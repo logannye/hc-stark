@@ -170,6 +170,15 @@ dependencies = [
 [[package]]
 name = "hc-prover"
 version = "0.1.0"
+dependencies = [
+ "hc-air",
+ "hc-commit",
+ "hc-core",
+ "hc-fri",
+ "hc-hash",
+ "hc-replay",
+ "hc-vm",
+]
 
 [[package]]
 name = "hc-recursion"
