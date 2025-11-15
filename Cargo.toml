@@ -1,0 +1,27 @@
+ [workspace]
+ members = [
+     "crates/hc-air",
+     "crates/hc-bench",
+     "crates/hc-cli",
+     "crates/hc-commit",
+     "crates/hc-core",
+     "crates/hc-examples",
+     "crates/hc-fri",
+     "crates/hc-hash",
+     "crates/hc-prover",
+     "crates/hc-recursion",
+     "crates/hc-replay",
+     "crates/hc-verifier",
+     "crates/hc-vm",
+ ]
+ resolver = "2"
+
+ [workspace.package]
+ edition = "2021"
+ license = "MIT"
+ rust-version = "1.77"
+ version = "0.1.0"
+
+ [workspace.dependencies]
+ thiserror = "1.0"
+

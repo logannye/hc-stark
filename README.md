@@ -379,4 +379,18 @@ Long-term directions:
 
 ---
 
+## 8. Development standards (TL;DR)
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full checklist. Highlights:
+
+- **Toolchain:** Rust `stable`, `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace --all-targets`, `cargo doc --workspace --no-deps`.
+- **Safety:** All crates use `#![forbid(unsafe_code)]`. Prefer pure functions and explicit data ownership.
+- **Error handling:** Use `hc_core::HcError`, `HcResult<T>`, and the `hc_ensure!` macro; never `panic!` in library code.
+- **Docs:** Every module starts with a `//!` overview and updates the relevant note under `docs/design_notes/`.
+- **Benchmarks:** Keep `hc-bench` scenarios deterministic so nightly CI can compare regressions.
+
+Following these guardrails ensures we ship a world-class, production-ready hc-STARK stack without regressing on correctness or security.
+
+---
+
 If you’re interested in collaborating, extending this design, or plugging hc-STARK into your zk stack (rollups, zkML, verifiable compute), the structure of this repo is meant to make that as straightforward as possible: you get a **future-proof, transparent, PQ-friendly ZKP engine** with a **provably sublinear-space prover** as a first-class architectural primitive.
