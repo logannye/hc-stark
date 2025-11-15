@@ -7,4 +7,10 @@
  publish = false
 
  [dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+hc-core = { path = "../hc-core" }
+hc-prover = { path = "../hc-prover" }
+hc-verifier = { path = "../hc-verifier" }
+hc-vm = { path = "../hc-vm" }
 

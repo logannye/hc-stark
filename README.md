@@ -307,6 +307,14 @@ cargo run -p hc-examples --bin zkvm_fib_prove
 cargo run -p hc-examples --bin zkvm_fib_verify
 ```
 
+Quick smoke tests via our CLI:
+
+```bash
+cargo run -p hc-cli -- prove
+cargo run -p hc-cli -- verify
+cargo run -p hc-cli -- bench --iterations 5
+```
+
 You might expose flags like:
 
 ```bash
@@ -357,7 +365,7 @@ Use the `benches/space_time` harness (or your own) to compare:
   * Total runtime,
   * CPU/GPU utilization.
 
-This demonstrates the **√T-space behavior** and the **polylogarithmic time overhead** empirically.
+This demonstrates the **√T-space behavior** and the **polylogarithmic time overhead** empirically. The `hc-bench` and `hc-cli bench` helpers give you a repeatable harness for micro-benchmarks without wiring up your own scripts.
 
 ---
 
@@ -390,6 +398,16 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full checklist. Highlights:
 - **Benchmarks:** Keep `hc-bench` scenarios deterministic so nightly CI can compare regressions.
 
 Following these guardrails ensures we ship a world-class, production-ready hc-STARK stack without regressing on correctness or security.
+
+---
+
+## 9. Current snapshot
+
+- ✅ Minimal AIR/VM/prover/verifier pipeline backed by deterministic replay.
+- ✅ CLI (`hc-cli`), examples (`hc-examples`), and benchmarking harness (`hc-bench`).
+- ✅ Recursive aggregator scaffolding plus GPU-ready FFT backend trait (`hc_core::fft::backend::FftBackend`).
+- ✅ Full workspace tests via `cargo test --workspace`.
+- 🔄 Next: richer circuits, true streaming Merkle/FRI proofs, GPU acceleration, and hardened proof serialization.
 
 ---
 

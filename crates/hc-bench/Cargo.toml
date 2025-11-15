@@ -7,4 +7,7 @@
  publish = false
 
  [dependencies]
+hc-core = { path = "../hc-core" }
+hc-prover = { path = "../hc-prover" }
+hc-vm = { path = "../hc-vm" }
 
