@@ -117,6 +117,10 @@ dependencies = [
 [[package]]
 name = "hc-air"
 version = "0.1.0"
+dependencies = [
+ "hc-core",
+ "hc-vm",
+]
 
 [[package]]
 name = "hc-bench"
@@ -182,6 +186,9 @@ version = "0.1.0"
 [[package]]
 name = "hc-vm"
 version = "0.1.0"
+dependencies = [
+ "hc-core",
+]
 
 [[package]]
 name = "libc"
