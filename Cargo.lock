@@ -195,6 +195,14 @@ dependencies = [
 [[package]]
 name = "hc-verifier"
 version = "0.1.0"
+dependencies = [
+ "hc-core",
+ "hc-fri",
+ "hc-hash",
+ "hc-prover",
+ "hc-vm",
+ "thiserror",
+]
 
 [[package]]
 name = "hc-vm"
