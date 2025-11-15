@@ -5,4 +5,5 @@ pub mod eval;
 pub mod sparse;
 
 pub use dense::DensePolynomial;
+pub use eval::{horner, lde_block};
 pub use sparse::{SparsePolynomial, SparseTerm};

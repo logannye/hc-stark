@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use hc_core::field::FieldElement;
 
 /// Basic oracle abstraction for FRI layers.
@@ -8,16 +10,16 @@ pub trait FriOracle<F: FieldElement> {
 
 #[derive(Clone, Debug)]
 pub struct InMemoryFriOracle<F: FieldElement> {
-    values: Vec<F>,
+    values: Arc<Vec<F>>,
 }
 
 impl<F: FieldElement> InMemoryFriOracle<F> {
-    pub fn new(values: Vec<F>) -> Self {
+    pub fn new(values: Arc<Vec<F>>) -> Self {
         Self { values }
     }
 
-    pub fn into_inner(self) -> Vec<F> {
-        self.values
+    pub fn values(&self) -> Arc<Vec<F>> {
+        Arc::clone(&self.values)
     }
 }
 

@@ -7,6 +7,8 @@ pub enum VerifierError {
     InvalidPublicInputs,
     #[error("fri verification failed")]
     FriFailure,
+    #[error("missing query responses")]
+    MissingQueryResponses,
 }
 
 impl From<VerifierError> for HcError {

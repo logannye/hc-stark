@@ -8,6 +8,7 @@
 
  [dependencies]
 hc-core = { path = "../hc-core" }
+hc-hash = { path = "../hc-hash" }
 hc-verifier = { path = "../hc-verifier" }
 
 [dev-dependencies]

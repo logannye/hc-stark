@@ -1,6 +1,6 @@
 # hc-STARK: Height-Compressed, Memory-Efficient STARK Provers
 
-_Last updated: YYYY-MM-DD_
+_Last updated: 2025-11-15_
 
 ---
 
@@ -415,27 +415,28 @@ With hc-STARK:
 
 ## 7. Mapping to the `hc-stark` Codebase
 
-In this repository:
+The current repository layout mirrors the architecture described above:
 
-- `hc-core/` encodes the core traits for:
-  - Execution traces,
-  - Block tiling,
-  - Checkpoints/interfaces.
-- `hc-poly/`, `hc-merkle/`, `hc-fri/` implement:
-  - Blocked polynomial operations,
-  - Streaming Merkle trees,
-  - Streaming FRI oracles.
-- `hc-prover/` contains the **height-compressed prover engine**:
-  - The pointerless DFS scheduler,
-  - The replay engine,
-  - The interfaces between “computation tree nodes” and block realizations.
-- `hc-verifier/` offers a standard STARK verifier:
-  - From the verifier’s perspective, it’s just a STARK proof.
-  - The internal height compression is invisible.
+- `hc-core/`
+  - Field/FMT primitives, FFT implementations, and the new `fft_auto` helper that can dispatch to the `gpu-fft` feature flag.
+  - Shared error handling and random utilities.
+- `hc-commit/`
+  - Vector commitments, standard + streaming (height-compressed) Merkle trees.
+- `hc-hash/`
+  - Blake3/SHA256 digests, transcripts, and Fiat–Shamir helpers.
+- `hc-fri/`
+  - Streaming FRI prover/verifier built on `TraceReplay`, exposing per-layer streaming stats.
+- `hc-replay/`
+  - Generic block producers plus the deterministic `TraceReplay` engine used by Merkle, FRI, and any block-sized consumer.
+- `hc-prover/`
+  - The pointerless DFS scheduler, replay integration, metrics collection, and proof orchestration.
+- `hc-verifier/`
+  - A conventional STARK verifier consuming the serialized proof artifacts.
+- Supporting crates (`hc-cli/`, `hc-bench/`, `hc-examples/`)
+  - CLI drive commands (prove/verify/bench/inspect) and JSON proof serialization.
+  - Benchmark harness that reports √T metrics (`avg_trace_blocks`, `avg_fri_blocks`) via the CLI and Rust APIs.
 
-The goal of this repo is to serve as a **reference implementation** of:
-
-> A height-compressed, streaming STARK prover that uses \(O(\sqrt{T})\) working memory for a trace of length \(T\), while preserving standard STARK cryptography and soundness guarantees.
+Together, these crates implement a **reference-quality height-compressed prover** whose RAM usage is dictated by the configured block size while surfacing enough observability (metrics + CLI tooling) to tune √T behavior on real workloads.
 
 ---
 

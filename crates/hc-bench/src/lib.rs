@@ -1,10 +1,11 @@
 use std::time::Instant;
 
 use hc_core::field::prime_field::GoldilocksField;
-use hc_prover::{config::ProverConfig, prove, PublicInputs};
+use hc_prover::{config::ProverConfig, metrics::ProverMetrics, prove, PublicInputs};
 use hc_vm::{Instruction, Program};
+use serde_json::json;
 
-pub fn benchmark(iterations: usize) -> hc_core::error::HcResult<()> {
+pub fn benchmark(iterations: usize, block_size: usize) -> hc_core::error::HcResult<()> {
     let program = Program::new(vec![
         Instruction::AddImmediate(1),
         Instruction::AddImmediate(2),
@@ -13,14 +14,23 @@ pub fn benchmark(iterations: usize) -> hc_core::error::HcResult<()> {
         initial_acc: GoldilocksField::new(5),
         final_acc: GoldilocksField::new(8),
     };
-    let config = ProverConfig::new(2, 2)?;
+    let config = ProverConfig::new(block_size, 2)?;
     let start = Instant::now();
+    let mut agg_metrics = ProverMetrics::default();
     for _ in 0..iterations {
-        let _ = prove(config, program.clone(), inputs.clone())?;
+        let proof = prove(config, program.clone(), inputs.clone())?;
+        agg_metrics.add_trace_blocks(proof.metrics.trace_blocks_loaded);
+        agg_metrics.add_fri_blocks(proof.metrics.fri_blocks_loaded);
     }
-    println!(
-        "Bench ran {iterations} iterations in {:.2?}",
-        start.elapsed()
-    );
+    let elapsed = start.elapsed();
+    let summary = json!({
+        "iterations": iterations,
+        "block_size": block_size,
+        "total_duration_ms": elapsed.as_secs_f64() * 1000.0,
+        "avg_duration_ms": (elapsed.as_secs_f64() * 1000.0) / iterations as f64,
+        "avg_trace_blocks": agg_metrics.trace_blocks_loaded as f64 / iterations as f64,
+        "avg_fri_blocks": agg_metrics.fri_blocks_loaded as f64 / iterations as f64,
+    });
+    println!("{summary}");
     Ok(())
 }

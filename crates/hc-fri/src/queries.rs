@@ -20,3 +20,19 @@ impl<F: FieldElement> FriProof<F> {
         self.layers.len()
     }
 }
+
+/// Propagate a query index from one FRI layer to the next.
+/// For FRI with folding ratio 2, the next layer index is current_index / 2.
+pub fn propagate_query_index(current_index: usize, folding_ratio: usize) -> usize {
+    current_index / folding_ratio
+}
+
+/// Get the folding ratio used by FRI (currently fixed at 2)
+pub fn get_folding_ratio() -> usize {
+    2
+}
+
+/// Check if a query index is valid for a given layer size
+pub fn is_valid_query_index(query_index: usize, layer_size: usize) -> bool {
+    query_index < layer_size
+}

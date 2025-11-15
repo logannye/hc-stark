@@ -1,6 +1,6 @@
 # merkle_streaming.md
 
-_Last updated: YYYY-MM-DD_
+_Last updated: 2025-11-14_
 
 ---
 

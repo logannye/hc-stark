@@ -2,6 +2,84 @@
 
 use crate::field::FieldElement;
 
+/// Low-Degree Extension (LDE) for STARK trace values.
+/// Extends trace values from a small domain to a larger domain for low-degree testing.
+pub fn lde_block<F: FieldElement>(
+    trace_values: &[F],
+    trace_domain: &[F],
+    lde_domain: &[F],
+) -> Vec<F> {
+    // Interpolate the trace values to get polynomial coefficients
+    let coeffs = interpolate(trace_values, trace_domain);
+
+    // Evaluate the polynomial on the larger LDE domain
+    evaluate_batch(&coeffs, lde_domain)
+}
+
+/// Interpolate values on a domain to get polynomial coefficients.
+/// Uses Lagrange interpolation (suitable for small domains).
+pub fn interpolate<F: FieldElement>(values: &[F], domain: &[F]) -> Vec<F> {
+    assert_eq!(values.len(), domain.len());
+
+    let n = values.len();
+    let mut coeffs = vec![F::ZERO; n];
+
+    for i in 0..n {
+        let basis_coeffs = lagrange_coefficients(domain, i);
+        let value = values[i];
+
+        for j in 0..n {
+            coeffs[j] = coeffs[j].add(basis_coeffs[j].mul(value));
+        }
+    }
+
+    coeffs
+}
+
+/// Get the coefficients of the i-th Lagrange basis polynomial.
+fn lagrange_coefficients<F: FieldElement>(domain: &[F], index: usize) -> Vec<F> {
+    let n = domain.len();
+    let xi = domain[index];
+
+    // Start with constant polynomial 1
+    let mut coeffs = vec![F::ZERO; n];
+    coeffs[0] = F::ONE;
+
+    // Multiply by (x - xj) for j != i
+    for j in 0..n {
+        if j == index {
+            continue;
+        }
+
+        let xj = domain[j];
+        // Multiply current polynomial by (x - xj)
+        let mut new_coeffs = vec![F::ZERO; n];
+        for k in 0..n {
+            if k > 0 {
+                new_coeffs[k] = new_coeffs[k].add(coeffs[k - 1]);
+            }
+            new_coeffs[k] = new_coeffs[k].sub(coeffs[k].mul(xj));
+        }
+        coeffs = new_coeffs;
+    }
+
+    // Normalize by the denominator
+    let mut denominator = F::ONE;
+    for j in 0..n {
+        if j == index {
+            continue;
+        }
+        denominator = denominator.mul(xi.sub(domain[j]));
+    }
+
+    let denominator_inv = denominator.inverse().expect("non-zero denominator");
+    for coeff in &mut coeffs {
+        *coeff = coeff.mul(denominator_inv);
+    }
+
+    coeffs
+}
+
 /// Horner evaluation for a polynomial represented by coefficients in ascending order.
 pub fn horner<F: FieldElement>(coeffs: &[F], point: F) -> F {
     coeffs

@@ -12,4 +12,5 @@ pub mod poly;
 pub mod random;
 pub mod utils;
 
+pub use domain::{generate_lde_domain, generate_trace_domain, EvaluationDomain};
 pub use error::{HcError, HcResult, ResultExt};

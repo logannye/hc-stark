@@ -9,4 +9,5 @@
  [dependencies]
 hc-core = { path = "../hc-core" }
 hc-hash = { path = "../hc-hash" }
+hc-replay = { path = "../hc-replay" }
 

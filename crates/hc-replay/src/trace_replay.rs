@@ -18,11 +18,6 @@ where
     T: Clone,
 {
     pub fn new(config: ReplayConfig, producer: P) -> HcResult<Self> {
-        if config.trace_length % config.block_size != 0 {
-            return Err(HcError::invalid_argument(
-                "trace length must be a multiple of block size",
-            ));
-        }
         Ok(Self {
             config,
             producer,
@@ -30,6 +25,22 @@ where
             last_block: Vec::new(),
             _marker: PhantomData,
         })
+    }
+
+    pub fn block_size(&self) -> usize {
+        self.config.block_size
+    }
+
+    pub fn trace_length(&self) -> usize {
+        self.config.trace_length
+    }
+
+    pub fn num_blocks(&self) -> usize {
+        if self.config.trace_length == 0 {
+            0
+        } else {
+            (self.config.trace_length + self.config.block_size - 1) / self.config.block_size
+        }
     }
 
     pub fn fetch_block(&mut self, block_index: usize) -> HcResult<&[T]> {
@@ -40,7 +51,9 @@ where
         if start >= self.config.trace_length {
             return Err(HcError::invalid_argument("block index out of range"));
         }
-        let range = BlockRange::new(start, self.config.block_size);
+        let remaining = self.config.trace_length - start;
+        let len = remaining.min(self.config.block_size);
+        let range = BlockRange::new(start, len);
         self.last_block = self.producer.produce(range)?;
         self.last_block_index = Some(block_index);
         Ok(&self.last_block)
@@ -66,13 +79,15 @@ mod tests {
     #[test]
     fn replay_fetches_consistent_blocks() {
         let producer = VecProducer {
-            data: (0..16).collect(),
+            data: (0..10).collect(),
         };
-        let config = ReplayConfig::new(4, 16).unwrap();
+        let config = ReplayConfig::new(4, 10).unwrap();
         let mut replay = TraceReplay::new(config, producer).unwrap();
         let block0 = replay.fetch_block(0).unwrap().to_vec();
         let block1 = replay.fetch_block(1).unwrap().to_vec();
+        let block2 = replay.fetch_block(2).unwrap().to_vec();
         assert_eq!(block0, vec![0, 1, 2, 3]);
         assert_eq!(block1, vec![4, 5, 6, 7]);
+        assert_eq!(block2, vec![8, 9]);
     }
 }

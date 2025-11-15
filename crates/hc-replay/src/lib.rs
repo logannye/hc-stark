@@ -14,4 +14,4 @@ pub use commit_replay::{new_commit_replay, CommitReplay};
 pub use config::ReplayConfig;
 pub use poly_replay::{new_poly_replay, PolyReplay};
 pub use trace_replay::TraceReplay;
-pub use traits::BlockProducer;
+pub use traits::{BlockProducer, VecBlockProducer};

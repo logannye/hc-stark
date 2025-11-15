@@ -7,6 +7,7 @@ pub mod metrics;
 pub mod pipeline;
 pub mod prove;
 pub mod queries;
+mod trace_stream;
 pub mod transcript;
 
 pub use config::ProverConfig;

@@ -66,42 +66,33 @@ hc-stark/
   Cargo.toml
   rust-toolchain.toml
   README.md
-  .gitignore
+  docs/
+    whitepaper.md
+    design_notes/
 
   crates/
-    hc-core/         # Field arithmetic, randomness, basic traits, error types
-    hc-poly/         # Polynomial I/O, blocked FFT/IFFT, tiled evaluations
-    hc-merkle/       # Streaming Merkle tree commitments + proofs
-    hc-fri/          # FRI prover/verifier with block-based oracles
-    hc-air/          # AIR definitions (constraints, degrees, boundary conditions)
-    hc-prover/       # Height-compressed prover orchestration (DFS + replay engine)
-    hc-verifier/     # Standard STARK verifier over Merkle + FRI transcripts
-    hc-vm/           # Simple zkVM / example execution traces
-    hc-utils/        # Logging, metrics, config parsing, CLI helpers
-
-  examples/
-    zkvm_fib/        # Tiny zkVM example (Fibonacci or similar)
-    zkml_linear/     # Simple zkML-style computation (e.g., linear layers)
-    rollup_batch/    # Example proving a batched “rollup-like” trace
-
-  benches/
-    space_time/      # Benchmark scripts comparing RAM/time vs in-core prover
-
-  scripts/
-    run_examples.sh  # Helpers to run end-to-end examples
-    bench_prover.sh  # Helpers to benchmark prover time/space
-
-  docs/
-    whitepaper.md    # High-level design + math notes
-    design_notes/    # Deeper notes on replay strategies, block sizing, etc.
-````
+    hc-core/       # Field arithmetic, FFTs (CPU + gpu-fft hook), error types
+    hc-commit/     # Vector commitments + standard/streaming Merkle trees
+    hc-hash/       # Hash digests, transcripts, Fiat–Shamir helpers
+    hc-fri/        # Streaming FRI prover/verifier built on TraceReplay
+    hc-air/        # AIR definitions (constraints, degrees, boundary conditions)
+    hc-vm/         # Toy VM + trace generator used in tests/examples
+    hc-replay/     # Block producers + deterministic replay engine
+    hc-prover/     # Pointerless DFS scheduler + replay-aware prover pipeline
+    hc-verifier/   # Standard STARK verifier matching the prover transcript
+    hc-cli/        # End-to-end CLI (prove/verify/bench/inspect) + JSON I/O
+    hc-bench/      # Programmatic benchmarking harness (√T metrics)
+    hc-examples/   # Library of sample end-to-end flows
+    hc-recursion/  # Aggregation + recursion scaffolding
+```
 
 **Separation of concerns:**
 
-* `hc-core` / `hc-poly` / `hc-merkle` / `hc-fri` implement **generic primitives** usable by other projects.
+* `hc-core`, `hc-commit`, `hc-hash`, and `hc-fri` implement **generic primitives** usable by other projects.
 * `hc-air` + `hc-vm` define concrete **computations to prove** (VMs, example AIRs).
-* `hc-prover` is where the **height compression logic lives**.
-* `hc-verifier` is intentionally “boring”: as close as possible to a standard STARK verifier.
+* `hc-replay` abstracts deterministic block replays so higher layers can stay agnostic.
+* `hc-prover` is where the **height compression logic** (scheduler + replay plumbing) lives.
+* `hc-verifier` is intentionally “boring”: as close as possible to a standard STARK verifier, now paired with serialized proofs emitted by the CLI/bench harnesses.
 
 ---
 
@@ -310,9 +301,9 @@ cargo run -p hc-examples --bin zkvm_fib_verify
 Quick smoke tests via our CLI:
 
 ```bash
-cargo run -p hc-cli -- prove
-cargo run -p hc-cli -- verify
-cargo run -p hc-cli -- bench --iterations 5
+cargo run -p hc-cli -- prove --output proof.json
+cargo run -p hc-cli -- verify --input proof.json
+cargo run -p hc-cli -- bench --iterations 5 --block-size 64
 ```
 
 You might expose flags like:
@@ -322,7 +313,7 @@ cargo run -p hc-examples --bin zkvm_fib_prove \
   -- --steps 100000000 \
      --block-size 10000 \
      --security-level 128 \
-     --output proof.bin
+     --output proof.json
 ```
 
 ### 6.2 Extending the system with a new AIR / VM
@@ -371,19 +362,20 @@ This demonstrates the **√T-space behavior** and the **polylogarithmic time ove
 
 ## 7. Status and roadmap
 
-* ✅ Core primitives (fields, Merkle, FRI) designed for **block-based, streaming operation**.
-* ✅ High-level architecture for height-compressed, pointerless DFS execution.
+* ✅ Core primitives (fields, hashing, FFTs) wired for **block-based, streaming operation** (including the `gpu-fft` hook).
+* ✅ Streaming Merkle + FRI data paths, deterministic replay engine, and pointerless DFS scheduler.
+* ✅ Proof serialization + CLI/bench tooling with √T metrics + JSON proof artifacts.
 * 🔄 Ongoing:
 
-  * Implementing concrete AIRs and zkVM examples.
-  * Tuning block sizes and replay strategies for different hardware.
-  * Adding robust benchmarking and observability.
+  * Expanding AIRs / zkVM examples beyond the toy VM.
+  * Adding CLI regression tests + end-to-end scenarios in CI.
+  * Documenting the replay/scheduler internals (whitepaper & design notes) as new components land.
 
 Long-term directions:
 
-* Adding **GPU-accelerated** blocked FFT/IFFT and MSM paths.
-* Integrating with real zkVM frontends and zkML frameworks.
-* Exploring **multi-prover parallelism** over the same height-compressed tree.
+* Flesh out the GPU backend (real kernels, not just the CPU shim) and expose multi-device scheduling policy.
+* Integrate with production zkVM frontends and zkML frameworks.
+* Explore multi-prover or distributed replay over the same height-compressed tree.
 
 ---
 

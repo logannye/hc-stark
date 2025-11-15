@@ -72,6 +72,37 @@ impl<F: TwoAdicField> EvaluationDomain<F> {
     }
 }
 
+/// Generate a Low-Degree Extension domain for a trace of the given length.
+/// The LDE domain is typically 2-4x larger than the trace domain for security.
+pub fn generate_lde_domain<F: TwoAdicField>(
+    trace_length: usize,
+    blowup_factor: usize,
+) -> HcResult<EvaluationDomain<F>> {
+    if blowup_factor < 1 {
+        return Err(HcError::invalid_argument("blowup factor must be at least 1"));
+    }
+
+    let lde_size = trace_length * blowup_factor;
+    if !is_power_of_two(lde_size) {
+        return Err(HcError::invalid_argument(
+            "LDE domain size must be a power of two",
+        ));
+    }
+
+    EvaluationDomain::new(lde_size)
+}
+
+/// Generate the standard trace domain for a given trace length.
+pub fn generate_trace_domain<F: TwoAdicField>(trace_length: usize) -> HcResult<EvaluationDomain<F>> {
+    if !is_power_of_two(trace_length) {
+        return Err(HcError::invalid_argument(
+            "trace length must be a power of two",
+        ));
+    }
+
+    EvaluationDomain::new(trace_length)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

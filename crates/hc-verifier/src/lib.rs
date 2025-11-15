@@ -35,6 +35,7 @@ mod tests {
             fri_proof: prover_proof.fri_proof,
             initial_acc: inputs.initial_acc,
             final_acc: inputs.final_acc,
+            query_response: prover_proof.query_response,
         };
         verify(&proof).unwrap();
     }

@@ -1,6 +1,6 @@
 # block_sizing_and_parameters.md
 
-_Last updated: YYYY-MM-DD_
+_Last updated: 2025-11-14_
 
 ---
 
@@ -260,3 +260,37 @@ By treating (b) as a first-class tuning parameter and respecting the shape (S(b)
 * Stay within predictable memory bounds,
 * Exploit cache and VRAM locality,
 * Trade memory pressure for controlled replay overhead.
+
+---
+
+## 6. Measuring Block Choices in Practice
+
+All of the math above is only useful after you validate it on real hardware. The repo now ships with:
+
+- `hc-cli bench` – a convenience wrapper around the prover that reports the average wall-clock time plus the number of streamed trace/FRI blocks for a particular block size.
+- `hc_bench::benchmark` – a Rust API you can embed in your own harnesses to sweep configurations or persist results alongside other telemetry.
+
+Example:
+
+```bash
+cargo run -p hc-cli -- bench \
+  --iterations 5 \
+  --block-size 64
+```
+
+This emits JSON such as:
+
+```json
+{
+  "iterations": 5,
+  "block_size": 64,
+  "total_duration_ms": 57.6,
+  "avg_duration_ms": 11.52,
+  "avg_trace_blocks": 192.0,
+  "avg_fri_blocks": 64.0
+}
+```
+
+`avg_trace_blocks` and `avg_fri_blocks` come directly from the prover’s streaming metrics (`ProverMetrics`) and therefore provide a concrete measurement of how close you are to the √T sweet spot. Increase `--block-size` to trade time for memory; decrease it to stay within tighter cache/VRAM budgets. The same instrumentation works on CPUs today and will extend to the GPU backend once the FFT hooks are wired up. 
+
+> **GPU preview:** enabling the `gpu-fft` feature flag on `hc-core` switches `fft_auto` over to the placeholder `GpuBackend`. For now the GPU backend proxies to the CPU FFT while kernel work continues, but the configuration plumbing (feature flag + runtime “prefer GPU” switch) is ready so that experiments can begin without touching the prover logic.

@@ -10,9 +10,9 @@
 hc-core = { path = "../hc-core" }
 hc-fri = { path = "../hc-fri" }
 hc-hash = { path = "../hc-hash" }
+hc-prover = { path = "../hc-prover" }
 thiserror.workspace = true
 
 [dev-dependencies]
-hc-prover = { path = "../hc-prover" }
 hc-vm = { path = "../hc-vm" }
 
