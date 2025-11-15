@@ -24,4 +24,7 @@
 
  [workspace.dependencies]
  thiserror = "1.0"
+rand = { version = "0.8", features = ["std"] }
+blake3 = "1.5"
+sha2 = "0.10"
 

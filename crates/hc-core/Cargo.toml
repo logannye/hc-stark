@@ -11,4 +11,5 @@
 
  [dependencies]
  thiserror.workspace = true
+rand.workspace = true
 

@@ -6,5 +6,8 @@
  license.workspace = true
  publish = false
 
- [dependencies]
+[dependencies]
+hc-core = { path = "../hc-core" }
+blake3.workspace = true
+sha2.workspace = true
 

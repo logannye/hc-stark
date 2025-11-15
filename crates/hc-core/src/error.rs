@@ -1,4 +1,3 @@
-
 //! Shared error primitives for the `hc-stark` workspace.
 //!
 //! Every crate in the workspace should depend on this module (re-exported
