@@ -1,0 +1,382 @@
+# hc-stark — Height-Compressed, Streaming STARK Prover
+
+`hc-stark` is a **height-compressed, sublinear-space STARK prover** designed to make **very long zero-knowledge proofs** practical on fixed-memory hardware (CPUs, GPUs, and edge devices).
+
+It implements a **√T-space, streaming prover** for STARK-style proofs: instead of buffering the entire trace and all derived polynomials, the prover walks a **height-compressed computation tree** and recomputes small tiles on demand from compact checkpoints.
+
+The result:
+
+- **Prover memory:** ~√T (up to polylog factors) instead of T  
+- **Prover time:** ~T · polylog²(T) (near-standard STARK time with a small replay overhead)  
+- **Verifier & proof:** unchanged STARK-like (polylog(T) verification, polylog(T) proof size)  
+- **Security:** transparent + hash-based (STARK-style, plausibly post-quantum)
+
+---
+
+## 1. What is this repo?
+
+This repository is a **reference implementation** of a height-compressed STARK (hc-STARK) prover, meant to demonstrate:
+
+- How to **recast a STARK prover** as a **height-compressible computation**.
+- How to **tile** traces and polynomials into `√T`-sized blocks and **stream** over them.
+- How to build a **pointerless DFS + replay engine** that achieves √T-space while preserving exact correctness.
+- How to plug this into **real proving use cases**: zkVM traces, zkML workloads, and rollup batch proofs.
+
+You can think of `hc-stark` as:
+
+> “A provably correct, streaming, low-memory STARK engine that trades a bit of extra CPU for a quadratic reduction in prover RAM.”
+
+---
+
+## 2. What does hc-stark do?
+
+At a high level, hc-STARK implements the standard STARK stack, but with a different **execution model**:
+
+- **Input:**
+  - A deterministic transition function (VM / AIR),
+  - A finite execution trace of length `T`,
+  - Public inputs/outputs, and a soundness / security parameter.
+
+- **Output:**
+  - A STARK-style proof that the trace satisfies the AIR constraints.
+  - The proof is:
+    - **Transparent** (no trusted setup),
+    - **Hash-based** (plausibly post-quantum),
+    - **Succinct** (polylog(T) size),
+    - **Fast to verify** (polylog(T) time).
+
+- **Key property:**  
+  The **prover** runs in **sublinear space**: its peak working set scales like  
+  `~ √T · polylog(T)` rather than `~ T`.
+
+This unlocks proving regimes that are currently painful or impossible with in-core STARKs:
+
+- zkVM traces with **10¹¹+ steps** on a single machine,
+- zkML workloads where the **model + data** don’t fit in RAM,
+- rollup batch proofs for **massive block sequences**, without mega-RAM boxes.
+
+---
+
+## 3. How the repo is organized
+
+*(Adapt these names to match your actual folders if they differ slightly.)*
+
+```text
+hc-stark/
+  Cargo.toml
+  rust-toolchain.toml
+  README.md
+  .gitignore
+
+  crates/
+    hc-core/         # Field arithmetic, randomness, basic traits, error types
+    hc-poly/         # Polynomial I/O, blocked FFT/IFFT, tiled evaluations
+    hc-merkle/       # Streaming Merkle tree commitments + proofs
+    hc-fri/          # FRI prover/verifier with block-based oracles
+    hc-air/          # AIR definitions (constraints, degrees, boundary conditions)
+    hc-prover/       # Height-compressed prover orchestration (DFS + replay engine)
+    hc-verifier/     # Standard STARK verifier over Merkle + FRI transcripts
+    hc-vm/           # Simple zkVM / example execution traces
+    hc-utils/        # Logging, metrics, config parsing, CLI helpers
+
+  examples/
+    zkvm_fib/        # Tiny zkVM example (Fibonacci or similar)
+    zkml_linear/     # Simple zkML-style computation (e.g., linear layers)
+    rollup_batch/    # Example proving a batched “rollup-like” trace
+
+  benches/
+    space_time/      # Benchmark scripts comparing RAM/time vs in-core prover
+
+  scripts/
+    run_examples.sh  # Helpers to run end-to-end examples
+    bench_prover.sh  # Helpers to benchmark prover time/space
+
+  docs/
+    whitepaper.md    # High-level design + math notes
+    design_notes/    # Deeper notes on replay strategies, block sizing, etc.
+````
+
+**Separation of concerns:**
+
+* `hc-core` / `hc-poly` / `hc-merkle` / `hc-fri` implement **generic primitives** usable by other projects.
+* `hc-air` + `hc-vm` define concrete **computations to prove** (VMs, example AIRs).
+* `hc-prover` is where the **height compression logic lives**.
+* `hc-verifier` is intentionally “boring”: as close as possible to a standard STARK verifier.
+
+---
+
+## 4. How the prover works (and why it meets the whitepaper desiderata)
+
+### 4.1 Classic STARK pipeline (conceptually)
+
+A “normal” in-core STARK prover does something like:
+
+1. **Trace generation:**
+   Materialize the full execution trace (T rows × k columns) in memory.
+
+2. **AIR evaluation and composition polynomial:**
+
+   * Interpolate polynomials over the trace domain.
+   * Apply constraint polynomials to produce a composition polynomial.
+   * Possibly extend to larger evaluation domains.
+
+3. **Commitments:**
+
+   * Perform FFTs / IFFTs over full vectors of length T (or larger).
+   * Build Merkle trees for each oracle (trace, composition, FRI layers).
+
+4. **Query answering:**
+
+   * On verifier’s challenge indices, fetch rows / evaluations.
+   * Return corresponding Merkle authentication paths and polynomial values.
+
+All major steps treat the trace and polynomial oracles as **monolithic arrays** of size Θ(T). Memory usage is **Θ(T)**.
+
+### 4.2 Height-compressed STARK pipeline
+
+hc-STARK refactors this into a **height-compressed computation tree**:
+
+1. **Block tiling:**
+
+   * Choose a block size `b ≈ √T`.
+   * Think of the trace as `T / b ≈ √T` **blocks** of size `b`.
+   * Do the same for polynomial oracles, FRI layers, etc.
+
+2. **Computation tree:**
+
+   * Each logical “STARK step” (e.g., building a Merkle tree, running FRI) is represented as a **binary tree of block computations**.
+   * Leaves correspond to block-local operations (FFT on a tile, hashing a range, etc.).
+   * Internal nodes combine children (e.g., merge partial tree roots, propagate FRI layers).
+
+3. **Height compression + pointerless DFS:**
+
+   * Reshape the natural left-deep tree into a **balanced binary tree** whose depth is **O(log T)**.
+   * Traverse this tree with a **pointerless DFS**:
+
+     * No explicit heap-allocated tree,
+     * Just a small **stack of frames** (one per level),
+     * Each frame holds at most O(1) “checkpoints” (hashes, random coins, block indices).
+
+4. **Replay engine:**
+
+   * Instead of keeping all blocks live, hc-STARK:
+
+     * Stores **only O(1)** block(s) of size `b` at a time,
+     * Recomputes blocks from nearby checkpoints using the VM/AIR and polynomial primitives.
+   * Whenever a block is needed again (e.g., for answering queries or building higher FRI layers), it is **replayed** from checkpoints with **O(b)** working memory.
+
+By choosing `b ≈ √T`, the prover’s peak space becomes:
+
+* `O(b) + O(log T)` stack overhead,
+* ⇒ **~√T · polylog(T)** in total.
+
+### 4.3 Complexity summary (hc-STARK itself)
+
+Let `T` be the trace length / domain size.
+
+* **Prover space:**
+
+  * Live block size: `b ≈ √T`
+  * DFS stack: `O(log T)` small frames
+  * ⇒ `Space_prover = ~O(√T · polylog T)`
+
+* **Prover time:**
+
+  * Each block: `~O(b · polylog b)` work,
+  * Number of blocks: `~T / b ≈ √T`,
+  * Some blocks are replayed along O(log T) tree height,
+  * ⇒ conservative bound `Time_prover = ~O(T · log² T)`
+
+* **Verifier & proof:**
+
+  * Comparable to a standard STARK:
+
+    * `Time_verifier = polylog(T)`
+    * `Proof_size = polylog(T)`
+
+---
+
+## 5. Complexity & properties: hc-STARK vs other proving systems
+
+This section compares hc-STARK against several prevailing ZKP paradigms along:
+
+* **Asymptotic prover time**
+* **Asymptotic prover space**
+* **Verifier time**
+* **Proof size**
+* **Transparency** (trusted setup or not)
+* **Post-quantum safety**
+
+Let `T` denote the “size” of the computation (e.g., number of steps in a VM trace, or circuit size).
+
+### 5.1 Side-by-side comparison
+
+> Asymptotics hide polylog factors; we use `~O(·)` to mean “up to polylog(T)”.
+
+| System / Paradigm                         | Prover Time (in T)  | Prover Space | Verifier Time                             | Proof Size        | Transparent? (No SRS)  | Post-Quantum Safe?*                           | Notes                                                  |
+| ----------------------------------------- | ------------------- | ------------ | ----------------------------------------- | ----------------- | ---------------------- | --------------------------------------------- | ------------------------------------------------------ |
+| **hc-STARK (this repo)**                  | `~O(T · log² T)`    | `~O(√T)`     | `~O(polylog T)`                           | `~O(polylog T)`   | **Yes**                | **Yes (hash-based; STARK-style assumptions)** | Streaming, √T-space; inherits STARK guarantees.        |
+| **In-core STARK**                         | `~O(T · log T)`     | `O(T)`       | `~O(polylog T)`                           | `~O(polylog T)`   | **Yes**                | **Yes (hash-based; STARK-style assumptions)** | Classic design; RAM is the bottleneck.                 |
+| **Pairing SNARK (Groth16/Plonk)**         | `~O(T · polylog T)` | `O(T)`       | `~O(1)` group ops + `polylog T` field ops | `O(1)` (constant) | **No** (needs SRS)     | **No** (EC pairings / discrete log)           | Tiny proofs; great verification; heavy setup & non-PQ. |
+| **IPA/Bulletproof-style SNARKs**          | `~O(T · log T)`     | `O(T)`       | `~O(polylog T)`                           | `~O(log T)`       | Often **Yes** (no SRS) | **No** (discrete log)                         | Small proofs; no trusted setup; prover still O(T) RAM. |
+| **PCP/IOP with generic hash commitments** | `~O(T · polylog T)` | `O(T)`       | `~O(polylog T)`                           | `~O(polylog T)`   | **Yes**                | **Yes (hash-based)**                          | Conceptual baseline for STARK-like systems.            |
+
+* “Post-quantum safe?” here means: **no known polynomial-time quantum attacks under common assumptions**.
+Hash-based, STARK-style systems are currently considered **much more “future-proof”** than discrete-log / pairing-based systems.
+
+### 5.2 How hc-STARK fits into the landscape
+
+* **vs In-core STARKs (same family):**
+
+  * **Same security & cryptographic assumptions.**
+  * **Same transparency**: no trusted setup.
+  * **Same general prover/verifier interface**, same AIR / IOP structure.
+  * **Key difference:** hc-STARK changes the **computational regime**:
+
+    * RAM: `O(T)` → `~O(√T)`,
+    * Time: `~O(T log T)` → `~O(T log² T)` (extra log factor from replay).
+  * If RAM is cheap and T is moderate: classic STARKs win on simplicity.
+  * If T is huge and RAM is the bottleneck: hc-STARK unlocks proofs that otherwise don’t fit at all.
+
+* **vs Pairing-based SNARKs (Groth16/Plonk):**
+
+  * SNARKs offer:
+
+    * **Tiny proofs (constant size)**,
+    * **Extremely fast verification**, great for on-chain verification.
+  * But:
+
+    * Require a **trusted setup** (universal or per-circuit SRS),
+    * Rely on **elliptic-curve pairings / discrete log** ⇒ vulnerable to **quantum attacks** (Shor).
+    * Prover still typically uses **O(T)** memory (large polynomials, FFTs, MSMs).
+  * hc-STARK chooses the opposite trade-off:
+
+    * Proofs are larger (polylog(T) rather than constant),
+    * Verifier is slightly heavier (though still polylog(T)),
+    * In exchange, you get **transparent, hash-based, PQ-friendly** security and **√T-space** provers.
+
+* **vs IPA/Bulletproof-style systems:**
+
+  * Bulletproofs and some IPA SNARKs are:
+
+    * **Transparent or updatable** (no per-circuit SRS),
+    * Have **logarithmic proof size**,
+    * But still rely on EC discrete log ⇒ **not PQ safe**.
+  * Prover memory is still effectively **O(T)**, because the underlying representation is vector-based.
+  * hc-STARK again trades slightly larger proofs for:
+
+    * **Hash-only assumptions**,
+    * **Sublinear prover memory**.
+
+### 5.3 Which use cases benefit the most from hc-STARK?
+
+The √T-space design is especially valuable where:
+
+* **T is enormous** (zkVMs, zkML, long-running off-chain compute, rollup batch proofs), and:
+* **RAM / VRAM is the true bottleneck**, not raw compute cycles.
+
+Concrete examples:
+
+* zkRollups with **massive block batches** on commodity cloud machines,
+* zkVMs with **billions of steps** running on a single GPU,
+* zkML proving for large models and large batched inputs, where activation traces don’t fit in RAM,
+* Verifiable off-chain compute platforms that want to run on **fixed-memory hardware tiers**.
+
+In that regime, hc-STARK:
+
+> *“Moves you from ‘what can I prove with my RAM?’ to ‘what can I prove with my CPU/GPU cycles?’”*
+
+which is often the **more scalable and cloud-friendly axis to spend money on**.
+
+---
+
+## 6. How to use hc-STARK (once the implementation is complete)
+
+> **Note:** The exact commands and crate names may differ slightly depending on how you wire things up. Treat this as a blueprint.
+
+### 6.1 Building and running examples
+
+```bash
+# Build everything
+cargo build --workspace
+
+# Run a simple zkVM example (e.g., Fibonacci)
+cargo run -p hc-examples --bin zkvm_fib_prove
+
+# Verify the corresponding proof
+cargo run -p hc-examples --bin zkvm_fib_verify
+```
+
+You might expose flags like:
+
+```bash
+cargo run -p hc-examples --bin zkvm_fib_prove \
+  -- --steps 100000000 \
+     --block-size 10000 \
+     --security-level 128 \
+     --output proof.bin
+```
+
+### 6.2 Extending the system with a new AIR / VM
+
+To define a new computation:
+
+1. Implement a **VM / transition function** in `hc-vm` or a similar crate:
+
+   * Define the state representation,
+   * Implement “next state” and boundary conditions.
+
+2. Define the corresponding **AIR** in `hc-air`:
+
+   * Number of trace columns,
+   * Constraint polynomials,
+   * Boundary constraints, degree bounds, etc.
+
+3. Wire it into `hc-prover`:
+
+   * Implement a small adapter that:
+
+     * Generates a trace stream,
+     * Exposes “block replay” hooks (how to regenerate a block from a checkpoint).
+
+4. Add an **example binary** in `examples/` that:
+
+   * Constructs public inputs,
+   * Runs the prover,
+   * Serializes a proof,
+   * Runs the verifier.
+
+### 6.3 Benchmarking the time/space trade-off
+
+Use the `benches/space_time` harness (or your own) to compare:
+
+* hc-STARK vs a baseline in-core STARK prover, for the same AIR / trace.
+* Measure:
+
+  * Peak RSS (RAM),
+  * Total runtime,
+  * CPU/GPU utilization.
+
+This demonstrates the **√T-space behavior** and the **polylogarithmic time overhead** empirically.
+
+---
+
+## 7. Status and roadmap
+
+* ✅ Core primitives (fields, Merkle, FRI) designed for **block-based, streaming operation**.
+* ✅ High-level architecture for height-compressed, pointerless DFS execution.
+* 🔄 Ongoing:
+
+  * Implementing concrete AIRs and zkVM examples.
+  * Tuning block sizes and replay strategies for different hardware.
+  * Adding robust benchmarking and observability.
+
+Long-term directions:
+
+* Adding **GPU-accelerated** blocked FFT/IFFT and MSM paths.
+* Integrating with real zkVM frontends and zkML frameworks.
+* Exploring **multi-prover parallelism** over the same height-compressed tree.
+
+---
+
+If you’re interested in collaborating, extending this design, or plugging hc-STARK into your zk stack (rollups, zkML, verifiable compute), the structure of this repo is meant to make that as straightforward as possible: you get a **future-proof, transparent, PQ-friendly ZKP engine** with a **provably sublinear-space prover** as a first-class architectural primitive.
