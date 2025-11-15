@@ -1,5 +1,5 @@
-use hc_hash::hash::{HashDigest, HashFunction};
 use hc_core::error::HcResult;
+use hc_hash::hash::{HashDigest, HashFunction};
 
 use super::hash_pair;
 
@@ -60,14 +60,75 @@ where
         ));
     }
 
-    // Build a temporary full tree to extract the path
-    // This is not ideal for memory usage, but correct for now
-    // TODO: Implement truly streaming path extraction
-    use crate::merkle::standard::MerkleTree;
+    let mut stack: Vec<Option<HashDigest>> = Vec::new();
+    let mut stack_contains_target: Vec<bool> = Vec::new();
+    let mut path_nodes: Vec<PathNode> = Vec::new();
 
-    let leaves: Vec<HashDigest> = (0..leaf_count).map(|i| producer(i)).collect();
-    let tree = MerkleTree::<H>::from_leaves(&leaves)?;
-    let path = tree.open(leaf_index)?;
+    for idx in 0..leaf_count {
+        let mut current = producer(idx);
+        let mut contains_target = idx == leaf_index;
+        let mut level = 0;
 
-    Ok(path)
+        loop {
+            if stack.len() <= level {
+                stack.push(Some(current));
+                stack_contains_target.push(contains_target);
+                break;
+            }
+
+            if let Some(existing) = stack[level].take() {
+                let existing_contains = stack_contains_target[level];
+                stack_contains_target[level] = false;
+
+                if existing_contains ^ contains_target {
+                    let (sibling, sibling_is_left) = if existing_contains {
+                        (current, false)
+                    } else {
+                        (existing, true)
+                    };
+                    path_nodes.push(PathNode {
+                        sibling,
+                        sibling_is_left,
+                    });
+                }
+
+                current = hash_pair::<H>(&existing, &current);
+                contains_target = existing_contains || contains_target;
+                level += 1;
+                continue;
+            }
+
+            stack[level] = Some(current);
+            stack_contains_target[level] = contains_target;
+            break;
+        }
+    }
+
+    let mut acc: Option<HashDigest> = None;
+    let mut acc_contains_target = false;
+    for (node_opt, node_contains) in stack.into_iter().zip(stack_contains_target.into_iter()) {
+        if let Some(node) = node_opt {
+            if let Some(prev) = acc.take() {
+                if acc_contains_target ^ node_contains {
+                    let (sibling, sibling_is_left) = if node_contains {
+                        (prev, false)
+                    } else {
+                        (node, true)
+                    };
+                    path_nodes.push(PathNode {
+                        sibling,
+                        sibling_is_left,
+                    });
+                }
+
+                acc = Some(hash_pair::<H>(&node, &prev));
+                acc_contains_target = acc_contains_target || node_contains;
+            } else {
+                acc = Some(node);
+                acc_contains_target = node_contains;
+            }
+        }
+    }
+
+    Ok(MerklePath::new(path_nodes))
 }

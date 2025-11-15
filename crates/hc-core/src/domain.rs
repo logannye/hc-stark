@@ -79,7 +79,9 @@ pub fn generate_lde_domain<F: TwoAdicField>(
     blowup_factor: usize,
 ) -> HcResult<EvaluationDomain<F>> {
     if blowup_factor < 1 {
-        return Err(HcError::invalid_argument("blowup factor must be at least 1"));
+        return Err(HcError::invalid_argument(
+            "blowup factor must be at least 1",
+        ));
     }
 
     let lde_size = trace_length * blowup_factor;
@@ -93,7 +95,9 @@ pub fn generate_lde_domain<F: TwoAdicField>(
 }
 
 /// Generate the standard trace domain for a given trace length.
-pub fn generate_trace_domain<F: TwoAdicField>(trace_length: usize) -> HcResult<EvaluationDomain<F>> {
+pub fn generate_trace_domain<F: TwoAdicField>(
+    trace_length: usize,
+) -> HcResult<EvaluationDomain<F>> {
     if !is_power_of_two(trace_length) {
         return Err(HcError::invalid_argument(
             "trace length must be a power of two",

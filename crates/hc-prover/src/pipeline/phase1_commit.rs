@@ -1,10 +1,15 @@
+use hc_air::{
+    constraints::{boundary::BoundaryConstraints, composition},
+    eval::evaluate_block,
+};
 use hc_commit::merkle::height_dfs::StreamingMerkle;
 use hc_core::{
-    domain::EvaluationDomain,
+    domain::{generate_lde_domain, generate_trace_domain},
     error::{HcError, HcResult},
     field::{FieldElement, TwoAdicField},
+    poly::{evaluate_batch, interpolate},
 };
-use hc_hash::{hash::HashDigest, Blake3, HashFunction};
+use hc_hash::{hash::HashDigest, Blake3, HashFunction, Transcript};
 use hc_replay::{trace_replay::TraceReplay, traits::BlockProducer};
 
 use crate::{config::ProverConfig, TraceRow};
@@ -12,60 +17,132 @@ use crate::{config::ProverConfig, TraceRow};
 pub fn commit_trace_streaming<F, P>(
     trace: &mut TraceReplay<P, TraceRow<F>>,
     config: &ProverConfig,
-) -> HcResult<HashDigest>
+    boundary: &BoundaryConstraints<F>,
+) -> HcResult<(HashDigest, HashDigest)>
 where
     F: FieldElement + TwoAdicField,
     P: BlockProducer<TraceRow<F>>,
 {
-    if trace.trace_length() == 0 {
+    let trace_len = trace.trace_length();
+    if trace_len == 0 {
         return Err(HcError::invalid_argument("trace must contain rows"));
     }
 
-    let mut builder = StreamingMerkle::<Blake3>::new();
+    let block_size = trace.block_size();
     let num_blocks = trace.num_blocks();
-
-    // Generate the LDE domain for the full trace
-    let trace_len = trace.trace_length();
     let padded_trace_len = trace_len.next_power_of_two();
-    let lde_domain = hc_core::generate_lde_domain::<F>(padded_trace_len, config.lde_blowup_factor)?;
+    let trace_domain = generate_trace_domain::<F>(padded_trace_len)?;
+    let lde_domain = generate_lde_domain::<F>(padded_trace_len, config.lde_blowup_factor)?;
+
+    let mut full_trace = Vec::with_capacity(trace_len);
+    let mut composition_transcript = Transcript::<Blake3>::new(b"composition");
+    for block_index in 0..num_blocks {
+        let block = trace.fetch_block(block_index)?;
+        full_trace.extend_from_slice(block);
+    }
+
+    let mut padded_trace = full_trace.clone();
+    let padding_extra = padded_trace_len - trace_len;
+    let last_row = padded_trace
+        .last()
+        .copied()
+        .ok_or_else(|| HcError::message("trace contains no rows"))?;
+    padded_trace.extend(std::iter::repeat(last_row).take(padding_extra));
+
+    let acc_values: Vec<F> = padded_trace.iter().map(|row| row[0]).collect();
+    let input_values: Vec<F> = padded_trace.iter().map(|row| row[1]).collect();
+    let acc_coeffs = interpolate(&acc_values, trace_domain.elements());
+    let input_coeffs = interpolate(&input_values, trace_domain.elements());
+
+    let selected_lde_points = lde_domain.elements();
+
+    let mut trace_builder = StreamingMerkle::<Blake3>::new();
+    let mut composition_builder = StreamingMerkle::<Blake3>::new();
+
+    let mut lde_cursor = 0;
+    let mut padding_remaining = padding_extra;
+
+    for row in &full_trace {
+        trace_builder.push(hash_trace_pair(&row[0], &row[1]));
+    }
 
     for block_index in 0..num_blocks {
         let block = trace.fetch_block(block_index)?;
+        let block_start_idx = block_index * block_size;
+        let block_rows = block.len();
 
-        // Apply LDE to this block
-        let block_lde_values = apply_lde_to_block(&block, &lde_domain, trace_len, config.lde_blowup_factor)?;
+        let extra_rows_for_block = if block_index + 1 == num_blocks {
+            padding_remaining
+        } else {
+            0
+        };
 
-        // Hash and commit each LDE value
-        for value in block_lde_values {
-            builder.push(hash_field_element(&value));
+        padding_remaining = padding_remaining.saturating_sub(extra_rows_for_block);
+
+        let block_rows_padded = block_rows + extra_rows_for_block;
+        let block_lde_points = block_rows_padded * config.lde_blowup_factor;
+
+        if block_lde_points > 0 {
+            let end_cursor = lde_cursor + block_lde_points;
+            if end_cursor > selected_lde_points.len() {
+                return Err(HcError::message("lde cursor out of bounds"));
+            }
+            let block_slice = &selected_lde_points[lde_cursor..end_cursor];
+            lde_cursor = end_cursor;
+
+            let acc_lde = evaluate_batch(&acc_coeffs, block_slice);
+            let input_lde = evaluate_batch(&input_coeffs, block_slice);
+
+            for i in 0..block_lde_points {
+                composition_builder.push(hash_trace_pair(&acc_lde[i], &input_lde[i]));
+            }
+        }
+
+        let constraint_evals = evaluate_block(block, block_start_idx, trace_len, boundary)?;
+        if !constraint_evals.is_empty() {
+            let random_coeffs = random_coeffs_for_block(
+                &mut composition_transcript,
+                block_index,
+                constraint_evals.len(),
+            );
+            let composition_values =
+                composition::build_composition_contributions(&constraint_evals, &random_coeffs);
+            for value in composition_values {
+                composition_builder.push(hash_field_element(&value));
+            }
         }
     }
 
-    builder
-        .finalize()
-        .ok_or_else(|| HcError::message("failed to finalize merkle tree"))
-}
-
-/// Apply LDE to a block of trace values.
-/// Returns the LDE values for this block's portion of the domain.
-fn apply_lde_to_block<F: FieldElement + TwoAdicField>(
-    block: &[TraceRow<F>],
-    _lde_domain: &EvaluationDomain<F>,
-    _padded_trace_len: usize,
-    _blowup_factor: usize,
-) -> HcResult<Vec<F>> {
-    // For simplicity, apply LDE to the entire trace at once
-    // In a full implementation, we'd need more sophisticated block-wise LDE
-    // For now, we'll just return the original block values (no LDE)
-    // TODO: Implement proper block-wise LDE
-
-    let mut values = Vec::new();
-    for row in block {
-        values.push(row[0]); // accumulator column
-        values.push(row[1]); // input column
+    if lde_cursor != selected_lde_points.len() {
+        return Err(HcError::message("lde points left unconsumed"));
     }
 
-    Ok(values)
+    let trace_root = trace_builder
+        .finalize()
+        .ok_or_else(|| HcError::message("failed to finalize trace merkle tree"))?;
+    let composition_root = composition_builder
+        .finalize()
+        .ok_or_else(|| HcError::message("failed to finalize composition merkle tree"))?;
+
+    Ok((trace_root, composition_root))
+}
+
+fn random_coeffs_for_block<F: FieldElement>(
+    transcript: &mut Transcript<Blake3>,
+    block_index: usize,
+    count: usize,
+) -> Vec<F> {
+    transcript.append_message(b"composition_block", &block_index.to_le_bytes());
+    (0..count)
+        .map(|_| transcript.challenge_field::<F>(b"composition_coeff"))
+        .collect()
+}
+
+fn hash_trace_pair<F: FieldElement>(left: &F, right: &F) -> HashDigest {
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&left.to_u64().to_le_bytes());
+    bytes[8..].copy_from_slice(&right.to_u64().to_le_bytes());
+    Blake3::hash(&bytes)
 }
 
 fn hash_field_element<F: FieldElement>(value: &F) -> HashDigest {

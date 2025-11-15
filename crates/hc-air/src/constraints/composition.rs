@@ -20,7 +20,8 @@ pub fn build_composition_contributions<F: hc_core::field::FieldElement>(
 ) -> Vec<F> {
     assert_eq!(constraint_evals.len(), random_coeffs.len());
 
-    constraint_evals.iter()
+    constraint_evals
+        .iter()
         .zip(random_coeffs.iter())
         .map(|(constraint, coeff)| constraint.mul(*coeff))
         .collect()

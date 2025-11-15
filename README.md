@@ -335,8 +335,9 @@ The test suite includes:
 - **Sanity checks**: Build verification, unit tests, CLI roundtrip tests, and core library validation
 - **Stress tests**: Multiple block sizes (1, 2, 4, ..., 512, 1024), multiple iterations, and edge cases
 - **Ladder tests**: Systematic scaling analysis that validates O(√T) memory complexity and measures performance metrics
-
 Test results are logged to timestamped files and include detailed performance metrics (duration, trace blocks loaded, FRI blocks loaded) for analysis.
+
+The ladder phase now wraps each benchmark with `/usr/bin/time -v` when available, collecting `profile_duration` (ms) and `memory_kb` (RSS) per block size. These entries are appended to `$TEMP_DIR/ladder_results.json` and the analysis stage uses `jq`/`bc` to compute normalized ratios, demonstrating constant-time and √T-memory behavior. The script still works when `timeout`, `/usr/bin/time`, or `jq` are missing—warnings are emitted and raw JSON is kept for offline inspection.
 
 ### 6.3 Extending the system with a new AIR / VM
 
@@ -389,11 +390,13 @@ This demonstrates the **√T-space behavior** and the **polylogarithmic time ove
 * ✅ **Core primitives**: Fields, hashing, FFTs wired for **block-based, streaming operation** (including the `gpu-fft` hook).
 * ✅ **Streaming architecture**: Streaming Merkle trees, FRI data paths, deterministic replay engine, and pointerless DFS scheduler.
 * ✅ **Complete prover pipeline**: Height-compressed STARK prover with O(√T) memory complexity.
-* ✅ **Query answering**: Fiat-Shamir query generation and Merkle path extraction for verifier challenges.
-* ✅ **Verifier implementation**: Complete verifier matching the prover transcript.
-* ✅ **CLI tooling**: Full CLI with `prove`, `verify`, and `bench` commands with JSON I/O.
-* ✅ **Benchmarking**: Performance metrics tracking (trace blocks, FRI blocks, duration) with `hc-bench`.
-* ✅ **Comprehensive test suite**: Sanity checks, stress tests, and scaling analysis validating O(√T) complexity.
+* ✅ **Query replay & verification**: Fiat-Shamir challenges are replayed with Merkle path checks, ensuring the verifier sees the same leaf values as the prover.
+* ✅ **Verifier implementation**: Complete verifier now matches the prover transcript, validates Merkle paths via streaming replay, and enforces FRI query propagation.
+* ✅ **Streaming Merkle replay**: `StreamingMerkle::extract_path` reconstructs Merkle paths via block replay without ever materializing the full tree.
+* ✅ **Block-wise LDE/composition**: Each block is low-degree extended and combined into composition contributions with hashed commitments and new metrics.
+* ✅ **CLI tooling**: Full CLI with `prove`, `verify`, and `bench` commands plus JSON serialization for proofs and query responses.
+* ✅ **Benchmarking**: Performance metrics tracking (trace blocks, FRI blocks, duration) with `hc-bench`, plus matrix of scaling data.
+* ✅ **Comprehensive test suite**: Sanity, stress, and ladder tests now log runtime and RSS metrics into `test_temp/ladder_results.json` for O(√T) verification.
 * ✅ **Documentation**: Complete whitepaper, design notes, and implementation documentation.
 
 ### 🔄 Ongoing Work

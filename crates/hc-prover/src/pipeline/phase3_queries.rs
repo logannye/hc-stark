@@ -1,9 +1,12 @@
+use hc_commit::merkle::reconstruct_path_from_replay;
 use hc_core::{
     error::{HcError, HcResult},
     field::FieldElement,
 };
-use hc_fri::{get_folding_ratio, is_valid_query_index, propagate_query_index, FriProof, oracles::FriOracle};
-use hc_hash::{Blake3, HashFunction};
+use hc_fri::{
+    get_folding_ratio, is_valid_query_index, oracles::FriOracle, propagate_query_index, FriProof,
+};
+use hc_hash::{hash::HashDigest, Blake3, HashFunction};
 use hc_replay::{trace_replay::TraceReplay, traits::BlockProducer};
 
 use crate::{queries::FriQuery, TraceRow};
@@ -33,7 +36,7 @@ pub fn answer_trace_queries<F, P>(
     trace_replay: &mut TraceReplay<P, TraceRow<F>>,
 ) -> HcResult<Vec<crate::queries::TraceQuery<F>>>
 where
-    F: FieldElement,
+    F: FieldElement + Clone,
     P: BlockProducer<TraceRow<F>>,
 {
     let mut results = Vec::with_capacity(queries.len());
@@ -44,7 +47,19 @@ where
 
     for &query_idx in queries {
         let block_idx = query_idx / trace_replay.block_size();
-        queries_by_block.entry(block_idx).or_insert_with(Vec::new).push(query_idx);
+        queries_by_block
+            .entry(block_idx)
+            .or_insert_with(Vec::new)
+            .push(query_idx);
+    }
+
+    let trace_len = trace_replay.trace_length();
+    let mut trace_hashes = Vec::with_capacity(trace_len);
+    for block_index in 0..trace_replay.num_blocks() {
+        let block = trace_replay.fetch_block(block_index)?;
+        for row in block.iter() {
+            trace_hashes.push(hash_trace_row(row));
+        }
     }
 
     for (block_idx, block_queries) in queries_by_block {
@@ -52,46 +67,31 @@ where
         let block_offset = block_idx * block_size;
 
         // Replay this block
-        let block = trace_replay.fetch_block(block_idx)?;
+        {
+            let block = trace_replay.fetch_block(block_idx)?;
+            let mut query_payloads = Vec::with_capacity(block_queries.len());
 
-        // Build streaming Merkle for this block
-        let mut block_streaming = hc_commit::merkle::height_dfs::StreamingMerkle::<Blake3>::new();
+            for &query_idx in &block_queries {
+                let in_block_idx = query_idx - block_offset;
+                let evaluation = block[in_block_idx].clone();
+                query_payloads.push((query_idx, evaluation));
+            }
 
-        // Hash each row in the block
-        for row in block.iter() {
-            let row_bytes = [
-                row[0].to_u64().to_le_bytes(),
-                row[1].to_u64().to_le_bytes(),
-            ].concat();
-            let row_hash = Blake3::hash(&row_bytes);
-            block_streaming.push(row_hash);
-        }
+            for (query_idx, evaluation) in query_payloads {
+                let producer = |leaf_index: usize| trace_hashes[leaf_index];
 
-        // Extract paths for queries in this block
-        for &query_idx in &block_queries {
-            let in_block_idx = query_idx - block_offset;
+                let merkle_path =
+                    reconstruct_path_from_replay::<Blake3, _>(query_idx, trace_len, &producer)
+                        .map_err(|err| {
+                            HcError::message(format!("Failed to extract Merkle path: {}", err))
+                        })?;
 
-            // Get the evaluation
-            let evaluation = block[in_block_idx];
-
-            // Extract Merkle path
-            let producer = |idx: usize| {
-                let row = &block[idx];
-                let row_bytes = [
-                    row[0].to_u64().to_le_bytes(),
-                    row[1].to_u64().to_le_bytes(),
-                ].concat();
-                Blake3::hash(&row_bytes)
-            };
-
-            let merkle_path = block_streaming.extract_path(in_block_idx, &producer)
-                .ok_or_else(|| HcError::message("Failed to extract Merkle path"))?;
-
-            results.push(crate::queries::TraceQuery {
-                index: query_idx,
-                evaluation,
-                merkle_path,
-            });
+                results.push(crate::queries::TraceQuery {
+                    index: query_idx,
+                    evaluation,
+                    merkle_path,
+                });
+            }
         }
     }
 
@@ -171,7 +171,7 @@ pub fn build_queries<F, P>(
     num_queries: usize,
 ) -> HcResult<crate::queries::QueryResponse<F>>
 where
-    F: FieldElement,
+    F: FieldElement + Clone,
     P: BlockProducer<TraceRow<F>>,
 {
     let trace_length = trace_replay.trace_length();
@@ -184,4 +184,11 @@ where
         trace_queries,
         fri_queries,
     })
+}
+
+fn hash_trace_row<F: FieldElement>(row: &TraceRow<F>) -> HashDigest {
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&row[0].to_u64().to_le_bytes());
+    bytes[8..].copy_from_slice(&row[1].to_u64().to_le_bytes());
+    Blake3::hash(&bytes)
 }

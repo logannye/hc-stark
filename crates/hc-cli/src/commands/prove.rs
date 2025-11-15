@@ -31,6 +31,7 @@ pub fn to_verifier_proof(
         initial_acc: output.public_inputs.initial_acc,
         final_acc: output.public_inputs.final_acc,
         query_response: output.query_response.clone(),
+        trace_length: output.trace_length,
     }
 }
 
@@ -65,6 +66,7 @@ pub struct SerializableProof {
     final_acc: u64,
     metrics: SerializableMetrics,
     query_response: Option<SerializableQueryResponse>,
+    trace_length: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -103,6 +105,7 @@ struct SerializablePathNode {
 struct SerializableMetrics {
     trace_blocks_loaded: usize,
     fri_blocks_loaded: usize,
+    composition_blocks_loaded: usize,
 }
 
 impl SerializableProof {
@@ -130,31 +133,50 @@ impl SerializableProof {
             .collect();
         let metrics = SerializableMetrics::from_metrics(&output.metrics);
 
-        let query_response = output.query_response.as_ref().map(|qr| {
-            SerializableQueryResponse {
-                trace_queries: qr.trace_queries.iter().map(|tq| SerializableTraceQuery {
-                    index: tq.index,
-                    evaluation: [tq.evaluation[0].to_u64(), tq.evaluation[1].to_u64()],
-                    merkle_path: SerializableMerklePath {
-                        nodes: tq.merkle_path.nodes().iter().map(|node| SerializablePathNode {
-                            sibling: format!("{}", node.sibling),
-                            sibling_is_left: node.sibling_is_left,
-                        }).collect(),
-                    },
-                }).collect(),
-                fri_queries: qr.fri_queries.iter().map(|fq| SerializableFriQuery {
-                    layer_index: fq.layer_index,
-                    query_index: fq.query_index,
-                    evaluation: fq.evaluation.to_u64(),
-                    merkle_path: SerializableMerklePath {
-                        nodes: fq.merkle_path.nodes().iter().map(|node| SerializablePathNode {
-                            sibling: format!("{}", node.sibling),
-                            sibling_is_left: node.sibling_is_left,
-                        }).collect(),
-                    },
-                }).collect(),
-            }
-        });
+        let query_response = output
+            .query_response
+            .as_ref()
+            .map(|qr| SerializableQueryResponse {
+                trace_queries: qr
+                    .trace_queries
+                    .iter()
+                    .map(|tq| SerializableTraceQuery {
+                        index: tq.index,
+                        evaluation: [tq.evaluation[0].to_u64(), tq.evaluation[1].to_u64()],
+                        merkle_path: SerializableMerklePath {
+                            nodes: tq
+                                .merkle_path
+                                .nodes()
+                                .iter()
+                                .map(|node| SerializablePathNode {
+                                    sibling: format!("{}", node.sibling),
+                                    sibling_is_left: node.sibling_is_left,
+                                })
+                                .collect(),
+                        },
+                    })
+                    .collect(),
+                fri_queries: qr
+                    .fri_queries
+                    .iter()
+                    .map(|fq| SerializableFriQuery {
+                        layer_index: fq.layer_index,
+                        query_index: fq.query_index,
+                        evaluation: fq.evaluation.to_u64(),
+                        merkle_path: SerializableMerklePath {
+                            nodes: fq
+                                .merkle_path
+                                .nodes()
+                                .iter()
+                                .map(|node| SerializablePathNode {
+                                    sibling: format!("{}", node.sibling),
+                                    sibling_is_left: node.sibling_is_left,
+                                })
+                                .collect(),
+                        },
+                    })
+                    .collect(),
+            });
 
         Self {
             trace_root: format!("{}", output.trace_root),
@@ -164,6 +186,7 @@ impl SerializableProof {
             final_acc: output.public_inputs.final_acc.to_u64(),
             metrics,
             query_response,
+            trace_length: output.trace_length,
         }
     }
 
@@ -196,31 +219,50 @@ impl SerializableProof {
             final_acc: GoldilocksField::from_u64(self.final_acc),
         };
 
-        let query_response = self.query_response.map(|qr| {
-            hc_prover::queries::QueryResponse {
-                trace_queries: qr.trace_queries.into_iter().map(|tq| hc_prover::queries::TraceQuery {
-                    index: tq.index,
-                    evaluation: [GoldilocksField::from_u64(tq.evaluation[0]), GoldilocksField::from_u64(tq.evaluation[1])],
-                    merkle_path: hc_commit::merkle::MerklePath::new(
-                        tq.merkle_path.nodes.into_iter().map(|node| hc_commit::merkle::PathNode {
-                            sibling: digest_from_hex(&node.sibling).unwrap(),
-                            sibling_is_left: node.sibling_is_left,
-                        }).collect()
-                    ),
-                }).collect(),
-                fri_queries: qr.fri_queries.into_iter().map(|fq| hc_prover::queries::FriQuery {
-                    layer_index: fq.layer_index,
-                    query_index: fq.query_index,
-                    evaluation: GoldilocksField::from_u64(fq.evaluation),
-                    merkle_path: hc_commit::merkle::MerklePath::new(
-                        fq.merkle_path.nodes.into_iter().map(|node| hc_commit::merkle::PathNode {
-                            sibling: digest_from_hex(&node.sibling).unwrap(),
-                            sibling_is_left: node.sibling_is_left,
-                        }).collect()
-                    ),
-                }).collect(),
-            }
-        });
+        let query_response = self
+            .query_response
+            .map(|qr| hc_prover::queries::QueryResponse {
+                trace_queries: qr
+                    .trace_queries
+                    .into_iter()
+                    .map(|tq| hc_prover::queries::TraceQuery {
+                        index: tq.index,
+                        evaluation: [
+                            GoldilocksField::from_u64(tq.evaluation[0]),
+                            GoldilocksField::from_u64(tq.evaluation[1]),
+                        ],
+                        merkle_path: hc_commit::merkle::MerklePath::new(
+                            tq.merkle_path
+                                .nodes
+                                .into_iter()
+                                .map(|node| hc_commit::merkle::PathNode {
+                                    sibling: digest_from_hex(&node.sibling).unwrap(),
+                                    sibling_is_left: node.sibling_is_left,
+                                })
+                                .collect(),
+                        ),
+                    })
+                    .collect(),
+                fri_queries: qr
+                    .fri_queries
+                    .into_iter()
+                    .map(|fq| hc_prover::queries::FriQuery {
+                        layer_index: fq.layer_index,
+                        query_index: fq.query_index,
+                        evaluation: GoldilocksField::from_u64(fq.evaluation),
+                        merkle_path: hc_commit::merkle::MerklePath::new(
+                            fq.merkle_path
+                                .nodes
+                                .into_iter()
+                                .map(|node| hc_commit::merkle::PathNode {
+                                    sibling: digest_from_hex(&node.sibling).unwrap(),
+                                    sibling_is_left: node.sibling_is_left,
+                                })
+                                .collect(),
+                        ),
+                    })
+                    .collect(),
+            });
 
         Ok(hc_prover::queries::ProverOutput {
             trace_root,
@@ -228,6 +270,7 @@ impl SerializableProof {
             public_inputs,
             query_response,
             metrics: self.metrics.into_metrics(),
+            trace_length: self.trace_length,
         })
     }
 }
@@ -245,6 +288,7 @@ impl SerializableMetrics {
         Self {
             trace_blocks_loaded: metrics.trace_blocks_loaded,
             fri_blocks_loaded: metrics.fri_blocks_loaded,
+            composition_blocks_loaded: metrics.composition_blocks_loaded,
         }
     }
 
@@ -252,6 +296,7 @@ impl SerializableMetrics {
         ProverMetrics {
             trace_blocks_loaded: self.trace_blocks_loaded,
             fri_blocks_loaded: self.fri_blocks_loaded,
+            composition_blocks_loaded: self.composition_blocks_loaded,
         }
     }
 }

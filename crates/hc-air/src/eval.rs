@@ -1,7 +1,4 @@
-use hc_core::{
-    error::HcResult,
-    field::FieldElement,
-};
+use hc_core::{error::HcResult, field::FieldElement};
 
 use crate::{
     constraints::{boundary::BoundaryConstraints, composition},

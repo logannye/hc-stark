@@ -141,6 +141,96 @@ run_cargo_capture() {
     fi
 }
 
+# Globals for profile metrics
+PROFILE_DURATION_MS=0
+PROFILE_MEMORY_KB=0
+
+# Run bench command with optional profiler/time tracking
+run_bench_with_profiler() {
+    local timeout="$1"
+    local block_size="$2"
+    shift 2
+    local profile_log="$TEMP_DIR/profile_${block_size}.log"
+    PROFILE_DURATION_MS=0
+    PROFILE_MEMORY_KB=0
+
+    log "Profiling benchmark (block size: $block_size)"
+    local cmd=("cargo" "$@")
+
+    if command -v timeout &> /dev/null; then
+        if command -v /usr/bin/time &> /dev/null; then
+            if output=$(timeout "$timeout" /usr/bin/time -v "${cmd[@]}" 2> "$profile_log"); then
+                parse_profile_output "$profile_log"
+                success "Benchmark completed (profiled)"
+                echo "$output"
+                return 0
+            else
+                error "Benchmark failed or timed out for block size $block_size"
+                return 1
+            fi
+        else
+            warning "Profiler (/usr/bin/time) not available, running without profiling"
+            if output=$(timeout "$timeout" "${cmd[@]}" 2>&1); then
+                success "Benchmark completed (no profiler)"
+                echo "$output"
+                return 0
+            else
+                error "Benchmark failed for block size $block_size"
+                return 1
+            fi
+        fi
+    else
+        warning "timeout not available, running benchmark without timeout guard"
+        if command -v /usr/bin/time &> /dev/null; then
+            if output=$(/usr/bin/time -v "${cmd[@]}" 2> "$profile_log"); then
+                parse_profile_output "$profile_log"
+                success "Benchmark completed (profiled)"
+                echo "$output"
+                return 0
+            else
+                error "Benchmark failed for block size $block_size"
+                return 1
+            fi
+        else
+            warning "Profiler (/usr/bin/time) not available, running without profiling"
+            if output=$("${cmd[@]}" 2>&1); then
+                success "Benchmark completed (no profiler)"
+                echo "$output"
+                return 0
+            else
+                error "Benchmark failed for block size $block_size"
+                return 1
+            fi
+        fi
+    fi
+}
+
+parse_profile_output() {
+    local log_file="$1"
+    PROFILE_DURATION_MS=0
+    PROFILE_MEMORY_KB=0
+
+    if [[ ! -f "$log_file" ]]; then
+        return
+    fi
+
+    local real_line
+    real_line=$(grep '^real' "$log_file" | head -n1 || true)
+    if [[ -n "$real_line" ]]; then
+        local time_part
+        time_part=$(echo "$real_line" | awk '{print $2}')
+        local minutes=$(echo "$time_part" | cut -dm -f1)
+        local seconds=$(echo "$time_part" | cut -dm -f2 | tr -d 's')
+        PROFILE_DURATION_MS=$(awk -v mts="$minutes" -v sec="$seconds" 'BEGIN { print (mts * 60 + sec) * 1000 }')
+    fi
+
+    local memory_line
+    memory_line=$(grep -i 'Maximum resident set size' "$log_file" | head -n1 || true)
+    if [[ -n "$memory_line" ]]; then
+        PROFILE_MEMORY_KB=$(echo "$memory_line" | tr -dc '0-9')
+    fi
+}
+
 # Sanity checks - basic functionality tests
 sanity_checks() {
     log "=== Running Sanity Checks ==="
@@ -290,9 +380,9 @@ ladder_tests() {
     for bs in "${block_sizes[@]}"; do
         info "  Testing block size: $bs"
 
-        # Run benchmark and capture output
+        # Run benchmark with profiler (if available)
         local output
-        if ! output=$(run_cargo_capture 120 run -p hc-cli -- bench --iterations 3 --block-size "$bs"); then
+        if ! output=$(run_bench_with_profiler 120 "$bs" run -p hc-cli -- bench --iterations 3 --block-size "$bs"); then
             warning "  Block size $bs failed, skipping..."
             continue
         fi
@@ -301,22 +391,26 @@ ladder_tests() {
         output=$(echo "$output" | tail -n 1)
 
         # Extract metrics from JSON output
-        local duration fri_blocks trace_blocks
+        local duration fri_blocks trace_blocks profile_duration memory_kb
         if command -v jq &> /dev/null; then
             duration=$(echo "$output" | jq -r '.avg_duration_ms // 0' 2>/dev/null || echo "0")
             fri_blocks=$(echo "$output" | jq -r '.avg_fri_blocks // 0' 2>/dev/null || echo "0")
             trace_blocks=$(echo "$output" | jq -r '.avg_trace_blocks // 0' 2>/dev/null || echo "0")
+            profile_duration=$PROFILE_DURATION_MS
+            memory_kb=$PROFILE_MEMORY_KB
         else
             # Fallback parsing without jq
             duration=$(echo "$output" | grep -o '"avg_duration_ms":[^,}]*' | cut -d: -f2 | tr -d ' ' 2>/dev/null || echo "0")
             fri_blocks=$(echo "$output" | grep -o '"avg_fri_blocks":[^,}]*' | cut -d: -f2 | tr -d ' ' 2>/dev/null || echo "0")
             trace_blocks=$(echo "$output" | grep -o '"avg_trace_blocks":[^,}]*' | cut -d: -f2 | tr -d ' ' 2>/dev/null || echo "0")
+            profile_duration=$PROFILE_DURATION_MS
+            memory_kb=$PROFILE_MEMORY_KB
         fi
 
         # Store results temporarily
-        echo "{\"block_size\":$bs,\"duration\":$duration,\"fri_blocks\":$fri_blocks,\"trace_blocks\":$trace_blocks}" >> "$temp_results"
+        echo "{\"block_size\":$bs,\"duration\":$duration,\"fri_blocks\":$fri_blocks,\"trace_blocks\":$trace_blocks,\"profile_duration\":$profile_duration,\"memory_kb\":$memory_kb}" >> "$temp_results"
 
-        success "  Block size $bs: ${duration}ms, trace_blocks: ${trace_blocks}, fri_blocks: ${fri_blocks}"
+        success "  Block size $bs: ${duration}ms, profile_time=${profile_duration}ms, memory=${memory_kb}kB, trace_blocks:${trace_blocks}, fri_blocks:${fri_blocks}"
     done
 
     # Build final JSON array
@@ -372,6 +466,10 @@ analyze_scaling() {
     local best_duration=999999
     local best_trace_blocks=0
     local best_fri_blocks=0
+    local min_memory_ratio=999999
+    local max_memory_ratio=0
+    local min_time_ratio=999999
+    local max_time_ratio=0
 
     # Parse results and find optimal
     if ! command -v jq &> /dev/null || ! command -v bc &> /dev/null; then
@@ -387,6 +485,32 @@ analyze_scaling() {
         local duration=$(echo "$results" | jq ".[$i].duration")
         local trace_blocks=$(echo "$results" | jq ".[$i].trace_blocks")
         local fri_blocks=$(echo "$results" | jq ".[$i].fri_blocks")
+        local profile_duration=$(echo "$results" | jq ".[$i].profile_duration")
+        local memory_kb=$(echo "$results" | jq ".[$i].memory_kb")
+
+        local normalized_bs=$bs
+        if (( $(echo "$normalized_bs < 2" | bc -l) )); then
+            normalized_bs=2
+        fi
+        local time_ratio=$(awk -v duration="$duration" -v bs="$normalized_bs" 'BEGIN { print duration / (bs * (log(bs)^2 + 1)) }')
+        local memory_ratio=0
+        if (( $(echo "$memory_kb > 0" | bc -l) )); then
+            memory_ratio=$(awk -v mem="$memory_kb" -v bs="$bs" 'BEGIN { print mem / sqrt(bs) }')
+        fi
+
+        if (( $(echo "$memory_ratio > 0" | bc -l) )) && (( $(echo "$memory_ratio < $min_memory_ratio" | bc -l) )); then
+            min_memory_ratio=$memory_ratio
+        fi
+        if (( $(echo "$memory_ratio > $max_memory_ratio" | bc -l) )); then
+            max_memory_ratio=$memory_ratio
+        fi
+
+        if (( $(echo "$time_ratio < $min_time_ratio" | bc -l) )); then
+            min_time_ratio=$time_ratio
+        fi
+        if (( $(echo "$time_ratio > $max_time_ratio" | bc -l) )); then
+            max_time_ratio=$time_ratio
+        fi
 
         if (( $(echo "$duration < $best_duration" | bc -l) )); then
             best_duration=$duration
@@ -394,6 +518,8 @@ analyze_scaling() {
             best_trace_blocks=$trace_blocks
             best_fri_blocks=$fri_blocks
         fi
+
+        info "  Block size $bs: duration=${duration}ms, profile_time=${profile_duration}ms, memory=${memory_kb}kB, time_ratio=${time_ratio}, memory_norm=${memory_ratio}"
     done
 
     info "Empirical Results:"
@@ -402,6 +528,13 @@ analyze_scaling() {
     info "  - Trace blocks loaded: $best_trace_blocks"
     info "  - FRI blocks loaded: $best_fri_blocks"
     info ""
+
+    if (( $(echo "$min_memory_ratio < 999999" | bc -l) )); then
+        info "  - Memory normalization per √b: min=${min_memory_ratio}, max=${max_memory_ratio}"
+    else
+        info "  - Memory statistics unavailable (profiler missing)"
+    fi
+    info "  - Time ratio (duration / (b·log²b)): min=${min_time_ratio}, max=${max_time_ratio}"
 
     # Check if results make sense
     if (( best_bs >= 1 && best_bs <= 16 )); then

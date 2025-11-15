@@ -1,3 +1,4 @@
+use hc_air::constraints::boundary::BoundaryConstraints;
 use hc_air::{evaluate, PublicInputs as AirPublicInputs, TraceTable};
 use hc_core::{
     error::{HcError, HcResult},
@@ -61,7 +62,10 @@ enum Frame {
 }
 
 impl Frame {
-    fn execute<F: FieldElement + hc_core::field::TwoAdicField>(&self, ctx: &mut ProverContext<F>) -> HcResult<()> {
+    fn execute<F: FieldElement + hc_core::field::TwoAdicField>(
+        &self,
+        ctx: &mut ProverContext<F>,
+    ) -> HcResult<()> {
         match self {
             Frame::CommitTrace => ctx.run_commit(),
             Frame::RunFri => ctx.run_fri(),
@@ -77,6 +81,7 @@ struct ProverContext<F: FieldElement> {
     public_inputs: PublicInputs<F>,
     transcript: Transcript<Blake3>,
     trace_root: Option<HashDigest>,
+    composition_root: Option<HashDigest>,
     fri_proof: Option<FriProof<F>>,
     output: Option<ProverOutput<F>>,
     metrics: ProverMetrics,
@@ -91,8 +96,14 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
     ) -> Self {
         let mut transcript = Transcript::<Blake3>::new(b"hc-stark");
         // Initialize transcript with public inputs
-        transcript.append_message(b"initial_acc", &public_inputs.initial_acc.to_u64().to_le_bytes());
-        transcript.append_message(b"final_acc", &public_inputs.final_acc.to_u64().to_le_bytes());
+        transcript.append_message(
+            b"initial_acc",
+            &public_inputs.initial_acc.to_u64().to_le_bytes(),
+        );
+        transcript.append_message(
+            b"final_acc",
+            &public_inputs.final_acc.to_u64().to_le_bytes(),
+        );
 
         Self {
             rows,
@@ -101,6 +112,7 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
             public_inputs,
             transcript,
             trace_root: None,
+            composition_root: None,
             fri_proof: None,
             output: None,
             metrics: ProverMetrics::default(),
@@ -113,9 +125,16 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
         let replay_config = ReplayConfig::new(block_size, self.rows.len())?;
         let mut trace_replay = TraceReplay::new(replay_config, producer)?;
         let total_blocks = trace_replay.num_blocks();
-        let trace_root = phase1_commit::commit_trace_streaming(&mut trace_replay, &self.config)?;
+        let boundary = BoundaryConstraints {
+            initial_acc: self.public_inputs.initial_acc,
+            final_acc: self.public_inputs.final_acc,
+        };
+        let (trace_root, composition_root) =
+            phase1_commit::commit_trace_streaming(&mut trace_replay, &self.config, &boundary)?;
         self.trace_root = Some(trace_root);
+        self.composition_root = Some(composition_root);
         self.metrics.add_trace_blocks(total_blocks);
+        self.metrics.add_composition_blocks(total_blocks);
         Ok(())
     }
 
@@ -159,6 +178,7 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
             public_inputs: self.public_inputs.clone(),
             query_response,
             metrics: self.metrics.clone(),
+            trace_length: self.rows.len(),
         });
         Ok(())
     }

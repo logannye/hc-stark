@@ -36,4 +36,5 @@ pub struct ProverOutput<F: FieldElement> {
     pub public_inputs: PublicInputs<F>,
     pub query_response: Option<QueryResponse<F>>,
     pub metrics: ProverMetrics,
+    pub trace_length: usize,
 }

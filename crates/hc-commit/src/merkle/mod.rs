@@ -4,7 +4,7 @@ pub mod height_dfs;
 pub mod path;
 pub mod standard;
 
-pub use path::{MerklePath, PathNode, reconstruct_path_from_replay};
+pub use path::{reconstruct_path_from_replay, MerklePath, PathNode};
 pub use standard::MerkleTree;
 
 pub(crate) fn hash_pair<H: HashFunction>(left: &HashDigest, right: &HashDigest) -> HashDigest {
