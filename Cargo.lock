@@ -178,6 +178,10 @@ version = "0.1.0"
 [[package]]
 name = "hc-replay"
 version = "0.1.0"
+dependencies = [
+ "hc-core",
+ "hc-hash",
+]
 
 [[package]]
 name = "hc-verifier"
