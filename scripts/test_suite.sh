@@ -20,6 +20,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 LOG_FILE="$PROJECT_ROOT/test_suite_$(date +%Y%m%d_%H%M%S).log"
 TEMP_DIR="$PROJECT_ROOT/test_temp"
+BENCH_DIR="$PROJECT_ROOT/benchmarks"
+STRESS_REPORT="$BENCH_DIR/stress_latest.json"
+LADDER_REPORT="$BENCH_DIR/ladder_latest.json"
+LADDER_CSV="$BENCH_DIR/ladder_latest.csv"
 
 # Colors for output
 RED='\033[0;31m'
@@ -61,6 +65,7 @@ info() {
 setup() {
     log "Setting up test environment..."
     mkdir -p "$TEMP_DIR"
+    mkdir -p "$BENCH_DIR"
 
     # Check if we're in the right directory
     if [[ ! -f "Cargo.toml" ]] || [[ ! -d "crates" ]]; then
@@ -315,6 +320,8 @@ sanity_checks() {
 # Stress tests - parameter variations and edge cases
 stress_tests() {
     log "=== Running Stress Tests ==="
+    local stress_tmp="$TEMP_DIR/stress_metrics.txt"
+    : > "$stress_tmp"
 
     # Test 1: Different block sizes
     info "Test 1: Testing different block sizes..."
@@ -322,7 +329,9 @@ stress_tests() {
 
     for bs in "${block_sizes[@]}"; do
         info "  Testing block size: $bs"
-        if run_cargo 60 run -p hc-cli -- bench --iterations 1 --block-size "$bs"; then
+        local output
+        if output=$(run_cargo_capture 60 run -p hc-cli -- bench --iterations 1 --block-size "$bs" --scenario prover); then
+            echo "$output" | tail -n 1 >> "$stress_tmp"
             success "  Block size $bs works"
         else
             error "  Block size $bs failed"
@@ -332,7 +341,8 @@ stress_tests() {
 
     # Test 2: Multiple iterations
     info "Test 2: Testing multiple iterations..."
-    if run_cargo 120 run -p hc-cli -- bench --iterations 5 --block-size 4; then
+    if output=$(run_cargo_capture 120 run -p hc-cli -- bench --iterations 5 --block-size 4 --scenario prover); then
+        echo "$output" | tail -n 1 >> "$stress_tmp"
         success "Multiple iterations work"
     else
         error "Multiple iterations failed"
@@ -341,7 +351,8 @@ stress_tests() {
 
     # Test 3: Large block sizes (stress memory)
     info "Test 3: Testing large block sizes..."
-    if run_cargo 180 run -p hc-cli -- bench --iterations 1 --block-size 1024; then
+    if output=$(run_cargo_capture 180 run -p hc-cli -- bench --iterations 1 --block-size 1024 --scenario prover); then
+        echo "$output" | tail -n 1 >> "$stress_tmp"
         success "Large block size works"
     else
         warning "Large block size test failed (may be expected on low-memory systems)"
@@ -349,11 +360,47 @@ stress_tests() {
 
     # Test 4: Edge case - minimal parameters
     info "Test 4: Testing minimal parameters..."
-    if run_cargo 60 run -p hc-cli -- bench --iterations 1 --block-size 1; then
+    if output=$(run_cargo_capture 60 run -p hc-cli -- bench --iterations 1 --block-size 1 --scenario prover); then
+        echo "$output" | tail -n 1 >> "$stress_tmp"
         success "Minimal parameters work"
     else
         error "Minimal parameters failed"
         return 1
+    fi
+
+    # Test 5: Streaming Merkle path replay vs in-memory
+    info "Test 5: Streaming Merkle path benchmark..."
+    if output=$(run_cargo_capture 90 run -p hc-cli -- bench --scenario merkle --leaves 4096 --queries 128 --fanout 2); then
+        echo "$output" | tail -n 1 >> "$stress_tmp"
+        success "Merkle benchmark captured"
+    else
+        warning "Merkle benchmark failed"
+    fi
+
+    # Test 6: Batched LDE throughput benchmark
+    info "Test 6: Batched LDE benchmark..."
+    if output=$(run_cargo_capture 90 run -p hc-cli -- bench --scenario lde --columns 4 --degree 512 --samples 2048); then
+        echo "$output" | tail -n 1 >> "$stress_tmp"
+        success "LDE benchmark captured"
+    else
+        warning "LDE benchmark failed"
+    fi
+
+    if [[ -s "$stress_tmp" ]]; then
+        local stress_json="["
+        local first=true
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            if [[ "$first" == true ]]; then
+                stress_json="$stress_json$line"
+                first=false
+            else
+                stress_json="$stress_json,$line"
+            fi
+        done < "$stress_tmp"
+        stress_json="$stress_json]"
+        echo "$stress_json" > "$STRESS_REPORT"
+        info "Stress metrics saved to $STRESS_REPORT"
     fi
 
     success "All stress tests passed!"
@@ -367,7 +414,7 @@ ladder_tests() {
     # Test scaling behavior with different block sizes
     # According to theory: memory ~ O(√T) when b ~ √T
 
-    local results_file="$TEMP_DIR/ladder_results.json"
+    local results_file="$LADDER_REPORT"
     local temp_results="$TEMP_DIR/temp_results.txt"
     echo "" > "$temp_results"
 
@@ -429,6 +476,14 @@ ladder_tests() {
     results_array="$results_array]"
 
     echo "$results_array" > "$results_file"
+
+    if command -v jq &> /dev/null; then
+        {
+            echo "block_size,duration_ms,trace_blocks,fri_blocks,profile_duration_ms,memory_kb"
+            jq -r '.[] | "\(.block_size),\(.duration),\(.trace_blocks),\(.fri_blocks),\(.profile_duration),\(.memory_kb)"' "$results_file"
+        } > "$LADDER_CSV"
+        info "Ladder CSV saved to $LADDER_CSV"
+    fi
 
     # Analyze results
     info "Phase 2: Analyzing scaling behavior..."

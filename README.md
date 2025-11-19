@@ -303,7 +303,13 @@ Quick smoke tests via our CLI:
 ```bash
 cargo run -p hc-cli -- prove --output proof.json
 cargo run -p hc-cli -- verify --input proof.json
-cargo run -p hc-cli -- bench --iterations 5 --block-size 64
+cargo run -p hc-cli -- bench --iterations 5 --block-size 64 --scenario prover
+
+# Streaming Merkle vs in-memory path replay
+cargo run -p hc-cli -- bench --scenario merkle --leaves 4096 --queries 128 --fanout 2
+
+# Batched LDE throughput micro-bench
+cargo run -p hc-cli -- bench --scenario lde --columns 4 --degree 512 --samples 2048
 ```
 
 You might expose flags like:
@@ -334,10 +340,13 @@ The test suite includes:
 
 - **Sanity checks**: Build verification, unit tests, CLI roundtrip tests, and core library validation
 - **Stress tests**: Multiple block sizes (1, 2, 4, ..., 512, 1024), multiple iterations, and edge cases
-- **Ladder tests**: Systematic scaling analysis that validates O(√T) memory complexity and measures performance metrics
+- **Stress tests**: Includes streaming Merkle (`--scenario merkle`) and batched LDE (`--scenario lde`) micro-benches; JSON artifacts land in `benchmarks/stress_latest.json`.
+- **Ladder tests**: Systematic scaling analysis that validates O(√T) memory complexity and measures performance metrics. Results are written to both `benchmarks/ladder_latest.json` and `benchmarks/ladder_latest.csv` for quick plotting.
 Test results are logged to timestamped files and include detailed performance metrics (duration, trace blocks loaded, FRI blocks loaded) for analysis.
 
-The ladder phase now wraps each benchmark with `/usr/bin/time -v` when available, collecting `profile_duration` (ms) and `memory_kb` (RSS) per block size. These entries are appended to `$TEMP_DIR/ladder_results.json` and the analysis stage uses `jq`/`bc` to compute normalized ratios, demonstrating constant-time and √T-memory behavior. The script still works when `timeout`, `/usr/bin/time`, or `jq` are missing—warnings are emitted and raw JSON is kept for offline inspection.
+The ladder phase now wraps each benchmark with `/usr/bin/time -v` when available, collecting `profile_duration` (ms) and `memory_kb` (RSS) per block size. These entries are appended to `benchmarks/ladder_latest.json` (and `.csv`), and the analysis stage uses `jq`/`bc` to compute normalized ratios, demonstrating constant-time and √T-memory behavior. The script still works when `timeout`, `/usr/bin/time`, or `jq` are missing—warnings are emitted and raw JSON is kept for offline inspection. Artifact formats are documented under [`docs/benchmarks/`](docs/benchmarks/README.md).
+
+Every `hc-cli bench` invocation emits a single-line JSON summary and updates `benchmarks/latest.json`, making it easy to feed CI dashboards or perf regressions without scraping logs.
 
 ### 6.3 Extending the system with a new AIR / VM
 
@@ -394,16 +403,20 @@ This demonstrates the **√T-space behavior** and the **polylogarithmic time ove
 * ✅ **Verifier implementation**: Complete verifier now matches the prover transcript, validates Merkle paths via streaming replay, and enforces FRI query propagation.
 * ✅ **Streaming Merkle replay**: `StreamingMerkle::extract_path` reconstructs Merkle paths via block replay without ever materializing the full tree.
 * ✅ **Block-wise LDE/composition**: Each block is low-degree extended and combined into composition contributions with hashed commitments and new metrics.
+* ✅ **Recursion-ready verifier summaries**: `hc-verifier` now exposes `verify_with_summary` plus `QueryCommitments`, enabling `hc-recursion` to hash query responses deterministically.
+* ✅ **Configurable streaming Merkle fanouts**: The height-compressed builder + replay extractor accept arbitrary fanouts and include property tests + micro-benchmarks.
+* ✅ **Batched LDE kernels**: Parallel column evaluators (Rayon-backed) keep LDE + constraint evaluation within the √T memory envelope.
 * ✅ **CLI tooling**: Full CLI with `prove`, `verify`, and `bench` commands plus JSON serialization for proofs and query responses.
-* ✅ **Benchmarking**: Performance metrics tracking (trace blocks, FRI blocks, duration) with `hc-bench`, plus matrix of scaling data.
-* ✅ **Comprehensive test suite**: Sanity, stress, and ladder tests now log runtime and RSS metrics into `test_temp/ladder_results.json` for O(√T) verification.
+* ✅ **Benchmarking**: `hc-bench` now ships scenario presets (`prover`, `merkle`, `lde`) so you can compare streaming vs in-memory paths and sequential vs batched LDE kernels. Summaries are emitted as JSON and copied into `benchmarks/latest.json`.
+* ✅ **Comprehensive test suite**: Sanity, stress, and ladder tests log runtime + RSS metrics and persist JSON/CSV artifacts under `benchmarks/` for CI scraping.
 * ✅ **Documentation**: Complete whitepaper, design notes, and implementation documentation.
 
 ### 🔄 Ongoing Work
 
-* Expanding AIRs / zkVM examples beyond the toy VM.
-* Adding CI/CD integration for automated testing and regression detection.
-* Performance optimization and profiling for production workloads.
+* Recursive wrapping circuits: feeding the new `ProofSummary` (with query commitments) into zk circuits + scheduled fan-in trees.
+* Multi-layer scheduling: richer recursion planning + multi-level aggregation specs.
+* Automated CI dashboards that ingest `benchmarks/latest.json` / ladder CSVs to track √T metrics across commits.
+* Expanding AIRs / zkVM examples beyond the toy VM + wiring GPU FFT backends.
 
 ### Long-term Directions
 

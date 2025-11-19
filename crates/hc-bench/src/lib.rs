@@ -5,7 +5,15 @@ use hc_prover::{config::ProverConfig, metrics::ProverMetrics, prove, PublicInput
 use hc_vm::{Instruction, Program};
 use serde_json::json;
 
-pub fn benchmark(iterations: usize, block_size: usize) -> hc_core::error::HcResult<()> {
+pub mod lde;
+pub mod merkle_paths;
+pub use lde::bench_parallel_lde;
+pub use merkle_paths::bench_merkle_paths;
+
+pub fn benchmark(
+    iterations: usize,
+    block_size: usize,
+) -> hc_core::error::HcResult<serde_json::Value> {
     let program = Program::new(vec![
         Instruction::AddImmediate(1),
         Instruction::AddImmediate(2),
@@ -31,6 +39,5 @@ pub fn benchmark(iterations: usize, block_size: usize) -> hc_core::error::HcResu
         "avg_trace_blocks": agg_metrics.trace_blocks_loaded as f64 / iterations as f64,
         "avg_fri_blocks": agg_metrics.fri_blocks_loaded as f64 / iterations as f64,
     });
-    println!("{summary}");
-    Ok(())
+    Ok(summary)
 }

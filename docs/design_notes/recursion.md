@@ -25,6 +25,8 @@ pub struct ProofSummary<F> {
     trace_root: HashDigest,
     initial_acc: F,
     final_acc: F,
+    trace_length: usize,
+    query_commitments: QueryCommitments,
 }
 
 pub struct AggregatedProof<F> {
@@ -34,8 +36,10 @@ pub struct AggregatedProof<F> {
 }
 ```
 
-* `summaries` preserves the metadata the outer recursion layer needs (e.g., to wire accumulators or enforce linking constraints).
+* `summaries` now include `trace_length` (linking the Fiat–Shamir queries to the original domain) and `query_commitments` (hashes over all trace/FRI query evaluations).
 * `digest` is a Blake3 commitment over all summaries. It is the single value an outer circuit needs to check.
+
+`QueryCommitments` are produced by `hc-verifier::verify_with_summary` by replaying the Fiat–Shamir transcript, rechecking every Merkle path, and hashing the evaluations + indices in a canonical order. This gives recursion circuits a succinct object to check without shipping entire query payloads into the outer proof.
 
 ---
 
@@ -55,7 +59,7 @@ At the moment the wrapper only enforces the fan-in constraint. That is, `wrap_pr
 ## 4. Roadmap
 
 1. **Input commitments for recursion circuits**  
-   Extend `ProofSummary` with the minimal set of values an outer circuit needs (e.g., FRI final layer commitments, Merkle roots, Fiat–Shamir challenges). Today we only store trace roots + accumulators.
+   **(DONE)** – `ProofSummary` now carries `trace_length` + `QueryCommitments` so outer circuits can bind to the exact Fiat–Shamir transcript without replaying queries.
 
 2. **Multi-level scheduling**  
    Use `RecursionSpec` to plan full trees (e.g., batching `fan_in^level` proofs per level) and emit a schedule the outer driver can follow.

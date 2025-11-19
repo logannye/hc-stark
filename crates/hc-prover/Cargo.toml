@@ -14,4 +14,5 @@ hc-commit = { path = "../hc-commit" }
 hc-hash = { path = "../hc-hash" }
 hc-fri = { path = "../hc-fri" }
 hc-replay = { path = "../hc-replay" }
+rayon = "1.8"
 

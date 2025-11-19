@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::commands::{
-    bench::run_bench,
+    bench::{run_bench, BenchArgs, BenchScenario},
     inspect::run_inspect,
     prove::{run_prove, write_proof},
     verify::{run_verify, run_verify_from_file},
@@ -36,6 +36,20 @@ enum Commands {
         iterations: usize,
         #[arg(long, default_value_t = 2)]
         block_size: usize,
+        #[arg(long, value_enum, default_value_t = BenchScenario::Prover)]
+        scenario: BenchScenario,
+        #[arg(long)]
+        leaves: Option<usize>,
+        #[arg(long)]
+        queries: Option<usize>,
+        #[arg(long)]
+        fanout: Option<usize>,
+        #[arg(long)]
+        columns: Option<usize>,
+        #[arg(long)]
+        degree: Option<usize>,
+        #[arg(long)]
+        samples: Option<usize>,
     },
 }
 
@@ -62,7 +76,24 @@ fn main() -> Result<()> {
         Commands::Bench {
             iterations,
             block_size,
-        } => run_bench(iterations, block_size)?,
+            scenario,
+            leaves,
+            queries,
+            fanout,
+            columns,
+            degree,
+            samples,
+        } => run_bench(BenchArgs {
+            iterations,
+            block_size,
+            scenario,
+            leaves,
+            queries,
+            fanout,
+            columns,
+            degree,
+            samples,
+        })?,
     }
     Ok(())
 }

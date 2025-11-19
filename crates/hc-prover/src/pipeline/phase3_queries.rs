@@ -81,10 +81,10 @@ where
                 let producer = |leaf_index: usize| trace_hashes[leaf_index];
 
                 let merkle_path =
-                    reconstruct_path_from_replay::<Blake3, _>(query_idx, trace_len, &producer)
+                    reconstruct_path_from_replay::<Blake3, _>(query_idx, trace_len, 2, &producer)
                         .map_err(|err| {
-                            HcError::message(format!("Failed to extract Merkle path: {}", err))
-                        })?;
+                        HcError::message(format!("Failed to extract Merkle path: {}", err))
+                    })?;
 
                 results.push(crate::queries::TraceQuery {
                     index: query_idx,

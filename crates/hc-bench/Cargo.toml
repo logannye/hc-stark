@@ -6,9 +6,11 @@
  license.workspace = true
  publish = false
 
- [dependencies]
+[dependencies]
 hc-core = { path = "../hc-core" }
 hc-prover = { path = "../hc-prover" }
 hc-vm = { path = "../hc-vm" }
+hc-commit = { path = "../hc-commit" }
+hc-hash = { path = "../hc-hash" }
 serde_json = "1.0"
 

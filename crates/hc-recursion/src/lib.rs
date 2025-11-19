@@ -74,4 +74,55 @@ mod tests {
         let err = wrap_proofs_with_spec(&spec, &[proof.clone(), proof]).unwrap_err();
         assert!(err.to_string().contains("recursion fan-in exceeded"));
     }
+
+    #[test]
+    fn summaries_capture_query_commitments() {
+        let program = Program::new(vec![
+            Instruction::AddImmediate(1),
+            Instruction::AddImmediate(2),
+        ]);
+
+        let inputs_a = PublicInputs {
+            initial_acc: GoldilocksField::new(5),
+            final_acc: GoldilocksField::new(8),
+        };
+        let inputs_b = PublicInputs {
+            initial_acc: GoldilocksField::new(7),
+            final_acc: GoldilocksField::new(10),
+        };
+
+        let config = ProverConfig::new(2, 2).unwrap();
+        let prover_a = prove(config.clone(), program.clone(), inputs_a.clone()).unwrap();
+        let prover_b = prove(config, program, inputs_b.clone()).unwrap();
+
+        let proof_a = Proof {
+            trace_root: prover_a.trace_root,
+            fri_proof: prover_a.fri_proof,
+            initial_acc: inputs_a.initial_acc,
+            final_acc: inputs_a.final_acc,
+            query_response: prover_a.query_response,
+            trace_length: prover_a.trace_length,
+        };
+        let proof_b = Proof {
+            trace_root: prover_b.trace_root,
+            fri_proof: prover_b.fri_proof,
+            initial_acc: inputs_b.initial_acc,
+            final_acc: inputs_b.final_acc,
+            query_response: prover_b.query_response,
+            trace_length: prover_b.trace_length,
+        };
+
+        let aggregated = wrap_proofs(&[proof_a, proof_b]).unwrap();
+
+        assert_eq!(aggregated.total_proofs, 2);
+        assert_eq!(aggregated.summaries.len(), 2);
+        assert_ne!(
+            aggregated.summaries[0].query_commitments.trace_commitment,
+            aggregated.summaries[1].query_commitments.trace_commitment
+        );
+        assert_ne!(
+            aggregated.summaries[0].query_commitments.fri_commitment,
+            aggregated.summaries[1].query_commitments.fri_commitment
+        );
+    }
 }

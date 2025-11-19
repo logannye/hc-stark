@@ -3,7 +3,10 @@ use hc_fri::{
     get_folding_ratio, is_valid_query_index, oracles::FriOracle, propagate_query_index, FriConfig,
 };
 use hc_hash::{hash::HashDigest, Blake3, HashFunction, Transcript};
-use hc_prover::{pipeline::phase3_queries::generate_queries, queries::QueryResponse};
+use hc_prover::{
+    pipeline::phase3_queries::generate_queries,
+    queries::{FriQuery, QueryResponse, TraceQuery},
+};
 
 use crate::{errors::VerifierError, fri_verify};
 
@@ -17,7 +20,26 @@ pub struct Proof<F: FieldElement> {
     pub trace_length: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QueryCommitments {
+    pub trace_commitment: HashDigest,
+    pub fri_commitment: HashDigest,
+}
+
+#[derive(Clone, Debug)]
+pub struct VerificationSummary<F: FieldElement> {
+    pub trace_root: HashDigest,
+    pub initial_acc: F,
+    pub final_acc: F,
+    pub trace_length: usize,
+    pub query_commitments: QueryCommitments,
+}
+
 pub fn verify<F: FieldElement>(proof: &Proof<F>) -> HcResult<()> {
+    verify_with_summary(proof).map(|_| ())
+}
+
+pub fn verify_with_summary<F: FieldElement>(proof: &Proof<F>) -> HcResult<VerificationSummary<F>> {
     if proof.final_acc == proof.initial_acc {
         return Err(VerifierError::InvalidPublicInputs.into());
     }
@@ -43,7 +65,18 @@ pub fn verify<F: FieldElement>(proof: &Proof<F>) -> HcResult<()> {
     let config = FriConfig::new(2)?;
     fri_verify::verify_fri(config, &proof.fri_proof).map_err(|_| VerifierError::FriFailure)?;
 
-    Ok(())
+    let query_commitments = QueryCommitments {
+        trace_commitment: commit_trace_queries(&query_response.trace_queries),
+        fri_commitment: commit_fri_queries(&query_response.fri_queries),
+    };
+
+    Ok(VerificationSummary {
+        trace_root: proof.trace_root,
+        initial_acc: proof.initial_acc,
+        final_acc: proof.final_acc,
+        trace_length: proof.trace_length,
+        query_commitments,
+    })
 }
 
 fn verify_trace_queries<F: FieldElement>(
@@ -136,4 +169,36 @@ fn hash_trace_row<F: FieldElement>(row: &[F; 2]) -> HashDigest {
     bytes[..8].copy_from_slice(&row[0].to_u64().to_le_bytes());
     bytes[8..].copy_from_slice(&row[1].to_u64().to_le_bytes());
     Blake3::hash(&bytes)
+}
+
+fn commit_trace_queries<F: FieldElement>(queries: &[TraceQuery<F>]) -> HashDigest {
+    let mut ordered: Vec<&TraceQuery<F>> = queries.iter().collect();
+    ordered.sort_by_key(|query| query.index);
+
+    let mut transcript = Transcript::<Blake3>::new(b"trace_query_commitment");
+    for query in ordered {
+        transcript.append_message(b"trace_index", &(query.index as u64).to_le_bytes());
+        transcript.append_message(b"trace_eval_0", &query.evaluation[0].to_u64().to_le_bytes());
+        transcript.append_message(b"trace_eval_1", &query.evaluation[1].to_u64().to_le_bytes());
+    }
+
+    transcript.challenge_bytes(b"trace_queries_digest")
+}
+
+fn commit_fri_queries<F: FieldElement>(queries: &[FriQuery<F>]) -> HashDigest {
+    let mut ordered: Vec<&FriQuery<F>> = queries.iter().collect();
+    ordered.sort_by(|a, b| {
+        a.layer_index
+            .cmp(&b.layer_index)
+            .then_with(|| a.query_index.cmp(&b.query_index))
+    });
+
+    let mut transcript = Transcript::<Blake3>::new(b"fri_query_commitment");
+    for query in ordered {
+        transcript.append_message(b"fri_layer", &(query.layer_index as u64).to_le_bytes());
+        transcript.append_message(b"fri_index", &(query.query_index as u64).to_le_bytes());
+        transcript.append_message(b"fri_eval", &query.evaluation.to_u64().to_le_bytes());
+    }
+
+    transcript.challenge_bytes(b"fri_queries_digest")
 }

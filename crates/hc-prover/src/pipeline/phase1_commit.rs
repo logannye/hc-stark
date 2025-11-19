@@ -7,10 +7,11 @@ use hc_core::{
     domain::{generate_lde_domain, generate_trace_domain},
     error::{HcError, HcResult},
     field::{FieldElement, TwoAdicField},
-    poly::{evaluate_batch, interpolate},
+    poly::{evaluate_columns_parallel, interpolate},
 };
 use hc_hash::{hash::HashDigest, Blake3, HashFunction, Transcript};
 use hc_replay::{trace_replay::TraceReplay, traits::BlockProducer};
+use rayon::join;
 
 use crate::{config::ProverConfig, TraceRow};
 
@@ -82,23 +83,38 @@ where
         let block_rows_padded = block_rows + extra_rows_for_block;
         let block_lde_points = block_rows_padded * config.lde_blowup_factor;
 
-        if block_lde_points > 0 {
-            let end_cursor = lde_cursor + block_lde_points;
-            if end_cursor > selected_lde_points.len() {
-                return Err(HcError::message("lde cursor out of bounds"));
-            }
-            let block_slice = &selected_lde_points[lde_cursor..end_cursor];
-            lde_cursor = end_cursor;
+        let (lde_hashes, constraint_evals) = join(
+            || -> HcResult<Vec<HashDigest>> {
+                if block_lde_points == 0 {
+                    return Ok(Vec::new());
+                }
 
-            let acc_lde = evaluate_batch(&acc_coeffs, block_slice);
-            let input_lde = evaluate_batch(&input_coeffs, block_slice);
+                let end_cursor = lde_cursor + block_lde_points;
+                if end_cursor > selected_lde_points.len() {
+                    return Err(HcError::message("lde cursor out of bounds"));
+                }
+                let block_slice = &selected_lde_points[lde_cursor..end_cursor];
+                lde_cursor = end_cursor;
 
-            for i in 0..block_lde_points {
-                composition_builder.push(hash_trace_pair(&acc_lde[i], &input_lde[i]));
-            }
+                let columns = evaluate_columns_parallel(&[&acc_coeffs, &input_coeffs], block_slice);
+                let acc_lde = &columns[0];
+                let input_lde = &columns[1];
+
+                let mut hashes = Vec::with_capacity(block_lde_points);
+                for i in 0..block_lde_points {
+                    hashes.push(hash_trace_pair(&acc_lde[i], &input_lde[i]));
+                }
+
+                Ok(hashes)
+            },
+            || evaluate_block(block, block_start_idx, trace_len, boundary),
+        );
+
+        for digest in lde_hashes? {
+            composition_builder.push(digest);
         }
 
-        let constraint_evals = evaluate_block(block, block_start_idx, trace_len, boundary)?;
+        let constraint_evals = constraint_evals?;
         if !constraint_evals.is_empty() {
             let random_coeffs = random_coeffs_for_block(
                 &mut composition_transcript,

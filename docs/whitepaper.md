@@ -289,6 +289,9 @@ This is exactly where height compression logic helps:
   - Deterministic.
 - We apply the same pointerless DFS + replay discipline to keep the Merkle working set small.
 
+> **Implementation note (Nov 2025):**  
+> The streaming builder now accepts arbitrary fan-outs (matching the height-compressed layout for each trace). Path reconstruction mirrors the same fan-out and records every sibling deterministically, which lets us replay authentication paths straight from trace hashes without ever materializing interior nodes. `hc-bench` provides a `merkle_paths` scenario that measures replay latency vs an in-memory tree so we can monitor the √T invariants empirically.
+
 ### 4.3 Streaming FRI
 
 The FRI protocol builds a sequence of oracles (layers) representing successive degree reductions.
@@ -314,6 +317,8 @@ Again, FRI layers organize naturally as a computation graph:
   - We can traverse it with pointerless DFS,
   - Cache only a small frontier,
   - Replay previous layers when necessary for queries.
+
+Likewise, the low-degree extension (LDE) + composition step is executed via batched column evaluators: Rayon-backed kernels evaluate multiple coefficient columns over the same domain in parallel while keeping only √T-sized slices in memory. These batches feed both the trace commitment and FRI layer builders, so “compute more / store less” is enforced uniformly across the pipeline.
 
 ### 4.4 Soundness and Transparency
 
@@ -431,10 +436,12 @@ The current repository layout mirrors the architecture described above:
 - `hc-prover/`
   - The pointerless DFS scheduler, replay integration, metrics collection, and proof orchestration.
 - `hc-verifier/`
-  - A conventional STARK verifier consuming the serialized proof artifacts.
+  - A conventional STARK verifier consuming the serialized proof artifacts, plus a `verify_with_summary` API that emits `QueryCommitments` so recursion layers can re-hash what was verified without replaying the whole transcript.
 - Supporting crates (`hc-cli/`, `hc-bench/`, `hc-examples/`)
   - CLI drive commands (prove/verify/bench/inspect) and JSON proof serialization.
   - Benchmark harness that reports √T metrics (`avg_trace_blocks`, `avg_fri_blocks`) via the CLI and Rust APIs.
+- `hc-recursion/`
+  - Aggregation helpers that reuse the verifier summary, hash child proofs into a deterministic commitment, and (soon) feed those summaries into recursive circuits.
 
 Together, these crates implement a **reference-quality height-compressed prover** whose RAM usage is dictated by the configured block size while surfacing enough observability (metrics + CLI tooling) to tune √T behavior on real workloads.
 

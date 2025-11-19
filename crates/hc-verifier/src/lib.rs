@@ -8,7 +8,7 @@ pub mod merkle;
 pub mod queries;
 pub mod transcript;
 
-pub use api::{verify, Proof};
+pub use api::{verify, verify_with_summary, Proof, QueryCommitments, VerificationSummary};
 
 #[cfg(test)]
 mod tests {

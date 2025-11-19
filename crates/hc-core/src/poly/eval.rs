@@ -1,6 +1,7 @@
 //! Helper functions for evaluating polynomials at various points.
 
 use crate::field::FieldElement;
+use rayon::prelude::*;
 
 /// Low-Degree Extension (LDE) for STARK trace values.
 /// Extends trace values from a small domain to a larger domain for low-degree testing.
@@ -91,6 +92,17 @@ pub fn horner<F: FieldElement>(coeffs: &[F], point: F) -> F {
 /// Naively evaluate the polynomial at multiple points.
 pub fn evaluate_batch<F: FieldElement>(coeffs: &[F], points: &[F]) -> Vec<F> {
     points.iter().map(|&p| horner(coeffs, p)).collect()
+}
+
+/// Evaluate multiple columns (sets of coefficients) over the same domain in parallel.
+pub fn evaluate_columns_parallel<F: FieldElement>(
+    coeff_columns: &[&[F]],
+    points: &[F],
+) -> Vec<Vec<F>> {
+    coeff_columns
+        .par_iter()
+        .map(|coeffs| evaluate_batch(coeffs, points))
+        .collect()
 }
 
 /// Computes the value of the `index`-th Lagrange basis polynomial at `point`.
