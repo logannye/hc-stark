@@ -37,6 +37,8 @@ Each invocation prints a single-line JSON summary **and** writes a prettified re
 
 These files are re-generated on every run (the directory is git-ignored); CI jobs can publish them as build artifacts or feed dashboards.
 
+> The GitHub Actions workflow (`.github/workflows/ci.yml`) already runs the sanity/stress/ladder suites and uploads the entire `benchmarks/` directory so you can diff results per commit without re-running the harness locally.
+
 ## Quick Reference
 
 ```bash

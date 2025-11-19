@@ -24,6 +24,25 @@ BENCH_DIR="$PROJECT_ROOT/benchmarks"
 STRESS_REPORT="$BENCH_DIR/stress_latest.json"
 LADDER_REPORT="$BENCH_DIR/ladder_latest.json"
 LADDER_CSV="$BENCH_DIR/ladder_latest.csv"
+TIME_PROFILER_CMD=""
+
+detect_time_profiler() {
+    if [[ -n "$TIME_PROFILER_CMD" ]]; then
+        return
+    fi
+
+    if command -v gtime &> /dev/null && gtime -v true &> /dev/null; then
+        TIME_PROFILER_CMD="gtime"
+        return
+    fi
+
+    if command -v /usr/bin/time &> /dev/null && /usr/bin/time -v true &> /dev/null; then
+        TIME_PROFILER_CMD="/usr/bin/time"
+        return
+    fi
+
+    TIME_PROFILER_CMD=""
+}
 
 # Colors for output
 RED='\033[0;31m'
@@ -162,9 +181,12 @@ run_bench_with_profiler() {
     log "Profiling benchmark (block size: $block_size)"
     local cmd=("cargo" "$@")
 
+    detect_time_profiler
+    local profiler="$TIME_PROFILER_CMD"
+
     if command -v timeout &> /dev/null; then
-        if command -v /usr/bin/time &> /dev/null; then
-            if output=$(timeout "$timeout" /usr/bin/time -v "${cmd[@]}" 2> "$profile_log"); then
+        if [[ -n "$profiler" ]]; then
+            if output=$(timeout "$timeout" "$profiler" -v "${cmd[@]}" 2> "$profile_log"); then
                 parse_profile_output "$profile_log"
                 success "Benchmark completed (profiled)"
                 echo "$output"
@@ -174,7 +196,7 @@ run_bench_with_profiler() {
                 return 1
             fi
         else
-            warning "Profiler (/usr/bin/time) not available, running without profiling"
+            warning "Profiler with verbose output not available, running without profiling"
             if output=$(timeout "$timeout" "${cmd[@]}" 2>&1); then
                 success "Benchmark completed (no profiler)"
                 echo "$output"
@@ -186,8 +208,8 @@ run_bench_with_profiler() {
         fi
     else
         warning "timeout not available, running benchmark without timeout guard"
-        if command -v /usr/bin/time &> /dev/null; then
-            if output=$(/usr/bin/time -v "${cmd[@]}" 2> "$profile_log"); then
+        if [[ -n "$profiler" ]]; then
+            if output=$("$profiler" -v "${cmd[@]}" 2> "$profile_log"); then
                 parse_profile_output "$profile_log"
                 success "Benchmark completed (profiled)"
                 echo "$output"
@@ -197,7 +219,7 @@ run_bench_with_profiler() {
                 return 1
             fi
         else
-            warning "Profiler (/usr/bin/time) not available, running without profiling"
+            warning "Profiler with verbose output not available, running without profiling"
             if output=$("${cmd[@]}" 2>&1); then
                 success "Benchmark completed (no profiler)"
                 echo "$output"

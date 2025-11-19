@@ -112,7 +112,11 @@ where
 
         let is_top_level = idx + 1 == total_levels;
         let duplicate_single = !(is_top_level && level_nodes.len() == 1 && !had_carry);
-        carry = Some(fold_chunk::<H>(level_nodes, &mut path_nodes, duplicate_single));
+        carry = Some(fold_chunk::<H>(
+            level_nodes,
+            &mut path_nodes,
+            duplicate_single,
+        ));
     }
 
     Ok(MerklePath::new(path_nodes))

@@ -106,6 +106,9 @@ struct SerializableMetrics {
     trace_blocks_loaded: usize,
     fri_blocks_loaded: usize,
     composition_blocks_loaded: usize,
+    fri_query_batches: usize,
+    fri_queries_answered: usize,
+    fri_query_duration_ms: u64,
 }
 
 impl SerializableProof {
@@ -289,6 +292,9 @@ impl SerializableMetrics {
             trace_blocks_loaded: metrics.trace_blocks_loaded,
             fri_blocks_loaded: metrics.fri_blocks_loaded,
             composition_blocks_loaded: metrics.composition_blocks_loaded,
+            fri_query_batches: metrics.fri_query_batches,
+            fri_queries_answered: metrics.fri_queries_answered,
+            fri_query_duration_ms: metrics.fri_query_duration_ms,
         }
     }
 
@@ -297,6 +303,9 @@ impl SerializableMetrics {
             trace_blocks_loaded: self.trace_blocks_loaded,
             fri_blocks_loaded: self.fri_blocks_loaded,
             composition_blocks_loaded: self.composition_blocks_loaded,
+            fri_query_batches: self.fri_query_batches,
+            fri_queries_answered: self.fri_queries_answered,
+            fri_query_duration_ms: self.fri_query_duration_ms,
         }
     }
 }

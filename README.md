@@ -312,6 +312,14 @@ cargo run -p hc-cli -- bench --scenario merkle --leaves 4096 --queries 128 --fan
 cargo run -p hc-cli -- bench --scenario lde --columns 4 --degree 512 --samples 2048
 ```
 
+For richer workloads, `hc-examples` includes a zkML **dense layer** harness that runs end-to-end with the streaming prover:
+
+```bash
+cargo test -p hc-examples tests::dense_layer_demo_executes -- --nocapture
+```
+
+The same module exposes `dense_layer_replay` so you can feed dense-layer traces into custom AIRs or benchmark replay performance.
+
 You might expose flags like:
 
 ```bash
@@ -347,6 +355,16 @@ Test results are logged to timestamped files and include detailed performance me
 The ladder phase now wraps each benchmark with `/usr/bin/time -v` when available, collecting `profile_duration` (ms) and `memory_kb` (RSS) per block size. These entries are appended to `benchmarks/ladder_latest.json` (and `.csv`), and the analysis stage uses `jq`/`bc` to compute normalized ratios, demonstrating constant-time and √T-memory behavior. The script still works when `timeout`, `/usr/bin/time`, or `jq` are missing—warnings are emitted and raw JSON is kept for offline inspection. Artifact formats are documented under [`docs/benchmarks/`](docs/benchmarks/README.md).
 
 Every `hc-cli bench` invocation emits a single-line JSON summary and updates `benchmarks/latest.json`, making it easy to feed CI dashboards or perf regressions without scraping logs.
+
+### 6.3 Continuous integration & regression artifacts
+
+`.github/workflows/ci.yml` runs on every push / PR and executes:
+
+- `cargo fmt`, `cargo clippy --workspace --all-targets`, and `cargo test --workspace`
+- `./scripts/test_suite.sh sanity`, `stress`, and `ladder`
+- A lightweight prover benchmark (`hc-cli bench --iterations 2 --block-size 8 --scenario prover`)
+
+The workflow uploads `benchmarks/latest.json`, `benchmarks/stress_latest.json`, and `benchmarks/ladder_latest.{json,csv}` via `actions/upload-artifact`, so dashboards (or humans) can diff √T behavior without reproducing long runs locally.
 
 ### 6.3 Extending the system with a new AIR / VM
 
@@ -403,12 +421,15 @@ This demonstrates the **√T-space behavior** and the **polylogarithmic time ove
 * ✅ **Verifier implementation**: Complete verifier now matches the prover transcript, validates Merkle paths via streaming replay, and enforces FRI query propagation.
 * ✅ **Streaming Merkle replay**: `StreamingMerkle::extract_path` reconstructs Merkle paths via block replay without ever materializing the full tree.
 * ✅ **Block-wise LDE/composition**: Each block is low-degree extended and combined into composition contributions with hashed commitments and new metrics.
+* ✅ **Recursion planner & encodings**: `RecursionSpec::plan_for` emits deterministic batching schedules and the recursion circuit re-encodes `ProofSummary` commitments for outer proofs.
+* ✅ **Richer workloads**: `hc-examples` ships zkML dense-layer traces plus replay helpers for benchmarking non-toy AIRs.
 * ✅ **Recursion-ready verifier summaries**: `hc-verifier` now exposes `verify_with_summary` plus `QueryCommitments`, enabling `hc-recursion` to hash query responses deterministically.
 * ✅ **Configurable streaming Merkle fanouts**: The height-compressed builder + replay extractor accept arbitrary fanouts and include property tests + micro-benchmarks.
 * ✅ **Batched LDE kernels**: Parallel column evaluators (Rayon-backed) keep LDE + constraint evaluation within the √T memory envelope.
 * ✅ **CLI tooling**: Full CLI with `prove`, `verify`, and `bench` commands plus JSON serialization for proofs and query responses.
 * ✅ **Benchmarking**: `hc-bench` now ships scenario presets (`prover`, `merkle`, `lde`) so you can compare streaming vs in-memory paths and sequential vs batched LDE kernels. Summaries are emitted as JSON and copied into `benchmarks/latest.json`.
 * ✅ **Comprehensive test suite**: Sanity, stress, and ladder tests log runtime + RSS metrics and persist JSON/CSV artifacts under `benchmarks/` for CI scraping.
+* ✅ **CI & regression hooks**: GitHub Actions run fmt/clippy/tests + all suite modes and publish benchmark artifacts for dashboards.
 * ✅ **Documentation**: Complete whitepaper, design notes, and implementation documentation.
 
 ### 🔄 Ongoing Work

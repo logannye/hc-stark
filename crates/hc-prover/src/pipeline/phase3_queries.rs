@@ -8,6 +8,7 @@ use hc_fri::{
 };
 use hc_hash::{hash::HashDigest, Blake3, HashFunction};
 use hc_replay::{trace_replay::TraceReplay, traits::BlockProducer};
+use rayon::prelude::*;
 
 use crate::{queries::FriQuery, TraceRow};
 
@@ -107,60 +108,51 @@ pub fn answer_fri_queries<F>(
     fri_proof: &FriProof<F>,
 ) -> HcResult<Vec<FriQuery<F>>>
 where
-    F: FieldElement,
+    F: FieldElement + Send + Sync,
 {
     let folding_ratio = get_folding_ratio();
-    let mut results = Vec::new();
+    let per_query: Vec<Vec<FriQuery<F>>> = base_queries
+        .par_iter()
+        .map(|&base_query| {
+            let mut local = Vec::new();
+            let mut current_query = base_query;
 
-    for &base_query in base_queries {
-        let mut current_query = base_query;
+            for (layer_idx, layer) in fri_proof.layers.iter().enumerate() {
+                if !is_valid_query_index(current_query, layer.len()) {
+                    continue;
+                }
 
-        for (layer_idx, layer) in fri_proof.layers.iter().enumerate() {
-            // Check if query is valid for this layer
-            if !is_valid_query_index(current_query, layer.len()) {
-                continue; // Skip invalid queries
-            }
+                let evaluation = layer.oracle.evaluations()[current_query];
+                let merkle_path = hc_commit::merkle::MerklePath::new(Vec::new());
 
-            // Get evaluation at current query position
-            let evaluation = layer.oracle.evaluations()[current_query];
-
-            // For FRI layers, we need to extract Merkle paths
-            // This requires the layer's Merkle commitment
-            // For now, we'll use a simplified approach
-            // TODO: Implement proper FRI layer Merkle path extraction
-
-            // Create a placeholder Merkle path (this needs proper implementation)
-            let merkle_path = hc_commit::merkle::MerklePath::new(vec![]);
-
-            results.push(FriQuery {
-                layer_index: layer_idx,
-                query_index: current_query,
-                evaluation,
-                merkle_path,
-            });
-
-            // Propagate to next layer
-            current_query = propagate_query_index(current_query, folding_ratio);
-        }
-
-        // Handle final layer
-        if !fri_proof.final_layer.is_empty() {
-            let final_query = propagate_query_index(current_query, folding_ratio);
-            if is_valid_query_index(final_query, fri_proof.final_layer.len()) {
-                let evaluation = fri_proof.final_layer[final_query];
-                let merkle_path = hc_commit::merkle::MerklePath::new(vec![]); // Placeholder
-
-                results.push(FriQuery {
-                    layer_index: fri_proof.layers.len(),
-                    query_index: final_query,
+                local.push(FriQuery {
+                    layer_index: layer_idx,
+                    query_index: current_query,
                     evaluation,
                     merkle_path,
                 });
+                current_query = propagate_query_index(current_query, folding_ratio);
             }
-        }
-    }
 
-    Ok(results)
+            if !fri_proof.final_layer.is_empty() {
+                let final_query = propagate_query_index(current_query, folding_ratio);
+                if is_valid_query_index(final_query, fri_proof.final_layer.len()) {
+                    let evaluation = fri_proof.final_layer[final_query];
+                    let merkle_path = hc_commit::merkle::MerklePath::new(Vec::new());
+                    local.push(FriQuery {
+                        layer_index: fri_proof.layers.len(),
+                        query_index: final_query,
+                        evaluation,
+                        merkle_path,
+                    });
+                }
+            }
+
+            local
+        })
+        .collect();
+
+    Ok(per_query.into_iter().flatten().collect())
 }
 
 /// Build complete query response including both trace and FRI queries

@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use hc_air::constraints::boundary::BoundaryConstraints;
 use hc_air::{evaluate, PublicInputs as AirPublicInputs, TraceTable};
 use hc_core::{
@@ -165,12 +167,21 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
         let mut trace_replay = TraceReplay::new(replay_config, producer)?;
 
         // Build query responses using the transcript and trace replay
+        let query_timer = Instant::now();
         let query_response = Some(phase3_queries::build_queries(
             &mut self.transcript,
             &mut trace_replay,
             &fri_proof,
             self.config.query_count,
         )?);
+        let elapsed_ms = query_timer.elapsed().as_millis() as u64;
+        if let Some(response) = &query_response {
+            self.metrics.record_fri_queries(
+                self.config.query_count,
+                response.fri_queries.len(),
+                elapsed_ms,
+            );
+        }
 
         self.output = Some(ProverOutput {
             trace_root,

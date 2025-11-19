@@ -78,3 +78,11 @@ At the moment the wrapper only enforces the fan-in constraint. That is, `wrap_pr
 
 This staged plan mirrors the rest of hc-STARK: start with deterministic streaming summaries, then gradually fold them into the prover/verifier pipelines once the interfaces are stable.
 
+---
+
+## 5. Implementation status (Nov 2025)
+
+- `RecursionSpec::plan_for(total_proofs)` now emits deterministic multi-level schedules (`RecursionLevel` + `BatchPlan`) and enforces both `fan_in` and `max_depth`.
+- The `hc_recursion::circuit` module converts each `ProofSummary` into Goldilocks words, replays the `QueryCommitments`, and exposes a challenge helper that outer circuits can re-use.
+- Tests cover tree planning, depth rejection, encoding round-trips, and deterministic aggregation batches driven directly by the schedule output.
+

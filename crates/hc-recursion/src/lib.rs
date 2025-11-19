@@ -6,7 +6,7 @@ pub mod spec;
 pub mod wrapper;
 
 pub use aggregator::{aggregate, AggregatedProof, ProofSummary};
-pub use spec::RecursionSpec;
+pub use spec::{BatchPlan, RecursionLevel, RecursionSchedule, RecursionSpec};
 pub use wrapper::{wrap_proofs, wrap_proofs_with_spec};
 
 #[cfg(test)]
@@ -124,5 +124,52 @@ mod tests {
             aggregated.summaries[0].query_commitments.fri_commitment,
             aggregated.summaries[1].query_commitments.fri_commitment
         );
+    }
+
+    #[test]
+    fn schedule_drives_deterministic_batches() {
+        let program = Program::new(vec![
+            Instruction::AddImmediate(1),
+            Instruction::AddImmediate(2),
+        ]);
+        let config = ProverConfig::new(2, 2).unwrap();
+
+        let mut proofs = Vec::new();
+        for offset in 0..6 {
+            let inputs = PublicInputs {
+                initial_acc: GoldilocksField::new(5 + offset),
+                final_acc: GoldilocksField::new(8 + offset),
+            };
+            let prover_proof = prove(config.clone(), program.clone(), inputs.clone()).unwrap();
+            proofs.push(Proof {
+                trace_root: prover_proof.trace_root,
+                fri_proof: prover_proof.fri_proof,
+                initial_acc: inputs.initial_acc,
+                final_acc: inputs.final_acc,
+                query_response: prover_proof.query_response,
+                trace_length: prover_proof.trace_length,
+            });
+        }
+
+        let spec = RecursionSpec {
+            max_depth: 4,
+            fan_in: 2,
+        };
+        let schedule = spec.plan_for(proofs.len()).unwrap();
+        assert_eq!(schedule.total_inputs, proofs.len());
+        assert!(schedule.depth() >= 3);
+
+        for batch in &schedule.levels[0].batches {
+            let mut chunk = Vec::new();
+            for idx in &batch.inputs {
+                chunk.push(proofs[*idx].clone());
+            }
+            let agg_a = aggregate(&chunk).unwrap();
+            let agg_b = aggregate(&chunk).unwrap();
+            assert_eq!(agg_a.digest, agg_b.digest);
+            for summary in &agg_a.summaries {
+                assert!(crate::circuit::verify_query_commitments(summary));
+            }
+        }
     }
 }
