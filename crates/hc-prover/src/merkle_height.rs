@@ -7,7 +7,8 @@ use hc_hash::hash::HashDigest;
 use hc_replay::{config::ReplayConfig, trace_replay::TraceReplay};
 
 use crate::{
-    config::ProverConfig, pipeline::phase1_commit, trace_stream::SliceTraceProducer, TraceRow,
+    commitment::CommitmentScheme, config::ProverConfig, pipeline::phase1_commit,
+    trace_stream::SliceTraceProducer, TraceRow,
 };
 
 pub fn compute_root<F: FieldElement + TwoAdicField>(rows: &[TraceRow<F>]) -> HcResult<HashDigest> {
@@ -22,7 +23,14 @@ pub fn compute_root<F: FieldElement + TwoAdicField>(rows: &[TraceRow<F>]) -> HcR
         initial_acc: rows.first().unwrap()[0],
         final_acc: rows.last().unwrap()[0],
     };
-    let (trace_root, _) =
+    let commitments =
         phase1_commit::commit_trace_streaming(&mut replay, &prover_config, &boundary)?;
-    Ok(trace_root)
+    if commitments.trace_commitment.scheme() != CommitmentScheme::Stark {
+        return Err(HcError::invalid_argument(
+            "trace root is only defined for Stark commitments",
+        ));
+    }
+    commitments
+        .merkle_trace_root
+        .ok_or_else(|| HcError::message("missing Stark trace root"))
 }

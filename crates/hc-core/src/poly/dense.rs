@@ -116,7 +116,7 @@ impl<F: TwoAdicField> DensePolynomial<F> {
 }
 
 fn trim_trailing_zeros<F: FieldElement>(coeffs: &mut Vec<F>) {
-    while coeffs.last().map_or(false, |c| c.is_zero()) {
+    while coeffs.last().is_some_and(|c| c.is_zero()) {
         coeffs.pop();
     }
 }

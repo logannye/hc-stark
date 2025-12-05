@@ -41,7 +41,7 @@ impl<'a, F: FieldElement, H: HashFunction> FriVerifier<'a, F, H> {
             let expected = if let Some(next_layer) = proof.layers.get(index + 1) {
                 next_layer.oracle.evaluations()
             } else {
-                &proof.final_layer
+                proof.final_layer.evaluations()
             };
             if next.len() != expected.len()
                 || !next

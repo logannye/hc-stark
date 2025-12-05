@@ -13,13 +13,25 @@ use hc_hash::{hash::HashDigest, Blake3, HashFunction, Transcript};
 use hc_replay::{trace_replay::TraceReplay, traits::BlockProducer};
 use rayon::join;
 
-use crate::{config::ProverConfig, TraceRow};
+use crate::{
+    commitment::{Commitment, CommitmentScheme},
+    config::ProverConfig,
+    kzg::{convert_coeffs, convert_domain, ensure_degree, serialize_commitment, TraceKzgState},
+    TraceRow,
+};
+
+pub struct CommitmentArtifacts {
+    pub trace_commitment: Commitment,
+    pub composition_commitment: Commitment,
+    pub merkle_trace_root: Option<HashDigest>,
+    pub trace_kzg_state: Option<TraceKzgState>,
+}
 
 pub fn commit_trace_streaming<F, P>(
     trace: &mut TraceReplay<P, TraceRow<F>>,
     config: &ProverConfig,
     boundary: &BoundaryConstraints<F>,
-) -> HcResult<(HashDigest, HashDigest)>
+) -> HcResult<CommitmentArtifacts>
 where
     F: FieldElement + TwoAdicField,
     P: BlockProducer<TraceRow<F>>,
@@ -52,19 +64,31 @@ where
 
     let acc_values: Vec<F> = padded_trace.iter().map(|row| row[0]).collect();
     let input_values: Vec<F> = padded_trace.iter().map(|row| row[1]).collect();
-    let acc_coeffs = interpolate(&acc_values, trace_domain.elements());
-    let input_coeffs = interpolate(&input_values, trace_domain.elements());
+    let trace_elements = trace_domain.elements();
+    let acc_coeffs = interpolate(&acc_values, trace_elements);
+    let input_coeffs = interpolate(&input_values, trace_elements);
 
     let selected_lde_points = lde_domain.elements();
+    let converted_trace_domain = convert_domain(trace_elements);
 
-    let mut trace_builder = StreamingMerkle::<Blake3>::new();
-    let mut composition_builder = StreamingMerkle::<Blake3>::new();
+    let mut trace_builder = if config.commitment == CommitmentScheme::Stark {
+        Some(StreamingMerkle::<Blake3>::new())
+    } else {
+        None
+    };
+    let mut composition_builder = if config.commitment == CommitmentScheme::Stark {
+        Some(StreamingMerkle::<Blake3>::new())
+    } else {
+        None
+    };
 
     let mut lde_cursor = 0;
     let mut padding_remaining = padding_extra;
 
     for row in &full_trace {
-        trace_builder.push(hash_trace_pair(&row[0], &row[1]));
+        if let Some(builder) = &mut trace_builder {
+            builder.push(hash_trace_pair(&row[0], &row[1]));
+        }
     }
 
     for block_index in 0..num_blocks {
@@ -111,7 +135,9 @@ where
         );
 
         for digest in lde_hashes? {
-            composition_builder.push(digest);
+            if let Some(builder) = &mut composition_builder {
+                builder.push(digest);
+            }
         }
 
         let constraint_evals = constraint_evals?;
@@ -123,8 +149,10 @@ where
             );
             let composition_values =
                 composition::build_composition_contributions(&constraint_evals, &random_coeffs);
-            for value in composition_values {
-                composition_builder.push(hash_field_element(&value));
+            if let Some(builder) = &mut composition_builder {
+                for value in &composition_values {
+                    builder.push(hash_field_element(value));
+                }
             }
         }
     }
@@ -133,14 +161,62 @@ where
         return Err(HcError::message("lde points left unconsumed"));
     }
 
-    let trace_root = trace_builder
-        .finalize()
-        .ok_or_else(|| HcError::message("failed to finalize trace merkle tree"))?;
-    let composition_root = composition_builder
-        .finalize()
-        .ok_or_else(|| HcError::message("failed to finalize composition merkle tree"))?;
+    let trace_root = if let Some(builder) = trace_builder {
+        Some(
+            builder
+                .finalize()
+                .ok_or_else(|| HcError::message("failed to finalize trace merkle tree"))?,
+        )
+    } else {
+        None
+    };
+    let composition_root = if let Some(builder) = composition_builder {
+        Some(
+            builder
+                .finalize()
+                .ok_or_else(|| HcError::message("failed to finalize composition merkle tree"))?,
+        )
+    } else {
+        None
+    };
 
-    Ok((trace_root, composition_root))
+    let mut trace_kzg_state = None;
+    let trace_commitment = match config.commitment {
+        CommitmentScheme::Stark => Commitment::Stark {
+            root: trace_root.expect("trace root must exist for Stark"),
+        },
+        CommitmentScheme::Kzg => {
+            ensure_degree(trace_elements.len())?;
+            let acc_poly_fr = convert_coeffs(&acc_coeffs);
+            let input_poly_fr = convert_coeffs(&input_coeffs);
+            let (acc_comm, acc_rand) = crate::kzg::commit_polynomial(&acc_poly_fr)?;
+            let (input_comm, input_rand) = crate::kzg::commit_polynomial(&input_poly_fr)?;
+            let points = vec![
+                serialize_commitment(&acc_comm)?,
+                serialize_commitment(&input_comm)?,
+            ];
+            trace_kzg_state = Some(TraceKzgState {
+                polynomials: vec![acc_poly_fr, input_poly_fr],
+                randomness: vec![acc_rand, input_rand],
+                commitments: vec![acc_comm, input_comm],
+                domain_points: converted_trace_domain.clone(),
+            });
+            Commitment::Kzg { points }
+        }
+    };
+    let composition_commitment = match config.commitment {
+        CommitmentScheme::Stark => Commitment::Stark {
+            root: composition_root.expect("composition root must exist for Stark"),
+        },
+        CommitmentScheme::Kzg => Commitment::Kzg { points: Vec::new() },
+    };
+
+    Ok(CommitmentArtifacts {
+        trace_commitment,
+        composition_commitment,
+        merkle_trace_root: trace_root,
+        trace_kzg_state,
+    })
 }
 
 fn random_coeffs_for_block<F: FieldElement>(
@@ -148,7 +224,8 @@ fn random_coeffs_for_block<F: FieldElement>(
     block_index: usize,
     count: usize,
 ) -> Vec<F> {
-    transcript.append_message(b"composition_block", &block_index.to_le_bytes());
+    let block_bytes = block_index.to_le_bytes();
+    transcript.append_message(b"composition_block", block_bytes);
     (0..count)
         .map(|_| transcript.challenge_field::<F>(b"composition_coeff"))
         .collect()

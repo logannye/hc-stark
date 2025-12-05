@@ -12,8 +12,10 @@ use hc_replay::{config::ReplayConfig, trace_replay::TraceReplay};
 use hc_vm::{generate_trace, Program};
 
 use crate::{
+    commitment::{Commitment, CommitmentScheme},
     config::ProverConfig,
     fri_height,
+    kzg::TraceKzgState,
     metrics::ProverMetrics,
     pipeline::{phase1_commit, phase3_queries},
     queries::ProverOutput,
@@ -83,10 +85,12 @@ struct ProverContext<F: FieldElement> {
     public_inputs: PublicInputs<F>,
     transcript: Transcript<Blake3>,
     trace_root: Option<HashDigest>,
-    composition_root: Option<HashDigest>,
+    trace_commitment: Option<Commitment>,
+    composition_commitment: Option<Commitment>,
     fri_proof: Option<FriProof<F>>,
     output: Option<ProverOutput<F>>,
     metrics: ProverMetrics,
+    trace_kzg_state: Option<TraceKzgState>,
 }
 
 impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
@@ -98,14 +102,10 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
     ) -> Self {
         let mut transcript = Transcript::<Blake3>::new(b"hc-stark");
         // Initialize transcript with public inputs
-        transcript.append_message(
-            b"initial_acc",
-            &public_inputs.initial_acc.to_u64().to_le_bytes(),
-        );
-        transcript.append_message(
-            b"final_acc",
-            &public_inputs.final_acc.to_u64().to_le_bytes(),
-        );
+        let initial_bytes = public_inputs.initial_acc.to_u64().to_le_bytes();
+        transcript.append_message(b"initial_acc", initial_bytes);
+        let final_bytes = public_inputs.final_acc.to_u64().to_le_bytes();
+        transcript.append_message(b"final_acc", final_bytes);
 
         Self {
             rows,
@@ -114,10 +114,12 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
             public_inputs,
             transcript,
             trace_root: None,
-            composition_root: None,
+            trace_commitment: None,
+            composition_commitment: None,
             fri_proof: None,
             output: None,
             metrics: ProverMetrics::default(),
+            trace_kzg_state: None,
         }
     }
 
@@ -131,10 +133,12 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
             initial_acc: self.public_inputs.initial_acc,
             final_acc: self.public_inputs.final_acc,
         };
-        let (trace_root, composition_root) =
+        let commitments =
             phase1_commit::commit_trace_streaming(&mut trace_replay, &self.config, &boundary)?;
-        self.trace_root = Some(trace_root);
-        self.composition_root = Some(composition_root);
+        self.trace_root = commitments.merkle_trace_root;
+        self.trace_commitment = Some(commitments.trace_commitment);
+        self.composition_commitment = Some(commitments.composition_commitment);
+        self.trace_kzg_state = commitments.trace_kzg_state;
         self.metrics.add_trace_blocks(total_blocks);
         self.metrics.add_composition_blocks(total_blocks);
         Ok(())
@@ -152,44 +156,52 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
     }
 
     fn build_output(&mut self) -> HcResult<()> {
-        let trace_root = self
-            .trace_root
-            .ok_or_else(|| HcError::message("missing trace root"))?;
         let fri_proof = self
             .fri_proof
             .take()
             .ok_or_else(|| HcError::message("missing FRI proof"))?;
+        let trace_commitment = self
+            .trace_commitment
+            .clone()
+            .ok_or_else(|| HcError::message("missing trace commitment"))?;
+        let composition_commitment = self
+            .composition_commitment
+            .clone()
+            .ok_or_else(|| HcError::message("missing composition commitment"))?;
 
-        // Recreate trace replay for query answering
+        if self.config.commitment == CommitmentScheme::Stark && self.trace_root.is_none() {
+            return Err(HcError::message("missing trace root for Stark commitment"));
+        }
         let producer = SliceTraceProducer { rows: &self.rows };
         let block_size = self.config.block_size.max(1);
         let replay_config = ReplayConfig::new(block_size, self.rows.len())?;
         let mut trace_replay = TraceReplay::new(replay_config, producer)?;
-
-        // Build query responses using the transcript and trace replay
         let query_timer = Instant::now();
-        let query_response = Some(phase3_queries::build_queries(
+        let queries = phase3_queries::build_queries(
             &mut self.transcript,
             &mut trace_replay,
             &fri_proof,
             self.config.query_count,
-        )?);
+            self.config.commitment,
+            self.trace_kzg_state.as_ref(),
+        )?;
         let elapsed_ms = query_timer.elapsed().as_millis() as u64;
-        if let Some(response) = &query_response {
-            self.metrics.record_fri_queries(
-                self.config.query_count,
-                response.fri_queries.len(),
-                elapsed_ms,
-            );
-        }
+        self.metrics.record_fri_queries(
+            self.config.query_count,
+            queries.fri_queries.len(),
+            elapsed_ms,
+        );
+        let query_response = Some(queries);
 
         self.output = Some(ProverOutput {
-            trace_root,
+            trace_commitment,
+            composition_commitment,
             fri_proof,
             public_inputs: self.public_inputs.clone(),
             query_response,
             metrics: self.metrics.clone(),
             trace_length: self.rows.len(),
+            commitment_scheme: self.config.commitment,
         });
         Ok(())
     }
@@ -204,6 +216,7 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commitment::CommitmentScheme;
     use hc_vm::isa::Instruction;
 
     #[test]
@@ -219,5 +232,36 @@ mod tests {
         let config = ProverConfig::new(2, 2).unwrap();
         let proof = prove(config, program, inputs.clone()).unwrap();
         assert_eq!(proof.public_inputs.final_acc, inputs.final_acc);
+    }
+
+    #[test]
+    fn prover_emits_kzg_commitment() {
+        let program = Program::new(vec![
+            Instruction::AddImmediate(1),
+            Instruction::AddImmediate(2),
+        ]);
+        let inputs = PublicInputs {
+            initial_acc: hc_core::field::prime_field::GoldilocksField::new(5),
+            final_acc: hc_core::field::prime_field::GoldilocksField::new(8),
+        };
+        let config = ProverConfig::new(2, 2)
+            .unwrap()
+            .with_commitment(CommitmentScheme::Kzg);
+        let proof = prove(config, program, inputs).unwrap();
+        assert_eq!(proof.commitment_scheme, CommitmentScheme::Kzg);
+        assert!(matches!(
+            proof.trace_commitment,
+            crate::commitment::Commitment::Kzg { .. }
+        ));
+        let query_response = proof
+            .query_response
+            .expect("kzg proofs should carry query responses");
+        assert!(
+            query_response
+                .trace_queries
+                .iter()
+                .all(|query| matches!(query.witness, crate::queries::TraceWitness::Kzg(_))),
+            "all witnesses should be KZG proofs"
+        );
     }
 }

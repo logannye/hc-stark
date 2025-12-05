@@ -6,10 +6,18 @@
  license.workspace = true
  publish = false
 
- [dependencies]
+[dependencies]
+anyhow = "1.0"
 hc-core = { path = "../hc-core" }
 hc-hash = { path = "../hc-hash" }
 hc-verifier = { path = "../hc-verifier" }
+halo2_proofs = { version = "0.3.2", default-features = true }
+halo2curves = "0.6.1"
+rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_bytes = "0.11"
+thiserror.workspace = true
 
 [dev-dependencies]
 hc-prover = { path = "../hc-prover" }

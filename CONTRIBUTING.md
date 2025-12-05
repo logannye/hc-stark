@@ -77,6 +77,12 @@ Benchmarks live in `.github/workflows/benches.yml` and run nightly to avoid
 slowing down the main CI loop. Keep them deterministic and bounded so they can
 run on GitHub-hosted runners.
 
+## Experimental height-compression sandboxes
+
+- The `hc-height` crate hosts generalized streaming commitment experiments (Merkle vs KZG/IPA style). Run `cargo test -p hc-height` to ensure both commitment paths stay in sync before wiring new ideas into the main prover.
+- When you want to benchmark a new height-compressed oracle, follow the pattern in `hc-height/src/lib.rs`: encode the oracle as a `StreamingCommitment`, feed it blocks via `TraceReplay`, and add property tests that compare against the in-memory baseline.
+- CI gates √T metrics by comparing `benchmarks/latest.json` and `benchmarks/ladder_latest.json` against `benchmarks/baseline.json` via `scripts/check_bench_thresholds.py`. If your change intentionally shifts performance, update the baseline file in the same PR and document the rationale so reviewers understand the expected movement.
+
 ## Security & Responsible Disclosure
 
 - Never commit private keys, API tokens, or traces derived from real customers.

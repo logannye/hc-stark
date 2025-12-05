@@ -22,6 +22,10 @@ impl<F: FieldElement> TraceTable<F> {
         self.rows.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
+    }
+
     pub fn rows(&self) -> &[[F; 2]] {
         &self.rows
     }

@@ -73,8 +73,9 @@ pub fn run_dense_layer_example(instance: DenseLayerInstance) -> HcResult<()> {
     let config = ProverConfig::with_full_config(8, 2, 32, 4)?;
     let proof = prove(config, program, inputs)?;
     println!(
-        "Dense layer demo complete (trace_root={}, trace_length={})",
-        proof.trace_root, proof.trace_length
+        "Dense layer demo complete (trace_commitment={}, trace_length={})",
+        hc_prover::commitment::commitment_digest(&proof.trace_commitment),
+        proof.trace_length
     );
     Ok(())
 }

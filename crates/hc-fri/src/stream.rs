@@ -41,7 +41,7 @@ where
         }
     }
 
-    pub fn next(&mut self) -> HcResult<Option<F>> {
+    pub fn next_value(&mut self) -> HcResult<Option<F>> {
         if self.index >= self.len {
             return Ok(None);
         }
@@ -83,9 +83,9 @@ where
         ));
     }
     let mut iter = ReplayValueStream::new(source);
-    let mut next = Vec::with_capacity((len + 1) / 2);
-    while let Some(a) = iter.next()? {
-        let b = match iter.next()? {
+    let mut next = Vec::with_capacity(len.div_ceil(2));
+    while let Some(a) = iter.next_value()? {
+        let b = match iter.next_value()? {
             Some(value) => value,
             None => F::ZERO,
         };

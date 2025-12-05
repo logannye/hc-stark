@@ -1,6 +1,6 @@
 # block_sizing_and_parameters.md
 
-_Last updated: 2025-11-14_
+_Last updated: 2025-12-04_
 
 ---
 
@@ -294,3 +294,112 @@ This emits JSON such as:
 `avg_trace_blocks` and `avg_fri_blocks` come directly from the prover’s streaming metrics (`ProverMetrics`) and therefore provide a concrete measurement of how close you are to the √T sweet spot. Increase `--block-size` to trade time for memory; decrease it to stay within tighter cache/VRAM budgets. The same instrumentation works on CPUs today and will extend to the GPU backend once the FFT hooks are wired up. 
 
 > **GPU preview:** enabling the `gpu-fft` feature flag on `hc-core` switches `fft_auto` over to the placeholder `GpuBackend`. For now the GPU backend proxies to the CPU FFT while kernel work continues, but the configuration plumbing (feature flag + runtime “prefer GPU” switch) is ready so that experiments can begin without touching the prover logic.
+
+---
+
+## 7. CLI Integration: `--auto-block` and `--auto-block-size`
+
+Starting in December 2025 the CLI understands the heuristics from this document:
+
+- `hc-cli prove --auto-block --trace-length 1048576 --target-rss-mb 256`  
+  feeds the hint (estimated trace length + RSS budget) into `hc_prover::block_tuner::recommend_block_size` and uses the suggestion when constructing `ProverConfig`.
+- `hc-cli bench --scenario prover --auto-block-size --trace-length 1048576 --target-rss-mb 256`  
+  applies the same logic before running the prover benchmark so you can sweep workloads without hand-picking block sizes per machine.
+
+Both commands still accept explicit `--block-size` overrides; the auto flags only kick in when you opt-in. The tuner defaults to `trace_length = 1<<20`, `target_rss_mb = 512`, `min_block = 32`, and `max_block = 1<<15`, which matches the qualitative guidance earlier in this note.
+
+---
+
+## 8. Persistent Tuning Feedback (`tuner_history.json`)
+
+Real workloads fluctuate, so we now persist the results of every prover run:
+
+- Successful `hc-cli prove` executions append the final block size plus the measured replay counts (`ProverMetrics::trace_blocks_loaded`) into `~/.hc-stark/tuner_history.json` (or a custom path via `--tuner-cache path/to/file.json`).
+- The history is keyed by `(auto profile, trace-length bucket)` and maintains a moving average of the best-known block size and observed replay factor. 
+- `recommend_block_size_with_feedback` consumes that history before each new run, biasing the next guess toward proven-good configurations and nudging the block upward/downward when replay ratios have drifted.
+
+Operational tips:
+
+```bash
+# Use the default cache (created automatically under ~/.hc-stark/)
+hc-cli prove --auto-block --trace-length 16777216
+
+# Point the cache somewhere else (e.g., shared CI workspace)
+hc-cli prove --auto-block --tuner-cache /var/tmp/hc-stark/tuner_history.json
+
+# Temporarily disable history reads/writes
+hc-cli prove --auto-block --no-tuner-cache
+```
+
+The cache file is just prettified JSON, so you can inspect or graph it with your favorite tools:
+
+```bash
+cat ~/.hc-stark/tuner_history.json | jq '.entries | keys[]'
+rm ~/.hc-stark/tuner_history.json  # reset if a machine’s profile changes drastically
+```
+
+`hc-cli bench --scenario prover --auto-block-size` respects the same flags, allowing CI to replay the exact heuristics used in production without mutating the cache (bench runs read from the cache but do not write new samples).
+
+Named presets (`--preset laptop`, `--preset server`, etc.) and user-defined entries inside `.hc-cli.toml` simply populate those knobs before the run starts. CLI flags still win if you pass conflicting values, and every command prints the resolved block size/profile so it’s easy to see which preset (if any) was applied.
+
+---
+
+## 9. Presets, hardware detection & GPU tiers
+
+### 9.1 `.hc-cli.toml` as a √T policy file
+
+The `.hc-cli.toml` format mirrors the knobs described throughout this note. Each `[presets.<name>]` table can provide:
+
+- `auto_block` / `auto_block_size`: opt-in to the √T heuristic plus hardware clamps.
+- `trace_length`: a prior for \(T\) when the CLI can’t derive it from inputs.
+- `target_rss_mb`: the working-set budget (RAM or VRAM) that stands in for \(S_{\text{tier}}\).
+- `hardware_detect`: whether to let the CLI sample caches / memory before clamping \(b\).
+- `profile`: one of `balanced`, `memory`, `latency`, `laptop`, or `server`, which tweaks the replay vs. memory trade-off.
+- `commitment`: `stark` or `kzg`, ensuring presets can also select the oracle strategy.
+
+Because presets are merged before CLI flags, you can capture per-lab defaults (e.g., “GPU rig with 24 GB VRAM, prefer KZG commitments”) while still overriding specifics per run.
+
+### 9.2 Hardware detection heuristics
+
+`detect_hardware_profile()` reads `/proc/cpuinfo` (or the macOS equivalents) to collect:
+
+- total system RAM,
+- the largest reported L3 cache,
+- CPU core count (which feeds Rayon defaults),
+- optional GPU metadata from `HC_GPU_MEM_MB` (set it in your shell or CI if you want VRAM-aware tuning without poking driver APIs).
+
+The tuner converts those measurements back into the analytical bounds from §3:
+
+\[
+b^\star = \lfloor\sqrt{T}\rfloor,\qquad
+b_{\max}^{\text{tier}} = \left\lfloor\frac{S_{\text{tier}} - a_0}{a_1}\right\rfloor
+\]
+
+with `S_tier` coming from `target_rss_mb` (if provided) or the hardware profile (RAM/VRAM budgets and cache sizes). L3 governs the maximum “hot” block size; RAM/VRAM governs the replay cache and composition buffers. The implementation keeps a 30–40 % safety margin so the live block fits in cache even when other processes are running. On GPU nodes you simply export `HC_GPU_MEM_MB` or set `target_rss_mb` to the per-device VRAM you can spare; the heuristic treats that number as the working-tier budget and keeps `b` within that envelope.
+
+### 9.3 Example workflows
+
+```bash
+# Reuse a laptop preset, but override the target RSS for a smaller machine
+hc-cli prove \
+  --preset laptop \
+  --auto-block \
+  --target-rss-mb 192 \
+  --hardware-detect
+
+# Pin a GPU-friendly preset defined in ~/.hc-cli.toml
+hc-cli prove \
+  --preset gpu_lab \
+  --auto-block \
+  --hardware-detect \
+  --commitment kzg
+
+# Run a bench sweep with CI-safe defaults and a shared tuner cache
+hc-cli bench \
+  --scenario prover \
+  --preset server \
+  --auto-block-size \
+  --tuner-cache /var/tmp/hc/tuner_history.json
+```
+
+These commands exercise the exact pipeline modeled in this document: the CLI estimates \(b \approx \sqrt{T}\), clamps it using L3/VRAM data, biases the choice using recorded replay factors, and surfaces the final numbers so you can tie observed √T metrics back to the hardware assumptions that produced them.

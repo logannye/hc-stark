@@ -12,5 +12,13 @@ hc-prover = { path = "../hc-prover" }
 hc-vm = { path = "../hc-vm" }
 hc-commit = { path = "../hc-commit" }
 hc-hash = { path = "../hc-hash" }
+hc-recursion = { path = "../hc-recursion" }
+hc-verifier = { path = "../hc-verifier" }
+hc-height = { path = "../hc-height" }
+hc-replay = { path = "../hc-replay" }
+ark-bn254 = "0.4"
+ark-ec = "0.4"
+ark-ff = "0.4"
+libc = "0.2"
 serde_json = "1.0"
 

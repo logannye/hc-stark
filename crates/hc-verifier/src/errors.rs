@@ -19,6 +19,20 @@ pub enum VerifierError {
     FriQueryEvaluationMismatch,
     #[error("unexpected number of fri queries")]
     FriQueryCountMismatch,
+    #[error("fri query Merkle path does not verify")]
+    FriQueryMerkleMismatch,
+    #[error("trace witness type not supported in this verifier")]
+    TraceWitnessUnsupported,
+    #[error("missing KZG trace commitment")]
+    TraceKzgCommitmentMissing,
+    #[error("expected KZG trace witness")]
+    TraceKzgWitnessMissing,
+    #[error("kzg witness references unknown column {0}")]
+    KzgUnknownColumn(usize),
+    #[error("kzg witness evaluation point mismatch")]
+    KzgPointMismatch,
+    #[error("kzg proof invalid")]
+    KzgProofInvalid,
 }
 
 impl From<VerifierError> for HcError {

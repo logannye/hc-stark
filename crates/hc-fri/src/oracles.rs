@@ -5,6 +5,7 @@ use hc_core::field::FieldElement;
 /// Basic oracle abstraction for FRI layers.
 pub trait FriOracle<F: FieldElement> {
     fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
     fn evaluations(&self) -> &[F];
 }
 
@@ -26,6 +27,10 @@ impl<F: FieldElement> InMemoryFriOracle<F> {
 impl<F: FieldElement> FriOracle<F> for InMemoryFriOracle<F> {
     fn len(&self) -> usize {
         self.values.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.values.is_empty()
     }
 
     fn evaluations(&self) -> &[F] {

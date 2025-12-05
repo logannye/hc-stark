@@ -1,15 +1,15 @@
 use hc_core::field::FieldElement;
 
-use crate::layer::FriLayer;
+use crate::layer::{FriFinalLayer, FriLayer};
 
 #[derive(Clone, Debug)]
 pub struct FriProof<F: FieldElement> {
     pub layers: Vec<FriLayer<F>>,
-    pub final_layer: Vec<F>,
+    pub final_layer: FriFinalLayer<F>,
 }
 
 impl<F: FieldElement> FriProof<F> {
-    pub fn new(layers: Vec<FriLayer<F>>, final_layer: Vec<F>) -> Self {
+    pub fn new(layers: Vec<FriLayer<F>>, final_layer: FriFinalLayer<F>) -> Self {
         Self {
             layers,
             final_layer,

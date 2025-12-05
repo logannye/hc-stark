@@ -13,6 +13,12 @@ pub struct StreamingMerkle<H: HashFunction> {
     _marker: core::marker::PhantomData<H>,
 }
 
+impl<H: HashFunction> Default for StreamingMerkle<H> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<H: HashFunction> StreamingMerkle<H> {
     pub fn new() -> Self {
         Self::with_fanout(2)
@@ -71,15 +77,13 @@ impl<H: HashFunction> StreamingMerkle<H> {
 
         // Use the standalone function for path reconstruction
         use super::reconstruct_path_from_replay;
-        match reconstruct_path_from_replay::<H, P>(
+        reconstruct_path_from_replay::<H, P>(
             leaf_index,
             self.leaf_count,
             self.fanout,
             producer,
-        ) {
-            Ok(path) => Some(path),
-            Err(_) => None,
-        }
+        )
+        .ok()
     }
 
     fn push_to_level(&mut self, level: usize, node: HashDigest) {

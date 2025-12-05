@@ -25,12 +25,10 @@ pub fn interpolate<F: FieldElement>(values: &[F], domain: &[F]) -> Vec<F> {
     let n = values.len();
     let mut coeffs = vec![F::ZERO; n];
 
-    for i in 0..n {
+    for (i, &value) in values.iter().enumerate() {
         let basis_coeffs = lagrange_coefficients(domain, i);
-        let value = values[i];
-
-        for j in 0..n {
-            coeffs[j] = coeffs[j].add(basis_coeffs[j].mul(value));
+        for (coeff, basis) in coeffs.iter_mut().zip(basis_coeffs.iter()) {
+            *coeff = coeff.add(basis.mul(value));
         }
     }
 
@@ -47,12 +45,11 @@ fn lagrange_coefficients<F: FieldElement>(domain: &[F], index: usize) -> Vec<F> 
     coeffs[0] = F::ONE;
 
     // Multiply by (x - xj) for j != i
-    for j in 0..n {
+    for (j, &xj) in domain.iter().enumerate() {
         if j == index {
             continue;
         }
 
-        let xj = domain[j];
         // Multiply current polynomial by (x - xj)
         let mut new_coeffs = vec![F::ZERO; n];
         for k in 0..n {
@@ -66,11 +63,11 @@ fn lagrange_coefficients<F: FieldElement>(domain: &[F], index: usize) -> Vec<F> 
 
     // Normalize by the denominator
     let mut denominator = F::ONE;
-    for j in 0..n {
+    for (j, &xj) in domain.iter().enumerate() {
         if j == index {
             continue;
         }
-        denominator = denominator.mul(xi.sub(domain[j]));
+        denominator = denominator.mul(xi.sub(xj));
     }
 
     let denominator_inv = denominator.inverse().expect("non-zero denominator");

@@ -300,6 +300,24 @@ sanity_checks() {
         return 1
     fi
 
+    # Test recursion command
+    local proof_file_b="$TEMP_DIR/test_proof_b.json"
+    if run_cargo 30 run -p hc-cli -- prove --output "$proof_file_b"; then
+        success "Second CLI prove command works"
+    else
+        error "Second CLI prove command failed"
+        return 1
+    fi
+
+    local recursion_metrics="$BENCH_DIR/recursion_latest.json"
+    local recursion_artifact="$BENCH_DIR/recursion_latest_artifact.json"
+    if run_cargo 60 run -p hc-cli -- recursion --proof "$proof_file" --proof "$proof_file_b" --metrics "$recursion_metrics" --artifact "$recursion_artifact"; then
+        success "CLI recursion command works"
+    else
+        error "CLI recursion command failed"
+        return 1
+    fi
+
     # Test 4: Core library functionality
     info "Test 4: Testing core library functions..."
 
@@ -332,6 +350,15 @@ sanity_checks() {
         success "FRI functionality works"
     else
         error "FRI functionality failed"
+        return 1
+    fi
+
+    # Test 7: Recursion aggregation + Halo2 circuit
+    info "Test 7: Testing recursion aggregation circuit..."
+    if run_cargo 180 test -p hc-recursion; then
+        success "Recursion circuit tests pass"
+    else
+        error "Recursion circuit tests failed"
         return 1
     fi
 
@@ -406,6 +433,20 @@ stress_tests() {
         success "LDE benchmark captured"
     else
         warning "LDE benchmark failed"
+    fi
+
+    # Test 7: Height-compression telemetry snapshot
+    info "Test 7: Height benchmark telemetry..."
+    if output=$(run_cargo_capture 180 run -p hc-cli -- bench --scenario height --leaves 65536 --auto-block-size --samples 3); then
+        echo "$output" | tail -n 1 >> "$stress_tmp"
+        if [[ -f "$BENCH_DIR/height_latest.csv" ]]; then
+            info "Height CSV saved to $BENCH_DIR/height_latest.csv"
+        else
+            warning "Height CSV not found after benchmark run"
+        fi
+        success "Height benchmark captured"
+    else
+        warning "Height benchmark failed"
     fi
 
     if [[ -s "$stress_tmp" ]]; then

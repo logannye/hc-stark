@@ -1,3 +1,10 @@
+use crate::{
+    commitment::CommitmentScheme,
+    kzg::{open_polynomial, serialize_fr, serialize_proof, TraceKzgState},
+    queries::{FriQuery, KzgColumnProof, KzgTraceWitness, TraceQuery, TraceWitness},
+    TraceRow,
+};
+use ark_poly::Polynomial;
 use hc_commit::merkle::reconstruct_path_from_replay;
 use hc_core::{
     error::{HcError, HcResult},
@@ -8,9 +15,6 @@ use hc_fri::{
 };
 use hc_hash::{hash::HashDigest, Blake3, HashFunction};
 use hc_replay::{trace_replay::TraceReplay, traits::BlockProducer};
-use rayon::prelude::*;
-
-use crate::{queries::FriQuery, TraceRow};
 
 /// Generate verifier challenge query indices using Fiat-Shamir
 pub fn generate_queries<F: FieldElement>(
@@ -21,7 +25,8 @@ pub fn generate_queries<F: FieldElement>(
     let mut queries = Vec::with_capacity(num_queries);
 
     for i in 0..num_queries {
-        transcript.append_message(b"query_round", &i.to_le_bytes());
+        let round_bytes = i.to_le_bytes();
+        transcript.append_message(b"query_round", round_bytes);
         let challenge = transcript.challenge_field::<F>(b"query_index");
         // Map field element to index in trace
         let index = challenge.to_u64() as usize % trace_length;
@@ -35,7 +40,9 @@ pub fn generate_queries<F: FieldElement>(
 pub fn answer_trace_queries<F, P>(
     queries: &[usize],
     trace_replay: &mut TraceReplay<P, TraceRow<F>>,
-) -> HcResult<Vec<crate::queries::TraceQuery<F>>>
+    scheme: CommitmentScheme,
+    kzg_state: Option<&TraceKzgState>,
+) -> HcResult<Vec<TraceQuery<F>>>
 where
     F: FieldElement + Clone,
     P: BlockProducer<TraceRow<F>>,
@@ -50,18 +57,29 @@ where
         let block_idx = query_idx / trace_replay.block_size();
         queries_by_block
             .entry(block_idx)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(query_idx);
     }
 
-    let trace_len = trace_replay.trace_length();
-    let mut trace_hashes = Vec::with_capacity(trace_len);
-    for block_index in 0..trace_replay.num_blocks() {
-        let block = trace_replay.fetch_block(block_index)?;
-        for row in block.iter() {
-            trace_hashes.push(hash_trace_row(row));
+    let use_merkle = matches!(scheme, CommitmentScheme::Stark);
+    let trace_hashes = if use_merkle {
+        let trace_len = trace_replay.trace_length();
+        let mut hashes = Vec::with_capacity(trace_len);
+        for block_index in 0..trace_replay.num_blocks() {
+            let block = trace_replay.fetch_block(block_index)?;
+            for row in block.iter() {
+                hashes.push(hash_trace_row(row));
+            }
         }
-    }
+        Some(hashes)
+    } else {
+        None
+    };
+    let kzg = if use_merkle {
+        None
+    } else {
+        Some(kzg_state.expect("kzg state required for KZG commitment scheme"))
+    };
 
     for (block_idx, block_queries) in queries_by_block {
         let block_size = trace_replay.block_size();
@@ -74,23 +92,66 @@ where
 
             for &query_idx in &block_queries {
                 let in_block_idx = query_idx - block_offset;
-                let evaluation = block[in_block_idx].clone();
+                let evaluation = block[in_block_idx];
                 query_payloads.push((query_idx, evaluation));
             }
 
             for (query_idx, evaluation) in query_payloads {
-                let producer = |leaf_index: usize| trace_hashes[leaf_index];
-
-                let merkle_path =
-                    reconstruct_path_from_replay::<Blake3, _>(query_idx, trace_len, 2, &producer)
-                        .map_err(|err| {
-                        HcError::message(format!("Failed to extract Merkle path: {}", err))
+                let witness = if use_merkle {
+                    let producer = |leaf_index: usize| trace_hashes.as_ref().unwrap()[leaf_index];
+                    let merkle_path = reconstruct_path_from_replay::<Blake3, _>(
+                        query_idx,
+                        trace_replay.trace_length(),
+                        2,
+                        &producer,
+                    )
+                    .map_err(|err| {
+                        HcError::message(format!("Failed to extract Merkle path: {err}"))
                     })?;
+                    TraceWitness::Merkle(merkle_path)
+                } else {
+                    let state = kzg.unwrap();
+                    let point = state
+                        .domain_points
+                        .get(query_idx)
+                        .ok_or_else(|| HcError::message("missing KZG domain point"))?;
+                    let mut column_proofs = Vec::with_capacity(state.polynomials.len());
+                    let mut column_evals = Vec::with_capacity(state.polynomials.len());
+                    for (column, ((poly, randomness), commitment)) in state
+                        .polynomials
+                        .iter()
+                        .zip(state.randomness.iter())
+                        .zip(state.commitments.iter())
+                        .enumerate()
+                    {
+                        let eval_fr = poly.evaluate(point);
+                        column_evals.push(serialize_fr(&eval_fr)?);
+                        let proof = open_polynomial(poly, *point, randomness)?;
+                        #[cfg(debug_assertions)]
+                        {
+                            use crate::kzg::verify_proof as check_kzg_proof;
+                            let eval_value = eval_fr;
+                            debug_assert!(
+                                check_kzg_proof(commitment, *point, eval_value, &proof)?,
+                                "generated invalid KZG proof"
+                            );
+                        }
+                        column_proofs.push(KzgColumnProof {
+                            column,
+                            proof: serialize_proof(&proof)?,
+                        });
+                    }
+                    TraceWitness::Kzg(KzgTraceWitness {
+                        point: serialize_fr(point)?,
+                        proofs: column_proofs,
+                        evaluations: column_evals,
+                    })
+                };
 
-                results.push(crate::queries::TraceQuery {
+                results.push(TraceQuery {
                     index: query_idx,
                     evaluation,
-                    merkle_path,
+                    witness,
                 });
             }
         }
@@ -108,11 +169,11 @@ pub fn answer_fri_queries<F>(
     fri_proof: &FriProof<F>,
 ) -> HcResult<Vec<FriQuery<F>>>
 where
-    F: FieldElement + Send + Sync,
+    F: FieldElement,
 {
     let folding_ratio = get_folding_ratio();
-    let per_query: Vec<Vec<FriQuery<F>>> = base_queries
-        .par_iter()
+    let per_query: HcResult<Vec<Vec<FriQuery<F>>>> = base_queries
+        .iter()
         .map(|&base_query| {
             let mut local = Vec::new();
             let mut current_query = base_query;
@@ -123,7 +184,9 @@ where
                 }
 
                 let evaluation = layer.oracle.evaluations()[current_query];
-                let merkle_path = hc_commit::merkle::MerklePath::new(Vec::new());
+                let merkle_path = layer.merkle_path(current_query).map_err(|err| {
+                    HcError::message(format!("Failed to extract FRI Merkle path: {err}"))
+                })?;
 
                 local.push(FriQuery {
                     layer_index: layer_idx,
@@ -137,8 +200,16 @@ where
             if !fri_proof.final_layer.is_empty() {
                 let final_query = propagate_query_index(current_query, folding_ratio);
                 if is_valid_query_index(final_query, fri_proof.final_layer.len()) {
-                    let evaluation = fri_proof.final_layer[final_query];
-                    let merkle_path = hc_commit::merkle::MerklePath::new(Vec::new());
+                    let evaluation = fri_proof.final_layer.evaluations()[final_query];
+                    let merkle_path =
+                        fri_proof
+                            .final_layer
+                            .merkle_path(final_query)
+                            .map_err(|err| {
+                                HcError::message(format!(
+                                    "Failed to extract final FRI layer Merkle path: {err}"
+                                ))
+                            })?;
                     local.push(FriQuery {
                         layer_index: fri_proof.layers.len(),
                         query_index: final_query,
@@ -148,11 +219,11 @@ where
                 }
             }
 
-            local
+            Ok(local)
         })
         .collect();
 
-    Ok(per_query.into_iter().flatten().collect())
+    Ok(per_query?.into_iter().flatten().collect())
 }
 
 /// Build complete query response including both trace and FRI queries
@@ -161,6 +232,8 @@ pub fn build_queries<F, P>(
     trace_replay: &mut TraceReplay<P, TraceRow<F>>,
     fri_proof: &FriProof<F>,
     num_queries: usize,
+    scheme: CommitmentScheme,
+    kzg_state: Option<&TraceKzgState>,
 ) -> HcResult<crate::queries::QueryResponse<F>>
 where
     F: FieldElement + Clone,
@@ -169,7 +242,7 @@ where
     let trace_length = trace_replay.trace_length();
     let query_indices = generate_queries::<F>(transcript, trace_length, num_queries)?;
 
-    let trace_queries = answer_trace_queries(&query_indices, trace_replay)?;
+    let trace_queries = answer_trace_queries(&query_indices, trace_replay, scheme, kzg_state)?;
     let fri_queries = answer_fri_queries(&query_indices, fri_proof)?;
 
     Ok(crate::queries::QueryResponse {

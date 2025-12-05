@@ -1,3 +1,4 @@
+use crate::commitment::CommitmentScheme;
 use hc_core::error::{HcError, HcResult};
 
 #[derive(Clone, Copy, Debug)]
@@ -6,6 +7,7 @@ pub struct ProverConfig {
     pub fri_final_poly_size: usize,
     pub query_count: usize,
     pub lde_blowup_factor: usize,
+    pub commitment: CommitmentScheme,
 }
 
 impl ProverConfig {
@@ -44,6 +46,12 @@ impl ProverConfig {
             fri_final_poly_size,
             query_count,
             lde_blowup_factor,
+            commitment: CommitmentScheme::Stark,
         })
+    }
+
+    pub fn with_commitment(mut self, scheme: CommitmentScheme) -> Self {
+        self.commitment = scheme;
+        self
     }
 }

@@ -17,7 +17,10 @@ pub fn run_toy_example() -> hc_core::error::HcResult<()> {
     };
     let config = ProverConfig::new(2, 2)?;
     let proof = prove(config, program, inputs)?;
-    println!("Example trace root {:?}", proof.trace_root);
+    println!(
+        "Example trace commitment {:?}",
+        hc_prover::commitment::commitment_digest(&proof.trace_commitment)
+    );
     Ok(())
 }
 
@@ -64,7 +67,7 @@ mod tests {
             biases: vec![GoldilocksField::from_u64(1)],
         };
         let trace = dense_layer_trace(&instance).unwrap();
-        assert!(trace.len() > 0);
+        assert!(!trace.is_empty());
         let mut replay = dense_layer_replay(&instance, 2).unwrap();
         let first = replay.fetch_block(0).unwrap().to_vec();
         assert_eq!(first.len(), 2.min(trace.len()));

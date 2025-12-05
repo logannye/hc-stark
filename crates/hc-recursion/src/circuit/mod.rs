@@ -3,23 +3,25 @@ use hc_hash::{hash::HashDigest, Blake3, HashFunction};
 
 use crate::aggregator::ProofSummary;
 
+pub mod halo2;
+#[derive(Clone, Debug)]
 pub struct SummaryEncoding {
-    pub trace_root_words: [GoldilocksField; 4],
+    pub trace_digest_words: [GoldilocksField; 4],
     pub initial_acc: GoldilocksField,
     pub final_acc: GoldilocksField,
     pub trace_length: GoldilocksField,
-    pub trace_commitment_words: [GoldilocksField; 4],
+    pub query_trace_commitment_words: [GoldilocksField; 4],
     pub fri_commitment_words: [GoldilocksField; 4],
 }
 
 impl SummaryEncoding {
     pub fn as_fields(&self) -> Vec<GoldilocksField> {
         let mut out = Vec::with_capacity(14);
-        out.extend(self.trace_root_words);
+        out.extend(self.trace_digest_words);
         out.push(self.initial_acc);
         out.push(self.final_acc);
         out.push(self.trace_length);
-        out.extend(self.trace_commitment_words);
+        out.extend(self.query_trace_commitment_words);
         out.extend(self.fri_commitment_words);
         out
     }
@@ -27,18 +29,18 @@ impl SummaryEncoding {
 
 pub fn encode_summary(summary: &ProofSummary<GoldilocksField>) -> SummaryEncoding {
     SummaryEncoding {
-        trace_root_words: digest_to_words(summary.trace_root),
+        trace_digest_words: digest_to_words(summary.trace_commitment_digest),
         initial_acc: summary.initial_acc,
         final_acc: summary.final_acc,
         trace_length: GoldilocksField::from_u64(summary.trace_length as u64),
-        trace_commitment_words: digest_to_words(summary.query_commitments.trace_commitment),
+        query_trace_commitment_words: digest_to_words(summary.query_commitments.trace_commitment),
         fri_commitment_words: digest_to_words(summary.query_commitments.fri_commitment),
     }
 }
 
 pub fn verify_query_commitments(summary: &ProofSummary<GoldilocksField>) -> bool {
     let encoding = encode_summary(summary);
-    let trace_digest = words_to_digest(&encoding.trace_commitment_words);
+    let trace_digest = words_to_digest(&encoding.query_trace_commitment_words);
     let fri_digest = words_to_digest(&encoding.fri_commitment_words);
     trace_digest == summary.query_commitments.trace_commitment
         && fri_digest == summary.query_commitments.fri_commitment
@@ -82,7 +84,7 @@ mod tests {
     #[test]
     fn encoding_round_trip_verifies_commitments() {
         let summary = ProofSummary {
-            trace_root: Blake3::hash(b"trace"),
+            trace_commitment_digest: Blake3::hash(b"trace"),
             initial_acc: GoldilocksField::from_u64(5),
             final_acc: GoldilocksField::from_u64(42),
             trace_length: 64,
@@ -90,6 +92,7 @@ mod tests {
                 trace_commitment: Blake3::hash(b"trace_queries"),
                 fri_commitment: Blake3::hash(b"fri_queries"),
             },
+            circuit_digest: GoldilocksField::from_u64(0),
         };
         assert!(verify_query_commitments(&summary));
         let encoding = encode_summary(&summary);

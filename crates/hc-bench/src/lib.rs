@@ -5,10 +5,14 @@ use hc_prover::{config::ProverConfig, metrics::ProverMetrics, prove, PublicInput
 use hc_vm::{Instruction, Program};
 use serde_json::json;
 
+pub mod height;
 pub mod lde;
 pub mod merkle_paths;
+pub mod recursion;
+pub use height::bench_height;
 pub use lde::bench_parallel_lde;
 pub use merkle_paths::bench_merkle_paths;
+pub use recursion::bench_recursion;
 
 pub fn benchmark(
     iterations: usize,

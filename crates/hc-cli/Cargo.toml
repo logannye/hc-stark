@@ -14,12 +14,16 @@ hc-core = { path = "../hc-core" }
 hc-bench = { path = "../hc-bench" }
 hc-fri = { path = "../hc-fri" }
 hc-hash = { path = "../hc-hash" }
+hc-recursion = { path = "../hc-recursion" }
 hc-prover = { path = "../hc-prover" }
 hc-verifier = { path = "../hc-verifier" }
 hc-vm = { path = "../hc-vm" }
+ark-bn254 = "0.4"
+ark-serialize = "0.4"
 hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+toml = "0.8"
 
 [dev-dependencies]
 assert_cmd = "2.0"

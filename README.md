@@ -86,11 +86,12 @@ hc-stark/
     hc-bench/      # Programmatic benchmarking harness (√T metrics)
     hc-examples/   # Library of sample end-to-end flows
     hc-recursion/  # Aggregation + recursion scaffolding
+    hc-height/     # Experimental generalized height-compression interfaces
 ```
 
 **Separation of concerns:**
 
-* `hc-core`, `hc-commit`, `hc-hash`, and `hc-fri` implement **generic primitives** usable by other projects.
+* `hc-core`, `hc-commit`, `hc-hash`, `hc-fri`, and `hc-height` implement **generic primitives** usable by other projects.
 * `hc-air` + `hc-vm` define concrete **computations to prove** (VMs, example AIRs).
 * `hc-replay` abstracts deterministic block replays so higher layers can stay agnostic.
 * `hc-prover` is where the **height compression logic** (scheduler + replay plumbing) lives.
@@ -310,6 +311,111 @@ cargo run -p hc-cli -- bench --scenario merkle --leaves 4096 --queries 128 --fan
 
 # Batched LDE throughput micro-bench
 cargo run -p hc-cli -- bench --scenario lde --columns 4 --degree 512 --samples 2048
+
+# Recursion summary aggregation
+cargo run -p hc-cli -- bench --scenario recursion --proofs 8
+
+# Produce a Halo2-backed recursion artifact from two child proofs
+cargo run -p hc-cli -- recursion \
+  --proof proof_a.json \
+  --proof proof_b.json \
+  --artifact recursion_artifact.json \
+  --metrics recursion_metrics.json
+
+# Height-compressed Merkle vs KZG commitments
+cargo run -p hc-cli -- bench --scenario height --leaves 65536 --block-size 128
+
+# Auto-select a block size (√T heuristic + memory clamp)
+hc-cli prove --auto-block --trace-length 1048576 --target-rss-mb 256
+hc-cli bench --scenario prover --auto-block-size --trace-length 1048576 --target-rss-mb 256
+
+# Experimental SNARK/KZG oracle (commitments streamed via ark-bn254)
+hc-cli prove --commitment kzg --auto-block --output proof_kzg.json
+# (verification currently mocks the KZG branch but exercises the pipeline end-to-end)
+
+### Bench metrics & dashboards
+
+All `hc-cli bench` scenarios accept `--metrics-dir <path>` (default `benchmarks`) and `--metrics-tag <label>` to persist JSONL/CSV history for dashboards. Example:
+
+```bash
+hc-cli bench \
+  --scenario height \
+  --auto-block-size \
+  --metrics-tag nightly \
+  --metrics-dir benchmarks \
+  --leaves 65536 \
+  --samples 3
+```
+
+This appends a record to `benchmarks/height_history.jsonl`, refreshes `height_latest.csv` (per-sample detail), and updates `height_history.csv` with per-run summaries. CI runs `scripts/aggregate_height_metrics.py` to turn those files into `height_dashboard.md` + `height_trend.png`, but you can run the script locally (optionally pointing `--out-dir` somewhere else) to inspect the latest regressions before pushing.
+
+## CLI presets, auto-tuning & hardware detection
+
+Auto-tuning is now a first-class feature; the CLI resolves block sizes and memory budgets by layering (in order of precedence) defaults → presets → config file → explicit flags. The built-in presets (`balanced`, `memory`, `latency`, `laptop`, `server`) encode sensible √T heuristics for common machines, while `.hc-cli.toml` lets you capture org-specific guidance.
+
+### Preset lifecycle
+
+- **Built-ins**: `--preset laptop` biases toward smaller blocks (good for 16–32 GB laptops); `--preset server` increases the max block cap and assumes large L3 caches; `--preset memory` minimizes RSS at the expense of more replays.
+- **User presets**: any table under `[presets.<name>]` mirrors CLI flags (`auto_block`, `trace_length`, `target_rss_mb`, `hardware_detect`, `commitment`, etc.). These presets can point to shared tuner caches so CI and developers reuse the same history.
+- **Resolution**: presets hydrate missing options, but you can still override anything per command (`--target-rss-mb 512` beats whatever the preset provided). The CLI prints the final profile, commitment scheme, and block size so you always see what was applied.
+
+### `.hc-cli.toml` structure
+
+```toml
+# ~/.hc-cli.toml
+[presets.gpu_lab]
+auto_block = true
+trace_length = 16777216         # hint used by √T heuristic before real traces are known
+target_rss_mb = 4096            # treat as “VRAM budget” when running on a 24 GB GPU
+profile = "latency"             # bias toward fewer replays on lab servers
+hardware_detect = true          # let hc-cli inspect L3/cache sizes before clamping b
+commitment = "kzg"              # default to the experimental SNARK-style oracle
+tuner_cache = "/var/tmp/hc-stark/tuner_history.json"
+```
+
+### Hardware detection and GPU considerations
+
+`--hardware-detect` (or `hardware_detect = true` in a preset) calls `hc_prover::block_tuner::detect_hardware_profile`, which gathers:
+
+- total RAM to estimate an RSS ceiling when you don’t pass `--target-rss-mb`,
+- L3 cache size to derive a conservative `b_{\max}` so active blocks remain cache-resident,
+- an optional `HC_GPU_MEM_MB` environment override so GPU runners can map VRAM budgets into the same √T formula.
+
+The auto tuner fuses those measurements with the analytical `b ≈ √T` starting point, then nudges the recommendation using historical replay factors (`tuner_history.json`). For GPU nodes, simply set `target_rss_mb` to the per-device VRAM you want to burn; the rest of the heuristics carry over unchanged because the prover already streams blocks through bounded buffers.
+
+### Example workflows
+
+```bash
+# Laptop-friendly auto tuning with hardware detection and preset defaults
+hc-cli prove \
+  --preset laptop \
+  --auto-block \
+  --hardware-detect \
+  --trace-length 1048576 \
+  --output proof.json
+
+# CI-style bench run that reuses shared tuner history without mutating it
+hc-cli bench \
+  --scenario prover \
+  --auto-block-size \
+  --preset server \
+  --trace-length 8388608 \
+  --no-tuner-cache \
+  --target-rss-mb 16384
+
+# Exercise the experimental KZG oracle end to end
+hc-cli prove \
+  --auto-block \
+  --hardware-detect \
+  --commitment kzg \
+  --trace-length 2097152
+```
+
+All three commands emit the finalized block size, auto profile, commitment scheme, and (when applicable) the tuner cache path so you can correlate observed √T behavior with the configuration that produced it.
+
+# Core FFT / field smoke tests (used by scripts/test_suite.sh sanity)
+cargo run -p hc-core --example fft_test
+cargo run -p hc-core --example field_test
 ```
 
 For richer workloads, `hc-examples` includes a zkML **dense layer** harness that runs end-to-end with the streaming prover:
@@ -363,6 +469,7 @@ Every `hc-cli bench` invocation emits a single-line JSON summary and updates `be
 - `cargo fmt`, `cargo clippy --workspace --all-targets`, and `cargo test --workspace`
 - `./scripts/test_suite.sh sanity`, `stress`, and `ladder`
 - A lightweight prover benchmark (`hc-cli bench --iterations 2 --block-size 8 --scenario prover`)
+- `./scripts/check_bench_thresholds.py benchmarks/latest.json benchmarks/ladder_latest.json` compares fresh metrics against `benchmarks/baseline.json` and fails the job if `avg_trace_blocks`, `avg_fri_blocks`, or durations drift beyond the allowed percentage.
 
 The workflow uploads `benchmarks/latest.json`, `benchmarks/stress_latest.json`, and `benchmarks/ladder_latest.{json,csv}` via `actions/upload-artifact`, so dashboards (or humans) can diff √T behavior without reproducing long runs locally.
 
@@ -419,17 +526,21 @@ This demonstrates the **√T-space behavior** and the **polylogarithmic time ove
 * ✅ **Complete prover pipeline**: Height-compressed STARK prover with O(√T) memory complexity.
 * ✅ **Query replay & verification**: Fiat-Shamir challenges are replayed with Merkle path checks, ensuring the verifier sees the same leaf values as the prover.
 * ✅ **Verifier implementation**: Complete verifier now matches the prover transcript, validates Merkle paths via streaming replay, and enforces FRI query propagation.
+* ✅ **Streaming FRI Merkle proofs**: Every FRI layer is committed with a streaming Merkle tree; query responses carry real authentication paths that `hc-verifier` replays before hashing them into `QueryCommitments`.
 * ✅ **Streaming Merkle replay**: `StreamingMerkle::extract_path` reconstructs Merkle paths via block replay without ever materializing the full tree.
 * ✅ **Block-wise LDE/composition**: Each block is low-degree extended and combined into composition contributions with hashed commitments and new metrics.
 * ✅ **Recursion planner & encodings**: `RecursionSpec::plan_for` emits deterministic batching schedules and the recursion circuit re-encodes `ProofSummary` commitments for outer proofs.
 * ✅ **Richer workloads**: `hc-examples` ships zkML dense-layer traces plus replay helpers for benchmarking non-toy AIRs.
 * ✅ **Recursion-ready verifier summaries**: `hc-verifier` now exposes `verify_with_summary` plus `QueryCommitments`, enabling `hc-recursion` to hash query responses deterministically.
+* ✅ **Recursive aggregation flow**: `hc-recursion` emits schedule-aware aggregated proofs, `AggregatedProof::verify` replays the hash tree, `hc-cli bench --scenario recursion` benchmarks end-to-end wrapping, and a Halo2/KZG circuit now produces/validates real proofs over the summarized data.
+* ✅ **Generalized height compression experiments**: The `hc-height` crate models streaming commitment builders (Merkle or KZG-style) so pointerless DFS + replay can be applied beyond STARKs.
+* ✅ **Height-compression benchmarks**: `hc-cli bench --scenario height` compares streaming Merkle/KZG commitments against in-memory baselines and logs runtime deltas for §8.4 experiments.
 * ✅ **Configurable streaming Merkle fanouts**: The height-compressed builder + replay extractor accept arbitrary fanouts and include property tests + micro-benchmarks.
 * ✅ **Batched LDE kernels**: Parallel column evaluators (Rayon-backed) keep LDE + constraint evaluation within the √T memory envelope.
 * ✅ **CLI tooling**: Full CLI with `prove`, `verify`, and `bench` commands plus JSON serialization for proofs and query responses.
 * ✅ **Benchmarking**: `hc-bench` now ships scenario presets (`prover`, `merkle`, `lde`) so you can compare streaming vs in-memory paths and sequential vs batched LDE kernels. Summaries are emitted as JSON and copied into `benchmarks/latest.json`.
 * ✅ **Comprehensive test suite**: Sanity, stress, and ladder tests log runtime + RSS metrics and persist JSON/CSV artifacts under `benchmarks/` for CI scraping.
-* ✅ **CI & regression hooks**: GitHub Actions run fmt/clippy/tests + all suite modes and publish benchmark artifacts for dashboards.
+* ✅ **CI & regression hooks**: GitHub Actions run fmt/clippy/tests + all suite modes, publish benchmark artifacts, and gate PRs via `scripts/check_bench_thresholds.py` against `benchmarks/baseline.json`.
 * ✅ **Documentation**: Complete whitepaper, design notes, and implementation documentation.
 
 ### 🔄 Ongoing Work

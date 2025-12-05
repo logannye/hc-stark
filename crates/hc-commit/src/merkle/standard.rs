@@ -18,7 +18,7 @@ impl<H: HashFunction> MerkleTree<H> {
         layers.push(leaves.to_vec());
         while layers.last().unwrap().len() > 1 {
             let prev = layers.last().unwrap();
-            let mut next = Vec::with_capacity((prev.len() + 1) / 2);
+            let mut next = Vec::with_capacity(prev.len().div_ceil(2));
             for chunk in prev.chunks(2) {
                 let left = chunk[0];
                 let right = if chunk.len() == 2 { chunk[1] } else { chunk[0] };

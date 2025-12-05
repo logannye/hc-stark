@@ -1,6 +1,6 @@
 # hc-STARK: Height-Compressed, Memory-Efficient STARK Provers
 
-_Last updated: 2025-11-15_
+_Last updated: 2025-12-04_
 
 ---
 
@@ -237,6 +237,42 @@ The important takeaway:
 
 > hc-STARK converts a **hard memory bottleneck** into a **soft time overhead**, which can be mitigated with more cores / GPUs.
 
+### 3.6 Auto-tuned block sizing in practice
+
+All of the mathematics above feed directly into the shipping CLI. The `hc_prover::block_tuner` module implements the \( b \approx \sqrt{T} \) heuristic, clamps it using measured cache / RAM / VRAM budgets, and biases the pick based on historical replay factors. Operators opt in per command or via presets:
+
+```bash
+# Laptop with 32 GB RAM: fit in cache, let the tuner record replay counts
+hc-cli prove \
+  --auto-block \
+  --hardware-detect \
+  --trace-length 1_048_576 \
+  --target-rss-mb 256 \
+  --output proof.json
+
+# Lab GPU node (24 GB VRAM) running the experimental KZG oracle
+hc-cli prove \
+  --auto-block \
+  --hardware-detect \
+  --preset gpu_lab \
+  --commitment kzg
+```
+
+Presets live in `.hc-cli.toml` and act as organizational policy files:
+
+```toml
+[presets.gpu_lab]
+auto_block = true
+trace_length = 16777216
+target_rss_mb = 4096       # treat as VRAM budget
+profile = "latency"
+hardware_detect = true
+commitment = "kzg"
+tuner_cache = "/var/tmp/hc-stark/tuner_history.json"
+```
+
+The CLI announces the resolved profile, block size, and commitment scheme so operators can correlate observed √T telemetry with the exact assumptions that produced it. GPU-specific tiers simply set `target_rss_mb` (or the `HC_GPU_MEM_MB` env var) to the desired VRAM budget; the same √T math carries over because the prover already streams blocks through bounded buffers.
+
 ---
 
 ## 4. Preserving the Cryptographic Layer (Merkle + FRI)
@@ -445,6 +481,28 @@ The current repository layout mirrors the architecture described above:
 
 Together, these crates implement a **reference-quality height-compressed prover** whose RAM usage is dictated by the configured block size while surfacing enough observability (metrics + CLI tooling) to tune √T behavior on real workloads.
 
+### 7.1 Recursion Planner & Query Summaries
+
+- `hc-verifier` now exposes `VerificationSummary` containing:
+  - Fiat–Shamir seeds,
+  - Commitment roots,
+  - Deterministic `QueryCommitments` that hash the ordered trace/FRI query payloads.
+- `hc-recursion::spec::plan_for` derives balanced aggregation schedules (`BatchPlan`, `RecursionSchedule`) so recursive wrappers can deterministically decide which summaries combine at each height.
+- `hc-recursion::circuit` encodes those summaries as field elements and re-hashes `QueryCommitments` to guard against omission or re-ordering.
+- A concrete Halo2/KZG circuit now enforces a `circuit_digest` constraint for every summary: it replays the `SummaryEncoding` words with Plonk-style accumulators and exposes the resulting digest as the circuit’s public input. The `hc-cli recursion` command produces a real Halo2 proof alongside the aggregated digest, so the recursion story is no longer a mock/verifier stub.
+
+### 7.2 zkML Dense-Layer Reference Trace
+
+- `hc-examples::zkml::dense_layer` constructs a fully streaming replay (`TraceReplay`) for dense layers.
+- `run_dense_layer_example` drives a prove/verify cycle end-to-end, demonstrating how zkML traces hook into the general hc-STARK pipeline without bespoke glue code.
+- Benchmark scenarios (`hc-cli bench --scenario prover`) default to this dense-layer workload, making it easy to track √T behavior on a realistic trace.
+
+### 7.3 CI Workflow & Regression Artifacts
+
+- `.github/workflows/ci.yml` runs the sanity/stress/ladder suites and uploads JSON/CSV artifacts under `benchmarks/`.
+- `benchmarks/baseline.json` captures the current √T envelope (trace/fri blocks and duration) while `scripts/check_bench_thresholds.py` compares fresh runs against those baselines with configurable percentage tolerances.
+- CI fails if `avg_trace_blocks`, `avg_fri_blocks`, `avg_duration_ms`, or the ladder sweep regress by more than the documented thresholds, ensuring √T guarantees stay intact as the code evolves.
+
 ---
 
 ## 8. Future Directions
@@ -460,14 +518,15 @@ Some directions that naturally follow from hc-STARK:
    - Preserve height compression while adding parallelism.
 
 3. **Adaptive block sizing**
-   - Choose \( b \) based on actual cache sizes,
-   - Dynamically adapt block granularity to hardware.
+   - Today’s CLI already implements the √T heuristic, hardware detection, presets, and persistent replay feedback (see §3.6), so most operators never hand-pick `b`. The next frontier is refining those models for multi-GPU rigs, mixing RSS + VRAM budgets, and folding the tuner history into CI dashboards so regressions in block choices are caught automatically.
 
 4. **Generalized height compression**
    - Apply the same techniques to:
      - SNARKs (KZG/IPA commitments),
      - Polynomial IOP-based systems,
      - Non-zk verifiable computation.
+   - The repo now ships a concrete harness (`hc-height` + `hc-cli bench --scenario height --leaves 65536 --block-size 128`) that compares streaming vs. full-buffer Merkle/KZG commitments, so we can validate √T behavior on non-STARK oracles before wiring them into the prover.
+   - `hc-cli prove --commitment kzg --auto-block --hardware-detect` exercises an end-to-end streaming KZG path (the verifier currently performs a mock digest check while we finalize the MSM/IP circuit). This keeps the door open for swapping oracle families without touching the replay core.
 
 As the implementation matures, this whitepaper will evolve to reflect the exact concrete protocol and measured performance characteristics of hc-STARK in practice.
 

@@ -66,12 +66,12 @@ mod tests {
 
     #[test]
     fn simple_trace_satisfies_constraints() {
-        let rows = vec![
+        let rows = [
             [GoldilocksField::new(5), GoldilocksField::new(1)],
             [GoldilocksField::new(6), GoldilocksField::new(2)],
             [GoldilocksField::new(8), GoldilocksField::new(0)],
         ];
-        let trace = TraceTable::new(rows).unwrap();
+        let trace = TraceTable::new(rows.to_vec()).unwrap();
         let public_inputs = PublicInputs {
             initial_acc: GoldilocksField::new(5),
             final_acc: GoldilocksField::new(8),
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn block_wise_evaluation() {
-        let rows = vec![
+        let rows = [
             [GoldilocksField::new(5), GoldilocksField::new(1)],
             [GoldilocksField::new(6), GoldilocksField::new(2)],
             [GoldilocksField::new(8), GoldilocksField::new(0)],

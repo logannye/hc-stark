@@ -41,6 +41,9 @@ jobs:
       - name: unit tests
         run: cargo test --workspace
 
+      - name: recursion circuit tests
+        run: cargo test -p hc-recursion
+
       - name: Sanity suite
         run: ./scripts/test_suite.sh sanity
 
@@ -53,6 +56,21 @@ jobs:
       - name: Prover benchmark snapshot
         run: cargo run -p hc-cli -- bench --iterations 2 --block-size 8 --scenario prover
 
+      - name: Recursive aggregation smoke test
+        run: |
+          cargo run -p hc-cli -- prove --output /tmp/proof_a.json
+          cargo run -p hc-cli -- prove --output /tmp/proof_b.json
+          cargo run -p hc-cli -- recursion --proof /tmp/proof_a.json --proof /tmp/proof_b.json --metrics benchmarks/recursion_latest.json --artifact benchmarks/recursion_latest_artifact.json
+
+      - name: Check benchmark thresholds
+        run: ./scripts/check_bench_thresholds.py benchmarks/latest.json benchmarks/ladder_latest.json
+
+      - name: Height benchmark snapshot
+        run: cargo run -p hc-cli -- bench --scenario height --leaves 65536 --auto-block-size --samples 3
+
+      - name: Height dashboard summary
+        run: python3 scripts/aggregate_height_metrics.py --history benchmarks/height_history.jsonl --out-dir benchmarks
+
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -62,6 +80,13 @@ jobs:
             benchmarks/stress_latest.json
             benchmarks/ladder_latest.json
             benchmarks/ladder_latest.csv
+            benchmarks/recursion_latest.json
+            benchmarks/recursion_latest_artifact.json
+            benchmarks/height_latest.csv
+            benchmarks/height_history.csv
+            benchmarks/height_history.jsonl
+            benchmarks/height_dashboard.md
+            benchmarks/height_trend.png
           if-no-files-found: ignore
 name: CI
 
@@ -97,6 +122,9 @@ jobs:
 
       - name: Tests
         run: cargo test --workspace --all-targets --no-fail-fast
+
+      - name: Recursion circuit tests
+        run: cargo test -p hc-recursion --all-targets
 
       - name: Docs
         run: cargo doc --workspace --no-deps

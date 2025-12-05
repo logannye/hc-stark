@@ -6,7 +6,7 @@ pub fn generate_trace<F: FieldElement>(
     program: &Program,
     initial_accumulator: F,
 ) -> HcResult<Vec<[F; 2]>> {
-    if program.len() == 0 {
+    if program.is_empty() {
         return Err(hc_core::error::HcError::invalid_argument(
             "program must contain at least one instruction",
         ));

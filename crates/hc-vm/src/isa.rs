@@ -20,4 +20,8 @@ impl Program {
     pub fn len(&self) -> usize {
         self.instructions.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.instructions.is_empty()
+    }
 }

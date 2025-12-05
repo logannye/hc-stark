@@ -2,10 +2,10 @@ use anyhow::Result;
 use hc_core::field::prime_field::GoldilocksField;
 use hc_verifier::verify;
 
-use super::prove::{read_proof, run_prove, to_verifier_proof};
+use super::prove::{read_proof, run_prove, to_verifier_proof, ProveOptions};
 
 pub fn run_verify() -> Result<()> {
-    let prover_output = run_prove()?;
+    let prover_output = run_prove(&ProveOptions::default())?;
     run_verify_with_output(prover_output)
 }
 

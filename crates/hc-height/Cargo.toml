@@ -1,0 +1,15 @@
+[package]
+name = "hc-height"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+hc-commit = { path = "../hc-commit" }
+hc-replay = { path = "../hc-replay" }
+hc-hash = { path = "../hc-hash" }
+ark-ff = "0.4"
+ark-ec = "0.4"
+ark-bn254 = "0.4"

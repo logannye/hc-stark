@@ -6,8 +6,11 @@
  license.workspace = true
  publish = false
 
- [dependencies]
+[dependencies]
 hc-core = { path = "../hc-core" }
 hc-hash = { path = "../hc-hash" }
 hc-replay = { path = "../hc-replay" }
+hc-commit = { path = "../hc-commit" }
+thiserror = "1.0"
+rayon = "1.8"
 

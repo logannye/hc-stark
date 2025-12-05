@@ -1,6 +1,6 @@
 # height_compression.md
 
-_Last updated: 2025-11-14_
+_Last updated: 2025-12-04_
 
 ---
 
@@ -249,3 +249,34 @@ The height-compression layer:
   - Memory usage.
 
 This formalism ensures we can treat full-trace STARK proving as a **height-compressible computation** over blocks, which is the foundation for the \(O(\sqrt{T})\)-space guarantee in hc-STARK.
+
+---
+
+## 5. Running the SNARK/KZG Experiments (`hc-height`)
+
+The `hc-height` crate provides streaming commitment builders (`StarkMerkleCommitment`, `StreamingKzgCommitment`) plus a generic `StreamingCommitment` trait that mirrors the replay-driven interfaces used by the prover. The easiest way to reproduce the §8.4 experiments is via the CLI bench harness:
+
+```bash
+cargo run -p hc-cli -- bench --scenario height --leaves 65536 --block-size 128
+```
+
+This command streams both Merkle and KZG commitments over replayed tiles (block size 128) and reports:
+
+- `merkle_stream_ms` vs `merkle_full_ms`: time to hash the tree with streaming checkpoints vs a conventional in-memory builder.
+- `kzg_stream_ms` vs `kzg_full_ms`: time to accumulate the polynomial commitment block-by-block vs a monolithic MSM.
+- `roots_match`: sanity check that both modes produce identical commitments.
+
+Adjust `--leaves` / `--block-size` to explore different √T regimes. The JSON summary lands in `benchmarks/latest.json`, so CI and dashboards can track the delta between streaming and baseline oracles.
+
+Passing `--samples N` now repeats the measurement, exposes mean / standard deviation for each timing column, records peak RSS deltas, and dumps per-sample records into `benchmarks/height_latest.csv`. The streaming portions also log how many replay blocks/elements were fetched, making it easy to correlate the √T memory profile with actual replay behavior.
+
+## 6. Swapping the prover oracle (experimental KZG pipeline)
+
+The same `StreamingCommitment` abstraction now fronts the prover itself. Passing `--commitment kzg` to `hc-cli prove` or setting `commitment = "kzg"` in a preset instructs the prover to:
+
+- Skip the streaming Merkle trees for trace/composition oracles,
+- Flatten each block’s field values into `ark_bn254::Fr` scalars,
+- Accumulate a streaming KZG commitment (`StreamingKzgCommitment`) rather than hashing leaves,
+- Emit the resulting G1 commitment inside the proof artifact. The verifier currently treats the KZG branch as a mock — it records the digest of the G1 point and skips Merkle/Fri-query replay — but the entire pipeline (replay, serialization, CI smoke tests) now exercises both oracle types.
+
+This makes the §8.4 “generalized height compression” claim concrete: `hc-height` benchmarks the Merkle vs. KZG builders, and `hc-cli prove --commitment kzg` reuses the exact streaming machinery inside the prover. Once the KZG verifier is fully wired up, the placeholder check in `hc-verifier` can be swapped for batch MSMs or IPA verifiers without touching the prover’s replay core.
