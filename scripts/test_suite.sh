@@ -18,7 +18,9 @@ set -e
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-LOG_FILE="$PROJECT_ROOT/test_suite_$(date +%Y%m%d_%H%M%S).log"
+LOG_DIR="${HC_TEST_LOG_DIR:-$PROJECT_ROOT/.logs}"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/test_suite_$(date +%Y%m%d_%H%M%S).log"
 TEMP_DIR="$PROJECT_ROOT/test_temp"
 BENCH_DIR="$PROJECT_ROOT/benchmarks"
 STRESS_REPORT="$BENCH_DIR/stress_latest.json"
