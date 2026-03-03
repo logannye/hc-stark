@@ -1,0 +1,29 @@
+[package]
+name = "hc-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+rmcp = { version = "0.17", features = ["server", "macros", "transport-io"] }
+schemars = "1.0"
+hc-sdk = { path = "../hc-sdk" }
+hc-workloads = { path = "../hc-workloads" }
+hc-vm = { path = "../hc-vm" }
+hc-core = { path = "../hc-core" }
+hc-prover = { path = "../hc-prover" }
+hc-verifier = { path = "../hc-verifier" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+base64 = "0.22"
+
+[[bin]]
+name = "hc-mcp-stdio"
+path = "src/bin/hc-mcp-stdio.rs"
