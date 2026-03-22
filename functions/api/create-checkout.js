@@ -4,7 +4,7 @@
 //   STRIPE_SECRET_KEY — sk_live_... or sk_test_...
 //   STRIPE_PRICE_ID  — price_...
 
-const RATE_LIMIT_MAX = 5;          // max requests per window per IP
+const RATE_LIMIT_MAX = 10;         // max requests per window per IP
 const RATE_LIMIT_WINDOW_S = 300;   // 5-minute window
 
 async function checkRateLimit(ip) {
