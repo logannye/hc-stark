@@ -430,7 +430,7 @@ fn remaining_rate_quota(state: &AppState, tenant_id: &str, plan: &str, endpoint:
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(healthz, metrics, verify, prove_submit, prove_get, prove_batch, proof_calldata, aggregate, usage, templates_list, template_detail, prove_template, estimate),
+    paths(healthz, metrics, verify, prove_submit, prove_get, prove_batch, proof_calldata, aggregate, usage, templates_list, template_detail, prove_template, prove_inspect, estimate),
     components(schemas(
         VerifyRequest,
         hc_sdk::types::VerifyResult,
@@ -444,7 +444,9 @@ fn remaining_rate_quota(state: &AppState, tenant_id: &str, plan: &str, endpoint:
         TemplateProveRequest,
         EstimateRequest,
         EstimateResponse,
-        EstimateRange
+        EstimateRange,
+        hc_sdk::types::ProofInspection,
+        hc_sdk::types::QueryCommitmentsJson
     )),
     tags(
         (name = "hc-stark", description = "hc-stark proving/verifying service")
@@ -649,6 +651,7 @@ pub fn build_app(state: AppState) -> Router {
         .route("/templates", get(templates_list))
         .route("/templates/:template_id", get(template_detail))
         .route("/prove/template/:template_id", post(prove_template))
+        .route("/prove/:job_id/inspect", get(prove_inspect))
         .route("/estimate", post(estimate))
         .route("/aggregate", post(aggregate))
         .route("/usage", get(usage))
@@ -1489,6 +1492,144 @@ async fn prove_batch(
     Ok(Json(BatchProveResponse { job_ids }))
 }
 
+// ---- Shared proof-loading helper ----
+
+/// Load a completed proof for a tenant + job_id.
+///
+/// Checks in-memory jobs first, falls back to disk.
+/// Returns 409 Conflict if the job exists but isn't succeeded, 404 if not found.
+fn load_completed_proof(
+    state: &AppState,
+    tenant_id: &str,
+    job_id: Uuid,
+) -> Result<hc_sdk::types::ProofBytes, ApiError> {
+    let key = JobKey {
+        tenant_id: tenant_id.to_string(),
+        job_id,
+    };
+    let status = if let Ok(jobs) = state.jobs.lock() {
+        jobs.get(&key).map(|j| j.status.clone())
+    } else {
+        None
+    };
+
+    match status {
+        Some(ProveJobStatus::Succeeded { proof }) => Ok(proof),
+        Some(_) => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "not_ready",
+            "proof is not yet available",
+        )),
+        None => {
+            let job_dir = state
+                .cfg
+                .data_dir
+                .join("jobs")
+                .join(tenant_id)
+                .join(job_id.to_string());
+            let status_path = job_dir.join("status.json");
+            match fs::read(&status_path)
+                .ok()
+                .and_then(|b| serde_json::from_slice::<ProveJobStatus>(&b).ok())
+            {
+                Some(ProveJobStatus::Succeeded { proof }) => Ok(proof),
+                Some(_) => Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "not_ready",
+                    "proof is not yet available",
+                )),
+                None => Err(ApiError::new(
+                    StatusCode::NOT_FOUND,
+                    "not_found",
+                    "unknown job_id",
+                )),
+            }
+        }
+    }
+}
+
+// ---- Proof inspection endpoint ----
+
+/// GET /prove/:job_id/inspect — detailed proof breakdown with verification summary.
+#[utoipa::path(
+    get,
+    path = "/prove/{job_id}/inspect",
+    params(("job_id" = String, Path, description = "prove job id")),
+    responses(
+        (status = 200, body = hc_sdk::types::ProofInspection),
+        (status = 404, description = "Job not found"),
+        (status = 409, description = "Proof not yet ready")
+    )
+)]
+async fn prove_inspect(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Path(job_id): Path<String>,
+) -> Result<Json<hc_sdk::types::ProofInspection>, ApiError> {
+    let parsed = Uuid::parse_str(&job_id).map_err(|_| {
+        ApiError::new(StatusCode::BAD_REQUEST, "bad_request", "invalid job_id")
+    })?;
+    let tenant = guarded_auth(&state, &headers)?;
+
+    let proof_bytes = load_completed_proof(&state, &tenant.tenant_id, parsed)?;
+
+    // Decode and verify with summary in a blocking task (CPU-bound).
+    let inspection = tokio::task::spawn_blocking(move || -> Result<hc_sdk::types::ProofInspection, String> {
+        let start = std::time::Instant::now();
+
+        let result = hc_sdk::proof::verify_proof_bytes(&proof_bytes, true);
+        if !result.ok {
+            return Err(format!("verification failed: {}", result.error.unwrap_or_default()));
+        }
+        let verify_ms = start.elapsed().as_millis() as u64;
+
+        // Decode proof to extract structural metadata.
+        let decoded: serde_json::Value = serde_json::from_slice(&proof_bytes.bytes)
+            .map_err(|e| format!("failed to decode proof: {e}"))?;
+
+        let trace_length = decoded.get("trace_length")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let initial_acc = decoded.get("initial_acc")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let final_acc = decoded.get("final_acc")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        // Extract commitment digests (hex-encoded in proof JSON).
+        let trace_commitment = decoded.get("trace_commitment")
+            .and_then(|v| v.as_str())
+            .unwrap_or("").to_string();
+        let composition_commitment = decoded.get("composition_commitment")
+            .and_then(|v| v.as_str())
+            .unwrap_or("").to_string();
+
+        let version = proof_bytes.version;
+        let scheme = if version == 2 { "KZG" } else { "STARK" };
+
+        Ok(hc_sdk::types::ProofInspection {
+            trace_commitment_digest: trace_commitment.clone(),
+            initial_acc,
+            final_acc,
+            trace_length,
+            query_commitments: hc_sdk::types::QueryCommitmentsJson {
+                trace_commitment,
+                composition_commitment,
+                fri_commitment: String::new(),
+            },
+            commitment_scheme: scheme.to_string(),
+            version,
+            verify_time_ms: verify_ms,
+        })
+    })
+    .await
+    .map_err(|e| ApiError::internal(format!("inspection task failed: {e}")))?
+    .map_err(|e| ApiError::internal(e))?;
+
+    Ok(Json(inspection))
+}
+
 // ---- Calldata endpoint ----
 
 #[derive(serde::Serialize, utoipa::ToSchema)]
@@ -1519,54 +1660,9 @@ async fn proof_calldata(
         Err(e) => return e.into_response(),
     };
 
-    // Find the completed proof.
-    let proof_bytes = {
-        let key = JobKey {
-            tenant_id: tenant.tenant_id.clone(),
-            job_id: parsed,
-        };
-        let status = if let Ok(jobs) = state.jobs.lock() {
-            jobs.get(&key).map(|j| j.status.clone())
-        } else {
-            None
-        };
-
-        match status {
-            Some(ProveJobStatus::Succeeded { proof }) => proof,
-            Some(_) => {
-                return ApiError::new(
-                    StatusCode::CONFLICT,
-                    "not_ready",
-                    "proof is not yet available",
-                )
-                .into_response()
-            }
-            None => {
-                // Try disk.
-                let job_dir = state
-                    .cfg
-                    .data_dir
-                    .join("jobs")
-                    .join(&tenant.tenant_id)
-                    .join(parsed.to_string());
-                let status_path = job_dir.join("status.json");
-                match fs::read(&status_path)
-                    .ok()
-                    .and_then(|b| serde_json::from_slice::<ProveJobStatus>(&b).ok())
-                {
-                    Some(ProveJobStatus::Succeeded { proof }) => proof,
-                    Some(_) => {
-                        return ApiError::new(
-                            StatusCode::CONFLICT,
-                            "not_ready",
-                            "proof is not yet available",
-                        )
-                        .into_response()
-                    }
-                    None => return (StatusCode::NOT_FOUND, "unknown job_id").into_response(),
-                }
-            }
-        }
+    let proof_bytes = match load_completed_proof(&state, &tenant.tenant_id, parsed) {
+        Ok(p) => p,
+        Err(e) => return e.into_response(),
     };
 
     // Decode proof and produce EVM calldata.

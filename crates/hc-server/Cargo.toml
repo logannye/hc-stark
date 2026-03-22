@@ -1,0 +1,37 @@
+[package]
+name = "hc-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+anyhow = "1.0"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+tokio = { version = "1.41", features = ["macros", "rt-multi-thread", "signal", "time", "process"] }
+axum = { version = "0.7", features = ["macros"] }
+tower-http = { version = "0.6", features = ["trace", "timeout"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+prometheus = "0.13"
+tokio-util = "0.7"
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+utoipa = { version = "5.2", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "8.0", features = ["axum"] }
+
+hc-sdk = { path = "../hc-sdk" }
+hc-workloads = { path = "../hc-workloads" }
+hc-core = { path = "../hc-core" }
+hc-prover = { path = "../hc-prover" }
+hc-verifier = { path = "../hc-verifier" }
+hc-vm = { path = "../hc-vm" }
+
+[dev-dependencies]
+tower = "0.5"
+tempfile = "3.10"
+
