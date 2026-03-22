@@ -1,5 +1,5 @@
-use rmcp::model::{CallToolResult, Content};
 use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
 use crate::types::{ProveTemplateParams, ProveWorkloadParams};
@@ -58,6 +58,8 @@ impl HcMcpServer {
         let block_size = params.block_size.unwrap_or(2);
         let req = hc_sdk::types::ProveRequest {
             workload_id: Some(params.workload_id.clone()),
+            template_id: None,
+            template_params: None,
             program: None,
             initial_acc: params.initial_acc,
             final_acc: params.final_acc,
