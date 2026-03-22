@@ -104,8 +104,8 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/hc-stark
-ExecStart=/usr/bin/python3 -m gunicorn -w 2 -b 127.0.0.1:5001 billing.provision_tenant:app
+WorkingDirectory=/opt/hc-stark/billing
+ExecStart=/usr/bin/python3 -m gunicorn -w 2 -b 127.0.0.1:5001 provision_tenant:app
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=/opt/hc-stark/.env
