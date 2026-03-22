@@ -6,10 +6,10 @@
 
 ```bash
 # Prove a secret is in range [0, 100] without revealing it
-curl -X POST https://api.tinyzkp.com/prove \
+curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
   -H "Authorization: Bearer tzk_..." \
   -H "Content-Type: application/json" \
-  -d '{"workload_id":"range_proof","secret":42,"min":0,"max":100}'
+  -d '{"params":{"min":0,"max":100,"witness_steps":[20,22]}}'
 
 # Verify (free, no charge)
 curl -X POST https://api.tinyzkp.com/verify \
@@ -43,18 +43,13 @@ Sign up at [tinyzkp.com/signup](https://tinyzkp.com/signup). Your key arrives vi
 
 ### 2. Submit a proof
 
+Use template-based proving — no need to specify block_size, initial/final accumulator, or FRI parameters. The API handles it:
+
 ```bash
-curl -X POST https://api.tinyzkp.com/prove \
+curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
   -H "Authorization: Bearer tzk_..." \
   -H "Content-Type: application/json" \
-  -d '{
-    "workload_id": "accumulator_step",
-    "initial_acc": 1000,
-    "final_acc": 1045,
-    "deltas": [10, 20, 15],
-    "block_size": 4,
-    "fri_final_poly_size": 2
-  }'
+  -d '{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'
 ```
 
 ### 3. Poll and verify
@@ -121,7 +116,24 @@ Pay per proof based on trace complexity. Verification is always free.
 
 ## Proof templates
 
-Six built-in templates cover common zero-knowledge use cases. Pass the template name as `workload_id`.
+Six built-in templates cover common zero-knowledge use cases. Browse them via the discovery API:
+
+```bash
+# List all templates
+curl https://api.tinyzkp.com/templates
+
+# Get full schema + example for a template
+curl https://api.tinyzkp.com/templates/range_proof
+
+# Submit a proof using a template (smart defaults, no block_size needed)
+curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
+  -H "Authorization: Bearer tzk_..." \
+  -d '{"params":{"min":0,"max":100,"witness_steps":[20,22]}}'
+
+# Estimate cost before proving
+curl -X POST https://api.tinyzkp.com/estimate \
+  -d '{"template_id":"range_proof","params":{"min":0,"max":100,"witness_steps":[20,22]}}'
+```
 
 | Template | What It Proves | Key Parameters |
 |----------|---------------|----------------|
@@ -183,13 +195,23 @@ Base URL: `https://api.tinyzkp.com`
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/prove` | Required | Submit an async prove job |
-| GET | `/prove/:job_id` | Required | Get job status and result |
+| **Template Discovery** | | | |
+| GET | `/templates` | None | List all proof templates |
+| GET | `/templates/:id` | None | Get template schema + example |
+| POST | `/estimate` | None | Estimate cost, time, proof size |
+| **Proving** | | | |
+| POST | `/prove/template/:id` | Required | Submit proof via template (recommended) |
+| POST | `/prove` | Required | Submit proof via workload_id or program |
 | POST | `/prove/batch` | Required | Submit multiple prove jobs |
+| GET | `/prove/:job_id` | Required | Get job status and result |
+| GET | `/prove/:job_id/inspect` | Required | Detailed proof breakdown + timing |
 | POST | `/prove/:job_id/cancel` | Required | Cancel a running job |
 | DELETE | `/prove/:job_id` | Required | Delete a completed job |
 | GET | `/prove` | Required | List jobs (`?status`, `?limit`, `?offset`) |
+| **Verification** | | | |
 | POST | `/verify` | Required | Verify a proof (free, no charge) |
+| POST | `/aggregate` | Required | Aggregate multiple proofs into one digest |
+| **Billing & Ops** | | | |
 | GET | `/usage` | Required | View usage and estimated costs |
 | GET | `/proof/:job_id/calldata` | Required | Get EVM on-chain calldata |
 | GET | `/healthz` | None | Liveness check |
@@ -291,7 +313,7 @@ hc-stark/
     hc-recursion/   # Recursive aggregation (Halo2/KZG)
     hc-height/      # Height-compression interfaces
     hc-simd/        # SIMD-accelerated field ops
-    hc-wasm/        # WebAssembly bindings
+    hc-wasm/        # WASM verifier (@tinyzkp/verify npm package)
     hc-python/      # Python bindings
   clients/          # Python + TypeScript client SDKs
   billing/          # Stripe billing (tenant provisioning, usage sync)
@@ -356,24 +378,30 @@ cargo run -p hc-cli -- bench --scenario recursion --proofs 8
 - Complete verifier with streaming Merkle replay
 - Zero-knowledge mode (protocol v4)
 - MCP server with 10 tools for AI agents
-- 6 proof templates
+- 6 proof templates with discovery API (`GET /templates`)
+- Template-based proving (`POST /prove/template/:id`)
+- Cost estimation endpoint (`POST /estimate`)
+- Proof inspection endpoint (`GET /prove/:job_id/inspect`)
+- Proof aggregation (`POST /aggregate` with recursive hash tree)
+- WASM verifier package (`@tinyzkp/verify`, 785K)
 - DSL compiler for custom programs
-- Recursive aggregation with Halo2/KZG
 - Multi-tenant HTTP API with rate limiting
 - **Production service at [tinyzkp.com](https://tinyzkp.com)**
-- Stripe billing (free tier + metered usage)
+- Stripe billing (free tier + metered usage + Customer Portal)
 - Python and TypeScript client SDKs
 - Docker Compose production stack with monitoring
 - EVM calldata generation
 
 ### Next
 
+- Publish `@tinyzkp/verify` to npm
 - Streamable HTTP transport for MCP (remote agent access)
-- Self-service API key rotation and Stripe Customer Portal
+- Self-service API key rotation
+- Custom program sandboxing (paid tier)
+- Node.js native bindings package
 - GPU acceleration (CUDA/Metal kernels)
-- Intent understanding — natural language to proof
-- Proof aggregation tools via MCP
 - On-chain verifier contracts deployment
+- Rollup state transition API
 - Distributed proving across multiple machines
 
 ---
