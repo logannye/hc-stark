@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 5s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - "/etc/prometheus/alerts.yml"
+
+scrape_configs:
+  - job_name: "hc-server"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["hc-server:8080"]

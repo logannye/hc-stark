@@ -1,0 +1,42 @@
+groups:
+  - name: hc-stark
+    rules:
+      - alert: HcHighFailureRate
+        expr: rate(hc_prove_failed_total[5m]) / rate(hc_prove_submitted_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High prove failure rate (>10%)"
+
+      - alert: HcSlowProves
+        expr: histogram_quantile(0.99, rate(hc_prove_duration_seconds_bucket[10m])) > 300
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P99 prove duration exceeds 5 minutes"
+
+      - alert: HcNoCompletions
+        expr: increase(hc_prove_completed_total[30m]) == 0 and increase(hc_prove_submitted_total[30m]) > 0
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No proofs completing despite submissions"
+
+      - alert: HcUnbilledBacklog
+        expr: hc_prove_completed_total - hc_usage_cents_total > 100
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Large unbilled usage backlog detected"
+
+      - alert: HcUsageCapHits
+        expr: increase(hc_usage_cap_rejections_total[1h]) > 10
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Multiple usage cap rejections — customers may be hitting limits"

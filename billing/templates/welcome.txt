@@ -1,0 +1,23 @@
+Welcome to TinyZKP!
+
+Your account has been created. Here are your credentials:
+
+  Tenant ID: {tenant_id}
+  API Key:   {api_key}
+
+API Endpoint: https://api.tinyzkp.com
+Documentation: https://api.tinyzkp.com/docs
+
+Quick start:
+
+  curl -X POST https://api.tinyzkp.com/prove \
+    -H "Authorization: Bearer {api_key}" \
+    -H "Content-Type: application/json" \
+    -d '{{"workload_id": "toy_add_1_2", "initial_acc": 0, "final_acc": 3, "block_size": 4, "fri_final_poly_size": 2}}'
+
+Keep your API key secret. If you believe it has been compromised,
+contact support immediately to rotate it.
+
+You can also view your API key in the Stripe Customer Portal.
+
+— The TinyZKP Team

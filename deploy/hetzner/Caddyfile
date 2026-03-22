@@ -1,0 +1,13 @@
+api.tinyzkp.com {
+	reverse_proxy localhost:8080
+
+	header {
+		Access-Control-Allow-Origin "*"
+		Access-Control-Allow-Methods "GET, POST, OPTIONS, DELETE"
+		Access-Control-Allow-Headers "Content-Type, Authorization"
+	}
+}
+
+webhook.tinyzkp.com {
+	reverse_proxy localhost:5001
+}

@@ -1,0 +1,35 @@
+# Production overrides for TinyZKP.
+# Usage: docker compose -f docker-compose.yml -f deploy/hetzner/docker-compose.prod.yml up -d
+services:
+  hc-server:
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
+      - HC_SERVER_DATA_DIR=/data
+      - HC_SERVER_MAX_INFLIGHT=8
+      - HC_SERVER_MAX_PROVE_SECS=3600
+      - HC_SERVER_API_KEYS=${HC_SERVER_API_KEYS}
+      - HC_SERVER_API_KEYS_FILE=/data/api_keys.txt
+      - HC_SERVER_ALLOW_CUSTOM_PROGRAMS=false
+      - HC_SERVER_JOB_INDEX_SQLITE=true
+    volumes:
+      - /opt/hc-stark/data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "8"
+          memory: 16G
+        reservations:
+          memory: 12G
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    stop_grace_period: 60s
+
+  prometheus:
+    restart: unless-stopped
+
+  grafana:
+    restart: unless-stopped
