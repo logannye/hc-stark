@@ -69,6 +69,7 @@ export async function onRequestPost(context) {
     params.append("mode", "subscription");
     params.append("customer_email", email);
     params.append("line_items[0][price]", STRIPE_PRICE_ID);
+    params.append("line_items[0][quantity]", "1");
     params.append("success_url", "https://tinyzkp.com/?checkout=success");
     params.append("cancel_url", "https://tinyzkp.com/signup?cancelled=true");
 
