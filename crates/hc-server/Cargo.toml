@@ -29,6 +29,7 @@ hc-workloads = { path = "../hc-workloads" }
 hc-core = { path = "../hc-core" }
 hc-prover = { path = "../hc-prover" }
 hc-verifier = { path = "../hc-verifier" }
+hc-recursion = { path = "../hc-recursion" }
 hc-vm = { path = "../hc-vm" }
 
 [dev-dependencies]

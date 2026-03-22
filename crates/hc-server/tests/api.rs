@@ -627,11 +627,12 @@ async fn prove_wrong_auth_rejected() {
 }
 
 #[tokio::test]
-async fn aggregate_returns_501() {
+async fn aggregate_rejects_invalid_job_ids() {
     let tmp = tempfile::tempdir().unwrap();
     let state = hc_server::test_state(tmp.path().to_path_buf());
     let app = hc_server::build_app(state);
 
+    // Invalid UUID → 400.
     let req_body = serde_json::json!({"job_ids": ["abc"]});
     let resp = app
         .oneshot(
@@ -644,7 +645,28 @@ async fn aggregate_returns_501() {
         )
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn aggregate_rejects_empty_job_ids() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state = hc_server::test_state(tmp.path().to_path_buf());
+    let app = hc_server::build_app(state);
+
+    let req_body = serde_json::json!({"job_ids": []});
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/aggregate")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&req_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
