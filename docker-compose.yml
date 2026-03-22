@@ -130,6 +130,7 @@ services:
     environment:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
       - HC_TENANT_STORE_PATH=/data/tenant_store.sqlite
       - HC_API_KEYS_FILE=/data/api_keys.txt
       - HC_USAGE_DB_PATH=/data/usage.sqlite
@@ -145,6 +146,41 @@ services:
       driver: "json-file"
       options:
         max-size: "50m"
+        max-file: "3"
+
+  billing-cron:
+    build:
+      context: .
+      dockerfile: deploy/hetzner/Dockerfile.billing
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "billing-cron: starting usage sync loop (every 60 min)"
+        while true; do
+          echo "--- sync_usage run at $$(date -u +%Y-%m-%dT%H:%M:%SZ) ---"
+          python sync_usage.py 2>&1
+          sleep 3600
+        done
+    environment:
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - HC_USAGE_DB_PATH=/data/usage.sqlite
+      - HC_TENANT_STORE_PATH=/data/tenant_store.sqlite
+      - STRIPE_METER_EVENT_NAME=${STRIPE_METER_EVENT_NAME:-proof_usage}
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
+    volumes:
+      - hc_data:/data
+    depends_on:
+      - billing-webhook
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
         max-file: "3"
 
 volumes:

@@ -26,8 +26,11 @@ async function checkRateLimit(ip) {
 }
 
 export async function onRequestPost(context) {
+  const origin = context.request.headers.get("Origin") || "";
+  const allowedOrigin = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com"
+    ? origin : "https://tinyzkp.com";
   const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
   };
@@ -84,10 +87,13 @@ export async function onRequestPost(context) {
   }
 }
 
-export async function onRequestOptions() {
+export async function onRequestOptions(context) {
+  const origin = context.request.headers.get("Origin") || "";
+  const allowedOrigin = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com"
+    ? origin : "https://tinyzkp.com";
   return new Response(null, {
     headers: {
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": allowedOrigin,
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     },

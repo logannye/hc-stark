@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TinyZKP — ZK Proofs as an API</title>
 <meta name="description" content="Generate and verify ZK-STARK proofs with a simple API call. No cryptography expertise needed. Free tier available.">
+<meta property="og:title" content="TinyZKP — ZK Proofs as an API">
+<meta property="og:description" content="Generate and verify ZK-STARK proofs with a single API call. Verify in 3ms. No cryptography degree required. Free tier available.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP — ZK Proofs as an API">
+<meta name="twitter:description" content="Generate and verify ZK-STARK proofs with a single API call. Verify in 3ms. Free tier available.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F510;</text></svg>">
+<link rel="canonical" href="https://tinyzkp.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -293,7 +302,7 @@ footer .right a:hover{color:var(--muted)}
       <div style="margin-top:16px"><span class="prompt">$</span> <span class="cmd">curl https://api.tinyzkp.com/prove/prf_7x9k2m</span></div>
       <div style="margin-top:8px"><span class="output">{"status":"<span class="ok">completed</span>","proof":{"version":4,"bytes":"0x6a8f...","size_kb":12.4}}</span></div>
       <div style="margin-top:16px"><span class="prompt">$</span> <span class="cmd">curl -X POST https://api.tinyzkp.com/verify -d '{"proof":{...}}'</span></div>
-      <div style="margin-top:8px"><span class="output">{"valid":<span class="ok">true</span>,"verified_in_ms":<span class="highlight">2.8</span>}  <span class="comment"># free, no auth needed</span></span></div>
+      <div style="margin-top:8px"><span class="output">{"valid":<span class="ok">true</span>,"verified_in_ms":<span class="highlight">2.8</span>}  <span class="comment"># free, auth required</span></span></div>
     </div>
   </div>
   <p class="demo-sub">Proved that 42 is in range [0, 100] without revealing the value. Verified in 2.8ms.</p>
@@ -491,8 +500,8 @@ curl -X POST https://api.tinyzkp.com/verify \
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/docs">Quickstart</a>
     <a href="/contact">Contact</a>
-    <a href="/terms.html">Terms</a>
-    <a href="/privacy.html">Privacy</a>
+    <a href="/terms">Terms</a>
+    <a href="/privacy">Privacy</a>
     <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
   </div>
 </div>
@@ -522,7 +531,15 @@ fetch('https://api.tinyzkp.com/healthz',{mode:'no-cors'}).then(()=>{
 // Animated proof counter
 (function(){
   var el=document.getElementById('proofCount');
+  // Pull live count from /metrics if available, otherwise show template count.
   var target=12847;
+  fetch('https://api.tinyzkp.com/metrics',{mode:'cors'}).then(function(r){return r.text()}).then(function(t){
+    var m=t.match(/hc_prove_completed_total\s+(\d+)/);
+    if(m) target=parseInt(m[1],10);
+  }).catch(function(){}).finally(function(){startCounter()});
+  var started=false;
+  function startCounter(){
+    if(started)return;started=true;
   var duration=2000;
   var start=null;
   function step(ts){
@@ -537,6 +554,7 @@ fetch('https://api.tinyzkp.com/healthz',{mode:'no-cors'}).then(()=>{
     if(e[0].isIntersecting){requestAnimationFrame(step);obs.disconnect()}
   });
   obs.observe(el);
+  }
 })();
 
 // Scroll-triggered fade-in

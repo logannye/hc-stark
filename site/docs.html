@@ -5,34 +5,56 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Documentation — TinyZKP</title>
 <meta name="description" content="TinyZKP documentation. Learn how to generate and verify ZK-STARK proofs with our API.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0a0a0f;--surface:#12121a;--border:#1e1e2e;
-  --text:#e0e0e8;--muted:#8888a0;--accent:#6c63ff;--accent2:#9d4edd;
-  --green:#22c55e;--mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  --bg:#050a12;
+  --surface:#0c1424;
+  --surface-2:#101a30;
+  --border:#152040;
+  --border-light:#1e2d52;
+  --text:#e4e9f2;
+  --text-bright:#f4f6fb;
+  --muted:#7088a8;
+  --dim:#3e5475;
+  --accent:#2ee8d4;
+  --accent-bright:#5cf0e0;
+  --accent-dim:rgba(46,232,212,.08);
+  --accent-glow:rgba(46,232,212,.15);
+  --green:#34d399;
+  --green-dim:rgba(52,211,153,.1);
+  --red:#f87171;
+  --mono:'IBM Plex Mono',Consolas,'Liberation Mono',Menlo,monospace;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
   --sidebar-w:220px;
 }
 html{scroll-behavior:smooth}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-  background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased;
-  min-height:100vh;display:flex;flex-direction:column}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;min-height:100vh;display:flex;flex-direction:column}
+body::before{content:'';position:fixed;inset:0;z-index:-2;
+  background-image:radial-gradient(circle,var(--border) .5px,transparent .5px);
+  background-size:32px 32px;opacity:.3;pointer-events:none}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
-
 .container{max-width:1100px;margin:0 auto;padding:0 24px;width:100%}
 
 /* Nav */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;
-  background:rgba(10,10,15,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+  background:rgba(5,10,18,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
 nav .container{display:flex;align-items:center;justify-content:space-between;height:56px}
-nav .logo{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--text)}
+nav .logo{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--text-bright);text-decoration:none;letter-spacing:-.02em}
 nav .logo span{color:var(--accent)}
 nav .links{display:flex;gap:24px;align-items:center}
-nav .links a{color:var(--muted);font-size:14px;transition:color .2s}
+nav .links a{color:var(--muted);font-size:13px;font-weight:500;transition:color .2s;letter-spacing:.01em}
 nav .links a:hover{color:var(--text);text-decoration:none}
-.nav-cta{background:var(--accent);color:#fff !important;padding:6px 16px;border-radius:6px;font-weight:600}
-.nav-cta:hover{opacity:.9;color:#fff !important}
+.nav-cta{background:var(--accent);color:var(--bg)!important;padding:7px 18px;border-radius:6px;font-weight:700;
+  font-size:12.5px;letter-spacing:.03em;text-transform:uppercase;transition:transform .15s,box-shadow .15s}
+.nav-cta:hover{transform:translateY(-1px);box-shadow:0 4px 20px var(--accent-glow);text-decoration:none}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px}
+.hamburger svg{width:24px;height:24px;stroke:var(--text);stroke-width:2;fill:none}
 
 /* Layout */
 .docs-layout{display:flex;padding-top:72px;min-height:calc(100vh - 56px);flex:1}
@@ -40,76 +62,87 @@ nav .links a:hover{color:var(--text);text-decoration:none}
 /* Sidebar */
 .sidebar{position:fixed;top:56px;left:0;width:var(--sidebar-w);height:calc(100vh - 56px);
   overflow-y:auto;border-right:1px solid var(--border);padding:24px 16px;background:var(--bg);z-index:50}
-.sidebar h4{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:12px;font-weight:600}
-.sidebar a{display:block;font-size:13px;color:var(--muted);padding:5px 8px;border-radius:4px;transition:color .2s,background .2s;line-height:1.4}
-.sidebar a:hover{color:var(--text);background:rgba(108,99,255,.08);text-decoration:none}
-.sidebar a.active{color:var(--accent);background:rgba(108,99,255,.1)}
+.sidebar h4{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:12px;font-weight:700;font-family:var(--mono)}
+.sidebar a{display:block;font-size:13px;color:var(--muted);padding:5px 8px;border-radius:6px;transition:color .2s,background .2s;line-height:1.4;font-weight:500}
+.sidebar a:hover{color:var(--text);background:var(--accent-dim);text-decoration:none}
+.sidebar a.active{color:var(--accent);background:var(--accent-dim)}
 
 /* Main content */
 .docs-main{margin-left:var(--sidebar-w);flex:1;max-width:820px;padding:8px 48px 80px}
-
-/* Section headings */
-.docs-main h2{font-size:24px;font-weight:700;margin-top:48px;margin-bottom:16px;padding-top:16px;border-top:1px solid var(--border);color:var(--text)}
+.docs-main h2{font-size:24px;font-weight:700;margin-top:48px;margin-bottom:16px;padding-top:16px;
+  border-top:1px solid var(--border);color:var(--text-bright);letter-spacing:-.02em}
 .docs-main h2:first-child{margin-top:0;border-top:none;padding-top:0}
-.docs-main h3{font-size:18px;font-weight:600;margin-top:32px;margin-bottom:12px;color:var(--text)}
+.docs-main h3{font-size:18px;font-weight:600;margin-top:32px;margin-bottom:12px;color:var(--text-bright)}
 .docs-main p{color:var(--muted);margin-bottom:16px;font-size:15px}
 .docs-main ul,.docs-main ol{color:var(--muted);font-size:15px;margin-bottom:16px;padding-left:24px}
 .docs-main li{margin-bottom:6px}
-.docs-main li code,.docs-main p code{background:var(--surface);border:1px solid var(--border);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--text)}
+.docs-main li code,.docs-main p code{background:var(--surface);border:1px solid var(--border);padding:2px 7px;border-radius:5px;
+  font-family:var(--mono);font-size:12.5px;color:var(--accent)}
 
 /* Numbered steps */
 .step-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;
-  background:var(--accent);color:#fff;border-radius:50%;font-weight:700;font-size:13px;margin-right:8px;flex-shrink:0}
+  background:var(--accent-dim);border:1px solid rgba(46,232,212,.2);color:var(--accent);
+  border-radius:8px;font-weight:700;font-size:13px;margin-right:8px;flex-shrink:0;font-family:var(--mono)}
 .step-item{display:flex;align-items:flex-start;margin-bottom:20px}
 .step-item>div{flex:1}
 .step-item h3{margin-top:0;margin-bottom:8px}
 
 /* Code blocks */
-.code-block{background:var(--surface);border:1px solid var(--border);border-radius:8px;
-  padding:16px;overflow-x:auto;margin-bottom:20px;position:relative}
-.code-block pre{font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--text);white-space:pre;margin:0}
-.code-block .comment{color:#6a6a8a}
-.code-block .string{color:#a5d6ff}
-.code-block .key{color:#ff7b72}
-.code-label{position:absolute;top:8px;right:12px;font-size:11px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.5px}
+.code-block{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:18px;overflow-x:auto;margin-bottom:20px;position:relative}
+.code-block pre{font-family:var(--mono);font-size:12.5px;line-height:1.8;color:var(--text);white-space:pre;margin:0}
+.code-block .comment{color:var(--dim)}
+.code-block .string{color:var(--accent-bright)}
+.code-block .key{color:var(--accent)}
+.code-label{position:absolute;top:8px;right:12px;font-size:10px;color:var(--dim);font-family:var(--mono);
+  text-transform:uppercase;letter-spacing:.06em;font-weight:600}
 
 /* Tables */
-.docs-table-wrap{overflow-x:auto;margin-bottom:24px;border-radius:8px;border:1px solid var(--border)}
+.docs-table-wrap{overflow-x:auto;margin-bottom:24px;border-radius:10px;border:1px solid var(--border)}
 table{width:100%;border-collapse:collapse;font-size:14px}
-thead{background:rgba(18,18,26,.9)}
-th{text-align:left;padding:12px 16px;font-weight:600;color:var(--text);border-bottom:1px solid var(--border);font-size:13px;white-space:nowrap}
-td{padding:10px 16px;border-bottom:1px solid var(--border);color:var(--muted);vertical-align:top}
+thead{background:var(--surface)}
+th{text-align:left;padding:12px 16px;font-weight:700;color:var(--dim);border-bottom:1px solid var(--border);
+  font-size:10px;white-space:nowrap;letter-spacing:.06em;text-transform:uppercase;font-family:var(--mono)}
+td{padding:11px 16px;border-bottom:1px solid var(--border);color:var(--muted);vertical-align:top}
 tbody tr:last-child td{border-bottom:none}
-tbody tr:nth-child(even){background:rgba(18,18,26,.4)}
-tbody tr:hover{background:rgba(108,99,255,.04)}
-td code{background:var(--surface);border:1px solid var(--border);padding:1px 5px;border-radius:3px;font-family:var(--mono);font-size:12px;color:var(--text)}
-.method-badge{font-family:var(--mono);font-size:12px;font-weight:600;padding:2px 8px;border-radius:4px;display:inline-block}
-.method-post{background:rgba(108,99,255,.15);color:var(--accent)}
-.method-get{background:rgba(34,197,94,.12);color:var(--green)}
-.method-delete{background:rgba(239,68,68,.12);color:#ef4444}
-.auth-yes{color:var(--accent);font-weight:600}
-.auth-no{color:var(--muted)}
+tbody tr:nth-child(even){background:rgba(12,20,36,.5)}
+tbody tr:hover{background:var(--accent-dim)}
+td code{background:var(--bg);border:1px solid var(--border);padding:2px 6px;border-radius:4px;
+  font-family:var(--mono);font-size:12px;color:var(--accent)}
+.method-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;display:inline-block;letter-spacing:.03em}
+.method-post{background:var(--accent-dim);color:var(--accent)}
+.method-get{background:var(--green-dim);color:var(--green)}
+.method-delete{background:rgba(248,113,113,.08);color:var(--red)}
+.auth-yes{color:var(--accent);font-weight:600;font-size:13px}
+.auth-no{color:var(--dim);font-size:13px}
 
 /* Pricing grid */
-.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:16px}
-.price-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;text-align:center}
-.price-card .tier{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-.price-card .amount{font-size:28px;font-weight:800;color:var(--text)}
-.price-card .unit{font-size:14px;color:var(--muted)}
-.price-card .desc{font-size:13px;color:var(--muted);margin-top:8px}
-.verify-free{color:var(--green);font-size:15px;font-weight:600;margin-top:16px;margin-bottom:24px}
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:16px}
+.price-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;text-align:center;
+  transition:border-color .2s}
+.price-card:hover{border-color:var(--border-light)}
+.price-card .tier{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:8px}
+.price-card .amount{font-size:28px;font-weight:800;color:var(--text-bright);letter-spacing:-.03em}
+.price-card .unit{font-size:13px;color:var(--muted)}
+.price-card .desc{font-size:12px;color:var(--dim);margin-top:6px;font-weight:500}
+.verify-free{color:var(--green);font-size:14px;font-weight:600;margin-top:16px;margin-bottom:24px;
+  display:flex;align-items:center;gap:6px}
+.verify-free::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 8px rgba(52,211,153,.5)}
 
 /* MCP tools list */
-.mcp-tools{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:20px}
-.mcp-tool{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;
-  font-family:var(--mono);font-size:13px;color:var(--text)}
+.mcp-tools{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-bottom:20px}
+.mcp-tool{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 12px;
+  font-family:var(--mono);font-size:11.5px;color:var(--dim);font-weight:600;transition:color .2s,border-color .2s}
+.mcp-tool:hover{color:var(--accent);border-color:var(--border-light)}
 
 /* Footer */
 footer{border-top:1px solid var(--border);padding:32px 0;margin-top:auto}
-footer .container{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--muted)}
-footer .right{display:flex;gap:20px}
-footer a{color:var(--muted)}
-footer a:hover{color:var(--text)}
+footer .container{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+footer .left{color:var(--dim);font-size:12.5px;font-weight:500}
+footer .right{display:flex;gap:22px;flex-wrap:wrap}
+footer .right a{color:var(--dim);font-size:12.5px;font-weight:500;transition:color .2s}
+footer .right a:hover{color:var(--muted);text-decoration:none}
 
 /* Mobile */
 @media(max-width:900px){
@@ -123,9 +156,12 @@ footer a:hover{color:var(--text)}
   .docs-main h2{font-size:20px;margin-top:36px}
   .pricing-grid{grid-template-columns:repeat(2,1fr)}
   .mcp-tools{grid-template-columns:1fr 1fr}
+  nav .links{display:none;position:absolute;top:56px;left:0;right:0;background:var(--bg);
+    border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}
+  nav .links.open{display:flex}
+  .hamburger{display:block}
 }
 @media(max-width:600px){
-  nav .links{gap:14px;font-size:13px}
   .pricing-grid{grid-template-columns:1fr 1fr}
   footer .container{flex-direction:column;gap:12px;text-align:center}
   footer .right{flex-wrap:wrap;justify-content:center}
@@ -135,16 +171,19 @@ footer a:hover{color:var(--text)}
 <body>
 
 <nav>
-  <div class="container">
-    <a href="/" class="logo"><span>Tiny</span>ZKP</a>
-    <div class="links">
-      <a href="/#pricing">Pricing</a>
-      <a href="/docs">Docs</a>
-      <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
-      <a href="/contact">Contact</a>
-      <a href="/signup" class="nav-cta">Get API Key</a>
-    </div>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/#pricing">Pricing</a>
+    <a href="/docs">Quickstart</a>
+    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
+    <a href="/contact">Contact</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
+</div>
 </nav>
 
 <div class="docs-layout">
@@ -164,7 +203,6 @@ footer a:hover{color:var(--text)}
 
   <main class="docs-main">
 
-    <!-- Quickstart -->
     <h2 id="quickstart">Quickstart</h2>
     <p>Get up and running with TinyZKP in three steps.</p>
 
@@ -172,7 +210,7 @@ footer a:hover{color:var(--text)}
       <span class="step-num">1</span>
       <div>
         <h3>Get an API key</h3>
-        <p><a href="/signup">Sign up</a> for a free account. Your API key will be delivered via email and is also available in the Stripe Customer Portal.</p>
+        <p><a href="/signup">Sign up</a> for a free account. Your API key will be delivered via email.</p>
       </div>
     </div>
 
@@ -201,7 +239,7 @@ footer a:hover{color:var(--text)}
       <span class="step-num">3</span>
       <div>
         <h3>Verify the proof</h3>
-        <p>Pass the proof object to the <code>/verify</code> endpoint. Verification requires your API key but is always <strong>free — no charge</strong>.</p>
+        <p>Pass the proof object to the <code>/verify</code> endpoint. Verification requires your API key but is always <strong style="color:var(--green)">free &mdash; no charge</strong>.</p>
         <div class="code-block">
           <span class="code-label">curl</span>
 <pre>curl -X POST https://api.tinyzkp.com/verify \
@@ -218,19 +256,18 @@ footer a:hover{color:var(--text)}
       </div>
     </div>
 
-    <!-- Authentication -->
     <h2 id="auth">Authentication</h2>
-    <p>All <code>/prove</code> endpoints require a Bearer token in the <code>Authorization</code> header:</p>
+    <p>All endpoints (including <code>/verify</code>) require a Bearer token in the <code>Authorization</code> header:</p>
     <div class="code-block">
 <pre>Authorization: Bearer tzk_...</pre>
     </div>
     <ul>
-      <li>Your API key is delivered via email after <a href="/signup">signing up</a>. It is also available in the Stripe Customer Portal.</li>
-      <li>The <code>/verify</code> endpoint is <strong style="color:var(--text)">free (no charge)</strong> but requires your API key to prevent abuse.</li>
+      <li>Your API key is delivered via email after <a href="/signup">signing up</a>.</li>
+      <li>The <code>/verify</code> endpoint is <strong style="color:var(--green)">free (no charge)</strong> but requires your API key to prevent abuse.</li>
       <li>Keep your API key secret. Do not expose it in client-side code or public repositories.</li>
+      <li>Lost your key? <a href="/contact">Contact support</a> to rotate it.</li>
     </ul>
 
-    <!-- API Endpoints -->
     <h2 id="endpoints">API Endpoints</h2>
     <p>All endpoints are served from <code>https://api.tinyzkp.com</code>.</p>
 
@@ -316,7 +353,6 @@ footer a:hover{color:var(--text)}
       </table>
     </div>
 
-    <!-- Proof Templates -->
     <h2 id="templates">Proof Templates</h2>
     <p>TinyZKP ships with six proof templates that cover common zero-knowledge use cases. Pass the template name as the <code>workload_id</code> prefix.</p>
 
@@ -360,9 +396,8 @@ footer a:hover{color:var(--text)}
       </table>
     </div>
 
-    <!-- Plan Tiers -->
     <h2 id="plans">Plan Tiers</h2>
-    <p>Rate limits and concurrency vary by plan. All plans include free verification.</p>
+    <p>Rate limits and concurrency vary by plan. All plans include free verification. Pay-as-you-go customers start on the Standard plan.</p>
 
     <div class="docs-table-wrap">
       <table>
@@ -371,31 +406,31 @@ footer a:hover{color:var(--text)}
         </thead>
         <tbody>
           <tr>
-            <td><strong style="color:var(--text)">Prove RPM</strong></td>
+            <td><strong style="color:var(--text-bright)">Prove RPM</strong></td>
             <td>10</td>
             <td>100</td>
             <td>500</td>
           </tr>
           <tr>
-            <td><strong style="color:var(--text)">Verify RPM</strong></td>
+            <td><strong style="color:var(--text-bright)">Verify RPM</strong></td>
             <td>30</td>
             <td>300</td>
             <td>1,500</td>
           </tr>
           <tr>
-            <td><strong style="color:var(--text)">Max Inflight Jobs</strong></td>
+            <td><strong style="color:var(--text-bright)">Max Inflight Jobs</strong></td>
             <td>1</td>
             <td>4</td>
             <td>8</td>
           </tr>
           <tr>
-            <td><strong style="color:var(--text)">Monthly Cap</strong></td>
+            <td><strong style="color:var(--text-bright)">Monthly Spend Cap</strong></td>
             <td>$5</td>
             <td>$500</td>
             <td>$5,000</td>
           </tr>
           <tr>
-            <td><strong style="color:var(--text)">Max Prove Time</strong></td>
+            <td><strong style="color:var(--text-bright)">Max Prove Time</strong></td>
             <td>5 min</td>
             <td>10 min</td>
             <td>60 min</td>
@@ -404,9 +439,8 @@ footer a:hover{color:var(--text)}
       </table>
     </div>
 
-    <!-- Pricing -->
     <h2 id="pricing">Pricing</h2>
-    <p>Pay per proof based on trace complexity. No subscriptions, no minimum commitments.</p>
+    <p>Pay per proof based on trace complexity. The per-proof cost depends on the number of trace steps in your computation. No subscriptions, no minimum commitments.</p>
 
     <div class="pricing-grid">
       <div class="price-card">
@@ -440,9 +474,8 @@ footer a:hover{color:var(--text)}
         <div class="desc">&gt; 10M steps</div>
       </div>
     </div>
-    <p class="verify-free">Verification is always free.</p>
+    <p class="verify-free">Verification is always free</p>
 
-    <!-- Parameters -->
     <h2 id="parameters">Parameters</h2>
 
     <h3>Security Parameters</h3>
@@ -499,16 +532,24 @@ footer a:hover{color:var(--text)}
       </table>
     </div>
 
-    <!-- MCP Integration -->
     <h2 id="mcp">MCP Integration</h2>
-    <p>TinyZKP ships as an <a href="https://modelcontextprotocol.io" target="_blank">MCP server</a> so AI agents can generate and verify proofs natively. Add it to your Claude Desktop config:</p>
+    <p>TinyZKP ships as an <a href="https://modelcontextprotocol.io" target="_blank">MCP server</a> so AI agents can generate and verify proofs natively.</p>
 
+    <h3>Install</h3>
+    <p>Download the <code>hc-mcp</code> binary from the <a href="https://github.com/logannye/hc-stark/releases" target="_blank">GitHub releases page</a>, or build from source:</p>
+    <div class="code-block">
+      <span class="code-label">shell</span>
+<pre>cargo install --path crates/hc-mcp</pre>
+    </div>
+
+    <h3>Configure</h3>
+    <p>Add to your <code>claude_desktop_config.json</code>:</p>
     <div class="code-block">
       <span class="code-label">JSON</span>
 <pre>{
   <span class="key">"mcpServers"</span>: {
     <span class="key">"tinyzkp"</span>: {
-      <span class="key">"command"</span>: <span class="string">"./hc-mcp"</span>,
+      <span class="key">"command"</span>: <span class="string">"hc-mcp"</span>,
       <span class="key">"args"</span>: [<span class="string">"--api-key"</span>, <span class="string">"tzk_..."</span>]
     }
   }
@@ -529,45 +570,43 @@ footer a:hover{color:var(--text)}
       <div class="mcp-tool">workload_status</div>
     </div>
 
-    <!-- Swagger -->
     <h2 id="swagger">Interactive API Reference</h2>
     <p>Explore the full API interactively with our Swagger UI. Try endpoints directly from your browser.</p>
-    <p><a href="https://api.tinyzkp.com/docs" target="_blank" style="display:inline-block;padding:10px 24px;background:var(--accent);color:#fff;border-radius:6px;font-weight:600;font-size:14px;margin-top:4px">Open Swagger UI &rarr;</a></p>
+    <p><a href="https://api.tinyzkp.com/docs" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:var(--accent);color:var(--bg);border-radius:8px;font-weight:700;font-size:13px;margin-top:4px;letter-spacing:.02em;transition:transform .15s,box-shadow .15s">Open Swagger UI &rarr;</a></p>
 
   </main>
 </div>
 
 <footer>
-  <div class="container">
-    <div class="left">&copy; 2026 TinyZKP</div>
-    <div class="right">
-      <a href="https://api.tinyzkp.com/docs" target="_blank">API Docs</a>
-      <a href="/docs">Docs</a>
-      <a href="/contact">Contact</a>
-      <a href="/terms.html">Terms</a>
-      <a href="/privacy.html">Privacy</a>
-      <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
-    </div>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
+    <a href="/docs">Quickstart</a>
+    <a href="/contact">Contact</a>
+    <a href="/terms">Terms</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
   </div>
+</div>
 </footer>
 
 <script>
-// Sidebar active state on scroll
 (function(){
-  const links = document.querySelectorAll('.sidebar a');
-  const sections = [];
-  links.forEach(a => {
-    const id = a.getAttribute('href').slice(1);
-    const el = document.getElementById(id);
-    if(el) sections.push({el, a});
+  var links = document.querySelectorAll('.sidebar a');
+  var sections = [];
+  links.forEach(function(a){
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if(el) sections.push({el:el, a:a});
   });
   function update(){
-    let current = sections[0];
-    const offset = window.scrollY + 100;
-    for(const s of sections){
-      if(s.el.offsetTop <= offset) current = s;
+    var current = sections[0];
+    var offset = window.scrollY + 100;
+    for(var i=0;i<sections.length;i++){
+      if(sections[i].el.offsetTop <= offset) current = sections[i];
     }
-    links.forEach(a => a.classList.remove('active'));
+    links.forEach(function(a){a.classList.remove('active')});
     if(current) current.a.classList.add('active');
   }
   window.addEventListener('scroll', update, {passive:true});

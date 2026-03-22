@@ -92,13 +92,20 @@ def _send_welcome_email(email: str, tenant_id: str, api_key: str) -> bool:
 
 
 def _deliver_key_via_stripe(customer_id: str, tenant_id: str, api_key: str) -> bool:
-    """Store API key in Stripe customer metadata as fallback delivery."""
+    """Store tenant_id in Stripe customer metadata (NOT the API key — security risk).
+
+    The API key is delivered only via email. Stripe metadata stores the tenant_id
+    and a masked key prefix so support can identify the customer.
+    """
     try:
         stripe.Customer.modify(
             customer_id,
-            metadata={"api_key": api_key, "tenant_id": tenant_id},
+            metadata={
+                "tenant_id": tenant_id,
+                "api_key_prefix": api_key[:8] + "...",
+            },
         )
-        print(f"API key delivered via Stripe metadata for {tenant_id}")
+        print(f"Stripe metadata updated for {tenant_id}")
         return True
     except stripe.error.StripeError as e:
         print(f"WARNING: Failed to set Stripe metadata for {tenant_id}: {e}", file=sys.stderr)
@@ -244,9 +251,21 @@ def stripe_webhook():
     return "", 200
 
 
+INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "")
+
+
 @app.route("/provision-free", methods=["POST"])
 def provision_free():
-    """Create a free-tier tenant (no Stripe subscription)."""
+    """Create a free-tier tenant (no Stripe subscription).
+
+    Requires X-Internal-Secret header matching INTERNAL_SECRET env var.
+    Called by the Cloudflare Pages Function, not directly by clients.
+    """
+    # Verify internal auth — reject requests without a valid secret.
+    req_secret = flask.request.headers.get("X-Internal-Secret", "")
+    if not INTERNAL_SECRET or not secrets.compare_digest(req_secret, INTERNAL_SECRET):
+        return flask.jsonify(error="unauthorized"), 403
+
     data = flask.request.get_json(silent=True) or {}
     email = data.get("email", "").strip()
 
