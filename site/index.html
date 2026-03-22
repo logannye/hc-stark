@@ -6,12 +6,12 @@
 <title>TinyZKP — ZK Proofs as an API</title>
 <meta name="description" content="Generate and verify ZK-STARK proofs with a simple API call. No cryptography expertise needed. Free tier available.">
 <meta property="og:title" content="TinyZKP — ZK Proofs as an API">
-<meta property="og:description" content="Generate and verify ZK-STARK proofs with a single API call. Verify in 3ms. No cryptography degree required. Free tier available.">
+<meta property="og:description" content="Generate and verify ZK-STARK proofs with a single API call. Verify in under 5ms. No cryptography degree required. Free tier available.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="TinyZKP — ZK Proofs as an API">
-<meta name="twitter:description" content="Generate and verify ZK-STARK proofs with a single API call. Verify in 3ms. Free tier available.">
+<meta name="twitter:description" content="Generate and verify ZK-STARK proofs with a single API call. Verify in under 5ms. Free tier available.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F510;</text></svg>">
 <link rel="canonical" href="https://tinyzkp.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,8 +28,8 @@
   --border-light:#1e2d52;
   --text:#e4e9f2;
   --text-bright:#f4f6fb;
-  --muted:#7088a8;
-  --dim:#3e5475;
+  --muted:#8899b8;
+  --dim:#6b84a6;
   --accent:#2ee8d4;
   --accent-bright:#5cf0e0;
   --accent-dim:rgba(46,232,212,.08);
@@ -277,7 +277,7 @@ footer .right a:hover{color:var(--muted)}
 <section class="hero">
 <div class="container">
   <h1>ZK Proofs as an API</h1>
-  <p class="sub">Prove any computation is correct without revealing how. Generate ZK-STARK proofs with a single API call &mdash; verify in 3ms. No cryptography degree required.</p>
+  <p class="sub">Prove any computation is correct without revealing how. Generate ZK-STARK proofs with a single API call &mdash; verify in under 5ms. No cryptography degree required.</p>
   <div class="hero-ctas">
     <a class="cta" href="/signup">Get Free API Key</a>
     <a class="cta cta-secondary" href="#demo">Try Live Demo</a>
@@ -426,6 +426,12 @@ curl -X POST https://api.tinyzkp.com/verify \
       <div class="unit">per proof</div>
       <div class="desc">1M &ndash; 10M steps</div>
     </div>
+    <div class="price-card fade-in">
+      <div class="tier">XL</div>
+      <div class="amount">$20</div>
+      <div class="unit">per proof</div>
+      <div class="desc">&gt; 10M steps</div>
+    </div>
   </div>
   <p class="verify-free">Verification is always free</p>
 
@@ -532,8 +538,8 @@ fetch('https://api.tinyzkp.com/healthz',{mode:'no-cors'}).then(()=>{
 // Animated proof counter
 (function(){
   var el=document.getElementById('proofCount');
-  // Pull live count from /metrics if available, otherwise show template count.
-  var target=12847;
+  // Pull live count from /metrics if available, show dash if unavailable.
+  var target=0;
   fetch('https://api.tinyzkp.com/metrics',{mode:'cors'}).then(function(r){return r.text()}).then(function(t){
     var m=t.match(/hc_prove_completed_total\s+(\d+)/);
     if(m) target=parseInt(m[1],10);
@@ -541,6 +547,7 @@ fetch('https://api.tinyzkp.com/healthz',{mode:'no-cors'}).then(()=>{
   var started=false;
   function startCounter(){
     if(started)return;started=true;
+  if(target===0){el.textContent='\u2014';return;}
   var duration=2000;
   var start=null;
   function step(ts){

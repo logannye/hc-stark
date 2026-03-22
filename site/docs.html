@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F510;</text></svg>">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -18,8 +19,8 @@
   --border-light:#1e2d52;
   --text:#e4e9f2;
   --text-bright:#f4f6fb;
-  --muted:#7088a8;
-  --dim:#3e5475;
+  --muted:#8899b8;
+  --dim:#6b84a6;
   --accent:#2ee8d4;
   --accent-bright:#5cf0e0;
   --accent-dim:rgba(46,232,212,.08);
@@ -181,6 +182,7 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
+    <a class="status-link" href="https://api.tinyzkp.com/healthz" target="_blank" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
     <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
 </div>
@@ -477,6 +479,12 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <p>Pay per proof based on trace complexity. The per-proof cost depends on the number of trace steps in your computation. No subscriptions, no minimum commitments.</p>
 
     <div class="pricing-grid">
+      <div class="price-card">
+        <div class="tier">Free</div>
+        <div class="amount" style="color:var(--green)">$0</div>
+        <div class="unit">100 proofs/mo</div>
+        <div class="desc">No credit card</div>
+      </div>
       <div class="price-card">
         <div class="tier">Tiny</div>
         <div class="amount">$0.05</div>

@@ -23,8 +23,8 @@
   --border-light:#1e2d52;
   --text:#e4e9f2;
   --text-bright:#f4f6fb;
-  --muted:#7088a8;
-  --dim:#3e5475;
+  --muted:#8899b8;
+  --dim:#6b84a6;
   --accent:#2ee8d4;
   --accent-bright:#5cf0e0;
   --accent-dim:rgba(46,232,212,.08);
@@ -46,7 +46,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;
 .container{max-width:1100px;margin:0 auto;padding:0 24px;width:100%}
 
 nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(5,10,18,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
-nav .container{display:flex;align-items:center;justify-content:space-between;height:60px}
+nav .container{display:flex;align-items:center;justify-content:space-between;height:56px}
 .logo{font-size:1.25rem;font-weight:700;text-decoration:none;color:var(--text-bright);font-family:var(--mono);letter-spacing:-.02em}
 .logo span{color:var(--accent)}
 .links{display:flex;align-items:center;gap:24px}
@@ -133,8 +133,8 @@ footer .right a:hover{color:var(--muted)}
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
-    <a href="/signup" class="nav-cta">Get API Key</a>
     <a class="status-link" href="https://api.tinyzkp.com/healthz" target="_blank" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
 </div>
 </nav>
@@ -166,11 +166,12 @@ footer .right a:hover{color:var(--muted)}
     <li>No credit card required</li>
   </ul>
   <ul class="plan-features" id="paidFeatures" style="display:none">
-    <li>Unlimited proofs (pay per proof by trace size)</li>
-    <li>Starts on Standard plan (100 RPM, 4 inflight)</li>
+    <li>No proof count limit (monthly spending cap applies)</li>
+    <li>Starts on Standard plan (100 RPM, 4 inflight, $500/mo cap)</li>
     <li>Verification always free</li>
     <li>Usage-based billing via Stripe</li>
     <li>Manage billing anytime in the Stripe Customer Portal</li>
+    <li>Need higher limits? <a href="/contact" style="color:var(--accent)">Contact us</a> for Pro (500 RPM, 8 inflight, $5K/mo cap)</li>
   </ul>
 
   <form id="signup-form">
