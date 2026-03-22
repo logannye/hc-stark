@@ -75,8 +75,12 @@ def _send_welcome_email(email: str, tenant_id: str, api_key: str) -> bool:
     msg["To"] = email
 
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        if SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+        else:
+            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
             server.starttls()
+        with server:
             if SMTP_USER and SMTP_PASSWORD:
                 server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg)
