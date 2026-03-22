@@ -132,10 +132,10 @@ footer .right a:hover{color:var(--muted)}
   <div class="step-card">
     <h3><span class="badge">2</span> Make your first proof</h3>
     <p>Prove that a secret number is in a range &mdash; without revealing the number:</p>
-    <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST https://api.tinyzkp.com/prove \
+    <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
   -H "Authorization: Bearer tzk_YOUR_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"workload_id":"range_proof","secret":42,"min":0,"max":100}'</div>
+  -d '{"params":{"min":0,"max":100,"witness_steps":[20,22]}}'</div>
   </div>
 
   <div class="step-card">

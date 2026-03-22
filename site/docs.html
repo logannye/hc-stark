@@ -218,19 +218,13 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       <span class="step-num">2</span>
       <div>
         <h3>Submit a proof</h3>
-        <p>Send a POST request to the <code>/prove</code> endpoint with your workload parameters.</p>
+        <p>Use a proof template &mdash; no need to specify block_size or accumulator values. The API handles it:</p>
         <div class="code-block">
           <span class="code-label">curl</span>
-<pre>curl -X POST https://api.tinyzkp.com/prove \
+<pre>curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
   -H "Authorization: Bearer tzk_..." \
   -H "Content-Type: application/json" \
-  -d '{
-    "workload_id": "toy_add_1_2",
-    "initial_acc": 0,
-    "final_acc": 3,
-    "block_size": 4,
-    "fri_final_poly_size": 2
-  }'</pre>
+  -d '{"params":{"min":0,"max":100,"witness_steps":[20,22]}}'</pre>
         </div>
       </div>
     </div>
@@ -277,11 +271,43 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
           <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
         </thead>
         <tbody>
+          <tr><td colspan="4" style="color:var(--dim);font-size:11px;font-weight:700;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 16px;background:var(--bg)">TEMPLATE DISCOVERY</td></tr>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><code>/templates</code></td>
+            <td class="auth-no">None</td>
+            <td>List all proof templates</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><code>/templates/:id</code></td>
+            <td class="auth-no">None</td>
+            <td>Get template schema + example</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><code>/estimate</code></td>
+            <td class="auth-no">None</td>
+            <td>Estimate cost, time, and proof size</td>
+          </tr>
+          <tr><td colspan="4" style="color:var(--dim);font-size:11px;font-weight:700;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 16px;background:var(--bg)">PROVING</td></tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><code>/prove/template/:id</code></td>
+            <td class="auth-yes">Required</td>
+            <td>Submit proof via template (recommended)</td>
+          </tr>
           <tr>
             <td><span class="method-badge method-post">POST</span></td>
             <td><code>/prove</code></td>
             <td class="auth-yes">Required</td>
-            <td>Submit an async prove job</td>
+            <td>Submit proof via workload_id or program</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><code>/prove/batch</code></td>
+            <td class="auth-yes">Required</td>
+            <td>Submit multiple prove jobs</td>
           </tr>
           <tr>
             <td><span class="method-badge method-get">GET</span></td>
@@ -290,10 +316,10 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
             <td>Get job status and result</td>
           </tr>
           <tr>
-            <td><span class="method-badge method-post">POST</span></td>
-            <td><code>/prove/batch</code></td>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><code>/prove/:job_id/inspect</code></td>
             <td class="auth-yes">Required</td>
-            <td>Submit multiple prove jobs</td>
+            <td>Detailed proof breakdown + timing</td>
           </tr>
           <tr>
             <td><span class="method-badge method-post">POST</span></td>
@@ -313,12 +339,20 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
             <td class="auth-yes">Required</td>
             <td>List jobs (with <code>?status</code>, <code>?limit</code>, <code>?offset</code>)</td>
           </tr>
+          <tr><td colspan="4" style="color:var(--dim);font-size:11px;font-weight:700;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 16px;background:var(--bg)">VERIFICATION</td></tr>
           <tr>
             <td><span class="method-badge method-post">POST</span></td>
             <td><code>/verify</code></td>
             <td class="auth-yes">Required</td>
             <td>Verify a proof (free, no charge)</td>
           </tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><code>/aggregate</code></td>
+            <td class="auth-yes">Required</td>
+            <td>Aggregate multiple proofs into one digest</td>
+          </tr>
+          <tr><td colspan="4" style="color:var(--dim);font-size:11px;font-weight:700;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 16px;background:var(--bg)">BILLING &amp; OPS</td></tr>
           <tr>
             <td><span class="method-badge method-get">GET</span></td>
             <td><code>/usage</code></td>
@@ -354,7 +388,7 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     </div>
 
     <h2 id="templates">Proof Templates</h2>
-    <p>TinyZKP ships with six proof templates that cover common zero-knowledge use cases. Pass the template name as the <code>workload_id</code> prefix.</p>
+    <p>TinyZKP ships with six proof templates that cover common zero-knowledge use cases. Use <code>POST /prove/template/:id</code> to prove via template, or browse templates with <code>GET /templates</code>.</p>
 
     <div class="docs-table-wrap">
       <table>

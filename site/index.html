@@ -295,9 +295,9 @@ footer .right a:hover{color:var(--muted)}
       <span>Terminal</span>
     </div>
     <div class="demo-body" id="demoBody">
-      <div><span class="prompt">$</span> <span class="cmd">curl -X POST https://api.tinyzkp.com/prove \</span></div>
+      <div><span class="prompt">$</span> <span class="cmd">curl -X POST https://api.tinyzkp.com/prove/template/range_proof \</span></div>
       <div><span class="cmd">  -H "Authorization: Bearer tzk_demo..." \</span></div>
-      <div><span class="cmd">  -d '{"workload_id":"range_proof","secret":42,"min":0,"max":100}'</span></div>
+      <div><span class="cmd">  -d '{"params":{"min":0,"max":100,"witness_steps":[20,22]}}'</span></div>
       <div style="margin-top:8px"><span class="output">{"job_id":"<span class="highlight">prf_7x9k2m</span>","status":"proving","eta_ms":1200}</span></div>
       <div style="margin-top:16px"><span class="prompt">$</span> <span class="cmd">curl https://api.tinyzkp.com/prove/prf_7x9k2m</span></div>
       <div style="margin-top:8px"><span class="output">{"status":"<span class="ok">completed</span>","proof":{"version":4,"bytes":"0x6a8f...","size_kb":12.4}}</span></div>
@@ -328,7 +328,7 @@ footer .right a:hover{color:var(--muted)}
     <div class="step fade-in">
       <span class="num">1</span>
       <h3>Submit</h3>
-      <p>POST a proof request to <code>/prove</code>. Choose from 6 built-in templates like <code>range_proof</code>, <code>hash_preimage</code>, or <code>data_integrity</code> &mdash; or define your own program. You get a job ID instantly.</p>
+      <p>POST to <code>/prove/template/range_proof</code> with your parameters. Choose from 6 built-in templates &mdash; or browse them via <code>/templates</code>. You get a job ID instantly.</p>
     </div>
     <div class="step fade-in">
       <span class="num">2</span>
@@ -358,7 +358,7 @@ footer .right a:hover{color:var(--muted)}
 <pre><span class="keyword">from</span> tinyzkp <span class="keyword">import</span> TinyZKP
 
 <span class="keyword">async with</span> <span class="func">TinyZKP</span>(<span class="string">"https://api.tinyzkp.com"</span>, api_key=<span class="string">"tzk_..."</span>) <span class="keyword">as</span> client:
-    job_id = <span class="keyword">await</span> client.<span class="func">prove</span>(program=[<span class="string">"add_immediate 1"</span>], initial_acc=<span class="string">5</span>, final_acc=<span class="string">6</span>)
+    job_id = <span class="keyword">await</span> client.<span class="func">prove_template</span>(<span class="string">"range_proof"</span>, params={<span class="string">"min"</span>: <span class="string">0</span>, <span class="string">"max"</span>: <span class="string">100</span>, <span class="string">"witness_steps"</span>: [<span class="string">20</span>, <span class="string">22</span>]})
     proof  = <span class="keyword">await</span> client.<span class="func">wait_for_proof</span>(job_id)
     result = <span class="keyword">await</span> client.<span class="func">verify</span>(proof)  <span class="comment"># free!</span></pre>
   </div>
@@ -366,24 +366,25 @@ footer .right a:hover{color:var(--muted)}
 <pre><span class="keyword">import</span> { HcClient } <span class="keyword">from</span> <span class="string">"tinyzkp"</span>;
 
 <span class="keyword">const</span> client = <span class="keyword">new</span> <span class="func">HcClient</span>(<span class="string">"https://api.tinyzkp.com"</span>, { apiKey: <span class="string">"tzk_..."</span> });
-<span class="keyword">const</span> jobId  = <span class="keyword">await</span> client.<span class="func">prove</span>({ program: [<span class="string">"add_immediate 1"</span>], initialAcc: <span class="string">5</span>, finalAcc: <span class="string">6</span> });
+<span class="keyword">const</span> jobId  = <span class="keyword">await</span> client.<span class="func">proveTemplate</span>(<span class="string">"range_proof"</span>, { min: <span class="string">0</span>, max: <span class="string">100</span>, witness_steps: [<span class="string">20</span>, <span class="string">22</span>] });
 <span class="keyword">const</span> proof  = <span class="keyword">await</span> client.<span class="func">waitForProof</span>(jobId);
 <span class="keyword">const</span> result = <span class="keyword">await</span> client.<span class="func">verify</span>(proof);  <span class="comment">// free!</span></pre>
   </div>
   <div class="code-block" id="tab-curl">
-<pre><span class="comment"># Submit a proof job</span>
-curl -X POST https://api.tinyzkp.com/prove \
+<pre><span class="comment"># Submit a proof via template (recommended)</span>
+curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
   -H <span class="string">"Authorization: Bearer tzk_..."</span> \
   -H <span class="string">"Content-Type: application/json"</span> \
-  -d <span class="string">'{"program":["add_immediate 1"],"initial_acc":5,"final_acc":6}'</span>
+  -d <span class="string">'{"params":{"min":0,"max":100,"witness_steps":[20,22]}}'</span>
 <span class="comment"># {"job_id":"abc123..."}</span>
 
 <span class="comment"># Poll for result</span>
-curl https://api.tinyzkp.com/prove/abc123...
+curl https://api.tinyzkp.com/prove/abc123... \
+  -H <span class="string">"Authorization: Bearer tzk_..."</span>
 
 <span class="comment"># Verify (free)</span>
 curl -X POST https://api.tinyzkp.com/verify \
-  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer tzk_..."</span> \
   -d <span class="string">'{"proof":{...}}'</span></pre>
   </div>
 </div>
