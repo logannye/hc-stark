@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Welcome to TinyZKP</title>
+<style>
+:root{--bg:#0a0a0f;--surface:#12121a;--border:#1e1e2e;--text:#e0e0e8;--muted:#8888a0;--accent:#6c63ff;--green:#22c55e;--mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+.container{max-width:720px;margin:0 auto;padding:0 24px;width:100%}
+
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,15,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+nav .container{max-width:1100px;display:flex;align-items:center;justify-content:space-between;height:56px}
+.logo{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--text);text-decoration:none}
+.logo span{color:var(--accent)}
+
+main{flex:1;padding-top:100px;padding-bottom:80px}
+
+.welcome-header{text-align:center;margin-bottom:48px}
+.welcome-header .check{width:64px;height:64px;border-radius:50%;background:rgba(34,197,94,.15);
+  display:flex;align-items:center;justify-content:center;margin:0 auto 20px}
+.welcome-header .check svg{width:32px;height:32px;stroke:var(--green);fill:none;stroke-width:2.5}
+.welcome-header h1{font-size:28px;font-weight:700;margin-bottom:8px}
+.welcome-header p{color:var(--muted);font-size:16px}
+
+.step-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px}
+.step-card h3{font-size:16px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.step-card h3 .badge{background:var(--accent);color:#fff;font-size:12px;font-weight:700;
+  width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.step-card p{color:var(--muted);font-size:14px;margin-bottom:12px}
+.step-card .code-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;
+  font-family:var(--mono);font-size:13px;line-height:1.6;overflow-x:auto;position:relative;white-space:pre}
+.step-card .code-box .copy-btn{position:absolute;top:8px;right:8px;background:var(--surface);border:1px solid var(--border);
+  color:var(--muted);padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;font-family:var(--mono)}
+.step-card .code-box .copy-btn:hover{color:var(--text);border-color:var(--accent)}
+.step-card .note{font-size:12px;color:var(--muted);margin-top:8px;font-style:italic}
+
+.next-links{display:flex;gap:12px;margin-top:32px;flex-wrap:wrap}
+.next-link{flex:1;min-width:200px;background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:16px;text-decoration:none;color:var(--text);transition:border-color .2s}
+.next-link:hover{border-color:var(--accent);text-decoration:none}
+.next-link .label{font-weight:600;font-size:14px;margin-bottom:4px}
+.next-link .desc{color:var(--muted);font-size:13px}
+
+footer{border-top:1px solid var(--border);padding:24px 0}
+footer .container{max-width:1100px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+footer .left{color:var(--muted);font-size:.85rem}
+footer .right{display:flex;gap:20px}
+footer .right a{color:var(--muted);text-decoration:none;font-size:.85rem}
+</style>
+</head>
+<body>
+
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+</div>
+</nav>
+
+<main>
+<div class="container">
+  <div class="welcome-header">
+    <div class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+    <h1>You're in!</h1>
+    <p>Check your email for your API key. Here's how to make your first proof.</p>
+  </div>
+
+  <div class="step-card">
+    <h3><span class="badge">1</span> Check your email</h3>
+    <p>We sent your API key to <strong id="userEmail">your email</strong>. It looks like <code>tzk_...</code>.</p>
+    <p class="note">Don't see it? Check spam, or contact support.</p>
+  </div>
+
+  <div class="step-card">
+    <h3><span class="badge">2</span> Make your first proof</h3>
+    <p>Prove that a secret number is in a range — without revealing the number:</p>
+    <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST https://api.tinyzkp.com/prove \
+  -H "Authorization: Bearer tzk_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"workload_id":"range_proof","secret":42,"min":0,"max":100}'</div>
+  </div>
+
+  <div class="step-card">
+    <h3><span class="badge">3</span> Verify it (free)</h3>
+    <p>Anyone can verify the proof. No auth required, no charge:</p>
+    <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST https://api.tinyzkp.com/verify \
+  -H "Content-Type: application/json" \
+  -d '{"proof": YOUR_PROOF_OBJECT}'</div>
+    <p class="note">Response: {"valid": true, "verified_in_ms": 2.8}</p>
+  </div>
+
+  <div class="next-links">
+    <a href="/docs" class="next-link">
+      <div class="label">Quickstart Guide</div>
+      <div class="desc">All 6 proof templates, authentication, and parameters</div>
+    </a>
+    <a href="https://api.tinyzkp.com/docs" target="_blank" class="next-link">
+      <div class="label">API Reference</div>
+      <div class="desc">Full OpenAPI docs with try-it-out</div>
+    </a>
+    <a href="/contact" class="next-link">
+      <div class="label">Get Help</div>
+      <div class="desc">Questions? We typically respond within 24 hours</div>
+    </a>
+  </div>
+</div>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
+    <a href="/docs">Quickstart</a>
+    <a href="/contact">Contact</a>
+  </div>
+</div>
+</footer>
+
+<script>
+var params = new URLSearchParams(window.location.search);
+var email = params.get('email');
+if (email) {
+  document.getElementById('userEmail').textContent = email;
+}
+
+function copyCode(btn) {
+  var code = btn.parentElement.textContent.replace('Copy', '').trim();
+  navigator.clipboard.writeText(code).then(function() {
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+</script>
+
+</body>
+</html>

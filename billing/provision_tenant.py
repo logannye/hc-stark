@@ -244,6 +244,44 @@ def stripe_webhook():
     return "", 200
 
 
+@app.route("/provision-free", methods=["POST"])
+def provision_free():
+    """Create a free-tier tenant (no Stripe subscription)."""
+    data = flask.request.get_json(silent=True) or {}
+    email = data.get("email", "").strip()
+
+    if not email or "@" not in email or len(email) > 254:
+        return flask.jsonify(error="valid email required"), 400
+
+    conn = tenant_store.open_db()
+
+    tenant_id = generate_tenant_id()
+    api_key = generate_api_key()
+
+    try:
+        tenant_store.create_tenant(
+            conn,
+            tenant_id=tenant_id,
+            email=email,
+            api_key=api_key,
+            plan="free",
+        )
+    except Exception:
+        conn.close()
+        return flask.jsonify(error="account already exists for this email"), 409
+
+    # Regenerate api_keys.txt with the new free tenant.
+    sync_keys.regenerate(conn, API_KEYS_FILE, active_keys={tenant_id: (api_key, "free")})
+
+    print(f"Provisioned free tenant={tenant_id} email={email}")
+
+    # Deliver API key via email.
+    _send_welcome_email(email, tenant_id, api_key)
+
+    conn.close()
+    return flask.jsonify(ok=True), 200
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return "ok", 200

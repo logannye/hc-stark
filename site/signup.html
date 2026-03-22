@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign Up - TinyZKP</title>
+<style>
+:root{--bg:#0a0a0f;--surface:#12121a;--border:#1e1e2e;--text:#e0e0e8;--muted:#8888a0;--accent:#6c63ff;--accent2:#9d4edd;--green:#22c55e;--mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+.container{max-width:1100px;margin:0 auto;padding:0 24px;width:100%}
+
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,15,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+nav .container{display:flex;align-items:center;justify-content:space-between;height:60px}
+.logo{font-size:1.25rem;font-weight:700;text-decoration:none;color:var(--text);font-family:var(--mono)}
+.logo span{color:var(--accent)}
+.links{display:flex;align-items:center;gap:24px}
+.links a{color:var(--muted);text-decoration:none;font-size:.9rem;transition:color .2s}
+.links a:hover{color:var(--text)}
+.nav-cta{background:var(--accent)!important;color:#fff!important;padding:6px 16px;border-radius:6px;font-weight:600}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px}
+.hamburger svg{width:24px;height:24px;stroke:var(--text);stroke-width:2;fill:none}
+
+main{flex:1;padding-top:120px;padding-bottom:80px;display:flex;justify-content:center}
+.signup-card{max-width:480px;width:100%;padding:0 24px}
+.signup-card h1{font-size:1.75rem;font-weight:700;margin-bottom:8px}
+.signup-card .sub{color:var(--muted);font-size:.95rem;line-height:1.5;margin-bottom:32px}
+
+.plan-toggle{display:flex;gap:12px;margin-bottom:28px}
+.plan-option{flex:1;background:var(--surface);border:2px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:border-color .2s;text-align:center}
+.plan-option.selected{border-color:var(--accent)}
+.plan-option .plan-label{font-weight:600;font-size:15px;margin-bottom:4px}
+.plan-option .plan-price{color:var(--muted);font-size:13px}
+.plan-option .plan-price.free{color:var(--green)}
+
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:6px}
+.form-group input{width:100%;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:1rem;font-family:inherit;outline:none;transition:border-color .2s}
+.form-group input::placeholder{color:var(--muted)}
+.form-group input:focus{border-color:var(--accent)}
+
+.btn-submit{width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .2s}
+.btn-submit:hover{opacity:.9}
+.btn-submit:disabled{opacity:.6;cursor:not-allowed}
+.btn-submit.free-btn{background:var(--green)}
+
+.hint{text-align:center;color:var(--muted);font-size:.82rem;margin-top:14px}
+.error-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#f87171;padding:10px 14px;border-radius:8px;font-size:.9rem;margin-top:16px;display:none}
+.cancelled-banner{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#fbbf24;padding:12px 20px;text-align:center;font-size:.9rem;margin-top:72px;border-radius:0}
+
+.plan-features{margin:0 0 24px;padding:0;list-style:none}
+.plan-features li{color:var(--muted);font-size:13px;padding:4px 0;padding-left:24px;position:relative}
+.plan-features li::before{content:"\2713";position:absolute;left:0;color:var(--green);font-weight:700}
+
+footer{border-top:1px solid var(--border);padding:24px 0}
+footer .container{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+footer .left{color:var(--muted);font-size:.85rem}
+footer .right{display:flex;gap:20px;flex-wrap:wrap}
+footer .right a{color:var(--muted);text-decoration:none;font-size:.85rem;transition:color .2s}
+footer .right a:hover{color:var(--text)}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:768px){
+  .links{display:none;position:absolute;top:60px;left:0;right:0;background:var(--bg);
+    border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}
+  .links.open{display:flex}
+  .hamburger{display:block}
+  .plan-toggle{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/#pricing">Pricing</a>
+    <a href="/docs">Quickstart</a>
+    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
+    <a href="/contact">Contact</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<div id="cancelled-banner" class="cancelled-banner" style="display:none">
+  Checkout was cancelled. You can try again below.
+</div>
+
+<main>
+<div class="signup-card">
+  <h1>Get Your API Key</h1>
+  <p class="sub">Choose a plan and start generating proofs in under a minute.</p>
+
+  <div class="plan-toggle">
+    <div class="plan-option selected" data-plan="free" onclick="selectPlan('free')">
+      <div class="plan-label">Free</div>
+      <div class="plan-price free">$0/month</div>
+    </div>
+    <div class="plan-option" data-plan="paid" onclick="selectPlan('paid')">
+      <div class="plan-label">Pay-as-you-go</div>
+      <div class="plan-price">From $0.05/proof</div>
+    </div>
+  </div>
+
+  <ul class="plan-features" id="freeFeatures">
+    <li>100 proofs per month</li>
+    <li>10 requests per minute</li>
+    <li>Verification always free</li>
+    <li>No credit card required</li>
+  </ul>
+  <ul class="plan-features" id="paidFeatures" style="display:none">
+    <li>Unlimited proofs</li>
+    <li>Up to 500 RPM (Pro)</li>
+    <li>Verification always free</li>
+    <li>Usage-based billing via Stripe</li>
+  </ul>
+
+  <form id="signup-form">
+    <div class="form-group">
+      <label for="email">Email address</label>
+      <input type="email" id="email" name="email" placeholder="you@example.com" required autocomplete="email">
+    </div>
+    <button type="submit" class="btn-submit free-btn" id="submit-btn">Get Free API Key</button>
+    <p class="hint" id="hintText">Your API key will be emailed instantly</p>
+    <div class="error-msg" id="error-msg"></div>
+  </form>
+</div>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
+    <a href="/docs">Quickstart</a>
+    <a href="/contact">Contact</a>
+    <a href="/terms.html">Terms</a>
+    <a href="/privacy.html">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+
+<script>
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('cancelled') === 'true') {
+    document.getElementById('cancelled-banner').style.display = 'block';
+  }
+
+  var currentPlan = 'free';
+  var form = document.getElementById('signup-form');
+  var btn = document.getElementById('submit-btn');
+  var errorEl = document.getElementById('error-msg');
+  var emailInput = document.getElementById('email');
+  var hintText = document.getElementById('hintText');
+
+  window.selectPlan = function(plan) {
+    currentPlan = plan;
+    document.querySelectorAll('.plan-option').forEach(function(el) {
+      el.classList.toggle('selected', el.dataset.plan === plan);
+    });
+    document.getElementById('freeFeatures').style.display = plan === 'free' ? '' : 'none';
+    document.getElementById('paidFeatures').style.display = plan === 'paid' ? '' : 'none';
+    if (plan === 'free') {
+      btn.textContent = 'Get Free API Key';
+      btn.className = 'btn-submit free-btn';
+      hintText.textContent = 'Your API key will be emailed instantly';
+    } else {
+      btn.textContent = 'Continue to Checkout';
+      btn.className = 'btn-submit';
+      hintText.textContent = "You'll be redirected to Stripe to set up billing";
+    }
+  };
+
+  function showError(msg) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
+  function hideError() { errorEl.style.display = 'none'; }
+  function isValidEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+
+  function setLoading(loading) {
+    if (loading) {
+      btn.disabled = true;
+      var s = document.createElement('span'); s.className = 'spinner';
+      var label = currentPlan === 'free' ? 'Creating account...' : 'Creating checkout...';
+      btn.textContent = '';
+      btn.appendChild(s);
+      btn.appendChild(document.createTextNode(label));
+    } else {
+      btn.disabled = false;
+      btn.textContent = currentPlan === 'free' ? 'Get Free API Key' : 'Continue to Checkout';
+    }
+  }
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    hideError();
+    var email = emailInput.value.trim();
+    if (!email || !isValidEmail(email)) { showError('Please enter a valid email address.'); return; }
+    setLoading(true);
+
+    if (currentPlan === 'free') {
+      fetch('/api/create-free-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email })
+      })
+      .then(function(res) {
+        if (!res.ok) return res.json().then(function(d) { throw new Error(d.error || 'Something went wrong.'); });
+        return res.json();
+      })
+      .then(function() { window.location.href = '/welcome?plan=free&email=' + encodeURIComponent(email); })
+      .catch(function(err) { showError(err.message); setLoading(false); });
+    } else {
+      fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email })
+      })
+      .then(function(res) {
+        if (!res.ok) return res.json().then(function(d) { throw new Error(d.error || d.message || 'Something went wrong.'); });
+        return res.json();
+      })
+      .then(function(data) {
+        if (data.url) window.location.href = data.url;
+        else throw new Error('No checkout URL returned.');
+      })
+      .catch(function(err) { showError(err.message); setLoading(false); });
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
