@@ -116,7 +116,7 @@ footer .right a:hover{color:var(--muted)}
     border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}
   .links.open{display:flex}
   .hamburger{display:block}
-  .plan-toggle{flex-direction:column}
+  .plan-toggle{grid-template-columns:1fr!important}
 }
 </style>
 </head>
@@ -148,30 +148,51 @@ footer .right a:hover{color:var(--muted)}
   <h1>Get Your API Key</h1>
   <p class="sub">Choose a plan and start generating proofs in under a minute.</p>
 
-  <div class="plan-toggle">
+  <div class="plan-toggle" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
     <div class="plan-option selected" data-plan="free" onclick="selectPlan('free')">
       <div class="plan-label">Free</div>
       <div class="plan-price free">$0/month</div>
     </div>
-    <div class="plan-option" data-plan="paid" onclick="selectPlan('paid')">
-      <div class="plan-label">Pay-as-you-go</div>
-      <div class="plan-price">From $0.05/proof</div>
+    <div class="plan-option" data-plan="developer" onclick="selectPlan('developer')">
+      <div class="plan-label">Developer</div>
+      <div class="plan-price">$0/mo + usage</div>
+    </div>
+    <div class="plan-option" data-plan="team" onclick="selectPlan('team')" style="position:relative">
+      <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--bg);font-size:9px;font-weight:700;padding:2px 10px;border-radius:8px;letter-spacing:.06em;text-transform:uppercase">Popular</div>
+      <div class="plan-label">Team</div>
+      <div class="plan-price">$49/mo + usage</div>
+    </div>
+    <div class="plan-option" data-plan="scale" onclick="selectPlan('scale')">
+      <div class="plan-label">Scale</div>
+      <div class="plan-price">$199/mo + usage</div>
     </div>
   </div>
 
-  <ul class="plan-features" id="freeFeatures">
+  <ul class="plan-features" id="features-free">
     <li>100 proofs per month</li>
     <li>10 requests per minute</li>
     <li>Verification always free</li>
     <li>No credit card required</li>
   </ul>
-  <ul class="plan-features" id="paidFeatures" style="display:none">
-    <li>No proof count limit (monthly spending cap applies)</li>
-    <li>Starts on Standard plan (100 RPM, 4 inflight, $500/mo cap)</li>
+  <ul class="plan-features" id="features-developer" style="display:none">
+    <li>Unlimited proofs (pay per proof, $500/mo cap)</li>
+    <li>100 requests per minute, 4 concurrent jobs</li>
     <li>Verification always free</li>
     <li>Usage-based billing via Stripe</li>
-    <li>Manage billing anytime in the Stripe Customer Portal</li>
-    <li>Need higher limits? <a href="/contact" style="color:var(--accent)">Contact us</a> for Pro (500 RPM, 8 inflight, $5K/mo cap)</li>
+  </ul>
+  <ul class="plan-features" id="features-team" style="display:none">
+    <li>25% off all per-proof rates</li>
+    <li>300 RPM, 8 concurrent jobs, 30 min timeout</li>
+    <li>$2,500/mo spending cap</li>
+    <li>Verification always free</li>
+    <li>Priority email support</li>
+  </ul>
+  <ul class="plan-features" id="features-scale" style="display:none">
+    <li>40% off all per-proof rates</li>
+    <li>500 RPM, 16 concurrent jobs, 60 min timeout</li>
+    <li>$10,000/mo spending cap</li>
+    <li>Verification always free</li>
+    <li>Dedicated support</li>
   </ul>
 
   <form id="signup-form">
@@ -215,22 +236,26 @@ footer .right a:hover{color:var(--muted)}
   var emailInput = document.getElementById('email');
   var hintText = document.getElementById('hintText');
 
+  var planConfig = {
+    free:      { btn: 'Get Free API Key',              btnClass: 'btn-submit free-btn', hint: 'Your API key will be emailed instantly', paid: false },
+    developer: { btn: 'Start with Developer',           btnClass: 'btn-submit',          hint: "You'll be redirected to Stripe to set up billing", paid: true },
+    team:      { btn: 'Subscribe to Team \u2014 $49/mo', btnClass: 'btn-submit',          hint: '$49/mo base + 25% off per-proof rates',           paid: true },
+    scale:     { btn: 'Subscribe to Scale \u2014 $199/mo', btnClass: 'btn-submit',       hint: '$199/mo base + 40% off per-proof rates',           paid: true },
+  };
+
   window.selectPlan = function(plan) {
     currentPlan = plan;
     document.querySelectorAll('.plan-option').forEach(function(el) {
       el.classList.toggle('selected', el.dataset.plan === plan);
     });
-    document.getElementById('freeFeatures').style.display = plan === 'free' ? '' : 'none';
-    document.getElementById('paidFeatures').style.display = plan === 'paid' ? '' : 'none';
-    if (plan === 'free') {
-      btn.textContent = 'Get Free API Key';
-      btn.className = 'btn-submit free-btn';
-      hintText.textContent = 'Your API key will be emailed instantly';
-    } else {
-      btn.textContent = 'Continue to Checkout';
-      btn.className = 'btn-submit';
-      hintText.textContent = "You'll be redirected to Stripe to set up billing";
-    }
+    ['free', 'developer', 'team', 'scale'].forEach(function(p) {
+      var el = document.getElementById('features-' + p);
+      if (el) el.style.display = p === plan ? '' : 'none';
+    });
+    var cfg = planConfig[plan] || planConfig.developer;
+    btn.textContent = cfg.btn;
+    btn.className = cfg.btnClass;
+    hintText.textContent = cfg.hint;
   };
 
   function showError(msg) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
@@ -247,7 +272,8 @@ footer .right a:hover{color:var(--muted)}
       btn.appendChild(document.createTextNode(label));
     } else {
       btn.disabled = false;
-      btn.textContent = currentPlan === 'free' ? 'Get Free API Key' : 'Continue to Checkout';
+      var cfg = planConfig[currentPlan] || planConfig.developer;
+      btn.textContent = cfg.btn;
     }
   }
 
@@ -280,7 +306,7 @@ footer .right a:hover{color:var(--muted)}
       fetch('/api/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email })
+        body: JSON.stringify({ email: email, plan: currentPlan })
       })
       .then(function(res) {
         return res.text().then(function(text) {

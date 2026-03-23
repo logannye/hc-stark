@@ -534,24 +534,40 @@ console.log(result.ok); <span class="comment">// true</span></pre>
     </div>
 
     <h2 id="plans">Plan Tiers</h2>
-    <p>Rate limits and concurrency vary by plan. All plans include free verification. Pay-as-you-go customers start on the Standard plan.</p>
+    <p>Rate limits, concurrency, and per-proof discounts vary by plan. All plans include free verification. Team and Scale plans include a monthly base fee that unlocks discounted per-proof rates.</p>
 
     <div class="docs-table-wrap">
       <table>
         <thead>
-          <tr><th></th><th>Free</th><th>Standard</th><th>Pro</th></tr>
+          <tr><th></th><th>Free</th><th>Developer</th><th>Team</th><th>Scale</th></tr>
         </thead>
         <tbody>
+          <tr>
+            <td><strong style="color:var(--text-bright)">Monthly Base</strong></td>
+            <td>$0</td>
+            <td>$0</td>
+            <td>$49</td>
+            <td>$199</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--text-bright)">Per-Proof Discount</strong></td>
+            <td>&mdash;</td>
+            <td>Base rates</td>
+            <td style="color:var(--accent)">25% off</td>
+            <td style="color:var(--accent)">40% off</td>
+          </tr>
           <tr>
             <td><strong style="color:var(--text-bright)">Prove RPM</strong></td>
             <td>10</td>
             <td>100</td>
+            <td>300</td>
             <td>500</td>
           </tr>
           <tr>
             <td><strong style="color:var(--text-bright)">Verify RPM</strong></td>
             <td>30</td>
             <td>300</td>
+            <td>900</td>
             <td>1,500</td>
           </tr>
           <tr>
@@ -559,63 +575,42 @@ console.log(result.ok); <span class="comment">// true</span></pre>
             <td>1</td>
             <td>4</td>
             <td>8</td>
+            <td>16</td>
           </tr>
           <tr>
             <td><strong style="color:var(--text-bright)">Monthly Spend Cap</strong></td>
             <td>$5</td>
             <td>$500</td>
-            <td>$5,000</td>
+            <td>$2,500</td>
+            <td>$10,000</td>
           </tr>
           <tr>
             <td><strong style="color:var(--text-bright)">Max Prove Time</strong></td>
             <td>5 min</td>
             <td>10 min</td>
+            <td>30 min</td>
             <td>60 min</td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <h2 id="pricing">Pricing</h2>
-    <p>Pay per proof based on trace complexity. The per-proof cost depends on the number of trace steps in your computation. No subscriptions, no minimum commitments.</p>
+    <h2 id="pricing">Per-Proof Pricing</h2>
+    <p>Pay per proof based on trace complexity. Team and Scale plans receive automatic discounts on every proof. These rates are 10&ndash;40x lower than running traditional provers, thanks to our O(&radic;T) memory architecture.</p>
 
-    <div class="pricing-grid">
-      <div class="price-card">
-        <div class="tier">Free</div>
-        <div class="amount" style="color:var(--green)">$0</div>
-        <div class="unit">100 proofs/mo</div>
-        <div class="desc">No credit card</div>
-      </div>
-      <div class="price-card">
-        <div class="tier">Tiny</div>
-        <div class="amount">$0.05</div>
-        <div class="unit">/proof</div>
-        <div class="desc">&lt; 10K steps</div>
-      </div>
-      <div class="price-card">
-        <div class="tier">Standard</div>
-        <div class="amount">$0.50</div>
-        <div class="unit">/proof</div>
-        <div class="desc">10K &ndash; 100K steps</div>
-      </div>
-      <div class="price-card">
-        <div class="tier">Large</div>
-        <div class="amount">$2.00</div>
-        <div class="unit">/proof</div>
-        <div class="desc">100K &ndash; 1M steps</div>
-      </div>
-      <div class="price-card">
-        <div class="tier">Enterprise</div>
-        <div class="amount">$5.00</div>
-        <div class="unit">/proof</div>
-        <div class="desc">1M &ndash; 10M steps</div>
-      </div>
-      <div class="price-card">
-        <div class="tier">XL</div>
-        <div class="amount">$20</div>
-        <div class="unit">/proof</div>
-        <div class="desc">&gt; 10M steps</div>
-      </div>
+    <div class="docs-table-wrap">
+      <table>
+        <thead>
+          <tr><th>Trace Steps</th><th>Developer</th><th>Team (-25%)</th><th>Scale (-40%)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong style="color:var(--text-bright)">&lt; 10K</strong></td><td>$0.05</td><td>$0.04</td><td>$0.03</td></tr>
+          <tr><td><strong style="color:var(--text-bright)">10K &ndash; 100K</strong></td><td>$0.50</td><td>$0.38</td><td>$0.30</td></tr>
+          <tr><td><strong style="color:var(--text-bright)">100K &ndash; 1M</strong></td><td>$2.00</td><td>$1.50</td><td>$1.20</td></tr>
+          <tr><td><strong style="color:var(--text-bright)">1M &ndash; 10M</strong></td><td>$8.00</td><td>$6.00</td><td>$4.80</td></tr>
+          <tr><td><strong style="color:var(--text-bright)">&gt; 10M</strong></td><td>$30.00</td><td>$22.50</td><td>$18.00</td></tr>
+        </tbody>
+      </table>
     </div>
     <p class="verify-free">Verification is always free</p>
 

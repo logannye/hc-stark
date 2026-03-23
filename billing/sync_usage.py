@@ -28,21 +28,38 @@ USAGE_DB_PATH = os.environ.get("HC_USAGE_DB_PATH", "/opt/hc-stark/data/usage.sql
 ALERT_WEBHOOK_URL = os.environ.get("ALERT_WEBHOOK_URL")
 METER_EVENT_NAME = os.environ.get("STRIPE_METER_EVENT_NAME", "proof_usage")
 
-# Price tiers (trace_length → cents per proof).
+# Price tiers (trace_length → base cents per proof).
 TIERS = [
-    (10_000, 5),        # < 10K steps   → $0.05
-    (100_000, 50),      # 10K–100K      → $0.50
-    (1_000_000, 200),   # 100K–1M       → $2.00
-    (10_000_000, 500),  # 1M–10M        → $5.00
-    (None, 2000),       # > 10M steps   → $20.00 (XL)
+    (10_000, 5),         # < 10K steps   → $0.05
+    (100_000, 50),       # 10K–100K      → $0.50
+    (1_000_000, 200),    # 100K–1M       → $2.00
+    (10_000_000, 800),   # 1M–10M        → $8.00
+    (None, 3000),        # > 10M steps   → $30.00
 ]
+
+# Plan-based discount factors. Team gets 25% off, Scale gets 40% off.
+DISCOUNT_FACTORS: dict[str, float] = {
+    "free": 1.0,
+    "developer": 1.0,
+    "standard": 1.0,   # legacy — same as developer
+    "team": 0.75,
+    "scale": 0.60,
+}
 
 
 def price_cents(trace_length: int) -> int:
+    """Base price in cents (before plan discounts)."""
     for limit, cents in TIERS:
         if limit is None or trace_length < limit:
             return cents
     return TIERS[-1][1]
+
+
+def discounted_price_cents(trace_length: int, plan: str) -> int:
+    """Price in cents after applying plan-based discount."""
+    base = price_cents(trace_length)
+    factor = DISCOUNT_FACTORS.get(plan, 1.0)
+    return max(1, round(base * factor))
 
 
 def _log(entry: dict) -> None:
@@ -91,6 +108,7 @@ def main() -> None:
             "stripe_customer_id": t["stripe_customer_id"],
             "email": t["email"],
             "status": t["status"],
+            "plan": t.get("plan", "developer"),
         }
     ts_conn.close()
 
@@ -114,10 +132,11 @@ def main() -> None:
         summary: dict[str, dict] = {}
         for row in rows:
             tid = row["tenant_id"]
+            plan = tenant_map.get(tid, {}).get("plan", "developer")
             if tid not in summary:
-                summary[tid] = {"count": 0, "total_cents": 0}
+                summary[tid] = {"count": 0, "total_cents": 0, "plan": plan}
             summary[tid]["count"] += 1
-            summary[tid]["total_cents"] += price_cents(row["trace_length"])
+            summary[tid]["total_cents"] += discounted_price_cents(row["trace_length"], plan)
         print(json.dumps(summary, indent=2))
         conn.close()
         return
@@ -131,17 +150,18 @@ def main() -> None:
         tenant_id = row["tenant_id"]
         tenant_info = tenant_map.get(tenant_id, {})
         customer_id = tenant_info.get("stripe_customer_id")
+        plan = tenant_info.get("plan", "developer")
 
         if not customer_id:
             skipped += 1
-            cents = price_cents(row["trace_length"])
+            cents = discounted_price_cents(row["trace_length"], plan)
             if tenant_id not in unbillable:
                 unbillable[tenant_id] = {"count": 0, "estimated_cents": 0}
             unbillable[tenant_id]["count"] += 1
             unbillable[tenant_id]["estimated_cents"] += cents
             continue
 
-        cents = price_cents(row["trace_length"])
+        cents = discounted_price_cents(row["trace_length"], plan)
 
         if args.dry_run:
             _log({

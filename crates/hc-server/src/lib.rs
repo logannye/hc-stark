@@ -93,15 +93,22 @@ impl PlanLimits {
                 monthly_cap_cents: 500,
                 max_prove_seconds: 300, // 5 min
             },
-            "pro" => Self {
+            "team" => Self {
+                prove_rpm: 300,
+                verify_rpm: 900,
+                max_inflight: 8,
+                monthly_cap_cents: 250_000,
+                max_prove_seconds: 1800, // 30 min
+            },
+            "scale" => Self {
                 prove_rpm: 500,
                 verify_rpm: 1500,
-                max_inflight: 8,
-                monthly_cap_cents: 500_000,
-                max_prove_seconds: 3600, // 60 min — large proofs
+                max_inflight: 16,
+                monthly_cap_cents: 1_000_000,
+                max_prove_seconds: 3600, // 60 min
             },
             _ => Self {
-                // "standard" is the default
+                // "developer" is the default; also covers legacy "standard" and "pro"
                 prove_rpm: 100,
                 verify_rpm: 300,
                 max_inflight: 4,
@@ -111,6 +118,7 @@ impl PlanLimits {
         }
     }
 }
+
 
 #[derive(Clone)]
 struct Metrics {
@@ -1023,7 +1031,7 @@ async fn prove_submit(
 
     // Usage cap enforcement.
     if let Some(ref usage) = state.usage_log {
-        if let Ok(cost) = usage.monthly_cost_cents(&tenant_id) {
+        if let Ok(cost) = usage.monthly_cost_cents(&tenant_id, &tenant_plan) {
             if cost >= plan_limits.monthly_cap_cents {
                 state.metrics.usage_cap_rejections.inc();
                 return Err(ApiError {
@@ -1393,7 +1401,7 @@ async fn prove_batch(
     // Usage cap enforcement.
     let plan_limits = PlanLimits::for_plan(&tenant.plan);
     if let Some(ref usage) = state.usage_log {
-        if let Ok(cost) = usage.monthly_cost_cents(&tenant.tenant_id) {
+        if let Ok(cost) = usage.monthly_cost_cents(&tenant.tenant_id, &tenant.plan) {
             if cost >= plan_limits.monthly_cap_cents {
                 state.metrics.usage_cap_rejections.inc();
                 return Err(ApiError {
@@ -1767,7 +1775,7 @@ async fn prove_template(
     let max_inflight = plan_limits.max_inflight.min(state.cfg.max_inflight_jobs);
 
     if let Some(ref usage) = state.usage_log {
-        if let Ok(cost) = usage.monthly_cost_cents(&tenant_id) {
+        if let Ok(cost) = usage.monthly_cost_cents(&tenant_id, &tenant_plan) {
             if cost >= plan_limits.monthly_cap_cents {
                 state.metrics.usage_cap_rejections.inc();
                 return Err(ApiError::new(
@@ -2349,7 +2357,7 @@ async fn usage(
     });
     let until = query.until.unwrap_or(now_ms);
 
-    match usage_log.query_usage(&tenant.tenant_id, since, until) {
+    match usage_log.query_usage(&tenant.tenant_id, &tenant.plan, since, until) {
         Ok(summary) => Json(summary).into_response(),
         Err(err) => ApiError::internal(err.to_string()).into_response(),
     }

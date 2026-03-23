@@ -121,18 +121,29 @@ npm install @tinyzkp/verify
 
 ## Pricing
 
-Pay per proof based on trace complexity. Verification is always free.
+Pay per proof based on trace complexity. Verification is always free. Our O(√T) architecture means 10–40x lower infrastructure costs — we pass the savings to you.
 
-| Tier | Trace Steps | Price |
-|------|-------------|-------|
-| Free | — | 100 proofs/month, no credit card |
-| Tiny | < 10K | $0.05/proof |
-| Standard | 10K – 100K | $0.50/proof |
-| Large | 100K – 1M | $2.00/proof |
-| Enterprise | 1M – 10M | $5.00/proof |
-| XL | > 10M | $20.00/proof |
+### Plans
 
-**Plan limits** (rate limits, concurrency, monthly caps) vary by tier — see [tinyzkp.com/docs#plans](https://tinyzkp.com/docs#plans).
+| Plan | Monthly Base | Per-Proof Discount | Key Limits |
+|------|-------------|-------------------|------------|
+| Free | $0 | — | 100 proofs/mo, 1 inflight, 10 RPM |
+| Developer | $0 | Base rates | 4 inflight, 100 RPM, $500/mo cap |
+| Team | $49 | 25% off | 8 inflight, 300 RPM, $2,500/mo cap |
+| Scale | $199 | 40% off | 16 inflight, 500 RPM, $10,000/mo cap |
+| Enterprise | Custom | Up to 50% off | Custom limits, SLA |
+
+### Per-proof base rates (Developer plan)
+
+| Trace Steps | Price |
+|-------------|-------|
+| < 10K | $0.05/proof |
+| 10K – 100K | $0.50/proof |
+| 100K – 1M | $2.00/proof |
+| 1M – 10M | $8.00/proof |
+| > 10M | $30.00/proof |
+
+Team and Scale plans receive automatic discounts (25% and 40% off) on every proof. See [tinyzkp.com/docs#plans](https://tinyzkp.com/docs#plans) for full details.
 
 ---
 

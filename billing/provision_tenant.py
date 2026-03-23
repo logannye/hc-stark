@@ -150,6 +150,11 @@ def _handle_checkout_completed(event: dict) -> tuple[str, int]:
     tenant_id = generate_tenant_id()
     api_key = generate_api_key()
 
+    # Extract plan from checkout session metadata (set by create-checkout.js).
+    plan = (session.get("metadata") or {}).get("plan", "developer")
+    if plan not in ("developer", "team", "scale"):
+        plan = "developer"
+
     tenant_store.create_tenant(
         conn,
         tenant_id=tenant_id,
@@ -158,11 +163,12 @@ def _handle_checkout_completed(event: dict) -> tuple[str, int]:
         stripe_customer_id=customer_id,
         stripe_subscription_id=subscription_id,
         stripe_subscription_item_id=si_id,
+        plan=plan,
     )
     tenant_store.mark_event_processed(conn, event_id)
 
     # Regenerate api_keys.txt with the new tenant.
-    sync_keys.regenerate(conn, API_KEYS_FILE, active_keys={tenant_id: (api_key, "standard")})
+    sync_keys.regenerate(conn, API_KEYS_FILE, active_keys={tenant_id: (api_key, plan)})
 
     print(f"Provisioned tenant={tenant_id} email={email} si={si_id}")
 
@@ -230,6 +236,48 @@ def _handle_payment_failed(event: dict) -> tuple[str, int]:
     return "", 200
 
 
+def _plan_from_subscription(subscription: dict) -> str:
+    """Determine plan from subscription metadata or items."""
+    # Check metadata first (set during checkout).
+    plan = (subscription.get("metadata") or {}).get("plan")
+    if plan in ("developer", "team", "scale"):
+        return plan
+    # Fallback: count line items — 1 item = developer, 2+ = team/scale.
+    items = subscription.get("items", {}).get("data", [])
+    if len(items) >= 2:
+        # If there's a flat-rate item alongside metered, it's team or scale.
+        # Check metadata on the subscription for specifics; default to team.
+        return "team"
+    return "developer"
+
+
+def _handle_subscription_updated(event: dict) -> tuple[str, int]:
+    """Handle customer.subscription.updated — plan changes via Stripe Portal."""
+    conn = tenant_store.open_db()
+
+    event_id = event["id"]
+    if tenant_store.is_event_processed(conn, event_id):
+        conn.close()
+        return "already processed", 200
+
+    subscription = event["data"]["object"]
+    subscription_id = subscription["id"]
+    tenant = tenant_store.get_by_subscription_id(conn, subscription_id)
+
+    if tenant:
+        plan = _plan_from_subscription(subscription)
+        tenant_store.set_plan(conn, tenant["tenant_id"], plan)
+        tenant_store.mark_event_processed(conn, event_id)
+        sync_keys.regenerate(conn, API_KEYS_FILE)
+        print(f"Updated plan for tenant={tenant['tenant_id']} to '{plan}'")
+    else:
+        tenant_store.mark_event_processed(conn, event_id)
+        print(f"WARNING: No tenant found for subscription {subscription_id}", file=sys.stderr)
+
+    conn.close()
+    return "", 200
+
+
 @app.route("/webhook", methods=["POST"])
 def stripe_webhook():
     payload = flask.request.get_data(as_text=True)
@@ -244,6 +292,8 @@ def stripe_webhook():
 
     if event_type == "checkout.session.completed":
         return _handle_checkout_completed(event)
+    elif event_type == "customer.subscription.updated":
+        return _handle_subscription_updated(event)
     elif event_type == "customer.subscription.deleted":
         return _handle_subscription_deleted(event)
     elif event_type == "invoice.payment_failed":

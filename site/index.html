@@ -241,7 +241,7 @@ footer .right a:hover{color:var(--muted)}
   nav .links.open{display:flex}
   .hamburger{display:block}
   .steps{grid-template-columns:1fr}
-  .pricing-grid{grid-template-columns:1fr 1fr}
+  .pricing-grid{grid-template-columns:1fr 1fr!important}
   .proof-bar .container{gap:28px}
   .plan-table{margin:40px 16px 0;font-size:12px}
   .plan-table th,.plan-table td{padding:9px 12px}
@@ -282,7 +282,7 @@ footer .right a:hover{color:var(--muted)}
     <a class="cta" href="/signup">Get Free API Key</a>
     <a class="cta cta-secondary" href="#demo">Try Live Demo</a>
   </div>
-  <span class="free">Free tier &middot; 100 proofs/month &middot; No credit card</span>
+  <span class="free">Free tier &middot; 100 proofs/month &middot; No credit card &middot; 10&ndash;40x cheaper than alternatives</span>
 </div>
 </section>
 
@@ -402,63 +402,95 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
 <section id="pricing">
 <div class="container">
   <div class="section-label">Pricing</div>
-  <h2 class="section-title">Simple, Per-Proof Pricing</h2>
-  <p class="section-sub">Pay only for proofs you generate. Verification is always free. Start with 100 free proofs per month.</p>
-  <div class="pricing-grid">
+  <h2 class="section-title">Pricing Built on Better Architecture</h2>
+  <p class="section-sub">Our O(&radic;T) prover uses a fraction of the memory. We pass the savings to you &mdash; at rates competitors structurally cannot match.</p>
+
+  <!-- √T Advantage Comparison -->
+  <div class="advantage-box fade-in" style="max-width:720px;margin:0 auto 48px;background:linear-gradient(135deg,rgba(46,232,212,.04) 0%,var(--surface) 100%);border:1px solid var(--accent);border-radius:14px;padding:32px 28px;position:relative;box-shadow:0 0 40px rgba(46,232,212,.06)">
+    <h3 style="font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">Why we're 10&ndash;40x cheaper</h3>
+    <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:20px">Traditional provers allocate memory proportional to trace length. TinyZKP's height-compressed streaming architecture needs only the square root. Same cryptographic guarantees &mdash; tiny footprint.</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;font-family:var(--mono)">
+      <thead><tr>
+        <th style="text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Trace</th>
+        <th style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Others</th>
+        <th style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--accent);font-size:11px;letter-spacing:.06em;text-transform:uppercase">TinyZKP</th>
+      </tr></thead>
+      <tbody>
+        <tr><td style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text)">1M steps</td><td style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--muted)">10&ndash;20 GB RAM</td><td style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--accent);font-weight:600">~30 MB</td></tr>
+        <tr><td style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text)">10M steps</td><td style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--muted)">100+ GB RAM</td><td style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--accent);font-weight:600">~100 MB</td></tr>
+        <tr><td style="padding:10px 14px;color:var(--text)">100M steps</td><td style="text-align:center;padding:10px 14px;color:var(--red);font-weight:600">Impossible</td><td style="text-align:center;padding:10px 14px;color:var(--accent);font-weight:600">~300 MB</td></tr>
+      </tbody>
+    </table>
+    <p style="color:var(--dim);font-size:12px;margin-top:16px;text-align:center;font-weight:500">Lower infrastructure cost &rarr; lower prices for you. No compromises on security.</p>
+  </div>
+
+  <!-- Plan Cards -->
+  <div class="pricing-grid" style="grid-template-columns:repeat(4,1fr)">
     <div class="price-card fade-in">
       <div class="tier">Free</div>
       <div class="amount" style="color:var(--green)">$0</div>
       <div class="unit">100 proofs/mo</div>
-      <div class="desc">No credit card</div>
+      <div class="desc">No credit card &middot; 10 RPM &middot; 1 job</div>
     </div>
     <div class="price-card fade-in">
-      <div class="tier">Tiny</div>
-      <div class="amount">$0.05</div>
-      <div class="unit">per proof</div>
-      <div class="desc">&lt; 10K trace steps</div>
+      <div class="tier">Developer</div>
+      <div class="amount">$0</div>
+      <div class="unit">per month + usage</div>
+      <div class="desc">100 RPM &middot; 4 jobs &middot; $500 cap</div>
     </div>
     <div class="price-card featured fade-in">
-      <div class="tier">Standard</div>
-      <div class="amount">$0.50</div>
-      <div class="unit">per proof</div>
-      <div class="desc">10K &ndash; 100K steps</div>
+      <div class="tier">Team</div>
+      <div class="amount">$49</div>
+      <div class="unit">per month + usage</div>
+      <div class="desc" style="color:var(--accent)">25% off &middot; 300 RPM &middot; 8 jobs</div>
     </div>
     <div class="price-card fade-in">
-      <div class="tier">Large</div>
-      <div class="amount">$2.00</div>
-      <div class="unit">per proof</div>
-      <div class="desc">100K &ndash; 1M steps</div>
-    </div>
-    <div class="price-card fade-in">
-      <div class="tier">Enterprise</div>
-      <div class="amount">$5.00</div>
-      <div class="unit">per proof</div>
-      <div class="desc">1M &ndash; 10M steps</div>
-    </div>
-    <div class="price-card fade-in">
-      <div class="tier">XL</div>
-      <div class="amount">$20</div>
-      <div class="unit">per proof</div>
-      <div class="desc">&gt; 10M steps</div>
+      <div class="tier">Scale</div>
+      <div class="amount">$199</div>
+      <div class="unit">per month + usage</div>
+      <div class="desc" style="color:var(--accent)">40% off &middot; 500 RPM &middot; 16 jobs</div>
     </div>
   </div>
+  <p style="text-align:center;margin-top:14px;color:var(--dim);font-size:13px">Need custom limits or SLAs? <a href="/contact" style="color:var(--accent)">Talk to us about Enterprise</a>.</p>
   <p class="verify-free">Verification is always free</p>
 
-  <div class="plan-table fade-in">
+  <!-- Per-Proof Rate Table -->
+  <div class="plan-table fade-in" style="max-width:820px">
     <table>
-      <thead><tr><th>Plan Limits</th><th class="plan-free">Free</th><th>Standard</th><th>Pro</th></tr></thead>
+      <thead><tr>
+        <th>Trace Steps</th>
+        <th>Developer</th>
+        <th style="color:var(--accent)">Team <span style="font-weight:400;opacity:.7">(-25%)</span></th>
+        <th style="color:var(--accent)">Scale <span style="font-weight:400;opacity:.7">(-40%)</span></th>
+        <th style="color:var(--green)">vs. Alternatives</th>
+      </tr></thead>
       <tbody>
-        <tr><td class="plan-name">Prove RPM</td><td class="plan-free">10</td><td>100</td><td>500</td></tr>
-        <tr><td class="plan-name">Verify RPM</td><td class="plan-free">30</td><td>300</td><td>1,500</td></tr>
-        <tr><td class="plan-name">Inflight jobs</td><td class="plan-free">1</td><td>4</td><td>8</td></tr>
-        <tr><td class="plan-name">Monthly cap</td><td class="plan-free">$5</td><td>$500</td><td>$5,000</td></tr>
-        <tr><td class="plan-name">Max prove time</td><td class="plan-free">5 min</td><td>10 min</td><td>60 min</td></tr>
+        <tr><td class="plan-name">&lt; 10K</td><td>$0.05</td><td>$0.04</td><td>$0.03</td><td style="color:var(--green)">Comparable</td></tr>
+        <tr><td class="plan-name">10K &ndash; 100K</td><td>$0.50</td><td>$0.38</td><td>$0.30</td><td style="color:var(--green)">50&ndash;90% less</td></tr>
+        <tr><td class="plan-name">100K &ndash; 1M</td><td>$2.00</td><td>$1.50</td><td>$1.20</td><td style="color:var(--green)">87&ndash;98% less</td></tr>
+        <tr><td class="plan-name">1M &ndash; 10M</td><td>$8.00</td><td>$6.00</td><td>$4.80</td><td style="color:var(--green)">90&ndash;98% less</td></tr>
+        <tr><td class="plan-name">&gt; 10M</td><td>$30.00</td><td>$22.50</td><td>$18.00</td><td style="color:var(--green)">94&ndash;99% less</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Plan Limits Table -->
+  <div class="plan-table fade-in" style="max-width:820px">
+    <table>
+      <thead><tr><th>Plan Limits</th><th class="plan-free">Free</th><th>Developer</th><th>Team</th><th>Scale</th></tr></thead>
+      <tbody>
+        <tr><td class="plan-name">Prove RPM</td><td class="plan-free">10</td><td>100</td><td>300</td><td>500</td></tr>
+        <tr><td class="plan-name">Verify RPM</td><td class="plan-free">30</td><td>300</td><td>900</td><td>1,500</td></tr>
+        <tr><td class="plan-name">Inflight jobs</td><td class="plan-free">1</td><td>4</td><td>8</td><td>16</td></tr>
+        <tr><td class="plan-name">Monthly cap</td><td class="plan-free">$5</td><td>$500</td><td>$2,500</td><td>$10,000</td></tr>
+        <tr><td class="plan-name">Max prove time</td><td class="plan-free">5 min</td><td>10 min</td><td>30 min</td><td>60 min</td></tr>
       </tbody>
     </table>
   </div>
 
   <div style="text-align:center;margin-top:36px">
     <a class="cta" href="/signup" style="font-size:13px;padding:12px 28px">Get Free API Key</a>
+    <a class="cta cta-secondary" href="/signup" style="font-size:13px;padding:12px 28px;margin-left:12px">Compare Plans</a>
   </div>
 </div>
 </section>

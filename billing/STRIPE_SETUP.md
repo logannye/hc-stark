@@ -2,24 +2,33 @@
 
 One-time setup steps for Stripe billing.
 
-## 1. Create Product
+## 1. Create Products
 
-In Stripe Dashboard > Products:
+In Stripe Dashboard > Products, create three products:
 
+### Metered Usage (all paid plans)
 - **Name**: TinyZKP Proof Generation
-- **Description**: ZK-STARK proof generation API
+- **Description**: ZK-STARK proof generation API — metered usage
+- **Price**: Usage-based, metered via `proof_usage` meter, $0.01/unit, monthly
 
-## 2. Create Price
+### Team Monthly (Team plan)
+- **Name**: TinyZKP Team
+- **Description**: Team plan — 25% off per-proof rates, 300 RPM, 8 concurrent jobs
+- **Price**: $49/month recurring
 
-On the product, add a price:
+### Scale Monthly (Scale plan)
+- **Name**: TinyZKP Scale
+- **Description**: Scale plan — 40% off per-proof rates, 500 RPM, 16 concurrent jobs
+- **Price**: $199/month recurring
 
-- **Pricing model**: Usage-based
-- **Usage type**: Metered
-- **Billing scheme**: Per unit
-- **Unit amount**: $0.01 (1 cent — we report actual cents per proof as quantity)
-- **Billing period**: Monthly
+Save all three **Price IDs** (start with `price_`).
 
-Save the **Price ID** (starts with `price_`).
+## 2. Create Meter
+
+In Stripe Dashboard > Billing > Meters:
+
+- **Event name**: `proof_usage`
+- **Display name**: Proof Usage
 
 ## 3. Create Webhook Endpoint
 
@@ -28,6 +37,7 @@ In Stripe Dashboard > Developers > Webhooks:
 - **Endpoint URL**: `https://webhook.tinyzkp.com/webhook`
 - **Events to listen for**:
   - `checkout.session.completed` — provisions new tenant
+  - `customer.subscription.updated` — handles plan changes
   - `customer.subscription.deleted` — suspends tenant
   - `invoice.payment_failed` — suspends tenant on payment failure
 
@@ -40,92 +50,57 @@ Add to `/opt/hc-stark/.env`:
 ```
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRICE_ID=price_...
+STRIPE_PRICE_ID_METERED=price_...    # metered usage price
+STRIPE_PRICE_ID_TEAM=price_...       # $49/mo Team price
+STRIPE_PRICE_ID_SCALE=price_...      # $199/mo Scale price
 ```
 
-## 5. Checkout
+## 5. Checkout Flow
 
-Customers sign up at `https://tinyzkp.com/signup`. The signup page calls a Cloudflare Pages Function that creates a Stripe Checkout session and redirects the customer.
+Customers sign up at `https://tinyzkp.com/signup` and select a plan:
 
-To generate a checkout link manually (e.g., for direct sharing):
+- **Free**: No Stripe — provisioned via internal `/provision-free` endpoint
+- **Developer**: Stripe Checkout with metered usage price only
+- **Team**: Stripe Checkout with Team flat price + metered usage price
+- **Scale**: Stripe Checkout with Scale flat price + metered usage price
 
-```bash
-STRIPE_SECRET_KEY=sk_live_... STRIPE_PRICE_ID=price_... python3 billing/create_checkout.py
-```
+The plan name is passed in `metadata.plan` on the checkout session and subscription,
+so the webhook handler can extract it during tenant provisioning.
 
 ## 6. Cloudflare Pages Secrets
 
-The checkout Pages Function needs these secrets (set via `wrangler pages secret put`):
+Set via `wrangler pages secret put`:
 
-- `STRIPE_SECRET_KEY` — same as above
-- `STRIPE_PRICE_ID` — same as above
+- `STRIPE_SECRET_KEY` — Stripe secret key
+- `STRIPE_PRICE_ID_METERED` — metered usage price ID (also accepted as `STRIPE_PRICE_ID` for backward compat)
+- `STRIPE_PRICE_ID_TEAM` — Team $49/mo price ID
+- `STRIPE_PRICE_ID_SCALE` — Scale $199/mo price ID
 
-## 7. Going Live
+## 7. Plan-Based Discount Logic
 
-Switch from Stripe test mode to live mode for real payments.
+The `sync_usage.py` billing cron applies plan-based discounts before reporting to Stripe:
 
-### Steps
-
-1. **Switch to Live mode** in Stripe Dashboard (toggle at top-left)
-
-2. **Create live Product**: Same name/description as test mode ("TinyZKP Proof Generation")
-
-3. **Create live Meter**: Event name must be `proof_usage` (matches `sync_usage.py`)
-
-4. **Create live Price** on the product:
-   - Usage-based, metered via the `proof_usage` meter
-   - Per unit: $0.01 (1 cent)
-   - Monthly billing
-
-5. **Create live Webhook** endpoint:
-   - URL: `https://webhook.tinyzkp.com/webhook`
-   - Events: `checkout.session.completed`, `customer.subscription.deleted`, `invoice.payment_failed`
-   - Save the signing secret (`whsec_...`)
-
-6. **Update Cloudflare Pages secrets** (website checkout):
-   ```bash
-   npx wrangler pages secret put STRIPE_SECRET_KEY --project-name tinyzkp  # sk_live_...
-   npx wrangler pages secret put STRIPE_PRICE_ID --project-name tinyzkp    # price_...
-   ```
-
-7. **Update Hetzner `.env`** with live keys:
-   ```
-   STRIPE_SECRET_KEY=sk_live_...
-   STRIPE_WEBHOOK_SECRET=whsec_...
-   STRIPE_PRICE_ID=price_...
-   ```
-
-8. **Redeploy**:
-   ```bash
-   # Website
-   npx wrangler pages deploy . --project-name tinyzkp
-
-   # Server
-   cd /opt/hc-stark && docker compose down && docker compose up -d
-   ```
-
-9. **Verify**: Make a test purchase at `https://tinyzkp.com/signup` with a real card
-
-### Checklist
-
-- [ ] Live Product created
-- [ ] Live Meter created (event_name: `proof_usage`)
-- [ ] Live Price created (usage-based, $0.01/unit, monthly)
-- [ ] Live Webhook created (3 events)
-- [ ] Cloudflare Pages secrets updated
-- [ ] Hetzner `.env` updated
-- [ ] Website redeployed
-- [ ] Server redeployed
-- [ ] Test purchase successful
+| Plan | Discount Factor | Example: 1M-step proof |
+|------|----------------|----------------------|
+| Free | 1.0 (no discount) | 800 cents ($8.00) |
+| Developer | 1.0 (no discount) | 800 cents ($8.00) |
+| Team | 0.75 (25% off) | 600 cents ($6.00) |
+| Scale | 0.60 (40% off) | 480 cents ($4.80) |
 
 ## Price Tiers
 
-The `sync_usage.py` script reports usage in cents per proof:
+Base rates (before plan discounts). `sync_usage.py` reports discounted cents per proof:
 
-| Trace Length | Cents Reported |
-|---|---|
-| < 10K steps | 5 ($0.05) |
-| 10K–100K | 50 ($0.50) |
-| 100K–1M | 200 ($2.00) |
-| 1M–10M | 500 ($5.00) |
-| > 10M steps | 2000 ($20.00) |
+| Trace Length | Base Cents | Team (25% off) | Scale (40% off) |
+|---|---|---|---|
+| < 10K steps | 5 ($0.05) | 4 ($0.04) | 3 ($0.03) |
+| 10K–100K | 50 ($0.50) | 38 ($0.38) | 30 ($0.30) |
+| 100K–1M | 200 ($2.00) | 150 ($1.50) | 120 ($1.20) |
+| 1M–10M | 800 ($8.00) | 600 ($6.00) | 480 ($4.80) |
+| > 10M steps | 3000 ($30.00) | 2250 ($22.50) | 1800 ($18.00) |
+
+## Migration
+
+Run `billing/migrate_plans.py` to rename legacy plan names:
+- `standard` → `developer`
+- `pro` → `scale`

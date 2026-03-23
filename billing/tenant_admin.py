@@ -90,7 +90,7 @@ def cmd_rotate_key(args: argparse.Namespace) -> None:
 
 
 def cmd_set_plan(args: argparse.Namespace) -> None:
-    valid_plans = ("free", "standard", "pro")
+    valid_plans = ("free", "developer", "team", "scale", "enterprise")
     if args.plan not in valid_plans:
         print(f"Invalid plan '{args.plan}'. Must be one of: {', '.join(valid_plans)}", file=sys.stderr)
         sys.exit(1)
@@ -154,7 +154,7 @@ def main() -> None:
 
     p_plan = sub.add_parser("set-plan", help="Change a tenant's plan")
     p_plan.add_argument("tenant_id")
-    p_plan.add_argument("plan", choices=["free", "standard", "pro"])
+    p_plan.add_argument("plan", choices=["free", "developer", "team", "scale", "enterprise"])
     p_plan.set_defaults(func=cmd_set_plan)
 
     p_usage = sub.add_parser("usage", help="Show tenant usage summary")

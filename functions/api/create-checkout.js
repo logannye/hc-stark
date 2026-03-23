@@ -47,7 +47,7 @@ export async function onRequestPost(context) {
       });
     }
 
-    const { email } = await context.request.json();
+    const { email, plan } = await context.request.json();
     if (!email || !email.includes("@") || email.length > 254) {
       return new Response(JSON.stringify({ error: "valid email required" }), {
         status: 400,
@@ -55,10 +55,14 @@ export async function onRequestPost(context) {
       });
     }
 
-    const STRIPE_SECRET_KEY = context.env.STRIPE_SECRET_KEY;
-    const STRIPE_PRICE_ID = context.env.STRIPE_PRICE_ID;
+    const selectedPlan = (plan === "team" || plan === "scale") ? plan : "developer";
 
-    if (!STRIPE_SECRET_KEY || !STRIPE_PRICE_ID) {
+    const STRIPE_SECRET_KEY = context.env.STRIPE_SECRET_KEY;
+    const STRIPE_PRICE_ID_METERED = context.env.STRIPE_PRICE_ID_METERED || context.env.STRIPE_PRICE_ID;
+    const STRIPE_PRICE_ID_TEAM = context.env.STRIPE_PRICE_ID_TEAM;
+    const STRIPE_PRICE_ID_SCALE = context.env.STRIPE_PRICE_ID_SCALE;
+
+    if (!STRIPE_SECRET_KEY || !STRIPE_PRICE_ID_METERED) {
       return new Response(JSON.stringify({ error: "server misconfigured" }), {
         status: 500,
         headers: jsonHeaders,
@@ -68,8 +72,19 @@ export async function onRequestPost(context) {
     const params = new URLSearchParams();
     params.append("mode", "subscription");
     params.append("customer_email", email);
-    params.append("line_items[0][price]", STRIPE_PRICE_ID);
-    params.append("success_url", "https://tinyzkp.com/?checkout=success");
+    params.append("line_items[0][price]", STRIPE_PRICE_ID_METERED);
+
+    if (selectedPlan === "team" && STRIPE_PRICE_ID_TEAM) {
+      params.append("line_items[1][price]", STRIPE_PRICE_ID_TEAM);
+      params.append("line_items[1][quantity]", "1");
+    } else if (selectedPlan === "scale" && STRIPE_PRICE_ID_SCALE) {
+      params.append("line_items[1][price]", STRIPE_PRICE_ID_SCALE);
+      params.append("line_items[1][quantity]", "1");
+    }
+
+    params.append("metadata[plan]", selectedPlan);
+    params.append("subscription_data[metadata][plan]", selectedPlan);
+    params.append("success_url", "https://tinyzkp.com/welcome?plan=" + selectedPlan);
     params.append("cancel_url", "https://tinyzkp.com/signup?cancelled=true");
 
     const resp = await fetch("https://api.stripe.com/v1/checkout/sessions", {
