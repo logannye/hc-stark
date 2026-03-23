@@ -206,19 +206,20 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <a href="#inspect">Proof Inspection</a>
     <a href="#calldata">EVM Calldata</a>
     <a href="#mcp">MCP Integration</a>
+    <a href="#glossary">Glossary</a>
     <a href="#swagger">API Reference</a>
   </aside>
 
   <main class="docs-main">
 
     <h2 id="quickstart">Quickstart</h2>
-    <p>Get up and running with TinyZKP in three steps.</p>
+    <p>Get from zero to a verified ZK proof in four steps. No cryptography knowledge required.</p>
 
     <div class="step-item">
       <span class="step-num">1</span>
       <div>
         <h3>Get an API key</h3>
-        <p><a href="/signup">Sign up</a> for a free account. Your API key will be delivered via email.</p>
+        <p><a href="/signup">Sign up</a> for a free account (100 proofs/month, no credit card). Your API key (<code>tzk_...</code>) will be emailed instantly.</p>
       </div>
     </div>
 
@@ -226,13 +227,19 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       <span class="step-num">2</span>
       <div>
         <h3>Submit a proof</h3>
-        <p>Use a proof template &mdash; no need to specify block_size or accumulator values. The API handles it:</p>
+        <p>Use a proof template to prove something without revealing secrets. This example proves you know a number between 0 and 100 &mdash; without showing the number.</p>
+        <p>The <code>witness_steps</code> are internal computation values that encode your secret. The verifier never sees them &mdash; they stay private.</p>
         <div class="code-block">
           <span class="code-label">curl</span>
 <pre>curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
   -H "Authorization: Bearer tzk_..." \
   -H "Content-Type: application/json" \
-  -d '{"params":{"min":0,"max":100,"witness_steps":[20,22]}}'</pre>
+  -d '{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'</pre>
+        </div>
+        <p><strong>Response:</strong></p>
+        <div class="code-block">
+<pre><span class="comment">// Save the job_id — you'll need it next</span>
+{"job_id":"prf_a1b2c3","status":"proving","eta_ms":1200}</pre>
         </div>
       </div>
     </div>
@@ -240,22 +247,52 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <div class="step-item">
       <span class="step-num">3</span>
       <div>
+        <h3>Poll until complete</h3>
+        <p>Proof generation takes 1&ndash;5 seconds. Poll the job ID until <code>status</code> is <code>"completed"</code>:</p>
+        <div class="code-block">
+          <span class="code-label">curl</span>
+<pre>curl https://api.tinyzkp.com/prove/prf_a1b2c3 \
+  -H "Authorization: Bearer tzk_..."</pre>
+        </div>
+        <p><strong>Response when done:</strong></p>
+        <div class="code-block">
+<pre>{"status":"completed","proof":{"version":4,"bytes":"0x6a8f...","size_kb":12.4}}</pre>
+        </div>
+        <p>If <code>status</code> is still <code>"proving"</code>, wait a second and try again. When it&rsquo;s <code>"completed"</code>, copy the entire <code>proof</code> object.</p>
+      </div>
+    </div>
+
+    <div class="step-item">
+      <span class="step-num">4</span>
+      <div>
         <h3>Verify the proof</h3>
-        <p>Pass the proof object to the <code>/verify</code> endpoint. Verification requires your API key but is always <strong style="color:var(--green)">free &mdash; no charge</strong>.</p>
+        <p>Pass the <code>proof</code> object from step 3 to the verify endpoint. Verification is always <strong style="color:var(--green)">free &mdash; no charge</strong>. Auth is required only to prevent abuse.</p>
         <div class="code-block">
           <span class="code-label">curl</span>
 <pre>curl -X POST https://api.tinyzkp.com/verify \
   -H "Authorization: Bearer tzk_..." \
   -H "Content-Type: application/json" \
-  -d '{
-    "proof": {
-      "version": 4,
-      "bytes": [...]
-    },
-    "allow_legacy_v2": false
-  }'</pre>
+  -d '{"proof":{"version":4,"bytes":"0x6a8f...","size_kb":12.4}}'</pre>
+        </div>
+        <p><strong>Response:</strong></p>
+        <div class="code-block">
+<pre><span class="comment">// The verifier confirmed the proof without learning your secret</span>
+{"valid":true,"verified_in_ms":2.8}</pre>
         </div>
       </div>
+    </div>
+
+    <h3>Common errors</h3>
+    <div class="docs-table-wrap">
+      <table>
+        <thead><tr><th>Status</th><th>Meaning</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td><code>401</code></td><td>Missing or invalid API key</td><td>Check your <code>Authorization: Bearer tzk_...</code> header</td></tr>
+          <tr><td><code>409</code></td><td>Proof not ready yet</td><td>Poll <code>GET /prove/:job_id</code> until <code>status</code> is <code>"completed"</code></td></tr>
+          <tr><td><code>429</code></td><td>Rate limit exceeded</td><td>Wait and retry. Free plan: 10 requests/min. <a href="#plans">See plan limits</a></td></tr>
+          <tr><td><code>402</code></td><td>Monthly spending cap reached</td><td>Wait for next billing cycle or <a href="/contact">contact us</a> to upgrade</td></tr>
+        </tbody>
+      </table>
     </div>
 
     <h2 id="wasm">Client-Side Verification</h2>
@@ -454,42 +491,42 @@ console.log(result.ok); <span class="comment">// true</span></pre>
     </div>
 
     <h2 id="templates">Proof Templates</h2>
-    <p>TinyZKP ships with six proof templates that cover common zero-knowledge use cases. Use <code>POST /prove/template/:id</code> to prove via template, or browse templates with <code>GET /templates</code>.</p>
+    <p>TinyZKP ships with six proof templates that cover common zero-knowledge use cases. Templates handle all the cryptographic complexity &mdash; you just provide your data. Use <code>POST /prove/template/:id</code> to prove, or browse templates with <code>GET /templates</code>.</p>
 
     <div class="docs-table-wrap">
       <table>
         <thead>
-          <tr><th>Template</th><th>What It Proves</th><th>Key Parameters</th></tr>
+          <tr><th>Template</th><th>What It Proves (Plain English)</th><th>Key Parameters</th></tr>
         </thead>
         <tbody>
           <tr>
-            <td><code>accumulator_step</code></td>
-            <td>A chain of additive deltas transitions correctly</td>
-            <td><code>initial</code>, <code>final</code>, <code>deltas[]</code></td>
-          </tr>
-          <tr>
-            <td><code>computation_attestation</code></td>
-            <td>f(secret_steps) = public_output without revealing inputs</td>
-            <td><code>steps[]</code>, <code>expected_output</code></td>
-          </tr>
-          <tr>
-            <td><code>hash_preimage</code></td>
-            <td>Prover knows a secret whose hash equals a public digest</td>
-            <td><code>digest</code>, <code>preimage_steps[]</code></td>
-          </tr>
-          <tr>
             <td><code>range_proof</code></td>
-            <td>A secret value lies within [min, max]</td>
+            <td>&ldquo;I know a number between X and Y&rdquo; &mdash; without revealing the number. Use for age verification, credit score ranges, balance checks.</td>
             <td><code>min</code>, <code>max</code>, <code>witness_steps[]</code></td>
           </tr>
           <tr>
+            <td><code>hash_preimage</code></td>
+            <td>&ldquo;I know the secret that produces this hash&rdquo; &mdash; without revealing the secret. Use for password proofs, commitment schemes.</td>
+            <td><code>digest</code>, <code>preimage_steps[]</code></td>
+          </tr>
+          <tr>
+            <td><code>computation_attestation</code></td>
+            <td>&ldquo;Running this function on my secret inputs gives this public result&rdquo; &mdash; without revealing the inputs. Use for ML inference proofs, auditing.</td>
+            <td><code>steps[]</code>, <code>expected_output</code></td>
+          </tr>
+          <tr>
+            <td><code>accumulator_step</code></td>
+            <td>&ldquo;Starting from X, applying these deltas reaches Y&rdquo; &mdash; proves a chain of additions is correct. Use for balance updates, state transitions.</td>
+            <td><code>initial</code>, <code>final</code>, <code>deltas[]</code></td>
+          </tr>
+          <tr>
             <td><code>policy_compliance</code></td>
-            <td>Actions stay within a threshold (spending limits, quotas)</td>
+            <td>&ldquo;These actions stayed within the allowed limit&rdquo; &mdash; proves spending or quota compliance. Use for budget enforcement, regulatory reporting.</td>
             <td><code>actions[]</code>, <code>threshold</code></td>
           </tr>
           <tr>
             <td><code>data_integrity</code></td>
-            <td>Data elements sum to a committed checksum</td>
+            <td>&ldquo;These data elements add up to this checksum&rdquo; &mdash; proves data hasn&rsquo;t been tampered with. Use for audit trails, supply chain verification.</td>
             <td><code>elements[]</code>, <code>checksum</code></td>
           </tr>
         </tbody>
@@ -866,6 +903,28 @@ claude mcp add --transport http tinyzkp http://localhost:3001/mcp</pre>
       <li>Supports both SSE streaming and JSON responses</li>
       <li>Works with any MCP-compatible client (Claude Code, Cursor, VS Code, etc.)</li>
     </ul>
+
+    <h2 id="glossary">Glossary</h2>
+    <p>Key terms used throughout this documentation, explained in plain English.</p>
+    <div class="docs-table-wrap">
+      <table>
+        <thead><tr><th>Term</th><th>What It Means</th></tr></thead>
+        <tbody>
+          <tr><td><code>proof</code></td><td>A short piece of data that proves a computation was done correctly &mdash; without revealing the inputs. Anyone can verify it quickly.</td></tr>
+          <tr><td><code>witness_steps</code></td><td>The private values that encode your secret in a proof template. These are <strong>never revealed</strong> to the verifier &mdash; they stay on the server during proving and are discarded after. Think of them as your secret answer that the proof vouches for.</td></tr>
+          <tr><td><code>trace</code></td><td>The step-by-step record of a computation. Each instruction the prover executes creates a row in the trace. A longer trace = more computation = higher cost.</td></tr>
+          <tr><td><code>trace_length</code></td><td>How many steps the computation has. This determines which <a href="#pricing">pricing tier</a> your proof falls into (e.g., &lt;10K steps = Tiny tier at $0.05).</td></tr>
+          <tr><td><code>template</code></td><td>A pre-built proof program for a common use case (range proof, hash preimage, etc.). Templates handle all the complexity &mdash; you just provide parameters.</td></tr>
+          <tr><td><code>zk_mask_degree</code></td><td>Set to 1 or higher to enable zero-knowledge mode. This hides the computation itself, not just the inputs. Default (0) = the proof reveals trace structure.</td></tr>
+          <tr><td><code>block_size</code></td><td>Internal parameter controlling how the trace is divided into chunks. The API sets this automatically &mdash; you almost never need to change it.</td></tr>
+          <tr><td><code>FRI</code></td><td>Fast Reed&ndash;Solomon Interactive Oracle Proof of Proximity. The core cryptographic protocol TinyZKP uses. You don&rsquo;t need to understand it to use the API.</td></tr>
+          <tr><td><code>lde_blowup_factor</code></td><td>Controls how much the trace is expanded for error detection. Higher = stronger security but larger proofs. Default (2) is fine for most use cases.</td></tr>
+          <tr><td><code>initial_acc</code> / <code>final_acc</code></td><td>The starting and ending accumulator values of a computation. For templates, these are set automatically from your parameters. For raw programs, they define the expected input&rarr;output.</td></tr>
+          <tr><td><code>STARK</code></td><td>Scalable Transparent ARgument of Knowledge. The type of proof system TinyZKP uses. &ldquo;Transparent&rdquo; means no trusted setup ceremony is needed. &ldquo;Scalable&rdquo; means verification is fast regardless of computation size.</td></tr>
+          <tr><td><code>KZG</code></td><td>Kate&ndash;Zaverucha&ndash;Goldberg polynomial commitment. Used in recursive proof aggregation for efficient on-chain verification (~300K gas vs. millions).</td></tr>
+        </tbody>
+      </table>
+    </div>
 
     <h2 id="swagger">Interactive API Reference</h2>
     <p>Explore the full API interactively with our Swagger UI. Try endpoints directly from your browser.</p>

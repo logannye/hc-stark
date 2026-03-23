@@ -127,28 +127,36 @@ footer .right a:hover{color:var(--muted)}
 
   <div class="step-card">
     <h3><span class="badge">1</span> Check your email</h3>
-    <p>We sent your API key to <strong id="userEmail">your email</strong>. It looks like <code>tzk_...</code>.</p>
-    <p class="note">Don't see it? Check spam, or <a href="/contact">contact support</a>.<br>
-    Need to rotate your key? <code style="font-size:11px">curl -X POST https://tinyzkp.com/api/rotate-key -H "Authorization: Bearer tzk_YOUR_KEY"</code></p>
+    <p>We sent your API key to <strong id="userEmail">your email</strong>. It looks like <code>tzk_...</code>. Store it securely &mdash; it&rsquo;s only shown once.</p>
+    <p class="note">Don't see it? Check spam, or <a href="/contact">contact support</a>. Need to rotate a compromised key? See <a href="/docs#auth">key rotation</a>.</p>
   </div>
 
   <div class="step-card">
-    <h3><span class="badge">2</span> Make your first proof</h3>
-    <p>Prove that a secret number is in a range &mdash; without revealing the number:</p>
+    <h3><span class="badge">2</span> Submit a proof</h3>
+    <p>Let&rsquo;s prove that you know a secret number between 0 and 100 &mdash; without revealing the number itself. The <code>witness_steps</code> are internal computation values that encode your secret; the verifier never sees them.</p>
     <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
   -H "Authorization: Bearer tzk_YOUR_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"params":{"min":0,"max":100,"witness_steps":[20,22]}}'</div>
+  -d '{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'</div>
+    <p class="note">Response: <code>{"job_id":"prf_a1b2c3","status":"proving","eta_ms":1200}</code><br>Save the <code>job_id</code> &mdash; you&rsquo;ll need it in the next step.</p>
   </div>
 
   <div class="step-card">
-    <h3><span class="badge">3</span> Verify it (free)</h3>
-    <p>Verify the proof &mdash; free, no charge. Auth is required to prevent abuse:</p>
+    <h3><span class="badge">3</span> Poll until complete</h3>
+    <p>Proof generation takes 1&ndash;5 seconds. Poll the job until <code>status</code> is <code>"completed"</code>:</p>
+    <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl https://api.tinyzkp.com/prove/prf_a1b2c3 \
+  -H "Authorization: Bearer tzk_YOUR_KEY"</div>
+    <p class="note">Response when done: <code>{"status":"completed","proof":{"version":4,"bytes":"0x6a8f..."}}</code><br>If <code>status</code> is still <code>"proving"</code>, wait a second and try again. Copy the entire <code>proof</code> object for the next step.</p>
+  </div>
+
+  <div class="step-card">
+    <h3><span class="badge">4</span> Verify it (free)</h3>
+    <p>Pass the <code>proof</code> object from step 3 to the verify endpoint. Verification is always free &mdash; auth is required only to prevent abuse:</p>
     <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST https://api.tinyzkp.com/verify \
   -H "Authorization: Bearer tzk_YOUR_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"proof": YOUR_PROOF_OBJECT}'</div>
-    <p class="note">Response: {"valid": true, "verified_in_ms": 2.8}</p>
+  -d '{"proof":{"version":4,"bytes":"0x6a8f..."}}'</div>
+    <p class="note">Response: <code>{"valid":true,"verified_in_ms":2.8}</code> &mdash; The verifier confirmed the proof is valid without learning your secret number.</p>
   </div>
 
   <div class="next-links">
