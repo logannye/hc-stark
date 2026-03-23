@@ -5,19 +5,39 @@ Your account has been created. Here are your credentials:
   Tenant ID: {tenant_id}
   API Key:   {api_key}
 
-API Endpoint: https://api.tinyzkp.com
-Documentation: https://api.tinyzkp.com/docs
+IMPORTANT: Your API key is shown only in this email. Store it securely.
 
-Quick start:
+API Endpoint:   https://api.tinyzkp.com
+Documentation:  https://tinyzkp.com/docs
+API Reference:  https://api.tinyzkp.com/docs
 
-  curl -X POST https://api.tinyzkp.com/prove \
+Quick start — prove a secret is in range [0, 100]:
+
+  curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
     -H "Authorization: Bearer {api_key}" \
     -H "Content-Type: application/json" \
-    -d '{{"workload_id": "toy_add_1_2", "initial_acc": 0, "final_acc": 3, "block_size": 4, "fri_final_poly_size": 2}}'
+    -d '{{"params":{{"min":0,"max":100,"witness_steps":[42,44]}}}}'
 
-Keep your API key secret. If you believe it has been compromised,
-contact support immediately to rotate it.
+Verify the proof (always free):
 
-You can also view your API key in the Stripe Customer Portal.
+  curl -X POST https://api.tinyzkp.com/verify \
+    -H "Authorization: Bearer {api_key}" \
+    -d '{{"proof": YOUR_PROOF_OBJECT}}'
+
+What you can do:
+  - 6 proof templates: range_proof, hash_preimage, accumulator_step,
+    computation_attestation, policy_compliance, data_integrity
+  - Zero-knowledge mode: add "zk_mask_degree": 1 to hide computation
+  - Cost estimation: POST /estimate (no auth required)
+  - Batch proving: POST /prove/batch (up to 100 jobs at once)
+  - EVM calldata: GET /proof/:job_id/calldata for on-chain verification
+  - Client-side verification: npm install @tinyzkp/verify (WASM, no server needed)
+
+Key rotation:
+  If your key is compromised, rotate it immediately:
+  curl -X POST https://tinyzkp.com/api/rotate-key \
+    -H "Authorization: Bearer {api_key}"
+
+Keep your API key secret. Do not expose it in client-side code.
 
 — The TinyZKP Team

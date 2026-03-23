@@ -4,9 +4,9 @@
 const RATE_LIMIT_MAX = 1;
 const RATE_LIMIT_WINDOW_S = 86400; // 24 hours
 
-async function checkRateLimit(ip) {
+async function checkRateLimit(ip, keyPrefix) {
   const cache = caches.default;
-  const key = new Request(`https://rate-limit.internal/rotate-key/${ip}`);
+  const key = new Request(`https://rate-limit.internal/rotate-key/${ip}/${keyPrefix}`);
   const cached = await cache.match(key);
 
   let count = 0;
@@ -35,7 +35,11 @@ export async function onRequestPost(context) {
 
   try {
     const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
-    const allowed = await checkRateLimit(ip);
+
+    // Extract key prefix for rate limiting (before full auth check).
+    const authHeader = context.request.headers.get("Authorization") || "";
+    const keyPrefix = authHeader.startsWith("Bearer tzk_") ? authHeader.slice(7, 15) : "unknown";
+    const allowed = await checkRateLimit(ip, keyPrefix);
     if (!allowed) {
       return new Response(JSON.stringify({ error: "Key rotation limited to once per 24 hours." }), {
         status: 429,
@@ -43,8 +47,7 @@ export async function onRequestPost(context) {
       });
     }
 
-    // Extract Bearer token from Authorization header.
-    const authHeader = context.request.headers.get("Authorization") || "";
+    // Validate Bearer token format.
     if (!authHeader.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Authorization: Bearer <api_key> header required." }), {
         status: 401,

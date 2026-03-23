@@ -87,10 +87,17 @@ footer .right a:hover{color:var(--muted)}
 <p>By using the TinyZKP API ("Service"), you agree to these terms. If you do not agree, do not use the Service.</p>
 
 <h2>2. Description of Service</h2>
-<p>TinyZKP provides a ZK-STARK proof generation and verification API. Proof generation requires an API key and is billed per proof. Verification is free.</p>
+<p>TinyZKP provides a ZK-STARK proof generation and verification API. The Service includes:</p>
+<ul>
+<li>Proof generation (billed per proof by trace complexity) and verification (free).</li>
+<li>Zero-knowledge mode for privacy-preserving proofs.</li>
+<li>Batch proving, proof inspection, cost estimation, and EVM calldata generation.</li>
+<li>Client-side proof verification via the <code>@tinyzkp/verify</code> WASM package, which runs entirely on the user's device.</li>
+<li>An MCP server for AI agent integration.</li>
+</ul>
 
 <h2>3. Account and API Keys</h2>
-<p>You are responsible for keeping your API key confidential. You are responsible for all usage under your key. Notify us immediately if you suspect unauthorized use.</p>
+<p>You are responsible for keeping your API key confidential. You are responsible for all usage under your key. If you suspect unauthorized use, rotate your key immediately via the API or contact support.</p>
 
 <h2>4. Billing</h2>
 <ul>

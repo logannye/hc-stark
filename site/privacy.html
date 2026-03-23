@@ -88,6 +88,7 @@ footer .right a:hover{color:var(--muted)}
 <li><strong>Account information</strong>: Email address provided during signup.</li>
 <li><strong>Usage data</strong>: API requests (tenant ID, trace length, duration, timestamp). We do not store program contents or proof data after delivery.</li>
 <li><strong>Billing data</strong>: Processed by Stripe. We do not store credit card numbers.</li>
+<li><strong>Client-side verification</strong>: The <code>@tinyzkp/verify</code> WASM package runs entirely in your browser or runtime. No proof data, verification results, or telemetry are sent to TinyZKP servers during client-side verification.</li>
 </ul>
 
 <h2>2. How We Use It</h2>
