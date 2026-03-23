@@ -1,0 +1,30 @@
+{
+  "name": "tinyzkp",
+  "display_name": "TinyZKP — ZK-STARK Prover",
+  "description": "Generate and verify ZK-STARK proofs. Supports program execution, custom workloads, and batch proving.",
+  "version": "0.1.0",
+  "homepage": "https://tinyzkp.com",
+  "repository": "https://github.com/logannye/hc-stark",
+  "license": "MIT",
+  "transport": ["stdio", "streamable-http"],
+  "url": "https://mcp.tinyzkp.com",
+  "tools": [
+    {"name": "prove", "description": "Generate a ZK-STARK proof for a program"},
+    {"name": "verify", "description": "Verify a ZK-STARK proof"},
+    {"name": "prove_status", "description": "Check status of a prove job"},
+    {"name": "list_jobs", "description": "List recent prove jobs"},
+    {"name": "healthz", "description": "Check server health"},
+    {"name": "list_programs", "description": "List available built-in programs"},
+    {"name": "describe_program", "description": "Get details about a built-in program"},
+    {"name": "list_workloads", "description": "List available workloads"},
+    {"name": "submit_workload", "description": "Submit a named workload for proving"},
+    {"name": "workload_status", "description": "Check status of a workload job"}
+  ],
+  "install": {
+    "binary": {
+      "macos-arm64": "https://github.com/logannye/hc-stark/releases/latest/download/hc-mcp-macos-arm64",
+      "macos-x86_64": "https://github.com/logannye/hc-stark/releases/latest/download/hc-mcp-macos-x86_64",
+      "linux-x86_64": "https://github.com/logannye/hc-stark/releases/latest/download/hc-mcp-linux-x86_64"
+    }
+  }
+}

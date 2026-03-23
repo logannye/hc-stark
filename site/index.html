@@ -338,7 +338,7 @@ footer .right a:hover{color:var(--muted)}
     <div class="step fade-in">
       <span class="num">3</span>
       <h3>Verify</h3>
-      <p>Anyone can verify the proof in milliseconds via <code>/verify</code>. Always free. The verifier learns nothing except that the statement is true.</p>
+      <p>Anyone can verify the proof in milliseconds via <code>/verify</code>. Always free. Or get <code>/calldata</code> for on-chain verification. The verifier learns nothing except that the statement is true.</p>
     </div>
   </div>
 </div>
@@ -353,6 +353,7 @@ footer .right a:hover{color:var(--muted)}
     <button class="active" onclick="showTab('python')">Python</button>
     <button onclick="showTab('typescript')">TypeScript</button>
     <button onclick="showTab('curl')">curl</button>
+    <button onclick="showTab('browser')">Browser</button>
   </div>
   <div class="code-block active" id="tab-python">
 <pre><span class="keyword">from</span> tinyzkp <span class="keyword">import</span> TinyZKP
@@ -386,6 +387,14 @@ curl https://api.tinyzkp.com/prove/abc123... \
 curl -X POST https://api.tinyzkp.com/verify \
   -H <span class="string">"Authorization: Bearer tzk_..."</span> \
   -d <span class="string">'{"proof":{...}}'</span></pre>
+  </div>
+  <div class="code-block" id="tab-browser">
+<pre><span class="comment">// Verify proofs client-side — no server, no API key</span>
+<span class="keyword">import</span> init, { verify } <span class="keyword">from</span> <span class="string">'@tinyzkp/verify'</span>;
+
+<span class="keyword">await</span> <span class="func">init</span>();
+<span class="keyword">const</span> result = <span class="func">verify</span>({ version: <span class="string">4</span>, bytes: proofBytes });
+console.log(result.ok); <span class="comment">// true — verified in WASM, offline</span></pre>
   </div>
 </div>
 </section>
@@ -496,6 +505,8 @@ curl -X POST https://api.tinyzkp.com/verify \
     <div class="proof-badge"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Post-quantum secure</div>
     <div class="proof-badge"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Open source</div>
     <div class="proof-badge"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Sub-5ms verification</div>
+    <div class="proof-badge"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Zero-knowledge mode</div>
+    <div class="proof-badge"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg> EVM on-chain ready</div>
   </div>
 </div>
 </section>

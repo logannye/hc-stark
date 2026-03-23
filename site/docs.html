@@ -193,12 +193,18 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
   <aside class="sidebar" id="sidebar">
     <h4>Documentation</h4>
     <a href="#quickstart" class="active">Quickstart</a>
+    <a href="#wasm">Client-Side Verification</a>
     <a href="#auth">Authentication</a>
     <a href="#endpoints">API Endpoints</a>
     <a href="#templates">Proof Templates</a>
     <a href="#plans">Plan Tiers</a>
     <a href="#pricing">Pricing</a>
     <a href="#parameters">Parameters</a>
+    <a href="#zk-mode">Zero-Knowledge Mode</a>
+    <a href="#estimate">Cost Estimation</a>
+    <a href="#batch">Batch Proving</a>
+    <a href="#inspect">Proof Inspection</a>
+    <a href="#calldata">EVM Calldata</a>
     <a href="#mcp">MCP Integration</a>
     <a href="#swagger">API Reference</a>
   </aside>
@@ -252,6 +258,42 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       </div>
     </div>
 
+    <h2 id="wasm">Client-Side Verification</h2>
+    <p>Verify proofs entirely client-side with the <code>@tinyzkp/verify</code> WASM package. No server roundtrip, no API key required for verification.</p>
+
+    <div class="code-block">
+      <span class="code-label">install</span>
+<pre>npm install @tinyzkp/verify</pre>
+    </div>
+
+    <h3>Browser</h3>
+    <div class="code-block">
+      <span class="code-label">JavaScript</span>
+<pre><span class="keyword">import</span> init, { verify } <span class="keyword">from</span> <span class="string">'@tinyzkp/verify'</span>;
+
+<span class="keyword">await</span> <span class="func">init</span>();  <span class="comment">// load WASM binary (~785 KB)</span>
+
+<span class="keyword">const</span> result = <span class="func">verify</span>({ version: <span class="string">4</span>, bytes: proofBytes });
+console.log(result.ok);     <span class="comment">// true</span>
+console.log(result.version); <span class="comment">// 4</span></pre>
+    </div>
+
+    <h3>Node.js</h3>
+    <div class="code-block">
+      <span class="code-label">JavaScript</span>
+<pre><span class="keyword">const</span> { verify_json } = <span class="keyword">require</span>(<span class="string">'@tinyzkp/verify'</span>);
+
+<span class="keyword">const</span> result = <span class="func">verify_json</span>(JSON.stringify(proofObject));
+console.log(result.ok); <span class="comment">// true</span></pre>
+    </div>
+
+    <ul>
+      <li><strong>Offline verification</strong> &mdash; no network request, no API key needed</li>
+      <li><strong>Edge-compatible</strong> &mdash; runs in Cloudflare Workers, Deno, Vercel Edge Functions</li>
+      <li><strong>~785 KB</strong> WASM binary (gzips to ~300 KB)</li>
+      <li>Returns <code>{ ok: bool, error?: string, version?: number }</code></li>
+    </ul>
+
     <h2 id="auth">Authentication</h2>
     <p>All endpoints (including <code>/verify</code>) require a Bearer token in the <code>Authorization</code> header:</p>
     <div class="code-block">
@@ -261,8 +303,23 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       <li>Your API key is delivered via email after <a href="/signup">signing up</a>.</li>
       <li>The <code>/verify</code> endpoint is <strong style="color:var(--green)">free (no charge)</strong> but requires your API key to prevent abuse.</li>
       <li>Keep your API key secret. Do not expose it in client-side code or public repositories.</li>
-      <li>Lost your key? <a href="/contact">Contact support</a> to rotate it.</li>
     </ul>
+
+    <h3>Key Rotation</h3>
+    <p>Rotate your API key at any time. Your old key is immediately invalidated and a new key is returned. Limited to once per 24 hours.</p>
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl -X POST https://tinyzkp.com/api/rotate-key \
+  -H "Authorization: Bearer tzk_YOUR_CURRENT_KEY"</pre>
+    </div>
+    <p><strong>Response:</strong></p>
+    <div class="code-block">
+<pre>{
+  "api_key": "tzk_NEW_KEY_HERE...",
+  "prefix": "tzk_a3b2...",
+  "message": "Key rotated successfully. Your old key is now invalid."
+}</pre>
+    </div>
 
     <h2 id="endpoints">API Endpoints</h2>
     <p>All endpoints are served from <code>https://api.tinyzkp.com</code>.</p>
@@ -574,6 +631,177 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       </table>
     </div>
 
+    <h2 id="zk-mode">Zero-Knowledge Mode</h2>
+    <p>By default, TinyZKP proofs prove that a computation is correct, but the proof structure reveals information about the trace. To hide the computation entirely, enable <strong>zero-knowledge masking</strong> by setting <code>zk_mask_degree</code> in your prove request.</p>
+
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "params": {"min": 0, "max": 100, "witness_steps": [42, 44]},
+    <span class="key">"zk_mask_degree"</span>: <span class="string">1</span>
+  }'</pre>
+    </div>
+
+    <ul>
+      <li><code>zk_mask_degree: 0</code> (default) &mdash; standard proof, no zero-knowledge masking</li>
+      <li><code>zk_mask_degree: 1</code> or higher &mdash; ZK-masked proof (protocol v4). The verifier learns nothing except that the statement is true.</li>
+      <li>When using templates, you can also pass <code>"zk": true</code> as a shorthand for <code>"zk_mask_degree": 1</code>.</li>
+      <li>ZK masking adds minimal overhead. Proofs are slightly larger but verification time is unchanged.</li>
+    </ul>
+
+    <h2 id="estimate">Cost Estimation</h2>
+    <p>Estimate cost, proving time, and proof size <strong>before</strong> generating a proof. This endpoint is public &mdash; no authentication required.</p>
+
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre><span class="comment"># Estimate cost for a range proof</span>
+curl -X POST https://api.tinyzkp.com/estimate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template_id": "range_proof",
+    "params": {"min": 0, "max": 100, "witness_steps": [42, 44]}
+  }'</pre>
+    </div>
+
+    <p><strong>Response:</strong></p>
+    <div class="code-block">
+<pre>{
+  "estimated_trace_length": 128,
+  "tier": "Tiny",
+  "estimated_cost_cents": 5,
+  "estimated_time_ms": { "min": 50, "max": 200 },
+  "estimated_proof_size_bytes": { "min": 7000, "max": 15000 }
+}</pre>
+    </div>
+
+    <ul>
+      <li><strong>No auth required</strong> &mdash; use this to preview costs without an API key.</li>
+      <li>You can also estimate by program length: <code>{"program_length": 500}</code>.</li>
+      <li>The <code>tier</code> field maps to the <a href="#pricing">pricing tiers</a> (Tiny, Standard, Large, Enterprise, XL).</li>
+    </ul>
+
+    <h2 id="batch">Batch Proving</h2>
+    <p>Submit 1&ndash;100 prove jobs in a single request. Each job is billed individually by trace length.</p>
+
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl -X POST https://api.tinyzkp.com/prove/batch \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requests": [
+      {"workload_id": "range_proof", "params": {"min": 0, "max": 100, "witness_steps": [20, 22]}},
+      {"workload_id": "range_proof", "params": {"min": 0, "max": 50, "witness_steps": [10, 12]}},
+      {"workload_id": "data_integrity", "params": {"elements": [1, 2, 3], "checksum": 6}}
+    ]
+  }'</pre>
+    </div>
+
+    <p><strong>Response:</strong></p>
+    <div class="code-block">
+<pre>{
+  "job_ids": ["a1b2c3...", "d4e5f6...", "g7h8i9..."]
+}</pre>
+    </div>
+
+    <ul>
+      <li>Job IDs are returned in the same order as the requests.</li>
+      <li><strong>Atomic rate limiting</strong> &mdash; if the batch would exceed your RPM quota, the entire batch is rejected (no partial submission).</li>
+      <li>Maximum batch size: 100 requests.</li>
+      <li>Poll each job individually via <code>GET /prove/:job_id</code>.</li>
+    </ul>
+
+    <h2 id="inspect">Proof Inspection</h2>
+    <p>Get a detailed breakdown of a completed proof, including trace metadata, commitment digests, and verification timing.</p>
+
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl https://api.tinyzkp.com/prove/JOB_ID/inspect \
+  -H "Authorization: Bearer tzk_..."</pre>
+    </div>
+
+    <p><strong>Response:</strong></p>
+    <div class="code-block">
+<pre>{
+  "trace_commitment_digest": "a1b2c3d4...",
+  "initial_acc": 0,
+  "final_acc": 42,
+  "trace_length": 128,
+  "query_commitments": {
+    "trace_commitment": "a1b2c3d4...",
+    "composition_commitment": "e5f6a7b8...",
+    "fri_commitment": ""
+  },
+  "commitment_scheme": "STARK",
+  "version": 4,
+  "verify_time_ms": 3
+}</pre>
+    </div>
+
+    <ul>
+      <li>The proof must be completed before inspection is available (returns 409 if still proving).</li>
+      <li><code>commitment_scheme</code> is <code>"STARK"</code> for standard proofs or <code>"KZG"</code> for recursively aggregated proofs.</li>
+      <li><code>verify_time_ms</code> is the server-side verification time, useful for benchmarking.</li>
+    </ul>
+
+    <h2 id="calldata">EVM Calldata</h2>
+    <p>Extract ABI-encoded calldata for on-chain verification. Use this to submit proofs to a Solidity verifier contract.</p>
+
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl https://api.tinyzkp.com/proof/JOB_ID/calldata \
+  -H "Authorization: Bearer tzk_..."</pre>
+    </div>
+
+    <p><strong>Response:</strong></p>
+    <div class="code-block">
+<pre>{
+  "calldata": "0x6a8f3b2c...",
+  "size_bytes": 1248
+}</pre>
+    </div>
+
+    <p><strong>Workflow:</strong></p>
+    <ol>
+      <li>Generate a proof via <code>POST /prove/template/:id</code></li>
+      <li>Wait for completion via <code>GET /prove/:job_id</code></li>
+      <li>Retrieve calldata via <code>GET /proof/:job_id/calldata</code></li>
+      <li>Submit the calldata to a Solidity verifier contract on-chain</li>
+    </ol>
+
+    <ul>
+      <li>The calldata is ABI-encoded and ready to submit directly to the verifier contract&rsquo;s <code>verify()</code> function.</li>
+      <li>Note the path: <code>/proof/:job_id/calldata</code> (not <code>/prove/</code>).</li>
+    </ul>
+
+    <h3>On-Chain Verification (Solidity)</h3>
+    <p>The <code>StarkVerifier</code> contract verifies proofs on-chain using recursive KZG verification via the BN254 pairing precompile (~300K gas). The contract is open source at <a href="https://github.com/logannye/hc-stark/tree/main/contracts" target="_blank"><code>contracts/StarkVerifier.sol</code></a>.</p>
+
+    <div class="code-block">
+      <span class="code-label">ethers.js</span>
+<pre><span class="keyword">const</span> verifier = <span class="keyword">new</span> ethers.Contract(VERIFIER_ADDRESS, [
+  <span class="string">"function verifyRecursiveProof(bytes calldata) view returns (bool)"</span>
+], provider);
+
+<span class="comment">// Get calldata from TinyZKP API</span>
+<span class="keyword">const</span> { calldata } = <span class="keyword">await</span> <span class="func">fetch</span>(<span class="string">`https://api.tinyzkp.com/proof/${jobId}/calldata`</span>, {
+  headers: { Authorization: <span class="string">`Bearer ${apiKey}`</span> }
+}).then(r => r.json());
+
+<span class="comment">// Verify on-chain</span>
+<span class="keyword">const</span> valid = <span class="keyword">await</span> verifier.verifyRecursiveProof(calldata);
+console.log(<span class="string">"On-chain verified:"</span>, valid); <span class="comment">// true</span></pre>
+    </div>
+
+    <ul>
+      <li><strong>~300K gas</strong> per verification via recursive KZG/Halo2 wrapping</li>
+      <li>Accepts 3 public inputs: <code>initial_acc</code>, <code>final_acc</code>, <code>trace_length</code></li>
+      <li>The contract interface is at <a href="https://github.com/logannye/hc-stark/blob/main/contracts/IHcStarkVerifier.sol" target="_blank"><code>IHcStarkVerifier.sol</code></a></li>
+    </ul>
+
     <h2 id="mcp">MCP Integration</h2>
     <p>TinyZKP ships as an <a href="https://modelcontextprotocol.io" target="_blank">MCP server</a> so AI agents can generate and verify proofs natively.</p>
 
@@ -611,6 +839,26 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       <div class="mcp-tool">submit_workload</div>
       <div class="mcp-tool">workload_status</div>
     </div>
+
+    <h3>Remote Access (HTTP)</h3>
+    <p>Connect to TinyZKP&rsquo;s MCP server remotely &mdash; no binary installation required:</p>
+    <div class="code-block">
+      <span class="code-label">Claude Code</span>
+<pre>claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com</pre>
+    </div>
+    <div class="code-block">
+      <span class="code-label">Self-hosted</span>
+<pre><span class="comment"># Run the HTTP MCP server locally</span>
+HC_MCP_HTTP_PORT=3001 cargo run -p hc-mcp --bin hc-mcp-http
+
+<span class="comment"># Connect Claude Code to your local server</span>
+claude mcp add --transport http tinyzkp http://localhost:3001/mcp</pre>
+    </div>
+    <ul>
+      <li>The hosted server at <code>https://mcp.tinyzkp.com</code> requires your TinyZKP API key</li>
+      <li>Supports both SSE streaming and JSON responses</li>
+      <li>Works with any MCP-compatible client (Claude Code, Cursor, VS Code, etc.)</li>
+    </ul>
 
     <h2 id="swagger">Interactive API Reference</h2>
     <p>Explore the full API interactively with our Swagger UI. Try endpoints directly from your browser.</p>

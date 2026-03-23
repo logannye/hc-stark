@@ -13,6 +13,7 @@ import secrets
 import smtplib
 import string
 import sys
+import time
 from email.mime.text import MIMEText
 from pathlib import Path
 
@@ -299,6 +300,66 @@ def provision_free():
 
     conn.close()
     return flask.jsonify(ok=True), 200
+
+
+@app.route("/rotate", methods=["POST"])
+def rotate_key():
+    """Rotate a tenant's API key. Authenticates via the current Bearer token.
+
+    Called by the Cloudflare Pages Function, not directly by clients.
+    """
+    req_secret = flask.request.headers.get("X-Internal-Secret", "")
+    if not INTERNAL_SECRET or not secrets.compare_digest(req_secret, INTERNAL_SECRET):
+        return flask.jsonify(error="unauthorized"), 403
+
+    data = flask.request.get_json(silent=True) or {}
+    current_key = data.get("current_key", "").strip()
+
+    if not current_key or not current_key.startswith("tzk_"):
+        return flask.jsonify(error="valid current API key required"), 400
+
+    import hashlib
+
+    current_hash = hashlib.sha256(current_key.encode()).hexdigest()
+
+    conn = tenant_store.open_db()
+
+    # Find tenant by key hash.
+    row = conn.execute(
+        "SELECT * FROM tenants WHERE api_key_hash = ?", (current_hash,)
+    ).fetchone()
+
+    if not row:
+        conn.close()
+        return flask.jsonify(error="invalid API key"), 401
+
+    if row["status"] != "active":
+        conn.close()
+        return flask.jsonify(error="account is not active"), 403
+
+    # Rate limit: max 1 rotation per 24 hours.
+    now_ms = int(time.time() * 1000)
+    last_updated = row["updated_at_ms"]
+    if (now_ms - last_updated) < 86_400_000:  # 24 hours in ms
+        conn.close()
+        return flask.jsonify(error="key rotation limited to once per 24 hours"), 429
+
+    # Generate new key.
+    new_key = generate_api_key()
+    tenant_id = row["tenant_id"]
+    plan = row["plan"]
+
+    tenant_store.update_api_key(conn, tenant_id, new_key)
+    sync_keys.regenerate(conn, API_KEYS_FILE, active_keys={tenant_id: (new_key, plan)})
+
+    print(f"Rotated key for tenant={tenant_id}")
+
+    conn.close()
+    return flask.jsonify(
+        api_key=new_key,
+        prefix=new_key[:8] + "...",
+        message="Key rotated successfully. Your old key is now invalid.",
+    ), 200
 
 
 @app.route("/health", methods=["GET"])
