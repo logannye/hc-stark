@@ -9,12 +9,17 @@
 curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
   -H "Authorization: Bearer tzk_..." \
   -H "Content-Type: application/json" \
-  -d '{"params":{"min":0,"max":100,"witness_steps":[20,22]}}'
+  -d '{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'
+# → {"job_id":"prf_a1b2c3","status":"proving","eta_ms":1200}
+
+# Poll until complete
+curl https://api.tinyzkp.com/prove/prf_a1b2c3 -H "Authorization: Bearer tzk_..."
+# → {"status":"completed","proof":{"version":4,"bytes":"0x6a8f...","size_kb":12.4}}
 
 # Verify (free, no charge)
 curl -X POST https://api.tinyzkp.com/verify \
   -H "Authorization: Bearer tzk_..." \
-  -d '{"proof": {...}}'
+  -d '{"proof":{"version":4,"bytes":"0x6a8f..."}}'
 # → {"valid": true, "verified_in_ms": 2.8}
 ```
 
@@ -72,7 +77,9 @@ curl -X POST https://api.tinyzkp.com/verify \
 from tinyzkp import TinyZKP
 
 async with TinyZKP("https://api.tinyzkp.com", api_key="tzk_...") as client:
-    job_id = await client.prove(program=["add_immediate 1"], initial_acc=5, final_acc=6)
+    job_id = await client.prove_template("range_proof", params={
+        "min": 0, "max": 100, "witness_steps": [42, 44],
+    })
     proof  = await client.wait_for_proof(job_id)
     result = await client.verify(proof)  # free!
 ```
@@ -86,13 +93,28 @@ pip install tinyzkp
 import { HcClient } from "tinyzkp";
 
 const client = new HcClient("https://api.tinyzkp.com", { apiKey: "tzk_..." });
-const jobId  = await client.prove({ program: ["add_immediate 1"], initialAcc: 5, finalAcc: 6 });
+const jobId  = await client.proveTemplate("range_proof", {
+  min: 0, max: 100, witness_steps: [42, 44],
+});
 const proof  = await client.waitForProof(jobId);
 const result = await client.verify(proof);  // free!
 ```
 
 ```bash
 npm install tinyzkp
+```
+
+**Browser (WASM — no server, no API key):**
+```javascript
+import init, { verify } from '@tinyzkp/verify';
+
+await init();
+const result = verify({ version: 4, bytes: proofBytes });
+console.log(result.ok); // true — verified client-side
+```
+
+```bash
+npm install @tinyzkp/verify
 ```
 
 ---
@@ -128,29 +150,38 @@ curl https://api.tinyzkp.com/templates/range_proof
 # Submit a proof using a template (smart defaults, no block_size needed)
 curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
   -H "Authorization: Bearer tzk_..." \
-  -d '{"params":{"min":0,"max":100,"witness_steps":[20,22]}}'
+  -d '{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'
 
-# Estimate cost before proving
+# Estimate cost before proving (no auth required)
 curl -X POST https://api.tinyzkp.com/estimate \
-  -d '{"template_id":"range_proof","params":{"min":0,"max":100,"witness_steps":[20,22]}}'
+  -d '{"template_id":"range_proof","params":{"min":0,"max":100,"witness_steps":[42,44]}}'
 ```
+
+> **What are `witness_steps`?** Internal computation values that encode your secret. They are never revealed to the verifier — only the proof (which vouches for them) is shared.
 
 | Template | What It Proves | Key Parameters |
 |----------|---------------|----------------|
-| `accumulator_step` | A chain of additive deltas transitions correctly | `initial`, `final`, `deltas[]` |
-| `computation_attestation` | f(secret_steps) = public_output without revealing inputs | `steps[]`, `expected_output` |
-| `hash_preimage` | Prover knows a secret whose hash equals a public digest | `digest`, `preimage_steps[]` |
-| `range_proof` | A secret value lies within [min, max] | `min`, `max`, `witness_steps[]` |
-| `policy_compliance` | Actions stay within a threshold (spending, quotas) | `actions[]`, `threshold` |
-| `data_integrity` | Data elements sum to a committed checksum | `elements[]`, `checksum` |
+| `range_proof` | "I know a number between X and Y" — without revealing it | `min`, `max`, `witness_steps[]` |
+| `hash_preimage` | "I know the secret that produces this hash" | `digest`, `preimage_steps[]` |
+| `computation_attestation` | "f(secret inputs) = this public output" | `steps[]`, `expected_output` |
+| `accumulator_step` | "Starting from X, applying these deltas reaches Y" | `initial`, `final`, `deltas[]` |
+| `policy_compliance` | "These actions stayed within the allowed limit" | `actions[]`, `threshold` |
+| `data_integrity` | "These data elements add up to this checksum" | `elements[]`, `checksum` |
 
 ---
 
 ## AI agent integration (MCP)
 
-hc-stark ships as an **MCP server** so AI agents (Claude, GPT, Cursor) can generate and verify proofs natively.
+hc-stark ships as an **MCP server** so AI agents (Claude, GPT, Cursor) can generate and verify proofs natively. Supports both local (stdio) and remote (HTTP) transport.
 
-### Install
+### Remote access (no install)
+
+```bash
+# Claude Code
+claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
+```
+
+### Local install
 
 ```bash
 cargo install --path crates/hc-mcp
@@ -158,14 +189,12 @@ cargo install --path crates/hc-mcp
 
 Or download from the [releases page](https://github.com/logannye/hc-stark/releases).
 
-### Configure
-
 **Claude Desktop** (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
     "tinyzkp": {
-      "command": "hc-mcp",
+      "command": "hc-mcp-stdio",
       "args": ["--api-key", "tzk_..."]
     }
   }
@@ -217,6 +246,8 @@ Base URL: `https://api.tinyzkp.com`
 | GET | `/healthz` | None | Liveness check |
 | GET | `/metrics` | None | Prometheus metrics |
 | GET | `/docs` | None | Interactive Swagger UI |
+| **Account** | | | |
+| POST | `/api/rotate-key` | Required | Rotate API key (once per 24h) |
 
 Interactive API explorer: **[api.tinyzkp.com/docs](https://api.tinyzkp.com/docs)**
 
@@ -229,6 +260,12 @@ Authorization: Bearer tzk_...
 ```
 
 Verification is free but still requires auth to prevent abuse.
+
+Rotate a compromised key instantly:
+```bash
+curl -X POST https://tinyzkp.com/api/rotate-key \
+  -H "Authorization: Bearer tzk_YOUR_CURRENT_KEY"
+```
 
 ---
 
@@ -313,9 +350,11 @@ hc-stark/
     hc-recursion/   # Recursive aggregation (Halo2/KZG)
     hc-height/      # Height-compression interfaces
     hc-simd/        # SIMD-accelerated field ops
-    hc-wasm/        # WASM verifier (@tinyzkp/verify npm package)
+    hc-wasm/        # WASM verifier (@tinyzkp/verify npm package, 785K)
     hc-python/      # Python bindings
-  clients/          # Python + TypeScript client SDKs
+    hc-node/        # Node.js native bindings
+    hc-rollup/      # Rollup state transition API
+  clients/          # Python, TypeScript, and Rust client SDKs
   billing/          # Stripe billing (tenant provisioning, usage sync)
   site/             # Marketing site (tinyzkp.com, Cloudflare Pages)
   deploy/           # Docker, Prometheus, Grafana configs
@@ -377,30 +416,31 @@ cargo run -p hc-cli -- bench --scenario recursion --proofs 8
 - Height-compressed streaming prover with O(√T) memory
 - Complete verifier with streaming Merkle replay
 - Zero-knowledge mode (protocol v4)
-- MCP server with 10 tools for AI agents
+- MCP server with 10 tools for AI agents (stdio + HTTP transport)
+- Streamable HTTP transport for MCP (remote agent access)
 - 6 proof templates with discovery API (`GET /templates`)
 - Template-based proving (`POST /prove/template/:id`)
 - Cost estimation endpoint (`POST /estimate`)
 - Proof inspection endpoint (`GET /prove/:job_id/inspect`)
 - Proof aggregation (`POST /aggregate` with recursive hash tree)
 - WASM verifier package (`@tinyzkp/verify`, 785K)
+- On-chain verifier contract (recursive KZG, ~300K gas)
+- EVM calldata generation (`GET /proof/:job_id/calldata`)
+- Self-service API key rotation (`POST /api/rotate-key`)
 - DSL compiler for custom programs
 - Multi-tenant HTTP API with rate limiting
 - **Production service at [tinyzkp.com](https://tinyzkp.com)**
 - Stripe billing (free tier + metered usage + Customer Portal)
-- Python and TypeScript client SDKs
+- Python, TypeScript, and Rust client SDKs
 - Docker Compose production stack with monitoring
-- EVM calldata generation
 
 ### Next
 
 - Publish `@tinyzkp/verify` to npm
-- Streamable HTTP transport for MCP (remote agent access)
-- Self-service API key rotation
 - Custom program sandboxing (paid tier)
 - Node.js native bindings package
 - GPU acceleration (CUDA/Metal kernels)
-- On-chain verifier contracts deployment
+- On-chain verifier contract deployment (mainnet)
 - Rollup state transition API
 - Distributed proving across multiple machines
 
