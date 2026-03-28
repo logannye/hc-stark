@@ -12,11 +12,14 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="TinyZKP — ZK Proofs as an API">
 <meta name="twitter:description" content="Generate and verify ZK-STARK proofs with a single API call. Verify in under 5ms. Free tier available.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F510;</text></svg>">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://tinyzkp.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -66,7 +69,7 @@ a:focus-visible,button:focus-visible{outline-offset:3px}
 /* Smooth transitions on theme-level elements */
 img,svg{vertical-align:middle}
 
-.container{max-width:1080px;margin:0 auto;padding:0 24px}
+.container{max-width:1100px;margin:0 auto;padding:0 24px}
 
 /* Dot grid background */
 body::before{content:'';position:fixed;inset:0;z-index:-2;
@@ -295,7 +298,7 @@ footer .right a:hover{color:var(--muted)}
   <p class="sub">Prove any computation is correct without revealing how. Generate ZK-STARK proofs with a single API call &mdash; verify in under 5ms. No cryptography degree required.</p>
   <div class="hero-ctas">
     <a class="cta" href="/signup">Get Free API Key</a>
-    <a class="cta cta-secondary" href="#demo">Try Live Demo</a>
+    <a class="cta cta-secondary" href="#demo">See How It Works</a>
   </div>
   <span class="free">Free tier &middot; 100 proofs/month &middot; No credit card &middot; 10&ndash;40x cheaper than alternatives</span>
 </div>
@@ -464,6 +467,7 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
   <p class="verify-free">Verification is always free</p>
 
   <!-- Per-Proof Rate Table -->
+  <p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:18px;max-width:640px;margin-left:auto;margin-right:auto;line-height:1.7">Pricing is based on <strong style="color:var(--muted)">trace steps</strong> &mdash; the number of computation steps in your proof. A simple range proof is ~128 steps. Use the free <a href="/docs#estimate" style="color:var(--accent)"><code>/estimate</code></a> endpoint to preview the cost of any proof before generating it.</p>
   <div class="plan-table fade-in" style="max-width:820px">
     <table>
       <thead><tr>
@@ -499,7 +503,7 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
 
   <div style="text-align:center;margin-top:36px">
     <a class="cta" href="/signup" style="font-size:13px;padding:12px 28px">Get Free API Key</a>
-    <a class="cta cta-secondary" href="/signup" style="font-size:13px;padding:12px 28px;margin-left:12px">Compare Plans</a>
+    <a class="cta cta-secondary" href="#pricing" style="font-size:13px;padding:12px 28px;margin-left:12px">Compare Plans</a>
   </div>
 </div>
 </section>
@@ -593,10 +597,10 @@ document.querySelectorAll('nav .links a').forEach(function(a){
   a.addEventListener('click',function(){document.querySelector('.links').classList.remove('open')});
 });
 
-// Status dot
-fetch('https://api.tinyzkp.com/healthz',{mode:'no-cors'}).then(()=>{
-  document.getElementById('statusDot').style.background='var(--green)';
-}).catch(()=>{
+// Status dot — use cors mode so we can inspect the response status
+fetch('https://api.tinyzkp.com/healthz').then(function(r){
+  document.getElementById('statusDot').style.background=r.ok?'var(--green)':'var(--amber)';
+}).catch(function(){
   document.getElementById('statusDot').style.background='var(--amber)';
 });
 

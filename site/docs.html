@@ -7,10 +7,12 @@
 <meta name="description" content="TinyZKP documentation. Learn how to generate and verify ZK-STARK proofs with our API.">
 <meta property="og:title" content="Documentation — TinyZKP">
 <meta property="og:description" content="Learn how to generate and verify ZK-STARK proofs with the TinyZKP API.">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F510;</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -356,7 +358,7 @@ console.log(result.ok); <span class="comment">// true</span></pre>
     <p>Rotate your API key at any time. Your old key is immediately invalidated and a new key is returned. Limited to once per 24 hours.</p>
     <div class="code-block">
       <span class="code-label">curl</span>
-<pre>curl -X POST https://tinyzkp.com/api/rotate-key \
+<pre>curl -X POST https://api.tinyzkp.com/api/rotate-key \
   -H "Authorization: Bearer tzk_YOUR_CURRENT_KEY"</pre>
     </div>
     <p><strong>Response:</strong></p>

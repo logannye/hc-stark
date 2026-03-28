@@ -7,10 +7,12 @@
 <meta name="description" content="Your TinyZKP account is ready. Get started with your first ZK-STARK proof.">
 <meta property="og:title" content="Welcome to TinyZKP">
 <meta property="og:description" content="Your TinyZKP account is ready. Get started with your first ZK-STARK proof.">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F510;</text></svg>">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
 :root{
   --bg:#050a12;
@@ -215,6 +217,8 @@ if (!email) {
 if (email) {
   document.getElementById('userEmail').textContent = email;
   try { sessionStorage.removeItem('tinyzkp_email'); } catch(e) {}
+} else {
+  document.getElementById('userEmail').textContent = 'the address you signed up with';
 }
 
 function copyCode(btn) {

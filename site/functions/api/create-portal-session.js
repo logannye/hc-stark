@@ -4,7 +4,24 @@
 // view invoices, and cancel subscriptions.
 //
 // Secrets required (set via `wrangler pages secret put`):
-//   STRIPE_SECRET_KEY — sk_live_... or sk_test_...
+//   STRIPE_SECRET_KEY          — sk_live_... or sk_test_...
+//   STRIPE_PORTAL_CONFIG_ID    — bpc_... (optional, uses default if omitted)
+
+const RATE_LIMIT_MAX = 5;
+const RATE_LIMIT_WINDOW_S = 300;
+
+async function checkRateLimit(ip) {
+  const cache = caches.default;
+  const key = new Request(`https://rate-limit.internal/portal/${ip}`);
+  const cached = await cache.match(key);
+  let count = 0;
+  if (cached) count = parseInt(await cached.text(), 10) || 0;
+  if (count >= RATE_LIMIT_MAX) return false;
+  await cache.put(key, new Response(String(count + 1), {
+    headers: { "Cache-Control": `s-maxage=${RATE_LIMIT_WINDOW_S}` },
+  }));
+  return true;
+}
 
 export async function onRequestPost(context) {
   const origin = context.request.headers.get("Origin") || "";
@@ -18,6 +35,13 @@ export async function onRequestPost(context) {
   const jsonHeaders = { "Content-Type": "application/json", ...corsHeaders };
 
   try {
+    const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
+    if (!(await checkRateLimit(ip))) {
+      return new Response(JSON.stringify({ error: "Too many requests. Try again later." }), {
+        status: 429, headers: jsonHeaders,
+      });
+    }
+
     const { email } = await context.request.json();
     if (!email || !email.includes("@") || email.length > 254) {
       return new Response(JSON.stringify({ error: "valid email required" }), {
@@ -57,7 +81,9 @@ export async function onRequestPost(context) {
     // Create a portal session using the activated portal configuration.
     const params = new URLSearchParams();
     params.append("customer", customerId);
-    params.append("configuration", "bpc_1TDmKKEDs4uiHp8xiHvcZvIb");
+    if (context.env.STRIPE_PORTAL_CONFIG_ID) {
+      params.append("configuration", context.env.STRIPE_PORTAL_CONFIG_ID);
+    }
     params.append("return_url", "https://tinyzkp.com/account");
 
     const portalResp = await fetch("https://api.stripe.com/v1/billing_portal/sessions", {

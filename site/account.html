@@ -8,12 +8,14 @@
 <meta property="og:title" content="Dashboard — TinyZKP">
 <meta property="og:description" content="Manage your TinyZKP account, view usage analytics, and manage your API key.">
 <meta property="og:url" content="https://tinyzkp.com/account">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <meta name="twitter:card" content="summary">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F510;</text></svg>">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://tinyzkp.com/account">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
 <style>
 :root{
   --bg:#050a12;
@@ -354,10 +356,10 @@ footer .right a:hover{color:var(--muted)}
 <div id="confirm-overlay" class="confirm-overlay" role="dialog" aria-modal="true">
   <div class="confirm-box">
     <h3>Rotate API Key</h3>
-    <p>Key rotation requires manual intervention to ensure a safe rollover. Please contact support and we will rotate your key within the hour.</p>
+    <p>This will immediately invalidate your current key and generate a new one. Any services using the old key will lose access. This cannot be undone.</p>
     <div class="confirm-actions">
       <button class="btn-cancel" id="confirm-cancel-btn">Cancel</button>
-      <a href="/contact" class="btn-confirm-danger">Contact Support</a>
+      <button class="btn-confirm-danger" id="confirm-rotate-btn">Rotate Key</button>
     </div>
   </div>
 </div>
@@ -397,6 +399,10 @@ footer .right a:hover{color:var(--muted)}
     <!-- Section 1: Overview Bar -->
     <div class="dash-section">
       <div class="dash-section-title">Overview</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <span style="font-size:15px;font-weight:600;color:var(--text-bright)" id="dash-email"></span>
+        <span style="font-size:12px;color:var(--dim);font-weight:500" id="dash-plan-label"></span>
+      </div>
       <div class="overview-bar">
         <div class="overview-card">
           <div class="oc-label">Plan</div>
@@ -868,6 +874,11 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
       window.location.reload();
     });
 
+    // Populate account header
+    if (session.email) {
+      document.getElementById('dash-email').textContent = session.email;
+    }
+
     // Populate plan
     var plan = (session.plan || 'free').toLowerCase();
     var planEl = document.getElementById('ov-plan');
@@ -1097,6 +1108,44 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   // Rotate key
   document.getElementById('btn-rotate-key').addEventListener('click', function() {
     document.getElementById('confirm-overlay').classList.add('visible');
+  });
+
+  // Confirm rotate
+  document.getElementById('confirm-rotate-btn').addEventListener('click', function() {
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Rotating...';
+
+    fetch(API + '/api/rotate-key', {
+      method: 'POST',
+      headers: apiHeaders()
+    })
+    .then(function(res) {
+      return res.json().then(function(data) {
+        if (!res.ok) throw new Error(data.error || data.message || 'Key rotation failed.');
+        return data;
+      });
+    })
+    .then(function(data) {
+      if (data.api_key) {
+        session.api_key = data.api_key;
+        saveSession(session, !!localStorage.getItem(SESSION_KEY));
+        document.getElementById('key-text').textContent = maskKey(session.api_key);
+        document.getElementById('key-toggle').textContent = 'Reveal';
+        document.getElementById('key-copy').style.display = 'none';
+        keyRevealed = false;
+        document.getElementById('ref-auth').textContent = 'Authorization: Bearer ' + session.api_key;
+        document.getElementById('curl-key').textContent = session.api_key;
+      }
+      document.getElementById('confirm-overlay').classList.remove('visible');
+      btn.disabled = false;
+      btn.textContent = 'Rotate Key';
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.textContent = 'Rotate Key';
+      alert(err.message);
+    });
   });
 
   // Confirm cancel

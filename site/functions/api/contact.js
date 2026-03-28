@@ -78,7 +78,7 @@ export async function onRequestPost(context) {
       );
     }
 
-    const validCategories = ["General Inquiry", "Bug Report", "Feature Request", "Billing"];
+    const validCategories = ["General Inquiry", "Bug Report", "Feature Request", "Billing", "Enterprise"];
     const safeCategory = validCategories.includes(category) ? category : "General Inquiry";
 
     const subject = `[TinyZKP ${safeCategory}] from ${name.slice(0, 100)}`;
@@ -107,6 +107,10 @@ export async function onRequestPost(context) {
     if (!mailResp.ok) {
       const errText = await mailResp.text();
       console.error("MailChannels error:", errText);
+      return new Response(JSON.stringify({ error: "Failed to send message. Please try again in a few minutes." }), {
+        status: 502,
+        headers: jsonHeaders,
+      });
     }
 
     return new Response(JSON.stringify({ ok: true }), {
