@@ -32,6 +32,15 @@ CREATE TABLE IF NOT EXISTS processed_events (
   event_id TEXT PRIMARY KEY,
   processed_at_ms INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS magic_links (
+  token_hash TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  expires_at_ms INTEGER NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_magic_links_tenant ON magic_links(tenant_id);
 """
 
 
@@ -155,6 +164,39 @@ def mark_event_processed(conn: sqlite3.Connection, event_id: str) -> None:
             "INSERT OR IGNORE INTO processed_events (event_id, processed_at_ms) VALUES (?, ?)",
             (event_id, _now_ms()),
         )
+
+
+def get_by_email(conn: sqlite3.Connection, email: str) -> Optional[sqlite3.Row]:
+    """Fetch a tenant by email address."""
+    return conn.execute(
+        "SELECT * FROM tenants WHERE email = ?", (email,)
+    ).fetchone()
+
+
+def create_magic_link(conn: sqlite3.Connection, token_hash: str, tenant_id: str, ttl_ms: int = 900_000) -> None:
+    """Store a magic link token hash with a 15-minute TTL."""
+    now = _now_ms()
+    with conn:
+        # GC expired tokens on every insert.
+        conn.execute("DELETE FROM magic_links WHERE expires_at_ms < ?", (now,))
+        conn.execute(
+            "INSERT INTO magic_links (token_hash, tenant_id, created_at_ms, expires_at_ms, used) VALUES (?, ?, ?, ?, 0)",
+            (token_hash, tenant_id, now, now + ttl_ms),
+        )
+
+
+def verify_magic_link(conn: sqlite3.Connection, token_hash: str) -> Optional[str]:
+    """Verify and consume a magic link. Returns tenant_id or None."""
+    now = _now_ms()
+    row = conn.execute(
+        "SELECT tenant_id FROM magic_links WHERE token_hash = ? AND used = 0 AND expires_at_ms > ?",
+        (token_hash, now),
+    ).fetchone()
+    if not row:
+        return None
+    with conn:
+        conn.execute("UPDATE magic_links SET used = 1 WHERE token_hash = ?", (token_hash,))
+    return row["tenant_id"]
 
 
 def migrate_from_tenant_map(conn: sqlite3.Connection, tenant_map_path: str, api_keys_path: str) -> int:
