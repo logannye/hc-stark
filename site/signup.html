@@ -304,9 +304,13 @@ footer .right a:hover{color:var(--muted)}
           return data;
         });
       })
-      .then(function() {
+      .then(function(data) {
         try { sessionStorage.setItem('tinyzkp_email', email); } catch(e) {}
-        window.location.href = '/welcome?plan=free';
+        if (data.dashboard_token) {
+          window.location.href = '/account?token=' + data.dashboard_token;
+        } else {
+          window.location.href = '/welcome?plan=free';
+        }
       })
       .catch(function(err) { showError(err.message); setLoading(false); });
     } else {
