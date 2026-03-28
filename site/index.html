@@ -216,13 +216,6 @@ section{padding:88px 0}
 .code-block .keyword{color:#f0a0a0}
 .code-block .func{color:#f0b86a}
 
-/* Social proof */
-.proof-bar{padding:48px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);
-  background:linear-gradient(180deg,var(--bg-warm),var(--bg))}
-.proof-bar .container{display:flex;justify-content:center;align-items:center;gap:56px;flex-wrap:wrap}
-.proof-item{text-align:center}
-.proof-item .num{font-size:30px;font-weight:800;color:var(--text-bright);font-family:var(--mono);letter-spacing:-.02em}
-.proof-item .label{font-size:12px;color:var(--dim);margin-top:6px;font-weight:500;letter-spacing:.03em;text-transform:uppercase}
 .proof-badges{display:flex;gap:16px;justify-content:center;margin-top:32px;flex-wrap:wrap}
 .proof-badge{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);
   border-radius:8px;padding:9px 16px;font-size:12.5px;color:var(--muted);font-weight:500;transition:border-color .2s}
@@ -264,7 +257,6 @@ footer .right a:hover{color:var(--muted)}
   .hamburger{display:block}
   .steps{grid-template-columns:1fr}
   .pricing-grid{grid-template-columns:1fr 1fr!important}
-  .proof-bar .container{gap:28px}
   .plan-table{margin:40px 16px 0;font-size:12px}
   .plan-table th,.plan-table td{padding:9px 12px}
   .hero-ctas{flex-direction:column;align-items:center}
@@ -330,16 +322,6 @@ footer .right a:hover{color:var(--muted)}
   <p class="demo-sub">Proved that 42 is in range [0, 100] without revealing the value. Verified in 2.8ms.</p>
 </div>
 </section>
-
-<!-- Social proof -->
-<div class="proof-bar">
-<div class="container">
-  <div class="proof-item"><div class="num" id="proofCount">&mdash;</div><div class="label">Proofs generated</div></div>
-  <div class="proof-item"><div class="num">&lt;5ms</div><div class="label">Avg verification</div></div>
-  <div class="proof-item"><div class="num">99.9%</div><div class="label">Uptime</div></div>
-  <div class="proof-item"><div class="num">6</div><div class="label">Proof templates</div></div>
-</div>
-</div>
 
 <section id="how">
 <div class="container">
@@ -616,36 +598,6 @@ fetch('https://api.tinyzkp.com/healthz',{mode:'no-cors'}).then(()=>{
 }).catch(()=>{
   document.getElementById('statusDot').style.background='var(--amber)';
 });
-
-// Animated proof counter
-(function(){
-  var el=document.getElementById('proofCount');
-  // Pull live count from /metrics if available, show dash if unavailable.
-  var target=0;
-  fetch('https://api.tinyzkp.com/metrics',{mode:'cors'}).then(function(r){return r.text()}).then(function(t){
-    var m=t.match(/hc_prove_completed_total\s+(\d+)/);
-    if(m) target=parseInt(m[1],10);
-  }).catch(function(){}).finally(function(){startCounter()});
-  var started=false;
-  function startCounter(){
-    if(started)return;started=true;
-  if(target===0){el.textContent='\u2014';return;}
-  var duration=2000;
-  var start=null;
-  function step(ts){
-    if(!start)start=ts;
-    var p=Math.min((ts-start)/duration,1);
-    // Ease-out cubic
-    var ep=1-Math.pow(1-p,3);
-    el.textContent=Math.floor(ep*target).toLocaleString();
-    if(p<1)requestAnimationFrame(step);
-  }
-  var obs=new IntersectionObserver(function(e){
-    if(e[0].isIntersecting){requestAnimationFrame(step);obs.disconnect()}
-  });
-  obs.observe(el);
-  }
-})();
 
 // Scroll-triggered fade-in
 (function(){
