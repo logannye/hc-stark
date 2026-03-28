@@ -7,6 +7,7 @@ Events handled:
   - invoice.payment_failed → suspend tenant
 """
 
+import hashlib
 import json
 import os
 import secrets
@@ -17,6 +18,7 @@ import threading
 import time
 from email.mime.text import MIMEText
 from pathlib import Path
+from typing import Optional
 
 import flask
 import stripe
@@ -93,6 +95,40 @@ def _send_welcome_email(email: str, tenant_id: str, api_key: str) -> bool:
         return False
 
 
+def _send_magic_link_email(email: str, link: str) -> bool:
+    """Send a magic login link email. Returns True on success."""
+    if not SMTP_HOST:
+        print("SMTP not configured, skipping magic link email", file=sys.stderr)
+        return False
+
+    template_path = TEMPLATES_DIR / "magic_link.txt"
+    if template_path.exists():
+        body = template_path.read_text().format(link=link)
+    else:
+        body = f"Log in to your TinyZKP dashboard:\n\n  {link}\n\nThis link expires in 15 minutes.\n"
+
+    msg = MIMEText(body)
+    msg["Subject"] = "Your TinyZKP login link"
+    msg["From"] = SMTP_FROM
+    msg["To"] = email
+
+    try:
+        if SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+        else:
+            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+            server.starttls()
+        with server:
+            if SMTP_USER and SMTP_PASSWORD:
+                server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(msg)
+        print(f"Magic link email sent to {email}")
+        return True
+    except Exception as e:
+        print(f"WARNING: Failed to send magic link to {email}: {e}", file=sys.stderr)
+        return False
+
+
 def _deliver_key_via_stripe(customer_id: str, tenant_id: str, api_key: str) -> bool:
     """Store tenant_id in Stripe customer metadata (NOT the API key — security risk).
 
@@ -112,6 +148,21 @@ def _deliver_key_via_stripe(customer_id: str, tenant_id: str, api_key: str) -> b
     except stripe.error.StripeError as e:
         print(f"WARNING: Failed to set Stripe metadata for {tenant_id}: {e}", file=sys.stderr)
         return False
+
+
+def _recover_api_key(tenant_id: str) -> Optional[str]:
+    """Recover plaintext API key from api_keys.txt for a given tenant."""
+    if not os.path.exists(API_KEYS_FILE):
+        return None
+    with open(API_KEYS_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(":")
+            if len(parts) >= 2 and parts[0] == tenant_id:
+                return parts[1]
+    return None
 
 
 def _handle_checkout_completed(event: dict) -> tuple[str, int]:
@@ -350,6 +401,11 @@ def provision_free():
     # Regenerate api_keys.txt with the new free tenant.
     sync_keys.regenerate(conn, API_KEYS_FILE, active_keys={tenant_id: (api_key, "free")})
 
+    # Generate a magic link token for immediate dashboard access.
+    dashboard_token = secrets.token_hex(32)
+    dashboard_token_hash = hashlib.sha256(dashboard_token.encode()).hexdigest()
+    tenant_store.create_magic_link(conn, dashboard_token_hash, tenant_id)
+
     print(f"Provisioned free tenant={tenant_id} email={email}")
 
     conn.close()
@@ -362,7 +418,7 @@ def provision_free():
             print(f"WARNING: Welcome email failed for {email}: {e}", file=sys.stderr)
 
     threading.Thread(target=_bg_email, daemon=True).start()
-    return flask.jsonify(ok=True), 200
+    return flask.jsonify(ok=True, dashboard_token=dashboard_token), 200
 
 
 @app.route("/rotate", methods=["POST"])
@@ -380,8 +436,6 @@ def rotate_key():
 
     if not current_key or not current_key.startswith("tzk_"):
         return flask.jsonify(error="valid current API key required"), 400
-
-    import hashlib
 
     current_hash = hashlib.sha256(current_key.encode()).hexdigest()
 
@@ -422,6 +476,85 @@ def rotate_key():
         api_key=new_key,
         prefix=new_key[:8] + "...",
         message="Key rotated successfully. Your old key is now invalid.",
+    ), 200
+
+
+@app.route("/send-magic-link", methods=["POST"])
+def send_magic_link():
+    """Send a magic login link to the user's email."""
+    req_secret = flask.request.headers.get("X-Internal-Secret", "")
+    if not INTERNAL_SECRET or not secrets.compare_digest(req_secret, INTERNAL_SECRET):
+        return flask.jsonify(error="unauthorized"), 403
+
+    data = flask.request.get_json(silent=True) or {}
+    email = data.get("email", "").strip().lower()
+
+    if not email or "@" not in email or len(email) > 254:
+        return flask.jsonify(error="valid email required"), 400
+
+    conn = tenant_store.open_db()
+    tenant = tenant_store.get_by_email(conn, email)
+
+    if not tenant:
+        conn.close()
+        return flask.jsonify(ok=True), 200
+
+    if tenant["status"] != "active":
+        conn.close()
+        return flask.jsonify(ok=True), 200
+
+    token = secrets.token_hex(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    tenant_store.create_magic_link(conn, token_hash, tenant["tenant_id"])
+    conn.close()
+
+    link = f"https://tinyzkp.com/account?token={token}"
+
+    def _bg_send():
+        try:
+            _send_magic_link_email(email, link)
+        except Exception as e:
+            print(f"WARNING: Magic link email failed for {email}: {e}", file=sys.stderr)
+
+    threading.Thread(target=_bg_send, daemon=True).start()
+    return flask.jsonify(ok=True), 200
+
+
+@app.route("/verify-magic-link", methods=["POST"])
+def verify_magic_link_route():
+    """Verify a magic link token and return tenant credentials."""
+    req_secret = flask.request.headers.get("X-Internal-Secret", "")
+    if not INTERNAL_SECRET or not secrets.compare_digest(req_secret, INTERNAL_SECRET):
+        return flask.jsonify(error="unauthorized"), 403
+
+    data = flask.request.get_json(silent=True) or {}
+    token = data.get("token", "").strip()
+
+    if not token or len(token) != 64:
+        return flask.jsonify(error="invalid token"), 400
+
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    conn = tenant_store.open_db()
+    tenant_id = tenant_store.verify_magic_link(conn, token_hash)
+
+    if not tenant_id:
+        conn.close()
+        return flask.jsonify(error="Invalid or expired link"), 401
+
+    tenant = tenant_store.get_tenant(conn, tenant_id)
+    conn.close()
+
+    if not tenant or tenant["status"] != "active":
+        return flask.jsonify(error="Account not active"), 403
+
+    api_key = _recover_api_key(tenant_id)
+
+    return flask.jsonify(
+        tenant_id=tenant_id,
+        email=tenant["email"],
+        plan=tenant["plan"],
+        api_key=api_key or "",
+        api_key_prefix=tenant["api_key_prefix"],
     ), 200
 
 

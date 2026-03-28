@@ -1,0 +1,9 @@
+Log in to your TinyZKP dashboard:
+
+  {link}
+
+This link expires in 15 minutes and can only be used once.
+If you didn't request this, you can safely ignore this email.
+
+— TinyZKP
+https://tinyzkp.com
