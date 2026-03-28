@@ -13,6 +13,7 @@ import secrets
 import smtplib
 import string
 import sys
+import threading
 import time
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -172,12 +173,18 @@ def _handle_checkout_completed(event: dict) -> tuple[str, int]:
 
     print(f"Provisioned tenant={tenant_id} email={email} si={si_id}")
 
-    # Deliver API key to customer.
-    if customer_id:
-        _deliver_key_via_stripe(customer_id, tenant_id, api_key)
-    _send_welcome_email(email, tenant_id, api_key)
-
     conn.close()
+
+    # Deliver API key in background thread (SMTP may hang if port 465 is blocked).
+    def _bg_deliver():
+        try:
+            if customer_id:
+                _deliver_key_via_stripe(customer_id, tenant_id, api_key)
+            _send_welcome_email(email, tenant_id, api_key)
+        except Exception as e:
+            print(f"WARNING: Key delivery failed for {email}: {e}", file=sys.stderr)
+
+    threading.Thread(target=_bg_deliver, daemon=True).start()
     return "", 200
 
 
@@ -345,10 +352,16 @@ def provision_free():
 
     print(f"Provisioned free tenant={tenant_id} email={email}")
 
-    # Deliver API key via email.
-    _send_welcome_email(email, tenant_id, api_key)
-
     conn.close()
+
+    # Send welcome email in background thread (SMTP may hang if port 465 is blocked).
+    def _bg_email():
+        try:
+            _send_welcome_email(email, tenant_id, api_key)
+        except Exception as e:
+            print(f"WARNING: Welcome email failed for {email}: {e}", file=sys.stderr)
+
+    threading.Thread(target=_bg_email, daemon=True).start()
     return flask.jsonify(ok=True), 200
 
 

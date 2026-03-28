@@ -49,6 +49,23 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
+
+/* Selection */
+::selection{background:rgba(46,232,212,.2);color:var(--text-bright)}
+
+/* Focus */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+a:focus-visible,button:focus-visible{outline-offset:3px}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+
+/* Smooth transitions on theme-level elements */
+img,svg{vertical-align:middle}
+
 .container{max-width:1080px;margin:0 auto;padding:0 24px}
 
 /* Dot grid background */
@@ -187,7 +204,11 @@ section{padding:88px 0}
 .code-tabs button.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
 .code-block{display:none;background:var(--surface);border:1px solid var(--border);border-radius:14px;
   padding:24px;overflow-x:auto;max-width:720px;margin:0 auto;
-  box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  box-shadow:0 1px 3px rgba(0,0,0,.2);position:relative}
+.code-block .copy-btn{position:absolute;top:12px;right:12px;background:var(--surface-2);border:1px solid var(--border);
+  color:var(--dim);padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--mono);font-weight:600;
+  transition:color .2s,border-color .2s;z-index:1}
+.code-block .copy-btn:hover{color:var(--accent);border-color:var(--accent)}
 .code-block.active{display:block}
 .code-block pre{font-family:var(--mono);font-size:12.5px;line-height:1.8;color:var(--text);white-space:pre;margin:0}
 .code-block .comment{color:var(--dim)}
@@ -239,6 +260,7 @@ footer .right a:hover{color:var(--muted)}
   nav .links{display:none;position:absolute;top:56px;left:0;right:0;background:var(--bg);
     border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}
   nav .links.open{display:flex}
+  nav .links a{width:100%}
   .hamburger{display:block}
   .steps{grid-template-columns:1fr}
   .pricing-grid{grid-template-columns:1fr 1fr!important}
@@ -255,7 +277,7 @@ footer .right a:hover{color:var(--muted)}
 <nav>
 <div class="container">
   <a href="/" class="logo"><span>Tiny</span>ZKP</a>
-  <button class="hamburger" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
@@ -312,7 +334,7 @@ footer .right a:hover{color:var(--muted)}
 <!-- Social proof -->
 <div class="proof-bar">
 <div class="container">
-  <div class="proof-item"><div class="num" id="proofCount">0</div><div class="label">Proofs generated</div></div>
+  <div class="proof-item"><div class="num" id="proofCount">&mdash;</div><div class="label">Proofs generated</div></div>
   <div class="proof-item"><div class="num">&lt;5ms</div><div class="label">Avg verification</div></div>
   <div class="proof-item"><div class="num">99.9%</div><div class="label">Uptime</div></div>
   <div class="proof-item"><div class="num">6</div><div class="label">Proof templates</div></div>
@@ -356,6 +378,7 @@ footer .right a:hover{color:var(--muted)}
     <button onclick="showTab('browser')">Browser</button>
   </div>
   <div class="code-block active" id="tab-python">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
 <pre><span class="keyword">from</span> tinyzkp <span class="keyword">import</span> TinyZKP
 
 <span class="keyword">async with</span> <span class="func">TinyZKP</span>(<span class="string">"https://api.tinyzkp.com"</span>, api_key=<span class="string">"tzk_..."</span>) <span class="keyword">as</span> client:
@@ -364,6 +387,7 @@ footer .right a:hover{color:var(--muted)}
     result = <span class="keyword">await</span> client.<span class="func">verify</span>(proof)  <span class="comment"># free!</span></pre>
   </div>
   <div class="code-block" id="tab-typescript">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
 <pre><span class="keyword">import</span> { HcClient } <span class="keyword">from</span> <span class="string">"tinyzkp"</span>;
 
 <span class="keyword">const</span> client = <span class="keyword">new</span> <span class="func">HcClient</span>(<span class="string">"https://api.tinyzkp.com"</span>, { apiKey: <span class="string">"tzk_..."</span> });
@@ -372,6 +396,7 @@ footer .right a:hover{color:var(--muted)}
 <span class="keyword">const</span> result = <span class="keyword">await</span> client.<span class="func">verify</span>(proof);  <span class="comment">// free!</span></pre>
   </div>
   <div class="code-block" id="tab-curl">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
 <pre><span class="comment"># Submit a proof via template (recommended)</span>
 curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
   -H <span class="string">"Authorization: Bearer tzk_..."</span> \
@@ -389,6 +414,7 @@ curl -X POST https://api.tinyzkp.com/verify \
   -d <span class="string">'{"proof":{...}}'</span></pre>
   </div>
   <div class="code-block" id="tab-browser">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
 <pre><span class="comment">// Verify proofs client-side — no server, no API key</span>
 <span class="keyword">import</span> init, { verify } <span class="keyword">from</span> <span class="string">'@tinyzkp/verify'</span>;
 
@@ -570,6 +596,19 @@ function showTab(name){
   document.getElementById('tab-'+name).classList.add('active');
   document.querySelector('.code-tabs button[onclick*="'+name+'"]').classList.add('active');
 }
+
+// Copy code button
+function copyCode(btn){
+  var code=btn.parentElement.querySelector('pre').textContent;
+  navigator.clipboard.writeText(code).then(function(){
+    btn.textContent='Copied!';setTimeout(function(){btn.textContent='Copy'},2000);
+  });
+}
+
+// Close mobile menu on link click
+document.querySelectorAll('nav .links a').forEach(function(a){
+  a.addEventListener('click',function(){document.querySelector('.links').classList.remove('open')});
+});
 
 // Status dot
 fetch('https://api.tinyzkp.com/healthz',{mode:'no-cors'}).then(()=>{

@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Welcome to TinyZKP</title>
 <meta name="description" content="Your TinyZKP account is ready. Get started with your first ZK-STARK proof.">
+<meta property="og:title" content="Welcome to TinyZKP">
+<meta property="og:description" content="Your TinyZKP account is ready. Get started with your first ZK-STARK proof.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -33,6 +35,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 body::before{content:'';position:fixed;inset:0;z-index:-2;
   background-image:radial-gradient(circle,var(--border) .5px,transparent .5px);
   background-size:32px 32px;opacity:.3;pointer-events:none}
+::selection{background:rgba(46,232,212,.2);color:var(--text-bright)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+a:focus-visible,button:focus-visible{outline-offset:3px}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 .container{max-width:720px;margin:0 auto;padding:0 24px;width:100%}
@@ -96,6 +105,8 @@ footer .right a:hover{color:var(--muted)}
   footer .container{flex-direction:column;gap:12px;text-align:center}
   footer .right{flex-wrap:wrap;justify-content:center}
 }
+@keyframes checkPop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.welcome-header .check{animation:checkPop .4s ease-out}
 </style>
 </head>
 <body>
@@ -212,6 +223,10 @@ function copyCode(btn) {
     setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
   });
 }
+// Close mobile menu on link click
+document.querySelectorAll('nav .links a').forEach(function(a){
+  a.addEventListener('click',function(){document.querySelector('.links').classList.remove('open')});
+});
 </script>
 
 </body>
