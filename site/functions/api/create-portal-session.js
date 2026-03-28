@@ -58,7 +58,7 @@ export async function onRequestPost(context) {
     const params = new URLSearchParams();
     params.append("customer", customerId);
     params.append("configuration", "bpc_1TDmKKEDs4uiHp8xiHvcZvIb");
-    params.append("return_url", "https://tinyzkp.com/docs");
+    params.append("return_url", "https://tinyzkp.com/account");
 
     const portalResp = await fetch("https://api.stripe.com/v1/billing_portal/sessions", {
       method: "POST",
