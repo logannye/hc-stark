@@ -367,7 +367,7 @@ sleep 0.5
 # ══════════════════════════════════════════════════════════════════
 log ""
 log "── Website Pages ──"
-for path in / /docs /signup /welcome /contact /terms /privacy; do
+for path in / /docs /signup /welcome /contact /terms /privacy /account; do
     test_url "$SITE$path"
 done
 
