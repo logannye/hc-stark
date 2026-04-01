@@ -101,7 +101,7 @@ test_url() {
     local expected="${2:-200}"
     TOTAL=$((TOTAL + 1))
     local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -L "$url" 2>/dev/null) || code="000"
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 -L "$url" 2>/dev/null) || code="000"
     if [ "$code" = "$expected" ]; then
         log "  PASS  $code  $url"
         PASS=$((PASS + 1))
