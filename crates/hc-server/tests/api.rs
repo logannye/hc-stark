@@ -808,3 +808,111 @@ async fn job_index_handles_concurrent_writes() {
         .expect("count works after contention");
     assert_eq!(total, 800);
 }
+
+/// Worker crash mid-prove: the spawned hc-worker exits non-zero before
+/// writing proof.json. The hc-server `prove_with_worker_process` must
+/// detect the failed exit and surface a Failed status, not leave the
+/// job stuck in Running. This is the regression guard for the colleague's
+/// "process killed mid-prove" scenario.
+#[tokio::test]
+async fn worker_crash_lands_job_in_failed_state() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Build a fake worker that exits 99 immediately. The arguments
+    // (--request, --out) are ignored — we want the spawn to succeed
+    // but the child to die before writing proof.json.
+    let tmp = tempfile::tempdir().unwrap();
+    let fake_worker = tmp.path().join("fake-worker");
+    std::fs::write(
+        &fake_worker,
+        b"#!/bin/sh\n# fake hc-worker that simulates a crash\nexit 99\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake_worker, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    std::env::set_var("HC_SERVER_WORKER_PATH", &fake_worker);
+    let state = hc_server::test_state(tmp.path().to_path_buf());
+    let app = hc_server::build_app(state);
+
+    let prove_req = ProveRequest {
+        workload_id: Some("toy_add_1_2".to_string()),
+        template_id: None,
+        template_params: None,
+        program: None,
+        initial_acc: 5,
+        final_acc: 8,
+        block_size: 8,
+        fri_final_poly_size: 2,
+        query_count: 10,
+        lde_blowup_factor: 2,
+        zk_mask_degree: None,
+    };
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/prove")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&prove_req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let submit: hc_sdk::types::ProveSubmitResponse = serde_json::from_slice(&body).unwrap();
+
+    // Poll: must transition to Failed within a reasonable window.
+    // Worker exits immediately so this should land in <1s on any
+    // sane CI runner; we give it 3s of headroom.
+    let mut final_status: Option<ProveJobStatus> = None;
+    for _ in 0..30 {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/prove/{}", submit.job_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let status: ProveJobStatus = serde_json::from_slice(&body).unwrap();
+        match status {
+            ProveJobStatus::Failed { .. } => {
+                final_status = Some(status);
+                break;
+            }
+            ProveJobStatus::Succeeded { .. } => {
+                panic!("fake worker exited 99 — succeed is impossible");
+            }
+            _ => tokio::time::sleep(std::time::Duration::from_millis(100)).await,
+        }
+    }
+
+    std::env::remove_var("HC_SERVER_WORKER_PATH");
+    let final_status = final_status.expect(
+        "worker crash should land Failed within 3s; got stuck in Running — \
+         this is the regression scenario this test guards against",
+    );
+    match final_status {
+        ProveJobStatus::Failed { error } => {
+            // The error message should reference the worker exit so an
+            // operator can debug. Don't pin the exact wording (anyhow
+            // formatting is implementation detail), just sanity-check
+            // that it's non-empty.
+            assert!(
+                !error.is_empty(),
+                "Failed status should carry a non-empty error message"
+            );
+        }
+        _ => unreachable!(),
+    }
+}
