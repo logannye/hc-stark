@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinyZKP Compute — O(√T) Proving for zkVM, zkML, Rollups</title>
+<meta name="description" content="The only production STARK prover with O(√T) memory. Prove a 100M-step trace on commodity hardware. $0.50 per million trace steps, no monthly base fee.">
+<meta property="og:title" content="TinyZKP Compute — O(√T) Proving for Long Traces">
+<meta property="og:description" content="Every other production STARK system needs memory linear in trace length. TinyZKP needs only the square root. $0.50/M trace steps, usage-based.">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/compute">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+:root{
+  --bg:#050a12;--surface:#0c1424;--surface-2:#0f1a30;--border:#152040;--border-light:#1e2d52;
+  --text:#e4e9f2;--text-bright:#f4f6fb;--muted:#8899b8;--dim:#6b84a6;
+  --accent:#2ee8d4;--accent-dim:rgba(46,232,212,.10);
+  --green:#34d399;--amber:#fbbf24;--rose:#f87171;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.65;
+  -webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column}
+body::before{content:'';position:fixed;inset:0;z-index:-2;
+  background-image:radial-gradient(circle,var(--border) .5px,transparent .5px);
+  background-size:32px 32px;opacity:.3;pointer-events:none}
+::selection{background:rgba(46,232,212,.2);color:var(--text-bright)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+a{color:var(--accent)}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(5,10,18,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+nav .container{max-width:1100px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px}
+.logo{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--text-bright);text-decoration:none;letter-spacing:-.02em}
+.logo span{color:var(--accent)}
+.links{display:flex;align-items:center;gap:24px}
+.links a{color:var(--muted);font-size:13px;font-weight:500;transition:color .2s;letter-spacing:.01em;text-decoration:none}
+.links a:hover{color:var(--text)}
+.nav-cta{background:var(--accent);color:var(--bg)!important;padding:7px 18px;border-radius:6px;font-weight:700;font-size:12.5px;letter-spacing:.03em;text-transform:uppercase;transition:transform .15s,box-shadow .15s}
+.nav-cta:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(46,232,212,.15)}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px}
+.hamburger svg{width:24px;height:24px;stroke:var(--text);stroke-width:2;fill:none}
+.content{max-width:880px;margin:0 auto;padding:120px 24px 80px;flex:1}
+.eyebrow{display:inline-block;font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);
+  background:var(--accent-dim);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:999px;margin-bottom:18px;font-weight:600}
+h1{font-size:44px;line-height:1.12;letter-spacing:-.025em;color:var(--text-bright);font-weight:800;margin-bottom:18px}
+h1 .accent{color:var(--accent)}
+.lede{font-size:19px;line-height:1.55;color:var(--muted);margin-bottom:48px;max-width:760px}
+.lede strong{color:var(--text);font-weight:600}
+h2{font-size:26px;letter-spacing:-.018em;color:var(--text-bright);font-weight:700;margin-top:64px;margin-bottom:18px}
+h3{font-size:18px;color:var(--text-bright);font-weight:700;margin-top:32px;margin-bottom:8px}
+p{margin-bottom:16px;color:var(--muted);font-size:15px;line-height:1.7}
+p strong{color:var(--text)}
+ul{margin-bottom:16px;padding-left:22px;color:var(--muted);font-size:15px;line-height:1.7}
+li{margin-bottom:6px}
+li strong{color:var(--text)}
+code{font-family:var(--mono);font-size:13.5px;color:var(--accent);background:var(--surface-2);border:1px solid var(--border);padding:1px 7px;border-radius:5px}
+.callout{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;margin:32px 0}
+.callout.accent{border-color:var(--accent);background:linear-gradient(135deg,rgba(46,232,212,.04) 0%,var(--surface) 100%);box-shadow:0 0 40px rgba(46,232,212,.06)}
+.callout h3{margin-top:0;font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+table{width:100%;border-collapse:collapse;margin:18px 0 26px;font-size:13.5px}
+th{text-align:left;padding:12px 14px;border-bottom:1px solid var(--border-light);color:var(--dim);font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:13.5px}
+td.label{color:var(--muted);font-family:var(--sans);font-size:14px}
+td.tinyzkp{color:var(--accent);font-weight:600}
+td.others{color:var(--muted)}
+.cta-row{display:flex;gap:14px;margin-top:36px;flex-wrap:wrap}
+.cta{display:inline-block;background:var(--accent);color:var(--bg);padding:13px 24px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;letter-spacing:.04em;text-transform:uppercase;transition:transform .15s,box-shadow .15s}
+.cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(46,232,212,.2)}
+.cta-secondary{background:transparent;color:var(--text);border:1px solid var(--border-light)}
+.cta-secondary:hover{border-color:var(--accent);color:var(--accent);box-shadow:none;transform:translateY(-1px)}
+.calc-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:32px;margin:32px 0}
+.calc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-bottom:24px}
+.calc-input label{display:block;color:var(--dim);font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;font-weight:600}
+.calc-input input,.calc-input select{width:100%;background:var(--surface-2);border:1px solid var(--border-light);color:var(--text);padding:12px 14px;border-radius:8px;font-family:var(--mono);font-size:14px;transition:border-color .15s}
+.calc-input input:focus,.calc-input select:focus{outline:none;border-color:var(--accent)}
+.calc-row{display:flex;justify-content:space-between;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--border)}
+.calc-row:last-child{border-bottom:none}
+.calc-row-label{color:var(--muted);font-size:14px}
+.calc-row-value{color:var(--text);font-family:var(--mono);font-size:18px;font-weight:600}
+.calc-row-savings .calc-row-value{color:var(--green);font-size:22px;font-weight:700}
+footer{border-top:1px solid var(--border);padding:32px 0;margin-top:auto}
+footer .container{max-width:1100px;margin:0 auto;padding:0 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+footer .left{color:var(--dim);font-size:12.5px;font-weight:500}
+footer .right{display:flex;gap:22px;flex-wrap:wrap}
+footer .right a{color:var(--dim);font-size:12.5px;font-weight:500;text-decoration:none;transition:color .2s}
+footer .right a:hover{color:var(--muted)}
+@media(max-width:768px){
+  .links{display:none;position:absolute;top:56px;left:0;right:0;background:var(--bg);border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}
+  .links.open{display:flex}
+  .hamburger{display:block}
+  h1{font-size:32px}
+  .lede{font-size:17px}
+  .calc-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/#pricing">Pricing</a>
+    <a href="/docs">Quickstart</a>
+    <a href="/compute" style="color:var(--accent)">Compute</a>
+    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
+    <a href="/contact">Contact</a>
+    <a href="/account">Dashboard</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<div class="content">
+
+<div class="eyebrow">For zkVM, zkML, and rollup teams</div>
+
+<h1>The only production STARK prover with <span class="accent">O(√T)</span> memory.</h1>
+
+<p class="lede">Every other production STARK system needs memory <strong>linear</strong> in trace length. A 100M-step trace requires hundreds of GB of RAM, or aggressive segmentation and recursive aggregation. TinyZKP needs only the <strong>square root</strong> — that same trace fits comfortably on a 16 GB laptop. Same cryptographic guarantees: ≥128-bit soundness, transparent, post-quantum.</p>
+
+<div class="cta-row">
+  <a class="cta" href="/signup?plan=compute">Start at $0.50 / M trace steps</a>
+  <a class="cta cta-secondary" href="https://github.com/logannye/hc-stark/blob/main/docs/whitepaper.md" target="_blank">Read the whitepaper →</a>
+</div>
+
+<h2>The structural advantage, in numbers</h2>
+
+<table>
+  <thead><tr>
+    <th>Trace length T</th>
+    <th>Conventional STARK</th>
+    <th>TinyZKP</th>
+  </tr></thead>
+  <tbody>
+    <tr><td class="label">1M steps</td><td class="others">10–20 GB RAM</td><td class="tinyzkp">~30 MB</td></tr>
+    <tr><td class="label">10M steps</td><td class="others">100+ GB RAM</td><td class="tinyzkp">~100 MB</td></tr>
+    <tr><td class="label">100M steps</td><td class="others">Fleet sharding required</td><td class="tinyzkp">~300 MB</td></tr>
+    <tr><td class="label">1B steps</td><td class="others">Not feasible without segmentation + recursion</td><td class="tinyzkp">~1 GB</td></tr>
+  </tbody>
+</table>
+
+<p>The trade-off is honest: extra time for less memory. We pay roughly <code>√T</code> more cycles to use <code>√T</code> less RAM. For very long traces, this trade-off is the only one that matters — RAM is the wall you hit first, and recovering memory unlocks workloads that conventional provers simply cannot run on commodity hardware.</p>
+
+<h2>Where the moat applies</h2>
+
+<h3>zkVM execution proofs</h3>
+
+<p>Long-running programs, many syscalls, complex state. RISC Zero, SP1, and similar systems handle this via <em>continuations</em> — splitting the trace into chunks and recursively aggregating. That works, but it adds:</p>
+<ul>
+  <li><strong>Memory pressure on each chunk's prover</strong> — still O(chunk size).</li>
+  <li><strong>Aggregation overhead</strong> — every chunk needs to be re-verified to be folded.</li>
+  <li><strong>Operational complexity</strong> — orchestrating the chunked prover fleet.</li>
+</ul>
+<p>TinyZKP runs the whole trace in a single shot at √T memory. Chunked aggregation becomes optional, not load-bearing.</p>
+
+<h3>zkML inference receipts</h3>
+
+<p>Proving a neural net forward-pass. Memory usage is dominated by the largest layer's intermediate activations. Conventional STARK provers need RAM proportional to the entire flattened computation graph. TinyZKP's memory usage is proportional to the largest <em>block</em>, not the largest layer or the dataset.</p>
+
+<h3>Rollup batch attestation</h3>
+
+<p>Sequencers want to batch many transactions. Today, the batch size is bounded by RAM — beyond a few thousand transactions, you need a recursive aggregator. With TinyZKP, the batch size is bounded by time and bandwidth, not memory. A continuously-running prover is feasible on a moderately-sized box.</p>
+
+<h2>Cost calculator</h2>
+
+<div class="calc-box">
+  <div class="calc-grid">
+    <div class="calc-input">
+      <label for="calc-steps">Trace steps per proof</label>
+      <select id="calc-steps" onchange="recalcCompute()">
+        <option value="1000000">1M (small zkVM run)</option>
+        <option value="5000000" selected>5M (typical zkVM batch)</option>
+        <option value="10000000">10M (rollup batch)</option>
+        <option value="50000000">50M (large zkML inference)</option>
+        <option value="100000000">100M (heavy zkVM workload)</option>
+      </select>
+    </div>
+    <div class="calc-input">
+      <label for="calc-volume">Proofs per month</label>
+      <input type="number" id="calc-volume" value="1000" min="1" max="1000000" oninput="recalcCompute()">
+    </div>
+  </div>
+  <div class="calc-row">
+    <span class="calc-row-label">TinyZKP Compute monthly</span>
+    <span class="calc-row-value" id="calc-tinyzkp">$2,500</span>
+  </div>
+  <div class="calc-row">
+    <span class="calc-row-label">Self-hosted estimate <span style="color:var(--dim);font-size:12px;font-weight:400">(1× r6i.8xlarge + DevOps + on-call)</span></span>
+    <span class="calc-row-value" id="calc-selfhost">~$3,400</span>
+  </div>
+  <div class="calc-row calc-row-savings">
+    <span class="calc-row-label">You save</span>
+    <span class="calc-row-value" id="calc-savings">$900/mo (26%)</span>
+  </div>
+  <p style="margin-top:18px;color:var(--dim);font-size:12.5px;font-weight:500;line-height:1.6">Self-host estimate: 1× r6i.8xlarge instance (32 vCPU, 256 GB RAM, ~$1,400/mo committed-use) + ~$2,000/mo blended cost for DevOps, on-call rotation, monitoring. The 16-vCPU tier (~$700/mo) doesn't have enough memory for 10M+ trace steps; you have to step up to a memory-optimized instance the moment a single trace exceeds your RAM cliff. TinyZKP's O(√T) prover doesn't have a cliff.</p>
+</div>
+
+<h2>What you get on the Compute tier</h2>
+
+<ul>
+  <li><strong>$0.50 per million trace steps.</strong> No monthly base fee. Pay for what you prove.</li>
+  <li><strong>Up to 100M-step traces per single proof.</strong> Larger workloads → talk to us about Enterprise.</li>
+  <li><strong>≥128-bit soundness.</strong> Same security floor as the rest of the platform; no relaxed parameters.</li>
+  <li><strong>100 RPM, 8 inflight jobs.</strong> Enough headroom for production zkVM/zkML pipelines.</li>
+  <li><strong>60-minute max prove time per job.</strong> Anything longer almost always benefits from proof aggregation; we'll help you architect it.</li>
+  <li><strong>Email support, 24-hour response SLA.</strong> Your job ID, our triage queue.</li>
+</ul>
+
+<div class="callout accent">
+<h3>The technical claim, defensible in one sentence</h3>
+<p style="margin-bottom:0;color:var(--text)">TinyZKP is the only production STARK proving service whose prover memory is bounded at O(√T) for arbitrarily long computations — meaning a 100M-step zkVM trace fits on commodity hardware. Every other production STARK system requires a memory budget linear in trace length, forcing aggressive segmentation+recursion or simply capping trace size. The whitepaper proves it; the open-source backend ships it; the Compute tier rents it.</p>
+</div>
+
+<h2>Get started</h2>
+
+<p>Compute is self-serve from <code>$0/mo + usage</code>. Sign up, paste your API key, prove your first 1M-step trace in under a minute.</p>
+
+<div class="cta-row">
+  <a class="cta" href="/signup?plan=compute">Start usage-based</a>
+  <a class="cta cta-secondary" href="/contact">Talk to sales (Enterprise)</a>
+</div>
+
+<p style="margin-top:24px"><strong>Questions on whether TinyZKP fits your workload?</strong> Email <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a> with a paragraph on what you're proving and we'll either shape it together or tell you straight if it's not the right tool.</p>
+
+</div>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/">Home</a>
+    <a href="/#pricing">Pricing</a>
+    <a href="/compute">Compute</a>
+    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
+    <a href="/contact">Contact</a>
+    <a href="/terms">Terms</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+
+<script>
+function fmt(n){return '$' + Math.round(n).toLocaleString()}
+function recalcCompute(){
+  var steps = +document.getElementById('calc-steps').value;
+  var vol   = +document.getElementById('calc-volume').value || 1;
+  var ours  = (steps * vol / 1000000) * 0.50;
+  // Self-hosted: r6i.8xlarge ~$1,400/mo committed + ~$2,000/mo DevOps/on-call,
+  // scales lightly with volume to reflect cluster growth at scale.
+  var selfHostBase = 3400;
+  var clusterScale = vol > 50000 ? Math.ceil(vol / 50000) * 1200 : 0;
+  var self_ = selfHostBase + clusterScale;
+  document.getElementById('calc-tinyzkp').textContent = fmt(ours);
+  document.getElementById('calc-selfhost').textContent = '~' + fmt(self_);
+  var save = self_ - ours;
+  if (save > 0) {
+    document.getElementById('calc-savings').textContent = fmt(save) + '/mo (' + Math.round(100 * save / self_) + '%)';
+    document.getElementById('calc-savings').style.color = 'var(--green)';
+  } else {
+    document.getElementById('calc-savings').textContent = '+ ' + fmt(-save) + '/mo (Enterprise quote recommended)';
+    document.getElementById('calc-savings').style.color = 'var(--amber)';
+  }
+}
+recalcCompute();
+
+document.querySelectorAll('nav .links a').forEach(function(a){
+  a.addEventListener('click', function(){ document.querySelector('.links').classList.remove('open'); });
+});
+</script>
+</body>
+</html>

@@ -1,18 +1,20 @@
 // Cloudflare Pages Function — creates a Stripe Checkout session.
 //
 // Secrets required (set via `wrangler pages secret put --project-name tinyzkp`):
-//   STRIPE_SECRET_KEY               — sk_live_... or sk_test_...
-//   STRIPE_PRICE_ID_METERED         — metered usage price (replaces legacy STRIPE_PRICE_ID)
-//   STRIPE_PRICE_ID_DEVELOPER       — $9/mo Developer flat price
-//   STRIPE_PRICE_ID_DEVELOPER_ANNUAL — $86.40/yr Developer annual
-//   STRIPE_PRICE_ID_TEAM            — $49/mo Team flat price
-//   STRIPE_PRICE_ID_TEAM_ANNUAL     — $470.40/yr Team annual
-//   STRIPE_PRICE_ID_SCALE           — $199/mo Scale flat price
-//   STRIPE_PRICE_ID_SCALE_ANNUAL    — $1,910.40/yr Scale annual
+//   STRIPE_SECRET_KEY                  — sk_live_... or sk_test_...
+//   STRIPE_PRICE_ID_METERED            — metered proof-count price (legacy fallback STRIPE_PRICE_ID)
+//   STRIPE_PRICE_ID_TRACE_STEP_METERED — metered trace-step price ($0.50/M, used for Compute and as
+//                                        the large-T overage line on Developer/Pro)
+//   STRIPE_PRICE_ID_DEVELOPER          — $19/mo Developer flat price (v2; legacy $9 was DEVELOPER_V1)
+//   STRIPE_PRICE_ID_DEVELOPER_ANNUAL   — $182/yr Developer annual
+//   STRIPE_PRICE_ID_PRO                — $199/mo Pro flat price (renamed from Scale)
+//   STRIPE_PRICE_ID_PRO_ANNUAL         — $1,910/yr Pro annual
 //
 // Request body: { email, plan, cadence }
-//   plan    ∈ {"developer", "team", "scale"}      (free/verifier-only handled elsewhere)
-//   cadence ∈ {"monthly", "annual"}               (default "monthly")
+//   plan    ∈ {"developer", "pro", "compute"}     (free/verifier-only handled elsewhere)
+//   cadence ∈ {"monthly", "annual"}               (default "monthly"; ignored for "compute")
+//
+// Compute is pure usage-based (no flat fee, just the trace-step meter).
 
 const RATE_LIMIT_MAX = 10;         // max requests per window per IP
 const RATE_LIMIT_WINDOW_S = 300;   // 5-minute window
@@ -39,8 +41,12 @@ async function checkRateLimit(ip) {
 }
 
 // Resolve the flat-fee price ID for (plan, cadence). Returns null if the
-// matching env secret isn't set; caller falls back to metered-only billing
-// so an incomplete deploy never breaks a signup.
+// matching env secret isn't set OR the plan is purely usage-based; caller
+// falls back to metered-only billing so an incomplete deploy never breaks
+// a signup.
+//
+// Legacy plan slugs ("team", "scale") map to "pro" so existing signup
+// links keep working through the rollout.
 function flatPriceFor(env, plan, cadence) {
   const annual = cadence === "annual";
   switch (plan) {
@@ -48,14 +54,18 @@ function flatPriceFor(env, plan, cadence) {
       return annual
         ? (env.STRIPE_PRICE_ID_DEVELOPER_ANNUAL || env.STRIPE_PRICE_ID_DEVELOPER || null)
         : (env.STRIPE_PRICE_ID_DEVELOPER || null);
-    case "team":
+    case "pro":
+    case "team":   // legacy alias → Pro
+    case "scale":  // legacy alias → Pro
       return annual
-        ? (env.STRIPE_PRICE_ID_TEAM_ANNUAL || env.STRIPE_PRICE_ID_TEAM || null)
-        : (env.STRIPE_PRICE_ID_TEAM || null);
-    case "scale":
-      return annual
-        ? (env.STRIPE_PRICE_ID_SCALE_ANNUAL || env.STRIPE_PRICE_ID_SCALE || null)
-        : (env.STRIPE_PRICE_ID_SCALE || null);
+        ? (env.STRIPE_PRICE_ID_PRO_ANNUAL
+            || env.STRIPE_PRICE_ID_PRO
+            || env.STRIPE_PRICE_ID_SCALE_ANNUAL
+            || env.STRIPE_PRICE_ID_SCALE
+            || null)
+        : (env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID_SCALE || null);
+    case "compute":
+      return null;  // pure usage-based, no flat fee
     default:
       return null;
   }
@@ -92,15 +102,21 @@ export async function onRequestPost(context) {
       });
     }
 
+    // Plan slug normalization. Legacy "team"/"scale" still map to "pro"
+    // for any signup link minted before the v2 pricing rollout.
     const planRaw = body.plan;
-    const selectedPlan = (planRaw === "team" || planRaw === "scale") ? planRaw : "developer";
+    const validPlans = new Set(["developer", "pro", "compute", "team", "scale"]);
+    let selectedPlan = validPlans.has(planRaw) ? planRaw : "developer";
+    if (selectedPlan === "team" || selectedPlan === "scale") selectedPlan = "pro";
     const cadence = body.cadence === "annual" ? "annual" : "monthly";
 
     const STRIPE_SECRET_KEY = context.env.STRIPE_SECRET_KEY;
-    // Metered usage price (all paid plans). Legacy fallback to STRIPE_PRICE_ID.
+    // Per-proof metered price (small-T plans). Legacy fallback to STRIPE_PRICE_ID.
     const STRIPE_PRICE_ID_METERED = context.env.STRIPE_PRICE_ID_METERED || context.env.STRIPE_PRICE_ID;
+    // Per-trace-step metered price ($0.50/M, used for Compute and overage on Developer/Pro).
+    const STRIPE_PRICE_ID_TRACE_STEP_METERED = context.env.STRIPE_PRICE_ID_TRACE_STEP_METERED;
 
-    if (!STRIPE_SECRET_KEY || !STRIPE_PRICE_ID_METERED) {
+    if (!STRIPE_SECRET_KEY) {
       return new Response(JSON.stringify({ error: "server misconfigured" }), {
         status: 500,
         headers: jsonHeaders,
@@ -111,18 +127,43 @@ export async function onRequestPost(context) {
     params.append("mode", "subscription");
     params.append("customer_email", email);
 
-    // All paid plans include metered usage billing.
-    params.append("line_items[0][price]", STRIPE_PRICE_ID_METERED);
+    // Line-item assembly:
+    //   - Developer / Pro: flat fee + per-proof meter + (if env set) trace-step overage meter
+    //   - Compute: trace-step meter only (no flat fee, no per-proof line)
+    let lineItem = 0;
 
-    // Add the flat-fee price for the selected (plan, cadence). If the
-    // matching env var isn't set yet (e.g., a partial Cloudflare deploy
-    // before secrets are pushed), fall back to metered-only so the signup
-    // doesn't break — customer pays $0 base + usage until the env is
-    // complete, which is graceful in the customer-friendly direction.
-    const flatPriceId = flatPriceFor(context.env, selectedPlan, cadence);
-    if (flatPriceId) {
-      params.append("line_items[1][price]", flatPriceId);
-      params.append("line_items[1][quantity]", "1");
+    if (selectedPlan === "compute") {
+      if (!STRIPE_PRICE_ID_TRACE_STEP_METERED) {
+        return new Response(JSON.stringify({ error: "compute tier not yet available" }), {
+          status: 503,
+          headers: jsonHeaders,
+        });
+      }
+      params.append(`line_items[${lineItem}][price]`, STRIPE_PRICE_ID_TRACE_STEP_METERED);
+      lineItem += 1;
+    } else {
+      // Developer / Pro
+      if (STRIPE_PRICE_ID_METERED) {
+        params.append(`line_items[${lineItem}][price]`, STRIPE_PRICE_ID_METERED);
+        lineItem += 1;
+      }
+      const flatPriceId = flatPriceFor(context.env, selectedPlan, cadence);
+      if (flatPriceId) {
+        params.append(`line_items[${lineItem}][price]`, flatPriceId);
+        params.append(`line_items[${lineItem}][quantity]`, "1");
+        lineItem += 1;
+      }
+      if (STRIPE_PRICE_ID_TRACE_STEP_METERED) {
+        params.append(`line_items[${lineItem}][price]`, STRIPE_PRICE_ID_TRACE_STEP_METERED);
+        lineItem += 1;
+      }
+    }
+
+    if (lineItem === 0) {
+      return new Response(JSON.stringify({ error: "server misconfigured: no price ids set" }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
     }
 
     // Pass plan + cadence in metadata so the webhook can extract them

@@ -52,9 +52,9 @@
       "description": "One MCP install. Mint a tamper-evident proof for any computation in one API call. Verify in milliseconds.",
       "offers": [
         {"@type": "Offer", "name": "Free",      "price": "0",   "priceCurrency": "USD", "description": "100 proofs/month, no credit card"},
-        {"@type": "Offer", "name": "Developer", "price": "9",   "priceCurrency": "USD", "description": "$9/month + usage"},
-        {"@type": "Offer", "name": "Team",      "price": "49",  "priceCurrency": "USD", "description": "$49/month + 25% off per-proof rates"},
-        {"@type": "Offer", "name": "Scale",     "price": "199", "priceCurrency": "USD", "description": "$199/month + 40% off per-proof rates"}
+        {"@type": "Offer", "name": "Developer", "price": "19",  "priceCurrency": "USD", "description": "$19/month — 5,000 small-T proofs + $0.40/M trace steps overage"},
+        {"@type": "Offer", "name": "Pro",       "price": "199", "priceCurrency": "USD", "description": "$199/month — 50,000 small-T proofs + 1M trace steps included"},
+        {"@type": "Offer", "name": "Compute",   "price": "0",   "priceCurrency": "USD", "description": "Usage-based: $0.50 per million trace steps. zkVM, zkML, rollups."}
       ],
       "aggregateRating": null,
       "publisher": {"@id": "https://tinyzkp.com/#org"}
@@ -424,6 +424,7 @@ footer .right a:hover{color:var(--muted)}
   <div class="links">
     <a href="/try">Try it</a>
     <a href="#pricing">Pricing</a>
+    <a href="/compute">Compute</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
@@ -602,144 +603,109 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
 <section id="pricing">
 <div class="container">
   <div class="section-label">Pricing</div>
-  <h2 class="section-title">Pricing Built on Better Architecture</h2>
-  <p class="section-sub">Our O(&radic;T) prover uses a fraction of the memory. We pass the savings to you &mdash; at rates competitors structurally cannot match.</p>
+  <h2 class="section-title">Two products on one prover</h2>
+  <p class="section-sub">Pick the audience that matches what you're shipping. Verification is always free across every tier.</p>
 
-  <!-- √T Advantage Comparison -->
-  <div class="advantage-box fade-in" style="max-width:720px;margin:0 auto 48px;background:linear-gradient(135deg,rgba(46,232,212,.04) 0%,var(--surface) 100%);border:1px solid var(--accent);border-radius:14px;padding:32px 28px;position:relative;box-shadow:0 0 40px rgba(46,232,212,.06)">
-    <h3 style="font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">Why we're 10&ndash;40x cheaper</h3>
-    <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:20px">Traditional provers allocate memory proportional to trace length. TinyZKP's height-compressed streaming architecture needs only the square root. Same cryptographic guarantees &mdash; tiny footprint.</p>
+  <!-- Audience tabs -->
+  <div class="audience-tabs fade-in" style="display:flex;gap:8px;justify-content:center;margin:0 auto 36px;max-width:560px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:6px">
+    <button class="audience-tab active" data-audience="agents" onclick="showAudience('agents')" style="flex:1;padding:12px 20px;background:var(--accent);color:var(--bg);border:none;border-radius:10px;font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .2s">For AI agents</button>
+    <button class="audience-tab" data-audience="compute" onclick="showAudience('compute')" style="flex:1;padding:12px 20px;background:transparent;color:var(--muted);border:none;border-radius:10px;font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .2s">For long-trace compute</button>
+  </div>
+
+  <!-- AGENT-RECEIPT TIERS -->
+  <div class="audience-panel" id="panel-agents">
+    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">Range proofs, hash preimages, policy compliance, data integrity, accumulator steps, computation attestations. <strong style="color:var(--text)">Sub-second proofs.</strong> The wedge for AI-agent receipts.</p>
+
+    <div class="pricing-grid" style="grid-template-columns:repeat(3,1fr);max-width:960px;margin:0 auto">
+      <div class="price-card fade-in">
+        <div class="tier">Free</div>
+        <div class="amount" style="color:var(--green)">$0</div>
+        <div class="unit">100 proofs/mo</div>
+        <div class="desc">No credit card &middot; 10 RPM &middot; 1 inflight job &middot; community support</div>
+        <a class="cta cta-secondary" href="/signup" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Start free</a>
+      </div>
+      <div class="price-card fade-in">
+        <div class="tier">Developer</div>
+        <div class="amount">$19</div>
+        <div class="unit">per month</div>
+        <div class="desc">5,000 proofs/mo &middot; 200 RPM &middot; 4 inflight &middot; $200 cap &middot; email 48h</div>
+        <a class="cta" href="/signup?plan=developer" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Developer</a>
+      </div>
+      <div class="price-card featured fade-in">
+        <div class="tier">Pro</div>
+        <div class="amount">$199</div>
+        <div class="unit">per month</div>
+        <div class="desc" style="color:var(--accent)">50,000 proofs/mo &middot; 1M trace steps included &middot; 500 RPM &middot; 16 inflight &middot; $2K cap &middot; email 24h</div>
+        <a class="cta" href="/signup?plan=pro" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Pro</a>
+      </div>
+    </div>
+
+    <p style="text-align:center;margin-top:24px;color:var(--dim);font-size:13px">Annual billing: <strong style="color:var(--muted)">20% off</strong> any paid plan. &middot; Need a one-off large trace? Overage is metered at <code>$0.40/M steps</code> on Developer, <code>$0.30/M</code> on Pro.</p>
+  </div>
+
+  <!-- LONG-TRACE COMPUTE TIERS -->
+  <div class="audience-panel" id="panel-compute" style="display:none">
+    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">zkVM execution, zkML inference, rollup batches. The tier where the <strong style="color:var(--accent)">O(&radic;T) prover</strong> replaces a 128 GB-RAM machine. Pure usage-based — pay for what you prove.</p>
+
+    <div class="pricing-grid" style="grid-template-columns:repeat(2,1fr);max-width:720px;margin:0 auto">
+      <div class="price-card featured fade-in">
+        <div class="tier">Compute</div>
+        <div class="amount">$0.50</div>
+        <div class="unit">per million trace steps</div>
+        <div class="desc" style="color:var(--accent)">No monthly base fee &middot; up to 100M-step traces &middot; 100 RPM &middot; 8 inflight &middot; &ge;128-bit soundness &middot; email 24h</div>
+        <a class="cta" href="/signup?plan=compute" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Start usage-based</a>
+      </div>
+      <div class="price-card fade-in">
+        <div class="tier">Enterprise</div>
+        <div class="amount">Custom</div>
+        <div class="unit">reserved capacity</div>
+        <div class="desc">Unlimited trace size &middot; custom SLAs (99.9–99.99%) &middot; dedicated support &middot; SOC 2, BAA, MSA</div>
+        <a class="cta cta-secondary" href="/contact" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Talk to us</a>
+      </div>
+    </div>
+
+    <p style="text-align:center;margin-top:24px;color:var(--dim);font-size:13px;max-width:640px;margin-left:auto;margin-right:auto;line-height:1.7"><strong style="color:var(--muted)">Worked example:</strong> a 5M-step zkVM proof costs $2.50. A team running 1,000/day pays ~$2,500/mo &mdash; competitive with the cheapest 128 GB-RAM prover instance, with no DevOps. <a href="/compute" style="color:var(--accent)">Read the technical brief &rarr;</a></p>
+  </div>
+
+  <!-- √T architectural advantage callout (visible on both panels) -->
+  <div class="advantage-box fade-in" style="max-width:720px;margin:48px auto 0;background:linear-gradient(135deg,rgba(46,232,212,.04) 0%,var(--surface) 100%);border:1px solid var(--accent);border-radius:14px;padding:28px 28px 22px;position:relative;box-shadow:0 0 40px rgba(46,232,212,.06)">
+    <h3 style="font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;text-align:center">The structural advantage</h3>
+    <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:18px;text-align:center">Other production STARK provers need memory linear in trace length. TinyZKP's height-compressed architecture needs only the square root.</p>
     <table style="width:100%;border-collapse:collapse;font-size:13px;font-family:var(--mono)">
       <thead><tr>
         <th style="text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Trace</th>
-        <th style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Others</th>
+        <th style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Conventional STARK</th>
         <th style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--accent);font-size:11px;letter-spacing:.06em;text-transform:uppercase">TinyZKP</th>
       </tr></thead>
       <tbody>
         <tr><td style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text)">1M steps</td><td style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--muted)">10&ndash;20 GB RAM</td><td style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--accent);font-weight:600">~30 MB</td></tr>
         <tr><td style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text)">10M steps</td><td style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--muted)">100+ GB RAM</td><td style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--accent);font-weight:600">~100 MB</td></tr>
-        <tr><td style="padding:10px 14px;color:var(--text)">100M steps</td><td style="text-align:center;padding:10px 14px;color:var(--red);font-weight:600">Impossible</td><td style="text-align:center;padding:10px 14px;color:var(--accent);font-weight:600">~300 MB</td></tr>
+        <tr><td style="padding:10px 14px;color:var(--text)">100M steps</td><td style="text-align:center;padding:10px 14px;color:var(--muted);font-weight:600">Needs fleet sharding</td><td style="text-align:center;padding:10px 14px;color:var(--accent);font-weight:600">~300 MB</td></tr>
       </tbody>
     </table>
-    <p style="color:var(--dim);font-size:12px;margin-top:16px;text-align:center;font-weight:500">Lower infrastructure cost &rarr; lower prices for you. No compromises on security.</p>
+    <p style="color:var(--dim);font-size:12px;margin-top:14px;text-align:center;font-weight:500">Same cryptographic guarantees: ZK-STARK, &ge;128-bit soundness, transparent, post-quantum. <a href="/compute" style="color:var(--accent)">See the whitepaper &rarr;</a></p>
   </div>
 
-  <!-- Plan Cards -->
-  <div class="pricing-grid" style="grid-template-columns:repeat(4,1fr)">
-    <div class="price-card fade-in">
-      <div class="tier">Free</div>
-      <div class="amount" style="color:var(--green)">$0</div>
-      <div class="unit">100 proofs/mo</div>
-      <div class="desc">No credit card &middot; 10 RPM &middot; 1 job</div>
-    </div>
-    <div class="price-card fade-in">
-      <div class="tier">Developer</div>
-      <div class="amount">$9</div>
-      <div class="unit">per month + usage</div>
-      <div class="desc">100 RPM &middot; 4 jobs &middot; $500 cap</div>
-    </div>
-    <div class="price-card featured fade-in">
-      <div class="tier">Team</div>
-      <div class="amount">$49</div>
-      <div class="unit">per month + usage</div>
-      <div class="desc" style="color:var(--accent)">25% off &middot; 300 RPM &middot; 8 jobs</div>
-    </div>
-    <div class="price-card fade-in">
-      <div class="tier">Scale</div>
-      <div class="amount">$199</div>
-      <div class="unit">per month + usage</div>
-      <div class="desc" style="color:var(--accent)">40% off &middot; 500 RPM &middot; 16 jobs</div>
-    </div>
-  </div>
-  <p style="text-align:center;margin-top:14px;color:var(--dim);font-size:13px">Need custom limits or SLAs? <a href="/contact" style="color:var(--accent)">Talk to us about Enterprise</a>. &middot; Annual billing: 20% off any paid plan.</p>
-  <p class="verify-free">Verification is always free &middot; Verifier-only plan: 10,000 free verify calls/month, no auth gate</p>
+  <p class="verify-free" style="margin-top:36px">Verification is always free across every tier &middot; <a href="https://npmjs.com/package/@tinyzkp/verify" style="color:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px"><code>@tinyzkp/verify</code></a> WASM package verifies anywhere in 5 ms</p>
 
-  <!-- Per-Proof Rate Table -->
-  <p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:18px;max-width:640px;margin-left:auto;margin-right:auto;line-height:1.7">Pricing is based on <strong style="color:var(--muted)">trace steps</strong> &mdash; the number of computation steps in your proof. A simple range proof is ~128 steps. Use the free <a href="/docs#estimate" style="color:var(--accent)"><code>/estimate</code></a> endpoint to preview the cost of any proof before generating it.</p>
-  <div class="plan-table fade-in" style="max-width:820px">
-    <table>
-      <thead><tr>
-        <th>Trace Steps</th>
-        <th>Developer</th>
-        <th style="color:var(--accent)">Team <span style="font-weight:400;opacity:.7">(-25%)</span></th>
-        <th style="color:var(--accent)">Scale <span style="font-weight:400;opacity:.7">(-40%)</span></th>
-        <th style="color:var(--green)">vs. Alternatives</th>
-      </tr></thead>
-      <tbody>
-        <tr><td class="plan-name">&lt; 10K</td><td>$0.05</td><td>$0.04</td><td>$0.03</td><td style="color:var(--green)">Comparable</td></tr>
-        <tr><td class="plan-name">10K &ndash; 100K</td><td>$0.50</td><td>$0.38</td><td>$0.30</td><td style="color:var(--green)">50&ndash;90% less</td></tr>
-        <tr><td class="plan-name">100K &ndash; 1M</td><td>$2.00</td><td>$1.50</td><td>$1.20</td><td style="color:var(--green)">87&ndash;98% less</td></tr>
-        <tr><td class="plan-name">1M &ndash; 10M</td><td>$8.00</td><td>$6.00</td><td>$4.80</td><td style="color:var(--green)">90&ndash;98% less</td></tr>
-        <tr><td class="plan-name">&gt; 10M</td><td>$30.00</td><td>$22.50</td><td>$18.00</td><td style="color:var(--green)">94&ndash;99% less</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Plan Limits Table -->
-  <div class="plan-table fade-in" style="max-width:820px">
-    <table>
-      <thead><tr><th>Plan Limits</th><th class="plan-free">Free</th><th>Developer</th><th>Team</th><th>Scale</th></tr></thead>
-      <tbody>
-        <tr><td class="plan-name">Prove RPM</td><td class="plan-free">10</td><td>100</td><td>300</td><td>500</td></tr>
-        <tr><td class="plan-name">Verify RPM</td><td class="plan-free">30</td><td>300</td><td>900</td><td>1,500</td></tr>
-        <tr><td class="plan-name">Inflight jobs</td><td class="plan-free">1</td><td>4</td><td>8</td><td>16</td></tr>
-        <tr><td class="plan-name">Monthly cap</td><td class="plan-free">$5</td><td>$500</td><td>$2,500</td><td>$10,000</td></tr>
-        <tr><td class="plan-name">Max prove time</td><td class="plan-free">5 min</td><td>10 min</td><td>30 min</td><td>60 min</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Cost Calculator -->
-  <div class="calc-box fade-in" id="cost-calc">
-    <div class="calc-label">Cost Calculator</div>
-    <h3 class="calc-title">Compare TinyZKP to self-hosting</h3>
-    <p class="calc-sub">Most teams run a single bare-metal prover. Here's what that actually costs.</p>
-    <div class="calc-grid">
-      <div class="calc-input">
-        <label for="calc-trace">Trace size per proof</label>
-        <select id="calc-trace" onchange="recalcCost()">
-          <option value="0.05">&lt; 10K steps (e.g., range proof)</option>
-          <option value="0.50" selected>10K – 100K steps (typical attestation)</option>
-          <option value="2.00">100K – 1M steps (small zkVM)</option>
-          <option value="8.00">1M – 10M steps (rollup batch)</option>
-          <option value="30.00">&gt; 10M steps (zkML inference)</option>
-        </select>
-      </div>
-      <div class="calc-input">
-        <label for="calc-volume">Proofs per month</label>
-        <input type="number" id="calc-volume" value="1000" min="1" max="10000000" oninput="recalcCost()">
-      </div>
-      <div class="calc-input">
-        <label for="calc-plan">Plan</label>
-        <select id="calc-plan" onchange="recalcCost()">
-          <option value="1.00" selected>Developer ($9/mo, base rates)</option>
-          <option value="0.75">Team ($49/mo, 25% off)</option>
-          <option value="0.60">Scale ($199/mo, 40% off)</option>
-        </select>
-      </div>
-    </div>
-    <div class="calc-output">
-      <div class="calc-row">
-        <span class="calc-row-label">TinyZKP monthly total</span>
-        <span class="calc-row-value calc-tinyzkp" id="calc-tinyzkp">$509</span>
-      </div>
-      <div class="calc-row">
-        <span class="calc-row-label">Self-hosted estimate <span class="calc-row-detail">(1× r5.4xlarge + ops + on-call)</span></span>
-        <span class="calc-row-value calc-selfhost" id="calc-selfhost">~$1,800</span>
-      </div>
-      <div class="calc-row calc-row-savings">
-        <span class="calc-row-label">You save</span>
-        <span class="calc-row-value calc-savings" id="calc-savings">$1,291/mo (72%)</span>
-      </div>
-    </div>
-    <p class="calc-note">Self-host estimate assumes one r5.4xlarge (16 vCPU, 128 GB RAM, ~$700/mo) + ~$1,000/mo blended cost for DevOps, on-call rotation, and Datadog. Real numbers depend on geography and team rates. Build vs. buy is mostly about who staffs the on-call rotation.</p>
-  </div>
-
-  <div style="text-align:center;margin-top:36px">
+  <div style="text-align:center;margin-top:32px">
     <a class="cta" href="/signup" style="font-size:13px;padding:12px 28px">Get Free API Key</a>
-    <a class="cta cta-secondary" href="#pricing" style="font-size:13px;padding:12px 28px;margin-left:12px">Compare Plans</a>
+    <a class="cta cta-secondary" href="/compute" style="font-size:13px;padding:12px 28px;margin-left:12px">Compute Brief</a>
   </div>
 </div>
+<script>
+function showAudience(name) {
+  document.querySelectorAll('.audience-tab').forEach(b => {
+    var on = b.dataset.audience === name;
+    b.classList.toggle('active', on);
+    b.style.background = on ? 'var(--accent)' : 'transparent';
+    b.style.color = on ? 'var(--bg)' : 'var(--muted)';
+  });
+  document.querySelectorAll('.audience-panel').forEach(p => {
+    p.style.display = p.id === 'panel-' + name ? 'block' : 'none';
+  });
+}
+</script>
 </section>
 
 <section id="mcp-tools">
@@ -749,16 +715,16 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
   <p class="section-sub">After <code>claude mcp add ...</code>, every tool below is callable from inside the agent.</p>
   <div class="mcp-box fade-in">
     <div class="mcp-tools">
-      <span>prove</span>
-      <span>verify</span>
-      <span>prove_status</span>
-      <span>list_jobs</span>
-      <span>healthz</span>
-      <span>list_programs</span>
-      <span>describe_program</span>
+      <span>list_templates</span>
+      <span>describe_template</span>
+      <span>prove_template</span>
+      <span>poll_job</span>
+      <span>get_proof</span>
+      <span>get_proof_summary</span>
+      <span>verify_proof</span>
       <span>list_workloads</span>
-      <span>submit_workload</span>
-      <span>workload_status</span>
+      <span>prove_workload</span>
+      <span>get_capabilities</span>
     </div>
     <p style="margin-top:18px;text-align:center;color:var(--dim);font-size:13px">
       Local stdio install (Claude Desktop, Cursor):
