@@ -1,0 +1,19 @@
+[package]
+name = "hc-zkvm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+hc-air = { path = "../hc-air" }
+hc-vm = { path = "../hc-vm" }
+hc-prover = { path = "../hc-prover" }
+hc-verifier = { path = "../hc-verifier" }
+hc-hash = { path = "../hc-hash" }
+hc-replay = { path = "../hc-replay" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror.workspace = true
