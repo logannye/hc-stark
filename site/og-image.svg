@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="38%" r="55%">
+      <stop offset="0%" stop-color="#2ee8d4" stop-opacity="0.18"/>
+      <stop offset="60%" stop-color="#2ee8d4" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#2ee8d4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="title" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2ee8d4"/>
+      <stop offset="55%" stop-color="#69f5e8"/>
+      <stop offset="100%" stop-color="#f0b86a"/>
+    </linearGradient>
+    <pattern id="dots" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="0.7" fill="#152040" opacity="0.7"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#050a12"/>
+  <rect width="1200" height="630" fill="url(#dots)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- Top pill: agent badge -->
+  <g transform="translate(80, 86)">
+    <rect width="320" height="40" rx="20" fill="rgba(46,232,212,0.08)" stroke="rgba(46,232,212,0.3)" stroke-width="1"/>
+    <circle cx="22" cy="20" r="4.5" fill="#2ee8d4"/>
+    <text x="38" y="26" font-family="'IBM Plex Mono', Menlo, Consolas, monospace" font-size="14" font-weight="600" fill="#2ee8d4" letter-spacing="1.4">
+      NATIVE MCP · FOR AI AGENTS
+    </text>
+  </g>
+
+  <!-- Headline -->
+  <g transform="translate(80, 168)">
+    <text x="0" y="0" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="78" font-weight="800" fill="url(#title)" letter-spacing="-2">
+      <tspan x="0" dy="0">Verifiable receipts</tspan>
+      <tspan x="0" dy="92">for every API call</tspan>
+    </text>
+  </g>
+
+  <!-- Subtitle -->
+  <g transform="translate(80, 380)">
+    <text x="0" y="0" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="28" font-weight="400" fill="#8899b8">
+      <tspan x="0" dy="0">Mint a tamper-evident proof in one MCP install or one</tspan>
+      <tspan x="0" dy="38">curl. Verify in 5 milliseconds. Free tier, no credit card.</tspan>
+    </text>
+  </g>
+
+  <!-- Brand mark -->
+  <g transform="translate(80, 530)">
+    <text x="0" y="0" font-family="'IBM Plex Mono', Menlo, monospace" font-size="22" font-weight="700" fill="#f4f6fb" letter-spacing="-0.5">
+      <tspan fill="#2ee8d4">Tiny</tspan>ZKP
+    </text>
+    <text x="120" y="-1" font-family="'IBM Plex Mono', Menlo, monospace" font-size="16" font-weight="500" fill="#6b84a6">
+      tinyzkp.com
+    </text>
+  </g>
+
+  <!-- Right-side decorative install command, like terminal -->
+  <g transform="translate(720, 290)">
+    <rect width="408" height="120" rx="14" fill="#0c1424" stroke="#152040" stroke-width="1"/>
+    <text x="22" y="36" font-family="'IBM Plex Mono', Menlo, monospace" font-size="13" fill="#6b84a6" font-weight="600" letter-spacing="1.6">
+      ONE-LINE INSTALL
+    </text>
+    <text x="22" y="74" font-family="'IBM Plex Mono', Menlo, monospace" font-size="14" fill="#34d399" font-weight="600">
+      $
+    </text>
+    <text x="40" y="74" font-family="'IBM Plex Mono', Menlo, monospace" font-size="14" fill="#e4e9f2">
+      claude mcp add --transport http \
+    </text>
+    <text x="40" y="98" font-family="'IBM Plex Mono', Menlo, monospace" font-size="14" fill="#2ee8d4">
+      tinyzkp https://mcp.tinyzkp.com
+    </text>
+  </g>
+</svg>

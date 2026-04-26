@@ -13,9 +13,93 @@
 <meta name="twitter:title" content="TinyZKP — Verifiable Receipts for AI Agents">
 <meta name="twitter:description" content="Native MCP server. Mint tamper-evident receipts for every agent action. Free tier, no credit card.">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="TinyZKP — Verifiable receipts for every API call. Native MCP server for AI agents.">
 <meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP — Verifiable receipts for every API call.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://tinyzkp.com">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://tinyzkp.com/#org",
+      "name": "TinyZKP",
+      "url": "https://tinyzkp.com",
+      "logo": "https://tinyzkp.com/og-image.png",
+      "description": "Hosted ZK-STARK proving service with native MCP integration for AI agents.",
+      "sameAs": [
+        "https://github.com/logannye/hc-stark"
+      ]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://tinyzkp.com/#website",
+      "url": "https://tinyzkp.com",
+      "name": "TinyZKP",
+      "publisher": {"@id": "https://tinyzkp.com/#org"},
+      "inLanguage": "en"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://tinyzkp.com/#app",
+      "name": "TinyZKP",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Web, macOS, Linux, Windows",
+      "description": "One MCP install. Mint a tamper-evident proof for any computation in one API call. Verify in milliseconds.",
+      "offers": [
+        {"@type": "Offer", "name": "Free",      "price": "0",   "priceCurrency": "USD", "description": "100 proofs/month, no credit card"},
+        {"@type": "Offer", "name": "Developer", "price": "9",   "priceCurrency": "USD", "description": "$9/month + usage"},
+        {"@type": "Offer", "name": "Team",      "price": "49",  "priceCurrency": "USD", "description": "$49/month + 25% off per-proof rates"},
+        {"@type": "Offer", "name": "Scale",     "price": "199", "priceCurrency": "USD", "description": "$199/month + 40% off per-proof rates"}
+      ],
+      "aggregateRating": null,
+      "publisher": {"@id": "https://tinyzkp.com/#org"}
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://tinyzkp.com/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How do I add ZK proofs to my AI agent?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Run claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com (or the equivalent for your MCP client). Your agent gets 10 ZK proof tools as native function calls. Free tier: 100 proofs/month, no credit card."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is TinyZKP zero-knowledge?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. TinyZKP uses ZK-STARKs — transparent (no trusted setup), post-quantum secure (hash-based), and supports a ZK-masked mode that hides the computation as well as the inputs."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why is TinyZKP cheaper than alternatives?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The prover uses a height-compressed streaming architecture that runs in O(√T) memory instead of O(T). One commodity server can serve many tenants without horizontal sharding, so the per-proof infrastructure cost is 10–40× lower."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I verify a proof without an API key?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes — install @tinyzkp/verify from npm and verify proofs entirely client-side in WebAssembly. No round-trip to any server. Verification typically takes under 5 milliseconds."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -338,6 +422,7 @@ footer .right a:hover{color:var(--muted)}
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
+    <a href="/try">Try it</a>
     <a href="#pricing">Pricing</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
@@ -361,7 +446,7 @@ footer .right a:hover{color:var(--muted)}
   <p class="sub">Mint a tamper-evident proof that your agent ran the code it claims, on the inputs it claims. One MCP install, or one curl. Generate in seconds, verify in milliseconds. No cryptography degree required.</p>
   <div class="hero-ctas">
     <a class="cta" href="/signup">Get Free API Key</a>
-    <a class="cta cta-secondary" href="#mcp">See MCP Install &rarr;</a>
+    <a class="cta cta-secondary" href="/try">Try in Browser &rarr;</a>
   </div>
   <span class="free">Free tier &middot; 100 proofs/month &middot; No credit card &middot; First proof in 60 seconds</span>
 </div>

@@ -1,31 +1,48 @@
-# hc-stark — Height-Compressed ZK-STARK Prover
+# TinyZKP — Verifiable Receipts for AI Agents
 
-**[TinyZKP.com](https://tinyzkp.com)** | **[API Docs](https://tinyzkp.com/docs)** | **[Swagger](https://api.tinyzkp.com/docs)** | **[Sign Up (free)](https://tinyzkp.com/signup)**
+**[tinyzkp.com](https://tinyzkp.com)** &middot; **[Try it in browser](https://tinyzkp.com/try)** &middot; **[API docs](https://tinyzkp.com/docs)** &middot; **[Free signup](https://tinyzkp.com/signup)**
 
-`hc-stark` is the open-source engine behind [TinyZKP](https://tinyzkp.com) — a production ZK-STARK proving service. Generate and verify zero-knowledge proofs with a single API call. No cryptography expertise required.
+Mint a tamper-evident proof that your agent ran the code it claims, on the inputs it claims. **One MCP install. One API call. Verify in milliseconds.** No cryptography degree required.
+
+## Install in 30 seconds (Claude Code)
 
 ```bash
-# Prove a secret is in range [0, 100] without revealing it
-curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
-  -H "Authorization: Bearer tzk_..." \
-  -H "Content-Type: application/json" \
-  -d '{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'
-# → {"job_id":"prf_a1b2c3","status":"proving","eta_ms":1200}
-
-# Poll until complete
-curl https://api.tinyzkp.com/prove/prf_a1b2c3 -H "Authorization: Bearer tzk_..."
-# → {"status":"completed","proof":{"version":4,"bytes":"0x6a8f...","size_kb":12.4}}
-
-# Verify (free, no charge)
-curl -X POST https://api.tinyzkp.com/verify \
-  -H "Authorization: Bearer tzk_..." \
-  -d '{"proof":{"version":4,"bytes":"0x6a8f..."}}'
-# → {"valid": true, "verified_in_ms": 2.8}
+claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 ```
 
-## Why hc-stark
+That's it. Your agent now has 10 ZK proof tools (`prove`, `verify`, `list_workloads`, ...) as native function calls. Free tier — 100 proofs/month, no credit card.
 
-The prover uses a **height-compressed streaming architecture** that runs in O(√T) memory instead of O(T). This makes long proofs practical on fixed-memory hardware — the core innovation that enables a real per-proof pricing model.
+For Claude Desktop, Cursor, OpenAI agents, and other MCP clients, see [the MCP install guide](https://tinyzkp.com/docs#mcp).
+
+## What you can prove
+
+| Template | What it proves | Typical use |
+|----------|---------------|-------------|
+| `range_proof` | "I know a value between X and Y" — without revealing it | Age verification, salary bands, score thresholds |
+| `hash_preimage` | "I know the secret behind this hash" | Password proofs, file integrity, commitment opening |
+| `computation_attestation` | "f(secret inputs) = this public output" | Agent action receipts, batch compute attestation |
+| `accumulator_step` | "Starting at X, applying these deltas reaches Y" | State machine attestation, rollup transitions |
+| `policy_compliance` | "These actions stayed within the allowed limit" | Spending caps, rate limits, resource quotas |
+| `data_integrity` | "These elements add up to this checksum" | Dataset audits, ledger reconciliation |
+
+## Two-line plain HTTP version
+
+```bash
+curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
+  -H "Authorization: Bearer tzk_YOUR_KEY" \
+  -d '{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'
+# → {"job_id":"prf_a1b2c3","status":"proving"}
+curl https://api.tinyzkp.com/prove/prf_a1b2c3 -H "Authorization: Bearer tzk_YOUR_KEY"
+# → {"status":"completed","proof":{"version":4,"bytes":"0x6a8f..."}}
+```
+
+Verification is always free. SDKs ship for Python (`pip install tinyzkp`), TypeScript (`npm install tinyzkp`), and Rust. There's also a [browser-side WASM verifier](https://www.npmjs.com/package/@tinyzkp/verify) so end users verify offline in 5ms.
+
+---
+
+## What sits underneath
+
+`hc-stark` is the open-source Rust engine behind TinyZKP. It uses a **height-compressed streaming architecture** that runs in O(√T) prover memory instead of O(T) — the structural advantage that lets us price the small-proof tier at $0.05/proof and offer a real free tier without going broke.
 
 | Property | hc-stark | Standard STARK |
 |----------|----------|----------------|
@@ -33,8 +50,10 @@ The prover uses a **height-compressed streaming architecture** that runs in O(�
 | Prover time | ~O(T · log² T) | ~O(T · log T) |
 | Verifier time | polylog(T) | polylog(T) |
 | Proof size | polylog(T) | polylog(T) |
-| Transparent | Yes | Yes |
-| Post-quantum | Yes (hash-based) | Yes (hash-based) |
+| Transparent (no trusted setup) | Yes | Yes |
+| Post-quantum (hash-based) | Yes | Yes |
+
+The technical writeup is in [`docs/whitepaper.md`](docs/whitepaper.md).
 
 ---
 

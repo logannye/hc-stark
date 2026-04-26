@@ -1,0 +1,43 @@
+{
+  "name": "@tinyzkp/cli",
+  "version": "0.1.0",
+  "description": "Generate and verify TinyZKP zero-knowledge proofs from your terminal. One command, no SDK setup.",
+  "keywords": [
+    "zk",
+    "zero-knowledge",
+    "stark",
+    "proof",
+    "tinyzkp",
+    "cli",
+    "ai-agent",
+    "verifiable",
+    "mcp"
+  ],
+  "author": "TinyZKP <support@tinyzkp.com>",
+  "license": "MIT",
+  "homepage": "https://tinyzkp.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/logannye/hc-stark.git",
+    "directory": "clients/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/logannye/hc-stark/issues"
+  },
+  "type": "module",
+  "bin": {
+    "tinyzkp": "./bin/tinyzkp.js"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {},
+  "publishConfig": {
+    "access": "public"
+  }
+}

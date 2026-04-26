@@ -1,0 +1,6 @@
+.git
+.github
+.DS_Store
+*.test.js
+test/
+node_modules/
