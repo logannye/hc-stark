@@ -62,7 +62,7 @@ TinyZKP is a hosted ZK-STARK proving service that exposes verifiable computation
 | Field | Value |
 |---|---|
 | **Transport protocol** | Streamable HTTP (`POST /mcp`) — the modern MCP transport. Stdio also available via `hc-mcp-stdio` binary for desktop clients, but the directory listing should point at the remote URL. |
-| **Authentication type** | API key (Bearer token in `Authorization` header). See §3 for OAuth note. |
+| **Authentication type** | None today. The endpoint is public and rate-limited via a server-side concurrency cap (`HC_MCP_MAX_INFLIGHT=2`). API-key Bearer enforcement and per-tenant quota are tracked as a follow-up — see §3. |
 | **Read/write capabilities** | Reads: list/describe templates and workloads, poll job, get proof, verify proof. Writes (in the sense of consuming quota and creating server-side jobs): `prove_template`, `prove_workload`, `prove_zkml_template`, `prove_spartan_template`. No external mutation outside the user's own tenant. |
 | **Connection requirements** | Internet access to `mcp.tinyzkp.com` (port 443). API key in `TINYZKP_API_KEY` env var or `Authorization: Bearer tzk_…` header. |
 | **Origin validation** | The HTTP transport validates the `Origin` header against an allowlist that includes `https://claude.ai`, the Anthropic API, and TinyZKP's own domains. Configurable via `HC_MCP_ALLOWED_ORIGINS`. |
@@ -71,20 +71,20 @@ TinyZKP is a hosted ZK-STARK proving service that exposes verifiable computation
 ### One-line install
 
 ```
-claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com --header "Authorization: Bearer ${TINYZKP_API_KEY}"
+claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 ```
 
 ---
 
 ## 3. Note on authentication (read this before reviewing)
 
-The Anthropic submission requirements list "OAuth 2.0 for authenticated services." TinyZKP authenticates with a long-lived API key (`tzk_…`) presented as a bearer token, which is the dominant pattern for stateless dev-tooling MCP servers (e.g., Stripe's). We chose this because:
+The Anthropic submission requirements list "OAuth 2.0 for authenticated services." The current TinyZKP MCP endpoint is **unauthenticated** — anyone with the URL can call any of the 10 tools, capped only by a server-side concurrency limit (`HC_MCP_MAX_INFLIGHT=2`).
 
-1. **The protected resource is the tenant's own quota and proof history**, not an external account or third-party identity. There is no OAuth-style authorization to delegate; the user simply needs a key that proves they signed up.
-2. **Onboarding is one click.** The user copies their key from https://tinyzkp.com/account and pastes it into Claude Code or Cursor. No redirect, no consent screen, no token refresh logic.
-3. **Free tier means no payment is gated by auth.** The reviewer can fully exercise every tool with a free key.
+This is intentional for the launch:
 
-If Anthropic requires OAuth as a hard rejection criterion, we will implement OAuth 2.0 Client Credentials (server-to-server) and Authorization Code flows on top of the existing key store. Please flag this in the first round of review and we will turn it around in 1–2 weeks.
+1. **No protected user resource exists yet on the MCP path.** The MCP server runs the prover in-process and does not touch the per-tenant quota database; every MCP call is treated as anonymous. There is nothing for an attacker to steal — only proving CPU, which is rate-limited at the server.
+2. **Free tier means there is no paywall to authenticate.** The 100-proofs/month quota lives on the JSON-HTTP API at `api.tinyzkp.com` (which *does* require Bearer keys). The reviewer can exercise every MCP tool without any credential.
+3. **Roadmap.** Per-tenant Bearer enforcement (forwarding the `Authorization` header and metering against the same store as the JSON API) is on the roadmap. We will ship it before any paid plan gates MCP access. If Anthropic considers unauthenticated access disqualifying, we will accelerate this work — please flag it in the first round of review and we'll turn it around in 1–2 weeks.
 
 ---
 
@@ -130,19 +130,21 @@ No tool is marked `destructive` because none mutates anything outside the callin
 
 ## 6. Test account for the reviewer
 
-Provide these credentials in the **private** test-account field of the form. Do **not** paste them into any public-facing field.
+The MCP endpoint is currently public and unauthenticated, so **no test credential is required**. The reviewer can install in one line and exercise every tool with no key:
 
-> **Action required before submitting:** mint a fresh API key dedicated to the Anthropic reviewer, with an extra-quota override so the reviewer is never throttled.
->
-> ```
-> # On the production tenant DB (Hetzner):
-> docker exec -it hc-stark-hc-server-1 hc-admin issue-key \
->     --label "anthropic-mcp-reviewer" \
->     --plan developer \
->     --quota-override 5000
-> ```
->
-> Paste the returned `tzk_…` value into the form. Note the date and rotate it after the directory listing goes live.
+```
+claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
+```
+
+If the reviewer also wants to exercise the **JSON-HTTP API** at `api.tinyzkp.com` (which is the real per-tenant billed surface, not strictly required for the MCP review), provide a fresh API key in the form's private test-account field:
+
+```
+# On the production tenant DB (Hetzner):
+docker exec hc-stark-hc-server-1 hc-admin issue-key \
+    --label "anthropic-mcp-reviewer" \
+    --plan developer \
+    --quota-override 5000
+```
 
 **Email contact for the reviewer:** logan@tinyzkp.com
 
@@ -152,9 +154,9 @@ Provide these credentials in the **private** test-account field of the form. Do 
 
 Paste this verbatim into the "setup instructions" field.
 
-> **Setup (60 seconds, no install):**
+> **Setup (30 seconds, no signup, no API key):**
 >
-> 1. Run: `claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com --header "Authorization: Bearer <KEY-WE-PROVIDED>"`
+> 1. Run: `claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com`
 > 2. In a new Claude Code session, ask: *"Use the tinyzkp MCP to list all available proof templates."* → expect 6 templates: `range_proof`, `hash_preimage`, `computation_attestation`, `accumulator_step`, `policy_compliance`, `data_integrity`.
 > 3. Ask: *"Use the range_proof template to prove that 42 is between 0 and 100."* → expect a `job_id`, then `poll_job` returns `succeeded`, then `get_proof` returns base64 proof bytes.
 > 4. Ask: *"Use verify_proof on the proof you just generated."* → expect `{valid: true}`.
