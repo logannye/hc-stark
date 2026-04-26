@@ -98,12 +98,15 @@ create_resource() {
   fi
 }
 
-# Look up an existing TinyZKP product by exact name; print its id (or empty
-# string if none). Idempotency at the application layer: re-running the
-# script after the meter+products were already created reuses them.
+# Lookups bypass the Stripe CLI's resource subcommands (which have version-
+# dependent quirks for the billing namespace) and call the HTTP API directly
+# via curl with Basic auth (key as username, empty password).
+STRIPE_API="https://api.stripe.com/v1"
+
 find_product_id_by_name() {
   local name="$1"
-  TARGET="$name" stripe products list --limit 100 2>/dev/null | python3 -c "
+  TARGET="$name" curl -sS "${STRIPE_API}/products?limit=100" \
+    -u "${STRIPE_API_KEY}:" 2>/dev/null | python3 -c "
 import json, sys, os
 target = os.environ.get('TARGET', '')
 try:
@@ -119,7 +122,8 @@ except Exception:
 
 find_meter_id_by_event() {
   local event="$1"
-  TARGET="$event" stripe billing meters list --limit 100 2>/dev/null | python3 -c "
+  TARGET="$event" curl -sS "${STRIPE_API}/billing/meters?limit=100" \
+    -u "${STRIPE_API_KEY}:" 2>/dev/null | python3 -c "
 import json, sys, os
 target = os.environ.get('TARGET', '')
 try:
@@ -133,12 +137,11 @@ except Exception:
 "
 }
 
-# Find an existing price by (product, nickname); print id (or empty).
 find_price_id_by_nickname() {
   local product_id="$1"
   local nickname="$2"
-  TARGET_PROD="$product_id" TARGET_NICK="$nickname" \
-    stripe prices list --product "$product_id" --limit 100 2>/dev/null | python3 -c "
+  TARGET_NICK="$nickname" curl -sS "${STRIPE_API}/prices?product=${product_id}&limit=100" \
+    -u "${STRIPE_API_KEY}:" 2>/dev/null | python3 -c "
 import json, sys, os
 target_nick = os.environ.get('TARGET_NICK', '')
 try:
