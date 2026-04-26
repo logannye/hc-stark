@@ -18,7 +18,7 @@
   "homepage": "https://tinyzkp.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/logannye/hc-stark.git",
+    "url": "git+https://github.com/logannye/hc-stark.git",
     "directory": "clients/cli"
   },
   "bugs": {
@@ -26,7 +26,7 @@
   },
   "type": "module",
   "bin": {
-    "tinyzkp": "./bin/tinyzkp.js"
+    "tinyzkp": "bin/tinyzkp.js"
   },
   "files": [
     "bin/",
