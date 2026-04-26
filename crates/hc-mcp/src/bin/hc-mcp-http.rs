@@ -9,10 +9,91 @@ use hc_server::auth::AuthConfig;
 use rmcp::transport::streamable_http_server::{
     session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
 };
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
+
+/// Per-tenant fixed-window rate limit on the authenticated MCP path.
+///
+/// Mirrors the `FixedWindow` shape from hc-server but lives in-process
+/// here — sharing live state across the two binaries would require a
+/// shared backing store (Redis, etc.) which is its own design problem.
+/// Until that lands, a tenant who hits limits on both surfaces shares
+/// no quota — which is acceptable since the API and MCP have different
+/// abuse profiles and per-surface caps are still meaningful.
+#[derive(Clone, Debug, Default)]
+struct TenantWindow {
+    window_start_ms: u64,
+    count: u32,
+}
+
+#[derive(Default)]
+struct McpRateLimitState {
+    /// Per-tenant fixed window. Map keys are tenant_ids.
+    tenants: HashMap<String, TenantWindow>,
+}
+
+const RATE_LIMIT_WINDOW_MS: u64 = 60_000;
+/// Cap on map size to prevent unbounded memory under tenant-id spam.
+const MAX_RATE_LIMIT_ENTRIES: usize = 10_000;
+
+/// Default authenticated-lane limit per minute. Matches hc-server's
+/// developer-tier prove_rpm. Operators with paid plans should override
+/// via HC_MCP_TENANT_RPM (single global value applied to all
+/// authenticated tenants for now — per-plan ladder is a follow-up
+/// once we wire actual plan info from AuthConfig through to here).
+const DEFAULT_MCP_TENANT_RPM: u32 = 100;
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Returns true if the request fits inside the per-tenant window;
+/// false means the tenant is over quota. Increments the count on
+/// success — call exactly once per request that should consume quota.
+fn check_tenant_rate_limit(
+    state: &Mutex<McpRateLimitState>,
+    tenant_id: &str,
+    limit_per_minute: u32,
+) -> bool {
+    if limit_per_minute == 0 {
+        // 0 disables the per-tenant gate entirely.
+        return true;
+    }
+    let now = now_ms();
+    let mut s = state.lock().expect("rate-limit lock");
+
+    // Bound map growth: drop entries whose window has lapsed twice.
+    if s.tenants.len() > MAX_RATE_LIMIT_ENTRIES {
+        let cutoff = now.saturating_sub(2 * RATE_LIMIT_WINDOW_MS);
+        let stale: Vec<String> = s
+            .tenants
+            .iter()
+            .filter(|(_, w)| w.window_start_ms < cutoff)
+            .map(|(k, _)| k.clone())
+            .collect();
+        for k in stale {
+            s.tenants.remove(&k);
+        }
+    }
+
+    let win = s.tenants.entry(tenant_id.to_string()).or_default();
+    if now.saturating_sub(win.window_start_ms) >= RATE_LIMIT_WINDOW_MS {
+        win.window_start_ms = now;
+        win.count = 0;
+    }
+    if win.count >= limit_per_minute {
+        return false;
+    }
+    win.count += 1;
+    true
+}
 
 /// Default exact-match Origin allowlist. CLI / desktop clients (Claude Code,
 /// Claude Desktop, Cursor) typically send no Origin header at all, so a missing
@@ -96,7 +177,14 @@ async fn validate_origin(req: Request, next: Next) -> Response {
 /// On success, the tenant id (if any) is stamped onto the request as
 /// `x-mcp-tenant` so downstream observability + per-tenant accounting can
 /// pick it up without re-parsing the auth header.
-async fn validate_auth(auth: Arc<AuthConfig>, require: bool, req: Request, next: Next) -> Response {
+async fn validate_auth(
+    auth: Arc<AuthConfig>,
+    require: bool,
+    rate: Arc<Mutex<McpRateLimitState>>,
+    tenant_rpm: u32,
+    req: Request,
+    next: Next,
+) -> Response {
     let header_present = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
@@ -109,7 +197,8 @@ async fn validate_auth(auth: Arc<AuthConfig>, require: bool, req: Request, next:
             );
             return (StatusCode::UNAUTHORIZED, "missing Authorization header").into_response();
         }
-        // Anonymous public lane.
+        // Anonymous public lane: no per-tenant accounting (no tenant id),
+        // bounded only by the global HC_MCP_MAX_INFLIGHT cap downstream.
         let mut req = req;
         req.headers_mut().remove("x-mcp-tenant");
         return next.run(req).await;
@@ -117,6 +206,21 @@ async fn validate_auth(auth: Arc<AuthConfig>, require: bool, req: Request, next:
 
     match auth.authenticate(req.headers()) {
         Ok(tenant) => {
+            // Per-tenant rate gate. Burns 1 unit of quota per request.
+            // 429 mirrors the hc-server rate-limit response shape.
+            if !check_tenant_rate_limit(&rate, &tenant.tenant_id, tenant_rpm) {
+                tracing::warn!(
+                    tenant_id = %tenant.tenant_id,
+                    rpm = tenant_rpm,
+                    "rate-limited: tenant exceeded per-minute quota on MCP path"
+                );
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded — try again in <60s",
+                )
+                    .into_response();
+            }
+
             tracing::debug!(tenant_id = %tenant.tenant_id, plan = %tenant.plan, "mcp request authenticated");
             let mut req = req;
             // Stamp tenant id onto the request for downstream consumers.
@@ -182,6 +286,19 @@ async fn main() -> Result<()> {
         "mcp auth middleware initialized"
     );
 
+    // Per-tenant rate limit state, populated from HC_MCP_TENANT_RPM (default
+    // DEFAULT_MCP_TENANT_RPM). 0 disables the per-tenant gate; the
+    // anonymous lane keeps its global concurrency cap regardless.
+    let tenant_rpm: u32 = std::env::var("HC_MCP_TENANT_RPM")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_MCP_TENANT_RPM);
+    let rate_state = Arc::new(Mutex::new(McpRateLimitState::default()));
+    tracing::info!(
+        tenant_rpm,
+        "mcp per-tenant rate limit configured (0 = disabled)"
+    );
+
     let ct = CancellationToken::new();
 
     let config = StreamableHttpServerConfig {
@@ -203,6 +320,7 @@ async fn main() -> Result<()> {
         );
 
     let auth_for_layer = auth.clone();
+    let rate_for_layer = rate_state.clone();
     let router = axum::Router::new()
         .nest_service("/mcp", service)
         // Order matters: auth runs first so an unauthorized request never
@@ -210,7 +328,8 @@ async fn main() -> Result<()> {
         // paths (browser-based clients).
         .layer(middleware::from_fn(move |req, next| {
             let auth = auth_for_layer.clone();
-            async move { validate_auth(auth, require_auth, req, next).await }
+            let rate = rate_for_layer.clone();
+            async move { validate_auth(auth, require_auth, rate, tenant_rpm, req, next).await }
         }))
         .layer(middleware::from_fn(validate_origin));
 
@@ -237,13 +356,30 @@ mod tests {
 
     /// Build a small test router that runs validate_auth in front of an
     /// always-200 handler, then return a tower::ServiceExt-style call.
+    /// Rate limit is disabled (rpm=0) for the basic auth tests; see
+    /// `run_rate_limited` for tests that exercise the per-tenant gate.
     async fn run(
         auth: AuthConfig,
         require: bool,
         bearer: Option<&str>,
     ) -> (StatusCode, Option<String>) {
+        let (status, body, _rate) = run_full(auth, require, 0, bearer, None).await;
+        (status, body)
+    }
+
+    /// Variant that exercises the rate-limit gate. `rate_state` is reused
+    /// across calls to verify quota persists.
+    async fn run_full(
+        auth: AuthConfig,
+        require: bool,
+        tenant_rpm: u32,
+        bearer: Option<&str>,
+        rate_state: Option<Arc<Mutex<McpRateLimitState>>>,
+    ) -> (StatusCode, Option<String>, Arc<Mutex<McpRateLimitState>>) {
         let auth = Arc::new(auth);
         let auth_layer = auth.clone();
+        let rate = rate_state.unwrap_or_else(|| Arc::new(Mutex::new(McpRateLimitState::default())));
+        let rate_layer = rate.clone();
         let app: axum::Router = axum::Router::new()
             .route(
                 "/test",
@@ -257,7 +393,8 @@ mod tests {
             )
             .layer(middleware::from_fn(move |req, next| {
                 let a = auth_layer.clone();
-                async move { validate_auth(a, require, req, next).await }
+                let r = rate_layer.clone();
+                async move { validate_auth(a, require, r, tenant_rpm, req, next).await }
             }));
 
         let mut req = AxumRequest::builder().method(Method::GET).uri("/test");
@@ -270,7 +407,7 @@ mod tests {
         let status = resp.status();
         let body_bytes = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
         let body = String::from_utf8(body_bytes.to_vec()).ok();
-        (status, body)
+        (status, body, rate)
     }
 
     #[tokio::test]
@@ -322,5 +459,100 @@ mod tests {
                 .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
             "got: {body:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn rate_limit_allows_under_quota() {
+        let auth = AuthConfig::from_pairs(&[("acme", "tzk_test")]);
+        let rate = Arc::new(Mutex::new(McpRateLimitState::default()));
+
+        // 3 requests in a row, limit 5/min: all should succeed.
+        for _ in 0..3 {
+            let (status, _, _) = run_full(
+                auth.clone(),
+                false,
+                5,
+                Some("tzk_test"),
+                Some(rate.clone()),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+        }
+    }
+
+    #[tokio::test]
+    async fn rate_limit_blocks_over_quota_with_429() {
+        let auth = AuthConfig::from_pairs(&[("acme", "tzk_test")]);
+        let rate = Arc::new(Mutex::new(McpRateLimitState::default()));
+
+        // 3 successful, then 4th should 429.
+        for _ in 0..3 {
+            let (status, _, _) = run_full(
+                auth.clone(),
+                false,
+                3,
+                Some("tzk_test"),
+                Some(rate.clone()),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+        }
+        let (status, _, _) =
+            run_full(auth, false, 3, Some("tzk_test"), Some(rate.clone())).await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn rate_limit_isolated_per_tenant() {
+        let auth = AuthConfig::from_pairs(&[("acme", "key_a"), ("beta", "key_b")]);
+        let rate = Arc::new(Mutex::new(McpRateLimitState::default()));
+
+        // Burn acme's quota of 2.
+        for _ in 0..2 {
+            let (status, _, _) =
+                run_full(auth.clone(), false, 2, Some("key_a"), Some(rate.clone())).await;
+            assert_eq!(status, StatusCode::OK);
+        }
+        let (acme_blocked, _, _) =
+            run_full(auth.clone(), false, 2, Some("key_a"), Some(rate.clone())).await;
+        assert_eq!(acme_blocked, StatusCode::TOO_MANY_REQUESTS);
+
+        // beta should still have full quota — separate window.
+        let (beta_ok, _, _) =
+            run_full(auth, false, 2, Some("key_b"), Some(rate.clone())).await;
+        assert_eq!(beta_ok, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn rate_limit_disabled_when_rpm_is_zero() {
+        let auth = AuthConfig::from_pairs(&[("acme", "tzk_test")]);
+        let rate = Arc::new(Mutex::new(McpRateLimitState::default()));
+
+        // 100 requests with rpm=0 should all pass — gate is fully disabled.
+        for _ in 0..100 {
+            let (status, _, _) = run_full(
+                auth.clone(),
+                false,
+                0,
+                Some("tzk_test"),
+                Some(rate.clone()),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+        }
+    }
+
+    #[tokio::test]
+    async fn rate_limit_does_not_apply_to_anonymous_lane() {
+        // Anonymous (no Authorization) requests bypass per-tenant rate
+        // limits — only the global cap applies. Send many requests with
+        // a strict tenant_rpm and verify they all succeed.
+        let auth = AuthConfig::from_pairs(&[("acme", "tzk_test")]);
+        let rate = Arc::new(Mutex::new(McpRateLimitState::default()));
+
+        for _ in 0..20 {
+            let (status, _, _) = run_full(auth.clone(), false, 1, None, Some(rate.clone())).await;
+            assert_eq!(status, StatusCode::OK);
+        }
     }
 }

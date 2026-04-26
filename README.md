@@ -231,7 +231,7 @@ hc-stark ships as an **MCP server** so AI agents (Claude, GPT, Cursor) can gener
 claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 ```
 
-The hosted endpoint at `mcp.tinyzkp.com` accepts both public requests (no Authorization header — bounded by `HC_MCP_MAX_INFLIGHT=2`) and authenticated requests (`Authorization: Bearer tzk_...`). Authenticated requests get per-tenant accounting and bypass the global anonymous cap. Operators who want to lock down the public lane entirely can set `HC_MCP_REQUIRE_AUTH=true` to require Bearer on every call. The HTTP transport also validates the `Origin` header against an allowlist that includes `*.claude.ai`, `*.anthropic.com`, and `tinyzkp.com`.
+The hosted endpoint at `mcp.tinyzkp.com` accepts both public requests (no Authorization header — bounded by `HC_MCP_MAX_INFLIGHT=2`) and authenticated requests (`Authorization: Bearer tzk_...`). Authenticated requests get per-tenant fixed-window rate limiting (default 100 req/min, configurable via `HC_MCP_TENANT_RPM`) and bypass the global anonymous cap. Operators who want to lock down the public lane entirely can set `HC_MCP_REQUIRE_AUTH=true` to require Bearer on every call. The HTTP transport also validates the `Origin` header against an allowlist that includes `*.claude.ai`, `*.anthropic.com`, and `tinyzkp.com`.
 
 ### Local install (stdio)
 
@@ -532,7 +532,7 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 
 ### Next
 
-- Per-tenant rate limits + quota enforcement on authenticated MCP calls (Bearer tokens already validated; per-tenant accounting beyond the global cap is the next step)
+- Cross-process tenant quota: today the MCP and HTTP API maintain independent per-tenant windows. A shared backing store (Redis-class) would let a tenant's quota deplete uniformly across both surfaces.
 - Custom program sandboxing (paid tier)
 - Node.js native bindings package
 - GPU acceleration (CUDA/Metal kernels)
