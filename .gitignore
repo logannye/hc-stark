@@ -6,3 +6,4 @@
 .logs/
 
 billing/.stripe_ids.json
+billing/.stripe_webhook_secret
