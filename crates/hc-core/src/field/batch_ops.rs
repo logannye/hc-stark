@@ -9,8 +9,8 @@
 //! Element-wise routines (`add_slices`, `mul_slices`, `add_assign_slices`,
 //! ..., `linear_combination`, `butterfly_slice`) are **rayon-parallelized
 //! above a length threshold** controlled by `PAR_THRESHOLD`. Below the
-//! threshold the scalar path stays — rayon's worker-pool dispatch is
-//! ~few-µs latency, which dominates a 256-element multiply.
+//! threshold the scalar path stays — rayon's worker-pool dispatch overhead
+//! dominates field arithmetic at small sizes.
 //!
 //! The reductions (`dot_product`, `batch_inverse`) keep their sequential
 //! shape: `dot_product` is order-dependent under non-associative semantics
@@ -18,16 +18,36 @@
 //! so this is conservative — tracked as a follow-up), and `batch_inverse`
 //! has carry-style state across iterations that doesn't trivially
 //! parallelize.
+//!
+//! ## Threshold tuning
+//!
+//! `PAR_THRESHOLD` is empirically determined from the
+//! `sweep_par_threshold` ignored bench in this file's test module. On
+//! M4 Max the crossover for `mul_assign_slices` (no allocation) is
+//! between 262K and 524K elements:
+//!
+//!     size     scalar_us   parallel_us  speedup
+//!     262144   ~232        ~260          0.89x   (scalar wins)
+//!     524288   ~458        ~341          1.35x   (parallel wins)
+//!     1048576  ~924        ~515          1.79x
+//!     2097152  ~1843       ~857          2.15x
+//!
+//! Setting the threshold at 524K means we only parallelize when there's
+//! a clear win, and we never make small ops slower. An earlier value of
+//! 1024 (committed in Day 4) was reasoned by analogy to other rayon-
+//! using libraries but never benchmarked — it was 80× slower than
+//! scalar for sizes near the threshold and only marginally faster than
+//! scalar at typical FFT/composition slice sizes (16K-256K).
 
 use super::FieldElement;
 use rayon::prelude::*;
 
-/// Below this slice length, the scalar path runs serially. Above it, rayon
-/// dispatches across worker threads. The threshold is empirical: rayon's
-/// fork/join cost is roughly equivalent to a few thousand u64 multiplies on
-/// modern cores, so a 1024-element slice is the rough crossover where
-/// parallelism stops being a slowdown.
-const PAR_THRESHOLD: usize = 1024;
+/// Length threshold for switching from scalar to parallel iteration.
+/// Below this, the scalar fallback runs; at-or-above, rayon's
+/// par_iter/par_iter_mut takes over.
+///
+/// Set empirically from `sweep_par_threshold` — see module docs.
+const PAR_THRESHOLD: usize = 524_288;
 
 /// Montgomery's trick: compute the inverse of every element in `values` using
 /// a single field inversion plus `3(n-1)` multiplications.
@@ -481,6 +501,75 @@ mod tests {
     }
 
     #[test]
+    /// Sweep candidate thresholds across the scalar/parallel crossover
+    /// region, comparing mul_assign_slices wall time at each size to the
+    /// pure-scalar baseline. Use to retune PAR_THRESHOLD; print output
+    /// shows the multiplier at each size (>1.0 = parallel wins).
+    ///
+    ///     cargo test -p hc-core --release --lib \
+    ///       field::batch_ops::tests::sweep_par_threshold \
+    ///       -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn sweep_par_threshold() {
+        use rayon::prelude::*;
+        use std::time::Instant;
+
+        // Scalar reference for a single mul_assign pass.
+        fn scalar_mul_assign(a: &mut [F], b: &[F]) {
+            for (x, &y) in a.iter_mut().zip(b.iter()) {
+                *x = x.mul(y);
+            }
+        }
+        // Forced-parallel reference (always uses par_iter_mut).
+        fn par_mul_assign(a: &mut [F], b: &[F]) {
+            a.par_iter_mut().zip(b.par_iter()).for_each(|(x, &y)| {
+                *x = x.mul(y);
+            });
+        }
+
+        const ITERS: usize = 200;
+        let sizes: &[usize] = &[
+            256, 1024, 16_384, 65_536, 262_144, 524_288, 1_048_576, 2_097_152,
+        ];
+        println!("{:>10} {:>14} {:>14} {:>10}", "size", "scalar (us)", "parallel (us)", "speedup");
+        for &n in sizes {
+            let template_a = deterministic_field_vec(1, n);
+            let b = deterministic_field_vec(2, n);
+
+            // Warm up to amortize allocator + thread-pool startup.
+            let mut warm = template_a.clone();
+            par_mul_assign(&mut warm, &b);
+
+            // Scalar timing.
+            let t0 = Instant::now();
+            for _ in 0..ITERS {
+                let mut a = template_a.clone();
+                scalar_mul_assign(&mut a, &b);
+                std::hint::black_box(a);
+            }
+            let scalar_us =
+                (t0.elapsed().as_secs_f64() * 1_000_000.0) / ITERS as f64;
+
+            // Parallel timing.
+            let t0 = Instant::now();
+            for _ in 0..ITERS {
+                let mut a = template_a.clone();
+                par_mul_assign(&mut a, &b);
+                std::hint::black_box(a);
+            }
+            let par_us = (t0.elapsed().as_secs_f64() * 1_000_000.0) / ITERS as f64;
+
+            println!(
+                "{:>10} {:>14.2} {:>14.2} {:>9.2}x",
+                n,
+                scalar_us,
+                par_us,
+                scalar_us / par_us,
+            );
+        }
+    }
+
     fn par_path_handles_below_threshold_inputs() {
         // A length below the threshold should still produce correct
         // results — confirms we didn't break the small-input scalar path
