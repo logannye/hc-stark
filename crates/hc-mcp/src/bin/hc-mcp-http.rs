@@ -11,19 +11,25 @@ use rmcp::transport::streamable_http_server::{
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 
-/// Default Origin allowlist. Keep this conservative; deployments add to it via
-/// HC_MCP_ALLOWED_ORIGINS (comma-separated). Browser-based MCP clients send an
-/// Origin header; CLI / desktop clients (Claude Code, Claude Desktop, Cursor)
-/// typically do not, so a missing Origin is allowed.
+/// Default exact-match Origin allowlist. CLI / desktop clients (Claude Code,
+/// Claude Desktop, Cursor) typically send no Origin header at all, so a missing
+/// Origin is allowed. Deployments may add entries via HC_MCP_ALLOWED_ORIGINS
+/// (comma-separated). Browser-based clients on any subdomain of anthropic.com
+/// or claude.ai are accepted via the suffix list below — that covers Claude.ai,
+/// Cowork, and any future Anthropic surface without a redeploy.
 const DEFAULT_ALLOWED_ORIGINS: &[&str] = &[
-    "https://claude.ai",
-    "https://www.claude.ai",
-    "https://api.anthropic.com",
     "https://tinyzkp.com",
     "https://www.tinyzkp.com",
     "https://mcp.tinyzkp.com",
     "http://localhost",
     "http://127.0.0.1",
+];
+
+const ALLOWED_HOST_SUFFIXES: &[&str] = &[
+    ".anthropic.com",
+    ".claude.ai",
+    "anthropic.com",
+    "claude.ai",
 ];
 
 fn allowed_origins() -> Vec<String> {
@@ -41,11 +47,25 @@ fn allowed_origins() -> Vec<String> {
 
 fn origin_allowed(origin: &HeaderValue, allowlist: &[String]) -> bool {
     let Ok(s) = origin.to_str() else { return false };
-    allowlist.iter().any(|allowed| {
+
+    // Exact-match allowlist (with port/path tolerance)
+    if allowlist.iter().any(|allowed| {
         s == allowed.as_str()
             || s.starts_with(&format!("{}:", allowed))
             || s.starts_with(&format!("{}/", allowed))
-    })
+    }) {
+        return true;
+    }
+
+    // Suffix-match for *.anthropic.com / *.claude.ai (https only)
+    if let Some(rest) = s.strip_prefix("https://") {
+        let host = rest.split(['/', ':']).next().unwrap_or("");
+        return ALLOWED_HOST_SUFFIXES.iter().any(|suf| {
+            host == suf.trim_start_matches('.') || host.ends_with(suf)
+        });
+    }
+
+    false
 }
 
 async fn validate_origin(req: Request, next: Next) -> Response {
