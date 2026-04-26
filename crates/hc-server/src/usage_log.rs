@@ -29,6 +29,12 @@ pub struct UsageSummary {
 impl UsageLog {
     pub fn open(path: PathBuf) -> anyhow::Result<Self> {
         let conn = Connection::open(path).context("open usage sqlite")?;
+        // 5s busy_timeout: see job_index::open for rationale. usage_log
+        // sees roughly one INSERT per completed prove and is read by both
+        // the in-process /usage handler and the out-of-process billing
+        // cron, so contention is more likely here than on jobs.sqlite.
+        conn.busy_timeout(std::time::Duration::from_millis(5_000))
+            .context("set usage sqlite busy_timeout")?;
         conn.execute_batch(
             r#"
             PRAGMA journal_mode=WAL;

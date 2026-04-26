@@ -149,6 +149,10 @@ def main() -> None:
 
     conn = sqlite3.connect(USAGE_DB_PATH)
     conn.row_factory = sqlite3.Row
+    # The Rust hc-server holds writer locks on this same file. Wait up to
+    # 5s for contention rather than returning SQLITE_BUSY immediately —
+    # matches the Rust side (crates/hc-server/src/usage_log.rs).
+    conn.execute("PRAGMA busy_timeout = 5000")
 
     rows = conn.execute(
         "SELECT id, tenant_id, job_id, trace_length, completed_at_ms "
