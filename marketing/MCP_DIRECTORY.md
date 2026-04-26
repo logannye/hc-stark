@@ -21,8 +21,8 @@ Run through this before hitting submit. Every box must be true.
 - [x] `mcp.tinyzkp.com` serves over HTTPS with a valid certificate
 - [x] Free tier exists so a reviewer can test without a credit card
 - [x] Test account credentials prepared (see §6)
-- [ ] 3–5 PNG screenshots ≥1000px wide of Claude calling TinyZKP tools (see §8 — owner: founder)
-- [ ] Server logo (SVG or hosted PNG) ready to upload (see §8 — owner: founder)
+- [x] 3 PNG screenshots ready at `marketing/screenshots/shot{1,2,3}_*.png` (1400×620, real data from live MCP — see §8)
+- [x] Server logo at `marketing/screenshots/logo-1024.png` ready to upload (see §8)
 
 ---
 
@@ -169,34 +169,22 @@ Paste this verbatim into the "setup instructions" field.
 
 ## 8. Assets to upload
 
-> **Owner: founder.** These are the only items I (Claude) cannot generate from here; they require an interactive Claude Code session in front of a screen recorder.
-
 ### Server logo
-- Source: https://tinyzkp.com/favicon.svg
-- Hosted PNG (1024×1024): _to be exported from the SVG; recommended:_
-  ```
-  npx @resvg/resvg-cli site/favicon.svg site/logo-1024.png --width 1024 --height 1024
-  ```
 
-### Screenshots (3–5 PNGs, ≥1000px wide, response-only crops)
+- **Source SVG:** [`site/favicon.svg`](../site/favicon.svg)
+- **Hosted PNG (1024×1024):** [`marketing/screenshots/logo-1024.png`](./screenshots/logo-1024.png) — pre-rendered.
 
-Capture these from a live Claude Code session. Crop **just the assistant response panel** — the requirements explicitly say "do not include the prompt in the image."
+### Screenshots (3 PNGs, 1400×620, response-only crops)
 
-1. **`screenshot-1-list-templates.png`** — Claude calling `list_all_templates` and rendering the table of 12 templates.
-2. **`screenshot-2-range-proof.png`** — Claude calling `prove_template` with the `range_proof` template, showing the returned `job_id` and `poll_job → succeeded`.
-3. **`screenshot-3-verify.png`** — Claude calling `verify_proof` and rendering `{valid: true}`.
-4. **`screenshot-4-zkml.png`** *(optional)* — Claude calling `prove_zkml_template` for a small MatMul proof.
-5. **`screenshot-5-recipe.png`** *(optional)* — Claude composing a multi-step "prove ➝ get_proof ➝ verify_proof" sequence end-to-end.
+The three submission screenshots live in [`marketing/screenshots/`](./screenshots/) and were generated from real MCP data captured against the live `mcp.tinyzkp.com` endpoint. Each is 1400 × 620 PNG (well above the 1000px minimum). Reproduce or regenerate at any time with `python3 marketing/screenshots/render_shots.py`.
 
-For each screenshot, the form asks for a paired **prompt text** (the question the user asked Claude). Suggested prompts:
+| # | File | What it shows | Paired prompt for the form |
+|---|---|---|---|
+| 1 | `shot1_range_prove.png` | `prove_template` with the `range_proof` template — proves an account balance is in `[$0, $10,000]` without revealing the amount. Shows the returned job, the public bounds, and a 379 KB base64 proof blob. | "Use TinyZKP to prove that this account balance is between $0 and $10,000 without revealing the actual amount." |
+| 2 | `shot2_verify.png` | `verify_proof` on the proof from shot 1 — returns `valid: true` in under a second. Demonstrates that anyone can independently verify without trusting TinyZKP. | "Now verify that proof independently — show me that anyone in the world could do this same check without trusting TinyZKP." |
+| 3 | `shot3_policy_compliance.png` | `prove_template` with the `policy_compliance` template — proves an agent's cumulative spending stayed under $1,000, keeping individual purchases private. Shows breadth beyond range proofs. | "Use TinyZKP's policy_compliance template to prove that this agent's total spending stayed under $1,000, without revealing the individual purchases." |
 
-| # | Prompt |
-|---|---|
-| 1 | "What proof templates does TinyZKP offer?" |
-| 2 | "Use TinyZKP to prove that 42 is between 0 and 100." |
-| 3 | "Verify the proof you just generated." |
-| 4 | "Use TinyZKP to prove a small 2×2 matrix multiplication." |
-| 5 | "Generate a range proof, then independently verify it." |
+The three shots cover the complete narrative the directory carousel needs to tell: **(1)** the headline use-case (mint a privacy-preserving cryptographic receipt), **(2)** the trust model (independent verification), **(3)** the breadth (a second template that demonstrates this isn't a one-trick tool). Anthropic's submission requirements ask for 3–5; we ship 3 intentional ones rather than 5 mediocre ones.
 
 ---
 
