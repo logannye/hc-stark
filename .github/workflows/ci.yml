@@ -49,6 +49,18 @@ jobs:
         if: runner.arch == 'X64'
         run: cargo test -p hc-simd --features avx2
 
+      # Compile the criterion regression benches so they don't bitrot.
+      # Full baseline-comparison gating is a follow-up — for now, the
+      # build gate alone catches API drift in the bench file.
+      - name: criterion benches compile
+        run: cargo bench -p hc-core --bench field_arithmetic --no-run
+
+      # Smoke-run the benches with --quick to verify they execute end-to-end
+      # in CI hardware. --quick caps each measurement at ~1s so total runtime
+      # stays bounded.
+      - name: criterion benches smoke run
+        run: cargo bench -p hc-core --bench field_arithmetic -- --quick --warm-up-time 1 --measurement-time 2
+
       - name: scaling invariant tests
         run: cargo test -p hc-bench --features scaling-tests
 

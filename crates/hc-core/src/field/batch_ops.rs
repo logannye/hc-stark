@@ -295,10 +295,10 @@ mod tests {
 
     #[test]
     fn batch_inverse_correctness() {
-        let values: Vec<F> = (1..=10).map(|i| F::from_u64(i)).collect();
+        let values: Vec<F> = (1..=10).map(F::from_u64).collect();
         let inverses = batch_inverse_nonzero(&values);
         for (v, inv) in values.iter().zip(inverses.iter()) {
-            assert_eq!(v.mul(*inv), F::ONE, "inverse of {:?} failed", v);
+            assert_eq!(v.mul(*inv), F::ONE, "inverse of {v:?} failed");
         }
     }
 

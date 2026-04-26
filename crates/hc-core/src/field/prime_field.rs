@@ -8,6 +8,11 @@ use super::{FieldElement, TwoAdicField};
 
 /// Prime modulus `p = 2^64 - 2^32 + 1`.
 pub const GOLDILOCKS_MODULUS: u64 = 0xFFFFFFFF00000001;
+/// 128-bit form of the modulus. Only the test oracle uses it now (fast
+/// reduction lives entirely in u64 register-wide arithmetic). Kept
+/// available as a documented constant; gated to test builds to silence
+/// dead_code under `clippy -D warnings`.
+#[cfg(test)]
 const MODULUS_U128: u128 = GOLDILOCKS_MODULUS as u128;
 const MODULUS_MINUS_TWO: u64 = GOLDILOCKS_MODULUS - 2;
 /// `EPSILON = 2^32 - 1 = p mod 2^64`. Equivalent to `2^64 mod p`. Used as
@@ -74,7 +79,7 @@ impl GoldilocksField {
         let lo = t as u64; // bits 0..64 of t
         let hi_word = (t >> 64) as u64; // bits 64..128
         let hi = hi_word >> 32; // bits 96..128 of t, in [0, 2^32)
-        let mid = hi_word & EPSILON as u64; // bits 64..96 of t, in [0, 2^32)
+        let mid = hi_word & EPSILON; // bits 64..96 of t, in [0, 2^32)
 
         // Step 1: t1 ≡ lo - hi (mod p).
         // If `lo < hi` we underflow the u64; the wrapped value represents
