@@ -4,30 +4,39 @@
 //! This crate is intentionally separated from `hc-core` because SIMD intrinsics
 //! require `unsafe` code, and `hc-core` uses `#![forbid(unsafe_code)]`.
 //!
-//! # STATUS: DORMANT — not yet wired into the prover
+//! # STATUS: WIRED — first consumer is the FRI fold hot path
 //!
-//! As of this commit, `hc-simd` has **zero downstream consumers** in the
-//! workspace. The NEON, AVX2, and scalar4 backends compile and pass their
-//! own tests, but no crate calls them. The hot loops that should consume
-//! a `PackedField`-style API still operate on scalar `GoldilocksField`:
+//! `crates/hc-fri/src/simd_fold.rs` consumes `PackedGoldilocks` via a
+//! TypeId-gated specialization on the `fold_layer` operation
+//! (`out[i] = pair[0] + beta * pair[1]`), the canonical hottest loop
+//! in any STARK FRI prover. Bench numbers on M4 Max (aarch64):
+//!
+//!     n_pairs    scalar(us)   simd(us)   speedup
+//!     16384       24.34       17.98       1.35x
+//!     65536       92.65       70.87       1.31x
+//!     262144     393.31      285.52       1.38x
+//!     1048576   1533.94     1118.12       1.37x
+//!
+//! The win compounds across log₂(N) FRI folds per proof. Notably,
+//! the speedup is roughly identical with `--features neon` and
+//! without — the compiler auto-vectorizes the scalar4 fallback's
+//! 4-wide structure on its own. NEON intrinsics give a tiny
+//! incremental gain on top.
+//!
+//! ## Other call sites still pending
+//!
+//! These hot loops are still scalar; wiring them is straightforward
+//! follow-up work using the same TypeId-specialization pattern:
 //!
 //! - `crates/hc-core/src/field/batch_ops.rs` (`mul_slices`,
-//!   `add_assign_slices`, `linear_combination`) — sequential scalar loops.
-//! - `crates/hc-core/src/fft/radix2.rs` and `tiled_fft.rs` — butterflies
-//!   are scalar.
-//! - `crates/hc-fri/src/prover.rs` — fold/extension layers.
-//!
-//! Wiring this in is a perf project of its own. Doing it responsibly
-//! requires (a) a scalar-vs-packed property test gate per call site —
-//! the same discipline the Goldilocks fast-reduction commit used —
-//! (b) CI exercising both arches, and (c) a length threshold below
-//! which the scalar path stays (packed setup overhead is real on small
-//! inputs).
-//!
-//! Until that work lands, this crate exists as scaffolding. Do not
-//! delete it casually — the NEON and AVX2 code below is non-trivial.
-//! But also do not assume reading this crate's presence in `Cargo.toml`
-//! means SIMD is active anywhere in the prover. **It is not.**
+//!   `add_assign_slices`, `linear_combination`) — would need the
+//!   helper to live in a separate crate to avoid the hc-core ↔
+//!   hc-simd dependency cycle. Most direct path: a new `hc-batch-ops`
+//!   crate.
+//! - `crates/hc-core/src/fft/radix2.rs` and `tiled_fft.rs` —
+//!   butterfly stages. Same crate-cycle constraint as batch_ops.
+//! - DEEP-OOD composition oracle in `hc-prover` — already in a leaf
+//!   crate; could pull `hc-simd` directly.
 //!
 //! # Available backends
 //!

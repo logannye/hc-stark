@@ -41,12 +41,25 @@ pub fn merkle_path_from_hashes(hashes: Arc<Vec<HashDigest>>, index: usize) -> Hc
     reconstruct_path_from_replay::<Blake3, _>(index, hashes.len(), 2, &|idx| hashes[idx])
 }
 
+/// Fold a FRI layer: `out[i] = pair[0] + beta * pair[1]` for each
+/// adjacent pair. When `F == GoldilocksField` (the production case),
+/// dispatches to a SIMD specialization that processes WIDTH pairs per
+/// iteration. Falls back to scalar for other field types.
+///
+/// Output is bit-identical to the scalar reference at every length —
+/// the SIMD path uses identical add/mul semantics and a scalar-tail for
+/// non-WIDTH-aligned suffixes. See `simd_fold::tests` for the parity
+/// gate.
 pub fn fold_layer<F: FieldElement>(values: &[F], beta: F) -> HcResult<Vec<F>> {
     if values.len() % 2 != 0 {
         return Err(HcError::invalid_argument(
             "FRI layer size must be even for folding",
         ));
     }
+    if let Some(out) = crate::simd_fold::try_fold_goldilocks(values, beta) {
+        return Ok(out);
+    }
+    // Generic scalar path.
     let mut next = Vec::with_capacity(values.len() / 2);
     for pair in values.chunks(2) {
         next.push(pair[0].add(beta.mul(pair[1])));

@@ -11,6 +11,18 @@ hc-core = { path = "../hc-core" }
 hc-hash = { path = "../hc-hash" }
 hc-replay = { path = "../hc-replay" }
 hc-commit = { path = "../hc-commit" }
+# SIMD specialization for the Goldilocks FRI fold hot path. Per-arch
+# backends (NEON/AVX2) are gated behind features so unrelated builds
+# don't pull in unsafe code paths they won't exercise.
+hc-simd = { path = "../hc-simd" }
 thiserror = "1.0"
 rayon = "1.8"
+
+[features]
+default = []
+# Forward to the corresponding hc-simd features. Enabling either
+# arch-specific feature switches the FRI fold to a packed Goldilocks
+# implementation when F == GoldilocksField (runtime TypeId check).
+neon = ["hc-simd/neon"]
+avx2 = ["hc-simd/avx2"]
 
