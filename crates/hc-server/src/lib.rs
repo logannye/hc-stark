@@ -63,6 +63,12 @@ pub struct AppState {
     auth: Arc<std::sync::RwLock<AuthConfig>>,
     auth_guard: AuthGuard,
     verify_inflight: Arc<tokio::sync::Semaphore>,
+    /// Caps the number of concurrent hc-worker subprocesses across all
+    /// tenants. Per-tenant inflight (PlanLimits.max_inflight) still
+    /// applies on top; this is the global guard against EMFILE / kernel
+    /// process-table exhaustion under spike load. Acquired before the
+    /// `Command::spawn()` call, released when the child exits.
+    worker_spawn_inflight: Arc<tokio::sync::Semaphore>,
     job_index: Option<Arc<job_index::JobIndex>>,
     usage_log: Option<Arc<usage_log::UsageLog>>,
     rate_limits: Arc<Mutex<HashMap<String, TenantRateLimits>>>,
@@ -140,6 +146,11 @@ struct Metrics {
     /// Histogram of `tokio::process::Command::spawn` time for hc-worker
     /// in seconds. Surfaces fork/exec tax under load + EMFILE pressure.
     worker_spawn_seconds: Histogram,
+    /// Available permits in the global worker-spawn semaphore. A
+    /// reading of 0 means every prove request is queueing on the
+    /// `max_worker_spawn` cap rather than firing an immediate spawn.
+    /// Updated opportunistically from the GC tick.
+    worker_spawn_permits_available: IntGauge,
     /// Gauge of jobs queued (status=pending) across all tenants. Read
     /// from job_index. Refreshed on each prove submission and each GC tick.
     job_queue_depth: IntGauge,
@@ -221,6 +232,11 @@ impl Metrics {
             "current number of jobs in pending state (waiting to start)",
         )
         .expect("gauge must be valid");
+        let worker_spawn_permits_available = IntGauge::new(
+            "hc_worker_spawn_permits_available",
+            "free permits in the global worker-spawn semaphore (0 = saturated)",
+        )
+        .expect("gauge must be valid");
 
         for m in [
             Box::new(prove_submitted.clone()) as Box<dyn prometheus::core::Collector>,
@@ -237,6 +253,7 @@ impl Metrics {
             Box::new(sqlite_lock_wait_seconds.clone()),
             Box::new(worker_spawn_seconds.clone()),
             Box::new(job_queue_depth.clone()),
+            Box::new(worker_spawn_permits_available.clone()),
         ] {
             registry.register(m).expect("register must succeed");
         }
@@ -257,6 +274,7 @@ impl Metrics {
             sqlite_lock_wait_seconds,
             worker_spawn_seconds,
             job_queue_depth,
+            worker_spawn_permits_available,
         }
     }
 }
@@ -277,6 +295,11 @@ struct ServerConfig {
     max_block_size: usize,
     min_query_count: usize,
     max_rate_limit_entries: usize,
+    /// Global cap on concurrent hc-worker subprocess spawns. Bounds the
+    /// fork+exec rate + open-FD count so a request burst can't push the
+    /// kernel into EMFILE territory. Default 32 (override via
+    /// HC_SERVER_MAX_WORKER_SPAWN); 0 disables the cap entirely.
+    max_worker_spawn: usize,
 }
 
 impl ServerConfig {
@@ -351,6 +374,10 @@ impl ServerConfig {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(80);
+        let max_worker_spawn = std::env::var("HC_SERVER_MAX_WORKER_SPAWN")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(32);
         Ok(Self {
             data_dir: PathBuf::from(data_dir),
             max_inflight_jobs,
@@ -366,6 +393,7 @@ impl ServerConfig {
             max_block_size,
             min_query_count,
             max_rate_limit_entries: 10_000,
+            max_worker_spawn,
         })
     }
 }
@@ -562,10 +590,18 @@ pub async fn run() -> anyhow::Result<()> {
         None
     };
 
+    // 0 → unbounded (Semaphore::new(usize::MAX) is effectively a no-op
+    // since we never expect that many concurrent waiters).
+    let worker_permits = if cfg.max_worker_spawn == 0 {
+        usize::MAX
+    } else {
+        cfg.max_worker_spawn
+    };
     let state = AppState {
         jobs: Arc::new(Mutex::new(HashMap::new())),
         metrics: Metrics::new(),
         verify_inflight: Arc::new(tokio::sync::Semaphore::new(cfg.max_verify_inflight)),
+        worker_spawn_inflight: Arc::new(tokio::sync::Semaphore::new(worker_permits)),
         cfg,
         auth,
         auth_guard: AuthGuard::new(),
@@ -623,6 +659,13 @@ pub async fn run() -> anyhow::Result<()> {
                         .with_label_values(&["jobs", "read"])
                         .observe(lock_t0.elapsed().as_secs_f64());
                 }
+                // Refresh worker-spawn permit gauge. Operators tracking
+                // saturation watch this; persistent 0 means the cap is
+                // throttling (raise HC_SERVER_MAX_WORKER_SPAWN, or scale).
+                gc_state
+                    .metrics
+                    .worker_spawn_permits_available
+                    .set(gc_state.worker_spawn_inflight.available_permits() as i64);
             }
         });
     }
@@ -790,6 +833,7 @@ pub fn test_state(temp_dir: PathBuf) -> AppState {
         max_block_size: usize::MAX,
         min_query_count: 1,
         max_rate_limit_entries: 10_000,
+        max_worker_spawn: 16,
     };
     let auth = Arc::new(std::sync::RwLock::new(AuthConfig::default()));
     fs::create_dir_all(cfg.data_dir.join("jobs")).expect("create jobs dir");
@@ -797,6 +841,7 @@ pub fn test_state(temp_dir: PathBuf) -> AppState {
         jobs: Arc::new(Mutex::new(HashMap::new())),
         metrics: Metrics::new(),
         verify_inflight: Arc::new(tokio::sync::Semaphore::new(cfg.max_verify_inflight)),
+        worker_spawn_inflight: Arc::new(tokio::sync::Semaphore::new(cfg.max_worker_spawn)),
         cfg,
         auth,
         auth_guard: AuthGuard::new(),
@@ -1115,6 +1160,7 @@ fn spawn_prove_worker(
             max,
             cancel,
             Some(&state2.metrics.worker_spawn_seconds),
+            Some(state2.worker_spawn_inflight.clone()),
         )
         .await;
 
@@ -2922,6 +2968,7 @@ async fn prove_with_worker_process(
     max: Duration,
     cancel: CancellationToken,
     spawn_histogram: Option<&Histogram>,
+    spawn_inflight: Option<Arc<tokio::sync::Semaphore>>,
 ) -> anyhow::Result<hc_sdk::types::ProofBytes> {
     // Re-check server-side safety invariants before spawning the worker.
     // Either workload_id OR template_id is sufficient to authorize the
@@ -2938,6 +2985,20 @@ async fn prove_with_worker_process(
 
     let request_path = PathBuf::from(job_dir).join("request.json");
     let out_path = PathBuf::from(job_dir).join("proof.json");
+
+    // Acquire a worker-spawn permit before fork+exec. Bounds the
+    // simultaneous subprocess count across all tenants so a request
+    // burst can't push the kernel into EMFILE / process-table
+    // exhaustion. Permit is held for the whole prove; dropped on
+    // function return (success, timeout, cancel, or error).
+    let _spawn_permit = match spawn_inflight {
+        Some(sem) => Some(
+            sem.acquire_owned()
+                .await
+                .map_err(|e| anyhow::anyhow!("worker spawn semaphore closed: {e}"))?,
+        ),
+        None => None,
+    };
 
     let worker = worker_executable_path();
     let spawn_started = std::time::Instant::now();
@@ -3167,5 +3228,54 @@ mod worker_validation_tests {
         std::env::remove_var("HC_SERVER_WORKER_PATH");
 
         result.expect("valid executable must succeed");
+    }
+}
+
+#[cfg(test)]
+mod worker_spawn_pool_tests {
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+
+    /// Verify the worker-spawn semaphore actually serializes acquisitions
+    /// — at most `permits` concurrent holders. This is the contract the
+    /// hc-server boot wiring relies on; a regression here would silently
+    /// disable the EMFILE protection.
+    #[tokio::test]
+    async fn worker_spawn_semaphore_caps_concurrency() {
+        const PERMITS: usize = 4;
+        const TASKS: usize = 32;
+
+        let sem = Arc::new(Semaphore::new(PERMITS));
+        let max_concurrent = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let cur_concurrent = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        let mut handles = Vec::new();
+        for _ in 0..TASKS {
+            let sem_t = sem.clone();
+            let max_t = max_concurrent.clone();
+            let cur_t = cur_concurrent.clone();
+            handles.push(tokio::spawn(async move {
+                let _permit = sem_t.acquire_owned().await.expect("acquire");
+                // Mimic spawn cost — short delay so tasks overlap.
+                let now = cur_t.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                max_t.fetch_max(now, std::sync::atomic::Ordering::SeqCst);
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                cur_t.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+            }));
+        }
+        for h in handles {
+            h.await.expect("task ok");
+        }
+
+        let observed_max = max_concurrent.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            observed_max <= PERMITS,
+            "concurrency exceeded permits: observed {observed_max} > {PERMITS}"
+        );
+        assert!(
+            observed_max >= 2,
+            "test was too sequential to verify capping (observed {observed_max}); \
+             check that PERMITS={PERMITS} and TASKS={TASKS} actually overlap"
+        );
     }
 }
