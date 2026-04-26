@@ -41,8 +41,29 @@ jobs:
       - name: unit tests
         run: cargo test --workspace
 
+      # CI runs on Ubuntu/x86_64. Exercise the AVX2 backend explicitly so
+      # the dormant SIMD code in hc-simd doesn't bitrot until someone
+      # finally wires it into the hot paths. NEON tests run on macos/aarch64
+      # if/when a macos matrix is added.
+      - name: hc-simd avx2 tests (x86_64)
+        if: runner.arch == 'X64'
+        run: cargo test -p hc-simd --features avx2
+
+      - name: scaling invariant tests
+        run: cargo test -p hc-bench --features scaling-tests
+
       - name: recursion circuit tests
         run: cargo test -p hc-recursion
+
+      - name: cargo audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --deny warnings
+
+      - name: cargo deny
+        run: |
+          cargo install cargo-deny --locked
+          cargo deny check
 
       - name: Sanity suite
         run: ./scripts/test_suite.sh sanity
@@ -55,6 +76,9 @@ jobs:
 
       - name: Prover benchmark snapshot
         run: cargo run -p hc-cli -- bench --iterations 2 --block-size 8 --scenario prover
+
+      - name: Verifier benchmark snapshot
+        run: cargo run -p hc-cli -- bench --iterations 5 --scenario verifier --metrics-dir benchmarks/verifier --metrics-tag ci
 
       - name: Recursive aggregation smoke test
         run: |
@@ -87,45 +111,7 @@ jobs:
             benchmarks/height_history.jsonl
             benchmarks/height_dashboard.md
             benchmarks/height_trend.png
+            benchmarks/verifier/latest.json
+            benchmarks/verifier/verifier_history.jsonl
           if-no-files-found: ignore
-name: CI
-
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-
-env:
-  CARGO_TERM_COLOR: always
-
-jobs:
-  lint-and-test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
-
-      - name: Install toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Format
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Tests
-        run: cargo test --workspace --all-targets --no-fail-fast
-
-      - name: Recursion circuit tests
-        run: cargo test -p hc-recursion --all-targets
-
-      - name: Docs
-        run: cargo doc --workspace --no-deps
 
