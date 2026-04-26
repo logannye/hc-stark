@@ -1,8 +1,18 @@
 // Cloudflare Pages Function — creates a Stripe Checkout session.
 //
-// Secrets required (set via `wrangler pages secret put`):
-//   STRIPE_SECRET_KEY — sk_live_... or sk_test_...
-//   STRIPE_PRICE_ID  — price_...
+// Secrets required (set via `wrangler pages secret put --project-name tinyzkp`):
+//   STRIPE_SECRET_KEY               — sk_live_... or sk_test_...
+//   STRIPE_PRICE_ID_METERED         — metered usage price (replaces legacy STRIPE_PRICE_ID)
+//   STRIPE_PRICE_ID_DEVELOPER       — $9/mo Developer flat price
+//   STRIPE_PRICE_ID_DEVELOPER_ANNUAL — $86.40/yr Developer annual
+//   STRIPE_PRICE_ID_TEAM            — $49/mo Team flat price
+//   STRIPE_PRICE_ID_TEAM_ANNUAL     — $470.40/yr Team annual
+//   STRIPE_PRICE_ID_SCALE           — $199/mo Scale flat price
+//   STRIPE_PRICE_ID_SCALE_ANNUAL    — $1,910.40/yr Scale annual
+//
+// Request body: { email, plan, cadence }
+//   plan    ∈ {"developer", "team", "scale"}      (free/verifier-only handled elsewhere)
+//   cadence ∈ {"monthly", "annual"}               (default "monthly")
 
 const RATE_LIMIT_MAX = 10;         // max requests per window per IP
 const RATE_LIMIT_WINDOW_S = 300;   // 5-minute window
@@ -28,6 +38,29 @@ async function checkRateLimit(ip) {
   return true;
 }
 
+// Resolve the flat-fee price ID for (plan, cadence). Returns null if the
+// matching env secret isn't set; caller falls back to metered-only billing
+// so an incomplete deploy never breaks a signup.
+function flatPriceFor(env, plan, cadence) {
+  const annual = cadence === "annual";
+  switch (plan) {
+    case "developer":
+      return annual
+        ? (env.STRIPE_PRICE_ID_DEVELOPER_ANNUAL || env.STRIPE_PRICE_ID_DEVELOPER || null)
+        : (env.STRIPE_PRICE_ID_DEVELOPER || null);
+    case "team":
+      return annual
+        ? (env.STRIPE_PRICE_ID_TEAM_ANNUAL || env.STRIPE_PRICE_ID_TEAM || null)
+        : (env.STRIPE_PRICE_ID_TEAM || null);
+    case "scale":
+      return annual
+        ? (env.STRIPE_PRICE_ID_SCALE_ANNUAL || env.STRIPE_PRICE_ID_SCALE || null)
+        : (env.STRIPE_PRICE_ID_SCALE || null);
+    default:
+      return null;
+  }
+}
+
 export async function onRequestPost(context) {
   const origin = context.request.headers.get("Origin") || "";
   const allowedOrigin = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com"
@@ -50,7 +83,8 @@ export async function onRequestPost(context) {
       });
     }
 
-    const { email, plan } = await context.request.json();
+    const body = await context.request.json();
+    const { email } = body;
     if (!email || !email.includes("@") || email.length > 254) {
       return new Response(JSON.stringify({ error: "valid email required" }), {
         status: 400,
@@ -58,14 +92,13 @@ export async function onRequestPost(context) {
       });
     }
 
-    const selectedPlan = (plan === "team" || plan === "scale") ? plan : "developer";
+    const planRaw = body.plan;
+    const selectedPlan = (planRaw === "team" || planRaw === "scale") ? planRaw : "developer";
+    const cadence = body.cadence === "annual" ? "annual" : "monthly";
 
     const STRIPE_SECRET_KEY = context.env.STRIPE_SECRET_KEY;
-    // Metered usage price (all paid plans).
+    // Metered usage price (all paid plans). Legacy fallback to STRIPE_PRICE_ID.
     const STRIPE_PRICE_ID_METERED = context.env.STRIPE_PRICE_ID_METERED || context.env.STRIPE_PRICE_ID;
-    // Flat monthly subscription prices (Team/Scale only).
-    const STRIPE_PRICE_ID_TEAM = context.env.STRIPE_PRICE_ID_TEAM;
-    const STRIPE_PRICE_ID_SCALE = context.env.STRIPE_PRICE_ID_SCALE;
 
     if (!STRIPE_SECRET_KEY || !STRIPE_PRICE_ID_METERED) {
       return new Response(JSON.stringify({ error: "server misconfigured" }), {
@@ -81,19 +114,24 @@ export async function onRequestPost(context) {
     // All paid plans include metered usage billing.
     params.append("line_items[0][price]", STRIPE_PRICE_ID_METERED);
 
-    // Team and Scale plans add a flat monthly subscription.
-    if (selectedPlan === "team" && STRIPE_PRICE_ID_TEAM) {
-      params.append("line_items[1][price]", STRIPE_PRICE_ID_TEAM);
-      params.append("line_items[1][quantity]", "1");
-    } else if (selectedPlan === "scale" && STRIPE_PRICE_ID_SCALE) {
-      params.append("line_items[1][price]", STRIPE_PRICE_ID_SCALE);
+    // Add the flat-fee price for the selected (plan, cadence). If the
+    // matching env var isn't set yet (e.g., a partial Cloudflare deploy
+    // before secrets are pushed), fall back to metered-only so the signup
+    // doesn't break — customer pays $0 base + usage until the env is
+    // complete, which is graceful in the customer-friendly direction.
+    const flatPriceId = flatPriceFor(context.env, selectedPlan, cadence);
+    if (flatPriceId) {
+      params.append("line_items[1][price]", flatPriceId);
       params.append("line_items[1][quantity]", "1");
     }
 
-    // Pass plan in metadata so the webhook can extract it during provisioning.
+    // Pass plan + cadence in metadata so the webhook can extract them
+    // during tenant provisioning.
     params.append("metadata[plan]", selectedPlan);
+    params.append("metadata[cadence]", cadence);
     params.append("subscription_data[metadata][plan]", selectedPlan);
-    params.append("success_url", "https://tinyzkp.com/welcome?plan=" + selectedPlan);
+    params.append("subscription_data[metadata][cadence]", cadence);
+    params.append("success_url", `https://tinyzkp.com/welcome?plan=${selectedPlan}&cadence=${cadence}`);
     params.append("cancel_url", "https://tinyzkp.com/signup?cancelled=true");
 
     const resp = await fetch("https://api.stripe.com/v1/checkout/sessions", {
