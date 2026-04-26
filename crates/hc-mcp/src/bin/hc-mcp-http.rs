@@ -40,12 +40,31 @@ const RATE_LIMIT_WINDOW_MS: u64 = 60_000;
 /// Cap on map size to prevent unbounded memory under tenant-id spam.
 const MAX_RATE_LIMIT_ENTRIES: usize = 10_000;
 
-/// Default authenticated-lane limit per minute. Matches hc-server's
-/// developer-tier prove_rpm. Operators with paid plans should override
-/// via HC_MCP_TENANT_RPM (single global value applied to all
-/// authenticated tenants for now — per-plan ladder is a follow-up
-/// once we wire actual plan info from AuthConfig through to here).
-const DEFAULT_MCP_TENANT_RPM: u32 = 100;
+/// Per-plan rate-limit ladder for the authenticated MCP lane. Mirrors
+/// hc-server's `PlanLimits::for_plan()` prove_rpm column so a tenant's
+/// effective MCP throughput tracks their HTTP API throughput. The
+/// values are intentionally identical to the server-side prove_rpm:
+/// changing one without the other surprises customers.
+///
+/// Plan strings come from AuthConfig (tenant.keys file format
+/// `tenant:key:plan`); unknown plans fall through to the developer
+/// default.
+fn rpm_for_plan(plan: &str) -> u32 {
+    match plan {
+        "free" => 10,
+        "team" => 300,
+        "scale" => 500,
+        // "developer", "standard", "pro", or anything else → developer
+        // tier. Matches hc-server's PlanLimits::for_plan() default arm.
+        _ => 100,
+    }
+}
+
+/// Optional global override. When set to a non-zero value via
+/// HC_MCP_TENANT_RPM, this single value REPLACES the per-plan ladder
+/// (useful for per-deployment caps or operator throttling during
+/// incidents). 0 → use per-plan ladder. Unset → use per-plan ladder.
+const GLOBAL_RPM_OVERRIDE_DISABLED: u32 = 0;
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -177,11 +196,22 @@ async fn validate_origin(req: Request, next: Next) -> Response {
 /// On success, the tenant id (if any) is stamped onto the request as
 /// `x-mcp-tenant` so downstream observability + per-tenant accounting can
 /// pick it up without re-parsing the auth header.
+/// Resolve the per-request rate limit. `global_override` (from
+/// HC_MCP_TENANT_RPM) wins when non-zero — operators can throttle
+/// across plans during an incident. Otherwise the plan ladder applies.
+fn effective_rpm(plan: &str, global_override: u32) -> u32 {
+    if global_override != GLOBAL_RPM_OVERRIDE_DISABLED {
+        global_override
+    } else {
+        rpm_for_plan(plan)
+    }
+}
+
 async fn validate_auth(
     auth: Arc<AuthConfig>,
     require: bool,
     rate: Arc<Mutex<McpRateLimitState>>,
-    tenant_rpm: u32,
+    global_rpm_override: u32,
     req: Request,
     next: Next,
 ) -> Response {
@@ -206,12 +236,16 @@ async fn validate_auth(
 
     match auth.authenticate(req.headers()) {
         Ok(tenant) => {
+            // Resolve the effective per-minute limit from the tenant's
+            // plan, falling back to the global override if set.
+            let limit = effective_rpm(&tenant.plan, global_rpm_override);
             // Per-tenant rate gate. Burns 1 unit of quota per request.
             // 429 mirrors the hc-server rate-limit response shape.
-            if !check_tenant_rate_limit(&rate, &tenant.tenant_id, tenant_rpm) {
+            if !check_tenant_rate_limit(&rate, &tenant.tenant_id, limit) {
                 tracing::warn!(
                     tenant_id = %tenant.tenant_id,
-                    rpm = tenant_rpm,
+                    plan = %tenant.plan,
+                    rpm = limit,
                     "rate-limited: tenant exceeded per-minute quota on MCP path"
                 );
                 return (
@@ -286,17 +320,20 @@ async fn main() -> Result<()> {
         "mcp auth middleware initialized"
     );
 
-    // Per-tenant rate limit state, populated from HC_MCP_TENANT_RPM (default
-    // DEFAULT_MCP_TENANT_RPM). 0 disables the per-tenant gate; the
-    // anonymous lane keeps its global concurrency cap regardless.
-    let tenant_rpm: u32 = std::env::var("HC_MCP_TENANT_RPM")
+    // Per-tenant rate limit state. By default the per-plan ladder (free
+    // 10 / developer 100 / team 300 / scale 500) applies, mirroring
+    // hc-server's PlanLimits. HC_MCP_TENANT_RPM, when set non-zero,
+    // overrides the plan ladder with a single global value — useful for
+    // operator throttling during incidents or for deployments with
+    // different tier semantics.
+    let global_rpm_override: u32 = std::env::var("HC_MCP_TENANT_RPM")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(DEFAULT_MCP_TENANT_RPM);
+        .unwrap_or(GLOBAL_RPM_OVERRIDE_DISABLED);
     let rate_state = Arc::new(Mutex::new(McpRateLimitState::default()));
     tracing::info!(
-        tenant_rpm,
-        "mcp per-tenant rate limit configured (0 = disabled)"
+        global_rpm_override,
+        "mcp per-tenant rate limit ready (0 = use per-plan ladder; non-zero = override)"
     );
 
     let ct = CancellationToken::new();
@@ -321,17 +358,20 @@ async fn main() -> Result<()> {
 
     let auth_for_layer = auth.clone();
     let rate_for_layer = rate_state.clone();
-    let router = axum::Router::new()
-        .nest_service("/mcp", service)
-        // Order matters: auth runs first so an unauthorized request never
-        // reaches the MCP service. validate_origin still applies to all
-        // paths (browser-based clients).
-        .layer(middleware::from_fn(move |req, next| {
-            let auth = auth_for_layer.clone();
-            let rate = rate_for_layer.clone();
-            async move { validate_auth(auth, require_auth, rate, tenant_rpm, req, next).await }
-        }))
-        .layer(middleware::from_fn(validate_origin));
+    let router =
+        axum::Router::new()
+            .nest_service("/mcp", service)
+            // Order matters: auth runs first so an unauthorized request never
+            // reaches the MCP service. validate_origin still applies to all
+            // paths (browser-based clients).
+            .layer(middleware::from_fn(move |req, next| {
+                let auth = auth_for_layer.clone();
+                let rate = rate_for_layer.clone();
+                async move {
+                    validate_auth(auth, require_auth, rate, global_rpm_override, req, next).await
+                }
+            }))
+            .layer(middleware::from_fn(validate_origin));
 
     let addr = format!("{host}:{port}");
     let tcp_listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -532,6 +572,74 @@ mod tests {
 
         for _ in 0..20 {
             let (status, _, _) = run_full(auth.clone(), false, 1, None, Some(rate.clone())).await;
+            assert_eq!(status, StatusCode::OK);
+        }
+    }
+
+    #[test]
+    fn rpm_for_plan_matches_hc_server_ladder() {
+        // Mirrors hc-server::PlanLimits::for_plan() prove_rpm column.
+        // Drift between the two is a customer-visible bug — they pay
+        // for plan X expecting plan-X throughput on either surface.
+        assert_eq!(rpm_for_plan("free"), 10);
+        assert_eq!(rpm_for_plan("developer"), 100);
+        assert_eq!(rpm_for_plan("standard"), 100); // legacy alias
+        assert_eq!(rpm_for_plan("pro"), 100); // legacy alias
+        assert_eq!(rpm_for_plan("team"), 300);
+        assert_eq!(rpm_for_plan("scale"), 500);
+        assert_eq!(rpm_for_plan(""), 100); // empty → developer fallback
+        assert_eq!(rpm_for_plan("garbage_plan"), 100); // unknown → developer
+    }
+
+    #[test]
+    fn effective_rpm_override_wins_over_plan() {
+        // Override unset (0) → plan ladder applies.
+        assert_eq!(effective_rpm("free", 0), 10);
+        assert_eq!(effective_rpm("scale", 0), 500);
+        // Override set → plan is ignored.
+        assert_eq!(effective_rpm("free", 50), 50);
+        assert_eq!(effective_rpm("scale", 50), 50);
+    }
+
+    #[tokio::test]
+    async fn free_plan_gets_lower_rpm_than_scale_plan() {
+        // Wire two tenants on different plans with the per-plan ladder
+        // active (override = 0 → plan tier applies). Burn through the
+        // free tier's quota; scale tier should still have plenty.
+        let auth = AuthConfig::from_pairs_with_plan(&[
+            ("free_co", "key_free", "free"),
+            ("scale_co", "key_scale", "scale"),
+        ]);
+        let rate = Arc::new(Mutex::new(McpRateLimitState::default()));
+
+        // Free tier = 10 rpm. Send 10 → all OK.
+        for _ in 0..10 {
+            let (status, _, _) = run_full(
+                auth.clone(),
+                false,
+                0, // override disabled → plan ladder
+                Some("key_free"),
+                Some(rate.clone()),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+        }
+        // 11th free request hits the cap.
+        let (over, _, _) =
+            run_full(auth.clone(), false, 0, Some("key_free"), Some(rate.clone())).await;
+        assert_eq!(over, StatusCode::TOO_MANY_REQUESTS);
+
+        // Scale tenant should sail through — separate window AND much
+        // higher cap (500). Send 50 just to demonstrate.
+        for _ in 0..50 {
+            let (status, _, _) = run_full(
+                auth.clone(),
+                false,
+                0,
+                Some("key_scale"),
+                Some(rate.clone()),
+            )
+            .await;
             assert_eq!(status, StatusCode::OK);
         }
     }

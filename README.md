@@ -231,7 +231,7 @@ hc-stark ships as an **MCP server** so AI agents (Claude, GPT, Cursor) can gener
 claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 ```
 
-The hosted endpoint at `mcp.tinyzkp.com` accepts both public requests (no Authorization header — bounded by `HC_MCP_MAX_INFLIGHT=2`) and authenticated requests (`Authorization: Bearer tzk_...`). Authenticated requests get per-tenant fixed-window rate limiting (default 100 req/min, configurable via `HC_MCP_TENANT_RPM`) and bypass the global anonymous cap. Operators who want to lock down the public lane entirely can set `HC_MCP_REQUIRE_AUTH=true` to require Bearer on every call. The HTTP transport also validates the `Origin` header against an allowlist that includes `*.claude.ai`, `*.anthropic.com`, and `tinyzkp.com`.
+The hosted endpoint at `mcp.tinyzkp.com` accepts both public requests (no Authorization header — bounded by `HC_MCP_MAX_INFLIGHT=2`) and authenticated requests (`Authorization: Bearer tzk_...`). Authenticated requests get per-tenant rate limits matched to their plan: Free 10/min, Developer 100/min, Team 300/min, Scale 500/min — same ladder as the HTTP API's `prove_rpm`. Setting `HC_MCP_TENANT_RPM` to a non-zero value overrides the plan ladder with a single global cap (operator throttling during incidents). Authenticated requests bypass the global anonymous cap. Operators who want to lock down the public lane entirely can set `HC_MCP_REQUIRE_AUTH=true` to require Bearer on every call. The HTTP transport also validates the `Origin` header against an allowlist that includes `*.claude.ai`, `*.anthropic.com`, and `tinyzkp.com`.
 
 ### Local install (stdio)
 
