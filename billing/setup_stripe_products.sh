@@ -75,153 +75,215 @@ print(d.get('id', ''))
 }
 
 # Run a stripe create command, save full response to a temp file, return ID.
+# Display output goes to stderr; only the bare ID goes to stdout (so callers
+# can capture it with $(...)) without contaminating the variable.
 create_resource() {
   local label="$1"
   local response_file="$2"
   shift 2
-  printf '  %-40s ... ' "$label"
+  printf '  %-40s ... ' "$label" >&2
   if stripe "$@" >"$response_file" 2>&1; then
     local id
     id="$(cat "$response_file" | extract_id)" || {
-      echo "FAIL"
+      echo "FAIL" >&2
       cat "$response_file" | head -10 >&2
       exit 1
     }
-    echo "$id"
-    printf '%s' "$id"
+    echo "$id" >&2          # show to user
+    printf '%s' "$id"        # only the ID lands in $(...) capture
   else
-    echo "FAIL"
+    echo "FAIL" >&2
     cat "$response_file" | head -10 >&2
     exit 1
   fi
 }
 
+# Look up an existing TinyZKP product by exact name; print its id (or empty
+# string if none). Idempotency at the application layer: re-running the
+# script after the meter+products were already created reuses them.
+find_product_id_by_name() {
+  local name="$1"
+  TARGET="$name" stripe products list --limit 100 2>/dev/null | python3 -c "
+import json, sys, os
+target = os.environ.get('TARGET', '')
+try:
+    d = json.load(sys.stdin)
+    for p in d.get('data', []):
+        if p.get('name') == target and p.get('active'):
+            print(p.get('id', ''))
+            sys.exit(0)
+except Exception:
+    pass
+"
+}
+
+find_meter_id_by_event() {
+  local event="$1"
+  TARGET="$event" stripe billing meters list --limit 100 2>/dev/null | python3 -c "
+import json, sys, os
+target = os.environ.get('TARGET', '')
+try:
+    d = json.load(sys.stdin)
+    for m in d.get('data', []):
+        if m.get('event_name') == target and m.get('status') == 'active':
+            print(m.get('id', ''))
+            sys.exit(0)
+except Exception:
+    pass
+"
+}
+
+# Find an existing price by (product, nickname); print id (or empty).
+find_price_id_by_nickname() {
+  local product_id="$1"
+  local nickname="$2"
+  TARGET_PROD="$product_id" TARGET_NICK="$nickname" \
+    stripe prices list --product "$product_id" --limit 100 2>/dev/null | python3 -c "
+import json, sys, os
+target_nick = os.environ.get('TARGET_NICK', '')
+try:
+    d = json.load(sys.stdin)
+    for p in d.get('data', []):
+        if p.get('nickname') == target_nick and p.get('active'):
+            print(p.get('id', ''))
+            sys.exit(0)
+except Exception:
+    pass
+"
+}
+
+# Reuse an existing product if the name matches; otherwise create.
+find_or_create_product() {
+  local label="$1"; local name="$2"; local description="$3"; local response_file="$4"
+  local existing
+  existing="$(find_product_id_by_name "$name")"
+  if [[ -n "$existing" ]]; then
+    printf '  %-40s ... %s (existing)\n' "$label" "$existing" >&2
+    printf '%s' "$existing"
+    return 0
+  fi
+  create_resource "$label" "$response_file" \
+    products create --name "$name" --description "$description"
+}
+
+find_or_create_meter() {
+  local label="$1"; local response_file="$2"
+  local existing
+  existing="$(find_meter_id_by_event "proof_usage")"
+  if [[ -n "$existing" ]]; then
+    printf '  %-40s ... %s (existing)\n' "$label" "$existing" >&2
+    printf '%s' "$existing"
+    return 0
+  fi
+  create_resource "$label" "$response_file" \
+    billing meters create \
+      --display-name "Proof Usage" \
+      --event-name "proof_usage" \
+      -d "default_aggregation[formula]=sum" \
+      -d "customer_mapping[event_payload_key]=stripe_customer_id" \
+      -d "customer_mapping[type]=by_id" \
+      -d "value_settings[event_payload_key]=value"
+}
+
+# Reuse an existing price by nickname; otherwise create. The 5th+ args are
+# passed through to `stripe prices create`.
+find_or_create_price() {
+  local label="$1"; local product_id="$2"; local nickname="$3"; local response_file="$4"
+  shift 4
+  local existing
+  existing="$(find_price_id_by_nickname "$product_id" "$nickname")"
+  if [[ -n "$existing" ]]; then
+    printf '  %-40s ... %s (existing)\n' "$label" "$existing" >&2
+    printf '%s' "$existing"
+    return 0
+  fi
+  create_resource "$label" "$response_file" prices create "$@"
+}
+
 # ── 1. Meter ───────────────────────────────────────────────────────────
 
 echo "=== Step 1: proof_usage meter ==="
-METER_ID="$(create_resource \
-  "proof_usage meter" \
-  "${TMP_DIR}/meter.json" \
-  billing meters create \
-    --display-name "Proof Usage" \
-    --event-name "proof_usage" \
-    -d "default_aggregation[formula]=sum" \
-    -d "customer_mapping[event_payload_key]=stripe_customer_id" \
-    -d "customer_mapping[type]=by_id" \
-    -d "value_settings[event_payload_key]=value")"
+METER_ID="$(find_or_create_meter "proof_usage meter" "${TMP_DIR}/meter.json")"
 echo
 
 # ── 2. Products ────────────────────────────────────────────────────────
 
 echo "=== Step 2: products ==="
-DEVELOPER_PROD="$(create_resource \
+DEVELOPER_PROD="$(find_or_create_product \
   "Developer product" \
-  "${TMP_DIR}/prod_dev.json" \
-  products create \
-    --name "TinyZKP Developer" \
-    --description "Developer plan — base per-proof rates, 100 RPM, 4 concurrent jobs, \$500/mo cap")"
-TEAM_PROD="$(create_resource \
+  "TinyZKP Developer" \
+  "Developer plan — base per-proof rates, 100 RPM, 4 concurrent jobs, \$500/mo cap" \
+  "${TMP_DIR}/prod_dev.json")"
+TEAM_PROD="$(find_or_create_product \
   "Team product" \
-  "${TMP_DIR}/prod_team.json" \
-  products create \
-    --name "TinyZKP Team" \
-    --description "Team plan — 25% off per-proof rates, 300 RPM, 8 concurrent jobs, \$2,500/mo cap")"
-SCALE_PROD="$(create_resource \
+  "TinyZKP Team" \
+  "Team plan — 25% off per-proof rates, 300 RPM, 8 concurrent jobs, \$2,500/mo cap" \
+  "${TMP_DIR}/prod_team.json")"
+SCALE_PROD="$(find_or_create_product \
   "Scale product" \
-  "${TMP_DIR}/prod_scale.json" \
-  products create \
-    --name "TinyZKP Scale" \
-    --description "Scale plan — 40% off per-proof rates, 500 RPM, 16 concurrent jobs, \$10,000/mo cap")"
-METERED_PROD="$(create_resource \
+  "TinyZKP Scale" \
+  "Scale plan — 40% off per-proof rates, 500 RPM, 16 concurrent jobs, \$10,000/mo cap" \
+  "${TMP_DIR}/prod_scale.json")"
+METERED_PROD="$(find_or_create_product \
   "Proof Generation (metered)" \
-  "${TMP_DIR}/prod_metered.json" \
-  products create \
-    --name "TinyZKP Proof Generation" \
-    --description "ZK-STARK proof generation API — metered usage (cents per proof)")"
+  "TinyZKP Proof Generation" \
+  "ZK-STARK proof generation API — metered usage (cents per proof)" \
+  "${TMP_DIR}/prod_metered.json")"
 echo
 
 # ── 3. Prices ──────────────────────────────────────────────────────────
 
 echo "=== Step 3: prices ==="
 
-DEV_MONTHLY_PRICE="$(create_resource \
-  "Developer monthly (\$9)" \
+DEV_MONTHLY_PRICE="$(find_or_create_price \
+  "Developer monthly (\$9)" "$DEVELOPER_PROD" "Developer Monthly" \
   "${TMP_DIR}/price_dev_m.json" \
-  prices create \
-    --currency usd \
-    --unit-amount 900 \
-    --product "$DEVELOPER_PROD" \
-    --nickname "Developer Monthly" \
-    -d "recurring[interval]=month" \
-    -d "recurring[usage_type]=licensed")"
+  --currency usd --unit-amount 900 --product "$DEVELOPER_PROD" \
+  --nickname "Developer Monthly" \
+  -d "recurring[interval]=month" -d "recurring[usage_type]=licensed")"
 
-DEV_ANNUAL_PRICE="$(create_resource \
-  "Developer annual (\$86.40)" \
+DEV_ANNUAL_PRICE="$(find_or_create_price \
+  "Developer annual (\$86.40)" "$DEVELOPER_PROD" "Developer Annual" \
   "${TMP_DIR}/price_dev_y.json" \
-  prices create \
-    --currency usd \
-    --unit-amount 8640 \
-    --product "$DEVELOPER_PROD" \
-    --nickname "Developer Annual" \
-    -d "recurring[interval]=year" \
-    -d "recurring[usage_type]=licensed")"
+  --currency usd --unit-amount 8640 --product "$DEVELOPER_PROD" \
+  --nickname "Developer Annual" \
+  -d "recurring[interval]=year" -d "recurring[usage_type]=licensed")"
 
-TEAM_MONTHLY_PRICE="$(create_resource \
-  "Team monthly (\$49)" \
+TEAM_MONTHLY_PRICE="$(find_or_create_price \
+  "Team monthly (\$49)" "$TEAM_PROD" "Team Monthly" \
   "${TMP_DIR}/price_team_m.json" \
-  prices create \
-    --currency usd \
-    --unit-amount 4900 \
-    --product "$TEAM_PROD" \
-    --nickname "Team Monthly" \
-    -d "recurring[interval]=month" \
-    -d "recurring[usage_type]=licensed")"
+  --currency usd --unit-amount 4900 --product "$TEAM_PROD" \
+  --nickname "Team Monthly" \
+  -d "recurring[interval]=month" -d "recurring[usage_type]=licensed")"
 
-TEAM_ANNUAL_PRICE="$(create_resource \
-  "Team annual (\$470.40)" \
+TEAM_ANNUAL_PRICE="$(find_or_create_price \
+  "Team annual (\$470.40)" "$TEAM_PROD" "Team Annual" \
   "${TMP_DIR}/price_team_y.json" \
-  prices create \
-    --currency usd \
-    --unit-amount 47040 \
-    --product "$TEAM_PROD" \
-    --nickname "Team Annual" \
-    -d "recurring[interval]=year" \
-    -d "recurring[usage_type]=licensed")"
+  --currency usd --unit-amount 47040 --product "$TEAM_PROD" \
+  --nickname "Team Annual" \
+  -d "recurring[interval]=year" -d "recurring[usage_type]=licensed")"
 
-SCALE_MONTHLY_PRICE="$(create_resource \
-  "Scale monthly (\$199)" \
+SCALE_MONTHLY_PRICE="$(find_or_create_price \
+  "Scale monthly (\$199)" "$SCALE_PROD" "Scale Monthly" \
   "${TMP_DIR}/price_scale_m.json" \
-  prices create \
-    --currency usd \
-    --unit-amount 19900 \
-    --product "$SCALE_PROD" \
-    --nickname "Scale Monthly" \
-    -d "recurring[interval]=month" \
-    -d "recurring[usage_type]=licensed")"
+  --currency usd --unit-amount 19900 --product "$SCALE_PROD" \
+  --nickname "Scale Monthly" \
+  -d "recurring[interval]=month" -d "recurring[usage_type]=licensed")"
 
-SCALE_ANNUAL_PRICE="$(create_resource \
-  "Scale annual (\$1,910.40)" \
+SCALE_ANNUAL_PRICE="$(find_or_create_price \
+  "Scale annual (\$1,910.40)" "$SCALE_PROD" "Scale Annual" \
   "${TMP_DIR}/price_scale_y.json" \
-  prices create \
-    --currency usd \
-    --unit-amount 191040 \
-    --product "$SCALE_PROD" \
-    --nickname "Scale Annual" \
-    -d "recurring[interval]=year" \
-    -d "recurring[usage_type]=licensed")"
+  --currency usd --unit-amount 191040 --product "$SCALE_PROD" \
+  --nickname "Scale Annual" \
+  -d "recurring[interval]=year" -d "recurring[usage_type]=licensed")"
 
-METERED_PRICE="$(create_resource \
-  "Metered usage (\$0.01/unit)" \
+METERED_PRICE="$(find_or_create_price \
+  "Metered usage (\$0.01/unit)" "$METERED_PROD" "Per-proof usage (cents)" \
   "${TMP_DIR}/price_metered.json" \
-  prices create \
-    --currency usd \
-    --product "$METERED_PROD" \
-    --nickname "Per-proof usage (cents)" \
-    -d "recurring[interval]=month" \
-    -d "recurring[usage_type]=metered" \
-    -d "recurring[meter]=$METER_ID" \
-    -d "billing_scheme=per_unit" \
-    -d "unit_amount_decimal=1.0")"
+  --currency usd --product "$METERED_PROD" --nickname "Per-proof usage (cents)" \
+  -d "recurring[interval]=month" -d "recurring[usage_type]=metered" \
+  -d "recurring[meter]=$METER_ID" \
+  -d "billing_scheme=per_unit" -d "unit_amount_decimal=1.0")"
 
 echo
 
