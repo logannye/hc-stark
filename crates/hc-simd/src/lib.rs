@@ -11,11 +11,13 @@
 //! (`out[i] = pair[0] + beta * pair[1]`), the canonical hottest loop
 //! in any STARK FRI prover. Bench numbers on M4 Max (aarch64):
 //!
-//!     n_pairs    scalar(us)   simd(us)   speedup
-//!     16384       24.34       17.98       1.35x
-//!     65536       92.65       70.87       1.31x
-//!     262144     393.31      285.52       1.38x
-//!     1048576   1533.94     1118.12       1.37x
+//! ```text
+//! n_pairs    scalar(us)   simd(us)   speedup
+//! 16384       24.34       17.98       1.35x
+//! 65536       92.65       70.87       1.31x
+//! 262144     393.31      285.52       1.38x
+//! 1048576   1533.94     1118.12       1.37x
+//! ```
 //!
 //! The win compounds across log₂(N) FRI folds per proof. Notably,
 //! the speedup is roughly identical with `--features neon` and

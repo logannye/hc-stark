@@ -26,11 +26,13 @@
 //! M4 Max the crossover for `mul_assign_slices` (no allocation) is
 //! between 262K and 524K elements:
 //!
-//!     size     scalar_us   parallel_us  speedup
-//!     262144   ~232        ~260          0.89x   (scalar wins)
-//!     524288   ~458        ~341          1.35x   (parallel wins)
-//!     1048576  ~924        ~515          1.79x
-//!     2097152  ~1843       ~857          2.15x
+//! ```text
+//! size     scalar_us   parallel_us  speedup
+//! 262144   ~232        ~260          0.89x   (scalar wins)
+//! 524288   ~458        ~341          1.35x   (parallel wins)
+//! 1048576  ~924        ~515          1.79x
+//! 2097152  ~1843       ~857          2.15x
+//! ```
 //!
 //! Setting the threshold at 524K means we only parallelize when there's
 //! a clear win, and we never make small ops slower. An earlier value of
