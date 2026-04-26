@@ -7,6 +7,41 @@ use std::{
 use anyhow::Context;
 use rusqlite::{params, Connection};
 
+/// Common write surface for usage recording. Implemented by `UsageLog`
+/// (SQLite, current production) and — once Phase 1 of the Postgres
+/// migration lands — `PgUsageRecorder`. A `DualWriter` composition
+/// during the migration window writes to both. See
+/// docs/postgres_migration.md for the full plan.
+///
+/// All methods are best-effort from the caller's perspective: SQLite
+/// writes use INSERT OR IGNORE so a duplicate job_id never errors. A
+/// future Postgres impl should return Ok(()) on `ON CONFLICT DO NOTHING`
+/// for the same idempotency contract.
+pub trait UsageRecorder: Send + Sync {
+    /// Record a completed prove job.
+    fn record(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        trace_length: usize,
+        workload_id: Option<&str>,
+        duration_ms: u64,
+    ) -> anyhow::Result<()>;
+
+    /// Record a verify call. No idempotency required (verify is not
+    /// metered — recorded only for /usage observability).
+    fn record_verify(&self, tenant_id: &str, duration_ms: u64) -> anyhow::Result<()>;
+
+    /// Record a failed prove job for tenant-side debugging via /usage.
+    fn record_failure(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        error: &str,
+        duration_ms: u64,
+    ) -> anyhow::Result<()>;
+}
+
 /// SQLite usage log for billing.
 ///
 /// Records every completed proof with tenant, trace length, and duration.
@@ -215,6 +250,108 @@ impl UsageLog {
     }
 }
 
+impl UsageRecorder for UsageLog {
+    fn record(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        trace_length: usize,
+        workload_id: Option<&str>,
+        duration_ms: u64,
+    ) -> anyhow::Result<()> {
+        UsageLog::record(
+            self,
+            tenant_id,
+            job_id,
+            trace_length,
+            workload_id,
+            duration_ms,
+        )
+    }
+    fn record_verify(&self, tenant_id: &str, duration_ms: u64) -> anyhow::Result<()> {
+        UsageLog::record_verify(self, tenant_id, duration_ms)
+    }
+    fn record_failure(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        error: &str,
+        duration_ms: u64,
+    ) -> anyhow::Result<()> {
+        UsageLog::record_failure(self, tenant_id, job_id, error, duration_ms)
+    }
+}
+
+/// Best-effort secondary writer that mirrors every recording call to a
+/// secondary `UsageRecorder`. Used during the Postgres dual-write window
+/// (docs/postgres_migration.md Phase 1). The primary is the source of
+/// truth: secondary write failures are LOGGED but never propagated as
+/// errors, so a flapping Postgres can't break the prove path.
+///
+/// Once Phase 2 cuts the read-side over to Postgres, the primary should
+/// SWAP to `PgUsageRecorder` and the secondary becomes `UsageLog`. After
+/// Phase 3 the secondary is dropped and only `PgUsageRecorder` remains.
+pub struct DualWriter<P: UsageRecorder, S: UsageRecorder> {
+    primary: P,
+    secondary: S,
+}
+
+impl<P: UsageRecorder, S: UsageRecorder> DualWriter<P, S> {
+    pub fn new(primary: P, secondary: S) -> Self {
+        Self { primary, secondary }
+    }
+}
+
+impl<P: UsageRecorder, S: UsageRecorder> UsageRecorder for DualWriter<P, S> {
+    fn record(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        trace_length: usize,
+        workload_id: Option<&str>,
+        duration_ms: u64,
+    ) -> anyhow::Result<()> {
+        // Primary first — any error here propagates.
+        self.primary
+            .record(tenant_id, job_id, trace_length, workload_id, duration_ms)?;
+        // Secondary best-effort. Log + swallow on error so a flapping
+        // mirror can't break the prove path.
+        if let Err(e) =
+            self.secondary
+                .record(tenant_id, job_id, trace_length, workload_id, duration_ms)
+        {
+            tracing::warn!(error = %e, tenant_id, job_id, "secondary usage_log.record failed");
+        }
+        Ok(())
+    }
+
+    fn record_verify(&self, tenant_id: &str, duration_ms: u64) -> anyhow::Result<()> {
+        self.primary.record_verify(tenant_id, duration_ms)?;
+        if let Err(e) = self.secondary.record_verify(tenant_id, duration_ms) {
+            tracing::warn!(error = %e, tenant_id, "secondary usage_log.record_verify failed");
+        }
+        Ok(())
+    }
+
+    fn record_failure(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        error: &str,
+        duration_ms: u64,
+    ) -> anyhow::Result<()> {
+        self.primary
+            .record_failure(tenant_id, job_id, error, duration_ms)?;
+        if let Err(e) = self
+            .secondary
+            .record_failure(tenant_id, job_id, error, duration_ms)
+        {
+            tracing::warn!(error = %e, tenant_id, job_id, "secondary usage_log.record_failure failed");
+        }
+        Ok(())
+    }
+}
+
 /// Public price lookup for metrics tracking.
 pub fn price_cents_pub(trace_length: usize) -> u64 {
     price_cents(trace_length)
@@ -405,5 +542,110 @@ mod tests {
             .query_usage("t_test", "developer", 0, i64::MAX as u64)
             .unwrap();
         assert_eq!(summary.failed_proofs, 1);
+    }
+
+    /// Stub recorder used to exercise DualWriter semantics without a
+    /// second SQLite or Postgres handle. Records every call into a
+    /// shared Vec so the tests can assert ordering + content.
+    #[derive(Clone, Default)]
+    struct StubRecorder {
+        calls: Arc<Mutex<Vec<String>>>,
+        fail_next: Arc<Mutex<bool>>,
+    }
+
+    impl UsageRecorder for StubRecorder {
+        fn record(
+            &self,
+            tenant_id: &str,
+            job_id: &str,
+            _trace_length: usize,
+            _workload_id: Option<&str>,
+            _duration_ms: u64,
+        ) -> anyhow::Result<()> {
+            let mut fail = self.fail_next.lock().unwrap();
+            if *fail {
+                *fail = false;
+                anyhow::bail!("stub: forced failure");
+            }
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("record({tenant_id},{job_id})"));
+            Ok(())
+        }
+        fn record_verify(&self, tenant_id: &str, _duration_ms: u64) -> anyhow::Result<()> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("verify({tenant_id})"));
+            Ok(())
+        }
+        fn record_failure(
+            &self,
+            tenant_id: &str,
+            job_id: &str,
+            _error: &str,
+            _duration_ms: u64,
+        ) -> anyhow::Result<()> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("failure({tenant_id},{job_id})"));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn dual_writer_calls_both_on_success() {
+        let primary = StubRecorder::default();
+        let secondary = StubRecorder::default();
+        let p_calls = primary.calls.clone();
+        let s_calls = secondary.calls.clone();
+
+        let dual = DualWriter::new(primary, secondary);
+        dual.record("acme", "job_1", 1000, None, 50).unwrap();
+        dual.record_verify("acme", 10).unwrap();
+        dual.record_failure("acme", "job_2", "boom", 1).unwrap();
+
+        assert_eq!(
+            *p_calls.lock().unwrap(),
+            vec![
+                "record(acme,job_1)".to_string(),
+                "verify(acme)".to_string(),
+                "failure(acme,job_2)".to_string(),
+            ]
+        );
+        assert_eq!(*s_calls.lock().unwrap(), *p_calls.lock().unwrap());
+    }
+
+    #[test]
+    fn dual_writer_propagates_primary_failure() {
+        let primary = StubRecorder::default();
+        let secondary = StubRecorder::default();
+        *primary.fail_next.lock().unwrap() = true;
+        let s_calls = secondary.calls.clone();
+
+        let dual = DualWriter::new(primary, secondary);
+        let result = dual.record("acme", "job_1", 1000, None, 50);
+
+        assert!(result.is_err(), "primary failure must propagate");
+        // Secondary must NOT have been called when primary failed.
+        assert!(s_calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn dual_writer_swallows_secondary_failure() {
+        let primary = StubRecorder::default();
+        let secondary = StubRecorder::default();
+        *secondary.fail_next.lock().unwrap() = true;
+        let p_calls = primary.calls.clone();
+
+        let dual = DualWriter::new(primary, secondary);
+        // Primary succeeds, secondary fails → dual returns Ok (best-effort
+        // mirror semantics; the prove path must not break on a flapping
+        // secondary).
+        dual.record("acme", "job_1", 1000, None, 50).unwrap();
+
+        assert_eq!(p_calls.lock().unwrap().len(), 1);
     }
 }
