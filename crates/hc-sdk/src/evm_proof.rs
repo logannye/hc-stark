@@ -186,7 +186,7 @@ pub struct EvmProofParts {
 pub fn to_abi_calldata(proof: &EvmProof) -> Vec<u8> {
     // For direct calldata submission, the proof bytes are already packed.
     // Wrap in ABI encoding: offset (32 bytes) + length (32 bytes) + data (padded to 32).
-    let mut calldata = Vec::with_capacity(64 + ((proof.bytes.len() + 31) / 32) * 32);
+    let mut calldata = Vec::with_capacity(64 + proof.bytes.len().div_ceil(32) * 32);
 
     // ABI dynamic bytes: offset = 32.
     calldata.extend_from_slice(&[0u8; 28]);
@@ -338,7 +338,7 @@ fn encode_merkle_path(path: &hc_commit::merkle::MerklePath, buf: &mut Vec<u8>) {
     buf.extend_from_slice(&(nodes.len() as u16).to_be_bytes());
 
     // Pack sibling_is_left bits into a bitfield.
-    let bit_bytes = (nodes.len() + 7) / 8;
+    let bit_bytes = nodes.len().div_ceil(8);
     let mut bits = vec![0u8; bit_bytes];
     for (i, node) in nodes.iter().enumerate() {
         if node.sibling_is_left {
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn decode_rejects_truncated() {
-        let result = decode_evm_proof(&[b'H', b'C']);
+        let result = decode_evm_proof(b"HC");
         assert!(result.is_err());
     }
 }

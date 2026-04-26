@@ -42,17 +42,9 @@ impl R1csVerifyOutcome {
 }
 
 /// Tunables.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct HcSpartanConfig {
     pub sumcheck: hc_sumcheck::HcSumcheckConfig,
-}
-
-impl Default for HcSpartanConfig {
-    fn default() -> Self {
-        Self {
-            sumcheck: hc_sumcheck::HcSumcheckConfig::default(),
-        }
-    }
 }
 
 /// Prove a satisfied R1CS instance.

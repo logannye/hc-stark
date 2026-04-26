@@ -199,9 +199,9 @@ pub fn prove(
     }
 
     let mut transcript: Transcript<Blake3> = Transcript::new(config.domain_separator);
-    transcript.append_message(b"sumcheck.num_vars", &(poly.num_vars as u64).to_le_bytes());
-    transcript.append_message(b"sumcheck.degree", &(poly.degree() as u64).to_le_bytes());
-    transcript.append_message(b"sumcheck.claim", &claim.claimed_sum.to_le_bytes());
+    transcript.append_message(b"sumcheck.num_vars", (poly.num_vars as u64).to_le_bytes());
+    transcript.append_message(b"sumcheck.degree", (poly.degree() as u64).to_le_bytes());
+    transcript.append_message(b"sumcheck.claim", claim.claimed_sum.to_le_bytes());
 
     // Working table that gets folded one variable at a time. This is the
     // streaming-friendly representation: after round i, the table has size
@@ -232,8 +232,8 @@ pub fn prove(
         let msg = SumcheckRoundMsg {
             coefficients: vec![s0.0, s1.0],
         };
-        transcript.append_message(b"sumcheck.round.s0", &s0.0.to_le_bytes());
-        transcript.append_message(b"sumcheck.round.s1", &s1.0.to_le_bytes());
+        transcript.append_message(b"sumcheck.round.s0", s0.0.to_le_bytes());
+        transcript.append_message(b"sumcheck.round.s1", s1.0.to_le_bytes());
         let r: F = transcript.challenge_field(b"sumcheck.round.challenge");
         challenges.push(r);
         rounds.push(msg);
@@ -249,7 +249,7 @@ pub fn prove(
     }
 
     let final_evaluation = table[0];
-    transcript.append_message(b"sumcheck.final", &final_evaluation.0.to_le_bytes());
+    transcript.append_message(b"sumcheck.final", final_evaluation.0.to_le_bytes());
 
     Ok((
         SumcheckProof {
@@ -299,10 +299,10 @@ pub fn verify_protocol(
     let mut transcript: Transcript<Blake3> = Transcript::new(config.domain_separator);
     transcript.append_message(
         b"sumcheck.num_vars",
-        &(claim.num_variables as u64).to_le_bytes(),
+        (claim.num_variables as u64).to_le_bytes(),
     );
-    transcript.append_message(b"sumcheck.degree", &(claim.degree as u64).to_le_bytes());
-    transcript.append_message(b"sumcheck.claim", &claim.claimed_sum.to_le_bytes());
+    transcript.append_message(b"sumcheck.degree", (claim.degree as u64).to_le_bytes());
+    transcript.append_message(b"sumcheck.claim", claim.claimed_sum.to_le_bytes());
 
     let mut current = F::new(claim.claimed_sum);
     let mut challenges = Vec::with_capacity(claim.num_variables);
@@ -321,8 +321,8 @@ pub fn verify_protocol(
         if s0.add(s1) != current {
             return Ok(None);
         }
-        transcript.append_message(b"sumcheck.round.s0", &s0.0.to_le_bytes());
-        transcript.append_message(b"sumcheck.round.s1", &s1.0.to_le_bytes());
+        transcript.append_message(b"sumcheck.round.s0", s0.0.to_le_bytes());
+        transcript.append_message(b"sumcheck.round.s1", s1.0.to_le_bytes());
         let r: F = transcript.challenge_field(b"sumcheck.round.challenge");
         challenges.push(r);
         // Linear interpolation: s(r) = s0 + r*(s1 - s0).
@@ -333,7 +333,7 @@ pub fn verify_protocol(
     if current != final_evaluation {
         return Ok(None);
     }
-    transcript.append_message(b"sumcheck.final", &final_evaluation.0.to_le_bytes());
+    transcript.append_message(b"sumcheck.final", final_evaluation.0.to_le_bytes());
     Ok(Some(VerifierOutcome {
         challenges,
         final_evaluation,

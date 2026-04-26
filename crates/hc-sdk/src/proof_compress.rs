@@ -99,7 +99,7 @@ pub fn encode_compressed(compressed: &CompressedPaths) -> Vec<u8> {
         buf.extend_from_slice(&(refs.len() as u16).to_be_bytes());
 
         // Direction bits.
-        let bit_bytes = (refs.len() + 7) / 8;
+        let bit_bytes = refs.len().div_ceil(8);
         let mut bits = vec![0u8; bit_bytes];
         for (i, &(_, is_left)) in refs.iter().enumerate() {
             if is_left {
@@ -146,7 +146,7 @@ pub fn decode_compressed(data: &[u8]) -> Result<CompressedPaths, &'static str> {
         cursor += 2;
 
         // Direction bits.
-        let bit_bytes = (node_count + 7) / 8;
+        let bit_bytes = node_count.div_ceil(8);
         if cursor + bit_bytes > data.len() {
             return Err("truncated direction bits");
         }
@@ -182,7 +182,7 @@ pub fn pack_indices(indices: &[usize], domain_size: usize) -> Vec<u8> {
 
     let bits_per_index = (usize::BITS - (domain_size - 1).leading_zeros()) as usize;
     let total_bits = indices.len() * bits_per_index;
-    let mut output = vec![0u8; (total_bits + 7) / 8];
+    let mut output = vec![0u8; total_bits.div_ceil(8)];
 
     let mut bit_offset = 0usize;
     for &idx in indices {

@@ -627,9 +627,21 @@ pub async fn run() -> anyhow::Result<()> {
         });
     }
 
-    // Spawn background auth reload from file (every 60s).
+    // Spawn background auth reload from file (every 60s). Hot-reload
+    // applies a grace window: keys present in the previous config but
+    // missing from the new one get retired with TTL = HC_SERVER_AUTH_GRACE_MS
+    // (default 5min) so in-flight requests holding the old key keep working
+    // until the rotated holder picks up the new value.
     if let Some(ref path) = api_keys_file {
-        info!(path=%path.display(), "auth hot-reload enabled (60s interval)");
+        let grace_ms = std::env::var("HC_SERVER_AUTH_GRACE_MS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(auth::DEFAULT_AUTH_GRACE_MS);
+        info!(
+            path=%path.display(),
+            grace_ms,
+            "auth hot-reload enabled (60s interval) with rotation grace window"
+        );
         let auth_ref = state.auth.clone();
         let path = path.clone();
         tokio::spawn(async move {
@@ -643,6 +655,19 @@ pub async fn run() -> anyhow::Result<()> {
                             fresh.merge(&file_auth);
                         }
                     }
+                    // Take a clone of the previous live config under
+                    // a short read lock, compute retired entries, then
+                    // swap under the write lock. Release the read lock
+                    // before grabbing the write lock to avoid deadlock.
+                    let previous: AuthConfig = match auth_ref.read() {
+                        Ok(g) => (*g).clone(),
+                        Err(_) => continue,
+                    };
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0);
+                    fresh.retire_missing(&previous, grace_ms, now);
                     if let Ok(mut guard) = auth_ref.write() {
                         *guard = fresh;
                     }

@@ -145,12 +145,9 @@ pub fn prove(
     }
 
     let mut transcript: Transcript<Blake3> = Transcript::new(config.domain_separator);
-    transcript.append_message(
-        b"sumcheck.num_vars",
-        &(poly.num_vars() as u64).to_le_bytes(),
-    );
-    transcript.append_message(b"sumcheck.degree", &(poly.degree() as u64).to_le_bytes());
-    transcript.append_message(b"sumcheck.claim", &claim.claimed_sum.to_le_bytes());
+    transcript.append_message(b"sumcheck.num_vars", (poly.num_vars() as u64).to_le_bytes());
+    transcript.append_message(b"sumcheck.degree", (poly.degree() as u64).to_le_bytes());
+    transcript.append_message(b"sumcheck.claim", claim.claimed_sum.to_le_bytes());
 
     // For each term, hold parallel folded tables (one Vec<F> per factor).
     let mut tables: Vec<Vec<Vec<F>>> = poly
@@ -192,10 +189,7 @@ pub fn prove(
 
         let coefficients: Vec<u64> = s_evals.iter().map(|e| e.0).collect();
         for (i, e) in s_evals.iter().enumerate() {
-            transcript.append_message(
-                format!("sumcheck.round.s{}", i).as_bytes(),
-                &e.0.to_le_bytes(),
-            );
+            transcript.append_message(format!("sumcheck.round.s{i}").as_bytes(), e.0.to_le_bytes());
         }
         let r: F = transcript.challenge_field(b"sumcheck.round.challenge");
         challenges.push(r);
@@ -224,7 +218,7 @@ pub fn prove(
         }
         final_eval = final_eval.add(prod);
     }
-    transcript.append_message(b"sumcheck.final", &final_eval.0.to_le_bytes());
+    transcript.append_message(b"sumcheck.final", final_eval.0.to_le_bytes());
 
     Ok((
         SumcheckProof {

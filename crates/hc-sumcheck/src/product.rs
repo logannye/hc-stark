@@ -153,10 +153,7 @@ pub fn prove(
     }
 
     let mut transcript: Transcript<Blake3> = Transcript::new(config.domain_separator);
-    transcript.append_message(
-        b"sumcheck.num_vars",
-        (poly.num_vars() as u64).to_le_bytes(),
-    );
+    transcript.append_message(b"sumcheck.num_vars", (poly.num_vars() as u64).to_le_bytes());
     transcript.append_message(b"sumcheck.degree", (poly.degree() as u64).to_le_bytes());
     transcript.append_message(b"sumcheck.claim", claim.claimed_sum.to_le_bytes());
 
@@ -200,10 +197,7 @@ pub fn prove(
 
         let coefficients: Vec<u64> = s_evals.iter().map(|e| e.0).collect();
         for (i, e) in s_evals.iter().enumerate() {
-            transcript.append_message(
-                format!("sumcheck.round.s{i}").as_bytes(),
-                e.0.to_le_bytes(),
-            );
+            transcript.append_message(format!("sumcheck.round.s{i}").as_bytes(), e.0.to_le_bytes());
         }
         let r: F = transcript.challenge_field(b"sumcheck.round.challenge");
         challenges.push(r);
@@ -296,10 +290,7 @@ pub fn verify_protocol_general(
             return Ok(None);
         }
         for (i, e) in evals.iter().enumerate() {
-            transcript.append_message(
-                format!("sumcheck.round.s{i}").as_bytes(),
-                e.0.to_le_bytes(),
-            );
+            transcript.append_message(format!("sumcheck.round.s{i}").as_bytes(), e.0.to_le_bytes());
         }
         let r: F = transcript.challenge_field(b"sumcheck.round.challenge");
         challenges.push(r);

@@ -19,8 +19,25 @@ struct TenantEntry {
 
 #[derive(Clone, Debug, Default)]
 pub struct AuthConfig {
-    /// Maps API key -> (tenant_id, plan).
+    /// Maps active API key -> (tenant_id, plan).
     keys: HashMap<String, TenantEntry>,
+    /// Recently-rotated keys that should still authenticate during the
+    /// grace window. Maps key -> (entry, expiry_ms_unix). Authentication
+    /// falls through to this map only if `keys` does not contain the
+    /// presented token. Entries past their expiry are ignored and pruned
+    /// opportunistically on each `authenticate` call.
+    retired: HashMap<String, RetiredEntry>,
+}
+
+/// Default grace window for retired keys: 5 minutes. Long enough to drain
+/// in-flight requests after a rotation, short enough that a leaked key
+/// stops working quickly. Override via `HC_SERVER_AUTH_GRACE_MS`.
+pub const DEFAULT_AUTH_GRACE_MS: u64 = 5 * 60 * 1000;
+
+#[derive(Clone, Debug)]
+struct RetiredEntry {
+    entry: TenantEntry,
+    expiry_ms: u64,
 }
 
 /// Per-IP auth failure tracking for brute-force protection.
@@ -148,7 +165,10 @@ impl AuthConfig {
                 },
             );
         }
-        Self { keys }
+        Self {
+            keys,
+            ..Default::default()
+        }
     }
 
     /// Construct from pairs with explicit plans.
@@ -163,7 +183,10 @@ impl AuthConfig {
                 },
             );
         }
-        Self { keys }
+        Self {
+            keys,
+            ..Default::default()
+        }
     }
 
     pub fn from_env() -> anyhow::Result<Self> {
@@ -192,7 +215,10 @@ impl AuthConfig {
                 },
             );
         }
-        Ok(Self { keys })
+        Ok(Self {
+            keys,
+            ..Default::default()
+        })
     }
 
     /// Load keys from a file.
@@ -232,18 +258,71 @@ impl AuthConfig {
                 },
             );
         }
-        Ok(Self { keys })
+        Ok(Self {
+            keys,
+            ..Default::default()
+        })
     }
 
-    /// Merge another config's keys into this one (additive).
+    /// Merge another config's keys into this one (additive). Retired
+    /// entries from `other` are carried over too — a key that was
+    /// retired in either source remains retired in the merge.
     pub fn merge(&mut self, other: &AuthConfig) {
         for (key, entry) in &other.keys {
             self.keys.insert(key.clone(), entry.clone());
+        }
+        for (key, retired) in &other.retired {
+            self.retired.insert(key.clone(), retired.clone());
         }
     }
 
     pub fn is_enabled(&self) -> bool {
         !self.keys.is_empty()
+    }
+
+    /// Compare this config to a `previous` one (typically the live config
+    /// just before a hot-reload swap) and seed retired entries for keys
+    /// that were active there but are missing here. The grace window is
+    /// `grace_ms` from `now_ms`.
+    ///
+    /// This is the operator-facing protection against rotation kicking
+    /// in-flight requests — a request holding the old key keeps working
+    /// for `grace_ms` after the rotation reload.
+    ///
+    /// If a key is in BOTH the previous active set AND the new active
+    /// set (re-issued unchanged), it stays purely active — no grace
+    /// entry is created.
+    pub fn retire_missing(&mut self, previous: &AuthConfig, grace_ms: u64, now_ms: u64) {
+        let expiry = now_ms.saturating_add(grace_ms);
+        for (key, prev_entry) in &previous.keys {
+            if !self.keys.contains_key(key) {
+                self.retired.insert(
+                    key.clone(),
+                    RetiredEntry {
+                        entry: prev_entry.clone(),
+                        expiry_ms: expiry,
+                    },
+                );
+            }
+        }
+        // Carry over still-valid retired entries from the previous config
+        // (a key that was retired 30s ago should keep its original expiry,
+        // not get its grace window extended).
+        for (key, retired) in &previous.retired {
+            if !self.keys.contains_key(key) && !self.retired.contains_key(key) {
+                self.retired.insert(key.clone(), retired.clone());
+            }
+        }
+        // Drop any retired entries whose grace window has already expired.
+        // Without this, the retired map would grow unbounded over many
+        // reload cycles.
+        self.retired.retain(|_, r| r.expiry_ms > now_ms);
+    }
+
+    /// Cardinality of currently-active keys + retired-but-still-valid
+    /// keys. Used by tests + observability.
+    pub fn retired_len(&self) -> usize {
+        self.retired.len()
     }
 
     /// Authenticate a request. Uses constant-time comparison to prevent timing attacks.
@@ -267,8 +346,9 @@ impl AuthConfig {
             .or_else(|| auth.strip_prefix("bearer "))
             .ok_or((StatusCode::UNAUTHORIZED, "expected Bearer token"))?;
 
-        // Constant-time scan: check ALL keys to prevent timing leaks.
-        // We iterate every key and compare in constant time, collecting the match.
+        // Constant-time scan over ACTIVE keys: iterate every entry, never
+        // early-exit. The match record is set unconditionally; comparing
+        // each entry takes the same time whether it's the match or not.
         let mut matched: Option<&TenantEntry> = None;
         for (stored_key, entry) in &self.keys {
             if constant_time_eq(token.as_bytes(), stored_key.as_bytes()) {
@@ -276,10 +356,170 @@ impl AuthConfig {
             }
         }
 
-        let entry = matched.ok_or((StatusCode::UNAUTHORIZED, "invalid API key"))?;
-        Ok(TenantContext {
-            tenant_id: entry.tenant_id.clone(),
-            plan: entry.plan.clone(),
-        })
+        if let Some(entry) = matched {
+            return Ok(TenantContext {
+                tenant_id: entry.tenant_id.clone(),
+                plan: entry.plan.clone(),
+            });
+        }
+
+        // Fallback: scan retired (recently-rotated) keys whose grace
+        // window hasn't elapsed. Same constant-time iteration shape so
+        // the timing-side-channel posture matches the active-keys path.
+        // Skipping this scan when keys.match exists costs us a tiny
+        // timing leak between "active-match" and "retired-match" branches;
+        // we accept that as a reasonable trade since retired matches are
+        // already log-warned (operator visibility on grace usage).
+        let now = now_ms();
+        let mut retired_matched: Option<&TenantEntry> = None;
+        for (stored_key, retired) in &self.retired {
+            // Only honor the match if the grace window hasn't expired.
+            // Comparing the key still happens to keep iteration shape
+            // uniform — the expiry filter is applied AFTER the compare.
+            let key_eq = constant_time_eq(token.as_bytes(), stored_key.as_bytes());
+            if key_eq && retired.expiry_ms > now {
+                retired_matched = Some(&retired.entry);
+            }
+        }
+
+        if let Some(entry) = retired_matched {
+            tracing::warn!(
+                tenant_id = %entry.tenant_id,
+                "authenticated via grace-window retired key — operator should rotate the holder soon"
+            );
+            return Ok(TenantContext {
+                tenant_id: entry.tenant_id.clone(),
+                plan: entry.plan.clone(),
+            });
+        }
+
+        Err((StatusCode::UNAUTHORIZED, "invalid API key"))
+    }
+}
+
+#[cfg(test)]
+mod grace_window_tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    fn auth_with(pairs: &[(&str, &str)]) -> AuthConfig {
+        AuthConfig::from_pairs(pairs)
+    }
+
+    fn bearer_headers(token: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {token}")).unwrap(),
+        );
+        h
+    }
+
+    #[test]
+    fn retire_missing_seeds_grace_for_removed_keys() {
+        let prev = auth_with(&[("acme", "key_a"), ("beta", "key_b")]);
+        let mut next = auth_with(&[("acme", "key_a")]); // key_b rotated out
+        next.retire_missing(&prev, 60_000, 1_000_000);
+
+        assert_eq!(next.retired_len(), 1);
+        // key_a stays purely active — it's in both prev and next.
+        assert!(next.keys.contains_key("key_a"));
+        // key_b is now retired with grace.
+        let r = next.retired.get("key_b").expect("key_b retired");
+        assert_eq!(r.entry.tenant_id, "beta");
+        assert_eq!(r.expiry_ms, 1_060_000);
+    }
+
+    #[test]
+    fn retired_key_authenticates_within_grace_window() {
+        let prev = auth_with(&[("acme", "old_key")]);
+        let mut next = auth_with(&[("acme", "new_key")]);
+        let now = now_ms();
+        next.retire_missing(&prev, 5 * 60 * 1000, now);
+
+        // Old key still works — it's in the grace window.
+        let result = next.authenticate(&bearer_headers("old_key"));
+        let tenant = result.expect("retired key should still authenticate");
+        assert_eq!(tenant.tenant_id, "acme");
+
+        // New key works too.
+        let result2 = next.authenticate(&bearer_headers("new_key"));
+        assert_eq!(result2.unwrap().tenant_id, "acme");
+    }
+
+    #[test]
+    fn retired_key_rejected_after_grace_expires() {
+        let prev = auth_with(&[("acme", "old_key")]);
+        let mut next = auth_with(&[("acme", "new_key")]);
+        // Insert a grace entry whose expiry is already in the past.
+        next.retire_missing(&prev, 0, now_ms().saturating_sub(60_000));
+
+        let result = next.authenticate(&bearer_headers("old_key"));
+        assert!(result.is_err(), "expired retired key must not authenticate");
+    }
+
+    #[test]
+    fn retire_missing_preserves_carryover_grace_expiry() {
+        // A key was retired 30s ago with a 5min window. It should keep
+        // its original expiry, not get a fresh window.
+        let now = 1_000_000_u64;
+        let original_expiry = now + 4 * 60 * 1000 + 30_000;
+
+        let mut prev = auth_with(&[("acme", "current")]);
+        prev.retired.insert(
+            "old_key".to_string(),
+            RetiredEntry {
+                entry: TenantEntry {
+                    tenant_id: "acme".to_string(),
+                    plan: "developer".to_string(),
+                },
+                expiry_ms: original_expiry,
+            },
+        );
+
+        let mut next = auth_with(&[("acme", "current")]);
+        next.retire_missing(&prev, 60_000, now);
+
+        let carried = next.retired.get("old_key").expect("retired key carried");
+        // Expiry should match the prev's value, not now+grace_ms.
+        assert_eq!(carried.expiry_ms, original_expiry);
+    }
+
+    #[test]
+    fn unknown_key_still_rejected_with_grace_active() {
+        let prev = auth_with(&[("acme", "old_key")]);
+        let mut next = auth_with(&[("acme", "new_key")]);
+        next.retire_missing(&prev, 5 * 60 * 1000, now_ms());
+
+        let result = next.authenticate(&bearer_headers("totally_random_token"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn retire_missing_prunes_already_expired_entries() {
+        // Verifies the prune-on-reload path: an expired retired entry
+        // from previous shouldn't leak into next.retired.
+        let now = 1_000_000_u64;
+        let expired = now.saturating_sub(1);
+
+        let mut prev = auth_with(&[("acme", "current")]);
+        prev.retired.insert(
+            "stale_key".to_string(),
+            RetiredEntry {
+                entry: TenantEntry {
+                    tenant_id: "acme".to_string(),
+                    plan: "developer".to_string(),
+                },
+                expiry_ms: expired,
+            },
+        );
+
+        let mut next = auth_with(&[("acme", "current")]);
+        next.retire_missing(&prev, 60_000, now);
+
+        assert!(
+            !next.retired.contains_key("stale_key"),
+            "expired retired entries should be pruned during reload"
+        );
     }
 }

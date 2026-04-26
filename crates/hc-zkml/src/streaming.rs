@@ -143,24 +143,24 @@ pub fn prove_single_matmul(
 
     // ── Build the streaming transcript ────────────────────────────────────
     let mut transcript: Transcript<Blake3> = Transcript::new(TRANSCRIPT_DOMAIN);
-    transcript.append_message(b"model.architecture", &model_commitment.architecture_digest);
-    transcript.append_message(b"model.weights", &model_commitment.weights_digest);
-    transcript.append_message(b"public.input_digest", &public_io.input_digest);
+    transcript.append_message(b"model.architecture", model_commitment.architecture_digest);
+    transcript.append_message(b"model.weights", model_commitment.weights_digest);
+    transcript.append_message(b"public.input_digest", public_io.input_digest);
 
     // Append every output entry as a tile-boundary checkpoint. When the AIR
     // lowering lands, this is replaced with per-tile partial-sum
     // checkpoints emitted from inside the evaluator.
     let mut tmp = [0u8; 8];
-    transcript.append_message(b"matmul.spec.m", &(m as u64).to_le_bytes());
-    transcript.append_message(b"matmul.spec.n", &(n as u64).to_le_bytes());
-    transcript.append_message(b"matmul.spec.k", &(k as u64).to_le_bytes());
+    transcript.append_message(b"matmul.spec.m", (m as u64).to_le_bytes());
+    transcript.append_message(b"matmul.spec.n", (n as u64).to_le_bytes());
+    transcript.append_message(b"matmul.spec.k", (k as u64).to_le_bytes());
     transcript.append_message(
         b"matmul.spec.tile_dim",
-        &(spec.tile_dim as u64).to_le_bytes(),
+        (spec.tile_dim as u64).to_le_bytes(),
     );
     for entry in &output_field {
         tmp.copy_from_slice(&entry.0.to_le_bytes());
-        transcript.append_message(b"matmul.entry", &tmp);
+        transcript.append_message(b"matmul.entry", tmp);
     }
 
     let output_digest_full = hash_tensor(&output);
