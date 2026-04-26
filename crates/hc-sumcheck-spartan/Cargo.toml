@@ -1,0 +1,15 @@
+[package]
+name = "hc-sumcheck-spartan"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+hc-core = { path = "../hc-core" }
+hc-hash = { path = "../hc-hash" }
+hc-sumcheck = { path = "../hc-sumcheck" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror.workspace = true
