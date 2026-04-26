@@ -6,6 +6,10 @@
  license.workspace = true
  publish = false
 
+[features]
+# Feature-gated tests that are slow and intended for CI/nightly runs.
+scaling-tests = []
+
 [dependencies]
 hc-core = { path = "../hc-core" }
 hc-prover = { path = "../hc-prover" }
@@ -16,6 +20,7 @@ hc-recursion = { path = "../hc-recursion" }
 hc-verifier = { path = "../hc-verifier" }
 hc-height = { path = "../hc-height" }
 hc-replay = { path = "../hc-replay" }
+hc-examples = { path = "../hc-examples" }
 ark-bn254 = "0.4"
 ark-ec = "0.4"
 ark-ff = "0.4"

@@ -21,6 +21,11 @@
     "crates/hc-workloads",
     "crates/hc-mcp",
     "crates/hc-rollup",
+    "crates/hc-zkml",
+    "crates/hc-zkvm",
+    "crates/hc-sumcheck",
+    "crates/hc-sumcheck-spartan",
+    "crates/hc-ipa",
  ]
  exclude = [
     "crates/hc-python",

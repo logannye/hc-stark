@@ -8,6 +8,7 @@
 
  [dependencies]
 hc-core = { path = "../hc-core" }
+hc-air = { path = "../hc-air" }
 hc-fri = { path = "../hc-fri" }
 hc-hash = { path = "../hc-hash" }
 hc-prover = { path = "../hc-prover" }
@@ -15,4 +16,6 @@ thiserror.workspace = true
 
 [dev-dependencies]
 hc-vm = { path = "../hc-vm" }
+hc-sdk = { path = "../hc-sdk" }
+proptest = "1.4"
 

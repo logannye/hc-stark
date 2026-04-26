@@ -18,6 +18,7 @@ hc-recursion = { path = "../hc-recursion" }
 hc-prover = { path = "../hc-prover" }
 hc-verifier = { path = "../hc-verifier" }
 hc-vm = { path = "../hc-vm" }
+hc-sdk = { path = "../hc-sdk" }
 ark-bn254 = "0.4"
 ark-serialize = "0.4"
 hex = "0.4"
