@@ -1,0 +1,18 @@
+[package]
+name = "hc-rollup"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+anyhow = "1.0"
+blake3 = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+
+hc-core = { path = "../hc-core" }
+hc-hash = { path = "../hc-hash" }
+hc-prover = { path = "../hc-prover" }
+hc-sdk = { path = "../hc-sdk" }
+hc-vm = { path = "../hc-vm" }
