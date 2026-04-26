@@ -112,7 +112,7 @@ fn run_prove(
     final_acc: u64,
     zk_mask_degree: Option<usize>,
 ) -> Result<hc_sdk::types::ProofBytes> {
-    let mut config = ProverConfig::with_full_config(2, 2, 30, 2)?;
+    let mut config = ProverConfig::with_full_config(2, 2, 80, 2)?;
     if let Some(degree) = zk_mask_degree {
         config = config.with_zk_masking(degree);
     }
