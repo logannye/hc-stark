@@ -1,0 +1,17 @@
+[package]
+name = "hc-simd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = []
+# Enable AVX2 packed Goldilocks (x86_64 only).
+avx2 = []
+# Enable NEON packed Goldilocks (aarch64 only).
+neon = []
+
+[dependencies]
+hc-core = { path = "../hc-core" }
