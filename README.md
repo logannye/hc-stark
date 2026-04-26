@@ -457,6 +457,38 @@ cargo run -p hc-cli -- bench --scenario recursion --proofs 8
 
 ---
 
+## Troubleshooting
+
+### `claude mcp add` succeeds but tools don't appear
+
+The connector may need a session restart. Quit Claude Code (or close the conversation) and start a fresh one. In Claude.ai web, the connector also needs to be enabled per-conversation via the connector picker — not all chats expose all installed connectors.
+
+### `prove_template` returns `status: failed` with `query_count … below minimum`
+
+You're hitting an old build of the MCP server (this was a real bug, fixed in commit [`f4f27ae`](https://github.com/logannye/hc-stark/commit/f4f27ae)). The hosted endpoint at `mcp.tinyzkp.com` is current; if you self-host, pull the latest `main`.
+
+### `verify_proof` returns `valid: false`
+
+This is the system working as intended. A failed verification means one of: the proof bytes were tampered with in transit, the public inputs you passed differ from the prover's, or the prover lied. Re-fetch the proof via `get_proof` and try again. If it still fails, the proof is genuinely invalid — *do not* treat it as authentic.
+
+### Long-running proofs / timeouts
+
+Lightweight templates (`range_proof`, `hash_preimage`, `policy_compliance`, `data_integrity`) typically complete in ~1 s and resolve on the first `poll_job`. Heavier templates (`accumulator_step`, `computation_attestation`) may need 2–3 polls. Wait ~1–2 s between polls; do not loop without a delay. If a job stays in `running` state for >30 s, that's a bug — file an issue with the `job_id`.
+
+### "Could not connect to MCP server"
+
+Check `https://tinyzkp.com/status` for the live health of `mcp.tinyzkp.com`. If the endpoint is up but you still can't connect, you're probably behind a corporate firewall — the MCP traffic is HTTPS POST to `mcp.tinyzkp.com:443`. Allowlist the host or use a personal network for testing.
+
+### CORS errors in browser-based clients
+
+Caddy is configured to send the right CORS headers (`Access-Control-Allow-Origin: *`, all standard methods, `Mcp-Session-Id` exposed) and to respond `204` to OPTIONS preflights. If you see a CORS error, capture the failing request's `Origin` header and the response headers and file an issue.
+
+### Anything else
+
+Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@tinyzkp.com**. Include: the tool name, the parameters you passed (redact secrets), the response you got, and any `job_id`.
+
+---
+
 ## Roadmap
 
 ### Shipped
