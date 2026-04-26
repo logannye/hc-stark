@@ -35,18 +35,34 @@ find_meter_by_event() {
     | jq -r --arg e "$event_name" '.data[] | select(.event_name==$e) | .id' | head -1
 }
 
-# Find a product by metadata key/value (returns empty if not found).
+# Find a product by metadata key/value. Returns empty string if not found.
+# /products/search is eventually consistent; fall back to /products list +
+# client-side filter, which is strongly consistent.
 find_product_by_metadata() {
   local key="$1" val="$2"
-  sk -G "$API/products/search" --data-urlencode "query=metadata['$key']:'$val'" \
-    | jq -r '.data[0].id // empty'
+  local id
+  id=$(sk -G "$API/products/search" --data-urlencode "query=metadata['$key']:'$val'" \
+    | jq -r '.data[0].id // empty')
+  if [ -z "$id" ]; then
+    id=$(sk "$API/products?limit=100&active=true" \
+      | jq -r --arg k "$key" --arg v "$val" \
+          '.data[] | select(.metadata[$k] == $v) | .id' | head -1)
+  fi
+  echo "$id"
 }
 
-# Find a price by metadata key/value (returns empty if not found).
+# Find a price by metadata key/value. Same fallback pattern as products.
 find_price_by_metadata() {
   local key="$1" val="$2"
-  sk -G "$API/prices/search" --data-urlencode "query=metadata['$key']:'$val'" \
-    | jq -r '.data[0].id // empty'
+  local id
+  id=$(sk -G "$API/prices/search" --data-urlencode "query=metadata['$key']:'$val'" \
+    | jq -r '.data[0].id // empty')
+  if [ -z "$id" ]; then
+    id=$(sk "$API/prices?limit=100&active=true" \
+      | jq -r --arg k "$key" --arg v "$val" \
+          '.data[] | select(.metadata[$k] == $v) | .id' | head -1)
+  fi
+  echo "$id"
 }
 
 # ─── 1. trace_step_usage meter ───────────────────────────────────────────────
