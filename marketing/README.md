@@ -2,6 +2,21 @@
 
 This directory holds **drafts** of customer-acquisition assets ready to publish or send. Nothing in here is auto-deployed — every file is a copy/paste artifact for the founder to send manually after final review.
 
+## Live state (as of launch)
+
+| Surface | Status | Verify |
+|---|---|---|
+| `tinyzkp.com` (homepage with new positioning, JSON-LD, OG image) | **Live** | `curl -I https://tinyzkp.com/ \| grep -i title` |
+| `tinyzkp.com/try` (browser playground, no signup) | **Live, fully functional** | Open the URL, click Generate, click Verify |
+| `tinyzkp.com/status` (real-time API health) | **Live** | Open the URL |
+| `tinyzkp.com/signup` (with monthly/annual toggle, Developer at $9) | **Live** | Real Stripe Checkout flows attached |
+| Stripe products + 7 price IDs in production | **Live** | `wrangler pages secret list --project-name tinyzkp` shows all `STRIPE_PRICE_ID_*` |
+| Stripe webhook at `webhook.tinyzkp.com` | **Live** | Subscribed to 4 events, signing secret deployed to `/opt/hc-stark/.env` |
+| `@tinyzkp/cli` on npm | **Published v0.1.0** | `npx @tinyzkp/cli@latest healthz` |
+| MCP server at `mcp.tinyzkp.com` | **Live** | `claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com` |
+| Demo API key in Cloudflare Pages secret | **Set** | `wrangler pages secret list` includes `TINYZKP_DEMO_API_KEY` |
+| Production hc-server template handler bug (template_id pre-flight) | **Fixed and deployed** | End-to-end prove → verify works against real templates |
+
 ## Contents
 
 | File | What it is | Where to publish |
@@ -15,9 +30,11 @@ This directory holds **drafts** of customer-acquisition assets ready to publish 
 
 ## Recommended sequence (90-day plan)
 
+> Week 1's "deploy site changes" is **already done**. Start at week 2.
+
 | Week | Action |
 |---|---|
-| 1 | Deploy site changes (homepage, status page, welcome onboarding); apply pricing changes in Stripe Dashboard |
+| ~~1~~ | ~~Deploy site changes; apply pricing changes in Stripe Dashboard~~ ✅ Done |
 | 2 | Submit `MCP_DIRECTORY.md` to Anthropic; submit PRs against LangChain/LlamaIndex/Cursor integration docs using `INTEGRATION_LANGCHAIN.md` and `INTEGRATION_CURSOR.md` |
 | 3 | Post `HN_LAUNCH.md` on Tuesday morning ET; ship `X_THREAD.md` 30 minutes after the HN post hits the front page |
 | 4–8 | Run the 50-account outbound cycle using `OUTBOUND_EMAIL.md`. 10 emails/day, M/T/W |

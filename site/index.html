@@ -540,6 +540,7 @@ claude mcp add --transport http \
     <button class="active" onclick="showTab('python')">Python</button>
     <button onclick="showTab('typescript')">TypeScript</button>
     <button onclick="showTab('curl')">curl</button>
+    <button onclick="showTab('cli')">CLI (npx)</button>
     <button onclick="showTab('browser')">Browser</button>
   </div>
   <div class="code-block active" id="tab-python">
@@ -577,6 +578,14 @@ curl https://api.tinyzkp.com/prove/abc123... \
 curl -X POST https://api.tinyzkp.com/verify \
   -H <span class="string">"Authorization: Bearer tzk_..."</span> \
   -d <span class="string">'{"proof":{...}}'</span></pre>
+  </div>
+  <div class="code-block" id="tab-cli">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><span class="comment"># Zero install, runs anywhere with Node 18+</span>
+<span class="keyword">export</span> TINYZKP_API_KEY=tzk_...
+npx @tinyzkp/cli prove range_proof <span class="string">'{"min":0,"max":100,"witness_steps":[42,44]}'</span> --wait > proof.json
+npx @tinyzkp/cli verify proof.json
+<span class="comment"># → ✔ valid  (round-trip 8 ms)</span></pre>
   </div>
   <div class="code-block" id="tab-browser">
 <button class="copy-btn" onclick="copyCode(this)">Copy</button>

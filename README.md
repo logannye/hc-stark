@@ -1,18 +1,36 @@
 # TinyZKP — Verifiable Receipts for AI Agents
 
+[![npm](https://img.shields.io/npm/v/%40tinyzkp%2Fcli?label=%40tinyzkp%2Fcli&color=2ee8d4)](https://www.npmjs.com/package/@tinyzkp/cli)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Free tier](https://img.shields.io/badge/free%20tier-100%20proofs%2Fmo-34d399)](https://tinyzkp.com/signup)
+
 **[tinyzkp.com](https://tinyzkp.com)** &middot; **[Try it in browser](https://tinyzkp.com/try)** &middot; **[API docs](https://tinyzkp.com/docs)** &middot; **[Free signup](https://tinyzkp.com/signup)**
 
 Mint a tamper-evident proof that your agent ran the code it claims, on the inputs it claims. **One MCP install. One API call. Verify in milliseconds.** No cryptography degree required.
 
-## Install in 30 seconds (Claude Code)
+## Three ways to start in under a minute
+
+### 1. Try in browser, no signup
+
+Mint and verify a real ZK proof at [**tinyzkp.com/try**](https://tinyzkp.com/try) — type a value, hit Generate, hit Verify. Result in ~2 seconds.
+
+### 2. Native install for AI agents (Claude Code)
 
 ```bash
 claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 ```
 
-That's it. Your agent now has 10 ZK proof tools (`prove`, `verify`, `list_workloads`, ...) as native function calls. Free tier — 100 proofs/month, no credit card.
+Your agent now has 10 ZK proof tools (`prove`, `verify`, `list_workloads`, ...) as native function calls. For Claude Desktop, Cursor, OpenAI agents, and other MCP clients, see [the MCP install guide](https://tinyzkp.com/docs#mcp).
 
-For Claude Desktop, Cursor, OpenAI agents, and other MCP clients, see [the MCP install guide](https://tinyzkp.com/docs#mcp).
+### 3. Terminal CLI (works against any TinyZKP API key)
+
+```bash
+npx @tinyzkp/cli templates                                # list available templates
+npx @tinyzkp/cli prove range_proof '{"min":0,"max":100,"witness_steps":[42,44]}' --wait
+npx @tinyzkp/cli verify proof.json                        # always free
+```
+
+`@tinyzkp/cli` is a zero-dependency Node 18+ ESM package. See [`clients/cli/README.md`](./clients/cli/README.md) for the full command reference.
 
 ## What you can prove
 
@@ -454,19 +472,21 @@ cargo run -p hc-cli -- bench --scenario recursion --proofs 8
 - Proof inspection endpoint (`GET /prove/:job_id/inspect`)
 - Proof aggregation (`POST /aggregate` with recursive hash tree)
 - WASM verifier package (`@tinyzkp/verify`, 785K)
+- **`@tinyzkp/cli` published to npm** — `npx @tinyzkp/cli verify proof.json`
 - On-chain verifier contract (recursive KZG, ~300K gas)
 - EVM calldata generation (`GET /proof/:job_id/calldata`)
 - Self-service API key rotation (`POST /api/rotate-key`)
 - DSL compiler for custom programs
 - Multi-tenant HTTP API with rate limiting
 - **Production service at [tinyzkp.com](https://tinyzkp.com)**
-- Stripe billing (free tier + metered usage + Customer Portal)
+- Stripe billing (free tier, $9 Developer, $49 Team, $199 Scale, monthly + annual variants at 20% off)
 - Python, TypeScript, and Rust client SDKs
+- **Browser playground at [`tinyzkp.com/try`](https://tinyzkp.com/try)** — mint and verify proofs without signup
+- Live status page at [`tinyzkp.com/status`](https://tinyzkp.com/status)
 - Docker Compose production stack with monitoring
 
 ### Next
 
-- Publish `@tinyzkp/verify` to npm
 - Custom program sandboxing (paid tier)
 - Node.js native bindings package
 - GPU acceleration (CUDA/Metal kernels)
