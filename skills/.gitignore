@@ -1,0 +1,4 @@
+# Symlinks to plugin caches outside this repo (claude-code, etc.).
+# Only first-party skills (e.g., tinyzkp-proofs/) belong in this repo.
+stripe-best-practices
+upgrade-stripe
