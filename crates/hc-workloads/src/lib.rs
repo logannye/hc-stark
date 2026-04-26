@@ -82,7 +82,12 @@ pub fn program_for_request(req: &ProveRequest) -> Result<Program> {
 }
 
 pub mod builtin;
+pub mod spartan_templates;
 pub mod templates;
+pub mod unified;
+pub mod zkml_templates;
+
+pub use unified::{list_all_templates, UnifiedTemplateInfo};
 
 #[cfg(test)]
 mod tests {

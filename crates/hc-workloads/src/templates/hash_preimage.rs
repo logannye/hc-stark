@@ -10,7 +10,9 @@ fn build(params: &serde_json::Map<String, JsonValue>) -> Result<TemplateBuildRes
         anyhow::bail!("'preimage_steps' must contain at least one element");
     }
 
-    let computed: u64 = preimage_steps.iter().fold(0u64, |acc, &s| acc.wrapping_add(s));
+    let computed: u64 = preimage_steps
+        .iter()
+        .fold(0u64, |acc, &s| acc.wrapping_add(s));
     if computed != digest {
         anyhow::bail!(
             "hash preimage mismatch: accumulated value = {computed}, \

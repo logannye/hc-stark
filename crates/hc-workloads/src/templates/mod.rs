@@ -38,8 +38,7 @@ pub struct ProofTemplate {
     pub cost_category: &'static str,
     /// JSON example as a string literal (parsed on demand).
     pub example_json: &'static str,
-    pub build_program:
-        fn(&serde_json::Map<String, JsonValue>) -> Result<TemplateBuildResult>,
+    pub build_program: fn(&serde_json::Map<String, JsonValue>) -> Result<TemplateBuildResult>,
 }
 
 inventory::collect!(ProofTemplate);
@@ -116,18 +115,14 @@ pub fn build_from_template(
     id: &str,
     params: &serde_json::Map<String, JsonValue>,
 ) -> Result<TemplateBuildResult> {
-    let t = template_by_id(id)
-        .ok_or_else(|| anyhow!("unknown template: {id}"))?;
+    let t = template_by_id(id).ok_or_else(|| anyhow!("unknown template: {id}"))?;
     (t.build_program)(params)
 }
 
 // ── Helpers for template builders ───────────────────────────────────────────
 
 /// Extract a required u64 parameter.
-pub(crate) fn require_u64(
-    params: &serde_json::Map<String, JsonValue>,
-    name: &str,
-) -> Result<u64> {
+pub(crate) fn require_u64(params: &serde_json::Map<String, JsonValue>, name: &str) -> Result<u64> {
     params
         .get(name)
         .and_then(|v| v.as_u64())
@@ -154,5 +149,8 @@ pub(crate) fn require_u64_array(
 
 /// Build a simple `AddImmediate` chain from a slice of deltas.
 pub(crate) fn add_immediate_chain(deltas: &[u64]) -> Vec<Instruction> {
-    deltas.iter().map(|&d| Instruction::AddImmediate(d)).collect()
+    deltas
+        .iter()
+        .map(|&d| Instruction::AddImmediate(d))
+        .collect()
 }

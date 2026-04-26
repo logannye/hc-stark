@@ -14,7 +14,9 @@ fn build(params: &serde_json::Map<String, JsonValue>) -> Result<TemplateBuildRes
         anyhow::bail!("'witness_steps' must contain at least one element");
     }
 
-    let value: u64 = witness_steps.iter().fold(min, |acc, &s| acc.wrapping_add(s));
+    let value: u64 = witness_steps
+        .iter()
+        .fold(min, |acc, &s| acc.wrapping_add(s));
     if value > max {
         anyhow::bail!(
             "range violation: min ({min}) + sum(witness_steps) = {value}, \
