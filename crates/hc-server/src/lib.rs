@@ -469,6 +469,12 @@ pub async fn run() -> anyhow::Result<()> {
         .init();
 
     let cfg = ServerConfig::from_env()?;
+
+    // Refuse to start if the hc-worker binary is missing or non-executable.
+    // Catches packaging/deploy bugs at boot rather than on the first prove
+    // request. See validate_worker_binary() for the resolution order.
+    validate_worker_binary()?;
+
     let mut auth = AuthConfig::from_env()?;
 
     // Merge file-based keys if configured.
@@ -2858,4 +2864,165 @@ fn worker_executable_path() -> PathBuf {
     }
     // Fallback to PATH lookup.
     PathBuf::from("hc-worker")
+}
+
+/// Validate at boot that the hc-worker binary exists and is executable.
+///
+/// Without this, a misconfigured deploy (HC_SERVER_WORKER_PATH unset, no
+/// `hc-worker` next to `hc-server`, no `hc-worker` on PATH) silently boots
+/// and 500s the first prove request. The 500 surfaces as `failed to spawn
+/// hc-worker` deep inside `spawn_worker_proof`, which is the wrong layer to
+/// be discovering a packaging bug.
+///
+/// Behavior:
+/// - If HC_SERVER_WORKER_PATH is set, the path must exist (and on Unix, be
+///   marked executable). A non-existent explicit path is a hard fatal — it's
+///   an operator error and we want to surface it loudly at boot, not on the
+///   first prove call.
+/// - If HC_SERVER_WORKER_PATH is unset, prefer the sibling-binary path; if
+///   that doesn't exist either, fall back to PATH lookup via `which`-style
+///   probing. PATH-resolved binaries are accepted as a soft success but
+///   logged at WARN — the production deploy should set the explicit path.
+fn validate_worker_binary() -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let explicit = std::env::var("HC_SERVER_WORKER_PATH")
+        .ok()
+        .filter(|s| !s.trim().is_empty());
+
+    if let Some(ref path_str) = explicit {
+        let path = PathBuf::from(path_str);
+        if !path.exists() {
+            anyhow::bail!(
+                "HC_SERVER_WORKER_PATH={} does not exist; refusing to start \
+                 (the first prove request would fail to spawn the worker)",
+                path.display()
+            );
+        }
+        let meta = std::fs::metadata(&path).with_context(|| {
+            format!(
+                "HC_SERVER_WORKER_PATH={} is unreadable; refusing to start",
+                path.display()
+            )
+        })?;
+        if !meta.is_file() {
+            anyhow::bail!(
+                "HC_SERVER_WORKER_PATH={} is not a regular file; refusing to start",
+                path.display()
+            );
+        }
+        // Unix: require at least one execute bit.
+        let mode = meta.permissions().mode();
+        if mode & 0o111 == 0 {
+            anyhow::bail!(
+                "HC_SERVER_WORKER_PATH={} is not executable (mode {:o}); \
+                 refusing to start",
+                path.display(),
+                mode
+            );
+        }
+        info!(path = %path.display(), "validated explicit hc-worker binary");
+        return Ok(());
+    }
+
+    // No explicit path. Try sibling-binary layout.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let sibling = dir.join("hc-worker");
+            if sibling.exists() {
+                info!(path = %sibling.display(), "validated sibling hc-worker binary");
+                return Ok(());
+            }
+        }
+    }
+
+    // Last-resort PATH lookup.
+    if let Some(found) = path_lookup("hc-worker") {
+        tracing::warn!(
+            path = %found.display(),
+            "hc-worker resolved via PATH; production deploys should set HC_SERVER_WORKER_PATH explicitly"
+        );
+        return Ok(());
+    }
+
+    anyhow::bail!(
+        "hc-worker binary not found. Set HC_SERVER_WORKER_PATH, place hc-worker \
+         next to hc-server, or add it to PATH. Refusing to start."
+    )
+}
+
+/// Probe each entry in $PATH for a binary with the given name.
+fn path_lookup(name: &str) -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path_var) {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod worker_validation_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// Serialize tests that mutate the HC_SERVER_WORKER_PATH env var. Cargo
+    /// runs unit tests in parallel by default and env mutation is process-
+    /// global.
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
+    #[test]
+    fn explicit_path_missing_fails_loudly() {
+        let _g = env_lock();
+        std::env::set_var(
+            "HC_SERVER_WORKER_PATH",
+            "/definitely/does/not/exist/hc-worker",
+        );
+        let result = validate_worker_binary();
+        std::env::remove_var("HC_SERVER_WORKER_PATH");
+
+        let err = result.expect_err("missing explicit path must fail");
+        let msg = format!("{err:#}");
+        assert!(msg.contains("does not exist"), "{msg}");
+    }
+
+    #[test]
+    fn explicit_path_non_executable_fails() {
+        let _g = env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hc-worker");
+        std::fs::write(&path, b"#!/bin/sh\necho fake\n").unwrap();
+        // Strip exec bits.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        std::env::set_var("HC_SERVER_WORKER_PATH", &path);
+        let result = validate_worker_binary();
+        std::env::remove_var("HC_SERVER_WORKER_PATH");
+
+        let err = result.expect_err("non-executable path must fail");
+        let msg = format!("{err:#}");
+        assert!(msg.contains("not executable"), "{msg}");
+    }
+
+    #[test]
+    fn explicit_path_executable_succeeds() {
+        let _g = env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hc-worker");
+        std::fs::write(&path, b"#!/bin/sh\necho fake\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        std::env::set_var("HC_SERVER_WORKER_PATH", &path);
+        let result = validate_worker_binary();
+        std::env::remove_var("HC_SERVER_WORKER_PATH");
+
+        result.expect("valid executable must succeed");
+    }
 }
