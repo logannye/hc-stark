@@ -32,25 +32,29 @@ def setup(tmp_path):
     )
     ts_conn.close()
 
-    # Usage database.
+    # Usage database. Schema mirrors crates/hc-server/src/usage_log.rs so the
+    # freshness check (which reads completed_at_ms) sees realistic data.
     usage_path = str(tmp_path / "usage.sqlite")
     usage_conn = sqlite3.connect(usage_path)
     usage_conn.execute("""
         CREATE TABLE usage_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id TEXT NOT NULL,
-            job_id TEXT NOT NULL,
+            job_id TEXT NOT NULL UNIQUE,
             trace_length INTEGER NOT NULL,
+            completed_at_ms INTEGER NOT NULL,
             billed INTEGER NOT NULL DEFAULT 0
         )
     """)
+    import time as _time
+    now_ms = int(_time.time() * 1000)
     usage_conn.execute(
-        "INSERT INTO usage_log (tenant_id, job_id, trace_length) VALUES (?, ?, ?)",
-        ("t_1", "job_100", 5000),  # < 10K → 5 cents
+        "INSERT INTO usage_log (tenant_id, job_id, trace_length, completed_at_ms) VALUES (?, ?, ?, ?)",
+        ("t_1", "job_100", 5000, now_ms),  # < 10K → 5 cents
     )
     usage_conn.execute(
-        "INSERT INTO usage_log (tenant_id, job_id, trace_length) VALUES (?, ?, ?)",
-        ("t_1", "job_101", 50_000),  # 10K-100K → 50 cents
+        "INSERT INTO usage_log (tenant_id, job_id, trace_length, completed_at_ms) VALUES (?, ?, ?, ?)",
+        ("t_1", "job_101", 50_000, now_ms),  # 10K-100K → 50 cents
     )
     usage_conn.commit()
     usage_conn.close()
@@ -78,14 +82,16 @@ class TestPriceCents:
 
     def test_boundary_1m(self):
         assert sync_usage.price_cents(999_999) == 200
-        assert sync_usage.price_cents(1_000_000) == 500
+        # Pricing v2 (commit a7ec699) raised the 1M-10M tier to $8.00.
+        assert sync_usage.price_cents(1_000_000) == 800
 
     def test_very_large_trace(self):
-        assert sync_usage.price_cents(5_000_000) == 500
+        assert sync_usage.price_cents(5_000_000) == 800
 
     def test_xl_trace(self):
-        assert sync_usage.price_cents(10_000_000) == 2000
-        assert sync_usage.price_cents(100_000_000) == 2000
+        # Pricing v2: > 10M trace → $30.00.
+        assert sync_usage.price_cents(10_000_000) == 3000
+        assert sync_usage.price_cents(100_000_000) == 3000
 
 
 class TestDryRun:
@@ -133,6 +139,95 @@ class TestReport:
         assert summary["t_1"]["total_cents"] == 55  # 5 + 50
 
 
+class TestIdempotency:
+    """Verify the dedup contract documented in sync_usage.py."""
+
+    def test_meter_event_uses_immutable_proof_identity(self, setup):
+        ts_path = setup["ts_path"]
+        usage_path = setup["usage_path"]
+
+        sync_usage.USAGE_DB_PATH = usage_path
+        captured = []
+
+        def _fake_create(**kwargs):
+            captured.append(kwargs)
+            return MagicMock(id="evt_test")
+
+        with patch("tenant_store.open_db", return_value=tenant_store.open_db(ts_path)):
+            with patch("stripe.billing.MeterEvent.create", side_effect=_fake_create):
+                with patch("sys.argv", ["sync_usage.py"]):
+                    sync_usage.main()
+
+        # Every call must carry both layers of dedup protection.
+        assert len(captured) == 2
+        for call in captured:
+            assert "identifier" in call, "semantic dedup (Stripe Meter Events identifier)"
+            assert "idempotency_key" in call, "HTTP-level dedup (Stripe SDK retries)"
+            # Identifier must be derived from immutable proof identity, not a
+            # volatile row id.
+            assert call["identifier"].startswith("hc-usage-t_1-job_"), call["identifier"]
+            # The two keys must be distinct strings — they protect against
+            # different failure modes.
+            assert call["identifier"] != call["idempotency_key"]
+
+    def test_post_meter_update_failure_is_alerted(self, setup):
+        """If MeterEvent succeeds but UPDATE billed=1 fails, we must alert
+        loudly so a human can reconcile before Stripe's dedup window expires."""
+        ts_path = setup["ts_path"]
+        usage_path = setup["usage_path"]
+
+        sync_usage.USAGE_DB_PATH = usage_path
+        alerts = []
+
+        def _fake_alert(msg, details):
+            alerts.append((msg, details))
+
+        # sqlite3.Connection.execute is read-only on the class, so a mutable
+        # proxy is the simplest way to inject failure on UPDATE.
+        original_connect = sqlite3.connect
+
+        class _FailingConn:
+            def __init__(self, real):
+                self._real = real
+                self.row_factory = None
+
+            def __setattr__(self, k, v):
+                if k == "_real":
+                    object.__setattr__(self, k, v)
+                else:
+                    setattr(self._real, k, v)
+
+            def __getattr__(self, k):
+                return getattr(self._real, k)
+
+            def execute(self, sql, *args, **kwargs):
+                if sql.startswith("UPDATE usage_log SET billed"):
+                    raise sqlite3.Error("simulated SQLite write failure")
+                return self._real.execute(sql, *args, **kwargs)
+
+            def commit(self):
+                return self._real.commit()
+
+            def close(self):
+                return self._real.close()
+
+        def _broken_connect(path, *a, **kw):
+            return _FailingConn(original_connect(path, *a, **kw))
+
+        with patch("tenant_store.open_db", return_value=tenant_store.open_db(ts_path)):
+            with patch("stripe.billing.MeterEvent.create", return_value=MagicMock(id="evt_x")):
+                with patch.object(sync_usage.sqlite3, "connect", side_effect=_broken_connect):
+                    with patch.object(sync_usage, "_send_alert", side_effect=_fake_alert):
+                        with patch("sys.argv", ["sync_usage.py"]):
+                            sync_usage.main()
+
+        # Both rows should have alerted.
+        post_meter_alerts = [
+            a for a in alerts if "MeterEvent succeeded but UPDATE billed=1 failed" in a[0]
+        ]
+        assert len(post_meter_alerts) == 2, alerts
+
+
 class TestUnbillable:
     def test_skips_tenant_without_customer_id(self, setup, capsys):
         tmp_path = setup["tmp_path"]
@@ -148,12 +243,14 @@ class TestUnbillable:
         usage_conn.execute("""
             CREATE TABLE usage_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tenant_id TEXT, job_id TEXT, trace_length INTEGER, billed INTEGER DEFAULT 0
+                tenant_id TEXT, job_id TEXT UNIQUE, trace_length INTEGER,
+                completed_at_ms INTEGER NOT NULL, billed INTEGER DEFAULT 0
             )
         """)
+        import time as _time
         usage_conn.execute(
-            "INSERT INTO usage_log (tenant_id, job_id, trace_length) VALUES (?, ?, ?)",
-            ("t_no_cus", "job_1", 1000),
+            "INSERT INTO usage_log (tenant_id, job_id, trace_length, completed_at_ms) VALUES (?, ?, ?, ?)",
+            ("t_no_cus", "job_1", 1000, int(_time.time() * 1000)),
         )
         usage_conn.commit()
         usage_conn.close()

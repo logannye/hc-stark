@@ -6,6 +6,27 @@ create_usage_record). The meter event_name must match the Stripe Meter configure
 in the dashboard (default: "proof_usage").
 
 Reads tenant data from tenant_store.sqlite.
+
+Idempotency contract
+--------------------
+Two layers protect against double-billing:
+
+1. **Semantic dedup** (Stripe's `identifier` parameter on MeterEvent.create).
+   Stripe deduplicates meter events whose identifier matches a prior event
+   within its dedup window (~24h). Our identifier is derived from the
+   immutable proof identity (tenant + job + usage row id), so retries of
+   the same usage row never produce a second meter event.
+
+2. **HTTP-level idempotency** (Stripe SDK's `idempotency_key`). Protects
+   against SDK-internal HTTP retries on transient errors — a retried
+   request with the same key returns the original response, never a
+   duplicate event.
+
+If the SQLite UPDATE billed=1 step fails after MeterEvent.create succeeds,
+the next cron run will replay the row and the semantic dedup catches it —
+PROVIDED the next run happens inside Stripe's dedup window. To guard
+against this, we alert if any unbilled row is older than UNBILLED_ALERT_HOURS
+(default 12h), which is well inside the ~24h window.
 """
 
 import argparse
@@ -27,6 +48,10 @@ stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 USAGE_DB_PATH = os.environ.get("HC_USAGE_DB_PATH", "/opt/hc-stark/data/usage.sqlite")
 ALERT_WEBHOOK_URL = os.environ.get("ALERT_WEBHOOK_URL")
 METER_EVENT_NAME = os.environ.get("STRIPE_METER_EVENT_NAME", "proof_usage")
+# Alert if any usage row stays unbilled longer than this. Must stay safely
+# below Stripe's meter-event dedup window (~24h) so a delayed cron run can
+# still rely on semantic dedup to prevent double-billing.
+UNBILLED_ALERT_HOURS = int(os.environ.get("HC_UNBILLED_ALERT_HOURS", "12"))
 
 # Price tiers (trace_length → base cents per proof).
 TIERS = [
@@ -104,11 +129,17 @@ def main() -> None:
     tenants = tenant_store.list_tenants(ts_conn)
     tenant_map: dict[str, dict] = {}
     for t in tenants:
-        tenant_map[t["tenant_id"]] = {
-            "stripe_customer_id": t["stripe_customer_id"],
-            "email": t["email"],
-            "status": t["status"],
-            "plan": t.get("plan", "developer"),
+        # tenant_store.list_tenants returns sqlite3.Row, which doesn't expose
+        # dict.get(). Convert to dict so callers (including the .get fallback
+        # for the legacy plan column) work correctly. This was a latent bug
+        # introduced in 2aeb2b2 (pricing overhaul) — without this conversion
+        # AttributeError aborts the whole billing run.
+        td = dict(t)
+        tenant_map[td["tenant_id"]] = {
+            "stripe_customer_id": td.get("stripe_customer_id"),
+            "email": td.get("email"),
+            "status": td.get("status"),
+            "plan": td.get("plan", "developer"),
         }
     ts_conn.close()
 
@@ -120,8 +151,30 @@ def main() -> None:
     conn.row_factory = sqlite3.Row
 
     rows = conn.execute(
-        "SELECT id, tenant_id, job_id, trace_length FROM usage_log WHERE billed = 0"
+        "SELECT id, tenant_id, job_id, trace_length, completed_at_ms "
+        "FROM usage_log WHERE billed = 0"
     ).fetchall()
+
+    # Freshness check: alert if any unbilled row predates Stripe's dedup window.
+    # If a cron outage has let rows age past UNBILLED_ALERT_HOURS, we can no
+    # longer rely on semantic dedup against repeat MeterEvent.create calls.
+    if rows and not args.report and not args.dry_run:
+        threshold_ms = int(time.time() * 1000) - (UNBILLED_ALERT_HOURS * 3600 * 1000)
+        stale = [r for r in rows if r["completed_at_ms"] < threshold_ms]
+        if stale:
+            stale_summary = {
+                "stale_count": len(stale),
+                "oldest_age_hours": round(
+                    (int(time.time() * 1000) - min(r["completed_at_ms"] for r in stale)) / 3_600_000,
+                    2,
+                ),
+                "threshold_hours": UNBILLED_ALERT_HOURS,
+            }
+            _log({"action": "stale_unbilled", **stale_summary})
+            _send_alert(
+                "Unbilled usage rows older than dedup window — review before next run",
+                stale_summary,
+            )
 
     if not rows:
         _log({"action": "complete", "billed": 0, "skipped": 0, "errors": 0})
@@ -168,12 +221,24 @@ def main() -> None:
                 "action": "would_bill",
                 "tenant_id": tenant_id,
                 "row_id": row["id"],
+                "job_id": row["job_id"],
                 "cents": cents,
                 "stripe_customer_id": customer_id,
                 "meter_event": METER_EVENT_NAME,
+                "meter_identifier": f"hc-usage-{tenant_id}-{row['job_id']}",
             })
             billed += 1
             continue
+
+        # Identifier is derived from the immutable proof identity so Stripe's
+        # semantic dedup catches replays even if the SQLite row id ever
+        # collides (e.g. after a restore-from-backup that resets autoincrement).
+        # job_id is UNIQUE in the source schema, so {tenant_id}-{job_id} is
+        # globally unique per proof.
+        meter_identifier = f"hc-usage-{tenant_id}-{row['job_id']}"
+        # HTTP-level idempotency: protects against SDK-internal retries on
+        # transient network errors. Distinct from the semantic dedup above.
+        http_idempotency_key = f"hc-usage-http-{tenant_id}-{row['job_id']}"
 
         try:
             stripe.billing.MeterEvent.create(
@@ -182,22 +247,59 @@ def main() -> None:
                     "value": str(cents),
                     "stripe_customer_id": customer_id,
                 },
-                identifier=f"hc-usage-{row['id']}",
+                identifier=meter_identifier,
+                idempotency_key=http_idempotency_key,
             )
         except stripe.error.StripeError as e:
             _log({
                 "action": "stripe_error",
                 "tenant_id": tenant_id,
                 "row_id": row["id"],
+                "job_id": row["job_id"],
                 "error": str(e),
             })
             errors += 1
             continue
 
-        conn.execute("UPDATE usage_log SET billed = 1 WHERE id = ?", (row["id"],))
-        conn.commit()
+        # Stripe accepted the event. Mark the row billed. If this UPDATE fails
+        # we must alert — on the next run we'll re-fetch the row, and the
+        # MeterEvent.create call above will be deduped by Stripe (within its
+        # ~24h window). The freshness check at the top of this function will
+        # alert if we drift outside that window.
+        try:
+            conn.execute("UPDATE usage_log SET billed = 1 WHERE id = ?", (row["id"],))
+            conn.commit()
+        except sqlite3.Error as db_err:
+            _log({
+                "action": "post_meter_update_failed",
+                "tenant_id": tenant_id,
+                "row_id": row["id"],
+                "job_id": row["job_id"],
+                "meter_identifier": meter_identifier,
+                "error": str(db_err),
+            })
+            _send_alert(
+                "MeterEvent succeeded but UPDATE billed=1 failed — manual reconciliation required",
+                {
+                    "tenant_id": tenant_id,
+                    "row_id": row["id"],
+                    "job_id": row["job_id"],
+                    "meter_identifier": meter_identifier,
+                    "error": str(db_err),
+                },
+            )
+            errors += 1
+            continue
+
         billed += 1
-        _log({"action": "billed", "tenant_id": tenant_id, "row_id": row["id"], "cents": cents})
+        _log({
+            "action": "billed",
+            "tenant_id": tenant_id,
+            "row_id": row["id"],
+            "job_id": row["job_id"],
+            "cents": cents,
+            "meter_identifier": meter_identifier,
+        })
 
     # Alert on unbillable usage.
     if unbillable:
