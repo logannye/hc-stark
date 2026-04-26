@@ -103,6 +103,23 @@ create_resource() {
 # via curl with Basic auth (key as username, empty password).
 STRIPE_API="https://api.stripe.com/v1"
 
+# Sanity-check that STRIPE_API_KEY is reaching curl. Sometimes the env var is
+# present in the script's bash but a child shell loses it; print a one-time
+# diagnostic of (length, prefix) to catch that without leaking the key.
+echo "  [diag] STRIPE_API_KEY length=${#STRIPE_API_KEY} prefix=${STRIPE_API_KEY:0:8}..." >&2
+if ! curl -sS -o /tmp/stripe_diag.json -w '%{http_code}\n' \
+  "${STRIPE_API}/billing/meters?limit=3" \
+  -u "${STRIPE_API_KEY}:" >/tmp/stripe_diag.code 2>/dev/null; then
+  echo "  [diag] curl invocation failed" >&2
+fi
+DIAG_CODE="$(cat /tmp/stripe_diag.code 2>/dev/null || echo '?')"
+echo "  [diag] /v1/billing/meters returned HTTP ${DIAG_CODE}" >&2
+if [[ "$DIAG_CODE" != "200" ]]; then
+  echo "  [diag] response body (first 300 chars):" >&2
+  head -c 300 /tmp/stripe_diag.json >&2
+  echo "" >&2
+fi
+
 find_product_id_by_name() {
   local name="$1"
   TARGET="$name" curl -sS "${STRIPE_API}/products?limit=100" \
@@ -122,19 +139,28 @@ except Exception:
 
 find_meter_id_by_event() {
   local event="$1"
-  TARGET="$event" curl -sS "${STRIPE_API}/billing/meters?limit=100" \
-    -u "${STRIPE_API_KEY}:" 2>/dev/null | python3 -c "
+  local body
+  body="$(curl -sS "${STRIPE_API}/billing/meters?limit=100" -u "${STRIPE_API_KEY}:" 2>/dev/null)"
+  local found
+  found="$(TARGET="$event" python3 -c "
 import json, sys, os
 target = os.environ.get('TARGET', '')
 try:
-    d = json.load(sys.stdin)
+    d = json.loads(sys.stdin.read())
     for m in d.get('data', []):
-        if m.get('event_name') == target and m.get('status') == 'active':
+        if m.get('event_name') == target:  # match regardless of status
             print(m.get('id', ''))
             sys.exit(0)
-except Exception:
-    pass
-"
+except Exception as e:
+    sys.stderr.write(f'parse error: {e}\n')
+" <<<"$body")"
+  if [[ -z "$found" ]]; then
+    # Diagnostic on miss — print the raw body so the user can see why.
+    echo "  [diag] meter find returned no match. Response (first 300 chars):" >&2
+    echo "$body" | head -c 300 >&2
+    echo "" >&2
+  fi
+  printf '%s' "$found"
 }
 
 find_price_id_by_nickname() {
@@ -171,6 +197,13 @@ find_or_create_product() {
 
 find_or_create_meter() {
   local label="$1"; local response_file="$2"
+  # Manual override: set OVERRIDE_METER_ID=mtr_... if the find function
+  # can't recover an existing meter (Dashboard URL: https://dashboard.stripe.com/billing/meters).
+  if [[ -n "${OVERRIDE_METER_ID:-}" ]]; then
+    printf '  %-40s ... %s (override)\n' "$label" "$OVERRIDE_METER_ID" >&2
+    printf '%s' "$OVERRIDE_METER_ID"
+    return 0
+  fi
   local existing
   existing="$(find_meter_id_by_event "proof_usage")"
   if [[ -n "$existing" ]]; then
