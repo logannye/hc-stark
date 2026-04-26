@@ -3,7 +3,7 @@ use halo2_proofs::{
     circuit::{Layouter, SimpleFloorPlanner, Value},
     plonk::{
         create_proof, keygen_pk, keygen_vk, verify_proof, Advice, Circuit, Column,
-        ConstraintSystem, Error, Expression, Instance, Selector, SingleVerifier,
+        ConstraintSystem, Error, Fixed, Instance, Selector, SingleVerifier,
     },
     poly::{commitment::Params, Rotation},
     transcript::{Blake2bRead, Blake2bWrite, Challenge255},
@@ -17,10 +17,10 @@ use hc_core::{
 };
 
 use super::encode_summary;
+use super::poseidon as poseidon_native;
 use crate::aggregator::ProofSummary;
 
 const HALO2_MIN_K: u32 = 9;
-const GOLDILOCKS_MODULUS: u64 = 0xFFFF_FFFF_0000_0001;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Halo2RecursiveProof {
@@ -30,95 +30,144 @@ pub struct Halo2RecursiveProof {
 }
 
 #[derive(Clone, Debug)]
-pub struct SummaryCircuit {
-    encoding_fields: Vec<Vec<Fr>>,
-    encoding_words: Vec<Vec<u64>>,
-    digests: Vec<Fr>,
-    total_rows: usize,
-}
-
-impl SummaryCircuit {
-    fn new(encoding_fields: Vec<Vec<Fr>>, encoding_words: Vec<Vec<u64>>, digests: Vec<Fr>) -> Self {
-        let total_rows = encoding_fields.iter().map(|e| e.len()).sum();
-        Self {
-            encoding_fields,
-            encoding_words,
-            digests,
-            total_rows,
-        }
-    }
+pub struct PoseidonWitnessCircuit {
+    inputs: Vec<Fr>,
 }
 
 #[derive(Clone, Debug)]
-pub struct SummaryConfig {
-    value: Column<Advice>,
-    acc: Column<Advice>,
-    carry: Column<Advice>,
-    q_first: Selector,
-    q_acc: Selector,
+pub struct PoseidonConfig {
+    state0: Column<Advice>,
+    state1: Column<Advice>,
+    state2: Column<Advice>,
+    in0: Column<Advice>,
+    in1: Column<Advice>,
+    ark0: Column<Fixed>,
+    ark1: Column<Fixed>,
+    ark2: Column<Fixed>,
+    q_absorb: Selector,
+    q_full: Selector,
+    q_partial: Selector,
     instance: Column<Instance>,
+    mds: [[Fr; 3]; 3],
 }
 
-impl Circuit<Fr> for SummaryCircuit {
-    type Config = SummaryConfig;
+fn pow5_expr(x: halo2_proofs::plonk::Expression<Fr>) -> halo2_proofs::plonk::Expression<Fr> {
+    // x^5 = x * x^2 * x^2
+    let x2 = x.clone() * x.clone();
+    x.clone() * x2.clone() * x2
+}
+
+impl Circuit<Fr> for PoseidonWitnessCircuit {
+    type Config = PoseidonConfig;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
-        let encoding_fields = self
-            .encoding_fields
-            .iter()
-            .map(|encoding| vec![Fr::ZERO; encoding.len()])
-            .collect();
-        let encoding_words = self
-            .encoding_words
-            .iter()
-            .map(|encoding| vec![0u64; encoding.len()])
-            .collect();
-        let digests = vec![Fr::ZERO; self.digests.len()];
-        SummaryCircuit::new(encoding_fields, encoding_words, digests)
+        Self {
+            inputs: vec![Fr::ZERO; self.inputs.len()],
+        }
     }
 
     fn configure(meta: &mut ConstraintSystem<Fr>) -> Self::Config {
-        let value = meta.advice_column();
-        let acc = meta.advice_column();
-        let carry = meta.advice_column();
-        let q_first = meta.selector();
-        let q_acc = meta.selector();
+        let state0 = meta.advice_column();
+        let state1 = meta.advice_column();
+        let state2 = meta.advice_column();
+        let in0 = meta.advice_column();
+        let in1 = meta.advice_column();
+        let ark0 = meta.fixed_column();
+        let ark1 = meta.fixed_column();
+        let ark2 = meta.fixed_column();
+        let q_absorb = meta.selector();
+        let q_full = meta.selector();
+        let q_partial = meta.selector();
         let instance = meta.instance_column();
 
-        meta.enable_equality(value);
-        meta.enable_equality(acc);
-        meta.enable_equality(carry);
+        meta.enable_equality(state0);
+        meta.enable_equality(state1);
+        meta.enable_equality(state2);
         meta.enable_equality(instance);
 
-        let goldilocks_mod = Fr::from(GOLDILOCKS_MODULUS);
+        let params = poseidon_native::params();
+        let mds = params.mds;
 
-        meta.create_gate("first row", |meta| {
-            let q = meta.query_selector(q_first);
-            let v = meta.query_advice(value, Rotation::cur());
-            let a = meta.query_advice(acc, Rotation::cur());
-            let c = meta.query_advice(carry, Rotation::cur());
-            vec![q.clone() * (a - v), q * c]
+        // Absorb: (s0',s1',s2') = (s0+in0, s1+in1, s2)
+        meta.create_gate("poseidon_absorb", |meta| {
+            let q = meta.query_selector(q_absorb);
+            let s0 = meta.query_advice(state0, Rotation::cur());
+            let s1 = meta.query_advice(state1, Rotation::cur());
+            let s2 = meta.query_advice(state2, Rotation::cur());
+            let n0 = meta.query_advice(state0, Rotation::next());
+            let n1 = meta.query_advice(state1, Rotation::next());
+            let n2 = meta.query_advice(state2, Rotation::next());
+            let i0 = meta.query_advice(in0, Rotation::cur());
+            let i1 = meta.query_advice(in1, Rotation::cur());
+            vec![
+                q.clone() * (n0 - (s0 + i0)),
+                q.clone() * (n1 - (s1 + i1)),
+                q * (n2 - s2),
+            ]
         });
 
-        meta.create_gate("accumulate", |meta| {
-            let q = meta.query_selector(q_acc);
-            let v = meta.query_advice(value, Rotation::cur());
-            let a = meta.query_advice(acc, Rotation::cur());
-            let a_prev = meta.query_advice(acc, Rotation::prev());
-            let c = meta.query_advice(carry, Rotation::cur());
-            let bool_check = c.clone() * (c.clone() - Expression::Constant(Fr::ONE));
-            let relation = a_prev + v - a - c * Expression::Constant(goldilocks_mod);
-            vec![q.clone() * relation, q * bool_check]
-        });
+        let round_gate = |is_full: bool| {
+            move |meta: &mut halo2_proofs::plonk::VirtualCells<'_, Fr>| {
+                let q = if is_full {
+                    meta.query_selector(q_full)
+                } else {
+                    meta.query_selector(q_partial)
+                };
 
-        SummaryConfig {
-            value,
-            acc,
-            carry,
-            q_first,
-            q_acc,
+                let s0 = meta.query_advice(state0, Rotation::cur());
+                let s1 = meta.query_advice(state1, Rotation::cur());
+                let s2 = meta.query_advice(state2, Rotation::cur());
+                let n0 = meta.query_advice(state0, Rotation::next());
+                let n1 = meta.query_advice(state1, Rotation::next());
+                let n2 = meta.query_advice(state2, Rotation::next());
+
+                let k0 = meta.query_fixed(ark0);
+                let k1 = meta.query_fixed(ark1);
+                let k2 = meta.query_fixed(ark2);
+
+                let x0 = s0 + k0;
+                let x1 = s1 + k1;
+                let x2 = s2 + k2;
+
+                let y0 = pow5_expr(x0);
+                let (y1, y2) = if is_full {
+                    (pow5_expr(x1), pow5_expr(x2))
+                } else {
+                    (x1, x2)
+                };
+
+                let z0 = halo2_proofs::plonk::Expression::Constant(mds[0][0]) * y0.clone()
+                    + halo2_proofs::plonk::Expression::Constant(mds[0][1]) * y1.clone()
+                    + halo2_proofs::plonk::Expression::Constant(mds[0][2]) * y2.clone();
+                let z1 = halo2_proofs::plonk::Expression::Constant(mds[1][0]) * y0.clone()
+                    + halo2_proofs::plonk::Expression::Constant(mds[1][1]) * y1.clone()
+                    + halo2_proofs::plonk::Expression::Constant(mds[1][2]) * y2.clone();
+                let z2 = halo2_proofs::plonk::Expression::Constant(mds[2][0]) * y0
+                    + halo2_proofs::plonk::Expression::Constant(mds[2][1]) * y1
+                    + halo2_proofs::plonk::Expression::Constant(mds[2][2]) * y2;
+
+                vec![q.clone() * (n0 - z0), q.clone() * (n1 - z1), q * (n2 - z2)]
+            }
+        };
+
+        meta.create_gate("poseidon_round_full", round_gate(true));
+        meta.create_gate("poseidon_round_partial", round_gate(false));
+
+        PoseidonConfig {
+            state0,
+            state1,
+            state2,
+            in0,
+            in1,
+            ark0,
+            ark1,
+            ark2,
+            q_absorb,
+            q_full,
+            q_partial,
             instance,
+            mds,
         }
     }
 
@@ -127,69 +176,373 @@ impl Circuit<Fr> for SummaryCircuit {
         config: Self::Config,
         mut layouter: impl Layouter<Fr>,
     ) -> Result<(), Error> {
-        let mut final_cells = Vec::with_capacity(self.digests.len());
+        let params = poseidon_native::params();
+        let rounds = params.ark.len();
+        let full_half = poseidon_native::FULL_ROUNDS / 2;
+        let partial_rounds = poseidon_native::PARTIAL_ROUNDS;
+        let full_start_2 = full_half + partial_rounds;
+
+        // Chunk inputs into rate-2 absorbs (pad with 1 if needed).
+        let mut chunks = Vec::new();
+        let mut i = 0usize;
+        while i < self.inputs.len() {
+            let a = self.inputs[i];
+            let b = if i + 1 < self.inputs.len() {
+                self.inputs[i + 1]
+            } else {
+                Fr::ONE
+            };
+            chunks.push((a, b));
+            i += 2;
+        }
+        if chunks.is_empty() {
+            chunks.push((Fr::ONE, Fr::ZERO));
+        }
+
+        let mut final_cell = None;
 
         layouter.assign_region(
-            || "summary accumulation",
+            || "poseidon_witness_commitment",
             |mut region| {
-                let mut offset = 0;
-                let mut summary_idx = 0usize;
-                final_cells.clear();
-                for (encoding_fields, encoding_words) in
-                    self.encoding_fields.iter().zip(self.encoding_words.iter())
-                {
-                    let mut acc_u64 = 0u64;
-                    for (index, (value, word)) in
-                        encoding_fields.iter().zip(encoding_words).enumerate()
-                    {
-                        let (new_acc, carry) = add_goldilocks(acc_u64, *word);
-                        acc_u64 = new_acc;
-                        let carry_fr = Fr::from(carry);
-                        let acc_fr = Fr::from(new_acc);
-                        region.assign_advice(
-                            || "value",
-                            config.value,
-                            offset,
-                            || Value::known(*value),
-                        )?;
-                        let cell = region.assign_advice(
-                            || "acc",
-                            config.acc,
-                            offset,
-                            || Value::known(acc_fr),
-                        )?;
-                        region.assign_advice(
-                            || "carry",
-                            config.carry,
-                            offset,
-                            || Value::known(carry_fr),
-                        )?;
-                        if index == 0 {
-                            config.q_first.enable(&mut region, offset)?;
+                let mut offset = 0usize;
+
+                // Initialize state to zero.
+                region.assign_advice(|| "s0", config.state0, offset, || Value::known(Fr::ZERO))?;
+                region.assign_advice(|| "s1", config.state1, offset, || Value::known(Fr::ZERO))?;
+                region.assign_advice(|| "s2", config.state2, offset, || Value::known(Fr::ZERO))?;
+                region.assign_advice(|| "in0", config.in0, offset, || Value::known(Fr::ZERO))?;
+                region.assign_advice(|| "in1", config.in1, offset, || Value::known(Fr::ZERO))?;
+                offset += 1;
+
+                // Domain separation permutation: start from state = [domain_tag, 0, 0] and permute.
+                let mut state = [poseidon_native::domain_tag(), Fr::ZERO, Fr::ZERO];
+                region.assign_advice(
+                    || "s0_domain",
+                    config.state0,
+                    offset,
+                    || Value::known(state[0]),
+                )?;
+                region.assign_advice(
+                    || "s1_domain",
+                    config.state1,
+                    offset,
+                    || Value::known(state[1]),
+                )?;
+                region.assign_advice(
+                    || "s2_domain",
+                    config.state2,
+                    offset,
+                    || Value::known(state[2]),
+                )?;
+                region.assign_advice(
+                    || "in0_domain",
+                    config.in0,
+                    offset,
+                    || Value::known(Fr::ZERO),
+                )?;
+                region.assign_advice(
+                    || "in1_domain",
+                    config.in1,
+                    offset,
+                    || Value::known(Fr::ZERO),
+                )?;
+
+                // Run permutation rounds (no absorb).
+                for r in 0..rounds {
+                    let is_full = r < full_half || r >= full_start_2;
+                    if is_full {
+                        config.q_full.enable(&mut region, offset)?;
+                    } else {
+                        config.q_partial.enable(&mut region, offset)?;
+                    }
+                    region.assign_fixed(
+                        || "ark0",
+                        config.ark0,
+                        offset,
+                        || Value::known(params.ark[r][0]),
+                    )?;
+                    region.assign_fixed(
+                        || "ark1",
+                        config.ark1,
+                        offset,
+                        || Value::known(params.ark[r][1]),
+                    )?;
+                    region.assign_fixed(
+                        || "ark2",
+                        config.ark2,
+                        offset,
+                        || Value::known(params.ark[r][2]),
+                    )?;
+                    region.assign_advice(
+                        || "s0",
+                        config.state0,
+                        offset,
+                        || Value::known(state[0]),
+                    )?;
+                    region.assign_advice(
+                        || "s1",
+                        config.state1,
+                        offset,
+                        || Value::known(state[1]),
+                    )?;
+                    region.assign_advice(
+                        || "s2",
+                        config.state2,
+                        offset,
+                        || Value::known(state[2]),
+                    )?;
+                    region.assign_advice(
+                        || "in0",
+                        config.in0,
+                        offset,
+                        || Value::known(Fr::ZERO),
+                    )?;
+                    region.assign_advice(
+                        || "in1",
+                        config.in1,
+                        offset,
+                        || Value::known(Fr::ZERO),
+                    )?;
+
+                    let mut x0 = state[0] + params.ark[r][0];
+                    let mut x1 = state[1] + params.ark[r][1];
+                    let mut x2 = state[2] + params.ark[r][2];
+                    x0 = x0.pow_vartime([5, 0, 0, 0]);
+                    if is_full {
+                        x1 = x1.pow_vartime([5, 0, 0, 0]);
+                        x2 = x2.pow_vartime([5, 0, 0, 0]);
+                    }
+                    let n0 = config.mds[0][0] * x0 + config.mds[0][1] * x1 + config.mds[0][2] * x2;
+                    let n1 = config.mds[1][0] * x0 + config.mds[1][1] * x1 + config.mds[1][2] * x2;
+                    let n2 = config.mds[2][0] * x0 + config.mds[2][1] * x1 + config.mds[2][2] * x2;
+                    state = [n0, n1, n2];
+                    region.assign_advice(
+                        || "s0_next",
+                        config.state0,
+                        offset + 1,
+                        || Value::known(state[0]),
+                    )?;
+                    region.assign_advice(
+                        || "s1_next",
+                        config.state1,
+                        offset + 1,
+                        || Value::known(state[1]),
+                    )?;
+                    region.assign_advice(
+                        || "s2_next",
+                        config.state2,
+                        offset + 1,
+                        || Value::known(state[2]),
+                    )?;
+                    region.assign_advice(
+                        || "in0_next",
+                        config.in0,
+                        offset + 1,
+                        || Value::known(Fr::ZERO),
+                    )?;
+                    region.assign_advice(
+                        || "in1_next",
+                        config.in1,
+                        offset + 1,
+                        || Value::known(Fr::ZERO),
+                    )?;
+                    offset += 1;
+                }
+
+                // Absorb + permute per chunk (starting from the domain-separated state).
+                for (chunk_idx, (a, b)) in chunks.iter().copied().enumerate() {
+                    // Absorb row.
+                    config.q_absorb.enable(&mut region, offset)?;
+                    region.assign_advice(|| "in0", config.in0, offset, || Value::known(a))?;
+                    region.assign_advice(|| "in1", config.in1, offset, || Value::known(b))?;
+
+                    // Set current state.
+                    region.assign_advice(
+                        || "s0",
+                        config.state0,
+                        offset,
+                        || Value::known(state[0]),
+                    )?;
+                    region.assign_advice(
+                        || "s1",
+                        config.state1,
+                        offset,
+                        || Value::known(state[1]),
+                    )?;
+                    region.assign_advice(
+                        || "s2",
+                        config.state2,
+                        offset,
+                        || Value::known(state[2]),
+                    )?;
+
+                    // Next state after absorb.
+                    state[0] += a;
+                    state[1] += b;
+                    region.assign_advice(
+                        || "s0'",
+                        config.state0,
+                        offset + 1,
+                        || Value::known(state[0]),
+                    )?;
+                    region.assign_advice(
+                        || "s1'",
+                        config.state1,
+                        offset + 1,
+                        || Value::known(state[1]),
+                    )?;
+                    region.assign_advice(
+                        || "s2'",
+                        config.state2,
+                        offset + 1,
+                        || Value::known(state[2]),
+                    )?;
+                    region.assign_advice(
+                        || "in0'",
+                        config.in0,
+                        offset + 1,
+                        || Value::known(Fr::ZERO),
+                    )?;
+                    region.assign_advice(
+                        || "in1'",
+                        config.in1,
+                        offset + 1,
+                        || Value::known(Fr::ZERO),
+                    )?;
+
+                    offset += 1;
+
+                    // Permutation rounds: each round consumes one row (cur) and writes next row.
+                    for r in 0..rounds {
+                        let is_full = r < full_half || r >= full_start_2;
+                        if is_full {
+                            config.q_full.enable(&mut region, offset)?;
                         } else {
-                            config.q_acc.enable(&mut region, offset)?;
+                            config.q_partial.enable(&mut region, offset)?;
                         }
+
+                        // Fixed ARK for this round at this row.
+                        region.assign_fixed(
+                            || "ark0",
+                            config.ark0,
+                            offset,
+                            || Value::known(params.ark[r][0]),
+                        )?;
+                        region.assign_fixed(
+                            || "ark1",
+                            config.ark1,
+                            offset,
+                            || Value::known(params.ark[r][1]),
+                        )?;
+                        region.assign_fixed(
+                            || "ark2",
+                            config.ark2,
+                            offset,
+                            || Value::known(params.ark[r][2]),
+                        )?;
+
+                        // Assign current state (already assigned on the first round's row via absorb next),
+                        // but for subsequent rounds we need to ensure it's present.
+                        region.assign_advice(
+                            || "s0",
+                            config.state0,
+                            offset,
+                            || Value::known(state[0]),
+                        )?;
+                        region.assign_advice(
+                            || "s1",
+                            config.state1,
+                            offset,
+                            || Value::known(state[1]),
+                        )?;
+                        region.assign_advice(
+                            || "s2",
+                            config.state2,
+                            offset,
+                            || Value::known(state[2]),
+                        )?;
+                        region.assign_advice(
+                            || "in0",
+                            config.in0,
+                            offset,
+                            || Value::known(Fr::ZERO),
+                        )?;
+                        region.assign_advice(
+                            || "in1",
+                            config.in1,
+                            offset,
+                            || Value::known(Fr::ZERO),
+                        )?;
+
+                        // Compute next state n = MDS * SBOX(state + ark)
+                        let mut x0 = state[0] + params.ark[r][0];
+                        let mut x1 = state[1] + params.ark[r][1];
+                        let mut x2 = state[2] + params.ark[r][2];
+                        x0 = x0.pow_vartime([5, 0, 0, 0]);
+                        if is_full {
+                            x1 = x1.pow_vartime([5, 0, 0, 0]);
+                            x2 = x2.pow_vartime([5, 0, 0, 0]);
+                        }
+                        let n0 =
+                            config.mds[0][0] * x0 + config.mds[0][1] * x1 + config.mds[0][2] * x2;
+                        let n1 =
+                            config.mds[1][0] * x0 + config.mds[1][1] * x1 + config.mds[1][2] * x2;
+                        let n2 =
+                            config.mds[2][0] * x0 + config.mds[2][1] * x1 + config.mds[2][2] * x2;
+                        state = [n0, n1, n2];
+
+                        // Assign next row state.
+                        region.assign_advice(
+                            || "s0_next",
+                            config.state0,
+                            offset + 1,
+                            || Value::known(state[0]),
+                        )?;
+                        region.assign_advice(
+                            || "s1_next",
+                            config.state1,
+                            offset + 1,
+                            || Value::known(state[1]),
+                        )?;
+                        region.assign_advice(
+                            || "s2_next",
+                            config.state2,
+                            offset + 1,
+                            || Value::known(state[2]),
+                        )?;
+                        region.assign_advice(
+                            || "in0_next",
+                            config.in0,
+                            offset + 1,
+                            || Value::known(Fr::ZERO),
+                        )?;
+                        region.assign_advice(
+                            || "in1_next",
+                            config.in1,
+                            offset + 1,
+                            || Value::known(Fr::ZERO),
+                        )?;
+
                         offset += 1;
-                        if index + 1 == encoding_fields.len() {
-                            #[cfg(debug_assertions)]
-                            debug_assert_eq!(
-                                acc_fr,
-                                self.digests[summary_idx],
-                                "accumulator mismatch for summary {summary_idx}"
-                            );
-                            final_cells.push(cell);
-                            summary_idx += 1;
-                        }
+                    }
+
+                    // After last chunk's permutation, remember state0 as output.
+                    if chunk_idx + 1 == chunks.len() {
+                        final_cell = Some(region.assign_advice(
+                            || "digest",
+                            config.state0,
+                            offset,
+                            || Value::known(state[0]),
+                        )?);
                     }
                 }
                 Ok(())
             },
         )?;
 
-        for (idx, cell) in final_cells.into_iter().enumerate() {
-            layouter.constrain_instance(cell.cell(), config.instance, idx)?;
-        }
-
+        // Constrain digest to instance[0].
+        let cell = final_cell.ok_or(Error::Synthesis)?;
+        layouter.constrain_instance(cell.cell(), config.instance, 0)?;
         Ok(())
     }
 }
@@ -202,26 +555,24 @@ pub fn prove_summaries(
             "cannot build recursion circuit without summaries",
         ));
     }
-    let encoding_fields = summaries.iter().map(encoding_to_fr).collect::<Vec<_>>();
-    let encoding_words = summaries.iter().map(encoding_words).collect::<Vec<_>>();
-    #[cfg(debug_assertions)]
-    for (summary, words) in summaries.iter().zip(encoding_words.iter()) {
-        let mut acc = 0u64;
-        for word in words {
-            acc = add_goldilocks(acc, *word).0;
-        }
-        debug_assert_eq!(
-            acc,
-            summary.circuit_digest.to_u64(),
-            "summary digest mismatch"
+
+    let mut inputs = Vec::new();
+    for summary in summaries {
+        inputs.extend(
+            encode_summary(summary)
+                .as_fields()
+                .into_iter()
+                .map(|value| Fr::from(value.to_u64())),
         );
     }
-    let public_inputs = summaries
-        .iter()
-        .map(|summary| Fr::from(summary.circuit_digest.to_u64()))
-        .collect::<Vec<_>>();
-    let circuit = SummaryCircuit::new(encoding_fields, encoding_words, public_inputs.clone());
-    let k = halo2_k_for_rows(circuit.total_rows);
+    let digest = poseidon_native::hash(inputs.as_slice());
+    let circuit = PoseidonWitnessCircuit {
+        inputs: inputs.clone(),
+    };
+
+    let k = halo2_k_for_rows(
+        1 + (1 + poseidon_native::params().ark.len()) * ((inputs.len() + 1).div_ceil(2)),
+    );
     let params = halo2_params(k);
 
     let vk = keygen_vk(&params, &circuit)
@@ -229,6 +580,7 @@ pub fn prove_summaries(
     let pk = keygen_pk(&params, vk, &circuit)
         .map_err(|err| HcError::message(format!("failed to build recursion pk: {err}")))?;
 
+    let public_inputs = vec![digest];
     let mut transcript = Blake2bWrite::<_, G1Affine, Challenge255<G1Affine>>::init(Vec::new());
     let instance_columns = vec![public_inputs.as_slice()];
     let instance_views = vec![instance_columns.as_slice()];
@@ -250,49 +602,32 @@ pub fn verify_summaries(
     halo2_proof: &Halo2RecursiveProof,
     summaries: &[ProofSummary<GoldilocksField>],
 ) -> HcResult<()> {
-    let encoding_fields = summaries.iter().map(encoding_to_fr).collect::<Vec<_>>();
-    let encoding_words = summaries.iter().map(encoding_words).collect::<Vec<_>>();
-    let public_inputs = summaries
-        .iter()
-        .map(|summary| Fr::from(summary.circuit_digest.to_u64()))
-        .collect::<Vec<_>>();
-    let circuit = SummaryCircuit::new(encoding_fields, encoding_words, public_inputs.clone());
+    let mut inputs = Vec::new();
+    for summary in summaries {
+        inputs.extend(
+            encode_summary(summary)
+                .as_fields()
+                .into_iter()
+                .map(|value| Fr::from(value.to_u64())),
+        );
+    }
+    let digest = poseidon_native::hash(inputs.as_slice());
+    let circuit = PoseidonWitnessCircuit {
+        inputs: inputs.clone(),
+    };
+
     let params = halo2_params(halo2_proof.k);
     let vk = keygen_vk(&params, &circuit)
         .map_err(|err| HcError::message(format!("failed to rebuild recursion vk: {err}")))?;
 
     let strategy = SingleVerifier::new(&params);
+    let public_inputs = vec![digest];
     let instance_columns = vec![public_inputs.as_slice()];
     let instance_views = vec![instance_columns.as_slice()];
     let mut transcript =
         Blake2bRead::<_, G1Affine, Challenge255<G1Affine>>::init(halo2_proof.proof.as_slice());
     verify_proof::<G1Affine, _, _, _>(&params, &vk, strategy, &instance_views, &mut transcript)
         .map_err(|err| HcError::message(format!("halo2 recursion proof invalid: {err}")))
-}
-
-fn encoding_to_fr(summary: &ProofSummary<GoldilocksField>) -> Vec<Fr> {
-    encode_summary(summary)
-        .as_fields()
-        .into_iter()
-        .map(|value| Fr::from(value.to_u64()))
-        .collect()
-}
-
-fn encoding_words(summary: &ProofSummary<GoldilocksField>) -> Vec<u64> {
-    encode_summary(summary)
-        .as_fields()
-        .into_iter()
-        .map(|value| value.to_u64())
-        .collect()
-}
-
-fn add_goldilocks(acc: u64, value: u64) -> (u64, u64) {
-    let sum = acc as u128 + value as u128;
-    if sum >= GOLDILOCKS_MODULUS as u128 {
-        ((sum - GOLDILOCKS_MODULUS as u128) as u64, 1)
-    } else {
-        (sum as u64, 0)
-    }
 }
 
 fn halo2_k_for_rows(rows: usize) -> u32 {

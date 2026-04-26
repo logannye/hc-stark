@@ -33,7 +33,11 @@ async fn list_templates_returns_all_templates() {
     let result = s.list_templates_impl().await.unwrap();
     let val = extract_json(&result);
     let arr = val.as_array().unwrap();
-    assert!(arr.len() >= 6, "expected at least 6 templates, got {}", arr.len());
+    assert!(
+        arr.len() >= 6,
+        "expected at least 6 templates, got {}",
+        arr.len()
+    );
 
     // Check that accumulator_step is in the list
     let has_acc = arr.iter().any(|t| t["id"] == "accumulator_step");
@@ -70,9 +74,15 @@ async fn describe_unknown_template_returns_error() {
     let params = hc_mcp::types::DescribeTemplateParams {
         template_id: "nonexistent_template".to_string(),
     };
-    let err = s.describe_template_impl(Parameters(params)).await.unwrap_err();
+    let err = s
+        .describe_template_impl(Parameters(params))
+        .await
+        .unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.contains("nonexistent_template"), "error should mention template name");
+    assert!(
+        msg.contains("nonexistent_template"),
+        "error should mention template name"
+    );
 }
 
 #[tokio::test]
@@ -123,7 +133,10 @@ async fn prove_template_accumulator_roundtrip() {
             panic!("proof job failed: {:?}", poll_val["error"]);
         }
         attempts += 1;
-        assert!(attempts < 150, "proof job didn't complete within 30 seconds");
+        assert!(
+            attempts < 150,
+            "proof job didn't complete within 30 seconds"
+        );
     }
 
     // Get proof bytes
@@ -140,7 +153,10 @@ async fn prove_template_accumulator_roundtrip() {
     let verify_params = hc_mcp::types::VerifyProofParams {
         proof_b64: proof_b64.to_string(),
     };
-    let verify_result = s.verify_proof_impl(Parameters(verify_params)).await.unwrap();
+    let verify_result = s
+        .verify_proof_impl(Parameters(verify_params))
+        .await
+        .unwrap();
     let verify_val = extract_json(&verify_result);
     assert_eq!(verify_val["valid"], true, "proof should verify");
 }
@@ -160,7 +176,10 @@ async fn prove_template_with_bad_params_returns_error() {
     };
     let err = s.prove_template_impl(Parameters(params)).await.unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.contains("deltas") || msg.contains("parameter"), "error should mention missing param");
+    assert!(
+        msg.contains("deltas") || msg.contains("parameter"),
+        "error should mention missing param"
+    );
 }
 
 #[tokio::test]
@@ -173,7 +192,10 @@ async fn prove_unknown_template_returns_error() {
     };
     let err = s.prove_template_impl(Parameters(params)).await.unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.contains("nonexistent"), "error should mention template name");
+    assert!(
+        msg.contains("nonexistent"),
+        "error should mention template name"
+    );
 }
 
 #[tokio::test]
@@ -184,7 +206,10 @@ async fn poll_unknown_job_returns_error() {
     };
     let err = s.poll_job_impl(Parameters(params)).await.unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.contains("nonexistent-job-id"), "error should mention job ID");
+    assert!(
+        msg.contains("nonexistent-job-id"),
+        "error should mention job ID"
+    );
 }
 
 #[tokio::test]
@@ -207,22 +232,35 @@ async fn get_proof_summary_for_completed_job() {
     // Wait for completion
     loop {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        let poll = s.poll_job_impl(Parameters(hc_mcp::types::PollJobParams {
-            job_id: job_id.clone(),
-        })).await.unwrap();
+        let poll = s
+            .poll_job_impl(Parameters(hc_mcp::types::PollJobParams {
+                job_id: job_id.clone(),
+            }))
+            .await
+            .unwrap();
         let pv = extract_json(&poll);
-        if pv["status"] == "succeeded" { break; }
-        if pv["status"] == "failed" { panic!("job failed: {:?}", pv["error"]); }
+        if pv["status"] == "succeeded" {
+            break;
+        }
+        if pv["status"] == "failed" {
+            panic!("job failed: {:?}", pv["error"]);
+        }
     }
 
     // Get human-readable summary
     let summary_params = hc_mcp::types::GetProofSummaryParams {
         job_id: job_id.clone(),
     };
-    let summary_result = s.get_proof_summary_impl(Parameters(summary_params)).await.unwrap();
+    let summary_result = s
+        .get_proof_summary_impl(Parameters(summary_params))
+        .await
+        .unwrap();
     let text = extract_text(&summary_result);
     assert!(text.contains("succeeded"), "summary should mention success");
-    assert!(text.contains("accumulator_step"), "summary should mention template");
+    assert!(
+        text.contains("accumulator_step"),
+        "summary should mention template"
+    );
 }
 
 #[tokio::test]
@@ -233,5 +271,8 @@ async fn verify_invalid_proof_returns_invalid() {
     };
     let err = s.verify_proof_impl(Parameters(params)).await.unwrap_err();
     let msg = format!("{:?}", err);
-    assert!(msg.contains("base64") || msg.contains("Invalid"), "should report base64 error");
+    assert!(
+        msg.contains("base64") || msg.contains("Invalid"),
+        "should report base64 error"
+    );
 }

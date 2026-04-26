@@ -7,112 +7,38 @@ use hc_core::{
 };
 use hc_hash::{hash::HashDigest, Blake3, HashFunction};
 
-use crate::oracles::{FriOracle, InMemoryFriOracle};
-
-#[derive(Clone, Debug)]
-pub struct FriLayer<F: FieldElement> {
-    pub beta: F,
-    pub oracle: InMemoryFriOracle<F>,
-    merkle_root: HashDigest,
-    leaf_hashes: Arc<Vec<HashDigest>>,
+/// Hash function for committing to FRI layer evaluations.
+///
+/// Note: this is not meant to be cryptographically “special”; it just needs to
+/// bind values to Merkle leaves deterministically.
+pub fn hash_value<F: FieldElement>(value: &F) -> HashDigest {
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&value.to_u64().to_le_bytes());
+    bytes[8..].copy_from_slice(&value.square().to_u64().to_le_bytes());
+    Blake3::hash(&bytes)
 }
 
-impl<F: FieldElement> FriLayer<F> {
-    pub fn from_values(beta: F, values: Arc<Vec<F>>) -> HcResult<Self> {
-        let hashes: Vec<HashDigest> = values.iter().map(Self::hash_value).collect();
-        let mut builder = StreamingMerkle::<Blake3>::new();
-        for hash in &hashes {
-            builder.push(*hash);
-        }
-        let root = builder
-            .finalize()
-            .ok_or_else(|| HcError::message("failed to finalize FRI layer commitment"))?;
-        Ok(Self {
-            beta,
-            oracle: InMemoryFriOracle::new(values),
-            merkle_root: root,
-            leaf_hashes: Arc::new(hashes),
-        })
-    }
-
-    pub fn len(&self) -> usize {
-        self.oracle.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.oracle.is_empty()
-    }
-
-    pub fn merkle_root(&self) -> HashDigest {
-        self.merkle_root
-    }
-
-    pub fn merkle_path(&self, index: usize) -> HcResult<MerklePath> {
-        let hashes = Arc::clone(&self.leaf_hashes);
-        reconstruct_path_from_replay::<Blake3, _>(index, hashes.len(), 2, &|idx| hashes[idx])
-    }
-
-    pub fn hash_value(value: &F) -> HashDigest {
-        let mut bytes = [0u8; 16];
-        bytes[..8].copy_from_slice(&value.to_u64().to_le_bytes());
-        bytes[8..].copy_from_slice(&value.square().to_u64().to_le_bytes());
-        Blake3::hash(&bytes)
-    }
+pub fn compute_leaf_hashes<F: FieldElement>(values: &[F]) -> Vec<HashDigest> {
+    values.iter().map(hash_value::<F>).collect()
 }
 
-#[derive(Clone, Debug)]
-pub struct FriFinalLayer<F: FieldElement> {
-    values: Arc<Vec<F>>,
-    merkle_root: HashDigest,
-    leaf_hashes: Arc<Vec<HashDigest>>,
+pub fn merkle_root_from_hashes(hashes: &[HashDigest]) -> HcResult<HashDigest> {
+    if hashes.is_empty() {
+        return Err(HcError::invalid_argument(
+            "cannot build Merkle root from empty hash list",
+        ));
+    }
+    let mut builder = StreamingMerkle::<Blake3>::new();
+    for hash in hashes {
+        builder.push(*hash);
+    }
+    builder
+        .finalize()
+        .ok_or_else(|| HcError::message("failed to finalize merkle tree"))
 }
 
-impl<F: FieldElement> FriFinalLayer<F> {
-    pub fn from_values(values: Arc<Vec<F>>) -> HcResult<Self> {
-        if values.is_empty() {
-            return Err(HcError::invalid_argument(
-                "final FRI layer must contain at least one evaluation",
-            ));
-        }
-        let hashes: Vec<HashDigest> = values.iter().map(FriLayer::hash_value).collect();
-        let mut builder = StreamingMerkle::<Blake3>::new();
-        for hash in &hashes {
-            builder.push(*hash);
-        }
-        let root = builder
-            .finalize()
-            .ok_or_else(|| HcError::message("failed to finalize final layer commitment"))?;
-        Ok(Self {
-            values,
-            merkle_root: root,
-            leaf_hashes: Arc::new(hashes),
-        })
-    }
-
-    pub fn evaluations(&self) -> &[F] {
-        &self.values
-    }
-
-    pub fn len(&self) -> usize {
-        self.values.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
-    }
-
-    pub fn merkle_root(&self) -> HashDigest {
-        self.merkle_root
-    }
-
-    pub fn merkle_path(&self, index: usize) -> HcResult<MerklePath> {
-        let hashes = Arc::clone(&self.leaf_hashes);
-        reconstruct_path_from_replay::<Blake3, _>(index, hashes.len(), 2, &|idx| hashes[idx])
-    }
-
-    pub fn hash_leaf(value: &F) -> HashDigest {
-        FriLayer::hash_value(value)
-    }
+pub fn merkle_path_from_hashes(hashes: Arc<Vec<HashDigest>>, index: usize) -> HcResult<MerklePath> {
+    reconstruct_path_from_replay::<Blake3, _>(index, hashes.len(), 2, &|idx| hashes[idx])
 }
 
 pub fn fold_layer<F: FieldElement>(values: &[F], beta: F) -> HcResult<Vec<F>> {

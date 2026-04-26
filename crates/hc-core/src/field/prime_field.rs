@@ -100,7 +100,11 @@ impl GoldilocksField {
 
         // Final canonical reduction: t2 may still be in [p, 2p).
         let reduced = t2.wrapping_sub(GOLDILOCKS_MODULUS);
-        if t2 >= GOLDILOCKS_MODULUS { reduced } else { t2 }
+        if t2 >= GOLDILOCKS_MODULUS {
+            reduced
+        } else {
+            t2
+        }
     }
 }
 
@@ -464,7 +468,7 @@ mod tests {
             MODULUS_U128 - 1,
             MODULUS_U128,
             MODULUS_U128 + 1,
-            (MODULUS_U128 - 1) * (MODULUS_U128 - 1),  // (p-1)^2
+            (MODULUS_U128 - 1) * (MODULUS_U128 - 1), // (p-1)^2
             u128::MAX,
             u128::MAX - 1,
             (1u128 << 64) - 1,

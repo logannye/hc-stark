@@ -1,7 +1,7 @@
 use crate::{
     domain::EvaluationDomain,
     error::{HcError, HcResult},
-    fft::{fft_in_place, ifft_in_place},
+    fft::{fft_parallel as fft_in_place, ifft_parallel as ifft_in_place},
     field::{FieldElement, TwoAdicField},
 };
 

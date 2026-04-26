@@ -39,9 +39,7 @@ where
         if self.config.trace_length == 0 {
             0
         } else {
-            self.config
-                .trace_length
-                .div_ceil(self.config.block_size)
+            self.config.trace_length.div_ceil(self.config.block_size)
         }
     }
 

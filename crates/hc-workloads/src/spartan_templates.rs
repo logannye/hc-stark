@@ -108,7 +108,10 @@ pub fn list_spartan_templates() -> Vec<&'static SpartanTemplate> {
 }
 
 pub fn list_spartan_template_infos() -> Vec<SpartanTemplateInfo> {
-    list_spartan_templates().iter().map(|t| t.to_info()).collect()
+    list_spartan_templates()
+        .iter()
+        .map(|t| t.to_info())
+        .collect()
 }
 
 pub fn spartan_template_by_id(id: &str) -> Option<&'static SpartanTemplate> {

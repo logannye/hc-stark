@@ -56,7 +56,10 @@ impl MultilinearPoly {
                 evaluations.len()
             )));
         }
-        Ok(Self { num_vars, evaluations })
+        Ok(Self {
+            num_vars,
+            evaluations,
+        })
     }
 
     /// Sum every entry on the hypercube. Used as the canonical "claimed sum"
@@ -294,7 +297,10 @@ pub fn verify_protocol(
     }
 
     let mut transcript: Transcript<Blake3> = Transcript::new(config.domain_separator);
-    transcript.append_message(b"sumcheck.num_vars", &(claim.num_variables as u64).to_le_bytes());
+    transcript.append_message(
+        b"sumcheck.num_vars",
+        &(claim.num_variables as u64).to_le_bytes(),
+    );
     transcript.append_message(b"sumcheck.degree", &(claim.degree as u64).to_le_bytes());
     transcript.append_message(b"sumcheck.claim", &claim.claimed_sum.to_le_bytes());
 
@@ -378,10 +384,14 @@ mod tests {
     use hc_core::field::FieldElement;
 
     fn seeded_rng(seed: u64, n: usize) -> Vec<F> {
-        let mut x = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let mut x = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (0..n)
             .map(|_| {
-                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                x = x
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 F::new(x % (1u64 << 16))
             })
             .collect()
@@ -395,9 +405,7 @@ mod tests {
     fn evaluate_at_boolean_point_recovers_table_entry() {
         let p = random_poly(1, 3);
         for idx in 0..(1u64 << 3) {
-            let pt: Vec<F> = (0..3)
-                .map(|b| F::new((idx >> b) & 1))
-                .collect();
+            let pt: Vec<F> = (0..3).map(|b| F::new((idx >> b) & 1)).collect();
             let got = p.evaluate_at(&pt).unwrap();
             assert_eq!(got, p.evaluations[idx as usize]);
         }

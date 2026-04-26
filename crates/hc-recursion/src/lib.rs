@@ -1,8 +1,12 @@
 #![forbid(unsafe_code)]
 
 pub mod aggregator;
+pub mod aggregator_v2;
 pub mod artifact;
 pub mod circuit;
+pub mod dual_commit;
+pub mod ivc;
+pub mod poseidon_transcript;
 pub mod spec;
 pub mod wrapper;
 
@@ -36,6 +40,7 @@ mod tests {
         let config = ProverConfig::new(2, 2).unwrap();
         let prover_proof = prove(config, program, inputs.clone()).unwrap();
         let proof = Proof {
+            version: prover_proof.version,
             trace_commitment: prover_proof.trace_commitment.clone(),
             composition_commitment: prover_proof.composition_commitment.clone(),
             fri_proof: prover_proof.fri_proof,
@@ -43,6 +48,7 @@ mod tests {
             final_acc: inputs.final_acc,
             query_response: prover_proof.query_response,
             trace_length: prover_proof.trace_length,
+            params: prover_proof.params,
         };
         let summary = aggregate(&[proof.clone()]).unwrap();
         assert_eq!(summary.total_proofs, 1);
@@ -70,6 +76,7 @@ mod tests {
         let config = ProverConfig::new(2, 2).unwrap();
         let prover_proof = prove(config, program.clone(), inputs.clone()).unwrap();
         let proof = Proof {
+            version: prover_proof.version,
             trace_commitment: prover_proof.trace_commitment,
             composition_commitment: prover_proof.composition_commitment,
             fri_proof: prover_proof.fri_proof,
@@ -77,6 +84,7 @@ mod tests {
             final_acc: inputs.final_acc,
             query_response: prover_proof.query_response,
             trace_length: prover_proof.trace_length,
+            params: prover_proof.params,
         };
         let spec = RecursionSpec {
             max_depth: 1,
@@ -107,6 +115,7 @@ mod tests {
         let prover_b = prove(config, program, inputs_b.clone()).unwrap();
 
         let proof_a = Proof {
+            version: prover_a.version,
             trace_commitment: prover_a.trace_commitment,
             composition_commitment: prover_a.composition_commitment,
             fri_proof: prover_a.fri_proof,
@@ -114,8 +123,10 @@ mod tests {
             final_acc: inputs_a.final_acc,
             query_response: prover_a.query_response,
             trace_length: prover_a.trace_length,
+            params: prover_a.params,
         };
         let proof_b = Proof {
+            version: prover_b.version,
             trace_commitment: prover_b.trace_commitment,
             composition_commitment: prover_b.composition_commitment,
             fri_proof: prover_b.fri_proof,
@@ -123,6 +134,7 @@ mod tests {
             final_acc: inputs_b.final_acc,
             query_response: prover_b.query_response,
             trace_length: prover_b.trace_length,
+            params: prover_b.params,
         };
 
         let aggregated = wrap_proofs(&[proof_a, proof_b]).unwrap();
@@ -155,6 +167,7 @@ mod tests {
             };
             let prover_proof = prove(config, program.clone(), inputs.clone()).unwrap();
             proofs.push(Proof {
+                version: prover_proof.version,
                 trace_commitment: prover_proof.trace_commitment,
                 composition_commitment: prover_proof.composition_commitment,
                 fri_proof: prover_proof.fri_proof,
@@ -162,6 +175,7 @@ mod tests {
                 final_acc: inputs.final_acc,
                 query_response: prover_proof.query_response,
                 trace_length: prover_proof.trace_length,
+                params: prover_proof.params,
             });
         }
 

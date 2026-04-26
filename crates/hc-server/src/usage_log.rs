@@ -222,11 +222,11 @@ pub fn price_cents_pub(trace_length: usize) -> u64 {
 
 fn price_cents(trace_length: usize) -> u64 {
     match trace_length {
-        0..10_000 => 5,              // $0.05
-        10_000..100_000 => 50,       // $0.50
-        100_000..1_000_000 => 200,   // $2.00
+        0..10_000 => 5,               // $0.05
+        10_000..100_000 => 50,        // $0.50
+        100_000..1_000_000 => 200,    // $2.00
         1_000_000..10_000_000 => 800, // $8.00
-        _ => 3000,                   // $30.00 (>10M steps)
+        _ => 3000,                    // $30.00 (>10M steps)
     }
 }
 
@@ -333,21 +333,28 @@ mod tests {
         log.record("t_test", "job1", 5000, None, 100).unwrap();
         log.record("t_test", "job2", 50000, None, 200).unwrap();
         log.record_verify("t_test", 50).unwrap();
-        log.record_failure("t_test", "job3", "timeout", 300).unwrap();
+        log.record_failure("t_test", "job3", "timeout", 300)
+            .unwrap();
 
         // Developer plan: no discount, base rates (5 + 50 = 55)
-        let summary = log.query_usage("t_test", "developer", 0, i64::MAX as u64).unwrap();
+        let summary = log
+            .query_usage("t_test", "developer", 0, i64::MAX as u64)
+            .unwrap();
         assert_eq!(summary.total_proofs, 2);
         assert_eq!(summary.total_verifies, 1);
         assert_eq!(summary.failed_proofs, 1);
         assert_eq!(summary.estimated_cost_cents, 55); // 5 + 50
 
         // Team plan: 25% off → round(5 * 0.75) + round(50 * 0.75) = 4 + 38 = 42
-        let summary = log.query_usage("t_test", "team", 0, i64::MAX as u64).unwrap();
+        let summary = log
+            .query_usage("t_test", "team", 0, i64::MAX as u64)
+            .unwrap();
         assert_eq!(summary.estimated_cost_cents, 42);
 
         // Scale plan: 40% off → round(5 * 0.60) + round(50 * 0.60) = 3 + 30 = 33
-        let summary = log.query_usage("t_test", "scale", 0, i64::MAX as u64).unwrap();
+        let summary = log
+            .query_usage("t_test", "scale", 0, i64::MAX as u64)
+            .unwrap();
         assert_eq!(summary.estimated_cost_cents, 33);
     }
 
@@ -379,7 +386,9 @@ mod tests {
         log.record_verify("t_test", 50).unwrap();
         log.record_verify("t_test", 60).unwrap();
 
-        let summary = log.query_usage("t_test", "developer", 0, i64::MAX as u64).unwrap();
+        let summary = log
+            .query_usage("t_test", "developer", 0, i64::MAX as u64)
+            .unwrap();
         assert_eq!(summary.total_verifies, 2);
     }
 
@@ -392,7 +401,9 @@ mod tests {
         // Duplicate job_id should be ignored.
         log.record_failure("t_test", "job1", "err2", 200).unwrap();
 
-        let summary = log.query_usage("t_test", "developer", 0, i64::MAX as u64).unwrap();
+        let summary = log
+            .query_usage("t_test", "developer", 0, i64::MAX as u64)
+            .unwrap();
         assert_eq!(summary.failed_proofs, 1);
     }
 }

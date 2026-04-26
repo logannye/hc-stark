@@ -9,10 +9,12 @@ pub mod height;
 pub mod lde;
 pub mod merkle_paths;
 pub mod recursion;
+pub mod verifier;
 pub use height::bench_height;
 pub use lde::bench_parallel_lde;
 pub use merkle_paths::bench_merkle_paths;
 pub use recursion::bench_recursion;
+pub use verifier::bench_verifier;
 
 pub fn benchmark(
     iterations: usize,

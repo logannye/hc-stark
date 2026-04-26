@@ -13,6 +13,18 @@ pub enum VerifierError {
     QueryIndexMismatch,
     #[error("trace query Merkle path does not verify")]
     TraceQueryMerkleMismatch,
+    #[error("missing next-row trace witness for transition check")]
+    TraceNextRowMissing,
+    #[error("composition query Merkle path does not verify")]
+    CompositionQueryMerkleMismatch,
+    #[error("composition query value mismatch")]
+    CompositionQueryValueMismatch,
+    #[error("missing boundary openings")]
+    BoundaryOpeningsMissing,
+    #[error("boundary opening index mismatch")]
+    BoundaryIndexMismatch,
+    #[error("boundary constraint mismatch")]
+    BoundaryConstraintMismatch,
     #[error("fri query layer mismatch")]
     FriQueryIndexMismatch,
     #[error("fri query evaluation mismatch")]
@@ -33,6 +45,8 @@ pub enum VerifierError {
     KzgPointMismatch,
     #[error("kzg proof invalid")]
     KzgProofInvalid,
+    #[error("proof params do not match proof version")]
+    ProofParamsVersionMismatch,
 }
 
 impl From<VerifierError> for HcError {

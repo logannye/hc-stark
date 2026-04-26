@@ -141,7 +141,14 @@ mod tests {
 
     #[test]
     fn rejects_non_pot_dimensions() {
-        let r = R1cs::new(3, 4, vec![F::ZERO; 12], vec![F::ZERO; 12], vec![F::ZERO; 12], vec![F::ZERO; 4]);
+        let r = R1cs::new(
+            3,
+            4,
+            vec![F::ZERO; 12],
+            vec![F::ZERO; 12],
+            vec![F::ZERO; 12],
+            vec![F::ZERO; 4],
+        );
         assert!(r.is_err());
     }
 

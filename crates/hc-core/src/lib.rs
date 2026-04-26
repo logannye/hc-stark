@@ -3,6 +3,7 @@
 //! Core math primitives, shared error types, and utilities for the hc-STARK
 //! workspace.
 
+pub mod arena;
 pub mod bytes;
 pub mod domain;
 pub mod error;

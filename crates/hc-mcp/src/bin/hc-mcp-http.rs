@@ -7,7 +7,7 @@ use axum::{
 };
 use hc_server::auth::AuthConfig;
 use rmcp::transport::streamable_http_server::{
-    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
+    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,15 +28,14 @@ const DEFAULT_ALLOWED_ORIGINS: &[&str] = &[
     "http://127.0.0.1",
 ];
 
-const ALLOWED_HOST_SUFFIXES: &[&str] = &[
-    ".anthropic.com",
-    ".claude.ai",
-    "anthropic.com",
-    "claude.ai",
-];
+const ALLOWED_HOST_SUFFIXES: &[&str] =
+    &[".anthropic.com", ".claude.ai", "anthropic.com", "claude.ai"];
 
 fn allowed_origins() -> Vec<String> {
-    let mut out: Vec<String> = DEFAULT_ALLOWED_ORIGINS.iter().map(|s| s.to_string()).collect();
+    let mut out: Vec<String> = DEFAULT_ALLOWED_ORIGINS
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     if let Ok(extra) = std::env::var("HC_MCP_ALLOWED_ORIGINS") {
         for o in extra.split(',') {
             let o = o.trim();
@@ -63,9 +62,9 @@ fn origin_allowed(origin: &HeaderValue, allowlist: &[String]) -> bool {
     // Suffix-match for *.anthropic.com / *.claude.ai (https only)
     if let Some(rest) = s.strip_prefix("https://") {
         let host = rest.split(['/', ':']).next().unwrap_or("");
-        return ALLOWED_HOST_SUFFIXES.iter().any(|suf| {
-            host == suf.trim_start_matches('.') || host.ends_with(suf)
-        });
+        return ALLOWED_HOST_SUFFIXES
+            .iter()
+            .any(|suf| host == suf.trim_start_matches('.') || host.ends_with(suf));
     }
 
     false
@@ -97,12 +96,7 @@ async fn validate_origin(req: Request, next: Next) -> Response {
 /// On success, the tenant id (if any) is stamped onto the request as
 /// `x-mcp-tenant` so downstream observability + per-tenant accounting can
 /// pick it up without re-parsing the auth header.
-async fn validate_auth(
-    auth: Arc<AuthConfig>,
-    require: bool,
-    req: Request,
-    next: Next,
-) -> Response {
+async fn validate_auth(auth: Arc<AuthConfig>, require: bool, req: Request, next: Next) -> Response {
     let header_present = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
@@ -110,7 +104,9 @@ async fn validate_auth(
 
     if !header_present {
         if require {
-            tracing::warn!("rejecting request: HC_MCP_REQUIRE_AUTH=true but no Authorization header");
+            tracing::warn!(
+                "rejecting request: HC_MCP_REQUIRE_AUTH=true but no Authorization header"
+            );
             return (StatusCode::UNAUTHORIZED, "missing Authorization header").into_response();
         }
         // Anonymous public lane.
@@ -251,24 +247,20 @@ mod tests {
         let app: axum::Router = axum::Router::new()
             .route(
                 "/test",
-                get(
-                    |headers: axum::http::HeaderMap| async move {
-                        let tenant = headers
-                            .get("x-mcp-tenant")
-                            .and_then(|v| v.to_str().ok())
-                            .map(|s| s.to_string());
-                        (StatusCode::OK, tenant.unwrap_or_default())
-                    },
-                ),
+                get(|headers: axum::http::HeaderMap| async move {
+                    let tenant = headers
+                        .get("x-mcp-tenant")
+                        .and_then(|v| v.to_str().ok())
+                        .map(|s| s.to_string());
+                    (StatusCode::OK, tenant.unwrap_or_default())
+                }),
             )
             .layer(middleware::from_fn(move |req, next| {
                 let a = auth_layer.clone();
                 async move { validate_auth(a, require, req, next).await }
             }));
 
-        let mut req = AxumRequest::builder()
-            .method(Method::GET)
-            .uri("/test");
+        let mut req = AxumRequest::builder().method(Method::GET).uri("/test");
         if let Some(b) = bearer {
             req = req.header(axum::http::header::AUTHORIZATION, format!("Bearer {b}"));
         }
@@ -323,7 +315,12 @@ mod tests {
         let (status, body) = run(auth, false, Some("tzk_test")).await;
         assert_eq!(status, StatusCode::OK);
         // The injected sequence is stripped.
-        assert!(body.as_deref().unwrap().chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
-            "got: {body:?}");
+        assert!(
+            body.as_deref()
+                .unwrap()
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+            "got: {body:?}"
+        );
     }
 }

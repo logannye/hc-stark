@@ -15,13 +15,12 @@ fn require_usize(params: &serde_json::Map<String, JsonValue>, name: &str) -> Res
         .get(name)
         .and_then(|v| v.as_u64())
         .map(|v| v as usize)
-        .ok_or_else(|| anyhow!("missing or invalid parameter '{name}': expected non-negative integer"))
+        .ok_or_else(|| {
+            anyhow!("missing or invalid parameter '{name}': expected non-negative integer")
+        })
 }
 
-fn require_u64_array(
-    params: &serde_json::Map<String, JsonValue>,
-    name: &str,
-) -> Result<Vec<u64>> {
+fn require_u64_array(params: &serde_json::Map<String, JsonValue>, name: &str) -> Result<Vec<u64>> {
     let arr = params
         .get(name)
         .and_then(|v| v.as_array())

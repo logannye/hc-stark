@@ -1,23 +1,29 @@
 use hc_core::field::FieldElement;
-
-use crate::layer::{FriFinalLayer, FriLayer};
+use hc_hash::hash::HashDigest;
 
 #[derive(Clone, Debug)]
 pub struct FriProof<F: FieldElement> {
-    pub layers: Vec<FriLayer<F>>,
-    pub final_layer: FriFinalLayer<F>,
+    /// Merkle roots of each committed FRI layer, in order.
+    pub layer_roots: Vec<HashDigest>,
+    /// Final layer evaluations (size <= `FriConfig::final_polynomial_size()`).
+    ///
+    /// We include these directly because the final layer is configured to be tiny.
+    pub final_layer: Vec<F>,
+    /// Merkle root of the final layer evaluations.
+    pub final_root: HashDigest,
 }
 
 impl<F: FieldElement> FriProof<F> {
-    pub fn new(layers: Vec<FriLayer<F>>, final_layer: FriFinalLayer<F>) -> Self {
+    pub fn new(layer_roots: Vec<HashDigest>, final_layer: Vec<F>, final_root: HashDigest) -> Self {
         Self {
-            layers,
+            layer_roots,
             final_layer,
+            final_root,
         }
     }
 
     pub fn layer_count(&self) -> usize {
-        self.layers.len()
+        self.layer_roots.len()
     }
 }
 

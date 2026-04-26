@@ -1,17 +1,12 @@
-use hc_air::{
-    constraints::{boundary::BoundaryConstraints, composition},
-    eval::evaluate_block,
-};
+use hc_air::constraints::boundary::BoundaryConstraints;
 use hc_commit::merkle::height_dfs::StreamingMerkle;
 use hc_core::{
-    domain::{generate_lde_domain, generate_trace_domain},
     error::{HcError, HcResult},
     field::{FieldElement, TwoAdicField},
-    poly::{evaluate_columns_parallel, interpolate},
 };
+use hc_hash::protocol;
 use hc_hash::{hash::HashDigest, Blake3, HashFunction, Transcript};
 use hc_replay::{trace_replay::TraceReplay, traits::BlockProducer};
-use rayon::join;
 
 use crate::{
     commitment::{Commitment, CommitmentScheme},
@@ -25,6 +20,7 @@ pub struct CommitmentArtifacts {
     pub composition_commitment: Commitment,
     pub merkle_trace_root: Option<HashDigest>,
     pub trace_kzg_state: Option<TraceKzgState>,
+    pub composition_coeffs: Option<(u64, u64)>,
 }
 
 pub fn commit_trace_streaming<F, P>(
@@ -43,149 +39,144 @@ where
 
     let block_size = trace.block_size();
     let num_blocks = trace.num_blocks();
-    let padded_trace_len = trace_len.next_power_of_two();
-    let trace_domain = generate_trace_domain::<F>(padded_trace_len)?;
-    let lde_domain = generate_lde_domain::<F>(padded_trace_len, config.lde_blowup_factor)?;
+    match config.commitment {
+        CommitmentScheme::Stark => {
+            let mut trace_builder = StreamingMerkle::<Blake3>::new();
+            let mut composition_builder = StreamingMerkle::<Blake3>::new();
 
-    let mut full_trace = Vec::with_capacity(trace_len);
-    let mut composition_transcript = Transcript::<Blake3>::new(b"composition");
-    for block_index in 0..num_blocks {
-        let block = trace.fetch_block(block_index)?;
-        full_trace.extend_from_slice(block);
-    }
-
-    let mut padded_trace = full_trace.clone();
-    let padding_extra = padded_trace_len - trace_len;
-    let last_row = padded_trace
-        .last()
-        .copied()
-        .ok_or_else(|| HcError::message("trace contains no rows"))?;
-    padded_trace.extend(std::iter::repeat(last_row).take(padding_extra));
-
-    let acc_values: Vec<F> = padded_trace.iter().map(|row| row[0]).collect();
-    let input_values: Vec<F> = padded_trace.iter().map(|row| row[1]).collect();
-    let trace_elements = trace_domain.elements();
-    let acc_coeffs = interpolate(&acc_values, trace_elements);
-    let input_coeffs = interpolate(&input_values, trace_elements);
-
-    let selected_lde_points = lde_domain.elements();
-    let converted_trace_domain = convert_domain(trace_elements);
-
-    let mut trace_builder = if config.commitment == CommitmentScheme::Stark {
-        Some(StreamingMerkle::<Blake3>::new())
-    } else {
-        None
-    };
-    let mut composition_builder = if config.commitment == CommitmentScheme::Stark {
-        Some(StreamingMerkle::<Blake3>::new())
-    } else {
-        None
-    };
-
-    let mut lde_cursor = 0;
-    let mut padding_remaining = padding_extra;
-
-    for row in &full_trace {
-        if let Some(builder) = &mut trace_builder {
-            builder.push(hash_trace_pair(&row[0], &row[1]));
-        }
-    }
-
-    for block_index in 0..num_blocks {
-        let block = trace.fetch_block(block_index)?;
-        let block_start_idx = block_index * block_size;
-        let block_rows = block.len();
-
-        let extra_rows_for_block = if block_index + 1 == num_blocks {
-            padding_remaining
-        } else {
-            0
-        };
-
-        padding_remaining = padding_remaining.saturating_sub(extra_rows_for_block);
-
-        let block_rows_padded = block_rows + extra_rows_for_block;
-        let block_lde_points = block_rows_padded * config.lde_blowup_factor;
-
-        let (lde_hashes, constraint_evals) = join(
-            || -> HcResult<Vec<HashDigest>> {
-                if block_lde_points == 0 {
-                    return Ok(Vec::new());
+            // Trace commitment: stream over trace rows, no buffering.
+            for block_index in 0..num_blocks {
+                let block = trace.fetch_block(block_index)?;
+                for row in block.iter() {
+                    trace_builder.push(hash_trace_pair(&row[0], &row[1]));
                 }
-
-                let end_cursor = lde_cursor + block_lde_points;
-                if end_cursor > selected_lde_points.len() {
-                    return Err(HcError::message("lde cursor out of bounds"));
-                }
-                let block_slice = &selected_lde_points[lde_cursor..end_cursor];
-                lde_cursor = end_cursor;
-
-                let columns = evaluate_columns_parallel(&[&acc_coeffs, &input_coeffs], block_slice);
-                let acc_lde = &columns[0];
-                let input_lde = &columns[1];
-
-                let mut hashes = Vec::with_capacity(block_lde_points);
-                for i in 0..block_lde_points {
-                    hashes.push(hash_trace_pair(&acc_lde[i], &input_lde[i]));
-                }
-
-                Ok(hashes)
-            },
-            || evaluate_block(block, block_start_idx, trace_len, boundary),
-        );
-
-        for digest in lde_hashes? {
-            if let Some(builder) = &mut composition_builder {
-                builder.push(digest);
             }
-        }
 
-        let constraint_evals = constraint_evals?;
-        if !constraint_evals.is_empty() {
-            let random_coeffs = random_coeffs_for_block(
+            let trace_root = trace_builder
+                .finalize()
+                .ok_or_else(|| HcError::message("failed to finalize trace merkle tree"))?;
+
+            // Composition transcript is seeded with public inputs + parameters + trace commitment.
+            let mut composition_transcript =
+                Transcript::<Blake3>::new(protocol::DOMAIN_COMPOSITION_V2);
+            protocol::append_u64::<Blake3>(
                 &mut composition_transcript,
-                block_index,
-                constraint_evals.len(),
+                protocol::label::PUB_INITIAL_ACC,
+                boundary.initial_acc.to_u64(),
             );
-            let composition_values =
-                composition::build_composition_contributions(&constraint_evals, &random_coeffs);
-            if let Some(builder) = &mut composition_builder {
-                for value in &composition_values {
-                    builder.push(hash_field_element(value));
+            protocol::append_u64::<Blake3>(
+                &mut composition_transcript,
+                protocol::label::PUB_FINAL_ACC,
+                boundary.final_acc.to_u64(),
+            );
+            protocol::append_u64::<Blake3>(
+                &mut composition_transcript,
+                protocol::label::PUB_TRACE_LENGTH,
+                trace_len as u64,
+            );
+            protocol::append_u64::<Blake3>(
+                &mut composition_transcript,
+                protocol::label::PARAM_LDE_BLOWUP,
+                config.lde_blowup_factor as u64,
+            );
+            protocol::append_u64::<Blake3>(
+                &mut composition_transcript,
+                protocol::label::PARAM_FRI_FOLDING_RATIO,
+                hc_fri::get_folding_ratio() as u64,
+            );
+            composition_transcript.append_message(protocol::label::PARAM_HASH_ID, b"blake3");
+            composition_transcript
+                .append_message(protocol::label::COMMIT_TRACE_ROOT, trace_root.as_bytes());
+
+            // Global mixing coefficients for a row-aligned composition oracle.
+            let alpha_boundary = composition_transcript
+                .challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
+            let alpha_transition = composition_transcript
+                .challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
+
+            // Row-aligned composition commitment: one value per trace row.
+            // c[i] = alpha_transition * (next_acc - (acc+delta)) + alpha_boundary * boundary_diff
+            let mut row_index = 0usize;
+            for block_index in 0..num_blocks {
+                let block = trace.fetch_block(block_index)?;
+                let local_len = block.len();
+                let rows: Vec<TraceRow<F>> = block.to_vec();
+                for (offset, row) in rows.iter().copied().enumerate() {
+                    let next = if row_index + 1 < trace_len {
+                        if offset + 1 < local_len {
+                            Some(rows[offset + 1])
+                        } else {
+                            // Cross-block lookahead
+                            let next_idx = row_index + 1;
+                            let nb = trace.fetch_block(next_idx / block_size)?;
+                            Some(*nb.get(next_idx % block_size).ok_or_else(|| {
+                                HcError::message("missing next row while building composition")
+                            })?)
+                        }
+                    } else {
+                        None
+                    };
+
+                    let next_row = next.unwrap_or(row);
+                    let value = hc_air::eval::composition_value_for_row(
+                        row,
+                        next_row,
+                        row_index,
+                        trace_len,
+                        boundary,
+                        alpha_boundary,
+                        alpha_transition,
+                    )?;
+                    composition_builder.push(hash_field_element(&value));
+                    row_index += 1;
                 }
             }
+
+            let composition_root = composition_builder
+                .finalize()
+                .ok_or_else(|| HcError::message("failed to finalize composition merkle tree"))?;
+
+            Ok(CommitmentArtifacts {
+                trace_commitment: Commitment::Stark { root: trace_root },
+                composition_commitment: Commitment::Stark {
+                    root: composition_root,
+                },
+                merkle_trace_root: Some(trace_root),
+                trace_kzg_state: None,
+                composition_coeffs: Some((alpha_boundary.to_u64(), alpha_transition.to_u64())),
+            })
         }
-    }
-
-    if lde_cursor != selected_lde_points.len() {
-        return Err(HcError::message("lde points left unconsumed"));
-    }
-
-    let trace_root = if let Some(builder) = trace_builder {
-        Some(
-            builder
-                .finalize()
-                .ok_or_else(|| HcError::message("failed to finalize trace merkle tree"))?,
-        )
-    } else {
-        None
-    };
-    let composition_root = if let Some(builder) = composition_builder {
-        Some(
-            builder
-                .finalize()
-                .ok_or_else(|| HcError::message("failed to finalize composition merkle tree"))?,
-        )
-    } else {
-        None
-    };
-
-    let mut trace_kzg_state = None;
-    let trace_commitment = match config.commitment {
-        CommitmentScheme::Stark => Commitment::Stark {
-            root: trace_root.expect("trace root must exist for Stark"),
-        },
         CommitmentScheme::Kzg => {
+            // Keep the existing KZG path for now (it still materializes full vectors).
+            // The transparent STARK path is the primary target for √T-space.
+            use hc_core::domain::{generate_lde_domain, generate_trace_domain};
+            use hc_core::poly::interpolate;
+
+            let padded_trace_len = trace_len.next_power_of_two();
+            let trace_domain = generate_trace_domain::<F>(padded_trace_len)?;
+            let lde_domain = generate_lde_domain::<F>(padded_trace_len, config.lde_blowup_factor)?;
+
+            let mut full_trace = Vec::with_capacity(trace_len);
+            for block_index in 0..num_blocks {
+                let block = trace.fetch_block(block_index)?;
+                full_trace.extend_from_slice(block);
+            }
+
+            let mut padded_trace = full_trace.clone();
+            let padding_extra = padded_trace_len - trace_len;
+            let last_row = padded_trace
+                .last()
+                .copied()
+                .ok_or_else(|| HcError::message("trace contains no rows"))?;
+            padded_trace.extend(std::iter::repeat(last_row).take(padding_extra));
+
+            let acc_values: Vec<F> = padded_trace.iter().map(|row| row[0]).collect();
+            let input_values: Vec<F> = padded_trace.iter().map(|row| row[1]).collect();
+            let trace_elements = trace_domain.elements();
+            let acc_coeffs = interpolate(&acc_values, trace_elements);
+            let input_coeffs = interpolate(&input_values, trace_elements);
+            let converted_trace_domain = convert_domain(trace_elements);
+
             ensure_degree(trace_elements.len())?;
             let acc_poly_fr = convert_coeffs(&acc_coeffs);
             let input_poly_fr = convert_coeffs(&input_coeffs);
@@ -195,40 +186,25 @@ where
                 serialize_commitment(&acc_comm)?,
                 serialize_commitment(&input_comm)?,
             ];
-            trace_kzg_state = Some(TraceKzgState {
+            let trace_kzg_state = Some(TraceKzgState {
                 polynomials: vec![acc_poly_fr, input_poly_fr],
                 randomness: vec![acc_rand, input_rand],
                 commitments: vec![acc_comm, input_comm],
                 domain_points: converted_trace_domain.clone(),
             });
-            Commitment::Kzg { points }
+
+            // (Optional) keep composition commitment empty for KZG path.
+            let _ = lde_domain;
+
+            Ok(CommitmentArtifacts {
+                trace_commitment: Commitment::Kzg { points },
+                composition_commitment: Commitment::Kzg { points: Vec::new() },
+                merkle_trace_root: None,
+                trace_kzg_state,
+                composition_coeffs: None,
+            })
         }
-    };
-    let composition_commitment = match config.commitment {
-        CommitmentScheme::Stark => Commitment::Stark {
-            root: composition_root.expect("composition root must exist for Stark"),
-        },
-        CommitmentScheme::Kzg => Commitment::Kzg { points: Vec::new() },
-    };
-
-    Ok(CommitmentArtifacts {
-        trace_commitment,
-        composition_commitment,
-        merkle_trace_root: trace_root,
-        trace_kzg_state,
-    })
-}
-
-fn random_coeffs_for_block<F: FieldElement>(
-    transcript: &mut Transcript<Blake3>,
-    block_index: usize,
-    count: usize,
-) -> Vec<F> {
-    let block_bytes = block_index.to_le_bytes();
-    transcript.append_message(b"composition_block", block_bytes);
-    (0..count)
-        .map(|_| transcript.challenge_field::<F>(b"composition_coeff"))
-        .collect()
+    }
 }
 
 fn hash_trace_pair<F: FieldElement>(left: &F, right: &F) -> HashDigest {

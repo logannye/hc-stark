@@ -25,8 +25,8 @@
 //! `0, 1, ..., k`. The verifier reconstructs `s(r)` for a field-element
 //! challenge `r` via barycentric Lagrange interpolation.
 
-use crate::prover::MultilinearPoly;
 use crate::proof::{SumcheckClaim, SumcheckProof, SumcheckRoundMsg};
+use crate::prover::MultilinearPoly;
 use crate::HcSumcheckConfig;
 use hc_core::field::{FieldElement, GoldilocksField as F};
 use hc_core::{HcError, HcResult};
@@ -82,7 +82,9 @@ pub struct ProductPoly {
 impl ProductPoly {
     pub fn new(factors: Vec<MultilinearPoly>) -> HcResult<Self> {
         if factors.is_empty() {
-            return Err(HcError::invalid_argument("ProductPoly: at least one factor required"));
+            return Err(HcError::invalid_argument(
+                "ProductPoly: at least one factor required",
+            ));
         }
         let n = factors[0].num_vars;
         for (i, f) in factors.iter().enumerate() {
@@ -151,7 +153,10 @@ pub fn prove(
     }
 
     let mut transcript: Transcript<Blake3> = Transcript::new(config.domain_separator);
-    transcript.append_message(b"sumcheck.num_vars", &(poly.num_vars() as u64).to_le_bytes());
+    transcript.append_message(
+        b"sumcheck.num_vars",
+        &(poly.num_vars() as u64).to_le_bytes(),
+    );
     transcript.append_message(b"sumcheck.degree", &(poly.degree() as u64).to_le_bytes());
     transcript.append_message(b"sumcheck.claim", &claim.claimed_sum.to_le_bytes());
 
@@ -266,7 +271,10 @@ pub fn verify_protocol_general(
     }
 
     let mut transcript: Transcript<Blake3> = Transcript::new(config.domain_separator);
-    transcript.append_message(b"sumcheck.num_vars", &(claim.num_variables as u64).to_le_bytes());
+    transcript.append_message(
+        b"sumcheck.num_vars",
+        &(claim.num_variables as u64).to_le_bytes(),
+    );
     transcript.append_message(b"sumcheck.degree", &(claim.degree as u64).to_le_bytes());
     transcript.append_message(b"sumcheck.claim", &claim.claimed_sum.to_le_bytes());
 
@@ -332,10 +340,14 @@ mod tests {
     use super::*;
 
     fn seeded(seed: u64, n: usize) -> Vec<F> {
-        let mut x = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let mut x = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (0..n)
             .map(|_| {
-                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                x = x
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 F::new(x % (1u64 << 14))
             })
             .collect()
@@ -350,7 +362,10 @@ mod tests {
         // s(t) = [3, 7, 11, 15] should give s(0) = 3, s(1) = 7, s(2) = 11, s(3) = 15.
         let vs = vec![F::new(3), F::new(7), F::new(11), F::new(15)];
         for i in 0..4u64 {
-            assert_eq!(lagrange_interpolate_at(&vs, F::new(i)).unwrap(), vs[i as usize]);
+            assert_eq!(
+                lagrange_interpolate_at(&vs, F::new(i)).unwrap(),
+                vs[i as usize]
+            );
         }
     }
 

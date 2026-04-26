@@ -27,12 +27,8 @@ pub trait SumcheckPolynomial {
     /// is the set of points on the current hypercube slice. The
     /// implementation should fill `out` with the polynomial value at each
     /// point.
-    fn evaluate_on_slice(
-        &self,
-        prefix: &[u64],
-        tile: &[Vec<u64>],
-        out: &mut [u64],
-    ) -> HcResult<()>;
+    fn evaluate_on_slice(&self, prefix: &[u64], tile: &[Vec<u64>], out: &mut [u64])
+        -> HcResult<()>;
 }
 
 /// A multilinear extension of a vector of evaluations on `{0,1}^n`.

@@ -212,9 +212,7 @@ mod tests {
         let q = Quantization::int8(1.0);
         let witness = InferenceWitness {
             input: Some(Tensor::new(Shape::matrix(2, 3), q, vec![1, 2, 3, 4, 5, 6]).unwrap()),
-            activations: vec![
-                Tensor::new(Shape::matrix(3, 2), q, vec![1, 0, 0, 1, 1, 1]).unwrap(),
-            ],
+            activations: vec![Tensor::new(Shape::matrix(3, 2), q, vec![1, 0, 0, 1, 1, 1]).unwrap()],
         };
         let cfg = HcZkmlConfig {
             tile_dim: 4,

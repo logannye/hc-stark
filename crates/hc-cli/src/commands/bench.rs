@@ -42,6 +42,7 @@ pub struct BenchArgs {
 #[derive(Clone, Debug, ValueEnum)]
 pub enum BenchScenario {
     Prover,
+    Verifier,
     Merkle,
     Lde,
     Recursion,
@@ -52,6 +53,7 @@ impl fmt::Display for BenchScenario {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BenchScenario::Prover => write!(f, "prover"),
+            BenchScenario::Verifier => write!(f, "verifier"),
             BenchScenario::Merkle => write!(f, "merkle"),
             BenchScenario::Lde => write!(f, "lde"),
             BenchScenario::Recursion => write!(f, "recursion"),
@@ -69,6 +71,7 @@ pub fn run_bench(args: BenchArgs) -> Result<()> {
 
     let summary = match args.scenario {
         BenchScenario::Prover => hc_bench::benchmark(args.iterations, block_size)?,
+        BenchScenario::Verifier => hc_bench::bench_verifier(args.iterations)?,
         BenchScenario::Merkle => hc_bench::bench_merkle_paths(
             args.leaves.unwrap_or(1 << 12),
             args.queries.unwrap_or(64),

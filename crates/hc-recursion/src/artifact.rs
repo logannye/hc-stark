@@ -121,6 +121,7 @@ mod tests {
         let config = ProverConfig::new(2, 2).unwrap();
         let output = prove(config, program, inputs.clone()).unwrap();
         Proof {
+            version: output.version,
             trace_commitment: output.trace_commitment,
             composition_commitment: output.composition_commitment,
             fri_proof: output.fri_proof,
@@ -128,6 +129,7 @@ mod tests {
             final_acc: inputs.final_acc,
             query_response: output.query_response,
             trace_length: output.trace_length,
+            params: output.params,
         }
     }
 

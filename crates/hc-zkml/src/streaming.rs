@@ -154,7 +154,10 @@ pub fn prove_single_matmul(
     transcript.append_message(b"matmul.spec.m", &(m as u64).to_le_bytes());
     transcript.append_message(b"matmul.spec.n", &(n as u64).to_le_bytes());
     transcript.append_message(b"matmul.spec.k", &(k as u64).to_le_bytes());
-    transcript.append_message(b"matmul.spec.tile_dim", &(spec.tile_dim as u64).to_le_bytes());
+    transcript.append_message(
+        b"matmul.spec.tile_dim",
+        &(spec.tile_dim as u64).to_le_bytes(),
+    );
     for entry in &output_field {
         tmp.copy_from_slice(&entry.0.to_le_bytes());
         transcript.append_message(b"matmul.entry", &tmp);
@@ -188,10 +191,7 @@ pub fn prove_single_matmul(
 /// arrives with the Phase 1.5 FRI lowering. Use this entry point in your
 /// integration tests now; it will graduate to a sound verifier without an
 /// API change.
-pub fn verify_envelope_structural(
-    public_io: &PublicIo,
-    proof: &ZkmlProof,
-) -> HcResult<bool> {
+pub fn verify_envelope_structural(public_io: &PublicIo, proof: &ZkmlProof) -> HcResult<bool> {
     if proof.version != ENVELOPE_VERSION {
         return Err(HcError::invalid_argument(format!(
             "unsupported zkML envelope version {} (this build supports {})",
@@ -266,7 +266,11 @@ fn hash_tensor(t: &Tensor) -> HashDigest {
     Blake3::hash(&serde_json::to_vec(t).unwrap_or_default())
 }
 
-fn serialize_envelope(num_tiles: u64, transcript_root: &HashDigest, output_digest: &HashDigest) -> Vec<u8> {
+fn serialize_envelope(
+    num_tiles: u64,
+    transcript_root: &HashDigest,
+    output_digest: &HashDigest,
+) -> Vec<u8> {
     let mut out = Vec::with_capacity(ENVELOPE_BYTES);
     out.push(ENVELOPE_VERSION);
     out.extend_from_slice(&num_tiles.to_le_bytes());
@@ -322,7 +326,9 @@ mod tests {
     fn small_matmul_witness(m: usize, k: usize, n: usize, seed: i32) -> InferenceWitness {
         let q = Quantization::int8(1.0);
         let a_data: Vec<i32> = (0..m * k).map(|i| ((i as i32 + seed) % 17) - 8).collect();
-        let b_data: Vec<i32> = (0..k * n).map(|i| ((i as i32 * 3 + seed) % 13) - 6).collect();
+        let b_data: Vec<i32> = (0..k * n)
+            .map(|i| ((i as i32 * 3 + seed) % 13) - 6)
+            .collect();
         InferenceWitness {
             input: Some(Tensor::new(Shape::matrix(m, k), q, a_data).unwrap()),
             activations: vec![Tensor::new(Shape::matrix(k, n), q, b_data).unwrap()],

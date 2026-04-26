@@ -26,10 +26,7 @@ pub enum Layer {
     Add { shape: Shape },
     /// Softmax along the last dimension. Parameterized by the maximum
     /// log-domain bit-width permitted to keep the AIR linear.
-    Softmax {
-        shape: Shape,
-        log_domain_bits: u8,
-    },
+    Softmax { shape: Shape, log_domain_bits: u8 },
     /// 2-D convolution. The implementation lowers this to a tiled matmul
     /// (im2col) before proving.
     Conv2d {

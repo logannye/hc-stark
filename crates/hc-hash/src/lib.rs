@@ -2,6 +2,7 @@
 
 pub mod blake3;
 pub mod hash;
+pub mod protocol;
 pub mod sha256;
 pub mod transcript;
 

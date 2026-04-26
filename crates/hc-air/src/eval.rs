@@ -1,6 +1,8 @@
 use hc_core::{error::HcResult, field::FieldElement};
 
 use crate::{
+    air::Air,
+    air::ToyAir,
     constraints::{boundary::BoundaryConstraints, composition},
     trace::TraceTable,
 };
@@ -20,6 +22,37 @@ pub fn evaluate<F: hc_core::field::FieldElement>(
         final_acc: public_inputs.final_acc,
     };
     composition::enforce(trace, &boundary)
+}
+
+/// Compute the per-row composition value used by the STARK verifier at a queried index.
+///
+/// This is a simplified composition for the toy AIR:
+/// - Boundary constraint(s) apply only at the first and last row.
+/// - Transition constraint applies at every row except the last (which has no successor).
+///
+/// The composition value is a linear combination:
+/// \n
+/// `alpha_boundary * boundary_diff + alpha_transition * transition_diff`\n
+/// \n
+/// where boundary_diff is 0 except at the first/last row, and transition_diff is 0 at the last row.
+pub fn composition_value_for_row<F: FieldElement>(
+    current: [F; 2],
+    next: [F; 2],
+    row_index: usize,
+    total_trace_len: usize,
+    boundary: &BoundaryConstraints<F>,
+    alpha_boundary: F,
+    alpha_transition: F,
+) -> HcResult<F> {
+    ToyAir.composition_value_for_row(
+        current.as_slice(),
+        next.as_slice(),
+        row_index,
+        total_trace_len,
+        boundary,
+        alpha_boundary,
+        alpha_transition,
+    )
 }
 
 /// Evaluate all constraints for a single block of trace rows.

@@ -49,9 +49,9 @@ impl AuthGuard {
     pub fn new() -> Self {
         Self {
             failures: Arc::new(Mutex::new(HashMap::new())),
-            max_failures: 10,      // 10 failures per window
-            lockout_ms: 60_000,    // 1 minute lockout
-            window_ms: 300_000,    // 5 minute window
+            max_failures: 10,   // 10 failures per window
+            lockout_ms: 60_000, // 1 minute lockout
+            window_ms: 300_000, // 5 minute window
             max_entries: 50_000,
         }
     }
@@ -210,7 +210,9 @@ impl AuthConfig {
                 2 => (parts[0].trim(), parts[1].trim(), "developer"),
                 3 => (parts[0].trim(), parts[1].trim(), parts[2].trim()),
                 _ => {
-                    anyhow::bail!("invalid api keys file entry (expected tenant:key[:plan]): {line}");
+                    anyhow::bail!(
+                        "invalid api keys file entry (expected tenant:key[:plan]): {line}"
+                    );
                 }
             };
             if tenant.is_empty() || key.is_empty() {

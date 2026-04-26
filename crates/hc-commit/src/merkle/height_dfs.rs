@@ -77,13 +77,8 @@ impl<H: HashFunction> StreamingMerkle<H> {
 
         // Use the standalone function for path reconstruction
         use super::reconstruct_path_from_replay;
-        reconstruct_path_from_replay::<H, P>(
-            leaf_index,
-            self.leaf_count,
-            self.fanout,
-            producer,
-        )
-        .ok()
+        reconstruct_path_from_replay::<H, P>(leaf_index, self.leaf_count, self.fanout, producer)
+            .ok()
     }
 
     fn push_to_level(&mut self, level: usize, node: HashDigest) {
@@ -103,7 +98,15 @@ impl<H: HashFunction> StreamingMerkle<H> {
         duplicate_single: bool,
     ) -> HashDigest {
         match nodes.len() {
-            0 => panic!("attempted to combine empty node list for merkle level"),
+            0 => {
+                debug_assert!(
+                    false,
+                    "attempted to combine empty node list for merkle level"
+                );
+                // Return a zeroed digest as defensive fallback; callers should never
+                // reach here because push_to_level always adds at least one node.
+                HashDigest::new([0u8; 32])
+            }
             1 if duplicate_single => {
                 let only = nodes.drain(..).next().unwrap();
                 hash_pair::<Hfn>(&only, &only)

@@ -45,7 +45,11 @@ impl SparseMatrix {
                 )));
             }
         }
-        Ok(Self { rows, cols, triples })
+        Ok(Self {
+            rows,
+            cols,
+            triples,
+        })
     }
 
     /// Multiply by a vector: `M · w` in `O(non_zeros)`.
@@ -248,9 +252,7 @@ pub fn verify_sparse_r1cs(
     }
     let expected_digest = sparse_r1cs_digest(r1cs);
     if expected_digest != proof.r1cs_digest {
-        return Err(HcError::invalid_argument(
-            "Sparse R1cs digest mismatch",
-        ));
+        return Err(HcError::invalid_argument("Sparse R1cs digest mismatch"));
     }
     if proof.tau.len() != r1cs.log_m() {
         return Err(HcError::invalid_argument(format!(
@@ -300,9 +302,13 @@ mod tests {
         let mut w = vec![F::ONE; n];
         let mut x = seed;
         for i in 0..m {
-            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            x = x
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let xi = (x % 17) + 1;
-            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            x = x
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let yi = (x % 19) + 1;
             let zi = xi * yi;
             let xj = 1 + 3 * i;
@@ -346,11 +352,7 @@ mod tests {
     fn canonicalize_combines_duplicate_triples() {
         let m = 2usize;
         let n = 2usize;
-        let triples = vec![
-            (0, 0, F::new(3)),
-            (0, 0, F::new(7)),
-            (1, 1, F::new(5)),
-        ];
+        let triples = vec![(0, 0, F::new(3)), (0, 0, F::new(7)), (1, 1, F::new(5))];
         let mat = SparseMatrix::new(m, n, triples).unwrap();
         let canon = mat.canonicalize();
         assert_eq!(canon, vec![(0, 0, F::new(10)), (1, 1, F::new(5))]);

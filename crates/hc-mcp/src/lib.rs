@@ -7,8 +7,10 @@ pub mod types;
 
 use rmcp::handler::server::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, Implementation, ProtocolVersion, ServerCapabilities, ServerInfo};
-use rmcp::{ErrorData, ServerHandler, tool_handler, tool_router};
+use rmcp::model::{
+    CallToolResult, Implementation, ProtocolVersion, ServerCapabilities, ServerInfo,
+};
+use rmcp::{tool_handler, tool_router, ErrorData, ServerHandler};
 
 use crate::executor::ProveExecutor;
 
@@ -49,7 +51,13 @@ impl HcMcpServer {
 
     #[rmcp::tool(
         description = "List all available proof templates with IDs, summaries, and tags. Use this to discover what kinds of proofs you can generate.",
-        annotations(title = "List Proof Templates", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+        annotations(
+            title = "List Proof Templates",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     async fn list_templates(&self) -> Result<CallToolResult, ErrorData> {
         self.list_templates_impl().await
@@ -57,7 +65,13 @@ impl HcMcpServer {
 
     #[rmcp::tool(
         description = "List all registered workload IDs. Workloads are predefined proof programs.",
-        annotations(title = "List Workloads", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+        annotations(
+            title = "List Workloads",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     async fn list_workloads(&self) -> Result<CallToolResult, ErrorData> {
         self.list_workloads_impl().await
@@ -65,7 +79,13 @@ impl HcMcpServer {
 
     #[rmcp::tool(
         description = "Get full parameter schema and example JSON for a specific proof template. Call this before prove_template to understand what parameters are needed.",
-        annotations(title = "Describe Proof Template", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+        annotations(
+            title = "Describe Proof Template",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     async fn describe_template(
         &self,
@@ -76,7 +96,13 @@ impl HcMcpServer {
 
     #[rmcp::tool(
         description = "Get server capabilities, version, and recommended workflow. Start here if you're unsure what this server can do.",
-        annotations(title = "Get Server Capabilities", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+        annotations(
+            title = "Get Server Capabilities",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     async fn get_capabilities(&self) -> Result<CallToolResult, ErrorData> {
         self.get_capabilities_impl().await
@@ -84,7 +110,13 @@ impl HcMcpServer {
 
     #[rmcp::tool(
         description = "Generate a zero-knowledge proof from a template ID and parameters. Returns a job_id — call poll_job to check progress. Consumes one proof from your monthly quota.",
-        annotations(title = "Generate Proof from Template", read_only_hint = false, destructive_hint = false, idempotent_hint = false, open_world_hint = false)
+        annotations(
+            title = "Generate Proof from Template",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     async fn prove_template(
         &self,
@@ -95,7 +127,13 @@ impl HcMcpServer {
 
     #[rmcp::tool(
         description = "Generate a proof from a registered workload ID. Returns a job_id — call poll_job to check progress. Consumes one proof from your monthly quota.",
-        annotations(title = "Generate Proof from Workload", read_only_hint = false, destructive_hint = false, idempotent_hint = false, open_world_hint = false)
+        annotations(
+            title = "Generate Proof from Workload",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     async fn prove_workload(
         &self,
@@ -106,7 +144,13 @@ impl HcMcpServer {
 
     #[rmcp::tool(
         description = "Check the status of a proof job. Returns: pending, running, succeeded, or failed.",
-        annotations(title = "Poll Proof Job Status", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+        annotations(
+            title = "Poll Proof Job Status",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     async fn poll_job(
         &self,
@@ -117,7 +161,13 @@ impl HcMcpServer {
 
     #[rmcp::tool(
         description = "Verify a proof independently. Pass the base64-encoded proof from get_proof. Returns {valid: true/false}. This is a pure cryptographic check — no quota consumed.",
-        annotations(title = "Verify Proof", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+        annotations(
+            title = "Verify Proof",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     async fn verify_proof(
         &self,
@@ -128,7 +178,13 @@ impl HcMcpServer {
 
     #[rmcp::tool(
         description = "Retrieve the base64-encoded proof bytes for a completed job. Pass the result to verify_proof for independent verification.",
-        annotations(title = "Get Proof Bytes", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+        annotations(
+            title = "Get Proof Bytes",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     async fn get_proof(
         &self,
@@ -139,7 +195,13 @@ impl HcMcpServer {
 
     #[rmcp::tool(
         description = "Get a human-readable summary of what a proof job attests to, including template, public inputs, and status.",
-        annotations(title = "Get Proof Summary", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+        annotations(
+            title = "Get Proof Summary",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     async fn get_proof_summary(
         &self,

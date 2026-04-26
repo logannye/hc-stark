@@ -26,8 +26,8 @@
 //! computation across terms while keeping the verifier protocol identical.
 
 use crate::product::verify_protocol_general;
-use crate::prover::{MultilinearPoly, VerifierOutcome};
 use crate::proof::{SumcheckClaim, SumcheckProof, SumcheckRoundMsg};
+use crate::prover::{MultilinearPoly, VerifierOutcome};
 use crate::HcSumcheckConfig;
 use hc_core::field::{FieldElement, GoldilocksField as F};
 use hc_core::{HcError, HcResult};
@@ -48,7 +48,10 @@ impl Term {
                 "Term: at least one factor required",
             ));
         }
-        Ok(Self { coefficient, factors })
+        Ok(Self {
+            coefficient,
+            factors,
+        })
     }
 
     /// Number of factors → per-term univariate degree.
@@ -142,7 +145,10 @@ pub fn prove(
     }
 
     let mut transcript: Transcript<Blake3> = Transcript::new(config.domain_separator);
-    transcript.append_message(b"sumcheck.num_vars", &(poly.num_vars() as u64).to_le_bytes());
+    transcript.append_message(
+        b"sumcheck.num_vars",
+        &(poly.num_vars() as u64).to_le_bytes(),
+    );
     transcript.append_message(b"sumcheck.degree", &(poly.degree() as u64).to_le_bytes());
     transcript.append_message(b"sumcheck.claim", &claim.claimed_sum.to_le_bytes());
 
@@ -264,10 +270,14 @@ mod tests {
     use super::*;
 
     fn seeded(seed: u64, n: usize) -> Vec<F> {
-        let mut x = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let mut x = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (0..n)
             .map(|_| {
-                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                x = x
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 F::new(x % (1u64 << 12))
             })
             .collect()

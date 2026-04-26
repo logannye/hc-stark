@@ -119,7 +119,6 @@ impl PlanLimits {
     }
 }
 
-
 #[derive(Clone)]
 struct Metrics {
     registry: Registry,
@@ -184,9 +183,11 @@ impl Metrics {
             &["tenant_id"],
         )
         .expect("counter vec must be valid");
-        let usage_cap_rejections =
-            IntCounter::new("hc_usage_cap_rejections_total", "usage cap rejections (402)")
-                .expect("counter must be valid");
+        let usage_cap_rejections = IntCounter::new(
+            "hc_usage_cap_rejections_total",
+            "usage cap rejections (402)",
+        )
+        .expect("counter must be valid");
         // Lock-wait buckets: micro to multi-second so a 5s busy_timeout
         // saturation is clearly visible. 5ms / 25ms / 100ms / 500ms /
         // 1s / 5s sweep covers the spectrum from "no contention" to
@@ -444,7 +445,12 @@ fn check_rate_limit(state: &AppState, tenant_id: &str, plan: &str, endpoint: Rat
     true
 }
 
-fn remaining_rate_quota(state: &AppState, tenant_id: &str, plan: &str, endpoint: RateEndpoint) -> u32 {
+fn remaining_rate_quota(
+    state: &AppState,
+    tenant_id: &str,
+    plan: &str,
+    endpoint: RateEndpoint,
+) -> u32 {
     let plan_limits = PlanLimits::for_plan(plan);
     let limit = match endpoint {
         RateEndpoint::Prove => {
@@ -872,7 +878,12 @@ async fn verify(
         Ok(t) => t,
         Err(e) => return e.into_response(),
     };
-    if !check_rate_limit(&state, &tenant.tenant_id, &tenant.plan, RateEndpoint::Verify) {
+    if !check_rate_limit(
+        &state,
+        &tenant.tenant_id,
+        &tenant.plan,
+        RateEndpoint::Verify,
+    ) {
         state
             .metrics
             .rate_limit_rejections
@@ -1004,15 +1015,16 @@ fn verify_zkml_proof_bytes(proof: &hc_sdk::types::ProofBytes) -> hc_sdk::types::
             }
         }
     };
-    let public_io: hc_workloads::zkml_templates::ZkmlPublicIo = match serde_json::from_value(public_io_v) {
-        Ok(p) => p,
-        Err(e) => {
-            return hc_sdk::types::VerifyResult {
-                ok: false,
-                error: Some(format!("zkml public_io decode failed: {e}")),
+    let public_io: hc_workloads::zkml_templates::ZkmlPublicIo =
+        match serde_json::from_value(public_io_v) {
+            Ok(p) => p,
+            Err(e) => {
+                return hc_sdk::types::VerifyResult {
+                    ok: false,
+                    error: Some(format!("zkml public_io decode failed: {e}")),
+                }
             }
-        }
-    };
+        };
     let envelope = hc_workloads::zkml_templates::ZkmlProof {
         version: envelope_version,
         bytes: envelope_bytes,
@@ -1024,7 +1036,9 @@ fn verify_zkml_proof_bytes(proof: &hc_sdk::types::ProofBytes) -> hc_sdk::types::
         },
         Ok(false) => hc_sdk::types::VerifyResult {
             ok: false,
-            error: Some("zkml envelope structural check failed (output digest mismatch)".to_string()),
+            error: Some(
+                "zkml envelope structural check failed (output digest mismatch)".to_string(),
+            ),
         },
         Err(e) => hc_sdk::types::VerifyResult {
             ok: false,
@@ -1064,7 +1078,12 @@ fn spawn_prove_worker(
         }
 
         let plan_limits = PlanLimits::for_plan(&plan2);
-        let max = Duration::from_secs(state2.cfg.max_prove_seconds.max(plan_limits.max_prove_seconds));
+        let max = Duration::from_secs(
+            state2
+                .cfg
+                .max_prove_seconds
+                .max(plan_limits.max_prove_seconds),
+        );
         let result = prove_with_worker_process(
             &job_dir2,
             &req,
@@ -1588,7 +1607,8 @@ async fn prove_batch(
     }
 
     // Check batch fits within remaining rate quota.
-    let remaining = remaining_rate_quota(&state, &tenant.tenant_id, &tenant.plan, RateEndpoint::Prove);
+    let remaining =
+        remaining_rate_quota(&state, &tenant.tenant_id, &tenant.plan, RateEndpoint::Prove);
     if (batch.requests.len() as u32) > remaining && remaining != u32::MAX {
         return Err(ApiError::new(
             StatusCode::TOO_MANY_REQUESTS,
@@ -1666,7 +1686,15 @@ async fn prove_batch(
             );
         }
 
-        spawn_prove_worker(&state, key, job_id, &tenant.tenant_id, &tenant.plan, &job_dir, req);
+        spawn_prove_worker(
+            &state,
+            key,
+            job_id,
+            &tenant.tenant_id,
+            &tenant.plan,
+            &job_dir,
+            req,
+        );
         state.metrics.jobs_inflight.inc();
 
         job_ids.push(job_id.to_string());
@@ -1749,66 +1777,76 @@ async fn prove_inspect(
     headers: axum::http::HeaderMap,
     Path(job_id): Path<String>,
 ) -> Result<Json<hc_sdk::types::ProofInspection>, ApiError> {
-    let parsed = Uuid::parse_str(&job_id).map_err(|_| {
-        ApiError::new(StatusCode::BAD_REQUEST, "bad_request", "invalid job_id")
-    })?;
+    let parsed = Uuid::parse_str(&job_id)
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "bad_request", "invalid job_id"))?;
     let tenant = guarded_auth(&state, &headers)?;
 
     let proof_bytes = load_completed_proof(&state, &tenant.tenant_id, parsed)?;
 
     // Decode and verify with summary in a blocking task (CPU-bound).
-    let inspection = tokio::task::spawn_blocking(move || -> Result<hc_sdk::types::ProofInspection, String> {
-        let start = std::time::Instant::now();
+    let inspection =
+        tokio::task::spawn_blocking(move || -> Result<hc_sdk::types::ProofInspection, String> {
+            let start = std::time::Instant::now();
 
-        let result = hc_sdk::proof::verify_proof_bytes(&proof_bytes, true);
-        if !result.ok {
-            return Err(format!("verification failed: {}", result.error.unwrap_or_default()));
-        }
-        let verify_ms = start.elapsed().as_millis() as u64;
+            let result = hc_sdk::proof::verify_proof_bytes(&proof_bytes, true);
+            if !result.ok {
+                return Err(format!(
+                    "verification failed: {}",
+                    result.error.unwrap_or_default()
+                ));
+            }
+            let verify_ms = start.elapsed().as_millis() as u64;
 
-        // Decode proof to extract structural metadata.
-        let decoded: serde_json::Value = serde_json::from_slice(&proof_bytes.bytes)
-            .map_err(|e| format!("failed to decode proof: {e}"))?;
+            // Decode proof to extract structural metadata.
+            let decoded: serde_json::Value = serde_json::from_slice(&proof_bytes.bytes)
+                .map_err(|e| format!("failed to decode proof: {e}"))?;
 
-        let trace_length = decoded.get("trace_length")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
-        let initial_acc = decoded.get("initial_acc")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let final_acc = decoded.get("final_acc")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+            let trace_length = decoded
+                .get("trace_length")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+            let initial_acc = decoded
+                .get("initial_acc")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let final_acc = decoded
+                .get("final_acc")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
 
-        // Extract commitment digests (hex-encoded in proof JSON).
-        let trace_commitment = decoded.get("trace_commitment")
-            .and_then(|v| v.as_str())
-            .unwrap_or("").to_string();
-        let composition_commitment = decoded.get("composition_commitment")
-            .and_then(|v| v.as_str())
-            .unwrap_or("").to_string();
+            // Extract commitment digests (hex-encoded in proof JSON).
+            let trace_commitment = decoded
+                .get("trace_commitment")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let composition_commitment = decoded
+                .get("composition_commitment")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
 
-        let version = proof_bytes.version;
-        let scheme = if version == 2 { "KZG" } else { "STARK" };
+            let version = proof_bytes.version;
+            let scheme = if version == 2 { "KZG" } else { "STARK" };
 
-        Ok(hc_sdk::types::ProofInspection {
-            trace_commitment_digest: trace_commitment.clone(),
-            initial_acc,
-            final_acc,
-            trace_length,
-            query_commitments: hc_sdk::types::QueryCommitmentsJson {
-                trace_commitment,
-                composition_commitment,
-                fri_commitment: String::new(),
-            },
-            commitment_scheme: scheme.to_string(),
-            version,
-            verify_time_ms: verify_ms,
+            Ok(hc_sdk::types::ProofInspection {
+                trace_commitment_digest: trace_commitment.clone(),
+                initial_acc,
+                final_acc,
+                trace_length,
+                query_commitments: hc_sdk::types::QueryCommitmentsJson {
+                    trace_commitment,
+                    composition_commitment,
+                    fri_commitment: String::new(),
+                },
+                commitment_scheme: scheme.to_string(),
+                version,
+                verify_time_ms: verify_ms,
+            })
         })
-    })
-    .await
-    .map_err(|e| ApiError::internal(format!("inspection task failed: {e}")))?
-    .map_err(|e| ApiError::internal(e))?;
+        .await
+        .map_err(|e| ApiError::internal(format!("inspection task failed: {e}")))?
+        .map_err(|e| ApiError::internal(e))?;
 
     Ok(Json(inspection))
 }
@@ -2023,8 +2061,8 @@ async fn prove_template(
     }
 
     // Validate template and build program (fail fast on bad params).
-    let build = hc_workloads::templates::build_from_template(&template_id, &req.params)
-        .map_err(|e| {
+    let build =
+        hc_workloads::templates::build_from_template(&template_id, &req.params).map_err(|e| {
             ApiError::new(
                 StatusCode::BAD_REQUEST,
                 "bad_request",
@@ -2035,7 +2073,9 @@ async fn prove_template(
     let zk = req.zk.unwrap_or(build.recommended_zk);
     let zk_mask_degree = if zk { Some(1) } else { None };
     let program_len = build.program.len();
-    let block_size = req.block_size.unwrap_or_else(|| smart_block_size(program_len));
+    let block_size = req
+        .block_size
+        .unwrap_or_else(|| smart_block_size(program_len));
     let fri_final_poly_size = req.fri_final_poly_size.unwrap_or(2);
 
     // Build a ProveRequest for the worker pipeline.
@@ -2127,16 +2167,14 @@ async fn dispatch_zkml_template(
     template_id: String,
     req: TemplateProveRequest,
 ) -> Result<Json<ProveSubmitResponse>, ApiError> {
-    let outcome =
-        hc_workloads::zkml_templates::prove_zkml_template(&template_id, &req.params).map_err(
-            |e| {
-                ApiError::new(
-                    StatusCode::BAD_REQUEST,
-                    "bad_request",
-                    format!("zkml template build/prove failed: {e}"),
-                )
-            },
-        )?;
+    let outcome = hc_workloads::zkml_templates::prove_zkml_template(&template_id, &req.params)
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "bad_request",
+                format!("zkml template build/prove failed: {e}"),
+            )
+        })?;
 
     let job_id = Uuid::new_v4();
     let job_dir = state
@@ -2232,15 +2270,14 @@ async fn dispatch_spartan_template(
     req: TemplateProveRequest,
 ) -> Result<Json<ProveSubmitResponse>, ApiError> {
     let proof_envelope =
-        hc_workloads::spartan_templates::prove_spartan_template(&template_id, &req.params).map_err(
-            |e| {
+        hc_workloads::spartan_templates::prove_spartan_template(&template_id, &req.params)
+            .map_err(|e| {
                 ApiError::new(
                     StatusCode::BAD_REQUEST,
                     "bad_request",
                     format!("spartan template build/prove failed: {e}"),
                 )
-            },
-        )?;
+            })?;
 
     let job_id = Uuid::new_v4();
     let job_dir = state
@@ -2345,7 +2382,9 @@ async fn estimate(Json(req): Json<EstimateRequest>) -> Result<Json<EstimateRespo
         ));
     };
 
-    let block_size = req.block_size.unwrap_or_else(|| smart_block_size(program_len));
+    let block_size = req
+        .block_size
+        .unwrap_or_else(|| smart_block_size(program_len));
     let trace_length = program_len.max(1).next_power_of_two() * block_size;
     let cost_cents = usage_log::price_cents_pub(trace_length);
 
@@ -2468,9 +2507,8 @@ async fn aggregate(
             )
         })?;
         let proof_bytes = load_completed_proof(&state, &tenant.tenant_id, jid)?;
-        let output = decode_proof_bytes(&proof_bytes).map_err(|e| {
-            ApiError::internal(format!("failed to decode proof {jid_str}: {e}"))
-        })?;
+        let output = decode_proof_bytes(&proof_bytes)
+            .map_err(|e| ApiError::internal(format!("failed to decode proof {jid_str}: {e}")))?;
 
         verifier_proofs.push(hc_verifier::Proof {
             version: output.version,
@@ -2896,7 +2934,8 @@ async fn prove_with_worker_process(
     if let Some(h) = spawn_histogram {
         h.observe(spawn_started.elapsed().as_secs_f64());
     }
-    let mut child = spawn_result.map_err(|err| anyhow::anyhow!("failed to spawn hc-worker: {err}"))?;
+    let mut child =
+        spawn_result.map_err(|err| anyhow::anyhow!("failed to spawn hc-worker: {err}"))?;
 
     let wait_fut = async {
         tokio::select! {

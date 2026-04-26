@@ -70,7 +70,13 @@ pub fn run_dense_layer_example(instance: DenseLayerInstance) -> HcResult<()> {
         initial_acc: GoldilocksField::ZERO,
         final_acc,
     };
-    let config = ProverConfig::with_full_config(8, 2, 32, 4)?;
+    let config = ProverConfig::with_security_floor(
+        8,
+        2,
+        32,
+        4,
+        hc_prover::config::SecurityFloor::relaxed(),
+    )?;
     let proof = prove(config, program, inputs)?;
     println!(
         "Dense layer demo complete (trace_commitment={}, trace_length={})",

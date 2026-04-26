@@ -51,10 +51,15 @@ enum Commands {
         no_tuner_cache: bool,
         #[arg(long, value_enum, default_value_t = CommitmentFlag::Stark)]
         commitment: CommitmentFlag,
+        /// Enable ZK masking by setting the masking polynomial degree (> 0).
+        #[arg(long)]
+        zk_mask_degree: Option<usize>,
     },
     Verify {
         #[arg(long)]
         input: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        allow_legacy_v2: bool,
     },
     Inspect,
     Bench {
@@ -129,6 +134,7 @@ fn main() -> Result<()> {
             tuner_cache,
             no_tuner_cache,
             commitment,
+            zk_mask_degree,
         } => {
             let mut options = ProveOptions {
                 block_size,
@@ -140,6 +146,7 @@ fn main() -> Result<()> {
                 tuner_cache,
                 disable_tuner_cache: no_tuner_cache,
                 commitment,
+                zk_mask_degree,
             };
             if let Some(name) = preset.as_deref() {
                 if let Some(preset_cfg) = lookup_preset(&file_cfg, name) {
@@ -158,11 +165,14 @@ fn main() -> Result<()> {
                 commands::prove::describe_commitment(&proof.trace_commitment)
             );
         }
-        Commands::Verify { input } => {
+        Commands::Verify {
+            input,
+            allow_legacy_v2,
+        } => {
             if let Some(path) = input {
-                run_verify_from_file(&path)?;
+                run_verify_from_file(&path, allow_legacy_v2)?;
             } else {
-                run_verify()?;
+                run_verify(allow_legacy_v2)?;
             }
             println!("proof verified");
         }

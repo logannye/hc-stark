@@ -53,7 +53,7 @@ pub mod prove;
 pub mod r1cs;
 pub mod sparse;
 
-pub use eq::{eq_poly, eq_evaluations};
+pub use eq::{eq_evaluations, eq_poly};
 pub use prove::{prove_r1cs, verify_r1cs, HcSpartanConfig, R1csProof, R1csVerifyOutcome};
 pub use r1cs::R1cs;
 pub use sparse::{prove_sparse_r1cs, verify_sparse_r1cs, SparseMatrix, SparseR1cs};

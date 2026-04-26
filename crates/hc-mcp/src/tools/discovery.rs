@@ -1,11 +1,30 @@
-use rmcp::model::{CallToolResult, Content};
 use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
 use crate::types::DescribeTemplateParams;
 use crate::HcMcpServer;
 
 impl HcMcpServer {
+    pub async fn list_all_templates_impl(&self) -> Result<CallToolResult, ErrorData> {
+        let unified = hc_workloads::list_all_templates();
+        let listing: Vec<serde_json::Value> = unified
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "id": t.id,
+                    "summary": t.summary,
+                    "tags": t.tags,
+                    "cost": t.cost_category,
+                    "backend": t.backend,
+                })
+            })
+            .collect();
+        let json = Content::json(listing)
+            .map_err(|e| ErrorData::internal_error(format!("JSON error: {e}"), None))?;
+        Ok(CallToolResult::success(vec![json]))
+    }
+
     pub async fn list_templates_impl(&self) -> Result<CallToolResult, ErrorData> {
         let templates = hc_workloads::templates::list_templates();
         let listing: Vec<serde_json::Value> = templates
@@ -35,15 +54,16 @@ impl HcMcpServer {
         &self,
         Parameters(params): Parameters<DescribeTemplateParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let tmpl = hc_workloads::templates::template_by_id(&params.template_id).ok_or_else(|| {
-            ErrorData::invalid_params(
-                format!(
-                    "Unknown template '{}'. Call list_templates to see available options.",
-                    params.template_id
-                ),
-                None,
-            )
-        })?;
+        let tmpl =
+            hc_workloads::templates::template_by_id(&params.template_id).ok_or_else(|| {
+                ErrorData::invalid_params(
+                    format!(
+                        "Unknown template '{}'. Call list_templates to see available options.",
+                        params.template_id
+                    ),
+                    None,
+                )
+            })?;
         let info = tmpl.to_info();
         let json = Content::json(info)
             .map_err(|e| ErrorData::internal_error(format!("JSON error: {e}"), None))?;

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use hc_core::field::FieldElement;
 
 pub(crate) fn serialize_evaluations<F: FieldElement>(values: &[F]) -> Vec<u8> {

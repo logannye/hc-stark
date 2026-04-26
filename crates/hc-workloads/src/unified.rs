@@ -103,8 +103,7 @@ mod tests {
     #[test]
     fn unified_listing_includes_all_three_backends() {
         let all = list_all_templates();
-        let backends: std::collections::HashSet<&str> =
-            all.iter().map(|t| t.backend).collect();
+        let backends: std::collections::HashSet<&str> = all.iter().map(|t| t.backend).collect();
         assert!(backends.contains("vm"), "expected at least one vm template");
         assert!(
             backends.contains("zkml"),
@@ -119,8 +118,7 @@ mod tests {
     #[test]
     fn unified_listing_includes_known_template_ids() {
         let all = list_all_templates();
-        let ids: std::collections::HashSet<String> =
-            all.iter().map(|t| t.id.clone()).collect();
+        let ids: std::collections::HashSet<String> = all.iter().map(|t| t.id.clone()).collect();
         assert!(ids.contains("range_proof"));
         assert!(ids.contains("zkml_matmul"));
         assert!(ids.contains("spartan_r1cs"));

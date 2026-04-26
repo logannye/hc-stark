@@ -235,12 +235,8 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let outcome =
-            prove_zkml_template("zkml_matmul", params.as_object().unwrap()).unwrap();
-        assert_eq!(
-            outcome.proof.version,
-            hc_zkml::streaming::ENVELOPE_VERSION
-        );
+        let outcome = prove_zkml_template("zkml_matmul", params.as_object().unwrap()).unwrap();
+        assert_eq!(outcome.proof.version, hc_zkml::streaming::ENVELOPE_VERSION);
         assert_eq!(
             outcome.proof.bytes.len(),
             hc_zkml::streaming::ENVELOPE_BYTES
@@ -248,10 +244,12 @@ mod tests {
         // Output shape must match (m, n).
         assert_eq!(outcome.output.shape.0, vec![2, 2]);
         // Structural verification round-trips.
-        assert!(
-            hc_zkml::verify_inference(&outcome.model_commitment, &outcome.public_io, &outcome.proof)
-                .unwrap()
-        );
+        assert!(hc_zkml::verify_inference(
+            &outcome.model_commitment,
+            &outcome.public_io,
+            &outcome.proof
+        )
+        .unwrap());
     }
 
     #[test]

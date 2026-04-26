@@ -1,6 +1,6 @@
 use base64::Engine;
-use rmcp::model::{CallToolResult, Content};
 use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
 use crate::types::{GetProofParams, GetProofSummaryParams, JobStatus};
@@ -62,10 +62,7 @@ impl HcMcpServer {
             .map_err(|e| ErrorData::invalid_params(e.to_string(), None))?;
 
         let status_label = entry.status.label();
-        let template_desc = entry
-            .template_id
-            .as_deref()
-            .unwrap_or("custom workload");
+        let template_desc = entry.template_id.as_deref().unwrap_or("custom workload");
 
         let summary = match &entry.status {
             JobStatus::Succeeded => {
@@ -78,9 +75,13 @@ impl HcMcpServer {
                      Proof version: {}, size: {} bytes\n\
                      The proof cryptographically attests that the computation \
                      with the given public inputs was executed correctly.",
-                    params.job_id, status_label, template_desc,
-                    entry.initial_acc, entry.final_acc,
-                    proof.version, size
+                    params.job_id,
+                    status_label,
+                    template_desc,
+                    entry.initial_acc,
+                    entry.final_acc,
+                    proof.version,
+                    size
                 )
             }
             JobStatus::Failed { error } => {

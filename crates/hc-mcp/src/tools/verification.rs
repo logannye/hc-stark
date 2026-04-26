@@ -1,6 +1,6 @@
 use base64::Engine;
-use rmcp::model::{CallToolResult, Content};
 use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
 use crate::types::VerifyProofParams;
@@ -23,7 +23,9 @@ impl HcMcpServer {
         let proof_bytes: hc_sdk::types::ProofBytes =
             serde_json::from_slice(&bytes).map_err(|e| {
                 ErrorData::invalid_params(
-                    format!("Invalid proof format: {e}. Use the exact bytes returned by get_proof."),
+                    format!(
+                        "Invalid proof format: {e}. Use the exact bytes returned by get_proof."
+                    ),
                     None,
                 )
             })?;

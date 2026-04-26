@@ -14,7 +14,9 @@ pub struct DescribeTemplateParams {
 pub struct ProveTemplateParams {
     #[schemars(description = "Template ID. Call list_templates to see available options.")]
     pub template_id: String,
-    #[schemars(description = "Template parameters as JSON object. Call describe_template for the parameter schema.")]
+    #[schemars(
+        description = "Template parameters as JSON object. Call describe_template for the parameter schema."
+    )]
     pub parameters: serde_json::Map<String, serde_json::Value>,
     #[schemars(description = "Enable zero-knowledge mode. Default: use template recommendation.")]
     pub zk: Option<bool>,
@@ -22,7 +24,9 @@ pub struct ProveTemplateParams {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ProveWorkloadParams {
-    #[schemars(description = "Registered workload ID. Call list_workloads to see available options.")]
+    #[schemars(
+        description = "Registered workload ID. Call list_workloads to see available options."
+    )]
     pub workload_id: String,
     #[schemars(description = "Initial accumulator value.")]
     pub initial_acc: u64,
@@ -46,6 +50,42 @@ pub struct PollJobParams {
 pub struct VerifyProofParams {
     #[schemars(description = "Base64-encoded proof bytes (from get_proof).")]
     pub proof_b64: String,
+}
+
+// ── zkML types ──────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DescribeZkmlTemplateParams {
+    #[schemars(description = "zkML template ID. Call list_zkml_templates to see options.")]
+    pub template_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ProveZkmlTemplateParams {
+    #[schemars(description = "zkML template ID. Call list_zkml_templates to see options.")]
+    pub template_id: String,
+    #[schemars(
+        description = "Template parameters as JSON object. Call describe_zkml_template for the schema."
+    )]
+    pub parameters: serde_json::Map<String, serde_json::Value>,
+}
+
+// ── Spartan types ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DescribeSpartanTemplateParams {
+    #[schemars(description = "Spartan template ID. Call list_spartan_templates to see options.")]
+    pub template_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ProveSpartanTemplateParams {
+    #[schemars(description = "Spartan template ID. Call list_spartan_templates to see options.")]
+    pub template_id: String,
+    #[schemars(
+        description = "Template parameters as JSON object. Call describe_spartan_template for the schema."
+    )]
+    pub parameters: serde_json::Map<String, serde_json::Value>,
 }
 
 // ── Output types ────────────────────────────────────────────────────────────

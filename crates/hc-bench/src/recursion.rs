@@ -30,6 +30,7 @@ pub fn bench_recursion(proofs: usize) -> HcResult<serde_json::Value> {
         };
         let prover = prove(config, program.clone(), inputs.clone())?;
         leaf_proofs.push(Proof {
+            version: prover.version,
             trace_commitment: prover.trace_commitment,
             composition_commitment: prover.composition_commitment,
             fri_proof: prover.fri_proof,
@@ -37,6 +38,7 @@ pub fn bench_recursion(proofs: usize) -> HcResult<serde_json::Value> {
             final_acc: inputs.final_acc,
             query_response: prover.query_response,
             trace_length: prover.trace_length,
+            params: prover.params,
         });
     }
 

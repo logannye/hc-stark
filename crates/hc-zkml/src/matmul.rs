@@ -271,11 +271,7 @@ pub fn evaluate_streaming<A: MatrixA, B: MatrixB>(
 /// Reference implementation that materializes nothing intelligently — pure
 /// triple-loop over field elements. Used in tests to cross-check the
 /// streaming evaluator.
-pub fn evaluate_naive<A: MatrixA, B: MatrixB>(
-    spec: &MatMulSpec,
-    a: &A,
-    b: &B,
-) -> HcResult<Vec<F>> {
+pub fn evaluate_naive<A: MatrixA, B: MatrixB>(spec: &MatMulSpec, a: &A, b: &B) -> HcResult<Vec<F>> {
     let mut sa = vec![F::ZERO; spec.tile_dim];
     let mut sb = vec![F::ZERO; spec.tile_dim];
     let mut out = Vec::with_capacity(spec.output_entries());
@@ -456,11 +452,15 @@ mod tests {
 
     fn small_random_field_vec(seed: u64, n: usize, range_log2: u32) -> Vec<F> {
         // Tiny LCG so we don't pull in the rand crate just for tests.
-        let mut x = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let mut x = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let mask: u64 = (1u64 << range_log2) - 1;
         (0..n)
             .map(|_| {
-                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                x = x
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 F::new(x & mask)
             })
             .collect()

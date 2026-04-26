@@ -21,13 +21,12 @@ fn require_usize(params: &serde_json::Map<String, JsonValue>, name: &str) -> Res
         .get(name)
         .and_then(|v| v.as_u64())
         .map(|v| v as usize)
-        .ok_or_else(|| anyhow!("missing or invalid parameter '{name}': expected non-negative integer"))
+        .ok_or_else(|| {
+            anyhow!("missing or invalid parameter '{name}': expected non-negative integer")
+        })
 }
 
-fn require_i32_array(
-    params: &serde_json::Map<String, JsonValue>,
-    name: &str,
-) -> Result<Vec<i32>> {
+fn require_i32_array(params: &serde_json::Map<String, JsonValue>, name: &str) -> Result<Vec<i32>> {
     let arr = params
         .get(name)
         .and_then(|v| v.as_array())
@@ -38,9 +37,7 @@ fn require_i32_array(
             v.as_i64()
                 .filter(|n| (-128..=127).contains(n))
                 .map(|n| n as i32)
-                .ok_or_else(|| {
-                    anyhow!("parameter '{name}[{i}]': expected int8 (-128..=127)")
-                })
+                .ok_or_else(|| anyhow!("parameter '{name}[{i}]': expected int8 (-128..=127)"))
         })
         .collect()
 }
@@ -82,7 +79,9 @@ fn build(params: &serde_json::Map<String, JsonValue>) -> Result<ZkmlBuildResult>
         .map(|v| v as f32)
         .unwrap_or(1.0);
     if !(scale.is_finite() && scale > 0.0) {
-        return Err(anyhow!("zkml_matmul: 'scale' must be a positive finite float"));
+        return Err(anyhow!(
+            "zkml_matmul: 'scale' must be a positive finite float"
+        ));
     }
     let q = Quantization::int8(scale);
 
