@@ -5,5 +5,44 @@
 .DS_Store
 .logs/
 
+# Local secrets / state
 billing/.stripe_ids.json
 billing/.stripe_webhook_secret
+
+# Python bytecode caches
+**/__pycache__/
+**/*.py[cod]
+
+# AI coding assistants — workspace metadata that should never be committed
+.adal/
+.agent/
+.agents/
+.augment/
+.claude/
+.codebuddy/
+.commandcode/
+.continue/
+.cortex/
+.crush/
+.cursor/
+.factory/
+.goose/
+.iflow/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.vibe/
+.windsurf/
+.wrangler/
+.zencoder/
