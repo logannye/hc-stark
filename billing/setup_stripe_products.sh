@@ -109,7 +109,7 @@ METER_ID="$(create_resource \
     -d "customer_mapping[event_payload_key]=stripe_customer_id" \
     -d "customer_mapping[type]=by_id" \
     -d "value_settings[event_payload_key]=value" \
-    -H "Idempotency-Key: tinyzkp:meter:proof_usage:v1")"
+    --idempotency-key "tinyzkp:meter:proof_usage:v1")"
 echo
 
 # ── 2. Products ────────────────────────────────────────────────────────
@@ -121,28 +121,28 @@ DEVELOPER_PROD="$(create_resource \
   products create \
     --name "TinyZKP Developer" \
     --description "Developer plan — base per-proof rates, 100 RPM, 4 concurrent jobs, \$500/mo cap" \
-    -H "Idempotency-Key: tinyzkp:product:developer:v1")"
+    --idempotency-key "tinyzkp:product:developer:v1")"
 TEAM_PROD="$(create_resource \
   "Team product" \
   "${TMP_DIR}/prod_team.json" \
   products create \
     --name "TinyZKP Team" \
     --description "Team plan — 25% off per-proof rates, 300 RPM, 8 concurrent jobs, \$2,500/mo cap" \
-    -H "Idempotency-Key: tinyzkp:product:team:v1")"
+    --idempotency-key "tinyzkp:product:team:v1")"
 SCALE_PROD="$(create_resource \
   "Scale product" \
   "${TMP_DIR}/prod_scale.json" \
   products create \
     --name "TinyZKP Scale" \
     --description "Scale plan — 40% off per-proof rates, 500 RPM, 16 concurrent jobs, \$10,000/mo cap" \
-    -H "Idempotency-Key: tinyzkp:product:scale:v1")"
+    --idempotency-key "tinyzkp:product:scale:v1")"
 METERED_PROD="$(create_resource \
   "Proof Generation (metered)" \
   "${TMP_DIR}/prod_metered.json" \
   products create \
     --name "TinyZKP Proof Generation" \
     --description "ZK-STARK proof generation API — metered usage (cents per proof)" \
-    -H "Idempotency-Key: tinyzkp:product:proof_generation:v1")"
+    --idempotency-key "tinyzkp:product:proof_generation:v1")"
 echo
 
 # ── 3. Prices ──────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ DEV_MONTHLY_PRICE="$(create_resource \
     --nickname "Developer Monthly" \
     -d "recurring[interval]=month" \
     -d "recurring[usage_type]=licensed" \
-    -H "Idempotency-Key: tinyzkp:price:developer:monthly:v1")"
+    --idempotency-key "tinyzkp:price:developer:monthly:v1")"
 
 DEV_ANNUAL_PRICE="$(create_resource \
   "Developer annual (\$86.40)" \
@@ -171,7 +171,7 @@ DEV_ANNUAL_PRICE="$(create_resource \
     --nickname "Developer Annual" \
     -d "recurring[interval]=year" \
     -d "recurring[usage_type]=licensed" \
-    -H "Idempotency-Key: tinyzkp:price:developer:annual:v1")"
+    --idempotency-key "tinyzkp:price:developer:annual:v1")"
 
 TEAM_MONTHLY_PRICE="$(create_resource \
   "Team monthly (\$49)" \
@@ -183,7 +183,7 @@ TEAM_MONTHLY_PRICE="$(create_resource \
     --nickname "Team Monthly" \
     -d "recurring[interval]=month" \
     -d "recurring[usage_type]=licensed" \
-    -H "Idempotency-Key: tinyzkp:price:team:monthly:v1")"
+    --idempotency-key "tinyzkp:price:team:monthly:v1")"
 
 TEAM_ANNUAL_PRICE="$(create_resource \
   "Team annual (\$470.40)" \
@@ -195,7 +195,7 @@ TEAM_ANNUAL_PRICE="$(create_resource \
     --nickname "Team Annual" \
     -d "recurring[interval]=year" \
     -d "recurring[usage_type]=licensed" \
-    -H "Idempotency-Key: tinyzkp:price:team:annual:v1")"
+    --idempotency-key "tinyzkp:price:team:annual:v1")"
 
 SCALE_MONTHLY_PRICE="$(create_resource \
   "Scale monthly (\$199)" \
@@ -207,7 +207,7 @@ SCALE_MONTHLY_PRICE="$(create_resource \
     --nickname "Scale Monthly" \
     -d "recurring[interval]=month" \
     -d "recurring[usage_type]=licensed" \
-    -H "Idempotency-Key: tinyzkp:price:scale:monthly:v1")"
+    --idempotency-key "tinyzkp:price:scale:monthly:v1")"
 
 SCALE_ANNUAL_PRICE="$(create_resource \
   "Scale annual (\$1,910.40)" \
@@ -219,7 +219,7 @@ SCALE_ANNUAL_PRICE="$(create_resource \
     --nickname "Scale Annual" \
     -d "recurring[interval]=year" \
     -d "recurring[usage_type]=licensed" \
-    -H "Idempotency-Key: tinyzkp:price:scale:annual:v1")"
+    --idempotency-key "tinyzkp:price:scale:annual:v1")"
 
 METERED_PRICE="$(create_resource \
   "Metered usage (\$0.01/unit)" \
@@ -233,7 +233,7 @@ METERED_PRICE="$(create_resource \
     -d "recurring[meter]=$METER_ID" \
     -d "billing_scheme=per_unit" \
     -d "unit_amount_decimal=1.0" \
-    -H "Idempotency-Key: tinyzkp:price:metered:v1")"
+    --idempotency-key "tinyzkp:price:metered:v1")"
 
 echo
 
