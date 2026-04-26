@@ -532,7 +532,10 @@ mod tests {
         let sizes: &[usize] = &[
             256, 1024, 16_384, 65_536, 262_144, 524_288, 1_048_576, 2_097_152,
         ];
-        println!("{:>10} {:>14} {:>14} {:>10}", "size", "scalar (us)", "parallel (us)", "speedup");
+        println!(
+            "{:>10} {:>14} {:>14} {:>10}",
+            "size", "scalar (us)", "parallel (us)", "speedup"
+        );
         for &n in sizes {
             let template_a = deterministic_field_vec(1, n);
             let b = deterministic_field_vec(2, n);
@@ -548,8 +551,7 @@ mod tests {
                 scalar_mul_assign(&mut a, &b);
                 std::hint::black_box(a);
             }
-            let scalar_us =
-                (t0.elapsed().as_secs_f64() * 1_000_000.0) / ITERS as f64;
+            let scalar_us = (t0.elapsed().as_secs_f64() * 1_000_000.0) / ITERS as f64;
 
             // Parallel timing.
             let t0 = Instant::now();

@@ -808,4 +808,3 @@ async fn job_index_handles_concurrent_writes() {
         .expect("count works after contention");
     assert_eq!(total, 800);
 }
-
