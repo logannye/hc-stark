@@ -104,13 +104,13 @@ impl R1cs {
 
 fn matvec(matrix: &[F], vec: &[F], rows: usize, cols: usize) -> Vec<F> {
     let mut out = vec![F::ZERO; rows];
-    for i in 0..rows {
+    for (i, slot) in out.iter_mut().enumerate().take(rows) {
         let row_base = i * cols;
         let mut acc = F::ZERO;
         for j in 0..cols {
             acc = acc.add(matrix[row_base + j].mul(vec[j]));
         }
-        out[i] = acc;
+        *slot = acc;
     }
     out
 }

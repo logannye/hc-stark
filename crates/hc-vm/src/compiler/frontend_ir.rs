@@ -161,6 +161,10 @@ impl Expr {
         Self::Var(name.to_string())
     }
 
+    // The add/sub/mul builder methods below build AST nodes rather than perform
+    // arithmetic. Naming them after the std::ops traits is deliberate (it gives
+    // a fluent builder API) but clippy can't tell — silence the false positive.
+    #[allow(clippy::should_implement_trait)]
     /// `self + other`
     pub fn add(self, other: Self) -> Self {
         Self::BinOp {
@@ -170,6 +174,7 @@ impl Expr {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     /// `self - other`
     pub fn sub(self, other: Self) -> Self {
         Self::BinOp {
@@ -179,6 +184,7 @@ impl Expr {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     /// `self * other`
     pub fn mul(self, other: Self) -> Self {
         Self::BinOp {

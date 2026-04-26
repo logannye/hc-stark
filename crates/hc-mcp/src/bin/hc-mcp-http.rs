@@ -53,8 +53,8 @@ fn origin_allowed(origin: &HeaderValue, allowlist: &[String]) -> bool {
     // Exact-match allowlist (with port/path tolerance)
     if allowlist.iter().any(|allowed| {
         s == allowed.as_str()
-            || s.starts_with(&format!("{}:", allowed))
-            || s.starts_with(&format!("{}/", allowed))
+            || s.starts_with(&format!("{allowed}:"))
+            || s.starts_with(&format!("{allowed}/"))
     }) {
         return true;
     }

@@ -78,7 +78,7 @@ async fn describe_unknown_template_returns_error() {
         .describe_template_impl(Parameters(params))
         .await
         .unwrap_err();
-    let msg = format!("{:?}", err);
+    let msg = format!("{err:?}");
     assert!(
         msg.contains("nonexistent_template"),
         "error should mention template name"
@@ -175,7 +175,7 @@ async fn prove_template_with_bad_params_returns_error() {
         zk: None,
     };
     let err = s.prove_template_impl(Parameters(params)).await.unwrap_err();
-    let msg = format!("{:?}", err);
+    let msg = format!("{err:?}");
     assert!(
         msg.contains("deltas") || msg.contains("parameter"),
         "error should mention missing param"
@@ -191,7 +191,7 @@ async fn prove_unknown_template_returns_error() {
         zk: None,
     };
     let err = s.prove_template_impl(Parameters(params)).await.unwrap_err();
-    let msg = format!("{:?}", err);
+    let msg = format!("{err:?}");
     assert!(
         msg.contains("nonexistent"),
         "error should mention template name"
@@ -205,7 +205,7 @@ async fn poll_unknown_job_returns_error() {
         job_id: "nonexistent-job-id".to_string(),
     };
     let err = s.poll_job_impl(Parameters(params)).await.unwrap_err();
-    let msg = format!("{:?}", err);
+    let msg = format!("{err:?}");
     assert!(
         msg.contains("nonexistent-job-id"),
         "error should mention job ID"
@@ -270,7 +270,7 @@ async fn verify_invalid_proof_returns_invalid() {
         proof_b64: "not-valid-base64!!!".to_string(),
     };
     let err = s.verify_proof_impl(Parameters(params)).await.unwrap_err();
-    let msg = format!("{:?}", err);
+    let msg = format!("{err:?}");
     assert!(
         msg.contains("base64") || msg.contains("Invalid"),
         "should report base64 error"

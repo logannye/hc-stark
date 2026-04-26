@@ -168,8 +168,10 @@ mod tests {
 
     #[test]
     fn config_rejects_oversized_tile() {
-        let mut cfg = HcSumcheckConfig::default();
-        cfg.tile_log_size = 30;
+        let cfg = HcSumcheckConfig {
+            tile_log_size: 30,
+            ..HcSumcheckConfig::default()
+        };
         assert!(cfg.validate().is_err());
     }
 

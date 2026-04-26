@@ -46,7 +46,7 @@ pub fn lagrange_interpolate_at(values: &[F], r: F) -> HcResult<F> {
     }
     let n = values.len();
     let mut acc = F::ZERO;
-    for i in 0..n {
+    for (i, vi) in values.iter().enumerate().take(n) {
         // L_i(r) = ∏_{j != i} (r - j) / (i - j)
         let mut num = F::ONE;
         let mut den = F::ONE;
@@ -66,7 +66,7 @@ pub fn lagrange_interpolate_at(values: &[F], r: F) -> HcResult<F> {
         let den_inv = den
             .inverse()
             .ok_or_else(|| HcError::math("lagrange_interpolate_at: zero denominator"))?;
-        acc = acc.add(values[i].mul(num).mul(den_inv));
+        acc = acc.add(vi.mul(num).mul(den_inv));
     }
     Ok(acc)
 }
@@ -155,10 +155,10 @@ pub fn prove(
     let mut transcript: Transcript<Blake3> = Transcript::new(config.domain_separator);
     transcript.append_message(
         b"sumcheck.num_vars",
-        &(poly.num_vars() as u64).to_le_bytes(),
+        (poly.num_vars() as u64).to_le_bytes(),
     );
-    transcript.append_message(b"sumcheck.degree", &(poly.degree() as u64).to_le_bytes());
-    transcript.append_message(b"sumcheck.claim", &claim.claimed_sum.to_le_bytes());
+    transcript.append_message(b"sumcheck.degree", (poly.degree() as u64).to_le_bytes());
+    transcript.append_message(b"sumcheck.claim", claim.claimed_sum.to_le_bytes());
 
     // Working tables: one per factor, folded in lockstep.
     let mut tables: Vec<Vec<F>> = poly.factors.iter().map(|f| f.evaluations.clone()).collect();
@@ -201,8 +201,8 @@ pub fn prove(
         let coefficients: Vec<u64> = s_evals.iter().map(|e| e.0).collect();
         for (i, e) in s_evals.iter().enumerate() {
             transcript.append_message(
-                format!("sumcheck.round.s{}", i).as_bytes(),
-                &e.0.to_le_bytes(),
+                format!("sumcheck.round.s{i}").as_bytes(),
+                e.0.to_le_bytes(),
             );
         }
         let r: F = transcript.challenge_field(b"sumcheck.round.challenge");
@@ -226,7 +226,7 @@ pub fn prove(
     for table in &tables {
         final_eval = final_eval.mul(table[0]);
     }
-    transcript.append_message(b"sumcheck.final", &final_eval.0.to_le_bytes());
+    transcript.append_message(b"sumcheck.final", final_eval.0.to_le_bytes());
 
     Ok((
         SumcheckProof {
@@ -273,10 +273,10 @@ pub fn verify_protocol_general(
     let mut transcript: Transcript<Blake3> = Transcript::new(config.domain_separator);
     transcript.append_message(
         b"sumcheck.num_vars",
-        &(claim.num_variables as u64).to_le_bytes(),
+        (claim.num_variables as u64).to_le_bytes(),
     );
-    transcript.append_message(b"sumcheck.degree", &(claim.degree as u64).to_le_bytes());
-    transcript.append_message(b"sumcheck.claim", &claim.claimed_sum.to_le_bytes());
+    transcript.append_message(b"sumcheck.degree", (claim.degree as u64).to_le_bytes());
+    transcript.append_message(b"sumcheck.claim", claim.claimed_sum.to_le_bytes());
 
     let mut current = F::new(claim.claimed_sum);
     let mut challenges = Vec::with_capacity(claim.num_variables);
@@ -297,8 +297,8 @@ pub fn verify_protocol_general(
         }
         for (i, e) in evals.iter().enumerate() {
             transcript.append_message(
-                format!("sumcheck.round.s{}", i).as_bytes(),
-                &e.0.to_le_bytes(),
+                format!("sumcheck.round.s{i}").as_bytes(),
+                e.0.to_le_bytes(),
             );
         }
         let r: F = transcript.challenge_field(b"sumcheck.round.challenge");
@@ -311,7 +311,7 @@ pub fn verify_protocol_general(
     if current != final_evaluation {
         return Ok(None);
     }
-    transcript.append_message(b"sumcheck.final", &final_evaluation.0.to_le_bytes());
+    transcript.append_message(b"sumcheck.final", final_evaluation.0.to_le_bytes());
     Ok(Some(VerifierOutcome {
         challenges,
         final_evaluation,

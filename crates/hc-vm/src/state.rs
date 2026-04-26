@@ -103,9 +103,7 @@ pub fn snapshot_row<F: FieldElement>(
     let mut row = [F::ZERO; TRACE_WIDTH];
     row[col::PC] = F::from_u64(state.pc as u64);
     row[col::OPCODE] = F::from_u64(opcode);
-    for i in 0..NUM_REGISTERS {
-        row[col::R0 + i] = state.regs[i];
-    }
+    row[col::R0..col::R0 + NUM_REGISTERS].copy_from_slice(&state.regs[..NUM_REGISTERS]);
     row[col::FLAG] = state.flag;
     row[col::MEM_ADDR] = mem_addr;
     row[col::MEM_VAL] = mem_val;

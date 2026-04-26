@@ -979,8 +979,7 @@ fn verify_zkml_proof_bytes(proof: &hc_sdk::types::ProofBytes) -> hc_sdk::types::
         return hc_sdk::types::VerifyResult {
             ok: false,
             error: Some(format!(
-                "ProofBytes.version=100 but descriptor.kind={:?} (expected \"zkml_envelope\")",
-                kind
+                "ProofBytes.version=100 but descriptor.kind={kind:?} (expected \"zkml_envelope\")"
             )),
         };
     }
@@ -1846,7 +1845,7 @@ async fn prove_inspect(
         })
         .await
         .map_err(|e| ApiError::internal(format!("inspection task failed: {e}")))?
-        .map_err(|e| ApiError::internal(e))?;
+        .map_err(ApiError::internal)?;
 
     Ok(Json(inspection))
 }
