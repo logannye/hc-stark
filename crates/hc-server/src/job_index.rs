@@ -214,6 +214,19 @@ impl JobIndex {
         }
         Ok(map)
     }
+
+    /// Cross-tenant count of jobs in the given status. Cheap because the
+    /// (status_tag, ...) index covers it. Returns the metric's i64-shaped
+    /// value (saturating cast — no realistic state ever exceeds i64::MAX).
+    pub fn count_global_by_status(&self, status_tag: &str) -> anyhow::Result<i64> {
+        let conn = self.conn.lock().expect("sqlite lock");
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM prove_jobs WHERE status_tag=?1",
+            params![status_tag],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
 }
 
 fn status_tag(status: &ProveJobStatus) -> &'static str {

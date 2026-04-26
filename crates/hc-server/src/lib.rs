@@ -28,8 +28,8 @@ use hc_sdk::{
 };
 use hc_vm::Instruction;
 use prometheus::{
-    Encoder, Histogram, HistogramOpts, IntCounter, IntCounterVec, IntGauge, Opts, Registry,
-    TextEncoder,
+    Encoder, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, Opts,
+    Registry, TextEncoder,
 };
 use tokio::{
     task::JoinHandle,
@@ -134,6 +134,16 @@ struct Metrics {
     rate_limit_rejections: IntCounterVec,
     usage_cents_total: IntCounterVec,
     usage_cap_rejections: IntCounter,
+    /// Histogram of SQLite lock-wait time in seconds, labeled by db
+    /// (`jobs` or `usage`) and op (`read` or `write`). The first
+    /// SQLite contention incident otherwise debugs blind.
+    sqlite_lock_wait_seconds: HistogramVec,
+    /// Histogram of `tokio::process::Command::spawn` time for hc-worker
+    /// in seconds. Surfaces fork/exec tax under load + EMFILE pressure.
+    worker_spawn_seconds: Histogram,
+    /// Gauge of jobs queued (status=pending) across all tenants. Read
+    /// from job_index. Refreshed on each prove submission and each GC tick.
+    job_queue_depth: IntGauge,
 }
 
 impl Metrics {
@@ -177,6 +187,39 @@ impl Metrics {
         let usage_cap_rejections =
             IntCounter::new("hc_usage_cap_rejections_total", "usage cap rejections (402)")
                 .expect("counter must be valid");
+        // Lock-wait buckets: micro to multi-second so a 5s busy_timeout
+        // saturation is clearly visible. 5ms / 25ms / 100ms / 500ms /
+        // 1s / 5s sweep covers the spectrum from "no contention" to
+        // "SQLite is the bottleneck."
+        let sqlite_lock_wait_seconds = HistogramVec::new(
+            HistogramOpts::new(
+                "hc_sqlite_lock_wait_seconds",
+                "time spent waiting for the SQLite writer lock",
+            )
+            .buckets(vec![
+                0.0001, 0.0005, 0.001, 0.005, 0.025, 0.1, 0.5, 1.0, 2.5, 5.0,
+            ]),
+            &["db", "op"],
+        )
+        .expect("histogram vec must be valid");
+        // Worker spawn buckets: typical fork+exec is sub-millisecond on
+        // a healthy box, but EMFILE pressure or memory thrashing can
+        // push this past 100ms.
+        let worker_spawn_seconds = Histogram::with_opts(
+            HistogramOpts::new(
+                "hc_worker_spawn_seconds",
+                "time spent in tokio::process::Command::spawn for hc-worker",
+            )
+            .buckets(vec![
+                0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0,
+            ]),
+        )
+        .expect("histogram must be valid");
+        let job_queue_depth = IntGauge::new(
+            "hc_job_queue_depth",
+            "current number of jobs in pending state (waiting to start)",
+        )
+        .expect("gauge must be valid");
 
         for m in [
             Box::new(prove_submitted.clone()) as Box<dyn prometheus::core::Collector>,
@@ -190,6 +233,9 @@ impl Metrics {
             Box::new(rate_limit_rejections.clone()),
             Box::new(usage_cents_total.clone()),
             Box::new(usage_cap_rejections.clone()),
+            Box::new(sqlite_lock_wait_seconds.clone()),
+            Box::new(worker_spawn_seconds.clone()),
+            Box::new(job_queue_depth.clone()),
         ] {
             registry.register(m).expect("register must succeed");
         }
@@ -207,6 +253,9 @@ impl Metrics {
             rate_limit_rejections,
             usage_cents_total,
             usage_cap_rejections,
+            sqlite_lock_wait_seconds,
+            worker_spawn_seconds,
+            job_queue_depth,
         }
     }
 }
@@ -554,6 +603,19 @@ pub async fn run() -> anyhow::Result<()> {
                     if removed > 0 {
                         gc_state.metrics.gc_removed_total.inc_by(removed);
                     }
+                }
+                // Refresh queue-depth gauge on each GC tick. Cheap: a single
+                // indexed COUNT(*) over prove_jobs WHERE status_tag='pending'.
+                if let Some(index) = gc_state.job_index.as_ref() {
+                    let lock_t0 = std::time::Instant::now();
+                    if let Ok(depth) = index.count_global_by_status("pending") {
+                        gc_state.metrics.job_queue_depth.set(depth);
+                    }
+                    gc_state
+                        .metrics
+                        .sqlite_lock_wait_seconds
+                        .with_label_values(&["jobs", "read"])
+                        .observe(lock_t0.elapsed().as_secs_f64());
                 }
             }
         });
@@ -1009,6 +1071,7 @@ fn spawn_prove_worker(
             state2.cfg.allow_custom_programs,
             max,
             cancel,
+            Some(&state2.metrics.worker_spawn_seconds),
         )
         .await;
 
@@ -1024,7 +1087,13 @@ fn spawn_prove_worker(
 
         let _ = write_json_atomic(job_dir2.join("status.json"), &status);
         if let Some(index) = state2.job_index.as_ref() {
+            let lock_t0 = std::time::Instant::now();
             let _ = index.update_status(&tenant_id2, &job_id.to_string(), &status);
+            state2
+                .metrics
+                .sqlite_lock_wait_seconds
+                .with_label_values(&["jobs", "write"])
+                .observe(lock_t0.elapsed().as_secs_f64());
         }
 
         let elapsed_secs = prove_start.elapsed().as_secs_f64();
@@ -1044,6 +1113,7 @@ fn spawn_prove_worker(
                     let trace_len = serde_json::from_slice::<TraceOnly>(&proof.bytes)
                         .map(|t| t.trace_length)
                         .unwrap_or(0);
+                    let lock_t0 = std::time::Instant::now();
                     let _ = usage.record(
                         &tenant_id2,
                         &job_id.to_string(),
@@ -1051,6 +1121,11 @@ fn spawn_prove_worker(
                         req.workload_id.as_deref(),
                         prove_start.elapsed().as_millis() as u64,
                     );
+                    state2
+                        .metrics
+                        .sqlite_lock_wait_seconds
+                        .with_label_values(&["usage", "write"])
+                        .observe(lock_t0.elapsed().as_secs_f64());
                     // Update billing metric.
                     let cost = usage_log::price_cents_pub(trace_len);
                     state2
@@ -2784,6 +2859,7 @@ async fn prove_with_worker_process(
     allow_custom_programs: bool,
     max: Duration,
     cancel: CancellationToken,
+    spawn_histogram: Option<&Histogram>,
 ) -> anyhow::Result<hc_sdk::types::ProofBytes> {
     // Re-check server-side safety invariants before spawning the worker.
     // Either workload_id OR template_id is sufficient to authorize the
@@ -2802,7 +2878,8 @@ async fn prove_with_worker_process(
     let out_path = PathBuf::from(job_dir).join("proof.json");
 
     let worker = worker_executable_path();
-    let mut child = tokio::process::Command::new(worker)
+    let spawn_started = std::time::Instant::now();
+    let spawn_result = tokio::process::Command::new(worker)
         .arg("--request")
         .arg(&request_path)
         .arg("--out")
@@ -2815,8 +2892,11 @@ async fn prove_with_worker_process(
                 "false"
             },
         )
-        .spawn()
-        .map_err(|err| anyhow::anyhow!("failed to spawn hc-worker: {err}"))?;
+        .spawn();
+    if let Some(h) = spawn_histogram {
+        h.observe(spawn_started.elapsed().as_secs_f64());
+    }
+    let mut child = spawn_result.map_err(|err| anyhow::anyhow!("failed to spawn hc-worker: {err}"))?;
 
     let wait_fut = async {
         tokio::select! {
