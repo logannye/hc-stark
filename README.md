@@ -20,7 +20,9 @@ Mint and verify a real ZK proof at [**tinyzkp.com/try**](https://tinyzkp.com/try
 claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 ```
 
-Your agent now has 10 ZK proof tools (`prove`, `verify`, `list_workloads`, ...) as native function calls. For Claude Desktop, Cursor, OpenAI agents, and other MCP clients, see [the MCP install guide](https://tinyzkp.com/docs#mcp).
+Your agent now has 10 ZK proof tools (`list_templates`, `describe_template`, `prove_template`, `poll_job`, `get_proof`, `verify_proof`, ...) as native function calls. **No signup, no API key, no credit card** — the MCP endpoint is public and rate-limited via a server-side concurrency cap. For Claude Desktop, Cursor, OpenAI agents, and other MCP clients, see [the MCP install guide](https://tinyzkp.com/docs#mcp).
+
+If you want Claude to *recognize* when a use case calls for a proof on its own (not just respond to "use TinyZKP"), install the companion Claude Skill at [`skills/tinyzkp-proofs/`](./skills/tinyzkp-proofs/SKILL.md).
 
 ### 3. Terminal CLI (works against any TinyZKP API key)
 
@@ -222,47 +224,56 @@ curl -X POST https://api.tinyzkp.com/estimate \
 
 hc-stark ships as an **MCP server** so AI agents (Claude, GPT, Cursor) can generate and verify proofs natively. Supports both local (stdio) and remote (HTTP) transport.
 
-### Remote access (no install)
+### Remote access (no install, no auth)
 
 ```bash
 # Claude Code
 claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 ```
 
-### Local install
+The hosted endpoint at `mcp.tinyzkp.com` is public and unauthenticated — no API key required at this surface. Per-tenant Bearer enforcement is on the roadmap; until then, abuse is bounded by a server-side concurrency cap (`HC_MCP_MAX_INFLIGHT=2`). The HTTP transport validates the `Origin` header against an allowlist that includes `*.claude.ai`, `*.anthropic.com`, and `tinyzkp.com`.
+
+### Local install (stdio)
 
 ```bash
-cargo install --path crates/hc-mcp
+cargo install --path crates/hc-mcp --bin hc-mcp-stdio
 ```
 
-Or download from the [releases page](https://github.com/logannye/hc-stark/releases).
+Or download a prebuilt binary from the [releases page](https://github.com/logannye/hc-stark/releases).
 
 **Claude Desktop** (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
     "tinyzkp": {
-      "command": "hc-mcp-stdio",
-      "args": ["--api-key", "tzk_..."]
+      "command": "hc-mcp-stdio"
     }
   }
 }
 ```
 
+### Companion Claude Skill
+
+The repo also ships a [Claude Skill](./skills/tinyzkp-proofs/SKILL.md) that teaches Claude when and how to use these tools. Install it alongside the MCP and Claude will *recognize* situations where a proof is the right primitive — privacy-preserving range checks, agent-action receipts, hash preimage proofs, policy compliance — without the user having to explicitly say "use TinyZKP."
+
 ### MCP tools
 
-| Tool | Description |
-|------|-------------|
-| `prove` | Submit a proof job |
-| `verify` | Verify a proof |
-| `prove_status` | Poll job status |
-| `list_jobs` | List jobs for your tenant |
-| `healthz` | Service health check |
-| `list_programs` | List registered workloads |
-| `describe_program` | Get workload details + parameter schema |
-| `list_workloads` | Browse proof templates |
-| `submit_workload` | Submit a proof via template |
-| `workload_status` | Poll workload job status |
+All 10 tools declare `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` annotations.
+
+| Tool | Title | Read-only |
+|---|---|:-:|
+| `list_templates` | List Proof Templates | ✓ |
+| `list_workloads` | List Workloads | ✓ |
+| `describe_template` | Describe Proof Template | ✓ |
+| `get_capabilities` | Get Server Capabilities | ✓ |
+| `prove_template` | Generate Proof from Template | — |
+| `prove_workload` | Generate Proof from Workload | — |
+| `poll_job` | Poll Proof Job Status | ✓ |
+| `verify_proof` | Verify Proof | ✓ |
+| `get_proof` | Get Proof Bytes | ✓ |
+| `get_proof_summary` | Get Proof Summary | ✓ |
+
+The standard workflow is `list_templates → describe_template → prove_template → poll_job → get_proof → verify_proof`. `verify_proof` is a pure cryptographic check — anyone with the proof bytes can run it independently of TinyZKP.
 
 ---
 
@@ -496,6 +507,8 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - Height-compressed streaming prover with O(√T) memory
 - Complete verifier with streaming Merkle replay
 - Zero-knowledge mode (protocol v4)
+- **Hosted MCP server live at [`mcp.tinyzkp.com`](https://mcp.tinyzkp.com)** — public, unauthenticated, free-tier-by-default, with full tool annotations and Origin allowlist
+- **Claude Skill (`tinyzkp-proofs`)** — teaches Claude when and how to mint and verify ZK proofs via the MCP, even when the user doesn't say "zero-knowledge proof" explicitly
 - MCP server with 10 tools for AI agents (stdio + HTTP transport)
 - Streamable HTTP transport for MCP (remote agent access)
 - 6 proof templates with discovery API (`GET /templates`)
@@ -519,6 +532,7 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 
 ### Next
 
+- Per-tenant Bearer enforcement on the MCP path (currently unauthenticated)
 - Custom program sandboxing (paid tier)
 - Node.js native bindings package
 - GPU acceleration (CUDA/Metal kernels)
