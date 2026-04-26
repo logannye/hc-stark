@@ -70,12 +70,11 @@ impl GoldilocksField {
     /// `subtle::ConstantTimeEq` or similar; we match the existing add/sub
     /// style.)
     ///
-    /// Note: the function is still named `montgomery_reduce` for now to
-    /// avoid breaking any external callers; the name is a misnomer kept
-    /// for source compatibility. The body is plain Goldilocks fast
-    /// reduction, not Montgomery form. See follow-up task for renaming.
+    /// Renamed from `montgomery_reduce` (which was a misnomer — the body
+    /// is plain Goldilocks fast reduction, not Montgomery form). Function
+    /// is private so the rename has no external API impact.
     #[inline(always)]
-    fn montgomery_reduce(t: u128) -> u64 {
+    fn reduce_128(t: u128) -> u64 {
         let lo = t as u64; // bits 0..64 of t
         let hi_word = (t >> 64) as u64; // bits 64..128
         let hi = hi_word >> 32; // bits 96..128 of t, in [0, 2^32)
@@ -157,7 +156,7 @@ impl FieldElement for GoldilocksField {
     }
 
     fn mul(self, rhs: Self) -> Self {
-        GoldilocksField(Self::montgomery_reduce(self.0 as u128 * rhs.0 as u128))
+        GoldilocksField(Self::reduce_128(self.0 as u128 * rhs.0 as u128))
     }
 
     fn inverse(self) -> Option<Self> {
@@ -347,7 +346,7 @@ mod tests {
         /// would corrupt every downstream prover/verifier output.
         #[test]
         fn reduction_matches_oracle(t in proptest::prelude::any::<u128>()) {
-            let fast = GoldilocksField::montgomery_reduce(t);
+            let fast = GoldilocksField::reduce_128(t);
             let slow = reduce_oracle(t);
             proptest::prop_assert_eq!(fast, slow, "reduction mismatch on input {}", t);
         }
@@ -428,7 +427,7 @@ mod tests {
         let t0 = Instant::now();
         let mut acc_fast: u64 = 0;
         for &(a, b) in &inputs {
-            let r = GoldilocksField::montgomery_reduce(a as u128 * b as u128);
+            let r = GoldilocksField::reduce_128(a as u128 * b as u128);
             acc_fast ^= r;
         }
         let dt_fast = t0.elapsed();
@@ -478,7 +477,7 @@ mod tests {
             (1u128 << 127),
         ];
         for &t in cases {
-            let fast = GoldilocksField::montgomery_reduce(t);
+            let fast = GoldilocksField::reduce_128(t);
             let slow = (t % MODULUS_U128) as u64;
             assert_eq!(fast, slow, "reduction mismatch on boundary {t:#x}");
         }
