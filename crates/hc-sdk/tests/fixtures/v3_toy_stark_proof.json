@@ -1,0 +1,4472 @@
+{
+  "version": 3,
+  "params": {
+    "query_count": 30,
+    "lde_blowup": 2,
+    "fri_final_size": 2,
+    "fri_folding_ratio": 2,
+    "hash_id": "blake3"
+  },
+  "commitment_scheme": "stark",
+  "trace_commitment": {
+    "type": "stark",
+    "root": "65cc6a944d81151023d5c5f3ab0a791d1adf3f1fd273b6e97fd54369c715078e"
+  },
+  "composition_commitment": {
+    "type": "stark",
+    "root": "668d05b9635d1e9005507dfb12f16bb878c9666ff8744085e72c937a351c1ef2"
+  },
+  "fri_layer_roots": [
+    "917e7a6c3824d7d41b2935ec389e07698f4ee85257fc34c25dd0ee5ed041e019",
+    "0255ae6c293e59eff9a1df94fd8a003590271fe0b602dc0004ec2fff038335ba"
+  ],
+  "fri_final_layer": [
+    11140472812372410914,
+    7186730285508781495
+  ],
+  "fri_final_root": "2eee0ac985bed97cb0e8d10d95ba69fa65f2f0756155a9ce8a30cf8c724af8fd",
+  "layers": [],
+  "final_layer": [],
+  "initial_acc": 5,
+  "final_acc": 8,
+  "metrics": {
+    "trace_blocks_loaded": 2,
+    "fri_blocks_loaded": 3,
+    "composition_blocks_loaded": 2,
+    "fri_query_batches": 30,
+    "fri_queries_answered": 60,
+    "fri_query_duration_ms": 4
+  },
+  "query_response": {
+    "trace_queries": [
+      {
+        "index": 0,
+        "evaluation": [
+          18399456273327193845,
+          47287796087390284
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 2,
+          "evaluation": [
+            70931694131085156,
+            18423100171370889405
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          18399456273327193845,
+          47287796087390284
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 2,
+          "evaluation": [
+            70931694131085156,
+            18423100171370889405
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          18399456273327193845,
+          47287796087390284
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 2,
+          "evaluation": [
+            70931694131085156,
+            18423100171370889405
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          18399456273327193845,
+          47287796087390284
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 2,
+          "evaluation": [
+            70931694131085156,
+            18423100171370889405
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          18399456273327193845,
+          47287796087390284
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 2,
+          "evaluation": [
+            70931694131085156,
+            18423100171370889405
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          18399456273327193845,
+          47287796087390284
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 2,
+          "evaluation": [
+            70931694131085156,
+            18423100171370889405
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          18399456273327193845,
+          47287796087390284
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 2,
+          "evaluation": [
+            70931694131085156,
+            18423100171370889405
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          18399456273327193845,
+          47287796087390284
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 2,
+          "evaluation": [
+            70931694131085156,
+            18423100171370889405
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          18399456273327193845,
+          47287796087390284
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 2,
+          "evaluation": [
+            70931694131085156,
+            18423100171370889405
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          4608516947175211591,
+          4608147516905509441
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "22fe75b04640d088f40926397c8b79bb59618ade21ea5ab88b342b31739cdf18",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 3,
+          "evaluation": [
+            4615328428873174855,
+            4614943593931517249
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "558249ca5f63e83ba1e07a85b1fb24d7fc585361a5cf45ff03951337c2135d29",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          4608516947175211591,
+          4608147516905509441
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "22fe75b04640d088f40926397c8b79bb59618ade21ea5ab88b342b31739cdf18",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 3,
+          "evaluation": [
+            4615328428873174855,
+            4614943593931517249
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "558249ca5f63e83ba1e07a85b1fb24d7fc585361a5cf45ff03951337c2135d29",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          4608516947175211591,
+          4608147516905509441
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "22fe75b04640d088f40926397c8b79bb59618ade21ea5ab88b342b31739cdf18",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 3,
+          "evaluation": [
+            4615328428873174855,
+            4614943593931517249
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "558249ca5f63e83ba1e07a85b1fb24d7fc585361a5cf45ff03951337c2135d29",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          4608516947175211591,
+          4608147516905509441
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "22fe75b04640d088f40926397c8b79bb59618ade21ea5ab88b342b31739cdf18",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 3,
+          "evaluation": [
+            4615328428873174855,
+            4614943593931517249
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "558249ca5f63e83ba1e07a85b1fb24d7fc585361a5cf45ff03951337c2135d29",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          70931694131085156,
+          18423100171370889405
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 4,
+          "evaluation": [
+            47287796087390465,
+            18399456273327194014
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "96d4670df2dacf6dd1eef72f55849d907cd7ceb7ca3d2baf01a741407df2516f",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          70931694131085156,
+          18423100171370889405
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 4,
+          "evaluation": [
+            47287796087390465,
+            18399456273327194014
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "96d4670df2dacf6dd1eef72f55849d907cd7ceb7ca3d2baf01a741407df2516f",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          70931694131085156,
+          18423100171370889405
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 4,
+          "evaluation": [
+            47287796087390465,
+            18399456273327194014
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "96d4670df2dacf6dd1eef72f55849d907cd7ceb7ca3d2baf01a741407df2516f",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          70931694131085156,
+          18423100171370889405
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "befcf308d02fe96e5fd9f398c4f20c7935d6ac6a81c3315d7b2e42678c6df8aa",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 4,
+          "evaluation": [
+            47287796087390465,
+            18399456273327194014
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "96d4670df2dacf6dd1eef72f55849d907cd7ceb7ca3d2baf01a741407df2516f",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 3,
+        "evaluation": [
+          4615328428873174855,
+          4614943593931517249
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "558249ca5f63e83ba1e07a85b1fb24d7fc585361a5cf45ff03951337c2135d29",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 5,
+          "evaluation": [
+            4607958950602669511,
+            4608328380872371649
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "e00edbf7ac699f67d5ecaf9e6853b93ee8ef8634bbccddee509723d6ddff1560",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 3,
+        "evaluation": [
+          4615328428873174855,
+          4614943593931517249
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "558249ca5f63e83ba1e07a85b1fb24d7fc585361a5cf45ff03951337c2135d29",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 5,
+          "evaluation": [
+            4607958950602669511,
+            4608328380872371649
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "e00edbf7ac699f67d5ecaf9e6853b93ee8ef8634bbccddee509723d6ddff1560",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 3,
+        "evaluation": [
+          4615328428873174855,
+          4614943593931517249
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "558249ca5f63e83ba1e07a85b1fb24d7fc585361a5cf45ff03951337c2135d29",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d93608b88c65e96246a583bd8e28f41e58ab74896721b8901c7ba1c156349f41",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 5,
+          "evaluation": [
+            4607958950602669511,
+            4608328380872371649
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "e00edbf7ac699f67d5ecaf9e6853b93ee8ef8634bbccddee509723d6ddff1560",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 4,
+        "evaluation": [
+          47287796087390465,
+          18399456273327194014
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "96d4670df2dacf6dd1eef72f55849d907cd7ceb7ca3d2baf01a741407df2516f",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 6,
+          "evaluation": [
+            18375812375283499203,
+            23643898043694942
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "1a027ccbaefb219a2aa1991b6a56b24cb9af02a83800b32e91f2082a05dc881b",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 5,
+        "evaluation": [
+          4607958950602669511,
+          4608328380872371649
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "e00edbf7ac699f67d5ecaf9e6853b93ee8ef8634bbccddee509723d6ddff1560",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 7,
+          "evaluation": [
+            4614939742763528391,
+            4615324577705185985
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "71ddf67bd434e069954b73d138c1fe554193386e43278600b0ec47d837ab783b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 5,
+        "evaluation": [
+          4607958950602669511,
+          4608328380872371649
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "e00edbf7ac699f67d5ecaf9e6853b93ee8ef8634bbccddee509723d6ddff1560",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 7,
+          "evaluation": [
+            4614939742763528391,
+            4615324577705185985
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "71ddf67bd434e069954b73d138c1fe554193386e43278600b0ec47d837ab783b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 5,
+        "evaluation": [
+          4607958950602669511,
+          4608328380872371649
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "e00edbf7ac699f67d5ecaf9e6853b93ee8ef8634bbccddee509723d6ddff1560",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 7,
+          "evaluation": [
+            4614939742763528391,
+            4615324577705185985
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "71ddf67bd434e069954b73d138c1fe554193386e43278600b0ec47d837ab783b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 6,
+        "evaluation": [
+          18375812375283499203,
+          23643898043694942
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1a027ccbaefb219a2aa1991b6a56b24cb9af02a83800b32e91f2082a05dc881b",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 0,
+          "evaluation": [
+            18399456273327193845,
+            47287796087390284
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 6,
+        "evaluation": [
+          18375812375283499203,
+          23643898043694942
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1a027ccbaefb219a2aa1991b6a56b24cb9af02a83800b32e91f2082a05dc881b",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 0,
+          "evaluation": [
+            18399456273327193845,
+            47287796087390284
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 6,
+        "evaluation": [
+          18375812375283499203,
+          23643898043694942
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "1a027ccbaefb219a2aa1991b6a56b24cb9af02a83800b32e91f2082a05dc881b",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 0,
+          "evaluation": [
+            18399456273327193845,
+            47287796087390284
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "1fe62ba90e70463497767ec9eb27ea14d2d191e2932aaa6ce5d8f7ffe872121e",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 7,
+        "evaluation": [
+          4614939742763528391,
+          4615324577705185985
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "71ddf67bd434e069954b73d138c1fe554193386e43278600b0ec47d837ab783b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 1,
+          "evaluation": [
+            4608516947175211591,
+            4608147516905509441
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "22fe75b04640d088f40926397c8b79bb59618ade21ea5ab88b342b31739cdf18",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 7,
+        "evaluation": [
+          4614939742763528391,
+          4615324577705185985
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "71ddf67bd434e069954b73d138c1fe554193386e43278600b0ec47d837ab783b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 1,
+          "evaluation": [
+            4608516947175211591,
+            4608147516905509441
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "22fe75b04640d088f40926397c8b79bb59618ade21ea5ab88b342b31739cdf18",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "index": 7,
+        "evaluation": [
+          4614939742763528391,
+          4615324577705185985
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "71ddf67bd434e069954b73d138c1fe554193386e43278600b0ec47d837ab783b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 1,
+          "evaluation": [
+            4608516947175211591,
+            4608147516905509441
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "22fe75b04640d088f40926397c8b79bb59618ade21ea5ab88b342b31739cdf18",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e7b78e4c67c893a7564e0cd6e97af60830428f3a754082960b1fde9d4fb03ede",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "22ff35d5de29b7cf01b01c9e4b83d68d4cc55965ba99d57c2335f69347a844ca",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "composition_queries": [
+      {
+        "index": 0,
+        "value": 10219755816664938926,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "08efb3612ea24c05d699a4517328d999f4b2e9ba567e30db6587c6a7eb885379",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 0,
+        "value": 10219755816664938926,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "08efb3612ea24c05d699a4517328d999f4b2e9ba567e30db6587c6a7eb885379",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 0,
+        "value": 10219755816664938926,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "08efb3612ea24c05d699a4517328d999f4b2e9ba567e30db6587c6a7eb885379",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 0,
+        "value": 10219755816664938926,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "08efb3612ea24c05d699a4517328d999f4b2e9ba567e30db6587c6a7eb885379",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 0,
+        "value": 10219755816664938926,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "08efb3612ea24c05d699a4517328d999f4b2e9ba567e30db6587c6a7eb885379",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 0,
+        "value": 10219755816664938926,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "08efb3612ea24c05d699a4517328d999f4b2e9ba567e30db6587c6a7eb885379",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 0,
+        "value": 10219755816664938926,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "08efb3612ea24c05d699a4517328d999f4b2e9ba567e30db6587c6a7eb885379",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 0,
+        "value": 10219755816664938926,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "08efb3612ea24c05d699a4517328d999f4b2e9ba567e30db6587c6a7eb885379",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 0,
+        "value": 10219755816664938926,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "08efb3612ea24c05d699a4517328d999f4b2e9ba567e30db6587c6a7eb885379",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 1,
+        "value": 15047758420462623057,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "3f43e4f337a3ce6433c117bb16fb8cdf25f1af1e6f35901aeeeed86c4841bf9e",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 1,
+        "value": 15047758420462623057,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "3f43e4f337a3ce6433c117bb16fb8cdf25f1af1e6f35901aeeeed86c4841bf9e",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 1,
+        "value": 15047758420462623057,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "3f43e4f337a3ce6433c117bb16fb8cdf25f1af1e6f35901aeeeed86c4841bf9e",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 1,
+        "value": 15047758420462623057,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "3f43e4f337a3ce6433c117bb16fb8cdf25f1af1e6f35901aeeeed86c4841bf9e",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "f6d0fc5d00e92f72f6140358684558d2ea9d312cfbdcb0f4841ffcdc6306058b",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 2,
+        "value": 18297887849041381858,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "756592df67dd64a4af663e6a45b78512ef95e2a3b408b958b27f217b28e3992a",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "9319239c4a5ce85229b05d5515f2ca471f3ff04ba88f8403b9370eb16c7c01c9",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 2,
+        "value": 18297887849041381858,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "756592df67dd64a4af663e6a45b78512ef95e2a3b408b958b27f217b28e3992a",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "9319239c4a5ce85229b05d5515f2ca471f3ff04ba88f8403b9370eb16c7c01c9",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 2,
+        "value": 18297887849041381858,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "756592df67dd64a4af663e6a45b78512ef95e2a3b408b958b27f217b28e3992a",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "9319239c4a5ce85229b05d5515f2ca471f3ff04ba88f8403b9370eb16c7c01c9",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 2,
+        "value": 18297887849041381858,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "756592df67dd64a4af663e6a45b78512ef95e2a3b408b958b27f217b28e3992a",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "9319239c4a5ce85229b05d5515f2ca471f3ff04ba88f8403b9370eb16c7c01c9",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 3,
+        "value": 4368779221096987205,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "e424a30ecfdea5d021eef4db2a920ede9546b7b77e6e7389193385e83a162c77",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "9319239c4a5ce85229b05d5515f2ca471f3ff04ba88f8403b9370eb16c7c01c9",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 3,
+        "value": 4368779221096987205,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "e424a30ecfdea5d021eef4db2a920ede9546b7b77e6e7389193385e83a162c77",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "9319239c4a5ce85229b05d5515f2ca471f3ff04ba88f8403b9370eb16c7c01c9",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 3,
+        "value": 4368779221096987205,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "e424a30ecfdea5d021eef4db2a920ede9546b7b77e6e7389193385e83a162c77",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "9319239c4a5ce85229b05d5515f2ca471f3ff04ba88f8403b9370eb16c7c01c9",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "a4f30e05f8b713d3b83f2aa97e18c854b99ba23ef232bf55947a0d32fa0d7045",
+              "sibling_is_left": false
+            }
+          ]
+        }
+      },
+      {
+        "index": 4,
+        "value": 14237279604474559509,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "649210260f54a872e987cfcc4fac4b6ca54d636ef9355e160c7ac1cd4e065557",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "8c47897cfd2f0a0e7086bbd1e4ac6c0d9ce51821440bd494b3c634acf3aaa140",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      },
+      {
+        "index": 5,
+        "value": 3977677309347437165,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "cf0fb22e78345375f07b84b043523c455fed38bfedf85d2bb6d23a26e827b2cd",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "8c47897cfd2f0a0e7086bbd1e4ac6c0d9ce51821440bd494b3c634acf3aaa140",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      },
+      {
+        "index": 5,
+        "value": 3977677309347437165,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "cf0fb22e78345375f07b84b043523c455fed38bfedf85d2bb6d23a26e827b2cd",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "8c47897cfd2f0a0e7086bbd1e4ac6c0d9ce51821440bd494b3c634acf3aaa140",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      },
+      {
+        "index": 5,
+        "value": 3977677309347437165,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "cf0fb22e78345375f07b84b043523c455fed38bfedf85d2bb6d23a26e827b2cd",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "8c47897cfd2f0a0e7086bbd1e4ac6c0d9ce51821440bd494b3c634acf3aaa140",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      },
+      {
+        "index": 6,
+        "value": 2085044724648028429,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "01bb4084987b6cf5210796445a799a965b9c70bb36a308142f46bea3c83b6803",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "cff3ea8e45df46de541568b2a3ae15e6493402b2bbba52110046f6e6126f1a15",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      },
+      {
+        "index": 6,
+        "value": 2085044724648028429,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "01bb4084987b6cf5210796445a799a965b9c70bb36a308142f46bea3c83b6803",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "cff3ea8e45df46de541568b2a3ae15e6493402b2bbba52110046f6e6126f1a15",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      },
+      {
+        "index": 6,
+        "value": 2085044724648028429,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "01bb4084987b6cf5210796445a799a965b9c70bb36a308142f46bea3c83b6803",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "cff3ea8e45df46de541568b2a3ae15e6493402b2bbba52110046f6e6126f1a15",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      },
+      {
+        "index": 7,
+        "value": 2999008974507276974,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "f03eb0f0031f8061d37fa9eb0f132d41fb7931a2b125dafc22b62a7b8b0ab5cc",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "cff3ea8e45df46de541568b2a3ae15e6493402b2bbba52110046f6e6126f1a15",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      },
+      {
+        "index": 7,
+        "value": 2999008974507276974,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "f03eb0f0031f8061d37fa9eb0f132d41fb7931a2b125dafc22b62a7b8b0ab5cc",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "cff3ea8e45df46de541568b2a3ae15e6493402b2bbba52110046f6e6126f1a15",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      },
+      {
+        "index": 7,
+        "value": 2999008974507276974,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "f03eb0f0031f8061d37fa9eb0f132d41fb7931a2b125dafc22b62a7b8b0ab5cc",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "cff3ea8e45df46de541568b2a3ae15e6493402b2bbba52110046f6e6126f1a15",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      }
+    ],
+    "fri_queries": [
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 6,
+        "values": [
+          2085044724648028429,
+          2999008974507276974
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "2aa332c15eb6b2f43463ec45a23e25965b9c5d263974b49bdc818b72cee43bb8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "74fa2221c6425f6d90d26381704c8cf3123c7aecd774b2fd5d4a8bd2e80822e4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 2,
+        "values": [
+          17467658335665127641,
+          7728018919911675247
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "498932c08b9d0b3158f890e1600c4f7e6a0a14fa96047917788cf4a17d71853c",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "c44ef7e3e394a1231e72336366ecaf08b54d3979ceb78de80873c0134f38d79c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          18297887849041381858,
+          4368779221096987205
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "e753a8e6cee97738f370e981c7fca9ad6b80bf6b3e98020a9ae5d06f5ed3b1d0",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5b44ae1e737646aa39b63d0d67b4b4988f0f4a861c3eedb712d226af41852e5c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 4,
+        "values": [
+          14237279604474559509,
+          3977677309347437165
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "8c7c15f8ebbe71ea9346b6289bc74974179549662653ab44ab193396e225ce55",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "5ec8b95e749120b6fbf60083da96b4360e93e660463c9adcaaf026002a46ecbc",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "649880e78a43b9d3b9e7e93bf8fc026f3be31b27ba7abb1ad7b5fa0c61f17c83",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "5ec8b95e749120b6fbf60083da96b4360e93e660463c9adcaaf026002a46ecbc",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 2,
+        "values": [
+          17467658335665127641,
+          7728018919911675247
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "498932c08b9d0b3158f890e1600c4f7e6a0a14fa96047917788cf4a17d71853c",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "c44ef7e3e394a1231e72336366ecaf08b54d3979ceb78de80873c0134f38d79c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 6,
+        "values": [
+          2085044724648028429,
+          2999008974507276974
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "2aa332c15eb6b2f43463ec45a23e25965b9c5d263974b49bdc818b72cee43bb8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "74fa2221c6425f6d90d26381704c8cf3123c7aecd774b2fd5d4a8bd2e80822e4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 2,
+        "values": [
+          17467658335665127641,
+          7728018919911675247
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "498932c08b9d0b3158f890e1600c4f7e6a0a14fa96047917788cf4a17d71853c",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "c44ef7e3e394a1231e72336366ecaf08b54d3979ceb78de80873c0134f38d79c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          18297887849041381858,
+          4368779221096987205
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "e753a8e6cee97738f370e981c7fca9ad6b80bf6b3e98020a9ae5d06f5ed3b1d0",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5b44ae1e737646aa39b63d0d67b4b4988f0f4a861c3eedb712d226af41852e5c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          18297887849041381858,
+          4368779221096987205
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "e753a8e6cee97738f370e981c7fca9ad6b80bf6b3e98020a9ae5d06f5ed3b1d0",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5b44ae1e737646aa39b63d0d67b4b4988f0f4a861c3eedb712d226af41852e5c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          18297887849041381858,
+          4368779221096987205
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "e753a8e6cee97738f370e981c7fca9ad6b80bf6b3e98020a9ae5d06f5ed3b1d0",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5b44ae1e737646aa39b63d0d67b4b4988f0f4a861c3eedb712d226af41852e5c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 4,
+        "values": [
+          14237279604474559509,
+          3977677309347437165
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "8c7c15f8ebbe71ea9346b6289bc74974179549662653ab44ab193396e225ce55",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "5ec8b95e749120b6fbf60083da96b4360e93e660463c9adcaaf026002a46ecbc",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "649880e78a43b9d3b9e7e93bf8fc026f3be31b27ba7abb1ad7b5fa0c61f17c83",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "5ec8b95e749120b6fbf60083da96b4360e93e660463c9adcaaf026002a46ecbc",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 2,
+        "values": [
+          17467658335665127641,
+          7728018919911675247
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "498932c08b9d0b3158f890e1600c4f7e6a0a14fa96047917788cf4a17d71853c",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "c44ef7e3e394a1231e72336366ecaf08b54d3979ceb78de80873c0134f38d79c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          18297887849041381858,
+          4368779221096987205
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "e753a8e6cee97738f370e981c7fca9ad6b80bf6b3e98020a9ae5d06f5ed3b1d0",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5b44ae1e737646aa39b63d0d67b4b4988f0f4a861c3eedb712d226af41852e5c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 6,
+        "values": [
+          2085044724648028429,
+          2999008974507276974
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "2aa332c15eb6b2f43463ec45a23e25965b9c5d263974b49bdc818b72cee43bb8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "74fa2221c6425f6d90d26381704c8cf3123c7aecd774b2fd5d4a8bd2e80822e4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 2,
+        "values": [
+          17467658335665127641,
+          7728018919911675247
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "498932c08b9d0b3158f890e1600c4f7e6a0a14fa96047917788cf4a17d71853c",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "c44ef7e3e394a1231e72336366ecaf08b54d3979ceb78de80873c0134f38d79c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 6,
+        "values": [
+          2085044724648028429,
+          2999008974507276974
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "2aa332c15eb6b2f43463ec45a23e25965b9c5d263974b49bdc818b72cee43bb8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "74fa2221c6425f6d90d26381704c8cf3123c7aecd774b2fd5d4a8bd2e80822e4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 2,
+        "values": [
+          17467658335665127641,
+          7728018919911675247
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "498932c08b9d0b3158f890e1600c4f7e6a0a14fa96047917788cf4a17d71853c",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "c44ef7e3e394a1231e72336366ecaf08b54d3979ceb78de80873c0134f38d79c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          18297887849041381858,
+          4368779221096987205
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "e753a8e6cee97738f370e981c7fca9ad6b80bf6b3e98020a9ae5d06f5ed3b1d0",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5b44ae1e737646aa39b63d0d67b4b4988f0f4a861c3eedb712d226af41852e5c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 4,
+        "values": [
+          14237279604474559509,
+          3977677309347437165
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "8c7c15f8ebbe71ea9346b6289bc74974179549662653ab44ab193396e225ce55",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "5ec8b95e749120b6fbf60083da96b4360e93e660463c9adcaaf026002a46ecbc",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "649880e78a43b9d3b9e7e93bf8fc026f3be31b27ba7abb1ad7b5fa0c61f17c83",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "5ec8b95e749120b6fbf60083da96b4360e93e660463c9adcaaf026002a46ecbc",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 2,
+        "values": [
+          17467658335665127641,
+          7728018919911675247
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "498932c08b9d0b3158f890e1600c4f7e6a0a14fa96047917788cf4a17d71853c",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "c44ef7e3e394a1231e72336366ecaf08b54d3979ceb78de80873c0134f38d79c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 4,
+        "values": [
+          14237279604474559509,
+          3977677309347437165
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "8c7c15f8ebbe71ea9346b6289bc74974179549662653ab44ab193396e225ce55",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "5ec8b95e749120b6fbf60083da96b4360e93e660463c9adcaaf026002a46ecbc",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "649880e78a43b9d3b9e7e93bf8fc026f3be31b27ba7abb1ad7b5fa0c61f17c83",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "5ec8b95e749120b6fbf60083da96b4360e93e660463c9adcaaf026002a46ecbc",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 2,
+        "values": [
+          17467658335665127641,
+          7728018919911675247
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "498932c08b9d0b3158f890e1600c4f7e6a0a14fa96047917788cf4a17d71853c",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "c44ef7e3e394a1231e72336366ecaf08b54d3979ceb78de80873c0134f38d79c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 6,
+        "values": [
+          2085044724648028429,
+          2999008974507276974
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "2aa332c15eb6b2f43463ec45a23e25965b9c5d263974b49bdc818b72cee43bb8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "74fa2221c6425f6d90d26381704c8cf3123c7aecd774b2fd5d4a8bd2e80822e4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 2,
+        "values": [
+          17467658335665127641,
+          7728018919911675247
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "498932c08b9d0b3158f890e1600c4f7e6a0a14fa96047917788cf4a17d71853c",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "c44ef7e3e394a1231e72336366ecaf08b54d3979ceb78de80873c0134f38d79c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 6,
+        "values": [
+          2085044724648028429,
+          2999008974507276974
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "2aa332c15eb6b2f43463ec45a23e25965b9c5d263974b49bdc818b72cee43bb8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "74fa2221c6425f6d90d26381704c8cf3123c7aecd774b2fd5d4a8bd2e80822e4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "eab238a4d76034eb208fb14772956060240d4fff5c5ab2f0722850f172b614d4",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e14249d54f4577f2c08c6d152ea46d2d09514bdf4d3d75530c0c57b0326a9244",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 2,
+        "values": [
+          17467658335665127641,
+          7728018919911675247
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "498932c08b9d0b3158f890e1600c4f7e6a0a14fa96047917788cf4a17d71853c",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "c44ef7e3e394a1231e72336366ecaf08b54d3979ceb78de80873c0134f38d79c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "028a1d1cab3b0d2ff8368512a73856d0506cc41b1279fb9cf966f10e0417133b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          10219755816664938926,
+          15047758420462623057
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "a591cf5471c581a786b096177e48a999580073efdd60e375ca4186a74ee629f8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "7b437a01f54353092ce24f7fd9528adcb0d070b07d22c96ade21ccb7d6e23a36",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "d5cead8240e5db7f843d4121e72fcf08af0195470bcd4cb472974c188d164ef8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          18297887849041381858,
+          4368779221096987205
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "e753a8e6cee97738f370e981c7fca9ad6b80bf6b3e98020a9ae5d06f5ed3b1d0",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5b44ae1e737646aa39b63d0d67b4b4988f0f4a861c3eedb712d226af41852e5c",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a7a2f7bfe5509049c622327a8102ea6225ad1352562158af23a2acdeb07ed600",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "889c8bd0235be978c39004036ade53e28418785c9056bd1457679eb288f90a81",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 1,
+        "query_index": 0,
+        "values": [
+          9335762978273781861,
+          9731505071800448575
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "cdf0c1d7d66d78373c84a6f45c8359f3663a52f9cba316cf59f14c70a8b8e5f1",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "a22ddcb143cc49d05fc63235bfcb31b5e44631a50ce64a560381fec83a4dd8cf",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "719bc714d8077a14ca38b922b09c7ea518797bffc79a5d1f0a88ab66db99e2bc",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "boundary": null,
+    "ood": {
+      "index": 5,
+      "trace": {
+        "index": 5,
+        "evaluation": [
+          4607958950602669511,
+          4608328380872371649
+        ],
+        "witness": {
+          "kind": "merkle",
+          "path": {
+            "nodes": [
+              {
+                "sibling": "e00edbf7ac699f67d5ecaf9e6853b93ee8ef8634bbccddee509723d6ddff1560",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "60aeb62417fc968d4ce1b8f6aa0091b6d29ad4e70553d0575d0ba82aa4069571",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        },
+        "next": {
+          "index": 7,
+          "evaluation": [
+            4614939742763528391,
+            4615324577705185985
+          ],
+          "witness": {
+            "nodes": [
+              {
+                "sibling": "71ddf67bd434e069954b73d138c1fe554193386e43278600b0ec47d837ab783b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "a93c61a19a254aab43bf0b46b5aac3babd3b4b2baf0c9aede867e2a2133aab9b",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "35ef68c798d264670f1e5c98e6439a26b6f8d477ec48d7c05dff86fe9e573d0b",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        }
+      },
+      "quotient": {
+        "index": 5,
+        "value": 3977677309347437165,
+        "witness": {
+          "nodes": [
+            {
+              "sibling": "cf0fb22e78345375f07b84b043523c455fed38bfedf85d2bb6d23a26e827b2cd",
+              "sibling_is_left": true
+            },
+            {
+              "sibling": "8c47897cfd2f0a0e7086bbd1e4ac6c0d9ce51821440bd494b3c634acf3aaa140",
+              "sibling_is_left": false
+            },
+            {
+              "sibling": "ded191b2a816d6f24c8ba296deb97007bd456ef50400557fdc76c33f0f8d46df",
+              "sibling_is_left": true
+            }
+          ]
+        }
+      }
+    }
+  },
+  "trace_length": 3
+}

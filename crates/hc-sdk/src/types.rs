@@ -113,6 +113,15 @@ pub struct TemplateSummary {
     pub summary: String,
     pub tags: Vec<String>,
     pub cost_category: String,
+    /// Backend that produces this template's proofs: `"vm"`, `"zkml"`, or
+    /// `"spartan"`. Defaults to `"vm"` so older clients/serialized records
+    /// without the field continue to deserialize.
+    #[serde(default = "default_backend")]
+    pub backend: String,
+}
+
+fn default_backend() -> String {
+    "vm".to_string()
 }
 
 /// Response for GET /templates.

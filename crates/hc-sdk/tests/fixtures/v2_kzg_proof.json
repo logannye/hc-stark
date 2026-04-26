@@ -1,0 +1,2032 @@
+{
+  "version": 2,
+  "params": {
+    "query_count": 30,
+    "lde_blowup": 2,
+    "fri_final_size": 2,
+    "fri_folding_ratio": 2,
+    "hash_id": "blake3"
+  },
+  "commitment_scheme": "kzg",
+  "trace_commitment": {
+    "type": "kzg",
+    "points": [
+      "8cd0499c63ca035fd901f55ecb1969ac1eb211c77847cec64fb9c13f17ee8f27",
+      "3d6274a4838e524987c57c81d85b22c660fc86a370c0981c136f3a552c3a081b"
+    ]
+  },
+  "composition_commitment": {
+    "type": "kzg",
+    "points": []
+  },
+  "fri_layer_roots": [
+    "b30d1fe0fddabf3988dda35c22ee6d23e4a59468b0b746840edc7414e19cc500"
+  ],
+  "fri_final_layer": [
+    13391120594418402373,
+    5556998079614813618
+  ],
+  "fri_final_root": "98a553a435d8be96ade1e667242d7be7135e00006dea6f8d3f8c19bc8773647c",
+  "layers": [],
+  "final_layer": [],
+  "initial_acc": 5,
+  "final_acc": 8,
+  "metrics": {
+    "trace_blocks_loaded": 2,
+    "fri_blocks_loaded": 2,
+    "composition_blocks_loaded": 2,
+    "fri_query_batches": 30,
+    "fri_queries_answered": 30,
+    "fri_query_duration_ms": 2144
+  },
+  "query_response": {
+    "trace_queries": [
+      {
+        "index": 0,
+        "evaluation": [
+          5,
+          1
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0100000000000000000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "86776f31cd1fd99d6cee4a46dbbb463a77a3db355f794fd64c85b43365d5a18400"
+            },
+            {
+              "column": 1,
+              "proof": "ba211531e5ab261847c038bf7ea771aadbfc86668ee616ac396aac2de101410100"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "07000000feffffff010000000000000000000000000000000000000000000000"
+            },
+            {
+              "column": 1,
+              "value": "03000000feffffff010000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          5,
+          1
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0100000000000000000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "86776f31cd1fd99d6cee4a46dbbb463a77a3db355f794fd64c85b43365d5a18400"
+            },
+            {
+              "column": 1,
+              "proof": "ba211531e5ab261847c038bf7ea771aadbfc86668ee616ac396aac2de101410100"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "07000000feffffff010000000000000000000000000000000000000000000000"
+            },
+            {
+              "column": 1,
+              "value": "03000000feffffff010000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          5,
+          1
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0100000000000000000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "86776f31cd1fd99d6cee4a46dbbb463a77a3db355f794fd64c85b43365d5a18400"
+            },
+            {
+              "column": 1,
+              "proof": "ba211531e5ab261847c038bf7ea771aadbfc86668ee616ac396aac2de101410100"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "07000000feffffff010000000000000000000000000000000000000000000000"
+            },
+            {
+              "column": 1,
+              "value": "03000000feffffff010000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          5,
+          1
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0100000000000000000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "86776f31cd1fd99d6cee4a46dbbb463a77a3db355f794fd64c85b43365d5a18400"
+            },
+            {
+              "column": 1,
+              "proof": "ba211531e5ab261847c038bf7ea771aadbfc86668ee616ac396aac2de101410100"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "07000000feffffff010000000000000000000000000000000000000000000000"
+            },
+            {
+              "column": 1,
+              "value": "03000000feffffff010000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          5,
+          1
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0100000000000000000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "86776f31cd1fd99d6cee4a46dbbb463a77a3db355f794fd64c85b43365d5a18400"
+            },
+            {
+              "column": 1,
+              "proof": "ba211531e5ab261847c038bf7ea771aadbfc86668ee616ac396aac2de101410100"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "07000000feffffff010000000000000000000000000000000000000000000000"
+            },
+            {
+              "column": 1,
+              "value": "03000000feffffff010000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          5,
+          1
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0100000000000000000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "86776f31cd1fd99d6cee4a46dbbb463a77a3db355f794fd64c85b43365d5a18400"
+            },
+            {
+              "column": 1,
+              "proof": "ba211531e5ab261847c038bf7ea771aadbfc86668ee616ac396aac2de101410100"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "07000000feffffff010000000000000000000000000000000000000000000000"
+            },
+            {
+              "column": 1,
+              "value": "03000000feffffff010000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          5,
+          1
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0100000000000000000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "86776f31cd1fd99d6cee4a46dbbb463a77a3db355f794fd64c85b43365d5a18400"
+            },
+            {
+              "column": 1,
+              "proof": "ba211531e5ab261847c038bf7ea771aadbfc86668ee616ac396aac2de101410100"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "07000000feffffff010000000000000000000000000000000000000000000000"
+            },
+            {
+              "column": 1,
+              "value": "03000000feffffff010000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          5,
+          1
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0100000000000000000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "86776f31cd1fd99d6cee4a46dbbb463a77a3db355f794fd64c85b43365d5a18400"
+            },
+            {
+              "column": 1,
+              "proof": "ba211531e5ab261847c038bf7ea771aadbfc86668ee616ac396aac2de101410100"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "07000000feffffff010000000000000000000000000000000000000000000000"
+            },
+            {
+              "column": 1,
+              "value": "03000000feffffff010000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 0,
+        "evaluation": [
+          5,
+          1
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0100000000000000000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "86776f31cd1fd99d6cee4a46dbbb463a77a3db355f794fd64c85b43365d5a18400"
+            },
+            {
+              "column": 1,
+              "proof": "ba211531e5ab261847c038bf7ea771aadbfc86668ee616ac396aac2de101410100"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "07000000feffffff010000000000000000000000000000000000000000000000"
+            },
+            {
+              "column": 1,
+              "value": "03000000feffffff010000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          6,
+          2
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0000000000000100000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "a22793876fe945e1a93b9d1b50c97a6c7b87612c8fd999f3e5470721c46570af00"
+            },
+            {
+              "column": 1,
+              "proof": "793ac6c85c772575fc0400dead57181d06e924fc4cf334c106b32a7ff785ba9900"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "070000c0ffffff3f0040ff7f00c000c0ffffff3f0040ff7fffbf000000000000"
+            },
+            {
+              "column": 1,
+              "value": "010000c0ffff00400040ff7fffbf00c0ffff00400040ff7f00c0000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          6,
+          2
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0000000000000100000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "a22793876fe945e1a93b9d1b50c97a6c7b87612c8fd999f3e5470721c46570af00"
+            },
+            {
+              "column": 1,
+              "proof": "793ac6c85c772575fc0400dead57181d06e924fc4cf334c106b32a7ff785ba9900"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "070000c0ffffff3f0040ff7f00c000c0ffffff3f0040ff7fffbf000000000000"
+            },
+            {
+              "column": 1,
+              "value": "010000c0ffff00400040ff7fffbf00c0ffff00400040ff7f00c0000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          6,
+          2
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0000000000000100000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "a22793876fe945e1a93b9d1b50c97a6c7b87612c8fd999f3e5470721c46570af00"
+            },
+            {
+              "column": 1,
+              "proof": "793ac6c85c772575fc0400dead57181d06e924fc4cf334c106b32a7ff785ba9900"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "070000c0ffffff3f0040ff7f00c000c0ffffff3f0040ff7fffbf000000000000"
+            },
+            {
+              "column": 1,
+              "value": "010000c0ffff00400040ff7fffbf00c0ffff00400040ff7f00c0000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          6,
+          2
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0000000000000100000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "a22793876fe945e1a93b9d1b50c97a6c7b87612c8fd999f3e5470721c46570af00"
+            },
+            {
+              "column": 1,
+              "proof": "793ac6c85c772575fc0400dead57181d06e924fc4cf334c106b32a7ff785ba9900"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "070000c0ffffff3f0040ff7f00c000c0ffffff3f0040ff7fffbf000000000000"
+            },
+            {
+              "column": 1,
+              "value": "010000c0ffff00400040ff7fffbf00c0ffff00400040ff7f00c0000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          6,
+          2
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0000000000000100000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "a22793876fe945e1a93b9d1b50c97a6c7b87612c8fd999f3e5470721c46570af00"
+            },
+            {
+              "column": 1,
+              "proof": "793ac6c85c772575fc0400dead57181d06e924fc4cf334c106b32a7ff785ba9900"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "070000c0ffffff3f0040ff7f00c000c0ffffff3f0040ff7fffbf000000000000"
+            },
+            {
+              "column": 1,
+              "value": "010000c0ffff00400040ff7fffbf00c0ffff00400040ff7f00c0000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          6,
+          2
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0000000000000100000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "a22793876fe945e1a93b9d1b50c97a6c7b87612c8fd999f3e5470721c46570af00"
+            },
+            {
+              "column": 1,
+              "proof": "793ac6c85c772575fc0400dead57181d06e924fc4cf334c106b32a7ff785ba9900"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "070000c0ffffff3f0040ff7f00c000c0ffffff3f0040ff7fffbf000000000000"
+            },
+            {
+              "column": 1,
+              "value": "010000c0ffff00400040ff7fffbf00c0ffff00400040ff7f00c0000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          6,
+          2
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0000000000000100000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "a22793876fe945e1a93b9d1b50c97a6c7b87612c8fd999f3e5470721c46570af00"
+            },
+            {
+              "column": 1,
+              "proof": "793ac6c85c772575fc0400dead57181d06e924fc4cf334c106b32a7ff785ba9900"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "070000c0ffffff3f0040ff7f00c000c0ffffff3f0040ff7fffbf000000000000"
+            },
+            {
+              "column": 1,
+              "value": "010000c0ffff00400040ff7fffbf00c0ffff00400040ff7f00c0000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          6,
+          2
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0000000000000100000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "a22793876fe945e1a93b9d1b50c97a6c7b87612c8fd999f3e5470721c46570af00"
+            },
+            {
+              "column": 1,
+              "proof": "793ac6c85c772575fc0400dead57181d06e924fc4cf334c106b32a7ff785ba9900"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "070000c0ffffff3f0040ff7f00c000c0ffffff3f0040ff7fffbf000000000000"
+            },
+            {
+              "column": 1,
+              "value": "010000c0ffff00400040ff7fffbf00c0ffff00400040ff7f00c0000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          6,
+          2
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0000000000000100000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "a22793876fe945e1a93b9d1b50c97a6c7b87612c8fd999f3e5470721c46570af00"
+            },
+            {
+              "column": 1,
+              "proof": "793ac6c85c772575fc0400dead57181d06e924fc4cf334c106b32a7ff785ba9900"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "070000c0ffffff3f0040ff7f00c000c0ffffff3f0040ff7fffbf000000000000"
+            },
+            {
+              "column": 1,
+              "value": "010000c0ffff00400040ff7fffbf00c0ffff00400040ff7f00c0000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 1,
+        "evaluation": [
+          6,
+          2
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "0000000000000100000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "a22793876fe945e1a93b9d1b50c97a6c7b87612c8fd999f3e5470721c46570af00"
+            },
+            {
+              "column": 1,
+              "proof": "793ac6c85c772575fc0400dead57181d06e924fc4cf334c106b32a7ff785ba9900"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "070000c0ffffff3f0040ff7f00c000c0ffffff3f0040ff7fffbf000000000000"
+            },
+            {
+              "column": 1,
+              "value": "010000c0ffff00400040ff7fffbf00c0ffff00400040ff7f00c0000000000000"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      },
+      {
+        "index": 2,
+        "evaluation": [
+          8,
+          0
+        ],
+        "witness": {
+          "kind": "kzg",
+          "point": "00000000ffffffff000000000000000000000000000000000000000000000000",
+          "proofs": [
+            {
+              "column": 0,
+              "proof": "d9fa66c0c7c4977a8baf2672a6c4595aa323ebc31a58017aea3cf36f67c595aa00"
+            },
+            {
+              "column": 1,
+              "proof": "1198fb62019e128bc250f8567e9d47d11497a1d8ab5271a83ffbc9fcdd15680e00"
+            }
+          ],
+          "evaluations": [
+            {
+              "column": 0,
+              "value": "040000f0431f5a344d2ed3d224c764c7ea767cbbd8ae0d97879f6c5ca494d22e"
+            },
+            {
+              "column": 1,
+              "value": "feffffef421f5a344e2ed4d223c763c7ed767bbbd5ae1097889f695ca494d32e"
+            }
+          ]
+        },
+        "next": null
+      }
+    ],
+    "composition_queries": [],
+    "fri_queries": [
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 0,
+        "values": [
+          5,
+          6
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "99d4da9d8de46af72b44025eb60f56a6d4722f1e67d9b07790e04df93475f6b8",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "5a9e12603fa4a78fab86659b7b89bc18e8db20f462dfa299229ad82de0e3d3d6",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "dbc2bba41de89505b13416e2ecc1a23e8b6b37890bb25e3644188ecde843314d",
+                "sibling_is_left": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "layer_index": 0,
+        "query_index": 2,
+        "values": [
+          8,
+          8
+        ],
+        "merkle_paths": [
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": false
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          },
+          {
+            "nodes": [
+              {
+                "sibling": "1bfeca8755d5e11fb53754f378f29c7c48270f6d17dc96b1359bca0a8a720093",
+                "sibling_is_left": true
+              },
+              {
+                "sibling": "e53f81bc8be74623147d186a4dbc2f31c8ca0f55f5f973e80d98bf6b994a7d7e",
+                "sibling_is_left": true
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "boundary": null,
+    "ood": null
+  },
+  "trace_length": 3
+}
