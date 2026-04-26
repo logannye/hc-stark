@@ -468,14 +468,8 @@ mod tests {
 
         // 3 requests in a row, limit 5/min: all should succeed.
         for _ in 0..3 {
-            let (status, _, _) = run_full(
-                auth.clone(),
-                false,
-                5,
-                Some("tzk_test"),
-                Some(rate.clone()),
-            )
-            .await;
+            let (status, _, _) =
+                run_full(auth.clone(), false, 5, Some("tzk_test"), Some(rate.clone())).await;
             assert_eq!(status, StatusCode::OK);
         }
     }
@@ -487,18 +481,11 @@ mod tests {
 
         // 3 successful, then 4th should 429.
         for _ in 0..3 {
-            let (status, _, _) = run_full(
-                auth.clone(),
-                false,
-                3,
-                Some("tzk_test"),
-                Some(rate.clone()),
-            )
-            .await;
+            let (status, _, _) =
+                run_full(auth.clone(), false, 3, Some("tzk_test"), Some(rate.clone())).await;
             assert_eq!(status, StatusCode::OK);
         }
-        let (status, _, _) =
-            run_full(auth, false, 3, Some("tzk_test"), Some(rate.clone())).await;
+        let (status, _, _) = run_full(auth, false, 3, Some("tzk_test"), Some(rate.clone())).await;
         assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
     }
 
@@ -518,8 +505,7 @@ mod tests {
         assert_eq!(acme_blocked, StatusCode::TOO_MANY_REQUESTS);
 
         // beta should still have full quota — separate window.
-        let (beta_ok, _, _) =
-            run_full(auth, false, 2, Some("key_b"), Some(rate.clone())).await;
+        let (beta_ok, _, _) = run_full(auth, false, 2, Some("key_b"), Some(rate.clone())).await;
         assert_eq!(beta_ok, StatusCode::OK);
     }
 
@@ -530,14 +516,8 @@ mod tests {
 
         // 100 requests with rpm=0 should all pass — gate is fully disabled.
         for _ in 0..100 {
-            let (status, _, _) = run_full(
-                auth.clone(),
-                false,
-                0,
-                Some("tzk_test"),
-                Some(rate.clone()),
-            )
-            .await;
+            let (status, _, _) =
+                run_full(auth.clone(), false, 0, Some("tzk_test"), Some(rate.clone())).await;
             assert_eq!(status, StatusCode::OK);
         }
     }
