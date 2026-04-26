@@ -37,6 +37,39 @@ services:
         max-file: "5"
     stop_grace_period: 30s
 
+  hc-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["/app/hc-mcp-http"]
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      - RUST_LOG=info
+      - HC_MCP_HTTP_HOST=0.0.0.0
+      - HC_MCP_HTTP_PORT=3001
+      - HC_MCP_MAX_INFLIGHT=2
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+        reservations:
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0\"}}}", "http://localhost:3001/mcp"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    stop_grace_period: 30s
+
   prometheus:
     image: prom/prometheus:v2.54.1
     command:

@@ -11,7 +11,7 @@ COPY docs ./docs
 COPY scripts ./scripts
 COPY README.md ./
 
-RUN cargo build -p hc-server --release --bins
+RUN cargo build -p hc-server -p hc-mcp --release --bins
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
@@ -19,10 +19,11 @@ RUN useradd -m -u 10001 hc
 WORKDIR /app
 COPY --from=builder /app/target/release/hc-server /app/hc-server
 COPY --from=builder /app/target/release/hc-worker /app/hc-worker
+COPY --from=builder /app/target/release/hc-mcp-http /app/hc-mcp-http
 USER hc
 
 ENV RUST_LOG=info
-EXPOSE 8080
+EXPOSE 8080 3001
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -sf http://localhost:8080/healthz || exit 1
 
