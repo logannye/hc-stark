@@ -305,7 +305,8 @@ async function onProve(){
       return;
     }
     var jobId = data.job_id;
-    setStatus('status-prove', 'Job ' + jobId + ' queued. Polling for result...', '');
+    if (!jobId) { setStatus('status-prove', 'Server response missing job_id', 'bad'); return; }
+    setStatus('status-prove', 'Job ' + jobId.slice(0,8) + '... queued. Polling for result...', '');
 
     // Poll up to 30s
     var deadline = Date.now() + 30000;
@@ -313,9 +314,19 @@ async function onProve(){
       await new Promise(function(r){setTimeout(r, 700)});
       var pollResp = await fetch('/api/demo-poll?id=' + encodeURIComponent(jobId));
       var poll = await pollResp.json();
-      if (poll.status === 'completed' && poll.proof) {
+      // Upstream uses "succeeded" / "completed" interchangeably depending on version.
+      if ((poll.status === 'succeeded' || poll.status === 'completed') && poll.proof) {
         var elapsed = Math.round(performance.now() - t0);
-        var preview = poll.proof.bytes ? (poll.proof.bytes.slice ? poll.proof.bytes.slice(0,80) : 'present') : 'present';
+        // proof.bytes can be either a hex string or a byte array; render a short preview either way.
+        var b = poll.proof.bytes;
+        var preview;
+        if (typeof b === 'string') {
+          preview = b.slice(0, 80) + '... (' + b.length + ' bytes hex)';
+        } else if (Array.isArray(b)) {
+          preview = '[' + b.slice(0, 16).join(',') + ', ... ] (' + b.length + ' bytes total)';
+        } else {
+          preview = 'present (' + (typeof b) + ')';
+        }
         var frag = document.createDocumentFragment();
         frag.appendChild(makeColoredLine('  status: ', 'completed', 'ok'));
         frag.appendChild(makeColoredLine('  job_id: ', jobId, 'accent'));

@@ -46,7 +46,8 @@ export async function onRequestGet(context) {
     }
     const url = new URL(context.request.url);
     const id = url.searchParams.get("id");
-    if (!id || !/^prf_[A-Za-z0-9]+$/.test(id)) {
+    // Accept either UUID v4 (current format) or legacy prf_<hex> form.
+    if (!id || !/^([A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}|prf_[A-Za-z0-9]+)$/.test(id)) {
       return new Response(JSON.stringify({ error: "valid job_id required" }), {
         status: 400, headers,
       });

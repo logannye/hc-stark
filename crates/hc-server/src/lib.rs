@@ -848,6 +848,14 @@ async fn verify(
                     }
                 }
             }
+            // zkML envelopes are wrapped under ProofBytes.version = 100;
+            // route them through the zkml structural verifier before the
+            // STARK verifier. (Spartan envelopes — version = 101 — require
+            // the matrices to be passed alongside the proof and are
+            // handled via a dedicated route in a follow-on.)
+            if req.proof.version == 100 {
+                return verify_zkml_proof_bytes(&req.proof);
+            }
             verify_proof_bytes(&req.proof, req.allow_legacy_v2)
         }),
     )
@@ -869,6 +877,91 @@ async fn verify(
         Err(_) => {
             ApiError::new(StatusCode::REQUEST_TIMEOUT, "timeout", "verify timeout").into_response()
         }
+    }
+}
+
+/// Verify a `ProofBytes` whose `version == 100` — i.e., a zkML envelope
+/// produced by `dispatch_zkml_template`. The structural verifier checks
+/// envelope version + length and binds the public output digest. Full
+/// cryptographic soundness over the matmul transition constraints lands
+/// with the FRI lowering (Phase 1.5, see ROADMAP_EXTENSIONS.md).
+fn verify_zkml_proof_bytes(proof: &hc_sdk::types::ProofBytes) -> hc_sdk::types::VerifyResult {
+    let descriptor: serde_json::Value = match serde_json::from_slice(&proof.bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            return hc_sdk::types::VerifyResult {
+                ok: false,
+                error: Some(format!("zkml descriptor parse failed: {e}")),
+            }
+        }
+    };
+    let kind = descriptor.get("kind").and_then(|v| v.as_str());
+    if kind != Some("zkml_envelope") {
+        return hc_sdk::types::VerifyResult {
+            ok: false,
+            error: Some(format!(
+                "ProofBytes.version=100 but descriptor.kind={:?} (expected \"zkml_envelope\")",
+                kind
+            )),
+        };
+    }
+    let envelope_version = descriptor
+        .get("envelope_version")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u8;
+    let envelope_bytes_v = match descriptor.get("envelope_bytes") {
+        Some(v) => v,
+        None => {
+            return hc_sdk::types::VerifyResult {
+                ok: false,
+                error: Some("zkml descriptor missing envelope_bytes".to_string()),
+            }
+        }
+    };
+    let envelope_bytes: Vec<u8> = match serde_json::from_value(envelope_bytes_v.clone()) {
+        Ok(b) => b,
+        Err(e) => {
+            return hc_sdk::types::VerifyResult {
+                ok: false,
+                error: Some(format!("zkml envelope_bytes decode failed: {e}")),
+            }
+        }
+    };
+    let public_io_v = match descriptor.get("public_io") {
+        Some(v) => v.clone(),
+        None => {
+            return hc_sdk::types::VerifyResult {
+                ok: false,
+                error: Some("zkml descriptor missing public_io".to_string()),
+            }
+        }
+    };
+    let public_io: hc_workloads::zkml_templates::ZkmlPublicIo = match serde_json::from_value(public_io_v) {
+        Ok(p) => p,
+        Err(e) => {
+            return hc_sdk::types::VerifyResult {
+                ok: false,
+                error: Some(format!("zkml public_io decode failed: {e}")),
+            }
+        }
+    };
+    let envelope = hc_workloads::zkml_templates::ZkmlProof {
+        version: envelope_version,
+        bytes: envelope_bytes,
+    };
+    match hc_workloads::zkml_templates::verify_zkml_envelope(&public_io, &envelope) {
+        Ok(true) => hc_sdk::types::VerifyResult {
+            ok: true,
+            error: None,
+        },
+        Ok(false) => hc_sdk::types::VerifyResult {
+            ok: false,
+            error: Some("zkml envelope structural check failed (output digest mismatch)".to_string()),
+        },
+        Err(e) => hc_sdk::types::VerifyResult {
+            ok: false,
+            error: Some(format!("zkml verifier error: {e}")),
+        },
     }
 }
 
@@ -1708,17 +1801,25 @@ fn smart_block_size(program_len: usize) -> usize {
     }
 }
 
-/// GET /templates — list all available proof templates (public, no auth).
+/// GET /templates — list all available proof templates across every
+/// backend (public, no auth).
+///
+/// Returns a unified view: accumulator-VM, zkML, and Spartan templates all
+/// in a single response, each with a `backend` discriminator (`"vm"`,
+/// `"zkml"`, `"spartan"`). Clients that only care about VM templates can
+/// filter on the discriminator; clients that want everything render the
+/// flat list directly.
 #[utoipa::path(get, path = "/templates", responses((status = 200, body = TemplateListResponse)))]
 async fn templates_list() -> Json<TemplateListResponse> {
-    let templates = hc_workloads::templates::list_templates();
-    let summaries: Vec<TemplateSummary> = templates
+    let unified = hc_workloads::list_all_templates();
+    let summaries: Vec<TemplateSummary> = unified
         .iter()
         .map(|t| TemplateSummary {
-            id: t.id.to_string(),
-            summary: t.summary.to_string(),
-            tags: t.tags.iter().map(|s| s.to_string()).collect(),
-            cost_category: t.cost_category.to_string(),
+            id: t.id.clone(),
+            summary: t.summary.clone(),
+            tags: t.tags.clone(),
+            cost_category: t.cost_category.clone(),
+            backend: t.backend.to_string(),
         })
         .collect();
     let count = summaries.len();
@@ -1728,20 +1829,34 @@ async fn templates_list() -> Json<TemplateListResponse> {
     })
 }
 
-/// GET /templates/:template_id — get full template info with parameter schema (public, no auth).
+/// GET /templates/:template_id — get full template info with parameter
+/// schema (public, no auth).
+///
+/// Looks up the template across all three backends. The `id` namespace is
+/// flat: each registry produces unique IDs, and the response carries a
+/// `backend` field so clients can tell which path produced it.
 #[utoipa::path(get, path = "/templates/{template_id}", params(("template_id" = String, Path, description = "Template identifier")), responses((status = 200), (status = 404)))]
 async fn template_detail(
     Path(template_id): Path<String>,
 ) -> Result<axum::response::Response, ApiError> {
-    let tmpl = hc_workloads::templates::template_by_id(&template_id).ok_or_else(|| {
-        ApiError::new(
-            StatusCode::NOT_FOUND,
-            "not_found",
-            format!("unknown template: {template_id}"),
-        )
-    })?;
-    let info = tmpl.to_info();
-    Ok(Json(serde_json::to_value(info).unwrap_or_default()).into_response())
+    if let Some(t) = hc_workloads::templates::template_by_id(&template_id) {
+        let mut info = serde_json::to_value(t.to_info()).unwrap_or_default();
+        if let Some(obj) = info.as_object_mut() {
+            obj.insert("backend".into(), serde_json::Value::String("vm".into()));
+        }
+        return Ok(Json(info).into_response());
+    }
+    if let Some(info) = hc_workloads::zkml_templates::describe_zkml_template(&template_id) {
+        return Ok(Json(serde_json::to_value(info).unwrap_or_default()).into_response());
+    }
+    if let Some(info) = hc_workloads::spartan_templates::describe_spartan_template(&template_id) {
+        return Ok(Json(serde_json::to_value(info).unwrap_or_default()).into_response());
+    }
+    Err(ApiError::new(
+        StatusCode::NOT_FOUND,
+        "not_found",
+        format!("unknown template: {template_id}"),
+    ))
 }
 
 /// POST /prove/template/:template_id — submit a proof job using a named template.
@@ -1805,6 +1920,25 @@ async fn prove_template(
             "too_many_inflight",
             "too many in-flight prove jobs",
         ));
+    }
+
+    // ── zkML fast-path ────────────────────────────────────────────────
+    // Templates whose ID starts with "zkml_" route through the synchronous
+    // zkML dispatcher in hc-workloads. The matmul prover finishes in the
+    // hundreds of milliseconds for typical sizes, so we skip the worker
+    // pipeline entirely and write the envelope into the standard job-dir
+    // layout with status=Succeeded.
+    if template_id.starts_with("zkml_") {
+        return dispatch_zkml_template(&state, &tenant_id, &tenant_plan, template_id, req).await;
+    }
+
+    // ── Spartan fast-path ─────────────────────────────────────────────
+    // Templates whose ID starts with "spartan_" route through the
+    // synchronous Spartan dispatcher. The R1CS sumcheck prover is fast for
+    // the dense-matrix size cap (m·n ≤ 2^18) so we again skip the worker
+    // and persist the envelope inline.
+    if template_id.starts_with("spartan_") {
+        return dispatch_spartan_template(&state, &tenant_id, &tenant_plan, template_id, req).await;
     }
 
     // Validate template and build program (fail fast on bad params).
@@ -1890,6 +2024,211 @@ async fn prove_template(
         prove_req,
     );
     state.metrics.jobs_inflight.inc();
+
+    Ok(Json(ProveSubmitResponse {
+        job_id: job_id.to_string(),
+    }))
+}
+
+/// Synchronous dispatcher for `zkml_*` templates. Runs the matmul prover
+/// inline, writes the envelope to the job directory in the standard layout,
+/// and returns the job_id with status already Succeeded.
+///
+/// Bills as one prove submission against the tenant. The envelope is
+/// persisted under `proof.json` keyed by `version: 100` so the existing
+/// `/prove/:job_id` polling path returns it unchanged. The unified
+/// `/verify` endpoint does not yet decode zkml envelopes — verification of
+/// zkml proofs is a follow-on (see ROADMAP_EXTENSIONS.md, Phase 1.5).
+async fn dispatch_zkml_template(
+    state: &AppState,
+    tenant_id: &str,
+    _tenant_plan: &str,
+    template_id: String,
+    req: TemplateProveRequest,
+) -> Result<Json<ProveSubmitResponse>, ApiError> {
+    let outcome =
+        hc_workloads::zkml_templates::prove_zkml_template(&template_id, &req.params).map_err(
+            |e| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "bad_request",
+                    format!("zkml template build/prove failed: {e}"),
+                )
+            },
+        )?;
+
+    let job_id = Uuid::new_v4();
+    let job_dir = state
+        .cfg
+        .data_dir
+        .join("jobs")
+        .join(tenant_id)
+        .join(job_id.to_string());
+    fs::create_dir_all(&job_dir).map_err(|err| ApiError::internal(err.to_string()))?;
+
+    // Persist a request stub so polling consumers find a consistent record.
+    let prove_req = ProveRequest {
+        workload_id: None,
+        template_id: Some(template_id.clone()),
+        template_params: Some(req.params.clone()),
+        program: None,
+        initial_acc: 0,
+        final_acc: 0,
+        block_size: 0,
+        fri_final_poly_size: 0,
+        query_count: 0,
+        lde_blowup_factor: 0,
+        zk_mask_degree: None,
+    };
+    write_json_atomic(job_dir.join("request.json"), &prove_req)
+        .map_err(|err| ApiError::internal(err.to_string()))?;
+
+    // Wrap the envelope in a JSON descriptor so future verifiers can sniff
+    // the kind. ProofBytes.version = 100 marks the zkml-envelope wire
+    // format; the inner JSON carries the raw envelope and public IO.
+    let zkml_descriptor = serde_json::json!({
+        "kind": "zkml_envelope",
+        "envelope_version": outcome.proof.version,
+        "envelope_bytes": outcome.proof.bytes,
+        "public_io": outcome.public_io,
+        "model_commitment": {
+            "architecture_digest": outcome.model_commitment.architecture_digest,
+            "weights_digest": outcome.model_commitment.weights_digest,
+        },
+    });
+    let proof = hc_sdk::types::ProofBytes {
+        version: 100,
+        bytes: serde_json::to_vec(&zkml_descriptor)
+            .map_err(|e| ApiError::internal(format!("zkml envelope serialize: {e}")))?,
+    };
+    let status = ProveJobStatus::Succeeded { proof };
+    write_json_atomic(job_dir.join("status.json"), &status)
+        .map_err(|err| ApiError::internal(err.to_string()))?;
+
+    if let Some(index) = state.job_index.as_ref() {
+        let _ = index.upsert_request(tenant_id, &job_id.to_string(), &prove_req, &status);
+        let _ = index.update_status(tenant_id, &job_id.to_string(), &status);
+    }
+
+    let key = JobKey {
+        tenant_id: tenant_id.to_string(),
+        job_id,
+    };
+    {
+        let mut jobs = state
+            .jobs
+            .lock()
+            .map_err(|_| ApiError::internal("job lock poisoned"))?;
+        jobs.insert(
+            key,
+            JobState {
+                status,
+                handle: None,
+                cancel: CancellationToken::new(),
+            },
+        );
+    }
+
+    state
+        .metrics
+        .prove_completed
+        .with_label_values(&[tenant_id])
+        .inc();
+
+    Ok(Json(ProveSubmitResponse {
+        job_id: job_id.to_string(),
+    }))
+}
+
+/// Synchronous dispatcher for `spartan_*` templates. Mirror of
+/// [`dispatch_zkml_template`] for the Spartan R1CS backend. Persists the
+/// R1csProof envelope under `ProofBytes { version: 101 }`.
+async fn dispatch_spartan_template(
+    state: &AppState,
+    tenant_id: &str,
+    _tenant_plan: &str,
+    template_id: String,
+    req: TemplateProveRequest,
+) -> Result<Json<ProveSubmitResponse>, ApiError> {
+    let proof_envelope =
+        hc_workloads::spartan_templates::prove_spartan_template(&template_id, &req.params).map_err(
+            |e| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "bad_request",
+                    format!("spartan template build/prove failed: {e}"),
+                )
+            },
+        )?;
+
+    let job_id = Uuid::new_v4();
+    let job_dir = state
+        .cfg
+        .data_dir
+        .join("jobs")
+        .join(tenant_id)
+        .join(job_id.to_string());
+    fs::create_dir_all(&job_dir).map_err(|err| ApiError::internal(err.to_string()))?;
+
+    let prove_req = ProveRequest {
+        workload_id: None,
+        template_id: Some(template_id.clone()),
+        template_params: Some(req.params.clone()),
+        program: None,
+        initial_acc: 0,
+        final_acc: 0,
+        block_size: 0,
+        fri_final_poly_size: 0,
+        query_count: 0,
+        lde_blowup_factor: 0,
+        zk_mask_degree: None,
+    };
+    write_json_atomic(job_dir.join("request.json"), &prove_req)
+        .map_err(|err| ApiError::internal(err.to_string()))?;
+
+    let spartan_descriptor = serde_json::json!({
+        "kind": "spartan_r1cs_envelope",
+        "envelope_version": proof_envelope.version,
+        "envelope": proof_envelope,
+    });
+    let proof = hc_sdk::types::ProofBytes {
+        version: 101,
+        bytes: serde_json::to_vec(&spartan_descriptor)
+            .map_err(|e| ApiError::internal(format!("spartan envelope serialize: {e}")))?,
+    };
+    let status = ProveJobStatus::Succeeded { proof };
+    write_json_atomic(job_dir.join("status.json"), &status)
+        .map_err(|err| ApiError::internal(err.to_string()))?;
+
+    if let Some(index) = state.job_index.as_ref() {
+        let _ = index.upsert_request(tenant_id, &job_id.to_string(), &prove_req, &status);
+        let _ = index.update_status(tenant_id, &job_id.to_string(), &status);
+    }
+
+    let key = JobKey {
+        tenant_id: tenant_id.to_string(),
+        job_id,
+    };
+    {
+        let mut jobs = state
+            .jobs
+            .lock()
+            .map_err(|_| ApiError::internal("job lock poisoned"))?;
+        jobs.insert(
+            key,
+            JobState {
+                status,
+                handle: None,
+                cancel: CancellationToken::new(),
+            },
+        );
+    }
+
+    state
+        .metrics
+        .prove_completed
+        .with_label_values(&[tenant_id])
+        .inc();
 
     Ok(Json(ProveSubmitResponse {
         job_id: job_id.to_string(),
@@ -2441,9 +2780,15 @@ async fn prove_with_worker_process(
     cancel: CancellationToken,
 ) -> anyhow::Result<hc_sdk::types::ProofBytes> {
     // Re-check server-side safety invariants before spawning the worker.
-    if req.workload_id.is_none() && !allow_custom_programs {
+    // Either workload_id OR template_id is sufficient to authorize the
+    // request; only fall through to the custom-program gate if neither is
+    // set. (Template requests have always been a first-class supported
+    // path; this pre-flight predates the template feature and was missing
+    // the template_id branch, which caused all /prove/template/:id calls
+    // to be rejected here even though hc-worker would handle them.)
+    if req.workload_id.is_none() && req.template_id.is_none() && !allow_custom_programs {
         anyhow::bail!(
-            "custom programs are disabled; supply workload_id (e.g. \"toy_add_1_2\") or enable HC_SERVER_ALLOW_CUSTOM_PROGRAMS"
+            "custom programs are disabled; supply workload_id, template_id, or enable HC_SERVER_ALLOW_CUSTOM_PROGRAMS"
         );
     }
 
