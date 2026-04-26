@@ -21,6 +21,11 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://tinyzkp.com/status</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://tinyzkp.com/privacy</loc>
     <changefreq>yearly</changefreq>
     <priority>0.2</priority>

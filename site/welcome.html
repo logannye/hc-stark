@@ -136,8 +136,47 @@ footer .right a:hover{color:var(--muted)}
   <div class="welcome-header">
     <div class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
     <h1>You're in!</h1>
-    <p>Check your email for your API key. Here's how to make your first proof.</p>
+    <p>Check your email for your API key. Two paths from here &mdash; pick whichever fits your stack.</p>
   </div>
+
+  <!-- Path picker -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:36px">
+    <a href="#path-mcp" style="background:linear-gradient(135deg,rgba(46,232,212,.06) 0%,var(--surface) 65%);
+      border:1px solid var(--accent);border-radius:12px;padding:20px;text-decoration:none;color:var(--text);
+      transition:transform .15s,box-shadow .2s;display:block">
+      <div style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px">For agent builders</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text-bright);margin-bottom:6px">One-line MCP install</div>
+      <div style="color:var(--muted);font-size:13px;line-height:1.5">Claude Code, Claude Desktop, Cursor, OpenAI agents. ~30 seconds.</div>
+    </a>
+    <a href="#path-curl" style="background:var(--surface);border:1px solid var(--border);
+      border-radius:12px;padding:20px;text-decoration:none;color:var(--text);transition:border-color .2s;display:block">
+      <div style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">For everyone else</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text-bright);margin-bottom:6px">curl &middot; Python &middot; TypeScript</div>
+      <div style="color:var(--muted);font-size:13px;line-height:1.5">Four commands and your first proof verifies. ~2 minutes.</div>
+    </a>
+  </div>
+
+  <!-- MCP path -->
+  <div id="path-mcp" style="margin-bottom:32px">
+    <h2 style="font-size:14px;font-family:var(--mono);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:14px">MCP path &mdash; for agent builders</h2>
+    <div class="step-card">
+      <h3><span class="badge">A</span> Install in Claude Code</h3>
+      <p>One command and your agent gets 10 ZK tools (<code>prove</code>, <code>verify</code>, <code>list_workloads</code>, &hellip;):</p>
+      <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>claude mcp add --transport http \
+  tinyzkp https://mcp.tinyzkp.com</div>
+      <p class="note">Then paste your <code>tzk_...</code> key when prompted, or set it via the <code>TINYZKP_API_KEY</code> env var. For Claude Desktop / Cursor, see <a href="/docs#mcp-stdio">stdio install</a>.</p>
+    </div>
+    <div class="step-card">
+      <h3><span class="badge">B</span> Ask the agent to prove something</h3>
+      <p>From inside your agent, prompt it with anything that maps to a template &mdash; e.g.:</p>
+      <div class="code-box" style="white-space:pre-wrap">Use the tinyzkp tools to prove that 42 is in the range [0, 100]
+without revealing the value, then verify the proof.</div>
+      <p class="note">The agent will call <code>prove</code> &rarr; poll <code>prove_status</code> &rarr; call <code>verify</code> autonomously. Done.</p>
+    </div>
+  </div>
+
+  <!-- curl path -->
+  <h2 id="path-curl" style="font-size:14px;font-family:var(--mono);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:14px">curl path &mdash; for everyone else</h2>
 
   <div class="step-card">
     <h3><span class="badge">1</span> Check your email</h3>
