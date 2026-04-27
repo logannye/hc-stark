@@ -14,6 +14,10 @@ use halo2curves::bn256::Fr;
 
 use super::{poseidon, poseidon_chip::PoseidonChip};
 
+// Scaffolding for the Halo2 FRI fold gadget. The circuit is exercised
+// from the wrapper in `crate::circuit::fri_chain`; clippy can't see
+// the cross-module construction site at this analysis layer.
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct FriFoldCircuit {
     root0: Fr,
@@ -23,6 +27,7 @@ struct FriFoldCircuit {
     v_next: Fr,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct FriFoldConfig {
     chip: crate::circuit::poseidon_chip::PoseidonChipConfig,

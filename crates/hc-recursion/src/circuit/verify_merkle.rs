@@ -34,12 +34,16 @@ pub fn compute_root(leaf: Fr, path: &[MerklePathElem]) -> Fr {
     acc
 }
 
+// Scaffolding for the Halo2 Merkle verifier gadget. Same situation as
+// FriFoldCircuit — clippy can't see the cross-module construction site.
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct MerkleCircuit {
     leaf: Fr,
     path: Vec<MerklePathElem>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct MerkleConfig {
     chip: crate::circuit::poseidon_chip::PoseidonChipConfig,
