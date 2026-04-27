@@ -28,7 +28,7 @@ RUSTFLAGS='' wasm-pack build \
 cat > pkg/package.json <<'PKGJSON'
 {
   "name": "@tinyzkp/verify",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Client-side WASM verifier for TinyZKP ZK-STARK proofs",
   "main": "tinyzkp-verify.js",
   "types": "tinyzkp-verify.d.ts",
