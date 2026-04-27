@@ -9,7 +9,7 @@
     "sourceMap": true,
     "strict": true,
     "esModuleInterop": true,
-    "outDir": "dist",
+    "outDir": "dist/esm",
     "rootDir": "src",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true

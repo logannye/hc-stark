@@ -1,14 +1,16 @@
 {
   "name": "tinyzkp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript client for the TinyZKP proving API — generate and verify ZK-STARK proofs",
   "type": "module",
-  "main": "dist/client.js",
-  "types": "dist/client.d.ts",
+  "main": "./dist/cjs/client.js",
+  "module": "./dist/esm/client.js",
+  "types": "./dist/esm/client.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/client.d.ts",
-      "import": "./dist/client.js"
+      "types": "./dist/esm/client.d.ts",
+      "import": "./dist/esm/client.js",
+      "require": "./dist/cjs/client.js"
     }
   },
   "files": [
@@ -17,8 +19,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
-    "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "build:esm": "tsc -p tsconfig.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist/cjs/package.json', JSON.stringify({type:'commonjs'}, null, 2))\"",
+    "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
+    "test": "node --test tests/*.test.mjs tests/*.test.cjs",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

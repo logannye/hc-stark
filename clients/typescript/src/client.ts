@@ -21,9 +21,30 @@
 
 // ---- Types ----
 
-export interface ProofBytes {
-  version: number;
-  bytes: number[];
+/**
+ * Serialized proof payload returned by the prover.
+ *
+ * Implemented as a class (not just an interface) so it is available at
+ * runtime — `import { ProofBytes } from "tinyzkp"` gives you a real value
+ * you can `new` or pass around. Object literals matching `{ version, bytes }`
+ * are still accepted everywhere a `ProofBytes` is expected, via TypeScript
+ * structural typing.
+ */
+export class ProofBytes {
+  constructor(
+    public readonly version: number,
+    public readonly bytes: number[],
+  ) {}
+
+  /** Build a ProofBytes from a plain object (e.g., parsed JSON). */
+  static from(obj: { version: number; bytes: number[] }): ProofBytes {
+    return new ProofBytes(obj.version, obj.bytes);
+  }
+
+  /** Serialize back to a plain object for transport. */
+  toJSON(): { version: number; bytes: number[] } {
+    return { version: this.version, bytes: this.bytes };
+  }
 }
 
 export interface VerifyResult {
@@ -216,10 +237,14 @@ export class HcClient {
 
   /** Get the status of a prove job. */
   async proveStatus(jobId: string): Promise<ProveJobStatus> {
-    return this.request<ProveJobStatus>(
+    const raw = await this.request<ProveJobStatus>(
       "GET",
       `/prove/${encodeURIComponent(jobId)}`,
     );
+    if (raw.status === "succeeded" && raw.proof) {
+      return { status: "succeeded", proof: ProofBytes.from(raw.proof) };
+    }
+    return raw;
   }
 
   /** Poll a prove job until it completes; return the proof on success. */
