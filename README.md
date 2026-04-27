@@ -369,12 +369,23 @@ See [`docs/operations.md`](docs/operations.md) for full configuration reference.
 |----------|---------|-------------|
 | `HC_SERVER_API_KEYS` | unset | `tenant:key` pairs (comma-separated) |
 | `HC_SERVER_API_KEYS_FILE` | unset | Path to API keys file (`tenant:key:plan` per line) |
+| `HC_SERVER_AUTH_GRACE_MS` | `300000` | Rotation grace window: rotated-out keys still authenticate for this long after a hot-reload swap |
+| `HC_SERVER_WORKER_PATH` | unset | Explicit path to `hc-worker`; validated at boot. Falls back to sibling-binary lookup, then PATH |
 | `HC_SERVER_MAX_INFLIGHT` | `4` | Max concurrent prove jobs per tenant |
+| `HC_SERVER_MAX_WORKER_SPAWN` | `32` | Global cap on concurrent worker subprocess spawns (EMFILE guard); 0 disables |
 | `HC_SERVER_MAX_PROVE_SECS` | `300` | Per-job timeout |
 | `HC_SERVER_ALLOW_CUSTOM_PROGRAMS` | `false` | Allow arbitrary VM programs |
 | `HC_SERVER_MAX_PROVE_RPM` | `100` | Per-tenant prove rate limit |
 | `HC_SERVER_MAX_VERIFY_RPM` | `300` | Per-tenant verify rate limit |
 | `HC_SERVER_JOB_INDEX_SQLITE` | `true` | Enable SQLite job index |
+| `HC_SERVER_PG_URL` | unset | Postgres connection string for dual-write (Phase 1 of [migration plan](docs/postgres_migration.md)). When set, usage_log writes mirror to PG; when unset, SQLite-only |
+| `HC_MCP_HTTP_HOST` | `0.0.0.0` | hc-mcp-http bind host |
+| `HC_MCP_HTTP_PORT` | `3001` | hc-mcp-http bind port |
+| `HC_MCP_REQUIRE_AUTH` | `false` | When true, hc-mcp-http rejects unauthenticated requests with 401 |
+| `HC_MCP_TENANT_RPM` | `0` | Optional global RPM override on the MCP path; 0 = use per-plan ladder |
+| `HC_MCP_MAX_INFLIGHT` | `2` | Global concurrency cap on the MCP anonymous lane |
+| `HC_MCP_ALLOWED_ORIGINS` | unset | Extra CORS origins (comma-separated) on top of the default allowlist |
+| `HC_UNBILLED_ALERT_HOURS` | `12` | Billing cron alerts if unbilled rows are older than this (must stay below Stripe's ~24h dedup window) |
 
 ### Zero-knowledge mode
 
