@@ -209,6 +209,7 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <a href="#auth">Authentication</a>
     <a href="#endpoints">API Endpoints</a>
     <a href="#templates">Proof Templates</a>
+    <a href="#template-examples" style="padding-left:28px;font-size:12.5px">Template Examples</a>
     <a href="#plans">Plan Tiers</a>
     <a href="#pricing">Pricing</a>
     <a href="#parameters">Parameters</a>
@@ -545,8 +546,112 @@ console.log(result.ok); <span class="comment">// true</span></pre>
       </table>
     </div>
 
+    <h3 id="template-examples">Template Examples</h3>
+    <p>Each template below is a complete, copy-paste working example. Replace <code>tzk_...</code> with your API key and run.</p>
+
+    <h4 style="margin-top:24px"><code>range_proof</code> &mdash; prove a value is in <code>[min, max]</code></h4>
+    <p>Proves an integer V satisfies <code>min &le; V &le; max</code> without revealing V. Encode <code>(V - min)</code> as additive <code>witness_steps</code>. Example: prove a balance is between $0 and $10,000 by encoding the actual value $4,237 as <code>[2000, 2237]</code> (or any decomposition that sums to 4,237).</p>
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"params":{"min":0,"max":10000,"witness_steps":[2000,2237]}}'</pre>
+    </div>
+    <div class="code-block">
+      <span class="code-label">Python</span>
+<pre>from tinyzkp import TinyZKPSync
+with TinyZKPSync("https://api.tinyzkp.com", api_key="tzk_...") as c:
+    job = c.prove_template("range_proof", params={"min":0,"max":10000,"witness_steps":[2000,2237]})
+    proof = c.wait_for_proof(job)
+    assert c.verify(proof).ok</pre>
+    </div>
+    <div class="code-block">
+      <span class="code-label">TypeScript</span>
+<pre>import { TinyZKP } from "tinyzkp";
+const c = new TinyZKP("https://api.tinyzkp.com", { apiKey: "tzk_..." });
+const job = await c.proveTemplate("range_proof", { min:0, max:10000, witness_steps:[2000,2237] });
+const proof = await c.waitForProof(job);
+console.log((await c.verify(proof)).ok);  // true</pre>
+    </div>
+
+    <h4 style="margin-top:24px"><code>hash_preimage</code> &mdash; prove knowledge of a secret behind a hash</h4>
+    <p>Proves you know a preimage whose iterative arithmetic hash equals a public <code>digest</code>. The preimage stays hidden when ZK is enabled. Use for password attestations and commitment opening.</p>
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl -X POST https://api.tinyzkp.com/prove/template/hash_preimage \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"params":{"digest":12,"preimage_steps":[7,3,2]},"zk":true}'</pre>
+    </div>
+    <div class="code-block">
+      <span class="code-label">Python</span>
+<pre>job = c.prove_template("hash_preimage",
+    params={"digest":12, "preimage_steps":[7,3,2]}, zk=True)</pre>
+    </div>
+
+    <h4 style="margin-top:24px"><code>computation_attestation</code> &mdash; prove <code>f(secret) = public_output</code></h4>
+    <p>Proves that applying a secret sequence of additive steps produces a public output. The steps stay hidden; only the output is revealed. Use for ML inference receipts or attesting an agent did the work it claims.</p>
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl -X POST https://api.tinyzkp.com/prove/template/computation_attestation \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"params":{"steps":[3,5,7,11],"expected_output":26}}'</pre>
+    </div>
+    <div class="code-block">
+      <span class="code-label">Python</span>
+<pre>job = c.prove_template("computation_attestation",
+    params={"steps":[3,5,7,11], "expected_output":26})</pre>
+    </div>
+
+    <h4 style="margin-top:24px"><code>accumulator_step</code> &mdash; prove a chain of state transitions</h4>
+    <p>Proves that applying a sequence of additive <code>deltas</code> to <code>initial</code> reaches <code>final</code>. Use for balance updates, ledger reconciliation, or rollup transition attestation.</p>
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"params":{"initial":1000,"final":1450,"deltas":[100,200,150]}}'</pre>
+    </div>
+    <div class="code-block">
+      <span class="code-label">Python</span>
+<pre>job = c.prove_template("accumulator_step",
+    params={"initial":1000, "final":1450, "deltas":[100,200,150]})</pre>
+    </div>
+
+    <h4 style="margin-top:24px"><code>policy_compliance</code> &mdash; prove cumulative actions stayed under a threshold</h4>
+    <p>Proves that <code>sum(actions) &le; threshold</code> without revealing individual <code>actions</code>. Classic agent receipt: prove the agent's spending stayed under a daily cap, or its requests stayed under a rate limit, without exposing each transaction.</p>
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl -X POST https://api.tinyzkp.com/prove/template/policy_compliance \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"params":{"actions":[150,200,75,300,180],"threshold":1000},"zk":true}'</pre>
+    </div>
+    <div class="code-block">
+      <span class="code-label">Python</span>
+<pre>job = c.prove_template("policy_compliance",
+    params={"actions":[150,200,75,300,180], "threshold":1000}, zk=True)</pre>
+    </div>
+
+    <h4 style="margin-top:24px"><code>data_integrity</code> &mdash; prove a dataset matches a committed checksum</h4>
+    <p>Proves that <code>sum(elements) == checksum</code>. Use for dataset audits, ledger balance attestation, or proving a batch of records is complete.</p>
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl -X POST https://api.tinyzkp.com/prove/template/data_integrity \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"params":{"elements":[100,250,75,500,125],"checksum":1050}}'</pre>
+    </div>
+    <div class="code-block">
+      <span class="code-label">Python</span>
+<pre>job = c.prove_template("data_integrity",
+    params={"elements":[100,250,75,500,125], "checksum":1050})</pre>
+    </div>
+
     <h2 id="plans">Plan Tiers</h2>
-    <p>Rate limits, concurrency, and per-proof discounts vary by plan. All plans include free verification. Team and Scale plans include a monthly base fee that unlocks discounted per-proof rates.</p>
+    <p>Rate limits, concurrency, and per-proof discounts vary by plan. All plans include free verification. Self-serve signup ships <strong>Free</strong>, <strong>Developer</strong>, and <strong>Scale</strong> directly. <strong>Team</strong> is documented here for completeness because the per-proof rate sheet supports it &mdash; provisioned via <a href="/contact" style="color:var(--accent)">contact</a> as a custom contract.</p>
 
     <div class="docs-table-wrap">
       <table>
@@ -557,7 +662,7 @@ console.log(result.ok); <span class="comment">// true</span></pre>
           <tr>
             <td><strong style="color:var(--text-bright)">Monthly Base</strong></td>
             <td>$0</td>
-            <td>$0</td>
+            <td>$19</td>
             <td>$49</td>
             <td>$199</td>
           </tr>
