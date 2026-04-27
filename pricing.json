@@ -1,0 +1,49 @@
+{
+  "_comment": "Single source of truth for TinyZKP pricing + plan limits. Read by parity tests in both crates/hc-server/src/usage_log.rs and billing/tests/test_pricing_parity.py — drift between either Rust or Python and this file fails CI. Edit this file FIRST when changing pricing; the parity tests will fail loudly until both sides catch up.",
+  "tiers_cents": [
+    { "max_steps_exclusive": 10000,    "cents": 5    },
+    { "max_steps_exclusive": 100000,   "cents": 50   },
+    { "max_steps_exclusive": 1000000,  "cents": 200  },
+    { "max_steps_exclusive": 10000000, "cents": 800  },
+    { "max_steps_exclusive": null,     "cents": 3000 }
+  ],
+  "plans": {
+    "free": {
+      "discount": 1.0,
+      "prove_rpm": 10,
+      "verify_rpm": 30,
+      "max_inflight": 1,
+      "monthly_cap_cents": 500,
+      "max_prove_seconds": 300
+    },
+    "developer": {
+      "discount": 1.0,
+      "prove_rpm": 100,
+      "verify_rpm": 300,
+      "max_inflight": 4,
+      "monthly_cap_cents": 50000,
+      "max_prove_seconds": 600
+    },
+    "team": {
+      "discount": 0.75,
+      "prove_rpm": 300,
+      "verify_rpm": 900,
+      "max_inflight": 8,
+      "monthly_cap_cents": 250000,
+      "max_prove_seconds": 1800
+    },
+    "scale": {
+      "discount": 0.60,
+      "prove_rpm": 500,
+      "verify_rpm": 1500,
+      "max_inflight": 16,
+      "monthly_cap_cents": 1000000,
+      "max_prove_seconds": 3600
+    }
+  },
+  "plan_aliases": {
+    "_comment": "Legacy plan names that should resolve to the developer tier.",
+    "standard": "developer",
+    "pro": "developer"
+  }
+}

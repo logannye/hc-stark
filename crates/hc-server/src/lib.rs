@@ -3279,3 +3279,100 @@ mod worker_spawn_pool_tests {
         );
     }
 }
+
+/// Parity test: in-code PlanLimits + discount_factor MUST match the
+/// canonical pricing.json at the repo root. The Python billing cron
+/// has its own parity test against the same file. Drift between any
+/// two of {pricing.json, hc-server, billing/sync_usage.py} fails CI
+/// loudly — preventing the colleague's flagged scenario where a plan
+/// ships in one and is forgotten in the other.
+///
+/// Edit pricing.json FIRST when changing pricing; this test will fail
+/// until you update PlanLimits::for_plan and usage_log::discount_factor
+/// (and the Python side).
+#[cfg(test)]
+mod pricing_parity_tests {
+    use super::*;
+
+    fn pricing_json() -> serde_json::Value {
+        // CARGO_MANIFEST_DIR for hc-server is crates/hc-server, so the
+        // workspace root is two levels up.
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("pricing.json");
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("could not read pricing.json at {}: {e}", path.display(),));
+        serde_json::from_str(&content).expect("pricing.json must parse as JSON")
+    }
+
+    #[test]
+    fn discount_factor_matches_pricing_json() {
+        let cfg = pricing_json();
+        let plans = cfg["plans"].as_object().unwrap();
+        for (plan_name, plan_data) in plans {
+            let want = plan_data["discount"].as_f64().unwrap();
+            let got = usage_log::discount_factor_pub(plan_name);
+            assert!(
+                (got - want).abs() < 1e-9,
+                "plan {plan_name}: in-code discount {got} ≠ pricing.json {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn plan_limits_match_pricing_json() {
+        let cfg = pricing_json();
+        let plans = cfg["plans"].as_object().unwrap();
+        for (plan_name, plan_data) in plans {
+            let want_prove_rpm = plan_data["prove_rpm"].as_u64().unwrap() as u32;
+            let want_verify_rpm = plan_data["verify_rpm"].as_u64().unwrap() as u32;
+            let want_max_inflight = plan_data["max_inflight"].as_u64().unwrap() as usize;
+            let want_monthly_cap = plan_data["monthly_cap_cents"].as_u64().unwrap();
+            let want_max_secs = plan_data["max_prove_seconds"].as_u64().unwrap();
+
+            let limits = PlanLimits::for_plan(plan_name);
+            assert_eq!(
+                limits.prove_rpm, want_prove_rpm,
+                "plan {plan_name}: prove_rpm drift"
+            );
+            assert_eq!(
+                limits.verify_rpm, want_verify_rpm,
+                "plan {plan_name}: verify_rpm drift"
+            );
+            assert_eq!(
+                limits.max_inflight, want_max_inflight,
+                "plan {plan_name}: max_inflight drift"
+            );
+            assert_eq!(
+                limits.monthly_cap_cents, want_monthly_cap,
+                "plan {plan_name}: monthly_cap_cents drift"
+            );
+            assert_eq!(
+                limits.max_prove_seconds, want_max_secs,
+                "plan {plan_name}: max_prove_seconds drift"
+            );
+        }
+    }
+
+    #[test]
+    fn price_tiers_match_pricing_json() {
+        let cfg = pricing_json();
+        let tiers = cfg["tiers_cents"].as_array().unwrap();
+        for tier in tiers {
+            let cents = tier["cents"].as_u64().unwrap();
+            let max_steps_exclusive = tier["max_steps_exclusive"].as_u64();
+            // Pick a representative trace length inside this tier and
+            // verify price_cents_pub returns the expected value.
+            let probe_steps = match max_steps_exclusive {
+                Some(upper) => upper.saturating_sub(1),
+                None => 100_000_000, // > all upper bounds, lands in last tier
+            };
+            let got = usage_log::price_cents_pub(probe_steps as usize);
+            assert_eq!(
+                got, cents,
+                "trace_length={probe_steps}: in-code price {got} ≠ pricing.json {cents}"
+            );
+        }
+    }
+}

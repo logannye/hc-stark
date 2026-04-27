@@ -368,12 +368,27 @@ fn price_cents(trace_length: usize) -> u64 {
 }
 
 /// Plan-based discount factor for per-proof pricing.
+///
+/// **Drift check**: this table is mirrored in `pricing.json` at the
+/// repo root, in `billing/sync_usage.py::DISCOUNT_FACTORS`, and in the
+/// Day 20 MCP `rpm_for_plan` (different table — RPM, not discount).
+/// The Rust parity test in `lib.rs::pricing_parity_tests` verifies
+/// this function against `pricing.json`; the Python parity test does
+/// the same on its side. Edit `pricing.json` FIRST when changing.
 fn discount_factor(plan: &str) -> f64 {
     match plan {
         "team" => 0.75,  // 25% off
         "scale" => 0.60, // 40% off
         _ => 1.0,
     }
+}
+
+/// Public lookup for the parity test in `lib.rs`. Avoids exposing the
+/// match implementation; callers outside this crate should not use
+/// this for production decisions (the value is per-plan but operators
+/// may want to override per-deployment).
+pub fn discount_factor_pub(plan: &str) -> f64 {
+    discount_factor(plan)
 }
 
 fn now_ms() -> i64 {
