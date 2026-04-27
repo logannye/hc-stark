@@ -188,19 +188,9 @@ footer .right a:hover{color:var(--muted)}
     </div>
   </div>
 
-  <div class="uptime-section">
-    <h2>Last 30 days</h2>
-    <p class="sub">Daily uptime for <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--accent);border:1px solid var(--border)">api.tinyzkp.com</code>. Hover any day for details.</p>
-    <div class="uptime-bar" id="uptime-bar"></div>
-    <div class="uptime-meta">
-      <span id="uptime-pct">&mdash; uptime</span>
-      <span>30 days ago &rarr; today</span>
-    </div>
-  </div>
-
   <div class="incidents">
     <h2>Recent incidents</h2>
-    <div class="empty"><strong>All systems nominal.</strong> No incidents recorded in the last 90 days.</div>
+    <div class="empty"><strong>All systems nominal.</strong> No incidents recorded since the production sweep on 2026-04-26. Operators are paged by Alertmanager on (1) any 5xx rate &gt; 1% over 5 minutes, (2) prove-job p95 latency &gt; 30s, (3) SQLite lock-wait p95 &gt; 1s, (4) worker-spawn permit exhaustion &gt; 60s.</div>
   </div>
 
 </div>
@@ -272,32 +262,8 @@ async function refreshStatus(){
     'Last checked: ' + new Date().toLocaleTimeString();
 }
 
-// 30-day uptime bar — synthetic optimistic baseline. A backing time-series store
-// is required for real history; this gives a reasonable visual until that ships.
-function renderUptimeBar(todayStatus){
-  var bar = document.getElementById('uptime-bar');
-  while(bar.firstChild) bar.removeChild(bar.firstChild);
-  var upDays = 30;
-  var pct = document.getElementById('uptime-pct');
-  for(var i = 29; i >= 0; i--){
-    var d = new Date();
-    d.setDate(d.getDate() - i);
-    var status = (i === 0 && todayStatus !== 'up') ? todayStatus : 'up';
-    var label = d.toLocaleDateString(undefined, {month:'short', day:'numeric'}) +
-      ' — ' + (status === 'up' ? 'Operational' : status === 'degraded' ? 'Partial outage' : 'Outage');
-    var day = document.createElement('div');
-    day.className = 'day ' + status;
-    day.dataset.tip = label;
-    bar.appendChild(day);
-    if(status !== 'up') upDays--;
-  }
-  pct.textContent = ((upDays / 30) * 100).toFixed(2) + '% uptime';
-}
-
 (async function init(){
   await refreshStatus();
-  var apiOk = document.getElementById('dot-api').classList.contains('up');
-  renderUptimeBar(apiOk ? 'up' : 'degraded');
   setInterval(refreshStatus, 30000);
 })();
 
