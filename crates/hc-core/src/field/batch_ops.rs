@@ -502,7 +502,6 @@ mod tests {
         );
     }
 
-    #[test]
     /// Sweep candidate thresholds across the scalar/parallel crossover
     /// region, comparing mul_assign_slices wall time at each size to the
     /// pure-scalar baseline. Use to retune PAR_THRESHOLD; print output
@@ -574,6 +573,7 @@ mod tests {
         }
     }
 
+    #[test]
     fn par_path_handles_below_threshold_inputs() {
         // A length below the threshold should still produce correct
         // results — confirms we didn't break the small-input scalar path

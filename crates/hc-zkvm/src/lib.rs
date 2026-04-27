@@ -134,8 +134,10 @@ mod tests {
 
     #[test]
     fn config_rejects_non_power_of_two_block_cycles() {
-        let mut cfg = HcZkvmConfig::default();
-        cfg.block_cycles = 100_000;
+        let cfg = HcZkvmConfig {
+            block_cycles: 100_000,
+            ..HcZkvmConfig::default()
+        };
         assert!(cfg.validate().is_err());
     }
 

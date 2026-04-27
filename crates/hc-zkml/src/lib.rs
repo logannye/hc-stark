@@ -172,15 +172,19 @@ mod tests {
 
     #[test]
     fn config_rejects_non_power_of_two_tile() {
-        let mut cfg = HcZkmlConfig::default();
-        cfg.tile_dim = 48;
+        let cfg = HcZkmlConfig {
+            tile_dim: 48,
+            ..HcZkmlConfig::default()
+        };
         assert!(cfg.validate().is_err());
     }
 
     #[test]
     fn config_rejects_zero_quant_bits() {
-        let mut cfg = HcZkmlConfig::default();
-        cfg.max_quant_bits = 0;
+        let cfg = HcZkmlConfig {
+            max_quant_bits: 0,
+            ..HcZkmlConfig::default()
+        };
         assert!(cfg.validate().is_err());
     }
 

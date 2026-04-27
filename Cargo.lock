@@ -1298,6 +1298,7 @@ dependencies = [
  "hc-core",
  "hc-hash",
  "hc-replay",
+ "hc-simd",
  "rayon",
  "thiserror 1.0.69",
 ]

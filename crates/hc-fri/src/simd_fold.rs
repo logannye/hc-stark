@@ -114,7 +114,6 @@ fn fold_goldilocks_simd(values: &[GoldilocksField], beta: GoldilocksField) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hc_core::field::FieldElement as _;
 
     fn det_vec(seed: u64, n: usize) -> Vec<GoldilocksField> {
         let mut x = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(1);
@@ -216,7 +215,7 @@ mod tests {
         use hc_core::field::QuadExtension;
 
         let values: Vec<QuadExtension<GoldilocksField>> =
-            (0..16u64).map(|i| QuadExtension::from_u64(i)).collect();
+            (0..16u64).map(QuadExtension::from_u64).collect();
         let beta = QuadExtension::from_u64(7);
         let got = try_fold_goldilocks::<QuadExtension<GoldilocksField>>(&values, beta);
         assert!(got.is_none(), "non-Goldilocks F must take scalar path");

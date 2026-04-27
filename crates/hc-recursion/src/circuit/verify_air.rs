@@ -66,6 +66,7 @@ impl QuotientCheckConfig {
 ///
 /// This mirrors the native verifier's quotient check but over BN254 Fr.
 /// Used for witness generation.
+#[allow(clippy::too_many_arguments)] // matches the AIR's selector + boundary fan-in
 pub fn toy_air_quotient_numerator(
     acc: Fr,
     delta: Fr,

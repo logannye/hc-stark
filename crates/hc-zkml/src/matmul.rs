@@ -177,6 +177,7 @@ impl ChainTile {
 ///
 /// Working memory for this call is exactly `2 * tile_dim` field elements
 /// regardless of `K`.
+#[allow(clippy::too_many_arguments)] // tile coordinates + matmul shape need 8 params
 pub fn evaluate_tile<A: MatrixA, B: MatrixB>(
     spec: &MatMulSpec,
     a: &A,

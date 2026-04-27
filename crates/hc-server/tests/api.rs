@@ -6,6 +6,14 @@ use axum::{
 use hc_sdk::types::{ProveJobStatus, ProveRequest, VerifyRequest};
 use tower::ServiceExt;
 
+/// Serialize tests that mutate the process-global HC_SERVER_WORKER_PATH
+/// env var. Cargo runs tests in parallel within a single integration
+/// binary, and the worker-crash test (which sets a fake worker) would
+/// race with the prove_then_verify roundtrip test (which sets the real
+/// worker) without this. All tests that touch HC_SERVER_WORKER_PATH
+/// acquire this lock for the duration of their env-mutating window.
+static WORKER_PATH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[tokio::test]
 async fn healthz_is_ok() {
     let tmp = tempfile::tempdir().unwrap();
@@ -26,6 +34,10 @@ async fn healthz_is_ok() {
 
 #[tokio::test]
 async fn prove_then_verify_roundtrip() {
+    // Hold the env-var lock for the env mutation. Other tests that mutate
+    // HC_SERVER_WORKER_PATH (e.g. worker_crash_lands_job_in_failed_state)
+    // would race with us without this.
+    let _guard = WORKER_PATH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     // Ensure the server can locate the worker binary when running under `cargo test`.
     // Cargo exposes bin paths via `CARGO_BIN_EXE_<name>`.
     let worker = std::env::var("CARGO_BIN_EXE_hc-worker")
@@ -222,6 +234,7 @@ async fn prove_rate_limit_is_enforced() {
 
 #[tokio::test]
 async fn auth_is_required_when_configured() {
+    let _guard = WORKER_PATH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(worker) = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/debug/hc-worker")
         .exists()
@@ -294,6 +307,7 @@ async fn auth_is_required_when_configured() {
 
 #[tokio::test]
 async fn job_ids_are_tenant_scoped() {
+    let _guard = WORKER_PATH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let here = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let worker = here.join("../../target/debug/hc-worker");
     if worker.exists() {
@@ -817,6 +831,10 @@ async fn job_index_handles_concurrent_writes() {
 #[tokio::test]
 async fn worker_crash_lands_job_in_failed_state() {
     use std::os::unix::fs::PermissionsExt;
+    // Hold the env-var lock for the entire test — set, prove, poll,
+    // restore — so no parallel test sees the fake worker.
+    let _guard = WORKER_PATH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let prior = std::env::var("HC_SERVER_WORKER_PATH").ok();
 
     // Build a fake worker that exits 99 immediately. The arguments
     // (--request, --out) are ignored — we want the spawn to succeed
@@ -897,7 +915,12 @@ async fn worker_crash_lands_job_in_failed_state() {
         }
     }
 
-    std::env::remove_var("HC_SERVER_WORKER_PATH");
+    // Restore prior env-var so any subsequent test sees what was set
+    // before us, not a removed variable.
+    match prior {
+        Some(v) => std::env::set_var("HC_SERVER_WORKER_PATH", v),
+        None => std::env::remove_var("HC_SERVER_WORKER_PATH"),
+    }
     let final_status = final_status.expect(
         "worker crash should land Failed within 3s; got stuck in Running — \
          this is the regression scenario this test guards against",

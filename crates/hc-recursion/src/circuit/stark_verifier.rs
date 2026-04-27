@@ -439,6 +439,7 @@ impl Circuit<Fr> for StarkVerifierCircuit {
 ///
 /// This is the bridge between the Goldilocks-field STARK proof and the
 /// BN254-field Halo2 circuit. All Goldilocks values are embedded as Fr.
+#[allow(clippy::too_many_arguments)] // signature shape determined by witness layout
 pub fn build_witness_from_proof(
     trace_root_fr: Fr,
     quotient_root_fr: Fr,

@@ -111,6 +111,7 @@ pub fn poseidon_fri_layer_root(coset_pairs: &[(Fr, Fr)]) -> Fr {
 /// - `fri_coset_pairs` — Per-layer coset pairs for FRI.
 /// - `initial_acc`, `final_acc` — Public inputs.
 /// - `padded_trace_length` — Padded trace length (power of 2).
+#[allow(clippy::too_many_arguments)] // signature shape mirrors the dual-hash transcript
 pub fn build_dual_hash_witness(
     blake3_trace_root: [u8; 32],
     blake3_quotient_root: [u8; 32],
