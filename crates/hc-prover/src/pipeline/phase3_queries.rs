@@ -423,7 +423,7 @@ where
         .map_err(|err| HcError::message(format!("Failed to extract FRI Merkle paths: {err}")))?;
 
         let mut out = HashMap::with_capacity(leaf_indices.len());
-        for (idx, path) in leaf_indices.into_iter().zip(paths.into_iter()) {
+        for (idx, path) in leaf_indices.into_iter().zip(paths) {
             let value = values
                 .remove(&idx)
                 .ok_or_else(|| HcError::message("missing fri opened value"))?;

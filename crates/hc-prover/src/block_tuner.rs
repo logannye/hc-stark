@@ -7,9 +7,12 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    process::Command,
     str::FromStr,
 };
+
+// Only used by the macOS-specific sysctl probe below.
+#[cfg(target_os = "macos")]
+use std::process::Command;
 
 #[cfg(target_os = "linux")]
 use std::thread;
