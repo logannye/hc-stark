@@ -88,5 +88,5 @@ fn measure_in_memory_paths(leaves: &[HashDigest], queries: usize) -> HcResult<f6
 }
 
 fn query_schedule(domain: usize, queries: usize) -> Vec<usize> {
-    (0..queries).map(|i| ((i * 1_048_583) % domain)).collect()
+    (0..queries).map(|i| (i * 1_048_583) % domain).collect()
 }
