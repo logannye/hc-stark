@@ -1,30 +1,42 @@
 {
   "name": "tinyzkp",
-  "display_name": "TinyZKP — ZK-STARK Prover",
-  "description": "Generate and verify ZK-STARK proofs. Supports program execution, custom workloads, and batch proving.",
+  "display_name": "TinyZKP — Verifiable Receipts for AI Agents",
+  "description": "Mint zero-knowledge proofs as a tool call. Six production templates (range, hash preimage, computation attestation, accumulator, policy compliance, data integrity). Free 100 proofs/month, no credit card.",
   "version": "0.1.0",
   "homepage": "https://tinyzkp.com",
   "repository": "https://github.com/logannye/hc-stark",
   "license": "MIT",
   "transport": ["stdio", "streamable-http"],
   "url": "https://mcp.tinyzkp.com",
+  "categories": ["developer-tools", "security-cryptography"],
+  "keywords": ["zk", "stark", "zero-knowledge", "proof", "verifiable", "cryptography"],
   "tools": [
-    {"name": "prove", "description": "Generate a ZK-STARK proof for a program"},
-    {"name": "verify", "description": "Verify a ZK-STARK proof"},
-    {"name": "prove_status", "description": "Check status of a prove job"},
-    {"name": "list_jobs", "description": "List recent prove jobs"},
-    {"name": "healthz", "description": "Check server health"},
-    {"name": "list_programs", "description": "List available built-in programs"},
-    {"name": "describe_program", "description": "Get details about a built-in program"},
-    {"name": "list_workloads", "description": "List available workloads"},
-    {"name": "submit_workload", "description": "Submit a named workload for proving"},
-    {"name": "workload_status", "description": "Check status of a workload job"}
+    {"name": "list_templates", "description": "List all available proof templates with summaries and tags."},
+    {"name": "describe_template", "description": "Get the full parameter schema and cost category for a template."},
+    {"name": "list_workloads", "description": "List built-in named workloads (programs) suitable for the raw prover."},
+    {"name": "get_capabilities", "description": "Report server capabilities, supported transports, and tier limits."},
+    {"name": "prove_template", "description": "Submit a proof job using a named template (recommended path)."},
+    {"name": "prove_workload", "description": "Submit a proof job using a named workload."},
+    {"name": "poll_job", "description": "Poll the status of a submitted prove job."},
+    {"name": "verify_proof", "description": "Verify a proof. Always free; never charges quota."},
+    {"name": "get_proof", "description": "Retrieve the proof bytes for a completed job."},
+    {"name": "get_proof_summary", "description": "Retrieve a compact summary (digest, sizes, timing) for a completed job."}
   ],
   "install": {
+    "remote": {
+      "claude": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com"
+    },
     "binary": {
-      "macos-arm64": "https://github.com/logannye/hc-stark/releases/latest/download/hc-mcp-macos-arm64",
-      "macos-x86_64": "https://github.com/logannye/hc-stark/releases/latest/download/hc-mcp-macos-x86_64",
-      "linux-x86_64": "https://github.com/logannye/hc-stark/releases/latest/download/hc-mcp-linux-x86_64"
+      "macos-arm64": "https://github.com/logannye/hc-stark/releases/latest/download/hc-mcp-macos-arm64-stdio",
+      "macos-x86_64": "https://github.com/logannye/hc-stark/releases/latest/download/hc-mcp-macos-x86_64-stdio",
+      "linux-x86_64": "https://github.com/logannye/hc-stark/releases/latest/download/hc-mcp-linux-x86_64-stdio"
     }
+  },
+  "auth": {
+    "type": "bearer",
+    "required": false,
+    "header": "Authorization",
+    "format": "Bearer tzk_...",
+    "notes": "Public endpoint, capped by HC_MCP_MAX_INFLIGHT. Authenticated requests get per-plan rate limits matching the HTTP API ladder."
   }
 }
