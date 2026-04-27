@@ -343,7 +343,7 @@ fn apply_bench_preset(preset: &Preset, args: &mut BenchArgs) -> Result<()> {
         }
     }
     if let Some(dir) = preset.metrics_dir.as_ref() {
-        if args.metrics_dir == PathBuf::from("benchmarks") {
+        if args.metrics_dir == std::path::Path::new("benchmarks") {
             args.metrics_dir = dir.clone();
         }
     }

@@ -50,7 +50,7 @@ mod tests {
             trace_length: prover_proof.trace_length,
             params: prover_proof.params,
         };
-        let summary = aggregate(&[proof.clone()]).unwrap();
+        let summary = aggregate(std::slice::from_ref(&proof)).unwrap();
         assert_eq!(summary.total_proofs, 1);
         summary.verify().unwrap();
         assert_eq!(

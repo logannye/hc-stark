@@ -19,6 +19,10 @@ use hc_verifier::Proof;
 use hc_vm::{Instruction, Program};
 use serde::{Deserialize, Serialize};
 
+// Used by the (de)serialize derives below for human-readable proof
+// dumps in the CLI's `prove --inspect` flow; clippy can't see the
+// derive's internal construction sites.
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct SerializableProofParams {
     query_count: usize,
