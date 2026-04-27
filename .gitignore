@@ -1,9 +1,19 @@
 /target
+**/target/
 **/*.rs.bk
 **/*.swp
 **/*.swo
 .DS_Store
 .logs/
+
+# Client SDK build artifacts
+clients/typescript/dist/
+clients/typescript/node_modules/
+clients/python/.venv*/
+clients/python/dist/
+clients/python/*.egg-info/
+clients/python/.pytest_cache/
+clients/rust/Cargo.lock
 
 # Local secrets / state
 billing/.stripe_ids.json

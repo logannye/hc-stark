@@ -1,0 +1,53 @@
+{
+  "name": "tinyzkp",
+  "version": "0.1.0",
+  "description": "TypeScript client for the TinyZKP proving API — generate and verify ZK-STARK proofs",
+  "type": "module",
+  "main": "dist/client.js",
+  "types": "dist/client.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "zk",
+    "stark",
+    "zero-knowledge",
+    "proof",
+    "cryptography",
+    "tinyzkp"
+  ],
+  "author": "TinyZKP <support@tinyzkp.com>",
+  "license": "MIT",
+  "homepage": "https://tinyzkp.com",
+  "bugs": {
+    "url": "https://github.com/logannye/hc-stark/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/logannye/hc-stark.git",
+    "directory": "clients/typescript"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "typescript": "^5.3",
+    "@types/node": "^20"
+  }
+}
