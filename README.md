@@ -518,7 +518,7 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - Height-compressed streaming prover with O(√T) memory
 - Complete verifier with streaming Merkle replay
 - Zero-knowledge mode (protocol v4)
-- **Hosted MCP server live at [`mcp.tinyzkp.com`](https://mcp.tinyzkp.com)** — public, unauthenticated, free-tier-by-default, with full tool annotations and Origin allowlist
+- **Hosted MCP server live at [`mcp.tinyzkp.com`](https://mcp.tinyzkp.com)** — anonymous lane (no Bearer required, bounded by global concurrency cap) plus authenticated lane with per-plan rate limits matching the HTTP API ladder; full tool annotations + Origin allowlist + opt-in closed-door mode (`HC_MCP_REQUIRE_AUTH=true`)
 - **Claude Skill (`tinyzkp-proofs`)** — teaches Claude when and how to mint and verify ZK proofs via the MCP, even when the user doesn't say "zero-knowledge proof" explicitly
 - MCP server with 10 tools for AI agents (stdio + HTTP transport)
 - Streamable HTTP transport for MCP (remote agent access)
@@ -540,6 +540,38 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - **Browser playground at [`tinyzkp.com/try`](https://tinyzkp.com/try)** — mint and verify proofs without signup
 - Live status page at [`tinyzkp.com/status`](https://tinyzkp.com/status)
 - Docker Compose production stack with monitoring
+
+### Recently shipped (production-readiness sweep)
+
+Sprint of focused production-readiness work, organized around the categories
+flagged in an external code review:
+
+- **Perf** (compounding through the prove pipeline):
+  - Goldilocks fast reduction, ~8.4× on the field-mul primitive
+  - rayon-parallelized batch field ops (above 524K elements)
+  - SIMD specialization for the FRI fold hot path, ~1.4×
+  - Precomputed FFT twiddle table per stage, ~1.5×
+- **Billing correctness**:
+  - Stripe Meter-Event idempotency keys derived from immutable proof identity
+  - Try/except + alert on post-MeterEvent SQLite `UPDATE billed=1` failure
+  - Freshness check warns if rows age past Stripe's dedup window
+- **Auth & rate limits**:
+  - Optional Bearer auth on MCP with opt-in closed-door (`HC_MCP_REQUIRE_AUTH`)
+  - Per-plan MCP rate-limit ladder matching hc-server's `prove_rpm`
+  - 5-minute API key rotation grace window (no in-flight 401s on rotation)
+- **Ops & resilience**:
+  - hc-worker binary validated at boot (refuses to start if missing/non-executable)
+  - SQLite `busy_timeout=5s` on jobs/usage handles + Python cron parity
+  - Concurrent worker-spawn cap (`HC_SERVER_MAX_WORKER_SPAWN`, EMFILE guard)
+  - Prometheus histograms: SQLite lock-wait, worker spawn time, job queue depth
+- **Single source of truth**:
+  - `pricing.json` at repo root, with parity tests in both Rust and Python
+- **Testing**:
+  - Failure-mode integration tests (auth-file corruption, SQLite contention)
+  - Worker-crash mid-prove → Failed status (regression guard)
+- **Docs & infra**:
+  - Postgres migration plan + dual-write `DualWriter` scaffolding
+  - Restored `cargo clippy -- -D warnings` strict gate
 
 ### Next
 
