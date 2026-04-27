@@ -42,8 +42,8 @@
     }
   },
   "plan_aliases": {
-    "_comment": "Legacy plan names that should resolve to the developer tier.",
+    "_comment": "Legacy plan slugs from prior pricing iterations. 'standard' was an early developer-tier label. 'pro' was the Stripe product label that succeeded 'scale'; Cloudflare checkout maps scale -> pro at the Stripe layer, but tenants whose DB row stored plan='pro' should resolve to the scale rate sheet.",
     "standard": "developer",
-    "pro": "developer"
+    "pro": "scale"
   }
 }

@@ -69,6 +69,7 @@ DISCOUNT_FACTORS: dict[str, float] = {
     "standard": 1.0,   # legacy — same as developer
     "team": 0.75,
     "scale": 0.60,
+    "pro": 0.60,       # legacy alias — Stripe product is named "Pro" but matches scale's rate sheet
 }
 
 

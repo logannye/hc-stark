@@ -166,21 +166,17 @@ footer .right a:hover{color:var(--muted)}
       style="background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:6px 16px;border-radius:6px;font-family:var(--mono);font-weight:600;cursor:pointer;font-size:12px;letter-spacing:.02em">Annual <span style="color:var(--green);font-weight:700">&minus;20%</span></button>
   </div>
 
-  <div class="plan-toggle" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+  <div class="plan-toggle" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
     <div class="plan-option selected" data-plan="free" onclick="selectPlan('free')">
       <div class="plan-label">Free</div>
       <div class="plan-price free">Free forever</div>
     </div>
     <div class="plan-option" data-plan="developer" onclick="selectPlan('developer')">
       <div class="plan-label">Developer</div>
-      <div class="plan-price" id="plan-price-developer">$9/mo + usage</div>
+      <div class="plan-price" id="plan-price-developer">$19/mo + usage</div>
     </div>
-    <div class="plan-option" data-plan="team" onclick="selectPlan('team')" style="position:relative">
+    <div class="plan-option" data-plan="scale" onclick="selectPlan('scale')" style="position:relative">
       <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--bg);font-size:9px;font-weight:700;padding:2px 10px;border-radius:8px;letter-spacing:.06em;text-transform:uppercase">Popular</div>
-      <div class="plan-label">Team</div>
-      <div class="plan-price" id="plan-price-team">$49/mo + usage</div>
-    </div>
-    <div class="plan-option" data-plan="scale" onclick="selectPlan('scale')">
       <div class="plan-label">Scale</div>
       <div class="plan-price" id="plan-price-scale">$199/mo + usage</div>
     </div>
@@ -198,13 +194,6 @@ footer .right a:hover{color:var(--muted)}
     <li>Verification always free</li>
     <li>Usage-based billing via Stripe</li>
   </ul>
-  <ul class="plan-features" id="features-team" style="display:none">
-    <li>25% off all per-proof rates</li>
-    <li>300 RPM, 8 concurrent jobs, 30 min timeout</li>
-    <li>$2,500/mo spending cap</li>
-    <li>Verification always free</li>
-    <li>Priority email support</li>
-  </ul>
   <ul class="plan-features" id="features-scale" style="display:none">
     <li>40% off all per-proof rates</li>
     <li>500 RPM, 16 concurrent jobs, 60 min timeout</li>
@@ -212,6 +201,7 @@ footer .right a:hover{color:var(--muted)}
     <li>Verification always free</li>
     <li>Dedicated support</li>
   </ul>
+  <p style="text-align:center;font-size:12px;color:var(--dim);margin-top:14px">Need an intermediate tier? <a href="/contact" style="color:var(--accent)">Contact us</a> for custom pricing.</p>
 
   <form id="signup-form">
     <div class="form-group">
@@ -256,16 +246,14 @@ footer .right a:hover{color:var(--muted)}
   var hintText = document.getElementById('hintText');
 
   // Plan price labels by cadence. Annual prices are 20% off the equivalent
-  // monthly cadence (e.g., Developer monthly $9 \u2192 annual $86.40).
+  // monthly cadence (e.g., Developer monthly $19 -> annual $182.40).
   var planLabels = {
     monthly: {
-      developer: '$9/mo + usage',
-      team:      '$49/mo + usage',
+      developer: '$19/mo + usage',
       scale:     '$199/mo + usage',
     },
     annual: {
-      developer: '$86.40/yr + usage',
-      team:      '$470.40/yr + usage',
+      developer: '$182.40/yr + usage',
       scale:     '$1,910.40/yr + usage',
     },
   };
@@ -274,14 +262,12 @@ footer .right a:hover{color:var(--muted)}
     var configs = {
       monthly: {
         free:      { btn: 'Get Free API Key',                                btnClass: 'btn-submit free-btn', hint: 'Your API key will be emailed instantly',                       paid: false },
-        developer: { btn: 'Start with Developer \u2014 $9/mo',                 btnClass: 'btn-submit',          hint: "You'll be redirected to Stripe to set up billing",             paid: true },
-        team:      { btn: 'Subscribe to Team \u2014 $49/mo',                   btnClass: 'btn-submit',          hint: '$49/mo base + 25% off per-proof rates',                         paid: true },
+        developer: { btn: 'Start with Developer \u2014 $19/mo',                btnClass: 'btn-submit',          hint: "You'll be redirected to Stripe to set up billing",             paid: true },
         scale:     { btn: 'Subscribe to Scale \u2014 $199/mo',                 btnClass: 'btn-submit',          hint: '$199/mo base + 40% off per-proof rates',                        paid: true },
       },
       annual: {
         free:      { btn: 'Get Free API Key',                                btnClass: 'btn-submit free-btn', hint: 'Your API key will be emailed instantly',                       paid: false },
-        developer: { btn: 'Start with Developer \u2014 $86.40/yr',             btnClass: 'btn-submit',          hint: '20% off via annual prepay (\u2248 $7.20/mo equivalent)',         paid: true },
-        team:      { btn: 'Subscribe to Team \u2014 $470.40/yr',               btnClass: 'btn-submit',          hint: '20% off via annual prepay + 25% off per-proof rates',           paid: true },
+        developer: { btn: 'Start with Developer \u2014 $182.40/yr',            btnClass: 'btn-submit',          hint: '20% off via annual prepay (\u2248 $15.20/mo equivalent)',        paid: true },
         scale:     { btn: 'Subscribe to Scale \u2014 $1,910.40/yr',            btnClass: 'btn-submit',          hint: '20% off via annual prepay + 40% off per-proof rates',           paid: true },
       },
     };
@@ -310,7 +296,7 @@ footer .right a:hover{color:var(--muted)}
     document.querySelectorAll('.plan-option').forEach(function(el) {
       el.classList.toggle('selected', el.dataset.plan === plan);
     });
-    ['free', 'developer', 'team', 'scale'].forEach(function(p) {
+    ['free', 'developer', 'scale'].forEach(function(p) {
       var el = document.getElementById('features-' + p);
       if (el) el.style.display = p === plan ? '' : 'none';
     });

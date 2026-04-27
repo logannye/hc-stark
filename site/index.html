@@ -52,8 +52,8 @@
       "description": "One MCP install. Mint a tamper-evident proof for any computation in one API call. Verify in milliseconds.",
       "offers": [
         {"@type": "Offer", "name": "Free",      "price": "0",   "priceCurrency": "USD", "description": "100 proofs/month, no credit card"},
-        {"@type": "Offer", "name": "Developer", "price": "19",  "priceCurrency": "USD", "description": "$19/month — 5,000 small-T proofs + $0.40/M trace steps overage"},
-        {"@type": "Offer", "name": "Pro",       "price": "199", "priceCurrency": "USD", "description": "$199/month — 50,000 small-T proofs + 1M trace steps included"},
+        {"@type": "Offer", "name": "Developer", "price": "19",  "priceCurrency": "USD", "description": "$19/month — 5,000 proofs/mo + usage overage"},
+        {"@type": "Offer", "name": "Scale",     "price": "199", "priceCurrency": "USD", "description": "$199/month — 40% off per-proof rates + 1M trace steps included"},
         {"@type": "Offer", "name": "Compute",   "price": "0",   "priceCurrency": "USD", "description": "Usage-based: $0.50 per million trace steps. zkVM, zkML, rollups."}
       ],
       "aggregateRating": null,
@@ -628,19 +628,19 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
         <div class="tier">Developer</div>
         <div class="amount">$19</div>
         <div class="unit">per month</div>
-        <div class="desc">5,000 proofs/mo &middot; 200 RPM &middot; 4 inflight &middot; $200 cap &middot; email 48h</div>
+        <div class="desc">5,000 proofs/mo &middot; 100 RPM &middot; 4 inflight &middot; $500 cap &middot; email 48h</div>
         <a class="cta" href="/signup?plan=developer" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Developer</a>
       </div>
       <div class="price-card featured fade-in">
-        <div class="tier">Pro</div>
+        <div class="tier">Scale</div>
         <div class="amount">$199</div>
         <div class="unit">per month</div>
-        <div class="desc" style="color:var(--accent)">50,000 proofs/mo &middot; 1M trace steps included &middot; 500 RPM &middot; 16 inflight &middot; $2K cap &middot; email 24h</div>
-        <a class="cta" href="/signup?plan=pro" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Pro</a>
+        <div class="desc" style="color:var(--accent)">40% off per-proof rates &middot; 1M trace steps included &middot; 500 RPM &middot; 16 inflight &middot; $10K cap &middot; email 24h</div>
+        <a class="cta" href="/signup?plan=scale" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Scale</a>
       </div>
     </div>
 
-    <p style="text-align:center;margin-top:24px;color:var(--dim);font-size:13px">Annual billing: <strong style="color:var(--muted)">20% off</strong> any paid plan. &middot; Need a one-off large trace? Overage is metered at <code>$0.40/M steps</code> on Developer, <code>$0.30/M</code> on Pro.</p>
+    <p style="text-align:center;margin-top:24px;color:var(--dim);font-size:13px">Annual billing: <strong style="color:var(--muted)">20% off</strong> any paid plan. &middot; Need a one-off large trace? Overage is metered per million steps; Scale tier gets a 40% discount off the per-proof base rate. Team-tier pricing is available — <a href="/contact" style="color:var(--accent)">contact us</a> for an intermediate plan.</p>
   </div>
 
   <!-- LONG-TRACE COMPUTE TIERS -->
