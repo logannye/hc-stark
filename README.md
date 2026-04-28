@@ -556,7 +556,7 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - **Production service at [tinyzkp.com](https://tinyzkp.com)**
 - Stripe billing (Free tier, $19 Developer, $199 Scale, plus a usage-based Compute product at $0.50/M trace steps; monthly + annual variants at 20% off; Team and Enterprise as sales-issued custom contracts)
 - **Publish-ready client SDKs** — Python (`pip install tinyzkp`, on PyPI), TypeScript (`npm install tinyzkp`, dual ESM+CJS build, on npm), Rust (`cargo add tinyzkp`)
-- **MCP directory submissions** — submission packets shipped for [smithery.ai](https://smithery.ai) and [mcp.so](https://mcp.so) (see [`marketing/MCP_DIRECTORY_SMITHERY.md`](marketing/MCP_DIRECTORY_SMITHERY.md), [`marketing/MCP_DIRECTORY_MCPSO.md`](marketing/MCP_DIRECTORY_MCPSO.md))
+- **MCP directory submission packets prepared** — pre-flight checklists + web-form submission steps for the [Anthropic MCP directory](https://claude.com/docs/connectors/building/submission), [smithery.ai](https://smithery.ai/new), and [mcp.so](https://mcp.so/submit). All three are operator-driven web forms (no CLI/PR submission path exists for any of them). Packets at [`marketing/MCP_DIRECTORY.md`](marketing/MCP_DIRECTORY.md), [`marketing/MCP_DIRECTORY_SMITHERY.md`](marketing/MCP_DIRECTORY_SMITHERY.md), [`marketing/MCP_DIRECTORY_MCPSO.md`](marketing/MCP_DIRECTORY_MCPSO.md). Live `smithery.yaml` + `crates/hc-mcp/mcp.json` manifests already in tree.
 - **Browser playground at [`tinyzkp.com/try`](https://tinyzkp.com/try)** — mint and verify proofs without signup
 - Live status page at [`tinyzkp.com/status`](https://tinyzkp.com/status) — real Grafana panels backing it
 - Docker Compose production stack with monitoring (Prometheus + Grafana + Alertmanager)

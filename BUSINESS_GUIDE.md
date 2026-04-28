@@ -44,7 +44,7 @@ viable.
 
 **Distribution channels live today:**
 
-- Anthropic MCP directory (mcp.tinyzkp.com)
+- Hosted MCP transport at `mcp.tinyzkp.com` (publicly reachable, no auth required for the anonymous lane). MCP *directory* listings (Anthropic / Smithery / mcp.so) are submission packets prepared but **not yet submitted** — see [`marketing/MCP_DIRECTORY*.md`](marketing/) and "What's deferred" below.
 - npm (`@tinyzkp/cli`, `@tinyzkp/verify`, `tinyzkp`)
 - PyPI (`pip install tinyzkp`)
 - Cargo (`tinyzkp` Rust SDK)
@@ -114,8 +114,12 @@ not a code-cleanup one:
 
 - **Publish-ready client SDKs** — Python (PyPI), TypeScript (npm,
   ESM+CJS dual build), Rust (Cargo), CLI (`@tinyzkp/cli` on npm).
-- **MCP-directory submission packets** — smithery.ai + mcp.so, in
-  [`marketing/`](marketing/).
+- **MCP-directory submission packets** — Anthropic + smithery.ai + mcp.so,
+  in [`marketing/`](marketing/). All three are operator-driven web forms;
+  packets contain pre-flight checklists + exact submission steps. None of
+  the three is CLI/PR-submittable (verified 2026-04-28: `smithery-ai/registry`
+  is issue-tracker-only; `chatmcp/mcp-directory` is the website source code,
+  not a registry).
 - **Marketing tiers collapsed to Stripe reality** — site, signup,
   and Stripe checkout now agree on Free / Developer $19 / Scale
   $199 + Compute usage-based; Team retained as a sales-issued
