@@ -5,6 +5,10 @@
 **/*.swo
 .DS_Store
 .logs/
+/logs/
+
+# AI coding assistant pin files (per-machine, not project source)
+skills-lock.json
 
 # Client SDK build artifacts
 clients/typescript/dist/

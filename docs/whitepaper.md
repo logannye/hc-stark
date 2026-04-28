@@ -481,6 +481,26 @@ The current repository layout mirrors the architecture described above:
 
 Together, these crates implement a **reference-quality height-compressed prover** whose RAM usage is dictated by the configured block size while surfacing enough observability (metrics + CLI tooling) to tune √T behavior on real workloads.
 
+### 7.0 Protocol Transcript (v2) and Compatibility
+
+In production, we treat the Fiat–Shamir transcript as a **versioned wire contract**:
+
+- **Main transcript domain**: `hc-stark/v2`
+- **FRI transcript domain**: `hc-stark/fri/v2`
+- **Canonical labels**: structured, domain-separated labels under:
+  - `pub/*` (public inputs)
+  - `param/*` (protocol parameters)
+  - `commit/*` (Merkle roots / commitments)
+  - `chal/*` (Fiat–Shamir challenges)
+
+The canonical registry lives in `hc_hash::protocol`:
+
+- Domains: `DOMAIN_MAIN_V2`, `DOMAIN_FRI_V2`, `DOMAIN_COMPOSITION_V2`
+- Labels: `hc_hash::protocol::label::*`
+
+This ensures prover/verifier (and recursion) cannot silently diverge due to ad hoc strings or
+accidental reordering.
+
 ### 7.1 Recursion Planner & Query Summaries
 
 - `hc-verifier` now exposes `VerificationSummary` containing:

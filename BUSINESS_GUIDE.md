@@ -52,12 +52,29 @@ viable.
 
 ## Pricing — current
 
+`pricing.json` at the repo root is the single source of truth. Stripe self-serve checkout exposes three plans (Free / Developer / Scale) plus a usage-based Compute product. Team is retained in `pricing.json` and provisioned by hand as a sales-issued contract; Enterprise is fully custom.
+
+**Self-serve plans:**
+
 | Plan | Monthly base | Per-proof discount | Inflight | RPM | Monthly cap |
 |------|-------------|-------------------|----------|-----|-------------|
-| Free | $0 | — | 1 | 10 | 100 proofs |
-| Developer | $0 | base rates | 4 | 100 | $500 |
-| Team | $49 | 25% off | 8 | 300 | $2,500 |
+| Free | $0 | — | 1 | 10 | $5 (≈100 proofs) |
+| Developer | $19 | base rates | 4 | 100 | $500 |
 | Scale | $199 | 40% off | 16 | 500 | $10,000 |
+
+Annual billing: 20% off any paid plan.
+
+**Usage-based product (no monthly base):**
+
+| Plan | Pricing | Inflight | RPM | Trace ceiling |
+|------|---------|----------|-----|---------------|
+| Compute | $0.50 per million trace steps | 8 | 100 | 100M steps |
+
+**Sales-issued plans (no Stripe self-serve checkout):**
+
+| Plan | Monthly base | Per-proof discount | Inflight | RPM | Monthly cap |
+|------|-------------|-------------------|----------|-----|-------------|
+| Team | custom (≈$49) | 25% off | 8 | 300 | $2,500 |
 | Enterprise | custom | up to 50% off | custom | custom | custom |
 
 **Per-proof base rates** (Developer plan):
@@ -70,7 +87,7 @@ viable.
 | 1M – 10M | $8.00 |
 | > 10M | $30.00 |
 
-Verification is always free. See `README.md` for canonical pricing.
+Verification is always free. See `README.md` for the customer-facing copy.
 
 ## Operations stack
 
@@ -89,12 +106,56 @@ Verification is always free. See `README.md` for canonical pricing.
 - **Auth**: Bearer keys with file-based hot-reload + 5min rotation
   grace window. Per-IP brute-force lockout.
 
+## Recently shipped (post-sweep + 2026-04-28 gap closure)
+
+Closing the engineering side of the post-launch backlog so the next
+quarter is a customer-discovery and structural-scale conversation,
+not a code-cleanup one:
+
+- **Publish-ready client SDKs** — Python (PyPI), TypeScript (npm,
+  ESM+CJS dual build), Rust (Cargo), CLI (`@tinyzkp/cli` on npm).
+- **MCP-directory submission packets** — smithery.ai + mcp.so, in
+  [`marketing/`](marketing/).
+- **Marketing tiers collapsed to Stripe reality** — site, signup,
+  and Stripe checkout now agree on Free / Developer $19 / Scale
+  $199 + Compute usage-based; Team retained as a sales-issued
+  custom contract via [`/contact`](https://tinyzkp.com/contact).
+- **Real Grafana panels + honest status page** at
+  [`tinyzkp.com/status`](https://tinyzkp.com/status).
+- **Templates copy-paste examples** — six full curl + Python +
+  TypeScript snippets on [`tinyzkp.com/docs`](https://tinyzkp.com/docs)
+  with an integration test at
+  `crates/hc-workloads/tests/template_examples.rs` asserting every
+  documented example builds.
+- **User-interview pipeline** — recruit / script / synthesis
+  playbook in [`marketing/USER_INTERVIEWS.md`](marketing/USER_INTERVIEWS.md);
+  target is 5 interviews / 14 days against free-tier signups, MCP
+  installs, and playground completions.
+- **Workspace recovery, round 2** — workspace-test scaffolding
+  (hc-bench / hc-core / hc-hash / hc-prover / hc-verifier),
+  hc-server's binary entry point, deny.toml, and the
+  hc-node / hc-python / fuzz crate skeletons all lifted into
+  version control. Fresh-clone `cargo metadata` now load-bearing-clean.
+- **Doc/contract assets lifted** — ROADMAP_EXTENSIONS.md, the
+  Solidity verifier interface (`contracts/IHcStarkVerifier.sol`),
+  the security/audit triple under `docs/security/`, the proof
+  format v4 spec, the parameter guide, and the Hetzner deploy
+  runbooks all under version control.
+
 ## What's deferred / on the roadmap
 
 - **Postgres cutover** — the next structural unlock. See above.
 - **Cross-process tenant quota** — MCP and API maintain independent
   per-tenant windows today. A shared backing store (Redis-class) would
   make a tenant's quota deplete uniformly across both surfaces.
+- **Customer discovery (5 interviews / 14 days)** — the gating input
+  for whether the next quarter is Postgres + scale, the zkML wedge,
+  or template redesign. Pipeline drafted in
+  [`marketing/USER_INTERVIEWS.md`](marketing/USER_INTERVIEWS.md).
+- **HN launch + MCP-directory submission** — drafted in
+  [`marketing/HN_LAUNCH.md`](marketing/HN_LAUNCH.md) (Tuesday/Wednesday
+  8–9:30 a.m. ET window) and the MCP-directory packets — operator
+  needs to pull the trigger.
 - **Worker warm pool** (vs current spawn-per-job) — ops concern under
   hundreds-per-min QPS. Currently bounded via the spawn-cap semaphore.
 - **GPU acceleration** — CUDA/Metal for the heaviest provers.
@@ -103,7 +164,8 @@ Verification is always free. See `README.md` for canonical pricing.
   deployed to mainnet.
 - **Cancer-superintelligence... wait wrong repo.** The extension wave
   for hc-stark is in [`ROADMAP_EXTENSIONS.md`](ROADMAP_EXTENSIONS.md):
-  zkML, zkVM, sumcheck/HyperPlonk, IPA / Bulletproofs.
+  zkML (Phase 1 — highest revenue), zkVM, sumcheck/HyperPlonk, IPA /
+  Bulletproofs.
 
 ## Where to look for what
 
@@ -112,7 +174,11 @@ Verification is always free. See `README.md` for canonical pricing.
 | How do I use the API? | [README.md](README.md) |
 | How does the prover work? | [docs/whitepaper.md](docs/whitepaper.md) |
 | How do I run my own deployment? | [docs/operations.md](docs/operations.md) |
+| How do I deploy the latest production sweep to Hetzner? | [docs/runbooks/deploy_2026-04-28.md](docs/runbooks/deploy_2026-04-28.md) |
 | What's the proof format? | [docs/proof_format_v4_zk.md](docs/proof_format_v4_zk.md) |
 | What's coming next, technically? | [ROADMAP_EXTENSIONS.md](ROADMAP_EXTENSIONS.md) |
 | How does Stripe billing work? | [billing/STRIPE_SETUP.md](billing/STRIPE_SETUP.md) |
+| What's the threat model / soundness story? | [docs/security/](docs/security/) |
+| How do I run user interviews? | [marketing/USER_INTERVIEWS.md](marketing/USER_INTERVIEWS.md) |
+| How do I launch on HN? | [marketing/HN_LAUNCH.md](marketing/HN_LAUNCH.md) |
 | What's the original business case? | [docs/archive/BUSINESS_GUIDE_2025-pre-launch.md](docs/archive/BUSINESS_GUIDE_2025-pre-launch.md) |

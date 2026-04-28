@@ -282,6 +282,15 @@ sanity_checks() {
         return 1
     fi
 
+    # Test 2b: Feature-gated scaling invariants
+    info "Test 2b: Running scaling invariant tests (feature-gated)..."
+    if run_cargo 300 test -p hc-bench --features scaling-tests; then
+        success "Scaling invariant tests pass"
+    else
+        error "Scaling invariant tests failed"
+        return 1
+    fi
+
     # Test 3: Basic CLI functionality
     info "Test 3: Testing CLI commands..."
 

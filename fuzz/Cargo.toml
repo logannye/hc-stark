@@ -1,0 +1,54 @@
+[package]
+name = "hc-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1.0"
+
+hc-sdk = { path = "../crates/hc-sdk" }
+hc-verifier = { path = "../crates/hc-verifier" }
+hc-core = { path = "../crates/hc-core" }
+hc-commit = { path = "../crates/hc-commit" }
+hc-hash = { path = "../crates/hc-hash" }
+
+[[bin]]
+name = "decode_proof_bytes"
+path = "fuzz_targets/decode_proof_bytes.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "verify_proof_bytes"
+path = "fuzz_targets/verify_proof_bytes.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "field_ops"
+path = "fuzz_targets/field_ops.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fft_roundtrip"
+path = "fuzz_targets/fft_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "merkle_path"
+path = "fuzz_targets/merkle_path.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "malformed_proof"
+path = "fuzz_targets/malformed_proof.rs"
+test = false
+doc = false

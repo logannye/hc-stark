@@ -43,6 +43,26 @@ The verifier’s view is unchanged if:
 
 is identical to what a conventional prover would have produced for the same witness.
 
+---
+
+## 2.4 Transcript Compatibility Contract (Fiat–Shamir)
+
+The **transcript is the protocol** once we apply Fiat–Shamir. In production, we treat the transcript
+format as a compatibility contract:
+
+- **Domain**: `hc-stark/v2` for the main protocol transcript, and `hc-stark/fri/v2` for the FRI
+  sub-transcript.
+- **Labels**: canonical, domain-separated byte labels.
+- **Ordering**: all parties must append messages in the same order before sampling challenges.
+
+These values are centralized in code under `hc_hash::protocol`:
+
+- Domains: `DOMAIN_MAIN_V2`, `DOMAIN_FRI_V2`, `DOMAIN_COMPOSITION_V2`
+- Labels: `hc_hash::protocol::label::*`
+
+Changing any domain or label requires a coordinated upgrade of prover/verifier (and any recursion
+layer), and should be treated as a breaking proof-format change.
+
 Formally, hc-STARK is a different \(\mathsf{P}^\*\) such that:
 
 - \(\mathsf{view}_\mathsf{V}(\mathsf{P}, w) \equiv \mathsf{view}_\mathsf{V}(\mathsf{P}^\*, w)\),

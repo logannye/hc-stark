@@ -1,0 +1,24 @@
+[package]
+name = "hc-node"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+hc-sdk = { path = "../hc-sdk" }
+hc-core = { path = "../hc-core" }
+hc-prover = { path = "../hc-prover" }
+hc-verifier = { path = "../hc-verifier" }
+hc-vm = { path = "../hc-vm" }
+napi = { version = "2", features = ["napi6", "serde-json"] }
+napi-derive = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[build-dependencies]
+napi-build = "2"

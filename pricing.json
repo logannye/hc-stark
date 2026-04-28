@@ -1,5 +1,6 @@
 {
   "_comment": "Single source of truth for TinyZKP pricing + plan limits. Read by parity tests in both crates/hc-server/src/usage_log.rs and billing/tests/test_pricing_parity.py — drift between either Rust or Python and this file fails CI. Edit this file FIRST when changing pricing; the parity tests will fail loudly until both sides catch up.",
+  "_plan_visibility": "Stripe self-serve checkout exposes 'free', 'developer', and 'scale' (plus a usage-based Compute product handled outside this rate sheet). The 'team' plan is retained here as a sales-only/grandfathered contract — provisioned by hand via billing/provision_tenant.py with plan=team — because the rate sheet supports it but there is no Stripe self-serve path. Marketing surfaces (site/index.html, site/signup.html) must NOT advertise Team as a checkout option; site/docs.html documents it for completeness.",
   "tiers_cents": [
     { "max_steps_exclusive": 10000,    "cents": 5    },
     { "max_steps_exclusive": 100000,   "cents": 50   },

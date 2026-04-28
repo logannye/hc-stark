@@ -548,6 +548,13 @@ console.log(result.ok); <span class="comment">// true</span></pre>
 
     <h3 id="template-examples">Template Examples</h3>
     <p>Each template below is a complete, copy-paste working example. Replace <code>tzk_...</code> with your API key and run.</p>
+    <p style="margin-top:12px;color:var(--muted);font-size:14px">The Python and TypeScript snippets use the official TinyZKP HTTP-API client SDKs. Install once, then any subsequent example just works:</p>
+    <div class="code-block">
+      <span class="code-label">install</span>
+<pre>pip install tinyzkp        <span class="comment"># Python (PyPI)</span>
+npm install tinyzkp         <span class="comment"># TypeScript / JS (npm, ESM + CJS)</span>
+cargo add tinyzkp           <span class="comment"># Rust (Cargo)</span></pre>
+    </div>
 
     <h4 style="margin-top:24px"><code>range_proof</code> &mdash; prove a value is in <code>[min, max]</code></h4>
     <p>Proves an integer V satisfies <code>min &le; V &le; max</code> without revealing V. Encode <code>(V - min)</code> as additive <code>witness_steps</code>. Example: prove a balance is between $0 and $10,000 by encoding the actual value $4,237 as <code>[2000, 2237]</code> (or any decomposition that sums to 4,237).</p>
