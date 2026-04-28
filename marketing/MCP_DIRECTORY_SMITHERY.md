@@ -44,4 +44,11 @@ curl -fsSL -o /dev/null -w "%{http_code}\n" "https://smithery.ai/server/@loganny
 
 ## Submission status
 
-- [ ] Submitted via web UI — date: ____ — listing URL: ____
+- [x] Submitted via web UI — **date: 2026-04-28** — **listing URL: https://smithery.ai/servers/logan/tinyzkp-mcp**
+
+**Notes from the 2026-04-28 submission:**
+
+- Server ID: `tinyzkp-mcp` (the bare `tinyzkp` was reserved in Smithery's draft state under the `@logannye` namespace from a prior partial attempt; `tinyzkp-mcp` is the standard fallback pattern in the Smithery catalog).
+- Connection-config parameters: **left empty (Skip)** so users hit the anonymous public lane through Smithery's gateway, preserving the "no signup, no API key" wedge. Power users with API keys can configure `Authorization: Bearer tzk_...` in their MCP client directly.
+- First release attempt failed with `Initialization failed with status 404` because Smithery's auto-scanner uses a protocol shape our Streamable HTTP transport doesn't expose. Resolved by hosting `/.well-known/mcp/server-card.json` (see `deploy/server-card.json` and the new `handle` block in `deploy/hetzner/Caddyfile`). Second release succeeded; 10 tools cataloged from the card.
+- Persistent benign warning: *"No config schema provided"* in the release log refers to Smithery's **deployment-payload** configSchema (what their UI prompts users for at install time), not the card's `configSchema`. Empty deployment-payload schema is intentional — it preserves the anonymous-by-default UX. Power users can still inject Bearer tokens via their MCP client directly.

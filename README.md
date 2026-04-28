@@ -3,6 +3,7 @@
 [![npm](https://img.shields.io/npm/v/%40tinyzkp%2Fcli?label=%40tinyzkp%2Fcli&color=2ee8d4)](https://www.npmjs.com/package/@tinyzkp/cli)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Free tier](https://img.shields.io/badge/free%20tier-100%20proofs%2Fmo-34d399)](https://tinyzkp.com/signup)
+[![Smithery](https://img.shields.io/badge/Smithery-tinyzkp--mcp-2ee8d4)](https://smithery.ai/servers/logan/tinyzkp-mcp)
 
 **[tinyzkp.com](https://tinyzkp.com)** &middot; **[Try it in browser](https://tinyzkp.com/try)** &middot; **[API docs](https://tinyzkp.com/docs)** &middot; **[Free signup](https://tinyzkp.com/signup)**
 
@@ -556,7 +557,11 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - **Production service at [tinyzkp.com](https://tinyzkp.com)**
 - Stripe billing (Free tier, $19 Developer, $199 Scale, plus a usage-based Compute product at $0.50/M trace steps; monthly + annual variants at 20% off; Team and Enterprise as sales-issued custom contracts)
 - **Publish-ready client SDKs** — Python (`pip install tinyzkp`, on PyPI), TypeScript (`npm install tinyzkp`, dual ESM+CJS build, on npm), Rust (`cargo add tinyzkp`)
-- **MCP directory submission packets prepared** — pre-flight checklists + web-form submission steps for the [Anthropic MCP directory](https://claude.com/docs/connectors/building/submission), [smithery.ai](https://smithery.ai/new), and [mcp.so](https://mcp.so/submit). All three are operator-driven web forms (no CLI/PR submission path exists for any of them). Packets at [`marketing/MCP_DIRECTORY.md`](marketing/MCP_DIRECTORY.md), [`marketing/MCP_DIRECTORY_SMITHERY.md`](marketing/MCP_DIRECTORY_SMITHERY.md), [`marketing/MCP_DIRECTORY_MCPSO.md`](marketing/MCP_DIRECTORY_MCPSO.md). Live `smithery.yaml` + `crates/hc-mcp/mcp.json` manifests already in tree.
+- **MCP directory listings**:
+  - **[Smithery](https://smithery.ai/servers/logan/tinyzkp-mcp)** — live since 2026-04-28. Catalogued from a static [server-card.json](deploy/server-card.json) at `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json`.
+  - **Anthropic MCP directory** — application submitted 2026-04-28, pending review.
+  - **mcp.so** — submission packet prepared at [`marketing/MCP_DIRECTORY_MCPSO.md`](marketing/MCP_DIRECTORY_MCPSO.md), submission pending.
+  - All three submission paths are operator-driven web forms — no CLI/PR submission path exists. Packets at [`marketing/MCP_DIRECTORY*.md`](marketing/) document what each form expects.
 - **Browser playground at [`tinyzkp.com/try`](https://tinyzkp.com/try)** — mint and verify proofs without signup
 - Live status page at [`tinyzkp.com/status`](https://tinyzkp.com/status) — real Grafana panels backing it
 - Docker Compose production stack with monitoring (Prometheus + Grafana + Alertmanager)

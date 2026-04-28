@@ -44,7 +44,8 @@ viable.
 
 **Distribution channels live today:**
 
-- Hosted MCP transport at `mcp.tinyzkp.com` (publicly reachable, no auth required for the anonymous lane). MCP *directory* listings (Anthropic / Smithery / mcp.so) are submission packets prepared but **not yet submitted** — see [`marketing/MCP_DIRECTORY*.md`](marketing/) and "What's deferred" below.
+- Hosted MCP transport at `mcp.tinyzkp.com` (publicly reachable, no auth required for the anonymous lane).
+- **Smithery directory listing** at [smithery.ai/servers/logan/tinyzkp-mcp](https://smithery.ai/servers/logan/tinyzkp-mcp) — live since 2026-04-28. Anthropic application submitted same day, pending review. mcp.so submission packet prepared, submission pending.
 - npm (`@tinyzkp/cli`, `@tinyzkp/verify`, `tinyzkp`)
 - PyPI (`pip install tinyzkp`)
 - Cargo (`tinyzkp` Rust SDK)
