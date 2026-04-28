@@ -1,6 +1,9 @@
 # TinyZKP — Verifiable Receipts for AI Agents
 
-[![npm](https://img.shields.io/npm/v/%40tinyzkp%2Fcli?label=%40tinyzkp%2Fcli&color=2ee8d4)](https://www.npmjs.com/package/@tinyzkp/cli)
+[![npm: @tinyzkp/cli](https://img.shields.io/npm/v/%40tinyzkp%2Fcli?label=%40tinyzkp%2Fcli&color=2ee8d4)](https://www.npmjs.com/package/@tinyzkp/cli)
+[![npm: tinyzkp](https://img.shields.io/npm/v/tinyzkp?label=tinyzkp%20%28TS%20SDK%29&color=2ee8d4)](https://www.npmjs.com/package/tinyzkp)
+[![npm: @tinyzkp/verify](https://img.shields.io/npm/v/%40tinyzkp%2Fverify?label=%40tinyzkp%2Fverify%20%28WASM%29&color=2ee8d4)](https://www.npmjs.com/package/@tinyzkp/verify)
+[![PyPI: tinyzkp](https://img.shields.io/pypi/v/tinyzkp?label=tinyzkp%20%28Python%20SDK%29&color=2ee8d4)](https://pypi.org/project/tinyzkp/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Free tier](https://img.shields.io/badge/free%20tier-100%20proofs%2Fmo-34d399)](https://tinyzkp.com/signup)
 [![Smithery](https://img.shields.io/badge/Smithery-tinyzkp--mcp-2ee8d4)](https://smithery.ai/servers/logan/tinyzkp-mcp)
@@ -23,6 +26,8 @@ claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 
 Your agent now has 10 ZK proof tools (`list_templates`, `describe_template`, `prove_template`, `poll_job`, `get_proof`, `verify_proof`, ...) as native function calls. **No signup, no API key, no credit card** — the MCP endpoint is public and rate-limited via a server-side concurrency cap. For Claude Desktop, Cursor, OpenAI agents, and other MCP clients, see [the MCP install guide](https://tinyzkp.com/docs#mcp).
 
+Discovery via [Smithery](https://smithery.ai/servers/logan/tinyzkp-mcp) works the same way — the directory routes through Smithery's gateway to the same endpoint.
+
 If you want Claude to *recognize* when a use case calls for a proof on its own (not just respond to "use TinyZKP"), install the companion Claude Skill at [`skills/tinyzkp-proofs/`](./skills/tinyzkp-proofs/SKILL.md).
 
 ### 3. Terminal CLI (works against any TinyZKP API key)
@@ -37,14 +42,20 @@ npx @tinyzkp/cli verify proof.json                        # always free
 
 ## What you can prove
 
-| Template | What it proves | Typical use |
-|----------|---------------|-------------|
-| `range_proof` | "I know a value between X and Y" — without revealing it | Age verification, salary bands, score thresholds |
-| `hash_preimage` | "I know the secret behind this hash" | Password proofs, file integrity, commitment opening |
-| `computation_attestation` | "f(secret inputs) = this public output" | Agent action receipts, batch compute attestation |
-| `accumulator_step` | "Starting at X, applying these deltas reaches Y" | State machine attestation, rollup transitions |
-| `policy_compliance` | "These actions stayed within the allowed limit" | Spending caps, rate limits, resource quotas |
-| `data_integrity` | "These elements add up to this checksum" | Dataset audits, ledger reconciliation |
+Six **production templates** (sub-second proofs, lightweight cost tier) plus two **preview-tier templates** for the long-trace extension surface (zkML inference attestation, sumcheck-based R1CS).
+
+| Template | Tier | What it proves | Typical use |
+|----------|------|---------------|-------------|
+| `range_proof` | Production | "I know a value between X and Y" — without revealing it | Age verification, salary bands, score thresholds |
+| `hash_preimage` | Production | "I know the secret behind this hash" | Password proofs, file integrity, commitment opening |
+| `computation_attestation` | Production | "f(secret inputs) = this public output" | Agent action receipts, batch compute attestation |
+| `accumulator_step` | Production | "Starting at X, applying these deltas reaches Y" | State machine attestation, rollup transitions |
+| `policy_compliance` | Production | "These actions stayed within the allowed limit" | Spending caps, rate limits, resource quotas |
+| `data_integrity` | Production | "These elements add up to this checksum" | Dataset audits, ledger reconciliation |
+| `zkml_matmul` | Preview | "This MatMul over committed weights produced this output" | AI inference attestation (zkML) — Phase 1 of the [extension roadmap](ROADMAP_EXTENSIONS.md) |
+| `spartan_r1cs` | Preview | "I know a witness that satisfies this R1CS instance" | General-purpose circuits via Spartan-class sumcheck — Phase 3 of the [extension roadmap](ROADMAP_EXTENSIONS.md) |
+
+> Preview templates ship with explicit soundness caveats — see [`ROADMAP_EXTENSIONS.md`](ROADMAP_EXTENSIONS.md) for the production-readiness criteria each must meet before graduating from Preview.
 
 ## Two-line plain HTTP version
 
@@ -63,7 +74,7 @@ Verification is always free. SDKs ship for Python (`pip install tinyzkp`), TypeS
 
 ## What sits underneath
 
-`hc-stark` is the open-source Rust engine behind TinyZKP. It uses a **height-compressed streaming architecture** that runs in O(√T) prover memory instead of O(T) — the structural advantage that lets us price the small-proof tier at $0.05/proof and offer a real free tier without going broke.
+`hc-stark` is the open-source Rust engine behind TinyZKP. The hosted service has been live since 2026-04-25 on a single dedicated Hetzner CPX42 (8 vCPU / 16 GB / Nuremberg); live health at [tinyzkp.com/status](https://tinyzkp.com/status). The engine uses a **height-compressed streaming architecture** that runs in O(√T) prover memory instead of O(T) — the structural advantage that lets us price the small-proof tier at $0.05/proof and offer a real free tier without going broke.
 
 | Property | hc-stark | Standard STARK |
 |----------|----------|----------------|
@@ -130,15 +141,17 @@ pip install tinyzkp
 
 **TypeScript:**
 ```typescript
-import { HcClient } from "tinyzkp";
+import { TinyZKP } from "tinyzkp";   // alias of HcClient — both exported
 
-const client = new HcClient("https://api.tinyzkp.com", { apiKey: "tzk_..." });
+const client = new TinyZKP("https://api.tinyzkp.com", { apiKey: "tzk_..." });
 const jobId  = await client.proveTemplate("range_proof", {
   min: 0, max: 100, witness_steps: [42, 44],
 });
 const proof  = await client.waitForProof(jobId);
 const result = await client.verify(proof);  // free!
 ```
+
+The `tinyzkp` package ships a dual ESM+CJS build (works in modern Node 18+ ESM, classic `require()`, bundlers, edge runtimes).
 
 ```bash
 npm install tinyzkp
@@ -208,7 +221,7 @@ Scale plans receive automatic 40% discounts on every proof; Team contracts recei
 
 ## Proof templates
 
-Six built-in templates cover common zero-knowledge use cases. Browse them via the discovery API:
+Eight built-in templates: six **production** (lightweight, sub-second) plus two **preview-tier** for the long-trace extension surface. Browse them via the discovery API:
 
 ```bash
 # List all templates
@@ -229,14 +242,16 @@ curl -X POST https://api.tinyzkp.com/estimate \
 
 > **What are `witness_steps`?** Internal computation values that encode your secret. They are never revealed to the verifier — only the proof (which vouches for them) is shared.
 
-| Template | What It Proves | Key Parameters |
-|----------|---------------|----------------|
-| `range_proof` | "I know a number between X and Y" — without revealing it | `min`, `max`, `witness_steps[]` |
-| `hash_preimage` | "I know the secret that produces this hash" | `digest`, `preimage_steps[]` |
-| `computation_attestation` | "f(secret inputs) = this public output" | `steps[]`, `expected_output` |
-| `accumulator_step` | "Starting from X, applying these deltas reaches Y" | `initial`, `final`, `deltas[]` |
-| `policy_compliance` | "These actions stayed within the allowed limit" | `actions[]`, `threshold` |
-| `data_integrity` | "These data elements add up to this checksum" | `elements[]`, `checksum` |
+| Template | Tier | What It Proves | Key Parameters |
+|----------|------|---------------|----------------|
+| `range_proof` | Production | "I know a number between X and Y" — without revealing it | `min`, `max`, `witness_steps[]` |
+| `hash_preimage` | Production | "I know the secret that produces this hash" | `digest`, `preimage_steps[]` |
+| `computation_attestation` | Production | "f(secret inputs) = this public output" | `steps[]`, `expected_output` |
+| `accumulator_step` | Production | "Starting from X, applying these deltas reaches Y" | `initial`, `final`, `deltas[]` |
+| `policy_compliance` | Production | "These actions stayed within the allowed limit" | `actions[]`, `threshold` |
+| `data_integrity` | Production | "These data elements add up to this checksum" | `elements[]`, `checksum` |
+| `zkml_matmul` | Preview | "This MatMul over committed weights produced this output" | `weights_commit`, `input_commit`, `output_commit`, `dims` |
+| `spartan_r1cs` | Preview | "I know a witness that satisfies this R1CS" | `r1cs_commit`, `public_inputs[]` |
 
 ---
 
@@ -251,7 +266,9 @@ hc-stark ships as an **MCP server** so AI agents (Claude, GPT, Cursor) can gener
 claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 ```
 
-The hosted endpoint at `mcp.tinyzkp.com` accepts both public requests (no Authorization header — bounded by `HC_MCP_MAX_INFLIGHT=2`) and authenticated requests (`Authorization: Bearer tzk_...`). Authenticated requests get per-tenant rate limits matched to their plan: Free 10/min, Developer 100/min, Team 300/min, Scale 500/min — same ladder as the HTTP API's `prove_rpm`. Setting `HC_MCP_TENANT_RPM` to a non-zero value overrides the plan ladder with a single global cap (operator throttling during incidents). Authenticated requests bypass the global anonymous cap. Operators who want to lock down the public lane entirely can set `HC_MCP_REQUIRE_AUTH=true` to require Bearer on every call. The HTTP transport also validates the `Origin` header against an allowlist that includes `*.claude.ai`, `*.anthropic.com`, and `tinyzkp.com`.
+The hosted endpoint at `mcp.tinyzkp.com` accepts both public requests (no Authorization header — bounded by `HC_MCP_MAX_INFLIGHT=2`) and authenticated requests (`Authorization: Bearer tzk_...`). Authenticated requests get per-tenant rate limits matched to their plan: Free 10/min, Developer 100/min, Scale 500/min — same ladder as the HTTP API's `prove_rpm`. (Team contracts get 300/min via sales-only provisioning.) Setting `HC_MCP_TENANT_RPM` to a non-zero value overrides the plan ladder with a single global cap (operator throttling during incidents). Authenticated requests bypass the global anonymous cap. Operators who want to lock down the public lane entirely can set `HC_MCP_REQUIRE_AUTH=true` to require Bearer on every call. The HTTP transport also validates the `Origin` header against an allowlist that includes `*.claude.ai`, `*.anthropic.com`, and `tinyzkp.com`.
+
+Additionally, `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json` serves a static [server card](deploy/server-card.json) (RFC-style description with the full tools list + configSchema) for MCP-directory scanners that prefer not to do live `tools/list` discovery — Smithery uses this path to populate the catalog.
 
 ### Local install (stdio)
 
@@ -323,8 +340,12 @@ Base URL: `https://api.tinyzkp.com`
 | GET | `/usage` | Required | View usage and estimated costs |
 | GET | `/proof/:job_id/calldata` | Required | Get EVM on-chain calldata |
 | GET | `/healthz` | None | Liveness check |
-| GET | `/metrics` | None | Prometheus metrics |
+| GET | `/readyz` | None | Readiness check |
+| GET | `/metrics` | None | Prometheus metrics (incl. `hc_sqlite_lock_wait_seconds`, `hc_worker_spawn_seconds`, `hc_worker_spawn_permits_available`, `hc_job_queue_depth`) |
 | GET | `/docs` | None | Interactive Swagger UI |
+| **MCP transport** | | | |
+| POST | `/mcp` (on `mcp.tinyzkp.com`) | Optional | Streamable HTTP MCP transport — 10 tools |
+| GET | `/.well-known/mcp/server-card.json` (on `mcp.tinyzkp.com`) | None | Static server card for MCP-directory scanners |
 | **Account** | | | |
 | POST | `/api/rotate-key` | Required | Rotate API key (once per 24h) |
 
@@ -623,14 +644,37 @@ After that, in priority order:
 
 ## Links
 
-- **Product:** [tinyzkp.com](https://tinyzkp.com)
-- **API Docs:** [tinyzkp.com/docs](https://tinyzkp.com/docs)
+### Product
+- **Marketing site:** [tinyzkp.com](https://tinyzkp.com)
+- **Browser playground:** [tinyzkp.com/try](https://tinyzkp.com/try)
+- **Long-trace compute brief:** [tinyzkp.com/compute](https://tinyzkp.com/compute)
+- **Account dashboard:** [tinyzkp.com/account](https://tinyzkp.com/account)
+- **Docs:** [tinyzkp.com/docs](https://tinyzkp.com/docs)
 - **Swagger UI:** [api.tinyzkp.com/docs](https://api.tinyzkp.com/docs)
-- **Sign Up:** [tinyzkp.com/signup](https://tinyzkp.com/signup)
-- **Contact:** [tinyzkp.com/contact](https://tinyzkp.com/contact)
-- **Business Guide:** [`BUSINESS_GUIDE.md`](BUSINESS_GUIDE.md)
+- **Status:** [tinyzkp.com/status](https://tinyzkp.com/status)
+- **Sign up / contact:** [tinyzkp.com/signup](https://tinyzkp.com/signup) · [tinyzkp.com/contact](https://tinyzkp.com/contact)
+
+### Distribution
+- **Smithery listing:** [smithery.ai/servers/logan/tinyzkp-mcp](https://smithery.ai/servers/logan/tinyzkp-mcp)
+- **PyPI:** [pypi.org/project/tinyzkp](https://pypi.org/project/tinyzkp/)
+- **npm — TS SDK:** [npmjs.com/package/tinyzkp](https://www.npmjs.com/package/tinyzkp)
+- **npm — CLI:** [npmjs.com/package/@tinyzkp/cli](https://www.npmjs.com/package/@tinyzkp/cli)
+- **npm — WASM verifier:** [npmjs.com/package/@tinyzkp/verify](https://www.npmjs.com/package/@tinyzkp/verify)
+- **Cargo:** [crates.io/crates/tinyzkp](https://crates.io/crates/tinyzkp)
+
+### Documents in this repo
+- **Business guide:** [`BUSINESS_GUIDE.md`](BUSINESS_GUIDE.md)
+- **Extension roadmap (zkML / zkVM / sumcheck / IPA):** [`ROADMAP_EXTENSIONS.md`](ROADMAP_EXTENSIONS.md)
 - **Whitepaper:** [`docs/whitepaper.md`](docs/whitepaper.md)
+- **Proof format v4:** [`docs/proof_format_v4_zk.md`](docs/proof_format_v4_zk.md)
 - **Operations:** [`docs/operations.md`](docs/operations.md)
-- **Proof Format:** [`docs/proof_format_v4_zk.md`](docs/proof_format_v4_zk.md)
-- **Privacy Policy:** [tinyzkp.com/privacy](https://tinyzkp.com/privacy)
-- **Terms of Service:** [tinyzkp.com/terms](https://tinyzkp.com/terms)
+- **Hetzner deploy runbooks:** [`docs/runbooks/`](docs/runbooks/)
+- **Postgres migration plan:** [`docs/postgres_migration.md`](docs/postgres_migration.md)
+- **Security audit suite (threat model, soundness proof, audit checklist):** [`docs/security/`](docs/security/)
+- **MCP directory submission packets:** [`marketing/MCP_DIRECTORY*.md`](marketing/)
+- **Customer-discovery playbook:** [`marketing/USER_INTERVIEWS.md`](marketing/USER_INTERVIEWS.md)
+- **HN launch draft:** [`marketing/HN_LAUNCH.md`](marketing/HN_LAUNCH.md)
+
+### Legal
+- **Privacy policy:** [tinyzkp.com/privacy](https://tinyzkp.com/privacy)
+- **Terms of service:** [tinyzkp.com/terms](https://tinyzkp.com/terms)
