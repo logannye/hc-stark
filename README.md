@@ -162,15 +162,34 @@ npm install @tinyzkp/verify
 
 Pay per proof based on trace complexity. Verification is always free. Our O(√T) architecture means 10–40x lower infrastructure costs — we pass the savings to you.
 
-### Plans
+`pricing.json` at the repo root is the single source of truth for plan limits and the per-proof rate sheet, with parity tests on both the Rust (`hc-server`) and Python (`billing/`) sides — drift between either side and the JSON fails CI.
+
+### Self-serve plans
 
 | Plan | Monthly Base | Per-Proof Discount | Key Limits |
 |------|-------------|-------------------|------------|
-| Free | $0 | — | 100 proofs/mo, 1 inflight, 10 RPM |
-| Developer | $0 | Base rates | 4 inflight, 100 RPM, $500/mo cap |
-| Team | $49 | 25% off | 8 inflight, 300 RPM, $2,500/mo cap |
+| Free | $0 | — | 100 proofs/mo, 1 inflight, 10 RPM, $5/mo cap |
+| Developer | $19 | Base rates | 4 inflight, 100 RPM, $500/mo cap |
 | Scale | $199 | 40% off | 16 inflight, 500 RPM, $10,000/mo cap |
+
+Annual billing is 20% off any paid plan.
+
+### Compute (usage-based, no monthly base)
+
+For zkVM, zkML, and rollup workloads — the long-trace tier where the O(√T) prover replaces a 128 GB-RAM machine.
+
+| Plan | Pricing | Key Limits |
+|------|---------|------------|
+| Compute | $0.50 per million trace steps | up to 100M-step traces, 100 RPM, 8 inflight |
+
+### Sales-only plans
+
+| Plan | Monthly Base | Per-Proof Discount | Key Limits |
+|------|-------------|-------------------|------------|
+| Team | Custom (around $49) | 25% off | 8 inflight, 300 RPM, $2,500/mo cap |
 | Enterprise | Custom | Up to 50% off | Custom limits, SLA |
+
+Team is provisioned by hand as a custom contract via [tinyzkp.com/contact](https://tinyzkp.com/contact); the rate sheet in `pricing.json` already supports it but there is no Stripe self-serve checkout. Enterprise covers reserved capacity, dedicated support, and SOC 2 / BAA / MSA paperwork.
 
 ### Per-proof base rates (Developer plan)
 
@@ -182,7 +201,7 @@ Pay per proof based on trace complexity. Verification is always free. Our O(√T
 | 1M – 10M | $8.00/proof |
 | > 10M | $30.00/proof |
 
-Team and Scale plans receive automatic discounts (25% and 40% off) on every proof. See [tinyzkp.com/docs#plans](https://tinyzkp.com/docs#plans) for full details.
+Scale plans receive automatic 40% discounts on every proof; Team contracts receive 25% off. See [tinyzkp.com/docs#plans](https://tinyzkp.com/docs#plans) for full details.
 
 ---
 
@@ -529,17 +548,22 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - Proof aggregation (`POST /aggregate` with recursive hash tree)
 - WASM verifier package (`@tinyzkp/verify`, 785K)
 - **`@tinyzkp/cli` published to npm** — `npx @tinyzkp/cli verify proof.json`
-- On-chain verifier contract (recursive KZG, ~300K gas)
+- On-chain verifier contract (recursive KZG, ~300K gas; Solidity interface at [`contracts/IHcStarkVerifier.sol`](contracts/IHcStarkVerifier.sol))
 - EVM calldata generation (`GET /proof/:job_id/calldata`)
 - Self-service API key rotation (`POST /api/rotate-key`)
 - DSL compiler for custom programs
 - Multi-tenant HTTP API with rate limiting
 - **Production service at [tinyzkp.com](https://tinyzkp.com)**
-- Stripe billing (free tier, $9 Developer, $49 Team, $199 Scale, monthly + annual variants at 20% off)
-- Python, TypeScript, and Rust client SDKs
+- Stripe billing (Free tier, $19 Developer, $199 Scale, plus a usage-based Compute product at $0.50/M trace steps; monthly + annual variants at 20% off; Team and Enterprise as sales-issued custom contracts)
+- **Publish-ready client SDKs** — Python (`pip install tinyzkp`, on PyPI), TypeScript (`npm install tinyzkp`, dual ESM+CJS build, on npm), Rust (`cargo add tinyzkp`)
+- **MCP directory submissions** — submission packets shipped for [smithery.ai](https://smithery.ai) and [mcp.so](https://mcp.so) (see [`marketing/MCP_DIRECTORY_SMITHERY.md`](marketing/MCP_DIRECTORY_SMITHERY.md), [`marketing/MCP_DIRECTORY_MCPSO.md`](marketing/MCP_DIRECTORY_MCPSO.md))
 - **Browser playground at [`tinyzkp.com/try`](https://tinyzkp.com/try)** — mint and verify proofs without signup
-- Live status page at [`tinyzkp.com/status`](https://tinyzkp.com/status)
-- Docker Compose production stack with monitoring
+- Live status page at [`tinyzkp.com/status`](https://tinyzkp.com/status) — real Grafana panels backing it
+- Docker Compose production stack with monitoring (Prometheus + Grafana + Alertmanager)
+- **6 templates with copy-paste examples + integration tests** — full curl + Python + TypeScript snippets shipped on [`tinyzkp.com/docs`](https://tinyzkp.com/docs); integration test at [`crates/hc-workloads/tests/template_examples.rs`](crates/hc-workloads/tests/template_examples.rs) asserts every documented example builds via `build_from_template()`
+- **Customer-discovery pipeline** — recruit → script → synthesis playbook in [`marketing/USER_INTERVIEWS.md`](marketing/USER_INTERVIEWS.md), targeting 5 interviews / 14 days against free-tier signups, MCP installs, and playground completions
+- **Protocol transcript v2 contract** — versioned Fiat–Shamir transcript domains (`hc-stark/v2`, `hc-stark/fri/v2`) with canonical labels in `hc_hash::protocol`; treated as a wire-compatibility contract (see [`docs/whitepaper.md`](docs/whitepaper.md) §7.0 and [`docs/design_notes/security_considerations.md`](docs/design_notes/security_considerations.md) §2.4)
+- **Security audit suite** — threat model, soundness proof, and audit checklist under [`docs/security/`](docs/security/), plus per-pillar fuzzing harnesses under [`fuzz/`](fuzz/)
 
 ### Recently shipped (production-readiness sweep)
 
@@ -575,13 +599,20 @@ flagged in an external code review:
 
 ### Next
 
-- Cross-process tenant quota: today the MCP and HTTP API maintain independent per-tenant windows. A shared backing store (Redis-class) would let a tenant's quota deplete uniformly across both surfaces.
-- Custom program sandboxing (paid tier)
-- Node.js native bindings package
-- GPU acceleration (CUDA/Metal kernels)
-- On-chain verifier contract deployment (mainnet)
-- Rollup state transition API
-- Distributed proving across multiple machines
+The next structural unlock is the **Postgres cutover** — the single Hetzner SQLite ceiling sits at roughly tens of proves/min sustained, and horizontal scaling unblocks at Postgres. The migration plan + dual-write `DualWriter` scaffolding is already in [`docs/postgres_migration.md`](docs/postgres_migration.md); `tokio-postgres` deliberately isn't wired yet, so `HC_SERVER_PG_URL` has no effect today.
+
+After that, in priority order:
+
+- **Cross-process tenant quota**: today the MCP and HTTP API maintain independent per-tenant windows. A shared backing store (Redis-class) would let a tenant's quota deplete uniformly across both surfaces.
+- **`hc-zkml` (verifiable AI inference)** — Phase 1 of the four-pillar [extension roadmap](ROADMAP_EXTENSIONS.md). Public API + type contracts already locked in; tiled MatMul AIR + ONNX subset frontend is the next implementation.
+- **Worker warm pool** (vs current spawn-per-job) — ops concern under hundreds-per-min QPS; bounded today via the spawn-cap semaphore.
+- **Custom program sandboxing** (paid tier).
+- **Node.js native bindings package** — scaffolded at [`crates/hc-node`](crates/hc-node/) (NAPI cdylib + rlib).
+- **GPU acceleration** (CUDA/Metal kernels).
+- **On-chain verifier contract deployment** (mainnet) — interface at [`contracts/IHcStarkVerifier.sol`](contracts/IHcStarkVerifier.sol).
+- **Rollup state-transition API** — `hc-rollup` crate already in the workspace.
+- **`hc-zkvm` / `hc-sumcheck` / `hc-ipa`** — Phases 2–4 of the [extension roadmap](ROADMAP_EXTENSIONS.md).
+- **Distributed proving across multiple machines**.
 
 ---
 
