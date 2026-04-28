@@ -11,3 +11,38 @@ api.tinyzkp.com {
 webhook.tinyzkp.com {
 	reverse_proxy localhost:5001
 }
+
+mcp.tinyzkp.com {
+	redir /favicon.svg https://tinyzkp.com/favicon.svg permanent
+	redir /favicon.ico https://tinyzkp.com/favicon.svg permanent
+
+	# Smithery / MCP-directory server-card. Smithery scanners hit this
+	# path to skip live tools/list discovery (their scanner did not
+	# initialize cleanly against our Streamable HTTP transport — see
+	# 2026-04-28 deployment notes). Card is a static JSON file at
+	# /opt/hc-stark/deploy/server-card.json — update via deploy.
+	handle /.well-known/mcp/server-card.json {
+		root * /opt/hc-stark/deploy
+		rewrite * /server-card.json
+		file_server
+		header Content-Type "application/json; charset=utf-8"
+		header Cache-Control "public, max-age=300"
+		header Access-Control-Allow-Origin "*"
+	}
+
+	@options method OPTIONS
+	respond @options 204
+
+	reverse_proxy localhost:3001
+
+	header {
+		Access-Control-Allow-Origin "*"
+		Access-Control-Allow-Methods "GET, POST, OPTIONS, DELETE"
+		Access-Control-Allow-Headers "Content-Type, Authorization, Accept, Mcp-Session-Id"
+		Access-Control-Expose-Headers "Mcp-Session-Id"
+	}
+
+	# Per-IP rate limit replacement: cap concurrent inflight via the upstream
+	# server (HC_MCP_MAX_INFLIGHT=2). Caddy enforces no per-IP throttling here
+	# so that legit Claude Code sessions are not blocked behind a single NAT.
+}

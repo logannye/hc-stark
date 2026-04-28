@@ -1,0 +1,305 @@
+{
+  "$schema": "https://smithery.ai/schemas/server-card.json",
+  "serverInfo": {
+    "name": "tinyzkp",
+    "version": "0.1.0"
+  },
+  "authentication": {
+    "required": false,
+    "schemes": [
+      "bearer"
+    ],
+    "description": "Optional Bearer token. Public lane works without auth (bounded by HC_MCP_MAX_INFLIGHT). Authenticated requests with Authorization: Bearer tzk_... unlock per-plan rate limits matching the HTTP API ladder."
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "title": "TinyZKP API key",
+        "description": "Optional. Get a free key at https://tinyzkp.com/signup (100 proofs/month, no credit card). Without a key, the public lane is bounded by a global concurrency cap.",
+        "x-from": "header:Authorization:Bearer ${value}"
+      }
+    },
+    "required": []
+  },
+  "tools": [
+    {
+      "name": "describe_template",
+      "description": "Get full parameter schema and example JSON for a specific proof template. Call this before prove_template to understand what parameters are needed.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "template_id": {
+            "description": "Template ID to describe. Call list_templates to see available IDs.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_id"
+        ],
+        "title": "DescribeTemplateParams",
+        "type": "object"
+      },
+      "annotations": {
+        "title": "Describe Proof Template",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_capabilities",
+      "description": "Get server capabilities, version, and recommended workflow. Start here if you're unsure what this server can do.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "annotations": {
+        "title": "Get Server Capabilities",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_proof",
+      "description": "Retrieve the base64-encoded proof bytes for a completed job. Pass the result to verify_proof for independent verification.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "job_id": {
+            "description": "Job ID of a completed proof job.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "GetProofParams",
+        "type": "object"
+      },
+      "annotations": {
+        "title": "Get Proof Bytes",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_proof_summary",
+      "description": "Get a human-readable summary of what a proof job attests to, including template, public inputs, and status.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "job_id": {
+            "description": "Job ID of a completed proof job.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "GetProofSummaryParams",
+        "type": "object"
+      },
+      "annotations": {
+        "title": "Get Proof Summary",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "list_templates",
+      "description": "List all available proof templates with IDs, summaries, and tags. Use this to discover what kinds of proofs you can generate.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "annotations": {
+        "title": "List Proof Templates",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "list_workloads",
+      "description": "List all registered workload IDs. Workloads are predefined proof programs.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "annotations": {
+        "title": "List Workloads",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "poll_job",
+      "description": "Check the status of a proof job. Returns: pending, running, succeeded, or failed.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "job_id": {
+            "description": "Job ID returned by prove_template or prove_workload.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "PollJobParams",
+        "type": "object"
+      },
+      "annotations": {
+        "title": "Poll Proof Job Status",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "prove_template",
+      "description": "Generate a zero-knowledge proof from a template ID and parameters. Returns a job_id — call poll_job to check progress. Consumes one proof from your monthly quota.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "parameters": {
+            "additionalProperties": true,
+            "description": "Template parameters as JSON object. Call describe_template for the parameter schema.",
+            "type": "object"
+          },
+          "template_id": {
+            "description": "Template ID. Call list_templates to see available options.",
+            "type": "string"
+          },
+          "zk": {
+            "description": "Enable zero-knowledge mode. Default: use template recommendation.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "template_id",
+          "parameters"
+        ],
+        "title": "ProveTemplateParams",
+        "type": "object"
+      },
+      "annotations": {
+        "title": "Generate Proof from Template",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "prove_workload",
+      "description": "Generate a proof from a registered workload ID. Returns a job_id — call poll_job to check progress. Consumes one proof from your monthly quota.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "block_size": {
+            "description": "Block size for the prover (power of 2). Default: 2.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "final_acc": {
+            "description": "Expected final accumulator value.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "initial_acc": {
+            "description": "Initial accumulator value.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workload_id": {
+            "description": "Registered workload ID. Call list_workloads to see available options.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workload_id",
+          "initial_acc",
+          "final_acc"
+        ],
+        "title": "ProveWorkloadParams",
+        "type": "object"
+      },
+      "annotations": {
+        "title": "Generate Proof from Workload",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "verify_proof",
+      "description": "Verify a proof independently. Pass the base64-encoded proof from get_proof. Returns {valid: true/false}. This is a pure cryptographic check — no quota consumed.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "proof_b64": {
+            "description": "Base64-encoded proof bytes (from get_proof).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proof_b64"
+        ],
+        "title": "VerifyProofParams",
+        "type": "object"
+      },
+      "annotations": {
+        "title": "Verify Proof",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    }
+  ],
+  "metadata": {
+    "displayName": "TinyZKP — Verifiable Receipts for AI Agents",
+    "description": "Mint zero-knowledge proofs as a tool call. Six production templates (range, hash preimage, computation attestation, accumulator, policy compliance, data integrity) plus two preview-tier extensions (zkml, spartan). Free 100 proofs/month, no credit card.",
+    "homepage": "https://tinyzkp.com",
+    "documentation": "https://tinyzkp.com/docs",
+    "repository": "https://github.com/logannye/hc-stark",
+    "license": "MIT",
+    "categories": [
+      "developer-tools",
+      "security-cryptography"
+    ],
+    "keywords": [
+      "zk",
+      "stark",
+      "zero-knowledge",
+      "proof",
+      "verifiable",
+      "cryptography",
+      "mcp"
+    ]
+  }
+}
