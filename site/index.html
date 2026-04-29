@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TinyZKP — Verifiable Receipts for AI Agents (ZK Proofs as an API)</title>
-<meta name="description" content="One MCP install. Verifiable receipts for every agent action — proof your agent ran the code it claims, on the inputs it claims. Free tier, no credit card.">
-<meta property="og:title" content="TinyZKP — Verifiable Receipts for AI Agents">
-<meta property="og:description" content="Native MCP server for Claude, Cursor, and OpenAI agents. Mint a tamper-evident proof for any computation in one API call. Verify in under 5ms.">
+<title>TinyZKP — Zero-Knowledge Proofs as an API · O(√N) Memory · Native MCP for AI agents</title>
+<meta name="description" content="Zero-knowledge proofs (ZK-STARK) as an API. The only production prover with O(√N) memory instead of O(N), where N is the size of the computation — a 100M-step proof fits on a laptop, not a 256-GB server. Native MCP for AI agents. Free tier, no credit card.">
+<meta property="og:title" content="TinyZKP — Zero-Knowledge Proofs as an API · O(√N) Memory">
+<meta property="og:description" content="ZK-STARK proofs in one API call. The only production prover with O(√N) memory instead of O(N) — a 100M-step proof runs on a laptop instead of a 256-GB server. Verify in under 5ms. Native MCP for AI agents.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="TinyZKP — Verifiable Receipts for AI Agents">
-<meta name="twitter:description" content="Native MCP server. Mint tamper-evident receipts for every agent action. Free tier, no credit card.">
+<meta name="twitter:title" content="TinyZKP — Zero-Knowledge Proofs as an API · O(√N) Memory">
+<meta name="twitter:description" content="ZK-STARK proofs as an API. The only production prover with O(√N) memory instead of O(N). Free tier, no credit card.">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="TinyZKP — Verifiable receipts for every API call. Native MCP server for AI agents.">
+<meta property="og:image:alt" content="TinyZKP — Zero-knowledge proofs as an API. O(√N) memory prover, native MCP for AI agents.">
 <meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
-<meta name="twitter:image:alt" content="TinyZKP — Verifiable receipts for every API call.">
+<meta name="twitter:image:alt" content="TinyZKP — Zero-knowledge proofs as an API. O(√N) memory.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://tinyzkp.com">
 <script type="application/ld+json">
@@ -49,7 +49,7 @@
       "name": "TinyZKP",
       "applicationCategory": "DeveloperApplication",
       "operatingSystem": "Web, macOS, Linux, Windows",
-      "description": "One MCP install. Mint a tamper-evident proof for any computation in one API call. Verify in milliseconds.",
+      "description": "Zero-knowledge proofs (ZK-STARK) as an API. The only production prover with O(√N) memory instead of O(N), where N is the size of the computation. Native MCP for AI agents. Mint a proof for any computation in one API call; verify in milliseconds.",
       "offers": [
         {"@type": "Offer", "name": "Free",      "price": "0",   "priceCurrency": "USD", "description": "100 proofs/month, no credit card"},
         {"@type": "Offer", "name": "Developer", "price": "19",  "priceCurrency": "USD", "description": "$19/month — 5,000 proofs/mo + usage overage"},
@@ -84,7 +84,7 @@
           "name": "Why is TinyZKP cheaper than alternatives?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "The prover uses a height-compressed streaming architecture that runs in O(√T) memory instead of O(T). One commodity server can serve many tenants without horizontal sharding, so the per-proof infrastructure cost is 10–40× lower."
+            "text": "The prover uses a height-compressed streaming architecture that runs in O(√N) memory instead of O(N), where N is the number of computation steps (trace length). One commodity server can serve many tenants without horizontal sharding, so the per-proof infrastructure cost is 10–40× lower."
           }
         },
         {
@@ -442,9 +442,14 @@ footer .right a:hover{color:var(--muted)}
 
 <section class="hero">
 <div class="container">
-  <div class="hero-pill"><span class="pill-dot"></span> Native MCP server &middot; First-class for AI agents</div>
-  <h1>Verifiable receipts for every API call</h1>
-  <p class="sub">Mint a tamper-evident proof that your agent ran the code it claims, on the inputs it claims. One MCP install, or one curl. Generate in seconds, verify in milliseconds. No cryptography degree required.</p>
+  <div class="hero-pill"><span class="pill-dot"></span> Zero-knowledge proofs &middot; ZK-STARK &middot; Native MCP for AI agents</div>
+  <h1>Zero-knowledge proofs, in one API call.</h1>
+  <p class="sub">Mint a ZK-STARK for any computation &mdash; cryptographic proof your code ran on the inputs it claims, without revealing them. Generate in seconds, verify in milliseconds. One <code style="background:var(--bg);padding:1px 6px;border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--border)">curl</code>, or one MCP install.</p>
+  <p class="sub" style="margin-top:-18px;font-size:14.5px;max-width:640px;color:var(--text)">
+    <strong style="color:var(--accent)">The only production prover that runs in O(&radic;N) memory instead of O(N)</strong>
+    <span style="color:var(--dim);font-weight:400">(where N = size of the computation)</span>
+    &mdash; a 100M-step proof fits on a laptop instead of a 256-GB server.
+  </p>
   <div class="hero-ctas">
     <a class="cta" href="/signup">Get Free API Key</a>
     <a class="cta cta-secondary" href="/try">Try in Browser &rarr;</a>
@@ -521,7 +526,7 @@ claude mcp add --transport http \
     <div class="step fade-in">
       <span class="num">2</span>
       <h3>Prove</h3>
-      <p>Our servers generate a ZK-STARK proof using O(&radic;T) memory. No trusted setup. No ceremony. Typical proofs complete in 1&ndash;5 seconds.</p>
+      <p>Our servers generate a ZK-STARK proof using O(&radic;N) memory, where N is the size of the computation. No trusted setup. No ceremony. Typical proofs complete in 1&ndash;5 seconds.</p>
     </div>
     <div class="step fade-in">
       <span class="num">3</span>
@@ -645,7 +650,7 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
 
   <!-- LONG-TRACE COMPUTE TIERS -->
   <div class="audience-panel" id="panel-compute" style="display:none">
-    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">zkVM execution, zkML inference, rollup batches. The tier where the <strong style="color:var(--accent)">O(&radic;T) prover</strong> replaces a 128 GB-RAM machine. Pure usage-based — pay for what you prove.</p>
+    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">zkVM execution, zkML inference, rollup batches. The tier where the <strong style="color:var(--accent)">O(&radic;N) prover</strong> replaces a 128 GB-RAM machine. Pure usage-based — pay for what you prove.</p>
 
     <div class="pricing-grid" style="grid-template-columns:repeat(2,1fr);max-width:720px;margin:0 auto">
       <div class="price-card featured fade-in">
@@ -667,10 +672,10 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
     <p style="text-align:center;margin-top:24px;color:var(--dim);font-size:13px;max-width:640px;margin-left:auto;margin-right:auto;line-height:1.7"><strong style="color:var(--muted)">Worked example:</strong> a 5M-step zkVM proof costs $2.50. A team running 1,000/day pays ~$2,500/mo &mdash; competitive with the cheapest 128 GB-RAM prover instance, with no DevOps. <a href="/compute" style="color:var(--accent)">Read the technical brief &rarr;</a></p>
   </div>
 
-  <!-- √T architectural advantage callout (visible on both panels) -->
+  <!-- √N architectural advantage callout (visible on both panels) -->
   <div class="advantage-box fade-in" style="max-width:720px;margin:48px auto 0;background:linear-gradient(135deg,rgba(46,232,212,.04) 0%,var(--surface) 100%);border:1px solid var(--accent);border-radius:14px;padding:28px 28px 22px;position:relative;box-shadow:0 0 40px rgba(46,232,212,.06)">
     <h3 style="font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;text-align:center">The structural advantage</h3>
-    <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:18px;text-align:center">Other production STARK provers need memory linear in trace length. TinyZKP's height-compressed architecture needs only the square root.</p>
+    <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:18px;text-align:center">Other production STARK provers need O(N) memory &mdash; linear in computation size. TinyZKP's height-compressed architecture needs only O(&radic;N), where <code style="background:var(--bg);padding:1px 6px;border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--accent);border:1px solid var(--border)">N</code> is the number of computation steps.</p>
     <table style="width:100%;border-collapse:collapse;font-size:13px;font-family:var(--mono)">
       <thead><tr>
         <th style="text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Trace</th>
