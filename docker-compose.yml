@@ -156,30 +156,14 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  billing-webhook:
-    build:
-      context: .
-      dockerfile: deploy/hetzner/Dockerfile.billing
-    environment:
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - INTERNAL_SECRET=${INTERNAL_SECRET}
-      - HC_TENANT_STORE_PATH=/data/tenant_store.sqlite
-      - HC_API_KEYS_FILE=/data/api_keys.txt
-      - HC_USAGE_DB_PATH=/data/usage.sqlite
-    volumes:
-      - hc_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
+  # NOTE: billing-webhook is NOT a docker service. It runs as the host-level
+  # systemd unit `hc-billing-webhook.service` directly bound to 127.0.0.1:5001
+  # (Caddy reverse-proxies webhook.tinyzkp.com to it). The previous compose
+  # entry was an orphan — built and ran a container with no host port mapping,
+  # so traffic never reached it. Removed 2026-04-29 after diagnosing why a
+  # contact-form fix to billing/provision_tenant.py wasn't taking effect.
+  # Deploy procedure for changes to provision_tenant.py:
+  #   git pull && systemctl restart hc-billing-webhook
 
   billing-cron:
     build:
@@ -202,8 +186,6 @@ services:
       - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
     volumes:
       - hc_data:/data
-    depends_on:
-      - billing-webhook
     restart: unless-stopped
     deploy:
       resources:
