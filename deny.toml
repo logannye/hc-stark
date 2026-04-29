@@ -3,9 +3,39 @@ all-features = true
 
 [advisories]
 version = 2
-ignore = []
+# Advisories ignored with documented rationale + follow-up tracking.
+# Each entry: pin a follow-up that removes it. Anything left here past
+# its follow-up window is technical debt — review during quarterly
+# dependency hygiene.
+ignore = [
+  # rand 0.10 unsound w/ custom log backend. False positive: pulled
+  # transitively via rmcp 0.17, neither rmcp nor hc-mcp uses
+  # rand::rng() with a custom logger. Follow-up: bump rmcp 0.17 -> 1.5
+  # (drops vulnerable rand entirely).
+  "RUSTSEC-2026-0097",
+  # protobuf 2.x DoS (uncontrolled recursion). Transitively pulled via
+  # prometheus 0.13.4 -> protobuf 2.28. Follow-up: replace
+  # prometheus 0.13 with a release that uses protobuf 3.x, or migrate
+  # metrics to prometheus-client crate.
+  "RUSTSEC-2024-0437",
+  # tracing-subscriber 0.2.x ANSI-escape log poisoning. The 0.3.x
+  # branch is already on >=0.3.20; the 0.2.25 copy is pulled by
+  # ark-relations 0.4.0 (entire arkworks 0.4 ecosystem). Follow-up:
+  # arkworks ecosystem bump or vendor a tracing-subscriber 0.2.x fork
+  # with the patch backported.
+  "RUSTSEC-2025-0055",
+  # derivative crate is unmaintained. Pulled by arkworks. No upstream
+  # fix possible; tied to arkworks bump. Same follow-up as above.
+  "RUSTSEC-2024-0388",
+  # paste crate is unmaintained. Same arkworks dependency story. Tied
+  # to the same migration.
+  "RUSTSEC-2024-0436",
+]
 
 [licenses]
+# Allow list for licenses we accept as dependency crates. We do not
+# redistribute these as proprietary forks; weak-copyleft like MPL-2.0
+# is fine for that posture.
 allow = [
   "MIT",
   "Apache-2.0",
@@ -14,11 +44,22 @@ allow = [
   "ISC",
   "Zlib",
   "CC0-1.0",
+  # Unicode-3.0: used by ICU/unicode-ident family of crates. The
+  # Unicode license has been on SPDX since v3.0; permissive equivalent
+  # to MIT for license-compatibility purposes.
+  "Unicode-3.0",
+  # MPL-2.0: weak copyleft. Fine because we use these as binary
+  # dependencies; modifications to the upstream sources (which we
+  # don't make) would need to remain open-source.
+  "MPL-2.0",
 ]
 confidence-threshold = 0.8
 
 [bans]
 multiple-versions = "warn"
+# Wildcard external deps remain banned. Workspace/path deps are
+# allowed because internal hc-* crates use "*" version specs in
+# Cargo.toml as the standard cargo workspace pattern — the actual
+# resolution comes from path = "../hc-foo" paths in the same manifest.
 wildcards = "deny"
-
-
+allow-wildcard-paths = true
