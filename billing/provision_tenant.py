@@ -129,6 +129,47 @@ def _send_magic_link_email(email: str, link: str) -> bool:
         return False
 
 
+CONTACT_RECIPIENT = "logan@galenhealth.org"
+
+
+def _send_contact_email(name: str, sender_email: str, category: str, message: str) -> bool:
+    """Forward a contact-form submission to the support inbox. Returns True on success."""
+    if not SMTP_HOST:
+        print("SMTP not configured, skipping contact email", file=sys.stderr)
+        return False
+
+    body = (
+        f"Name: {name}\n"
+        f"Email: {sender_email}\n"
+        f"Category: {category}\n"
+        f"\n"
+        f"{message}\n"
+    )
+
+    msg = MIMEText(body)
+    msg["Subject"] = f"[TinyZKP {category}] from {name[:100]}"
+    msg["From"] = SMTP_FROM
+    msg["To"] = CONTACT_RECIPIENT
+    # Reply-To set to submitter so hitting Reply in the inbox responds to them, not the noreply box.
+    msg["Reply-To"] = f"{name[:100]} <{sender_email[:254]}>"
+
+    try:
+        if SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+        else:
+            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+            server.starttls()
+        with server:
+            if SMTP_USER and SMTP_PASSWORD:
+                server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(msg)
+        print(f"Contact email forwarded for {sender_email}")
+        return True
+    except Exception as e:
+        print(f"WARNING: Failed to forward contact email from {sender_email}: {e}", file=sys.stderr)
+        return False
+
+
 def _deliver_key_via_stripe(customer_id: str, tenant_id: str, api_key: str) -> bool:
     """Store tenant_id in Stripe customer metadata (NOT the API key — security risk).
 
@@ -515,6 +556,37 @@ def send_magic_link():
             _send_magic_link_email(email, link)
         except Exception as e:
             print(f"WARNING: Magic link email failed for {email}: {e}", file=sys.stderr)
+
+    threading.Thread(target=_bg_send, daemon=True).start()
+    return flask.jsonify(ok=True), 200
+
+
+@app.route("/send-contact", methods=["POST"])
+def send_contact():
+    """Forward a contact-form submission to the support inbox."""
+    req_secret = flask.request.headers.get("X-Internal-Secret", "")
+    if not INTERNAL_SECRET or not secrets.compare_digest(req_secret, INTERNAL_SECRET):
+        return flask.jsonify(error="unauthorized"), 403
+
+    data = flask.request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    category = (data.get("category") or "General Inquiry").strip()
+    message = (data.get("message") or "").strip()
+
+    if not name or not email or not message:
+        return flask.jsonify(error="name, email, and message are required"), 400
+    if "@" not in email or len(email) > 254 or len(name) > 200 or len(message) > 5000:
+        return flask.jsonify(error="invalid input"), 400
+
+    valid_categories = {"General Inquiry", "Bug Report", "Feature Request", "Billing", "Enterprise"}
+    safe_category = category if category in valid_categories else "General Inquiry"
+
+    def _bg_send():
+        try:
+            _send_contact_email(name, email, safe_category, message)
+        except Exception as e:
+            print(f"WARNING: Contact email failed from {email}: {e}", file=sys.stderr)
 
     threading.Thread(target=_bg_send, daemon=True).start()
     return flask.jsonify(ok=True), 200
