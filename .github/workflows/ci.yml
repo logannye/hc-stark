@@ -70,32 +70,9 @@ jobs:
       - name: cargo audit
         run: |
           cargo install cargo-audit --locked
-          # Ignored advisories (each documented + tracked):
-          #   RUSTSEC-2026-0097 - rand 0.10 unsound w/ custom log backend.
-          #     False positive: pulled transitively via rmcp 0.17, neither
-          #     rmcp nor hc-mcp uses `rand::rng()` with a custom logger.
-          #     Follow-up: bump rmcp 0.17 -> 1.5 (drops vulnerable rand).
-          #   RUSTSEC-2024-0437 - protobuf 2.x DoS (uncontrolled recursion).
-          #     Transitively pulled via prometheus 0.13.4 -> protobuf 2.28.
-          #     Follow-up: replace prometheus 0.13 with a release that
-          #     uses protobuf 3.x, or migrate metrics to prometheus-client.
-          #   RUSTSEC-2025-0055 - tracing-subscriber 0.2.x ANSI-escape log
-          #     poisoning. The 0.3.x branch is already on >=0.3.20; the
-          #     0.2.25 copy is pulled by ark-relations 0.4.0 (whole arkworks
-          #     0.4 ecosystem). Follow-up: arkworks ecosystem bump or vendor
-          #     a tracing-subscriber 0.2.x fork with the patch backported.
-          #   RUSTSEC-2024-0388 - derivative crate is unmaintained. Pulled
-          #     by arkworks. No upstream fix possible; tied to arkworks bump.
-          #   RUSTSEC-2024-0436 - paste crate is unmaintained. Same arkworks
-          #     dependency story. Tied to the same migration.
-          # bytes (RUSTSEC-2026-0007) was fixed via lockfile bump 1.11.0 -> 1.11.1.
-          cargo audit --deny warnings \
-            --ignore RUSTSEC-2026-0097 \
-            --ignore RUSTSEC-2024-0437 \
-            --ignore RUSTSEC-2025-0055 \
-            --ignore RUSTSEC-2024-0388 \
-            --ignore RUSTSEC-2024-0436
-
+          # Advisory ignores live in .cargo/audit.toml (shared source
+          # of truth with deny.toml). Update both when changing.
+          cargo audit --deny warnings
       - name: cargo deny
         run: |
           cargo install cargo-deny --locked
