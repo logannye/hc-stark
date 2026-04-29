@@ -204,11 +204,12 @@ nav .nav-cta:hover{transform:translateY(-1px);box-shadow:0 4px 20px var(--accent
   background:radial-gradient(circle,rgba(240,184,106,.04) 0%,transparent 65%);
   bottom:-200px;right:-100px;pointer-events:none}
 @keyframes pulse-glow{from{opacity:.5;transform:translateX(-50%) scale(1)}to{opacity:.8;transform:translateX(-50%) scale(1.1)}}
-.hero h1{font-size:clamp(36px,5.5vw,64px);font-weight:800;line-height:1.05;letter-spacing:-.03em;
+.hero h1{font-size:clamp(36px,5.5vw,64px);font-weight:800;line-height:1.1;letter-spacing:-.03em;
   background:linear-gradient(135deg,var(--accent) 0%,#69f5e8 40%,var(--accent2) 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;position:relative}
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;position:relative;
+  text-wrap:balance}
 .hero .sub{font-size:clamp(15px,1.8vw,18px);color:var(--muted);margin:20px auto 36px;max-width:580px;
-  line-height:1.7;font-weight:400}
+  line-height:1.7;font-weight:400;text-wrap:pretty}
 .hero-ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
 .cta{display:inline-flex;align-items:center;gap:8px;padding:14px 32px;font-family:var(--sans);
   background:var(--accent);color:var(--bg);font-weight:700;font-size:14px;border-radius:8px;
@@ -443,7 +444,7 @@ footer .right a:hover{color:var(--muted)}
 <section class="hero">
 <div class="container">
   <div class="hero-pill"><span class="pill-dot"></span> Zero-knowledge proofs &middot; ZK-STARK &middot; Native MCP for AI agents</div>
-  <h1>Zero-knowledge proofs, in one API call.</h1>
+  <h1>Zero-knowledge proofs,<br>in one API call.</h1>
   <p class="sub">Mint a ZK-STARK for any computation &mdash; cryptographic proof your code ran on the inputs it claims, without revealing them. Generate in seconds, verify in milliseconds. One <code style="background:var(--bg);padding:1px 6px;border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--border)">curl</code>, or one MCP install.</p>
   <p class="sub" style="margin-top:-18px;font-size:14.5px;max-width:640px;color:var(--text)">
     <strong style="color:var(--accent)">The only production prover that runs in O(&radic;N) memory instead of O(N)</strong>
