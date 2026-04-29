@@ -1,10 +1,10 @@
-// Cloudflare Pages Function — contact form email delivery.
+// Cloudflare Pages Function — contact form intake.
 //
-// Sends submissions to logan@galenhealth.org via MailChannels API.
-// DNS setup: add TXT record `_mailchannels.tinyzkp.com` with value
-// `v=mc1 cfid=tinyzkp.pages.dev` to authorize sending.
+// Forwards submissions to the billing-webhook service on Hetzner, which
+// holds the SMTP creds and delivers to logan@galenhealth.org. Mirrors
+// the send-magic-link.js pattern for consistency + single source of
+// truth on outbound email infrastructure.
 
-const RECIPIENT = "logan@galenhealth.org";
 const RATE_LIMIT_MAX = 3;          // max contact submissions per window per IP
 const RATE_LIMIT_WINDOW_S = 600;   // 10-minute window
 const MAX_MESSAGE_LEN = 5000;
@@ -70,7 +70,6 @@ export async function onRequestPost(context) {
       );
     }
 
-    // Input length limits.
     if (name.length > 200 || email.length > 254 || message.length > MAX_MESSAGE_LEN) {
       return new Response(
         JSON.stringify({ error: "input too long" }),
@@ -81,33 +80,20 @@ export async function onRequestPost(context) {
     const validCategories = ["General Inquiry", "Bug Report", "Feature Request", "Billing", "Enterprise"];
     const safeCategory = validCategories.includes(category) ? category : "General Inquiry";
 
-    const subject = `[TinyZKP ${safeCategory}] from ${name.slice(0, 100)}`;
-    const text = [
-      `Name: ${name}`,
-      `Email: ${email}`,
-      `Category: ${safeCategory}`,
-      "",
-      message,
-    ].join("\n");
-
-    const mailResp = await fetch("https://api.mailchannels.net/tx/v1/send", {
+    const WEBHOOK_URL = context.env.WEBHOOK_BASE_URL || "https://webhook.tinyzkp.com";
+    const resp = await fetch(`${WEBHOOK_URL}/send-contact`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        personalizations: [
-          { to: [{ email: RECIPIENT, name: "TinyZKP Support" }] },
-        ],
-        from: { email: "noreply@tinyzkp.com", name: "TinyZKP Contact Form" },
-        reply_to: { email: email.slice(0, 254), name: name.slice(0, 100) },
-        subject,
-        content: [{ type: "text/plain", value: text }],
-      }),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Secret": context.env.INTERNAL_SECRET || "",
+      },
+      body: JSON.stringify({ name, email, category: safeCategory, message }),
     });
 
-    if (!mailResp.ok) {
-      const errText = await mailResp.text();
-      console.error("MailChannels error:", errText);
-      return new Response(JSON.stringify({ error: "Failed to send message. Please try again in a few minutes." }), {
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      console.error("Contact webhook error:", resp.status, errBody);
+      return new Response(JSON.stringify({ error: errBody.error || "Failed to send message. Please try again in a few minutes." }), {
         status: 502,
         headers: jsonHeaders,
       });
