@@ -70,7 +70,11 @@ jobs:
       - name: cargo audit
         run: |
           cargo install cargo-audit --locked
-          cargo audit --deny warnings
+          # RUSTSEC-2026-0097: rand 0.10.0 is unsound when callers combine
+          # `rand::rng()` with a custom log backend. We pull rand only
+          # transitively via rmcp 0.17; neither rmcp nor hc-mcp uses the
+          # offending pattern. Follow-up PR will bump rmcp to 1.5+.
+          cargo audit --deny warnings --ignore RUSTSEC-2026-0097
 
       - name: cargo deny
         run: |
