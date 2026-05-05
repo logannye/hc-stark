@@ -177,6 +177,8 @@ test_api GET  "/usage" "" "401" > /dev/null
 test_api POST "/prove/batch" \
     '{"requests":[{"initial_acc":0,"final_acc":10,"block_size":8,"fri_final_poly_size":4}]}' \
     "401" > /dev/null
+test_api POST "/aggregate" '{}' "401" > /dev/null
+test_api GET  "/prove" "" "401" > /dev/null
 
 # ══════════════════════════════════════════════════════════════════
 # 4. API SERVER — Authenticated Endpoints (if API key provided)
@@ -185,11 +187,35 @@ if [ -n "$API_KEY" ]; then
     AUTH_HDR="Authorization: Bearer $API_KEY"
 
     log ""
-    log "── API: Authenticated — Usage ──"
+    log "── API: Authenticated — Usage & Listing ──"
     usage_resp=$(test_api GET "/usage" "" "200" "15" "$AUTH_HDR")
     if ! echo "$usage_resp" | grep -q '"total_proofs"'; then
         log "  WARN  /usage response missing 'total_proofs'"
     fi
+
+    # List jobs — should return JSON (possibly empty list)
+    test_api GET "/prove" "" "200" "15" "$AUTH_HDR" > /dev/null
+
+    # Authed batch happy path — single tiny job
+    test_api POST "/prove/batch" \
+        '{"requests":[{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}]}' \
+        "200" "60" "$AUTH_HDR" > /dev/null
+
+    # Aggregate — exists and rejects empty body with structural error.
+    # Accept 400 or 422; either confirms the route is mounted and auth passed.
+    TOTAL=$((TOTAL + 1))
+    agg_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+        -X POST -H "$AUTH_HDR" -H "Content-Type: application/json" \
+        -d '{}' "$API/aggregate" 2>/dev/null) || agg_code="000"
+    if [ "$agg_code" = "400" ] || [ "$agg_code" = "422" ]; then
+        log "  PASS  $agg_code  POST /aggregate (route live, rejects empty)"
+        PASS=$((PASS + 1))
+    else
+        log "  FAIL  $agg_code  POST /aggregate (expected 400|422)"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  $agg_code POST /aggregate (expected 400|422)"
+    fi
+    sleep 0.5
 
     log ""
     log "── API: Authenticated — Prove + Verify ──"
@@ -261,10 +287,37 @@ if [ -n "$API_KEY" ]; then
         # Cleanup — delete the test job
         curl -s -X DELETE -H "$AUTH_HDR" "$API/prove/$JOB_ID" --max-time 10 >/dev/null 2>&1 || true
     else
-        log "  WARN  prove/template returned no job_id — skipping verify chain"
+        log "  WARN  prove returned no job_id — skipping verify chain"
         TOTAL=$((TOTAL + 4))
         FAIL=$((FAIL + 4))
-        FAILURES="$FAILURES\n  --- prove/template/range_proof returned no job_id"
+        FAILURES="$FAILURES\n  --- prove returned no job_id"
+    fi
+
+    log ""
+    log "── API: Authenticated — Cancel + Template ──"
+    # Cancel flow: submit a job, immediately cancel, verify state.
+    cancel_submit=$(test_api POST "/prove" \
+        '{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}' \
+        "200" "30" "$AUTH_HDR")
+    CANCEL_JOB=$(echo "$cancel_submit" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
+    if [ -n "$CANCEL_JOB" ]; then
+        test_api POST "/prove/$CANCEL_JOB/cancel" "" "200" "10" "$AUTH_HDR" > /dev/null
+        curl -s -X DELETE -H "$AUTH_HDR" "$API/prove/$CANCEL_JOB" --max-time 10 >/dev/null 2>&1 || true
+    else
+        log "  WARN  prove for cancel test returned no job_id"
+        TOTAL=$((TOTAL + 1))
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  --- prove (cancel test) returned no job_id"
+    fi
+
+    # Template proof — range_proof template using minimal valid params.
+    template_resp=$(test_api POST "/prove/template/range_proof" \
+        '{"min":0,"max":100,"witness_steps":[42]}' \
+        "200" "60" "$AUTH_HDR")
+    TEMPLATE_JOB=$(echo "$template_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
+    if [ -n "$TEMPLATE_JOB" ]; then
+        # Best-effort cleanup; ignore failure.
+        curl -s -X DELETE -H "$AUTH_HDR" "$API/prove/$TEMPLATE_JOB" --max-time 10 >/dev/null 2>&1 || true
     fi
 else
     log ""
@@ -272,7 +325,7 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════
-# 5. BILLING WEBHOOK SERVICE (2 tests)
+# 5. BILLING WEBHOOK SERVICE (7 tests)
 # ══════════════════════════════════════════════════════════════════
 log ""
 log "── Billing Webhook Service ──"
@@ -302,72 +355,81 @@ else
 fi
 sleep 0.5
 
+# Internal-only routes — require X-Internal-Secret. Hitting without the
+# header should return 403 (route exists, auth-rejected). 404 = route gone.
+for path in /provision-free /rotate /send-magic-link /send-contact /verify-magic-link; do
+    TOTAL=$((TOTAL + 1))
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+        -X POST -H "Content-Type: application/json" -d '{}' \
+        "$WEBHOOK_SVC$path" 2>/dev/null) || code="000"
+    if [ "$code" = "403" ]; then
+        log "  PASS  $code  POST $WEBHOOK_SVC$path (route live, internal-secret-gated)"
+        PASS=$((PASS + 1))
+    else
+        log "  FAIL  $code  POST $WEBHOOK_SVC$path (expected 403)"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  $code POST $WEBHOOK_SVC$path (expected 403)"
+    fi
+    sleep 0.5
+done
+
 # ══════════════════════════════════════════════════════════════════
-# 6. CLOUDFLARE FUNCTIONS — Signup & Billing Routes (3 tests)
+# 6. CLOUDFLARE FUNCTIONS — Signup, Billing, Auth, Demo (9 tests)
 # ══════════════════════════════════════════════════════════════════
 log ""
 log "── Cloudflare Functions ──"
 
-# Free account creation — missing email should get 400
-TOTAL=$((TOTAL + 1))
-free_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-    -X POST \
-    -H "Content-Type: application/json" \
-    -H "Origin: https://tinyzkp.com" \
-    -d '{}' \
-    "$SITE/api/create-free-account" 2>/dev/null) || free_code="000"
-if [ "$free_code" = "400" ] || [ "$free_code" = "429" ]; then
-    log "  PASS  $free_code  POST /api/create-free-account (route live)"
-    PASS=$((PASS + 1))
-else
-    log "  FAIL  $free_code  POST /api/create-free-account (expected 400)"
-    FAIL=$((FAIL + 1))
-    FAILURES="$FAILURES\n  $free_code POST /api/create-free-account (expected 400)"
-fi
-sleep 0.5
+# Helper for CF Function structural tests — empty body should yield 400
+# (validation error, route mounted), 429 (rate limited, route mounted),
+# or 405 (wrong method, also route mounted). Anything else is a failure.
+test_cf_function() {
+    local method="$1"
+    local path="$2"
+    local label="$3"
+    TOTAL=$((TOTAL + 1))
+    local code
+    if [ "$method" = "POST" ]; then
+        code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -X POST -H "Content-Type: application/json" \
+            -H "Origin: https://tinyzkp.com" \
+            -d '{}' "$SITE$path" 2>/dev/null) || code="000"
+    else
+        code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -H "Origin: https://tinyzkp.com" \
+            "$SITE$path" 2>/dev/null) || code="000"
+    fi
+    if [ "$code" = "400" ] || [ "$code" = "429" ]; then
+        log "  PASS  $code  $method $path ($label)"
+        PASS=$((PASS + 1))
+    else
+        log "  FAIL  $code  $method $path (expected 400|429)"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  $code $method $path (expected 400|429)"
+    fi
+    sleep 0.5
+}
 
-# Checkout — missing email should get 400
-TOTAL=$((TOTAL + 1))
-checkout_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-    -X POST \
-    -H "Content-Type: application/json" \
-    -H "Origin: https://tinyzkp.com" \
-    -d '{}' \
-    "$SITE/api/create-checkout" 2>/dev/null) || checkout_code="000"
-if [ "$checkout_code" = "400" ] || [ "$checkout_code" = "429" ]; then
-    log "  PASS  $checkout_code  POST /api/create-checkout (route live)"
-    PASS=$((PASS + 1))
-else
-    log "  FAIL  $checkout_code  POST /api/create-checkout (expected 400)"
-    FAIL=$((FAIL + 1))
-    FAILURES="$FAILURES\n  $checkout_code POST /api/create-checkout (expected 400)"
-fi
-sleep 0.5
+# Signup / billing
+test_cf_function POST /api/create-free-account "free-signup route"
+test_cf_function POST /api/create-checkout     "checkout route"
+test_cf_function POST /api/create-portal-session "Stripe billing portal"
+test_cf_function POST /api/contact             "contact form"
 
-# Contact form — missing fields should get 400
-TOTAL=$((TOTAL + 1))
-contact_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-    -X POST \
-    -H "Content-Type: application/json" \
-    -H "Origin: https://tinyzkp.com" \
-    -d '{}' \
-    "$SITE/api/contact" 2>/dev/null) || contact_code="000"
-if [ "$contact_code" = "400" ] || [ "$contact_code" = "429" ]; then
-    log "  PASS  $contact_code  POST /api/contact (route live)"
-    PASS=$((PASS + 1))
-else
-    log "  FAIL  $contact_code  POST /api/contact (expected 400)"
-    FAIL=$((FAIL + 1))
-    FAILURES="$FAILURES\n  $contact_code POST /api/contact (expected 400)"
-fi
-sleep 0.5
+# Auth (magic-link)
+test_cf_function POST /api/send-magic-link     "magic-link send"
+test_cf_function POST /api/verify-magic-link   "magic-link verify"
+
+# Homepage demo flow (powers /try)
+test_cf_function POST /api/demo-prove          "demo prove proxy"
+test_cf_function GET  /api/demo-poll           "demo poll proxy"
+test_cf_function POST /api/demo-verify         "demo verify proxy"
 
 # ══════════════════════════════════════════════════════════════════
-# 7. WEBSITE — All Pages (7 tests)
+# 7. WEBSITE — All Pages (11 tests)
 # ══════════════════════════════════════════════════════════════════
 log ""
 log "── Website Pages ──"
-for path in / /docs /signup /welcome /contact /terms /privacy /account; do
+for path in / /docs /signup /welcome /contact /terms /privacy /account /compute /try /status; do
     test_url "$SITE$path"
 done
 

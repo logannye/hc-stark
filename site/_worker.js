@@ -18,6 +18,7 @@ import * as createPortal       from "./functions/api/create-portal-session.js";
 import * as demoPoll           from "./functions/api/demo-poll.js";
 import * as demoProve          from "./functions/api/demo-prove.js";
 import * as demoVerify         from "./functions/api/demo-verify.js";
+import * as rotateKey          from "./functions/api/rotate-key.js";
 import * as sendMagicLink      from "./functions/api/send-magic-link.js";
 import * as verifyMagicLink    from "./functions/api/verify-magic-link.js";
 
@@ -29,6 +30,7 @@ const ROUTES = {
   "/api/demo-poll":            demoPoll,
   "/api/demo-prove":           demoProve,
   "/api/demo-verify":          demoVerify,
+  "/api/rotate-key":           rotateKey,
   "/api/send-magic-link":      sendMagicLink,
   "/api/verify-magic-link":    verifyMagicLink,
 };

@@ -1116,7 +1116,10 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     btn.disabled = true;
     btn.textContent = 'Rotating...';
 
-    fetch(API + '/api/rotate-key', {
+    // Same-origin Cloudflare Pages Function (NOT api.tinyzkp.com — the
+    // rotate-key flow is implemented as a CF Function that proxies to
+    // webhook.tinyzkp.com with the internal secret).
+    fetch('/api/rotate-key', {
       method: 'POST',
       headers: apiHeaders()
     })
