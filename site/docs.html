@@ -251,8 +251,8 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
         </div>
         <p><strong>Response:</strong></p>
         <div class="code-block">
-<pre><span class="comment">// Save the job_id — you'll need it next</span>
-{"job_id":"prf_a1b2c3","status":"proving","eta_ms":1200}</pre>
+<pre><span class="comment">// Save the job_id — you'll need it next. job_id is a UUID.</span>
+{"job_id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890"}</pre>
         </div>
       </div>
     </div>
@@ -261,17 +261,18 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       <span class="step-num">3</span>
       <div>
         <h3>Poll until complete</h3>
-        <p>Proof generation takes 1&ndash;5 seconds. Poll the job ID until <code>status</code> is <code>"completed"</code>:</p>
+        <p>Proof generation takes 1&ndash;5 seconds. Poll the job ID until <code>status</code> is <code>"succeeded"</code>:</p>
         <div class="code-block">
           <span class="code-label">curl</span>
-<pre>curl https://api.tinyzkp.com/prove/prf_a1b2c3 \
+<pre>curl https://api.tinyzkp.com/prove/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
   -H "Authorization: Bearer tzk_..."</pre>
         </div>
         <p><strong>Response when done:</strong></p>
         <div class="code-block">
-<pre>{"status":"completed","proof":{"version":4,"bytes":"0x6a8f...","size_kb":12.4}}</pre>
+<pre><span class="comment">// proof.bytes is a JSON array of unsigned bytes (Vec&lt;u8&gt;), not a hex string.</span>
+{"status":"succeeded","proof":{"version":4,"bytes":[106,143,59,44,...]}}</pre>
         </div>
-        <p>If <code>status</code> is still <code>"proving"</code>, wait a second and try again. When it&rsquo;s <code>"completed"</code>, copy the entire <code>proof</code> object.</p>
+        <p>Status values are one of <code>"pending"</code>, <code>"running"</code>, <code>"succeeded"</code>, or <code>"failed"</code>. Keep polling while it&rsquo;s <code>pending</code> or <code>running</code>; when it&rsquo;s <code>succeeded</code>, copy the entire <code>proof</code> object. On <code>failed</code> the response includes an <code>error</code> string.</p>
       </div>
     </div>
 
@@ -279,18 +280,19 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       <span class="step-num">4</span>
       <div>
         <h3>Verify the proof</h3>
-        <p>Pass the <code>proof</code> object from step 3 to the verify endpoint. Verification is always <strong style="color:var(--green)">free &mdash; no charge</strong>. Auth is required only to prevent abuse.</p>
+        <p>Pass the <code>proof</code> object from step 3 to the verify endpoint. Set <code>allow_legacy_v2</code> to <code>true</code> if your proof is a v2 (it&rsquo;s required &mdash; the field has no default). Verification is always <strong style="color:var(--green)">free &mdash; no charge</strong>. Auth is required only to prevent abuse.</p>
         <div class="code-block">
           <span class="code-label">curl</span>
 <pre>curl -X POST https://api.tinyzkp.com/verify \
   -H "Authorization: Bearer tzk_..." \
   -H "Content-Type: application/json" \
-  -d '{"proof":{"version":4,"bytes":"0x6a8f...","size_kb":12.4}}'</pre>
+  -d '{"proof":{"version":4,"bytes":[106,143,59,44,...]},"allow_legacy_v2":true}'</pre>
         </div>
         <p><strong>Response:</strong></p>
         <div class="code-block">
-<pre><span class="comment">// The verifier confirmed the proof without learning your secret</span>
-{"valid":true,"verified_in_ms":2.8}</pre>
+<pre><span class="comment">// The verifier confirmed the proof without learning your secret.</span>
+<span class="comment">// On failure, error contains a human-readable message.</span>
+{"ok":true,"error":null}</pre>
         </div>
       </div>
     </div>
@@ -301,7 +303,7 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
         <thead><tr><th>Status</th><th>Meaning</th><th>Fix</th></tr></thead>
         <tbody>
           <tr><td><code>401</code></td><td>Missing or invalid API key</td><td>Check your <code>Authorization: Bearer tzk_...</code> header</td></tr>
-          <tr><td><code>409</code></td><td>Proof not ready yet</td><td>Poll <code>GET /prove/:job_id</code> until <code>status</code> is <code>"completed"</code></td></tr>
+          <tr><td><code>409</code></td><td>Proof not ready yet</td><td>Poll <code>GET /prove/:job_id</code> until <code>status</code> is <code>"succeeded"</code></td></tr>
           <tr><td><code>429</code></td><td>Rate limit exceeded</td><td>Wait and retry. Free plan: 10 requests/min. <a href="#plans">See plan limits</a></td></tr>
           <tr><td><code>402</code></td><td>Monthly spending cap reached</td><td>Wait for next billing cycle or <a href="/contact">contact us</a> to upgrade</td></tr>
         </tbody>
@@ -355,11 +357,30 @@ console.log(result.ok); <span class="comment">// true</span></pre>
       <li>Keep your API key secret. Do not expose it in client-side code or public repositories.</li>
     </ul>
 
+    <h3>Magic-Link Sign-In</h3>
+    <p>If you lose access to your API key, request a one-time magic link by email. The link unlocks <a href="/account">your account dashboard</a>, where you can recover or rotate the key. Both routes are Cloudflare Pages Functions on <code>tinyzkp.com</code>, not on <code>api.tinyzkp.com</code>. The send route is rate-limited to 3 requests per IP per 10&nbsp;minutes.</p>
+    <div class="code-block">
+      <span class="code-label">curl &mdash; request the link</span>
+<pre>curl -X POST https://tinyzkp.com/api/send-magic-link \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://tinyzkp.com" \
+  -d '{"email": "you@example.com"}'</pre>
+    </div>
+    <p>Always returns <code>{"ok": true}</code> on success (regardless of whether the email exists, to prevent account enumeration). The user clicks the link, which redirects to <code>tinyzkp.com/account?token=...</code>. The account page then exchanges the token for credentials:</p>
+    <div class="code-block">
+      <span class="code-label">curl &mdash; verify the token</span>
+<pre>curl -X POST https://tinyzkp.com/api/verify-magic-link \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://tinyzkp.com" \
+  -d '{"token": "TOKEN_FROM_EMAIL"}'</pre>
+    </div>
+    <p>Returns the tenant&rsquo;s credentials so the dashboard can resume the session. Tokens are single-use and expire quickly. You typically don&rsquo;t need to call these directly &mdash; the <a href="/account">account dashboard</a> drives the full flow.</p>
+
     <h3>Key Rotation</h3>
-    <p>Rotate your API key at any time. Your old key is immediately invalidated and a new key is returned. Limited to once per 24 hours.</p>
+    <p>Rotate your API key at any time. Your old key is immediately invalidated and a new key is returned. Limited to once per 24 hours. The rotation route lives on <code>tinyzkp.com</code> (a Cloudflare Pages Function), <strong>not</strong> on <code>api.tinyzkp.com</code>.</p>
     <div class="code-block">
       <span class="code-label">curl</span>
-<pre>curl -X POST https://api.tinyzkp.com/api/rotate-key \
+<pre>curl -X POST https://tinyzkp.com/api/rotate-key \
   -H "Authorization: Bearer tzk_YOUR_CURRENT_KEY"</pre>
     </div>
     <p><strong>Response:</strong></p>
@@ -482,6 +503,12 @@ console.log(result.ok); <span class="comment">// true</span></pre>
           </tr>
           <tr>
             <td><span class="method-badge method-get">GET</span></td>
+            <td><code>/readyz</code></td>
+            <td class="auth-no">None</td>
+            <td>Readiness check (returns 200 once the server is ready to accept traffic)</td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
             <td><code>/metrics</code></td>
             <td class="auth-no">None</td>
             <td>Prometheus metrics</td>
@@ -492,12 +519,12 @@ console.log(result.ok); <span class="comment">// true</span></pre>
             <td class="auth-no">None</td>
             <td>Interactive Swagger UI</td>
           </tr>
-          <tr><td colspan="4" style="color:var(--dim);font-size:11px;font-weight:700;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 16px;background:var(--bg)">ACCOUNT</td></tr>
+          <tr><td colspan="4" style="color:var(--dim);font-size:11px;font-weight:700;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 16px;background:var(--bg)">ACCOUNT (HOSTED ON tinyzkp.com)</td></tr>
           <tr>
             <td><span class="method-badge method-post">POST</span></td>
-            <td><code>/api/rotate-key</code></td>
+            <td><code>tinyzkp.com/api/rotate-key</code></td>
             <td class="auth-yes">Required</td>
-            <td>Rotate API key (once per 24h). <a href="#auth">Details</a></td>
+            <td>Rotate API key (once per 24h). Cloudflare Pages Function — <strong>not</strong> on api.tinyzkp.com. <a href="#auth">Details</a></td>
           </tr>
         </tbody>
       </table>
@@ -847,7 +874,7 @@ curl -X POST https://api.tinyzkp.com/estimate \
     </ul>
 
     <h2 id="batch">Batch Proving</h2>
-    <p>Submit 1&ndash;100 prove jobs in a single request. Each job is billed individually by trace length.</p>
+    <p>Submit 1&ndash;100 prove jobs in a single request. Each job is billed individually by trace length. Each entry in <code>requests</code> is a full <code>ProveRequest</code> &mdash; pass <code>template_id</code> + <code>template_params</code> to use a built-in template, and always include <code>initial_acc</code>, <code>final_acc</code>, <code>block_size</code>, and <code>fri_final_poly_size</code>.</p>
 
     <div class="code-block">
       <span class="code-label">curl</span>
@@ -856,9 +883,21 @@ curl -X POST https://api.tinyzkp.com/estimate \
   -H "Content-Type: application/json" \
   -d '{
     "requests": [
-      {"workload_id": "range_proof", "params": {"min": 0, "max": 100, "witness_steps": [20, 22]}},
-      {"workload_id": "range_proof", "params": {"min": 0, "max": 50, "witness_steps": [10, 12]}},
-      {"workload_id": "data_integrity", "params": {"elements": [1, 2, 3], "checksum": 6}}
+      {
+        "template_id": "range_proof",
+        "template_params": {"min": 0, "max": 100, "witness_steps": [20, 22]},
+        "initial_acc": 0, "final_acc": 0, "block_size": 8, "fri_final_poly_size": 4
+      },
+      {
+        "template_id": "range_proof",
+        "template_params": {"min": 0, "max": 50, "witness_steps": [10, 12]},
+        "initial_acc": 0, "final_acc": 0, "block_size": 8, "fri_final_poly_size": 4
+      },
+      {
+        "template_id": "data_integrity",
+        "template_params": {"elements": [1, 2, 3], "checksum": 6},
+        "initial_acc": 0, "final_acc": 0, "block_size": 8, "fri_final_poly_size": 4
+      }
     ]
   }'</pre>
     </div>
@@ -866,15 +905,19 @@ curl -X POST https://api.tinyzkp.com/estimate \
     <p><strong>Response:</strong></p>
     <div class="code-block">
 <pre>{
-  "job_ids": ["a1b2c3...", "d4e5f6...", "g7h8i9..."]
+  "job_ids": [
+    "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+    "c3d4e5f6-a7b8-9012-cdef-345678901234"
+  ]
 }</pre>
     </div>
 
     <ul>
-      <li>Job IDs are returned in the same order as the requests.</li>
+      <li>Job IDs are returned in the same order as the requests (UUIDs).</li>
       <li><strong>Atomic rate limiting</strong> &mdash; if the batch would exceed your RPM quota, the entire batch is rejected (no partial submission).</li>
       <li>Maximum batch size: 100 requests.</li>
-      <li>Poll each job individually via <code>GET /prove/:job_id</code>.</li>
+      <li>Poll each job individually via <code>GET /prove/:job_id</code> (status will be <code>pending</code> &rarr; <code>running</code> &rarr; <code>succeeded</code>/<code>failed</code>).</li>
     </ul>
 
     <h2 id="inspect">Proof Inspection</h2>
@@ -938,6 +981,49 @@ curl -X POST https://api.tinyzkp.com/estimate \
     <ul>
       <li>The calldata is ABI-encoded and ready to submit directly to the verifier contract&rsquo;s <code>verify()</code> function.</li>
       <li>Note the path: <code>/proof/:job_id/calldata</code> (not <code>/prove/</code>).</li>
+    </ul>
+
+    <h2 id="aggregate">Recursive Aggregation</h2>
+    <p>Aggregate 1&ndash;100 completed proofs into a single recursive digest. Useful for batched on-chain settlement: pay one verification cost for many statements.</p>
+
+    <div class="code-block">
+      <span class="code-label">curl</span>
+<pre>curl -X POST https://api.tinyzkp.com/aggregate \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_ids": [
+      "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "b2c3d4e5-f6a7-8901-bcde-f23456789012"
+    ],
+    "max_depth": 4,
+    "fan_in": 8
+  }'</pre>
+    </div>
+
+    <p><strong>Response:</strong></p>
+    <div class="code-block">
+<pre>{
+  "status": "succeeded",
+  "proof_count": 2,
+  "root_digest": "a1b2c3d4...",
+  "aggregation_time_ms": 187,
+  "summaries": [
+    {
+      "trace_commitment_digest": "...",
+      "initial_acc": 0,
+      "final_acc": 42,
+      "trace_length": 128
+    }
+  ]
+}</pre>
+    </div>
+
+    <ul>
+      <li><code>job_ids</code> &mdash; 1 to 100 IDs of <strong>completed</strong> proofs (returns 409 if any are still in progress).</li>
+      <li><code>max_depth</code> &mdash; recursion tree depth cap (default 4).</li>
+      <li><code>fan_in</code> &mdash; number of children per aggregation level (default 8).</li>
+      <li><code>root_digest</code> &mdash; Blake3 root of the aggregation tree, suitable for on-chain commitment.</li>
     </ul>
 
     <h3>On-Chain Verification (Solidity)</h3>

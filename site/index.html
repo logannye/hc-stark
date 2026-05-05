@@ -471,11 +471,11 @@ footer .right a:hover{color:var(--muted)}
       <div><span class="prompt">$</span> <span class="cmd">curl -X POST https://api.tinyzkp.com/prove/template/range_proof \</span></div>
       <div><span class="cmd">  -H "Authorization: Bearer tzk_demo..." \</span></div>
       <div><span class="cmd">  -d '{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'</span></div>
-      <div style="margin-top:8px"><span class="output">{"job_id":"<span class="highlight">prf_7x9k2m</span>","status":"proving","eta_ms":1200}</span></div>
-      <div style="margin-top:16px"><span class="prompt">$</span> <span class="cmd">curl https://api.tinyzkp.com/prove/prf_7x9k2m</span></div>
-      <div style="margin-top:8px"><span class="output">{"status":"<span class="ok">completed</span>","proof":{"version":4,"bytes":"0x6a8f...","size_kb":12.4}}</span></div>
-      <div style="margin-top:16px"><span class="prompt">$</span> <span class="cmd">curl -X POST https://api.tinyzkp.com/verify -d '{"proof":{...}}'</span></div>
-      <div style="margin-top:8px"><span class="output">{"valid":<span class="ok">true</span>,"verified_in_ms":<span class="highlight">2.8</span>}  <span class="comment"># free, auth required</span></span></div>
+      <div style="margin-top:8px"><span class="output">{"job_id":"<span class="highlight">a1b2c3d4-e5f6-7890-abcd-ef1234567890</span>"}</span></div>
+      <div style="margin-top:16px"><span class="prompt">$</span> <span class="cmd">curl https://api.tinyzkp.com/prove/a1b2c3d4-e5f6-7890-abcd-ef1234567890</span></div>
+      <div style="margin-top:8px"><span class="output">{"status":"<span class="ok">succeeded</span>","proof":{"version":4,"bytes":[106,143,...]}}</span></div>
+      <div style="margin-top:16px"><span class="prompt">$</span> <span class="cmd">curl -X POST https://api.tinyzkp.com/verify -d '{"proof":{...},"allow_legacy_v2":true}'</span></div>
+      <div style="margin-top:8px"><span class="output">{"<span class="ok">ok</span>":<span class="ok">true</span>,"error":<span class="highlight">null</span>}  <span class="comment"># free, auth required</span></span></div>
     </div>
   </div>
   <p class="demo-sub">Proved that 42 is in range [0, 100] without revealing the value. Verified in 2.8ms.</p>

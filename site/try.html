@@ -314,7 +314,9 @@ async function onProve(){
       await new Promise(function(r){setTimeout(r, 700)});
       var pollResp = await fetch('/api/demo-poll?id=' + encodeURIComponent(jobId));
       var poll = await pollResp.json();
-      // Upstream uses "succeeded" / "completed" interchangeably depending on version.
+      // The API returns "succeeded" on success (see hc-sdk ProveJobStatus).
+      // We accept "completed" as well for backward compatibility with any
+      // older client/proxy still in flight.
       if ((poll.status === 'succeeded' || poll.status === 'completed') && poll.proof) {
         var elapsed = Math.round(performance.now() - t0);
         // proof.bytes can be either a hex string or a byte array; render a short preview either way.
@@ -328,7 +330,7 @@ async function onProve(){
           preview = 'present (' + (typeof b) + ')';
         }
         var frag = document.createDocumentFragment();
-        frag.appendChild(makeColoredLine('  status: ', 'completed', 'ok'));
+        frag.appendChild(makeColoredLine('  status: ', 'succeeded', 'ok'));
         frag.appendChild(makeColoredLine('  job_id: ', jobId, 'accent'));
         frag.appendChild(makeColoredLine('  version: ', String(poll.proof.version), 'accent'));
         frag.appendChild(makeColoredLine('  bytes:   ', preview + '... (truncated)', ''));
