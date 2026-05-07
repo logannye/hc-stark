@@ -275,7 +275,7 @@ sanity_checks() {
 
     # Test 2: Run all unit tests
     info "Test 2: Running unit tests..."
-    if run_cargo 600 test; then  # 10 minute timeout for tests
+    if run_cargo 1800 test; then  # 30 minute timeout — full-workspace test compile+run on cold CI runners exceeds 10m
         success "All unit tests pass"
     else
         error "Unit tests failed"
