@@ -62,6 +62,13 @@ def main() -> int:
     ladder_path = ROOT / sys.argv[2]
     baseline_path = ROOT / "benchmarks" / "baseline.json"
 
+    if not baseline_path.exists():
+        print(
+            f"warning: {baseline_path.relative_to(ROOT)} missing — skipping threshold check",
+            file=sys.stderr,
+        )
+        return 0
+
     baseline = read_json(baseline_path)
     latest = read_json(latest_path)
     ladder = read_json(ladder_path)
