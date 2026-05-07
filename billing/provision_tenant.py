@@ -630,6 +630,44 @@ def verify_magic_link_route():
     ), 200
 
 
+@app.route("/tenant-purge", methods=["POST"])
+def tenant_purge():
+    """Permanently delete an audit-test tenant.
+
+    Gated by INTERNAL_SECRET. As a defense-in-depth measure, the endpoint
+    refuses to delete anything that isn't an obviously-test tenant: the
+    plan must be "free" AND the email must start with "audit+" (the prefix
+    used by the daily health audit's free-signup E2E check). This way, even
+    if INTERNAL_SECRET were to leak, this endpoint cannot reach a paying
+    customer's row.
+    """
+    req_secret = flask.request.headers.get("X-Internal-Secret", "")
+    if not INTERNAL_SECRET or not secrets.compare_digest(req_secret, INTERNAL_SECRET):
+        return flask.jsonify(error="unauthorized"), 403
+
+    data = flask.request.get_json(silent=True) or {}
+    tenant_id = (data.get("tenant_id") or "").strip()
+    if not tenant_id or not tenant_id.startswith("t_"):
+        return flask.jsonify(error="valid tenant_id required"), 400
+
+    conn = tenant_store.open_db()
+    tenant = tenant_store.get_tenant(conn, tenant_id)
+    if not tenant:
+        conn.close()
+        return flask.jsonify(error="not found"), 404
+
+    if tenant["plan"] != "free" or not (tenant["email"] or "").startswith("audit+"):
+        conn.close()
+        return flask.jsonify(error="refusing to purge non-audit tenant"), 403
+
+    deleted = tenant_store.delete_tenant(conn, tenant_id)
+    sync_keys.regenerate(conn, API_KEYS_FILE)
+    conn.close()
+
+    print(f"Purged audit tenant={tenant_id} email={tenant['email']} rows={deleted}")
+    return flask.jsonify(ok=True, deleted=deleted), 200
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return "ok", 200

@@ -142,6 +142,26 @@ class TestListTenants:
         assert suspended[0]["tenant_id"] == "t_2"
 
 
+class TestDeleteTenant:
+    def test_delete_existing(self, db):
+        tenant_store.create_tenant(db, "t_1", "a@b.com", "key1")
+        deleted = tenant_store.delete_tenant(db, "t_1")
+        assert deleted == 1
+        assert tenant_store.get_tenant(db, "t_1") is None
+
+    def test_delete_missing_returns_zero(self, db):
+        assert tenant_store.delete_tenant(db, "t_nonexistent") == 0
+
+    def test_delete_cleans_up_magic_links(self, db):
+        tenant_store.create_tenant(db, "t_1", "a@b.com", "key1")
+        tenant_store.create_magic_link(db, "hash_a", "t_1")
+        tenant_store.create_magic_link(db, "hash_b", "t_1")
+        tenant_store.delete_tenant(db, "t_1")
+        # Both magic links should be gone with the tenant.
+        assert tenant_store.verify_magic_link(db, "hash_a") is None
+        assert tenant_store.verify_magic_link(db, "hash_b") is None
+
+
 class TestEventIdempotency:
     def test_event_not_processed_initially(self, db):
         assert not tenant_store.is_event_processed(db, "evt_123")
