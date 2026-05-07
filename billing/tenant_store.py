@@ -140,6 +140,18 @@ def update_api_key(conn: sqlite3.Connection, tenant_id: str, new_api_key: str) -
         )
 
 
+def delete_tenant(conn: sqlite3.Connection, tenant_id: str) -> int:
+    """Permanently remove a tenant and any associated magic-link rows.
+
+    Returns the number of tenant rows deleted (0 if tenant_id was not found).
+    Used by the /tenant-purge admin endpoint to clean up audit-test tenants.
+    """
+    with conn:
+        conn.execute("DELETE FROM magic_links WHERE tenant_id = ?", (tenant_id,))
+        cur = conn.execute("DELETE FROM tenants WHERE tenant_id = ?", (tenant_id,))
+        return cur.rowcount
+
+
 def list_tenants(conn: sqlite3.Connection, status: Optional[str] = None) -> list:
     """List all tenants, optionally filtered by status."""
     if status:

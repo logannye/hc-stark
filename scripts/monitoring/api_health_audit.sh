@@ -344,7 +344,150 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════
-# 5. BILLING WEBHOOK SERVICE (7 tests)
+# 5. CRITICAL FLOWS — Stripe Checkout (positive)
+# ══════════════════════════════════════════════════════════════════
+# Verify the checkout endpoint can actually create a Stripe Session and
+# return a real checkout.stripe.com URL. Catches Stripe key + Price ID
+# misconfiguration that the structural empty-body test (which only
+# checks for 400) cannot detect.
+log ""
+log "── Critical Flows — Stripe Checkout ──"
+TOTAL=$((TOTAL + 1))
+checkout_email="audit+stripe-$(date +%s)@tinyzkp.com"
+checkout_resp=$(curl -s --max-time 20 \
+    -X POST -H "Content-Type: application/json" \
+    -H "Origin: https://tinyzkp.com" \
+    -d "{\"email\":\"$checkout_email\",\"plan\":\"developer\",\"cadence\":\"monthly\"}" \
+    "$SITE/api/create-checkout" 2>/dev/null) || checkout_resp=""
+checkout_url=$(echo "$checkout_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('url',''))" 2>/dev/null || echo "")
+if [[ "$checkout_url" == https://checkout.stripe.com/* ]]; then
+    log "  PASS  200  POST /api/create-checkout (returned valid Stripe session URL)"
+    PASS=$((PASS + 1))
+else
+    log "  FAIL  ---  POST /api/create-checkout (no checkout.stripe.com URL in response: ${checkout_resp:0:120})"
+    FAIL=$((FAIL + 1))
+    FAILURES="$FAILURES\n  POST /api/create-checkout did not return a valid Stripe session URL"
+fi
+sleep 0.5
+
+# ══════════════════════════════════════════════════════════════════
+# 6. CRITICAL FLOWS — Free Signup → Magic-Link → API Key → /usage
+# ══════════════════════════════════════════════════════════════════
+# End-to-end exercise of the full free-tier signup pipeline:
+#   CF Function → webhook → tenant DB → magic-link issuance →
+#   verify-magic-link → API key → /usage.
+# Cleans up by purging the test tenant via the webhook's
+# /tenant-purge admin endpoint (gated by INTERNAL_SECRET, refuses any
+# tenant whose plan != "free" or whose email doesn't start with "audit+").
+#
+# Skipped when TINYZKP_INTERNAL_SECRET is unset — the purge step would
+# leave dead tenants in the DB, so we'd rather skip the section entirely.
+INTERNAL_SECRET="${TINYZKP_INTERNAL_SECRET:-}"
+if [ -n "$INTERNAL_SECRET" ]; then
+    log ""
+    log "── Critical Flows — Free Signup E2E ──"
+
+    audit_email="audit+autotest-$(date +%s)@tinyzkp.com"
+    signup_resp=$(curl -s --max-time 20 \
+        -X POST -H "Content-Type: application/json" \
+        -H "Origin: https://tinyzkp.com" \
+        -d "{\"email\":\"$audit_email\"}" \
+        "$SITE/api/create-free-account" 2>/dev/null) || signup_resp=""
+    DASHBOARD_TOKEN=$(echo "$signup_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('dashboard_token','') or '')" 2>/dev/null || echo "")
+
+    TOTAL=$((TOTAL + 1))
+    if [ -n "$DASHBOARD_TOKEN" ]; then
+        log "  PASS  200  POST /api/create-free-account (tenant + magic-link issued)"
+        PASS=$((PASS + 1))
+    else
+        log "  FAIL  ---  POST /api/create-free-account (no dashboard_token: ${signup_resp:0:120})"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  POST /api/create-free-account did not return a dashboard_token"
+    fi
+    sleep 0.5
+
+    NEW_API_KEY=""
+    NEW_TENANT_ID=""
+    if [ -n "$DASHBOARD_TOKEN" ]; then
+        verify_resp=$(curl -s --max-time 15 \
+            -X POST -H "Content-Type: application/json" \
+            -H "Origin: https://tinyzkp.com" \
+            -d "{\"token\":\"$DASHBOARD_TOKEN\"}" \
+            "$SITE/api/verify-magic-link" 2>/dev/null) || verify_resp=""
+        NEW_API_KEY=$(echo "$verify_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('api_key','') or '')" 2>/dev/null || echo "")
+        NEW_TENANT_ID=$(echo "$verify_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tenant_id','') or '')" 2>/dev/null || echo "")
+
+        TOTAL=$((TOTAL + 1))
+        if [ -n "$NEW_API_KEY" ] && [ -n "$NEW_TENANT_ID" ]; then
+            log "  PASS  200  POST /api/verify-magic-link (returned api_key + tenant_id)"
+            PASS=$((PASS + 1))
+        else
+            log "  FAIL  ---  POST /api/verify-magic-link (missing credentials: ${verify_resp:0:120})"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  POST /api/verify-magic-link did not return tenant credentials"
+        fi
+        sleep 0.5
+    fi
+
+    if [ -n "$NEW_API_KEY" ]; then
+        TOTAL=$((TOTAL + 1))
+        usage_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            -H "Authorization: Bearer $NEW_API_KEY" \
+            "$API/usage" 2>/dev/null) || usage_code="000"
+        if [ "$usage_code" = "200" ]; then
+            log "  PASS  200  GET /usage (new tenant's API key authenticates)"
+            PASS=$((PASS + 1))
+        else
+            log "  FAIL  $usage_code  GET /usage (new tenant's API key did not authenticate)"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  $usage_code GET /usage with newly minted API key"
+        fi
+        sleep 0.5
+
+        # Magic-link positive path against the just-created tenant. The
+        # public route returns 200 even for unknown emails (anti-enumeration),
+        # so this only catches outright route/email-service breakage —
+        # delivery verification would require inbox access.
+        TOTAL=$((TOTAL + 1))
+        mlink_resp=$(curl -s --max-time 15 \
+            -X POST -H "Content-Type: application/json" \
+            -H "Origin: https://tinyzkp.com" \
+            -d "{\"email\":\"$audit_email\"}" \
+            "$SITE/api/send-magic-link" 2>/dev/null) || mlink_resp=""
+        mlink_ok=$(echo "$mlink_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if d.get('ok') else '')" 2>/dev/null || echo "")
+        if [ -n "$mlink_ok" ]; then
+            log "  PASS  200  POST /api/send-magic-link (route accepted send for known tenant)"
+            PASS=$((PASS + 1))
+        else
+            log "  FAIL  ---  POST /api/send-magic-link (no ok:true in response: ${mlink_resp:0:120})"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  POST /api/send-magic-link did not return ok:true"
+        fi
+        sleep 0.5
+    fi
+
+    # Cleanup — purge the test tenant. Failure here is logged but does
+    # not fail the audit (the safety guards on /tenant-purge make orphan
+    # rows benign).
+    if [ -n "$NEW_TENANT_ID" ]; then
+        purge_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -X POST -H "Content-Type: application/json" \
+            -H "X-Internal-Secret: $INTERNAL_SECRET" \
+            -d "{\"tenant_id\":\"$NEW_TENANT_ID\"}" \
+            "$WEBHOOK_SVC/tenant-purge" 2>/dev/null) || purge_code="000"
+        if [ "$purge_code" = "200" ]; then
+            log "  INFO  Purged audit tenant $NEW_TENANT_ID"
+        else
+            log "  WARN  Failed to purge audit tenant $NEW_TENANT_ID (HTTP $purge_code) — leaves orphan row"
+        fi
+    fi
+else
+    log ""
+    log "── Critical Flows — Free Signup E2E — SKIPPED (no TINYZKP_INTERNAL_SECRET) ──"
+fi
+
+# ══════════════════════════════════════════════════════════════════
+# 7. BILLING WEBHOOK SERVICE (7 tests)
 # ══════════════════════════════════════════════════════════════════
 log ""
 log "── Billing Webhook Service ──"
@@ -393,7 +536,7 @@ for path in /provision-free /rotate /send-magic-link /send-contact /verify-magic
 done
 
 # ══════════════════════════════════════════════════════════════════
-# 6. CLOUDFLARE FUNCTIONS — Signup, Billing, Auth, Demo (9 tests)
+# 8. CLOUDFLARE FUNCTIONS — Signup, Billing, Auth, Demo (9 tests)
 # ══════════════════════════════════════════════════════════════════
 log ""
 log "── Cloudflare Functions ──"
@@ -444,7 +587,7 @@ test_cf_function GET  /api/demo-poll           "demo poll proxy"
 test_cf_function POST /api/demo-verify         "demo verify proxy"
 
 # ══════════════════════════════════════════════════════════════════
-# 7. WEBSITE — All Pages (11 tests)
+# 9. WEBSITE — All Pages (11 tests)
 # ══════════════════════════════════════════════════════════════════
 log ""
 log "── Website Pages ──"
