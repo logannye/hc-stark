@@ -177,7 +177,11 @@ test_api GET  "/usage" "" "401" > /dev/null
 test_api POST "/prove/batch" \
     '{"requests":[{"initial_acc":0,"final_acc":10,"block_size":8,"fri_final_poly_size":4}]}' \
     "401" > /dev/null
-test_api POST "/aggregate" '{}' "401" > /dev/null
+# Send a structurally-valid body so the Json extractor succeeds and the
+# auth check runs (matches how /prove and /prove/batch are tested above).
+test_api POST "/aggregate" \
+    '{"job_ids":["00000000-0000-0000-0000-000000000000"]}' \
+    "401" > /dev/null
 test_api GET  "/prove" "" "401" > /dev/null
 
 # ══════════════════════════════════════════════════════════════════
@@ -295,13 +299,27 @@ if [ -n "$API_KEY" ]; then
 
     log ""
     log "── API: Authenticated — Cancel + Template ──"
-    # Cancel flow: submit a job, immediately cancel, verify state.
+    # Cancel flow: submit a job, immediately cancel. The toy workload
+    # finishes in <1s, so 409 ("already in a terminal state") is also a
+    # healthy result — both prove the route is mounted and auth passed.
     cancel_submit=$(test_api POST "/prove" \
         '{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}' \
         "200" "30" "$AUTH_HDR")
     CANCEL_JOB=$(echo "$cancel_submit" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
     if [ -n "$CANCEL_JOB" ]; then
-        test_api POST "/prove/$CANCEL_JOB/cancel" "" "200" "10" "$AUTH_HDR" > /dev/null
+        TOTAL=$((TOTAL + 1))
+        cancel_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -X POST -H "$AUTH_HDR" \
+            "$API/prove/$CANCEL_JOB/cancel" 2>/dev/null) || cancel_code="000"
+        if [ "$cancel_code" = "200" ] || [ "$cancel_code" = "409" ]; then
+            log "  PASS  $cancel_code  POST /prove/$CANCEL_JOB/cancel (route live)"
+            PASS=$((PASS + 1))
+        else
+            log "  FAIL  $cancel_code  POST /prove/$CANCEL_JOB/cancel (expected 200|409)"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  $cancel_code POST /prove/$CANCEL_JOB/cancel (expected 200|409)"
+        fi
+        sleep 0.5
         curl -s -X DELETE -H "$AUTH_HDR" "$API/prove/$CANCEL_JOB" --max-time 10 >/dev/null 2>&1 || true
     else
         log "  WARN  prove for cancel test returned no job_id"
@@ -311,8 +329,9 @@ if [ -n "$API_KEY" ]; then
     fi
 
     # Template proof — range_proof template using minimal valid params.
+    # Schema requires the parameters wrapped in a "params" object.
     template_resp=$(test_api POST "/prove/template/range_proof" \
-        '{"min":0,"max":100,"witness_steps":[42]}' \
+        '{"params":{"min":0,"max":100,"witness_steps":[42]}}' \
         "200" "60" "$AUTH_HDR")
     TEMPLATE_JOB=$(echo "$template_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
     if [ -n "$TEMPLATE_JOB" ]; then
