@@ -111,7 +111,7 @@ cleanup() {
 
 # Run cargo command with timeout
 run_cargo() {
-    local timeout="${2:-300}" # Default 5 minute timeout
+    local timeout="${1:-300}" # Default 5 minute timeout
     shift 1  # Remove first argument (timeout) from $@
 
     log "Running: cargo $@"
@@ -139,7 +139,7 @@ run_cargo() {
 
 # Run cargo command and capture output
 run_cargo_capture() {
-    local timeout="${2:-300}" # Default 5 minute timeout
+    local timeout="${1:-300}" # Default 5 minute timeout
     shift 1  # Remove first argument (timeout) from $@
 
     log "Running: cargo $@"
