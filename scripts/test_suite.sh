@@ -111,7 +111,7 @@ cleanup() {
 
 # Run cargo command with timeout
 run_cargo() {
-    local timeout="${2:-300}" # Default 5 minute timeout
+    local timeout="${1:-300}" # Default 5 minute timeout
     shift 1  # Remove first argument (timeout) from $@
 
     log "Running: cargo $@"
@@ -139,7 +139,7 @@ run_cargo() {
 
 # Run cargo command and capture output
 run_cargo_capture() {
-    local timeout="${2:-300}" # Default 5 minute timeout
+    local timeout="${1:-300}" # Default 5 minute timeout
     shift 1  # Remove first argument (timeout) from $@
 
     log "Running: cargo $@"
@@ -275,7 +275,7 @@ sanity_checks() {
 
     # Test 2: Run all unit tests
     info "Test 2: Running unit tests..."
-    if run_cargo 600 test; then  # 10 minute timeout for tests
+    if run_cargo 1800 test; then  # 30 minute timeout — full-workspace test compile+run on cold CI runners exceeds 10m
         success "All unit tests pass"
     else
         error "Unit tests failed"
