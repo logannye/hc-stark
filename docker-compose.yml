@@ -15,6 +15,12 @@ services:
       - HC_SERVER_API_KEYS=demo:demo_key
       # Default production posture: disallow arbitrary code; require fixed workload_id.
       - HC_SERVER_ALLOW_CUSTOM_PROGRAMS=false
+      # DB-backed auth fallback: closes the 60s window between webhook
+      # provisioning a new tenant and the file-based key reload picking
+      # it up. Path is the same tenant_store.sqlite the webhook writes
+      # (volume-mounted at /data inside the container; host path is
+      # /opt/hc-stark/data/tenant_store.sqlite).
+      - HC_SERVER_AUTH_DB_PATH=/data/tenant_store.sqlite
     volumes:
       - hc_data:/data
     deploy:
