@@ -5,6 +5,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::http::{HeaderMap, StatusCode};
 
+pub mod db;
+
+pub use db::DbAuthSource;
+
 #[derive(Clone, Debug)]
 pub struct TenantContext {
     pub tenant_id: String,
@@ -12,12 +16,12 @@ pub struct TenantContext {
 }
 
 #[derive(Clone, Debug)]
-struct TenantEntry {
-    tenant_id: String,
-    plan: String,
+pub(crate) struct TenantEntry {
+    pub(crate) tenant_id: String,
+    pub(crate) plan: String,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct AuthConfig {
     /// Maps active API key -> (tenant_id, plan).
     keys: HashMap<String, TenantEntry>,
@@ -27,6 +31,21 @@ pub struct AuthConfig {
     /// presented token. Entries past their expiry are ignored and pruned
     /// opportunistically on each `authenticate` call.
     retired: HashMap<String, RetiredEntry>,
+    /// Optional DB-backed lookup for keys that are not in `keys` (e.g.
+    /// freshly-provisioned tenants whose row landed in tenant_store but
+    /// hasn't yet propagated into the file the 60s reload picks up).
+    /// Off by default; enabled by `with_db_source`.
+    db_source: Option<Arc<DbAuthSource>>,
+}
+
+impl std::fmt::Debug for AuthConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AuthConfig")
+            .field("keys_len", &self.keys.len())
+            .field("retired_len", &self.retired.len())
+            .field("db_source", &self.db_source.is_some())
+            .finish()
+    }
 }
 
 /// Default grace window for retired keys: 5 minutes. Long enough to drain
@@ -267,6 +286,10 @@ impl AuthConfig {
     /// Merge another config's keys into this one (additive). Retired
     /// entries from `other` are carried over too — a key that was
     /// retired in either source remains retired in the merge.
+    ///
+    /// Note: does NOT overwrite an existing `db_source`. Callers that
+    /// want the DB fallback should attach it via `with_db_source` after
+    /// all merges are done (typically once at startup).
     pub fn merge(&mut self, other: &AuthConfig) {
         for (key, entry) in &other.keys {
             self.keys.insert(key.clone(), entry.clone());
@@ -274,10 +297,32 @@ impl AuthConfig {
         for (key, retired) in &other.retired {
             self.retired.insert(key.clone(), retired.clone());
         }
+        if self.db_source.is_none() {
+            self.db_source = other.db_source.clone();
+        }
+    }
+
+    /// Attach a DB-backed fallback. Keys not found in `keys` or `retired`
+    /// will be looked up in tenant_store via this source. Intended to be
+    /// called once at startup after env/file merges; preserved across
+    /// hot-reload cycles by `inherit_db_source`.
+    pub fn with_db_source(mut self, src: Arc<DbAuthSource>) -> Self {
+        self.db_source = Some(src);
+        self
+    }
+
+    /// Carry the DB source from a previous live config into this freshly-
+    /// built one. The 60s reload loop rebuilds `AuthConfig` from env+file
+    /// (which know nothing about the DB fallback) and must call this so
+    /// the fallback isn't silently disabled after the first reload.
+    pub fn inherit_db_source(&mut self, previous: &AuthConfig) {
+        if self.db_source.is_none() {
+            self.db_source = previous.db_source.clone();
+        }
     }
 
     pub fn is_enabled(&self) -> bool {
-        !self.keys.is_empty()
+        !self.keys.is_empty() || self.db_source.is_some()
     }
 
     /// Compare this config to a `previous` one (typically the live config
@@ -391,6 +436,25 @@ impl AuthConfig {
                 tenant_id: entry.tenant_id.clone(),
                 plan: entry.plan.clone(),
             });
+        }
+
+        // Final fallback: DB-backed lookup against tenant_store. Closes
+        // the freshly-provisioned-key window between the webhook
+        // committing the row and the file-based hot-reload (60s)
+        // picking it up. See `auth/db.rs`.
+        if let Some(src) = self.db_source.as_ref() {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(token.as_bytes());
+            let digest = hasher.finalize();
+            let mut hash = [0u8; 32];
+            hash.copy_from_slice(&digest);
+            if let Some(entry) = src.lookup(&hash) {
+                return Ok(TenantContext {
+                    tenant_id: entry.tenant_id,
+                    plan: entry.plan,
+                });
+            }
         }
 
         Err((StatusCode::UNAUTHORIZED, "invalid API key"))
@@ -521,5 +585,205 @@ mod grace_window_tests {
             !next.retired.contains_key("stale_key"),
             "expired retired entries should be pruned during reload"
         );
+    }
+}
+
+#[cfg(test)]
+mod db_fallback_tests {
+    use super::*;
+    use axum::http::HeaderValue;
+    use rusqlite::Connection;
+    use sha2::{Digest, Sha256};
+
+    fn bearer_headers(token: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {token}")).unwrap(),
+        );
+        h
+    }
+
+    fn sha256_hex(s: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(s.as_bytes());
+        hex::encode(hasher.finalize())
+    }
+
+    /// Build a tenant_store-shaped SQLite DB at `path` and insert one row.
+    /// Mirrors the schema in `billing/tenant_store.py`.
+    fn seed_tenant_store(path: &Path, tenant_id: &str, api_key: &str, plan: &str, status: &str) {
+        let conn = Connection::open(path).expect("open temp db");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS tenants (
+              tenant_id TEXT PRIMARY KEY,
+              email TEXT NOT NULL,
+              api_key_hash TEXT NOT NULL,
+              api_key_prefix TEXT NOT NULL,
+              stripe_customer_id TEXT,
+              stripe_subscription_id TEXT UNIQUE,
+              stripe_subscription_item_id TEXT,
+              status TEXT NOT NULL DEFAULT 'active',
+              plan TEXT NOT NULL DEFAULT 'standard',
+              created_at_ms INTEGER NOT NULL,
+              updated_at_ms INTEGER NOT NULL
+            );
+            "#,
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO tenants (tenant_id, email, api_key_hash, api_key_prefix, status, plan, created_at_ms, updated_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 0)",
+            rusqlite::params![
+                tenant_id,
+                format!("{tenant_id}@example.com"),
+                sha256_hex(api_key),
+                &api_key[..8.min(api_key.len())],
+                status,
+                plan,
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn db_fallback_authenticates_key_absent_from_in_memory_map() {
+        // The webhook just provisioned a tenant: the row is in
+        // tenant_store.sqlite but the 60s file-based hot-reload hasn't
+        // run yet, so AuthConfig.keys is empty for this key. With a
+        // db_source attached, authenticate() should find it.
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("tenant_store.sqlite");
+        let api_key = "tzk_freshly_minted_audit_key_2026_05_10";
+        seed_tenant_store(&db_path, "t_audit", api_key, "free", "active");
+
+        let db_src = DbAuthSource::open(&db_path).expect("open temp tenant store");
+        let auth = AuthConfig::default().with_db_source(db_src);
+
+        let ctx = auth
+            .authenticate(&bearer_headers(api_key))
+            .expect("DB-fallback should authenticate fresh tenant key");
+
+        assert_eq!(ctx.tenant_id, "t_audit");
+        assert_eq!(ctx.plan, "free");
+    }
+
+    #[test]
+    fn db_fallback_rejects_suspended_tenant() {
+        // A suspended tenant's hash is still in the table — the DB query
+        // must filter on status='active' so the key stops working
+        // immediately after suspension.
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("tenant_store.sqlite");
+        let api_key = "tzk_suspended_key";
+        seed_tenant_store(&db_path, "t_susp", api_key, "developer", "suspended");
+
+        let db_src = DbAuthSource::open(&db_path).expect("open");
+        let auth = AuthConfig::default().with_db_source(db_src);
+
+        let result = auth.authenticate(&bearer_headers(api_key));
+        assert!(
+            result.is_err(),
+            "suspended tenant must not authenticate via DB fallback"
+        );
+    }
+
+    #[test]
+    fn db_fallback_rejects_unknown_key() {
+        // A token that isn't in the DB at all → 401, no panics, no
+        // cache pollution.
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("tenant_store.sqlite");
+        seed_tenant_store(&db_path, "t_other", "tzk_other_key", "free", "active");
+
+        let db_src = DbAuthSource::open(&db_path).expect("open");
+        let auth = AuthConfig::default().with_db_source(db_src);
+
+        let result = auth.authenticate(&bearer_headers("tzk_totally_unknown"));
+        assert!(result.is_err(), "unknown key must return 401");
+    }
+
+    #[test]
+    fn db_fallback_caches_lookup_result_within_ttl() {
+        // First call hits the DB and populates the cache. Mutating the
+        // row out-of-band must not affect the second call within the
+        // TTL — proves the cache is actually in front of the query.
+        // (Revocation latency is the deliberate trade-off; a hot-disable
+        // or short TTL handles security-critical revocations.)
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("tenant_store.sqlite");
+        let api_key = "tzk_cache_test_key";
+        seed_tenant_store(&db_path, "t_cache", api_key, "free", "active");
+
+        let db_src = DbAuthSource::open(&db_path).expect("open");
+        let auth = AuthConfig::default().with_db_source(db_src);
+
+        auth.authenticate(&bearer_headers(api_key))
+            .expect("first call populates cache");
+
+        // Suspend the tenant via a separate writer connection.
+        let writer = Connection::open(&db_path).expect("open writer");
+        writer
+            .execute(
+                "UPDATE tenants SET status='suspended' WHERE tenant_id=?1",
+                ["t_cache"],
+            )
+            .expect("suspend update");
+
+        let result = auth.authenticate(&bearer_headers(api_key));
+        assert!(
+            result.is_ok(),
+            "cache hit within TTL should not re-query the DB"
+        );
+    }
+
+    #[test]
+    fn db_source_is_inherited_across_hot_reload() {
+        // The 60s reload loop builds a `fresh` config from env+file and
+        // swaps it in. db_source is set once at startup and must survive
+        // every reload — otherwise the fallback silently turns off after
+        // the first reload tick.
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("tenant_store.sqlite");
+        let api_key = "tzk_carryover_key";
+        seed_tenant_store(&db_path, "t_carry", api_key, "free", "active");
+
+        let db_src = DbAuthSource::open(&db_path).expect("open");
+        let previous = AuthConfig::default().with_db_source(db_src);
+
+        // Simulate the reload: a fresh config built from env+file (no DB
+        // source — startup wires it once). It must inherit from previous.
+        let mut fresh = AuthConfig::default();
+        fresh.inherit_db_source(&previous);
+
+        let ctx = fresh
+            .authenticate(&bearer_headers(api_key))
+            .expect("inherited db_source should still authenticate");
+        assert_eq!(ctx.tenant_id, "t_carry");
+    }
+
+    #[test]
+    fn in_memory_keys_take_precedence_over_db_lookup() {
+        // If the same key is present in both `keys` and the DB, the
+        // in-memory match wins — guarantees DB lookup is a fallback,
+        // not a duplicate path on the hot request flow.
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("tenant_store.sqlite");
+        let api_key = "tzk_dual_present_key";
+        // DB says the key belongs to t_db with plan 'free'.
+        seed_tenant_store(&db_path, "t_db", api_key, "free", "active");
+
+        let db_src = DbAuthSource::open(&db_path).expect("open");
+        // In-memory file/env says the SAME key belongs to t_mem with
+        // plan 'developer'. Operator intent in `keys` wins.
+        let mut auth = AuthConfig::from_pairs_with_plan(&[("t_mem", api_key, "developer")]);
+        auth.db_source = Some(db_src);
+
+        let ctx = auth
+            .authenticate(&bearer_headers(api_key))
+            .expect("authenticated");
+        assert_eq!(ctx.tenant_id, "t_mem", "in-memory match should win");
+        assert_eq!(ctx.plan, "developer");
     }
 }

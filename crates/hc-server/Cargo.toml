@@ -20,6 +20,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 prometheus = "0.13"
 tokio-util = "0.7"
 rusqlite = { version = "0.31", features = ["bundled"] }
+sha2 = "0.10"
 
 utoipa = { version = "5.2", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "8.0", features = ["axum"] }
