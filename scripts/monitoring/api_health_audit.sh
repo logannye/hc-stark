@@ -437,8 +437,16 @@ if [ -n "$INTERNAL_SECRET" ]; then
         if [ "$usage_code" = "200" ]; then
             log "  PASS  200  GET /usage (new tenant's API key authenticates)"
             PASS=$((PASS + 1))
+        elif [ "$usage_code" = "429" ]; then
+            # Rate-limited means auth resolved the key (request reached the
+            # rate limiter), so the auth path is fine — just throttled.
+            # Still a FAIL because the audit expects 200, but operator
+            # action differs from a real auth-path failure.
+            log "  FAIL  429  GET /usage (new tenant's API key was rate-limited; auth path resolved the key)"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  429 GET /usage with newly minted API key (rate-limited, not auth failure)"
         else
-            log "  FAIL  $usage_code  GET /usage (new tenant's API key did not authenticate)"
+            log "  FAIL  $usage_code  GET /usage (new tenant's API key returned $usage_code, expected 200)"
             FAIL=$((FAIL + 1))
             FAILURES="$FAILURES\n  $usage_code GET /usage with newly minted API key"
         fi
