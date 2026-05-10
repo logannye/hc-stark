@@ -570,6 +570,29 @@ pub async fn run() -> anyhow::Result<()> {
             auth.merge(&file_auth);
         }
     }
+
+    // Optional DB-backed fallback. Closes the freshly-provisioned-key
+    // window between the webhook committing a tenant row and the file
+    // hot-reload (60s) picking it up. Off by default; set
+    // HC_SERVER_AUTH_DB_PATH to enable.
+    if let Ok(db_path) = std::env::var("HC_SERVER_AUTH_DB_PATH") {
+        let db_path = PathBuf::from(db_path);
+        match auth::DbAuthSource::open(&db_path) {
+            Ok(src) => {
+                info!(
+                    path = %db_path.display(),
+                    "auth DB fallback enabled (tenant_store)"
+                );
+                auth = auth.with_db_source(src);
+            }
+            Err(e) => {
+                anyhow::bail!(
+                    "HC_SERVER_AUTH_DB_PATH set but tenant_store could not be opened: {e}"
+                );
+            }
+        }
+    }
+
     let auth = Arc::new(std::sync::RwLock::new(auth));
 
     fs::create_dir_all(cfg.data_dir.join("jobs"))?;
@@ -711,6 +734,7 @@ pub async fn run() -> anyhow::Result<()> {
                         .map(|d| d.as_millis() as u64)
                         .unwrap_or(0);
                     fresh.retire_missing(&previous, grace_ms, now);
+                    fresh.inherit_db_source(&previous);
                     if let Ok(mut guard) = auth_ref.write() {
                         *guard = fresh;
                     }
