@@ -22,7 +22,13 @@ services:
       # /opt/hc-stark/data/tenant_store.sqlite).
       - HC_SERVER_AUTH_DB_PATH=/data/tenant_store.sqlite
     volumes:
-      - hc_data:/data
+      # Bind-mount the host data dir so hc-server reads the SAME
+      # tenant_store.sqlite the host-side billing-webhook writes to.
+      # Earlier PRs (#15/#16) shipped the DB-fallback code + env but
+      # left the mount as a named docker volume — those are different
+      # files (different inodes), so the fallback resolved against a
+      # stale snapshot and the daily audit's persistent key 401'd.
+      - /opt/hc-stark/data:/data
     deploy:
       resources:
         limits:
@@ -191,7 +197,9 @@ services:
       - STRIPE_METER_EVENT_NAME=${STRIPE_METER_EVENT_NAME:-proof_usage}
       - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
     volumes:
-      - hc_data:/data
+      # Same host bind as hc-server — must share the same physical
+      # tenant_store.sqlite and usage.sqlite the webhook writes to.
+      - /opt/hc-stark/data:/data
     restart: unless-stopped
     deploy:
       resources:
@@ -205,5 +213,4 @@ services:
         max-file: "3"
 
 volumes:
-  hc_data:
   prometheus_data:
