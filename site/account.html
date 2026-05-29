@@ -552,11 +552,11 @@ footer .right a:hover{color:var(--muted)}
           <a href="/docs#estimate">Cost Estimation</a>
         </div>
         <div class="curl-box" id="curl-box">
-          <button class="copy-btn" id="curl-copy-btn">Copy</button><span class="curl-comment"># Submit a range proof</span>
-curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://api.tinyzkp.com/prove/template/range_proof</span> \
+          <button class="copy-btn" id="curl-copy-btn">Copy</button><span class="curl-comment"># Submit an accumulator_step proof</span>
+curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://api.tinyzkp.com/prove/template/accumulator_step</span> \
   <span class="curl-flag">-H</span> <span class="curl-string">"Authorization: Bearer <span id="curl-key">tzk_YOUR_KEY</span>"</span> \
   <span class="curl-flag">-H</span> <span class="curl-string">"Content-Type: application/json"</span> \
-  <span class="curl-flag">-d</span> <span class="curl-string">'{"params":{"min":0,"max":100,"witness_steps":[42]}}'</span></div>
+  <span class="curl-flag">-d</span> <span class="curl-string">'{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'</span></div>
       </div>
     </div>
 
@@ -1217,10 +1217,10 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   document.getElementById('curl-copy-btn').addEventListener('click', function() {
     var btn = this;
     var key = session ? session.api_key : 'tzk_YOUR_KEY';
-    var cmd = 'curl -X POST https://api.tinyzkp.com/prove/template/range_proof \\\n' +
+    var cmd = 'curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \\\n' +
       '  -H "Authorization: Bearer ' + key + '" \\\n' +
       '  -H "Content-Type: application/json" \\\n' +
-      '  -d \'{"params":{"min":0,"max":100,"witness_steps":[42]}}\'';
+      '  -d \'{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}\'';
     navigator.clipboard.writeText(cmd).then(function() {
       btn.textContent = 'Copied!';
       setTimeout(function() { btn.textContent = 'Copy'; }, 2000);

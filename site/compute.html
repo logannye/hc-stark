@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TinyZKP Compute — O(√N) Proving for zkVM, zkML, Rollups</title>
-<meta name="description" content="The only production STARK prover with O(√N) memory, where N is the size of the computation. Prove a 100M-step trace on commodity hardware. $0.50 per million trace steps, no monthly base fee.">
+<meta name="description" content="A STARK prover with O(√N) memory, where N is the size of the computation. Prove a 100M-step trace on commodity hardware. $0.50 per million trace steps, no monthly base fee.">
 <meta property="og:title" content="TinyZKP Compute — O(√N) Proving for Long Computations">
-<meta property="og:description" content="Every other production STARK system needs O(N) memory — linear in computation size. TinyZKP needs only O(√N). $0.50/M trace steps, usage-based.">
+<meta property="og:description" content="Most STARK systems need O(N) memory — linear in computation size. TinyZKP needs only O(√N). $0.50/M trace steps, usage-based.">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com/compute">
@@ -124,9 +124,9 @@ footer .right a:hover{color:var(--muted)}
 
 <div class="eyebrow">For zkVM, zkML, and rollup teams</div>
 
-<h1>The only production STARK prover with <span class="accent">O(&radic;N)</span> memory.</h1>
+<h1>A STARK prover with <span class="accent">O(&radic;N)</span> memory.</h1>
 
-<p class="lede">Every other production STARK system needs <strong>O(N) memory</strong> — linear in the size of the computation, where N is the number of trace steps. A 100M-step proof needs hundreds of GB of RAM, or aggressive segmentation and recursive aggregation. TinyZKP needs only <strong>O(&radic;N)</strong> — that same proof fits comfortably on a 16 GB laptop. Same cryptographic guarantees: ≥128-bit soundness, transparent, post-quantum.</p>
+<p class="lede">Most STARK systems need <strong>O(N) memory</strong> — linear in the size of the computation, where N is the number of trace steps. A 100M-step proof needs hundreds of GB of RAM, or aggressive segmentation and recursive aggregation. TinyZKP needs only <strong>O(&radic;N)</strong> — that same proof fits comfortably on a 16 GB laptop. Transparent (no trusted setup), post-quantum (hash-based).</p>
 
 <div class="cta-row">
   <a class="cta" href="/signup?plan=compute">Start at $0.50 / M trace steps</a>
@@ -153,7 +153,7 @@ footer .right a:hover{color:var(--muted)}
 
 <h2>Where the moat applies</h2>
 
-<h3>zkVM execution proofs</h3>
+<h3>zkVM execution proofs <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(in development)</span></h3>
 
 <p>Long-running programs, many syscalls, complex state. RISC Zero, SP1, and similar systems handle this via <em>continuations</em> — splitting the trace into chunks and recursively aggregating. That works, but it adds:</p>
 <ul>
@@ -161,11 +161,11 @@ footer .right a:hover{color:var(--muted)}
   <li><strong>Aggregation overhead</strong> — every chunk needs to be re-verified to be folded.</li>
   <li><strong>Operational complexity</strong> — orchestrating the chunked prover fleet.</li>
 </ul>
-<p>TinyZKP runs the whole trace in a single shot at &radic;N memory. Chunked aggregation becomes optional, not load-bearing.</p>
+<p>The O(&radic;N) architecture is designed to run the whole trace in a single shot. Full zkVM support is in development; <a href="/contact">contact us</a> for early access.</p>
 
-<h3>zkML inference receipts</h3>
+<h3>zkML inference receipts <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(in development)</span></h3>
 
-<p>Proving a neural net forward-pass. Memory usage is dominated by the largest layer's intermediate activations. Conventional STARK provers need RAM proportional to the entire flattened computation graph. TinyZKP's memory usage is proportional to the largest <em>block</em>, not the largest layer or the dataset.</p>
+<p>Proving a neural net forward-pass. Memory usage is dominated by the largest layer's intermediate activations. Conventional STARK provers need RAM proportional to the entire flattened computation graph. The O(&radic;N) architecture bounds memory to the largest <em>block</em>, not the largest layer or the dataset. zkML proof generation is in development; <a href="/contact">contact us</a> to discuss your use case.</p>
 
 <h3>Rollup batch attestation</h3>
 
@@ -210,7 +210,7 @@ footer .right a:hover{color:var(--muted)}
 <ul>
   <li><strong>$0.50 per million trace steps.</strong> No monthly base fee. Pay for what you prove.</li>
   <li><strong>Up to 100M-step traces per single proof.</strong> Larger workloads → talk to us about Enterprise.</li>
-  <li><strong>≥128-bit soundness.</strong> Same security floor as the rest of the platform; no relaxed parameters.</li>
+  <li><strong>Transparent, post-quantum (hash-based).</strong> Same ZK-STARK guarantees as the rest of the platform; no trusted setup.</li>
   <li><strong>100 RPM, 8 inflight jobs.</strong> Enough headroom for production zkVM/zkML pipelines.</li>
   <li><strong>60-minute max prove time per job.</strong> Anything longer almost always benefits from proof aggregation; we'll help you architect it.</li>
   <li><strong>Email support, 24-hour response SLA.</strong> Your job ID, our triage queue.</li>
@@ -218,7 +218,7 @@ footer .right a:hover{color:var(--muted)}
 
 <div class="callout accent">
 <h3>The technical claim, defensible in one sentence</h3>
-<p style="margin-bottom:0;color:var(--text)">TinyZKP is the only production STARK proving service whose prover memory is bounded at O(&radic;N) for arbitrarily large computations — meaning a 100M-step zkVM trace fits on commodity hardware. Every other production STARK system requires O(N) memory — linear in computation size — forcing aggressive segmentation+recursion or simply capping trace size. The whitepaper proves it; the open-source backend ships it; the Compute tier rents it.</p>
+<p style="margin-bottom:0;color:var(--text)">TinyZKP is a STARK proving service whose prover memory is bounded at O(&radic;N) for arbitrarily large computations — meaning a 100M-step trace fits on commodity hardware. Most STARK systems require O(N) memory — linear in computation size — forcing aggressive segmentation+recursion or simply capping trace size. The whitepaper proves it; the open-source backend ships it; the Compute tier is the usage-based access point.</p>
 </div>
 
 <h2>Get started</h2>
