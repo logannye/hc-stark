@@ -1,4 +1,5 @@
-// Cloudflare Pages Function — verifies a magic link token and returns credentials.
+// Cloudflare Pages Function — verifies a magic link token, sets an httpOnly session cookie,
+// and returns safe metadata (no raw API key, no session token) to the page.
 
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_S = 300;
@@ -59,8 +60,13 @@ export async function onRequestPost(context) {
       });
     }
 
-    return new Response(JSON.stringify(body), {
-      status: 200, headers: jsonHeaders,
+    // Set the httpOnly session cookie and return only safe metadata to the page
+    // (no session_token, no api_key).
+    const setCookie = `tz_session=${body.session_token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400`;
+    const { session_token, ...safe } = body;
+    return new Response(JSON.stringify(safe), {
+      status: 200,
+      headers: { ...jsonHeaders, "Set-Cookie": setCookie },
     });
   } catch (err) {
     console.error("verify-magic-link error:", err);

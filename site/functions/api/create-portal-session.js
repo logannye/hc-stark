@@ -1,11 +1,15 @@
 // Cloudflare Pages Function — creates a Stripe Customer Portal session.
 //
-// Allows paying customers to manage billing, update payment methods,
-// view invoices, and cancel subscriptions.
+// Requires a valid tz_session cookie; the Stripe customer ID is server-resolved
+// via the session (no client-supplied email, no Stripe customer search).
 //
 // Secrets required (set via `wrangler pages secret put`):
 //   STRIPE_SECRET_KEY          — sk_live_... or sk_test_...
 //   STRIPE_PORTAL_CONFIG_ID    — bpc_... (optional, uses default if omitted)
+//   INTERNAL_SECRET            — shared secret for webhook calls
+//   WEBHOOK_BASE_URL           — (optional) defaults to https://webhook.tinyzkp.com
+
+import { readSessionCookie, webhookSession, corsHeaders, CLEAR_COOKIE } from "./_session.js";
 
 const RATE_LIMIT_MAX = 5;
 const RATE_LIMIT_WINDOW_S = 300;
@@ -25,14 +29,8 @@ async function checkRateLimit(ip) {
 
 export async function onRequestPost(context) {
   const origin = context.request.headers.get("Origin") || "";
-  const allowedOrigin = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com"
-    ? origin : "https://tinyzkp.com";
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-  };
-  const jsonHeaders = { "Content-Type": "application/json", ...corsHeaders };
+  const cors = corsHeaders(origin);
+  const jsonHeaders = { "Content-Type": "application/json", ...cors };
 
   try {
     const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
@@ -42,45 +40,42 @@ export async function onRequestPost(context) {
       });
     }
 
-    const { email } = await context.request.json();
-    if (!email || !email.includes("@") || email.length > 254) {
-      return new Response(JSON.stringify({ error: "valid email required" }), {
-        status: 400,
-        headers: jsonHeaders,
+    // Require a valid session cookie — no client-supplied email accepted.
+    const token = readSessionCookie(context.request);
+    if (!token) {
+      return new Response(JSON.stringify({ error: "no session" }), {
+        status: 401, headers: jsonHeaders,
+      });
+    }
+
+    // Resolve the session to get the Stripe customer ID server-side.
+    const { ok, status, body } = await webhookSession(context.env, "/session/resolve", token);
+    if (!ok) {
+      const headers = status === 401
+        ? { ...jsonHeaders, "Set-Cookie": CLEAR_COOKIE }
+        : jsonHeaders;
+      return new Response(JSON.stringify({ error: body.error || "invalid session" }), {
+        status, headers,
+      });
+    }
+
+    const stripeCustomerId = body.stripe_customer_id;
+    if (!stripeCustomerId) {
+      return new Response(JSON.stringify({ error: "No billing account for this account." }), {
+        status: 404, headers: jsonHeaders,
       });
     }
 
     const STRIPE_SECRET_KEY = context.env.STRIPE_SECRET_KEY;
     if (!STRIPE_SECRET_KEY) {
       return new Response(JSON.stringify({ error: "server misconfigured" }), {
-        status: 500,
-        headers: jsonHeaders,
+        status: 500, headers: jsonHeaders,
       });
     }
 
-    // Look up the customer by email.
-    const searchResp = await fetch(
-      `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(email)}'`,
-      {
-        headers: {
-          Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
-        },
-      }
-    );
-
-    const searchResult = await searchResp.json();
-    if (!searchResp.ok || !searchResult.data || searchResult.data.length === 0) {
-      return new Response(JSON.stringify({ error: "No billing account found for this email. Free-tier accounts don't have billing." }), {
-        status: 404,
-        headers: jsonHeaders,
-      });
-    }
-
-    const customerId = searchResult.data[0].id;
-
-    // Create a portal session using the activated portal configuration.
+    // Create a portal session using the server-resolved customer ID directly.
     const params = new URLSearchParams();
-    params.append("customer", customerId);
+    params.append("customer", stripeCustomerId);
     if (context.env.STRIPE_PORTAL_CONFIG_ID) {
       params.append("configuration", context.env.STRIPE_PORTAL_CONFIG_ID);
     }
@@ -99,33 +94,22 @@ export async function onRequestPost(context) {
     if (!portalResp.ok) {
       console.error("Stripe portal error:", JSON.stringify(portalSession));
       return new Response(JSON.stringify({ error: "Could not create portal session." }), {
-        status: 502,
-        headers: jsonHeaders,
+        status: 502, headers: jsonHeaders,
       });
     }
 
     return new Response(JSON.stringify({ url: portalSession.url }), {
-      status: 200,
-      headers: jsonHeaders,
+      status: 200, headers: jsonHeaders,
     });
   } catch (err) {
     console.error("Portal error:", err);
     return new Response(JSON.stringify({ error: "internal error" }), {
-      status: 500,
-      headers: jsonHeaders,
+      status: 500, headers: jsonHeaders,
     });
   }
 }
 
 export async function onRequestOptions(context) {
   const origin = context.request.headers.get("Origin") || "";
-  const allowedOrigin = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com"
-    ? origin : "https://tinyzkp.com";
-  return new Response(null, {
-    headers: {
-      "Access-Control-Allow-Origin": allowedOrigin,
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  });
+  return new Response(null, { headers: corsHeaders(origin) });
 }
