@@ -8,9 +8,9 @@ startCommand:
 name: tinyzkp
 displayName: "TinyZKP — Verifiable Receipts for AI Agents"
 description: >
-  Mint zero-knowledge proofs as a tool call. Six production templates
-  (range proof, hash preimage, computation attestation, accumulator step,
-  policy compliance, data integrity). Free 100 proofs/month, no credit card.
+  Mint zero-knowledge proofs as a tool call. ZK-STARK, transparent (no trusted
+  setup), post-quantum (hash-based). Accumulator-step state-transition proofs
+  available now. Free 100 proofs/month, no credit card.
 
 homepage: https://tinyzkp.com
 repository: https://github.com/logannye/hc-stark

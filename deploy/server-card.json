@@ -283,7 +283,7 @@
   ],
   "metadata": {
     "displayName": "TinyZKP — Verifiable Receipts for AI Agents",
-    "description": "Mint zero-knowledge proofs as a tool call. Six production templates (range, hash preimage, computation attestation, accumulator, policy compliance, data integrity) plus two preview-tier extensions (zkml, spartan). Free 100 proofs/month, no credit card.",
+    "description": "Mint zero-knowledge proofs as a tool call. ZK-STARK, transparent (no trusted setup), post-quantum (hash-based). Accumulator-step state-transition proofs available now. Free 100 proofs/month, no credit card.",
     "homepage": "https://tinyzkp.com",
     "documentation": "https://tinyzkp.com/docs",
     "repository": "https://github.com/logannye/hc-stark",
