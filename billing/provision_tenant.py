@@ -439,6 +439,12 @@ def provision_free():
 
     conn = tenant_store.open_db()
 
+    # G8: one free tenant per email — reject duplicates before create_tenant.
+    existing = tenant_store.get_by_email(conn, email)
+    if existing:
+        conn.close()
+        return flask.jsonify(error="account already exists for this email"), 409
+
     tenant_id = generate_tenant_id()
     api_key = generate_api_key()
 
