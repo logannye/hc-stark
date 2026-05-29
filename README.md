@@ -75,7 +75,7 @@ Verification is always free. SDKs ship for Python (`pip install tinyzkp`), TypeS
 | Verifier time | polylog(T) | polylog(T) |
 | Proof size | polylog(T) | polylog(T) |
 | Transparent (no trusted setup) | Yes | Yes |
-| Post-quantum (hash-based) | Yes (hash-based) | Yes (hash-based) |
+| Post-quantum (hash-based) | Yes | Yes |
 
 The technical writeup is in [`docs/whitepaper.md`](docs/whitepaper.md).
 

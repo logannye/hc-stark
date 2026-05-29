@@ -73,10 +73,10 @@ For the current list of available templates, call `list_templates` via MCP or th
 ## Cost
 
 - **Free tier**: 100 proofs/month, no credit card.
-- **Developer ($9/month)**: 100 RPM, 4 concurrent jobs, $500 monthly cap. Per-proof rates from $0.05 (small) to $30 (10M+ steps).
+- **Developer ($19/month)**: 100 RPM, 4 concurrent jobs, $500 monthly cap. Per-proof rates from $0.05 (small) to $30 (10M+ steps).
 - **Verification**: always free. 10K free verify calls/month even on no-card plans.
 
-Most Cursor-side workloads (small accumulator / state-transition proofs) land squarely in the $0.05 tier. A typical developer pays $9–$25 per month all-in.
+Most Cursor-side workloads (small accumulator / state-transition proofs) land squarely in the $0.05 tier. A typical developer pays $19–$25 per month all-in.
 
 ## Try it
 
