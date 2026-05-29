@@ -12,7 +12,9 @@ services:
       - HC_SERVER_MAX_PROVE_SECS=300
       # Multi-tenant-lite API keys: "tenant:key" pairs (comma-separated).
       # Clients must send: Authorization: Bearer <key>
-      - HC_SERVER_API_KEYS=demo:demo_key
+      # Set per-deployment; empty by default so there is NO live default credential.
+      # Local dev: export HC_SERVER_API_KEYS=demo:demo_key before `docker compose up`.
+      - HC_SERVER_API_KEYS=${HC_SERVER_API_KEYS:-}
       # Default production posture: disallow arbitrary code; require fixed workload_id.
       - HC_SERVER_ALLOW_CUSTOM_PROGRAMS=false
       # DB-backed auth fallback: closes the 60s window between webhook
