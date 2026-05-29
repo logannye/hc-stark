@@ -334,6 +334,9 @@ impl SerializableProof {
                 },
                 zk_enabled: self.params.zk_enabled,
                 zk_mask_degree: self.params.zk_mask_degree,
+                // grinding_bits defaults to 0 for v3 proofs; will be round-tripped
+                // once the v5 serializer (a later task) adds it to SerializableProofParams.
+                grinding_bits: 0,
             }
         } else {
             ProofParams {
@@ -344,6 +347,7 @@ impl SerializableProof {
                 protocol_version: self.version,
                 zk_enabled: false,
                 zk_mask_degree: 0,
+                grinding_bits: 0,
             }
         };
 

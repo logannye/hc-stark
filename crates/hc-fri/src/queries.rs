@@ -11,6 +11,11 @@ pub struct FriProof<F: FieldElement> {
     pub final_layer: Vec<F>,
     /// Merkle root of the final layer evaluations.
     pub final_root: HashDigest,
+    /// Explicit final-layer polynomial coefficients for the v5 prover's low-degree material.
+    ///
+    /// Empty for v3 proofs. Populated via [`FriProof::with_final_coeffs`] by the v5 prover
+    /// (Task 7b). Not bound into the v3 transcript; additive-only.
+    pub final_coeffs: Vec<F>,
 }
 
 impl<F: FieldElement> FriProof<F> {
@@ -19,7 +24,16 @@ impl<F: FieldElement> FriProof<F> {
             layer_roots,
             final_layer,
             final_root,
+            final_coeffs: Vec::new(),
         }
+    }
+
+    /// Builder method for the v5 prover (Task 7b) to attach final polynomial coefficients.
+    // used by the v5 prover (Task 7b)
+    #[allow(dead_code)]
+    pub fn with_final_coeffs(mut self, coeffs: Vec<F>) -> Self {
+        self.final_coeffs = coeffs;
+        self
     }
 
     pub fn layer_count(&self) -> usize {
@@ -60,6 +74,26 @@ pub fn is_valid_query_index(query_index: usize, layer_size: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hc_hash::HashDigest;
+    use hc_core::field::prime_field::GoldilocksField;
+
+    /// FriProof::new sets final_coeffs to empty; with_final_coeffs sets it.
+    #[test]
+    fn fri_proof_final_coeffs_field() {
+        let proof: FriProof<GoldilocksField> =
+            FriProof::new(Vec::new(), Vec::new(), HashDigest::new([0u8; 32]));
+        assert!(proof.final_coeffs.is_empty(), "new() must set final_coeffs = []");
+
+        let coeffs = vec![
+            GoldilocksField::from_u64(1),
+            GoldilocksField::from_u64(2),
+            GoldilocksField::from_u64(3),
+        ];
+        let proof2 = proof.with_final_coeffs(coeffs.clone());
+        assert_eq!(proof2.final_coeffs.len(), 3);
+        assert_eq!(proof2.final_coeffs[0].to_u64(), 1);
+        assert_eq!(proof2.final_coeffs[2].to_u64(), 3);
+    }
 
     #[test]
     fn propagate_v5_hand_cases() {

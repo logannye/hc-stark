@@ -23,6 +23,9 @@ pub struct ProofParams {
     pub zk_enabled: bool,
     /// Masking degree bound (meaningful only when `zk_enabled`).
     pub zk_mask_degree: usize,
+    /// Number of bits of proof-of-work grinding performed by the v5 prover.
+    /// Zero for v3 proofs (no grinding). Populated by the v5 prover (Task 7b).
+    pub grinding_bits: u32,
 }
 
 /// Query response containing both trace and FRI query answers
@@ -128,4 +131,32 @@ pub struct ProverOutput<F: FieldElement> {
     pub trace_length: usize,
     pub commitment_scheme: CommitmentScheme,
     pub params: ProofParams,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ProofParams construct-and-read test (manual serde — not derive). Verifies the
+    /// new grinding_bits field round-trips through a plain Rust value.
+    #[test]
+    fn proof_params_grinding_bits_field() {
+        let p = ProofParams {
+            query_count: 40,
+            lde_blowup_factor: 4,
+            fri_final_poly_size: 2,
+            fri_folding_ratio: 2,
+            protocol_version: 3,
+            zk_enabled: false,
+            zk_mask_degree: 0,
+            grinding_bits: 0,
+        };
+        assert_eq!(p.grinding_bits, 0, "v3 params must have grinding_bits = 0");
+
+        let p_nonzero = ProofParams {
+            grinding_bits: 16,
+            ..p
+        };
+        assert_eq!(p_nonzero.grinding_bits, 16);
+    }
 }

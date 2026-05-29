@@ -1141,6 +1141,8 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
                 protocol_version: self.config.protocol_version,
                 zk_enabled: self.config.zk.enabled,
                 zk_mask_degree: self.config.zk.mask_degree,
+                // v3 does not grind; the v5 prover (Task 7b) will set this from config.
+                grinding_bits: 0,
             },
         });
         Ok(())
