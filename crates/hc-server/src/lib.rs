@@ -2014,6 +2014,16 @@ fn smart_block_size(program_len: usize) -> usize {
     }
 }
 
+/// Whether unaudited (StructureOnly) templates are exposed/dispatchable.
+/// Default `false`: production offers only templates whose AIR enforces
+/// their predicate. Set `HC_ALLOW_UNAUDITED_TEMPLATES=true` for dev/Phase-1B.
+fn allow_unaudited_templates() -> bool {
+    matches!(
+        std::env::var("HC_ALLOW_UNAUDITED_TEMPLATES").as_deref(),
+        Ok("true") | Ok("1")
+    )
+}
+
 /// GET /templates — list all available proof templates across every
 /// backend (public, no auth).
 ///
@@ -2024,15 +2034,21 @@ fn smart_block_size(program_len: usize) -> usize {
 /// flat list directly.
 #[utoipa::path(get, path = "/templates", responses((status = 200, body = TemplateListResponse)))]
 async fn templates_list() -> Json<TemplateListResponse> {
+    let allow = allow_unaudited_templates();
     let unified = hc_workloads::list_all_templates();
     let summaries: Vec<TemplateSummary> = unified
         .iter()
+        .filter(|t| hc_workloads::is_listable(t.enforcement, allow))
         .map(|t| TemplateSummary {
             id: t.id.clone(),
             summary: t.summary.clone(),
             tags: t.tags.clone(),
             cost_category: t.cost_category.clone(),
             backend: t.backend.to_string(),
+            enforcement: serde_json::to_value(t.enforcement)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_else(|| "structure_only".to_string()),
         })
         .collect();
     let count = summaries.len();
@@ -2052,6 +2068,16 @@ async fn templates_list() -> Json<TemplateListResponse> {
 async fn template_detail(
     Path(template_id): Path<String>,
 ) -> Result<axum::response::Response, ApiError> {
+    let allow = allow_unaudited_templates();
+    if let Some(enf) = hc_workloads::enforcement_for(&template_id) {
+        if !hc_workloads::is_listable(enf, allow) {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                format!("unknown template: {template_id}"),
+            ));
+        }
+    }
     if let Some(t) = hc_workloads::templates::template_by_id(&template_id) {
         let mut info = serde_json::to_value(t.to_info()).unwrap_or_default();
         if let Some(obj) = info.as_object_mut() {
@@ -2081,6 +2107,17 @@ async fn prove_template(
     Json(req): Json<TemplateProveRequest>,
 ) -> Result<Json<ProveSubmitResponse>, ApiError> {
     state.metrics.prove_submitted.inc();
+
+    if !hc_workloads::is_dispatchable(&template_id, allow_unaudited_templates()) {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "template_unavailable",
+            format!(
+                "template '{template_id}' does not currently enforce its named predicate \
+                 and is disabled in this deployment"
+            ),
+        ));
+    }
 
     let tenant = guarded_auth(&state, &headers)?;
     let tenant_id = tenant.tenant_id.clone();
@@ -2458,6 +2495,13 @@ async fn estimate(Json(req): Json<EstimateRequest>) -> Result<Json<EstimateRespo
                 "params required when template_id is set",
             )
         })?;
+        if !hc_workloads::is_dispatchable(tid, allow_unaudited_templates()) {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "template_unavailable",
+                "template is not available in this deployment",
+            ));
+        }
         let build = hc_workloads::templates::build_from_template(tid, params).map_err(|e| {
             ApiError::new(
                 StatusCode::BAD_REQUEST,
@@ -3398,5 +3442,33 @@ mod pricing_parity_tests {
                 "trace_length={probe_steps}: in-code price {got} ≠ pricing.json {cents}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod honest_catalog_tests {
+    use super::*;
+
+    #[test]
+    fn allow_helper_defaults_false_and_reads_true() {
+        std::env::remove_var("HC_ALLOW_UNAUDITED_TEMPLATES");
+        assert!(!allow_unaudited_templates());
+        std::env::set_var("HC_ALLOW_UNAUDITED_TEMPLATES", "true");
+        assert!(allow_unaudited_templates());
+        std::env::set_var("HC_ALLOW_UNAUDITED_TEMPLATES", "false");
+        assert!(!allow_unaudited_templates());
+        std::env::remove_var("HC_ALLOW_UNAUDITED_TEMPLATES");
+    }
+
+    #[test]
+    fn default_catalog_lists_only_enforced() {
+        let listed: Vec<String> = hc_workloads::list_all_templates()
+            .into_iter()
+            .filter(|t| hc_workloads::is_listable(t.enforcement, false))
+            .map(|t| t.id)
+            .collect();
+        assert!(listed.contains(&"accumulator_step".to_string()));
+        assert!(!listed.contains(&"range_proof".to_string()));
+        assert!(!listed.iter().any(|id| id.starts_with("zkml_")));
     }
 }

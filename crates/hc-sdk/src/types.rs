@@ -118,6 +118,7 @@ pub struct TemplateSummary {
     /// without the field continue to deserialize.
     #[serde(default = "default_backend")]
     pub backend: String,
+    pub enforcement: String,
 }
 
 fn default_backend() -> String {
