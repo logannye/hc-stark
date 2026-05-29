@@ -371,11 +371,12 @@ fi
 sleep 0.5
 
 # ══════════════════════════════════════════════════════════════════
-# 6. CRITICAL FLOWS — Free Signup → Magic-Link → API Key → /usage
+# 6. CRITICAL FLOWS — Free Signup → Magic-Link → Session Cookie → /usage
 # ══════════════════════════════════════════════════════════════════
 # End-to-end exercise of the full free-tier signup pipeline:
 #   CF Function → webhook → tenant DB → magic-link issuance →
-#   verify-magic-link → API key → /usage.
+#   verify-magic-link (sets tz_session cookie, no raw api_key) →
+#   session-resolve → /api/usage (cookie-gated).
 # Cleans up by purging the test tenant via the webhook's
 # /tenant-purge admin endpoint (gated by INTERNAL_SECRET, refuses any
 # tenant whose plan != "free" or whose email doesn't start with "audit+").
@@ -386,6 +387,9 @@ INTERNAL_SECRET="${TINYZKP_INTERNAL_SECRET:-}"
 if [ -n "$INTERNAL_SECRET" ]; then
     log ""
     log "── Critical Flows — Free Signup E2E ──"
+
+    # Cookie jar — mirrors a real browser session; cleaned up below.
+    JAR=$(mktemp)
 
     audit_email="audit+autotest-$(date +%s)@tinyzkp.com"
     signup_resp=$(curl -s --max-time 20 \
@@ -406,49 +410,114 @@ if [ -n "$INTERNAL_SECRET" ]; then
     fi
     sleep 0.5
 
-    NEW_API_KEY=""
     NEW_TENANT_ID=""
+    VERIFY_OK=""
     if [ -n "$DASHBOARD_TOKEN" ]; then
+        # POST verify-magic-link with cookie jar so the HttpOnly tz_session
+        # cookie is stored for all subsequent cookie-gated calls.
         verify_resp=$(curl -s --max-time 15 \
+            -c "$JAR" -b "$JAR" \
             -X POST -H "Content-Type: application/json" \
             -H "Origin: https://tinyzkp.com" \
             -d "{\"token\":\"$DASHBOARD_TOKEN\"}" \
             "$SITE/api/verify-magic-link" 2>/dev/null) || verify_resp=""
-        NEW_API_KEY=$(echo "$verify_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('api_key','') or '')" 2>/dev/null || echo "")
         NEW_TENANT_ID=$(echo "$verify_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tenant_id','') or '')" 2>/dev/null || echo "")
 
+        # Assert: response must NOT contain api_key (raw key must never be returned).
         TOTAL=$((TOTAL + 1))
-        if [ -n "$NEW_API_KEY" ] && [ -n "$NEW_TENANT_ID" ]; then
-            log "  PASS  200  POST /api/verify-magic-link (returned api_key + tenant_id)"
-            PASS=$((PASS + 1))
-        else
-            log "  FAIL  ---  POST /api/verify-magic-link (missing credentials: ${verify_resp:0:120})"
+        has_raw_key=$(echo "$verify_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if 'api_key' in d and d['api_key'] else '')" 2>/dev/null || echo "")
+        if [ -n "$has_raw_key" ]; then
+            log "  FAIL  ---  POST /api/verify-magic-link leaked the raw API key (api_key present in response)"
             FAIL=$((FAIL + 1))
-            FAILURES="$FAILURES\n  POST /api/verify-magic-link did not return tenant credentials"
+            FAILURES="$FAILURES\n  POST /api/verify-magic-link leaked the raw API key"
+        else
+            log "  PASS  ---  POST /api/verify-magic-link did not return api_key (key not exposed)"
+            PASS=$((PASS + 1))
+        fi
+
+        # Assert: response must contain api_key_prefix and the session cookie must be set.
+        TOTAL=$((TOTAL + 1))
+        has_prefix=$(echo "$verify_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if d.get('api_key_prefix') else '')" 2>/dev/null || echo "")
+        has_cookie=$(grep -q "tz_session" "$JAR" 2>/dev/null && echo "yes" || echo "")
+        if [ -n "$has_prefix" ] && [ -n "$has_cookie" ]; then
+            log "  PASS  200  POST /api/verify-magic-link (api_key_prefix present; tz_session cookie set)"
+            PASS=$((PASS + 1))
+            VERIFY_OK="yes"
+        elif [ -z "$has_prefix" ]; then
+            log "  FAIL  ---  POST /api/verify-magic-link (missing api_key_prefix: ${verify_resp:0:120})"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  POST /api/verify-magic-link did not return api_key_prefix"
+        else
+            log "  FAIL  ---  POST /api/verify-magic-link (tz_session cookie not set in jar)"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  POST /api/verify-magic-link did not set tz_session cookie"
         fi
         sleep 0.5
     fi
 
-    if [ -n "$NEW_API_KEY" ]; then
+    if [ -n "$VERIFY_OK" ]; then
+        # session-resolve positive path — cookie authenticates.
         TOTAL=$((TOTAL + 1))
-        usage_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
-            -H "Authorization: Bearer $NEW_API_KEY" \
-            "$API/usage" 2>/dev/null) || usage_code="000"
-        if [ "$usage_code" = "200" ]; then
-            log "  PASS  200  GET /usage (new tenant's API key authenticates)"
+        sresolve_resp=$(curl -s --max-time 15 \
+            -b "$JAR" \
+            -X POST -H "Content-Type: application/json" \
+            -H "Origin: https://tinyzkp.com" \
+            -d '{}' \
+            "$SITE/api/session-resolve" 2>/dev/null) || sresolve_resp=""
+        sr_prefix=$(echo "$sresolve_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('api_key_prefix','') or '')" 2>/dev/null || echo "")
+        if [ -n "$sr_prefix" ]; then
+            log "  PASS  200  POST /api/session-resolve (session cookie authenticates; api_key_prefix present)"
             PASS=$((PASS + 1))
-        elif [ "$usage_code" = "429" ]; then
-            # Rate-limited means auth resolved the key (request reached the
-            # rate limiter), so the auth path is fine — just throttled.
-            # Still a FAIL because the audit expects 200, but operator
-            # action differs from a real auth-path failure.
-            log "  FAIL  429  GET /usage (new tenant's API key was rate-limited; auth path resolved the key)"
-            FAIL=$((FAIL + 1))
-            FAILURES="$FAILURES\n  429 GET /usage with newly minted API key (rate-limited, not auth failure)"
         else
-            log "  FAIL  $usage_code  GET /usage (new tenant's API key returned $usage_code, expected 200)"
+            log "  FAIL  ---  POST /api/session-resolve (missing api_key_prefix: ${sresolve_resp:0:120})"
             FAIL=$((FAIL + 1))
-            FAILURES="$FAILURES\n  $usage_code GET /usage with newly minted API key"
+            FAILURES="$FAILURES\n  POST /api/session-resolve did not return api_key_prefix"
+        fi
+        sleep 0.5
+
+        # /api/usage positive path — cookie-gated, replaces old Bearer /usage.
+        TOTAL=$((TOTAL + 1))
+        usage_resp=$(curl -s --max-time 15 \
+            -b "$JAR" \
+            -X POST -H "Content-Type: application/json" \
+            -H "Origin: https://tinyzkp.com" \
+            -d '{}' \
+            "$SITE/api/usage" 2>/dev/null) || usage_resp=""
+        usage_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            -b "$JAR" \
+            -X POST -H "Content-Type: application/json" \
+            -H "Origin: https://tinyzkp.com" \
+            -d '{}' \
+            "$SITE/api/usage" 2>/dev/null) || usage_code="000"
+        has_proofs=$(echo "$usage_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if 'total_proofs' in d else '')" 2>/dev/null || echo "")
+        if [ "$usage_code" = "200" ]; then
+            if [ -n "$has_proofs" ]; then
+                log "  PASS  200  POST /api/usage (session cookie authenticates; total_proofs present)"
+            else
+                log "  PASS  200  POST /api/usage (session cookie authenticates)"
+            fi
+            PASS=$((PASS + 1))
+        else
+            log "  FAIL  $usage_code  POST /api/usage (expected 200, got $usage_code)"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  $usage_code POST /api/usage with session cookie"
+        fi
+        sleep 0.5
+
+        # session-resolve negative path — no cookie should return 401.
+        TOTAL=$((TOTAL + 1))
+        sr_noauth_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            -X POST -H "Content-Type: application/json" \
+            -H "Origin: https://tinyzkp.com" \
+            -d '{}' \
+            "$SITE/api/session-resolve" 2>/dev/null) || sr_noauth_code="000"
+        if [ "$sr_noauth_code" = "401" ]; then
+            log "  PASS  401  POST /api/session-resolve (correctly rejects unauthenticated request)"
+            PASS=$((PASS + 1))
+        else
+            log "  FAIL  $sr_noauth_code  POST /api/session-resolve (expected 401 without cookie)"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  $sr_noauth_code POST /api/session-resolve without cookie (expected 401)"
         fi
         sleep 0.5
 
@@ -474,9 +543,10 @@ if [ -n "$INTERNAL_SECRET" ]; then
         sleep 0.5
     fi
 
-    # Cleanup — purge the test tenant. Failure here is logged but does
-    # not fail the audit (the safety guards on /tenant-purge make orphan
-    # rows benign).
+    # Cleanup — purge the test tenant and remove the cookie jar. Failure
+    # here is logged but does not fail the audit (the safety guards on
+    # /tenant-purge make orphan rows benign).
+    rm -f "$JAR"
     if [ -n "$NEW_TENANT_ID" ]; then
         purge_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
             -X POST -H "Content-Type: application/json" \
@@ -527,7 +597,7 @@ sleep 0.5
 
 # Internal-only routes — require X-Internal-Secret. Hitting without the
 # header should return 403 (route exists, auth-rejected). 404 = route gone.
-for path in /provision-free /rotate /send-magic-link /send-contact /verify-magic-link; do
+for path in /provision-free /rotate /send-magic-link /send-contact /verify-magic-link /session/resolve /logout; do
     TOTAL=$((TOTAL + 1))
     code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
         -X POST -H "Content-Type: application/json" -d '{}' \
