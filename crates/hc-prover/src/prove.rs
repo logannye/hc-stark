@@ -1272,7 +1272,8 @@ pub fn prove_stark_v5(
     };
 
     // --- Phase 1 (F): trace LDE evaluation (+ optional ZK mask) and commit. ---
-    let trace_lde = build_trace_lde::<F>(&trace_producer, trace_length, padded_len, blowup, &config)?;
+    let trace_lde =
+        build_trace_lde::<F>(&trace_producer, trace_length, padded_len, blowup, &config)?;
     let trace_root = commit_trace_lde::<F>(&trace_lde)?;
 
     // --- v5 MAIN transcript. The Task 8 verifier MUST replay this exact order. ---
@@ -1684,7 +1685,9 @@ fn open_trace_query<F: FieldElement>(
     };
     let next_witness =
         reconstruct_path_from_replay_mut::<Blake3, _>(next_idx, lde_len, 2, &mut leaf_hash2)
-            .map_err(|err| HcError::message(format!("Failed to extract trace LDE next path: {err}")))?;
+            .map_err(|err| {
+                HcError::message(format!("Failed to extract trace LDE next path: {err}"))
+            })?;
 
     Ok(crate::queries::TraceQuery {
         index: idx,
@@ -1717,7 +1720,9 @@ fn open_composition_query<F: FieldElement>(
         Ok(hash_field_element(&v))
     };
     let witness = reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)
-        .map_err(|err| HcError::message(format!("Failed to extract quotient Merkle path: {err}")))?;
+        .map_err(|err| {
+            HcError::message(format!("Failed to extract quotient Merkle path: {err}"))
+        })?;
     Ok(crate::queries::CompositionQuery {
         index: idx,
         value,
@@ -1886,11 +1891,13 @@ mod tests {
             protocol::label::PARAM_ZK_MASK_DEGREE,
             proof.params.zk_mask_degree as u64,
         );
-        t.append_message(protocol::label::COMMIT_TRACE_LDE_ROOT, trace_root.as_bytes());
+        t.append_message(
+            protocol::label::COMMIT_TRACE_LDE_ROOT,
+            trace_root.as_bytes(),
+        );
         // Re-derive the composition challenges (must be drawn here, between the
         // trace LDE root and the quotient root, to advance the transcript state).
-        let _alpha_boundary =
-            t.challenge_field::<Gl>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
+        let _alpha_boundary = t.challenge_field::<Gl>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
         let _alpha_transition =
             t.challenge_field::<Gl>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
         t.append_message(
@@ -1914,7 +1921,10 @@ mod tests {
         // version == 5 (native, ZK disabled).
         assert_eq!(proof.version, 5, "native v5 proof version");
         assert_eq!(proof.params.protocol_version, 5);
-        assert_eq!(proof.params.grinding_bits, 8, "grinding_bits set from config");
+        assert_eq!(
+            proof.params.grinding_bits, 8,
+            "grinding_bits set from config"
+        );
 
         // final_coeffs length == fri_final_poly_size / lde_blowup_factor.
         let expected_final_coeffs =

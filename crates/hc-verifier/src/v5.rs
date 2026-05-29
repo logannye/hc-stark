@@ -183,7 +183,9 @@ fn verify_stark_v5_inner(proof: &ProofV5<F>) -> HcResult<()> {
         .checked_mul(blowup)
         .ok_or_else(|| HcError::invalid_argument("lde domain size overflow"))?;
     if lde_len == 0 {
-        return Err(HcError::invalid_argument("lde domain size must be non-zero"));
+        return Err(HcError::invalid_argument(
+            "lde domain size must be non-zero",
+        ));
     }
 
     // --- (a) Rebuild the v5 MAIN transcript EXACTLY as `prove_stark_v5`. ---
@@ -239,10 +241,14 @@ fn verify_stark_v5_inner(proof: &ProofV5<F>) -> HcResult<()> {
         protocol::label::PARAM_ZK_MASK_DEGREE,
         proof.params.zk_mask_degree as u64,
     );
-    transcript.append_message(protocol::label::COMMIT_TRACE_LDE_ROOT, trace_root.as_bytes());
+    transcript.append_message(
+        protocol::label::COMMIT_TRACE_LDE_ROOT,
+        trace_root.as_bytes(),
+    );
     // Draw the two composition α challenges to advance the transcript state
     // (the quotient relation stays in F; the challenge field is F as in v3).
-    let alpha_boundary = transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
+    let alpha_boundary =
+        transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
     let alpha_transition =
         transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
     transcript.append_message(
@@ -273,8 +279,7 @@ fn verify_stark_v5_inner(proof: &ProofV5<F>) -> HcResult<()> {
         protocol::label::FRI_GRINDING_NONCE,
         proof.grinding_nonce,
     );
-    let base_queries =
-        generate_queries::<F>(&mut transcript, lde_len, proof.params.query_count)?;
+    let base_queries = generate_queries::<F>(&mut transcript, lde_len, proof.params.query_count)?;
 
     // --- (b) Recompute the FRI betas in K (mirror `run_fri_v5`). ---
     let betas = recompute_fri_betas_v5(proof, trace_root, quotient_root)?;
@@ -340,8 +345,16 @@ fn recompute_fri_betas_v5(
     quotient_root: HashDigest,
 ) -> HcResult<Vec<K>> {
     let mut t = Transcript::<Blake3>::new(protocol::DOMAIN_FRI_V5);
-    protocol::append_u64::<Blake3>(&mut t, protocol::label::PUB_INITIAL_ACC, proof.initial_acc.to_u64());
-    protocol::append_u64::<Blake3>(&mut t, protocol::label::PUB_FINAL_ACC, proof.final_acc.to_u64());
+    protocol::append_u64::<Blake3>(
+        &mut t,
+        protocol::label::PUB_INITIAL_ACC,
+        proof.initial_acc.to_u64(),
+    );
+    protocol::append_u64::<Blake3>(
+        &mut t,
+        protocol::label::PUB_FINAL_ACC,
+        proof.final_acc.to_u64(),
+    );
     protocol::append_u64::<Blake3>(
         &mut t,
         protocol::label::PUB_TRACE_LENGTH,
@@ -386,8 +399,14 @@ fn recompute_fri_betas_v5(
         proof.params.zk_mask_degree as u64,
     );
     // v5 extends v3: LDE-trace + quotient commitment labels.
-    t.append_message(protocol::label::COMMIT_TRACE_LDE_ROOT, trace_root.as_bytes());
-    t.append_message(protocol::label::COMMIT_QUOTIENT_ROOT, quotient_root.as_bytes());
+    t.append_message(
+        protocol::label::COMMIT_TRACE_LDE_ROOT,
+        trace_root.as_bytes(),
+    );
+    t.append_message(
+        protocol::label::COMMIT_QUOTIENT_ROOT,
+        quotient_root.as_bytes(),
+    );
 
     // Squeeze a K beta after appending each layer root (mirrors the commit phase).
     let mut betas = Vec::with_capacity(proof.fri_proof.layer_roots.len());
@@ -615,7 +634,9 @@ fn verify_fri_low_degree_v5(
             let half = n / 2;
             let low = current & (half - 1);
 
-            let recorded = fri_iter.next().ok_or(VerifierError::FriQueryCountMismatch)?;
+            let recorded = fri_iter
+                .next()
+                .ok_or(VerifierError::FriQueryCountMismatch)?;
             if recorded.layer_index != layer_idx || recorded.query_index != low {
                 return Err(VerifierError::FriQueryIndexMismatch.into());
             }
@@ -750,7 +771,12 @@ mod tests {
     }
 
     fn honest_proof(grinding_bits: u32) -> ProofV5<F> {
-        prove_v5(honest_config(grinding_bits), honest_program(), honest_inputs()).unwrap()
+        prove_v5(
+            honest_config(grinding_bits),
+            honest_program(),
+            honest_inputs(),
+        )
+        .unwrap()
     }
 
     // ── G2: honest v5 round-trip ACCEPTS ───────────────────────────────────
@@ -864,10 +890,7 @@ mod tests {
     fn v5_truncated_final_coeffs_rejected() {
         // A LONGER final_coeffs than the degree bound must be rejected outright.
         let mut proof = honest_proof(8);
-        proof
-            .fri_proof
-            .final_coeffs
-            .push(K::from_u64(123)); // now longer than fri_final_poly_size/blowup
+        proof.fri_proof.final_coeffs.push(K::from_u64(123)); // now longer than fri_final_poly_size/blowup
         let err = verify_v5_with_floor(&proof, VerifierSecurityFloor::relaxed())
             .expect_err("over-long final_coeffs must be rejected");
         eprintln!("v5_over_long_final_coeffs_rejected: {err}");
@@ -894,7 +917,9 @@ mod tests {
         let proof = honest_proof(20);
         // (blowup also below floor; this test pins that the floor fires at all.)
         let err = verify_v5(&proof).expect_err("query_count below floor must be rejected");
-        assert!(err.to_string().contains("below the verifier security floor"));
+        assert!(err
+            .to_string()
+            .contains("below the verifier security floor"));
     }
 
     #[test]
@@ -906,7 +931,9 @@ mod tests {
         proof.params.query_count = 40;
         let err = enforce_floor(&proof, VerifierSecurityFloor::default())
             .expect_err("grinding_bits below floor must be rejected");
-        assert!(err.to_string().contains("below the verifier security floor"));
+        assert!(err
+            .to_string()
+            .contains("below the verifier security floor"));
     }
 
     #[test]
@@ -917,7 +944,9 @@ mod tests {
         proof.params.fri_final_poly_size = 257; // > MAX (256)
         let err = enforce_floor(&proof, VerifierSecurityFloor::default())
             .expect_err("oversized final poly must be rejected");
-        assert!(err.to_string().contains("below the verifier security floor"));
+        assert!(err
+            .to_string()
+            .contains("below the verifier security floor"));
     }
 
     #[test]

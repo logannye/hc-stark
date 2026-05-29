@@ -573,12 +573,16 @@ pub fn answer_fri_queries_v5(
             let len = end - s;
 
             // Two block reads: low values prev[s..e], high prev[s+half..e+half].
-            let lo = self.prev.produce(hc_replay::block_range::BlockRange::new(s, len))?;
+            let lo = self
+                .prev
+                .produce(hc_replay::block_range::BlockRange::new(s, len))?;
             let hi = self
                 .prev
                 .produce(hc_replay::block_range::BlockRange::new(s + half, len))?;
             if lo.len() != len || hi.len() != len {
-                return Err(HcError::message("fri v5 fold producer returned short block"));
+                return Err(HcError::message(
+                    "fri v5 fold producer returned short block",
+                ));
             }
 
             let two_inv = K::from_u64(2)
@@ -974,9 +978,11 @@ mod v5_query_tests {
     /// Build the K layer-0 `LayerDomain` exactly as `run_fri_v5` does: the LDE
     /// coset (offset 7) of size `base_len` in F, embedded into K.
     fn base_layer_domain_k(base_len: usize) -> LayerDomain<K> {
-        let dom_f =
-            EvaluationDomain::<GoldilocksField>::new_coset(base_len, GoldilocksField::from_u64(LDE_COSET_OFFSET))
-                .unwrap();
+        let dom_f = EvaluationDomain::<GoldilocksField>::new_coset(
+            base_len,
+            GoldilocksField::from_u64(LDE_COSET_OFFSET),
+        )
+        .unwrap();
         LayerDomain {
             offset: K::from_base(dom_f.offset()),
             gen: K::from_base(dom_f.generator()),
@@ -987,9 +993,11 @@ mod v5_query_tests {
     /// A genuinely low-degree F base codeword (degree `base_len/blowup - 1`) on
     /// the LDE coset, ready to be embedded into K by `run_fri_v5`'s adapter.
     fn low_degree_base(base_len: usize, blowup: usize) -> Vec<GoldilocksField> {
-        let dom_f =
-            EvaluationDomain::<GoldilocksField>::new_coset(base_len, GoldilocksField::from_u64(LDE_COSET_OFFSET))
-                .unwrap();
+        let dom_f = EvaluationDomain::<GoldilocksField>::new_coset(
+            base_len,
+            GoldilocksField::from_u64(LDE_COSET_OFFSET),
+        )
+        .unwrap();
         let deg = base_len / blowup - 1;
         let poly: Vec<GoldilocksField> = (0..=deg)
             .map(|i| GoldilocksField::from_u64((i as u64).wrapping_mul(2_654_435_761) + 101))
@@ -1025,14 +1033,22 @@ mod v5_query_tests {
             let values = low_degree_base(base_len, blowup);
             let producer: Arc<dyn BlockProducer<GoldilocksField>> =
                 Arc::new(VecBlockProducer::new(values));
-            let artifacts =
-                run_fri_v5(config, producer, base_len, seed_v5(base_len, blowup, final_size))
-                    .unwrap();
+            let artifacts = run_fri_v5(
+                config,
+                producer,
+                base_len,
+                seed_v5(base_len, blowup, final_size),
+            )
+            .unwrap();
 
             // A spread of base queries across the LDE coset.
-            let base_queries: Vec<usize> = vec![0, 1, 3, base_len / 2, base_len / 2 + 1, base_len - 1];
+            let base_queries: Vec<usize> =
+                vec![0, 1, 3, base_len / 2, base_len / 2 + 1, base_len - 1];
             let queries = answer_fri_queries_v5(&base_queries, &artifacts).unwrap();
-            assert!(!queries.is_empty(), "expected openings (base_len={base_len})");
+            assert!(
+                !queries.is_empty(),
+                "expected openings (base_len={base_len})"
+            );
 
             for q in &queries {
                 let root = artifacts.proof.layer_roots[q.layer_index];
@@ -1063,9 +1079,13 @@ mod v5_query_tests {
             let values = low_degree_base(base_len, blowup);
             let producer: Arc<dyn BlockProducer<GoldilocksField>> =
                 Arc::new(VecBlockProducer::new(values));
-            let artifacts =
-                run_fri_v5(config, producer, base_len, seed_v5(base_len, blowup, final_size))
-                    .unwrap();
+            let artifacts = run_fri_v5(
+                config,
+                producer,
+                base_len,
+                seed_v5(base_len, blowup, final_size),
+            )
+            .unwrap();
 
             // Per-layer LayerDomain chain (offset 7, embedded to K, squared each layer).
             let mut domains: Vec<LayerDomain<K>> = Vec::new();
@@ -1097,7 +1117,11 @@ mod v5_query_tests {
                     // `current_{L+1}` lands in: slot 0 if it equals the recorded
                     // low, else slot 1 (the antipodal partner).
                     let next_current = cur.query_index;
-                    let slot = if next_current == next.query_index { 0 } else { 1 };
+                    let slot = if next_current == next.query_index {
+                        0
+                    } else {
+                        1
+                    };
                     assert_eq!(
                         folded, next.values[slot],
                         "antipodal fold of layer {} pair must equal layer {} opened value \
@@ -1135,8 +1159,13 @@ mod v5_query_tests {
         let values = low_degree_base(base_len, blowup);
         let producer: Arc<dyn BlockProducer<GoldilocksField>> =
             Arc::new(VecBlockProducer::new(values));
-        let artifacts =
-            run_fri_v5(config, producer, base_len, seed_v5(base_len, blowup, final_size)).unwrap();
+        let artifacts = run_fri_v5(
+            config,
+            producer,
+            base_len,
+            seed_v5(base_len, blowup, final_size),
+        )
+        .unwrap();
 
         for &bq in &[0usize, 5, 130, base_len - 1] {
             let chain = answer_fri_queries_v5(&[bq], &artifacts).unwrap();
@@ -1171,8 +1200,13 @@ mod v5_query_tests {
         let base_values_k: Vec<K> = base_values_f.iter().map(|&v| K::from_base(v)).collect();
         let producer: Arc<dyn BlockProducer<GoldilocksField>> =
             Arc::new(VecBlockProducer::new(base_values_f));
-        let artifacts =
-            run_fri_v5(config, producer, base_len, seed_v5(base_len, blowup, final_size)).unwrap();
+        let artifacts = run_fri_v5(
+            config,
+            producer,
+            base_len,
+            seed_v5(base_len, blowup, final_size),
+        )
+        .unwrap();
 
         // Materialize every committed layer independently via fold_layer_v5.
         let mut layers: Vec<Vec<K>> = Vec::new();

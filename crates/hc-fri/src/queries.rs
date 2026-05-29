@@ -74,15 +74,18 @@ pub fn is_valid_query_index(query_index: usize, layer_size: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hc_hash::HashDigest;
     use hc_core::field::prime_field::GoldilocksField;
+    use hc_hash::HashDigest;
 
     /// FriProof::new sets final_coeffs to empty; with_final_coeffs sets it.
     #[test]
     fn fri_proof_final_coeffs_field() {
         let proof: FriProof<GoldilocksField> =
             FriProof::new(Vec::new(), Vec::new(), HashDigest::new([0u8; 32]));
-        assert!(proof.final_coeffs.is_empty(), "new() must set final_coeffs = []");
+        assert!(
+            proof.final_coeffs.is_empty(),
+            "new() must set final_coeffs = []"
+        );
 
         let coeffs = vec![
             GoldilocksField::from_u64(1),

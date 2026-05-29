@@ -1339,9 +1339,7 @@ mod forge_poc_g2 {
     use hc_hash::{grinding, protocol, Blake3, Transcript};
     use hc_prover::commitment::{commitment_digest, Commitment};
     use hc_prover::pipeline::phase2_fri::{run_fri_v5, FriTranscriptSeedV5};
-    use hc_prover::pipeline::phase3_queries::{
-        answer_fri_queries_v5, generate_queries,
-    };
+    use hc_prover::pipeline::phase3_queries::{answer_fri_queries_v5, generate_queries};
     use hc_prover::queries::{
         CompositionQuery, NextTraceRow, OodOpenings, ProofParams, ProofV5, QueryResponseV5,
         TraceQuery, TraceWitness,
@@ -1390,13 +1388,16 @@ mod forge_poc_g2 {
         shift: usize,
     ) -> HcResult<TraceQuery<F>> {
         let evaluation = trace_lde[idx];
-        let mut leaf_hash =
-            |li: usize| -> HcResult<HashDigest> { Ok(hash_trace_pair(&trace_lde[li][0], &trace_lde[li][1])) };
-        let witness = reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)?;
+        let mut leaf_hash = |li: usize| -> HcResult<HashDigest> {
+            Ok(hash_trace_pair(&trace_lde[li][0], &trace_lde[li][1]))
+        };
+        let witness =
+            reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)?;
         let next_idx = (idx + shift) % lde_len;
         let next_eval = trace_lde[next_idx];
-        let mut leaf_hash2 =
-            |li: usize| -> HcResult<HashDigest> { Ok(hash_trace_pair(&trace_lde[li][0], &trace_lde[li][1])) };
+        let mut leaf_hash2 = |li: usize| -> HcResult<HashDigest> {
+            Ok(hash_trace_pair(&trace_lde[li][0], &trace_lde[li][1]))
+        };
         let next_witness =
             reconstruct_path_from_replay_mut::<Blake3, _>(next_idx, lde_len, 2, &mut leaf_hash2)?;
         Ok(TraceQuery {
@@ -1417,8 +1418,10 @@ mod forge_poc_g2 {
         lde_len: usize,
     ) -> HcResult<CompositionQuery<F>> {
         let value = quotient_lde[idx];
-        let mut leaf_hash = |li: usize| -> HcResult<HashDigest> { Ok(hash_field_element(&quotient_lde[li])) };
-        let witness = reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)?;
+        let mut leaf_hash =
+            |li: usize| -> HcResult<HashDigest> { Ok(hash_field_element(&quotient_lde[li])) };
+        let witness =
+            reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)?;
         Ok(CompositionQuery {
             index: idx,
             value,
@@ -1511,7 +1514,10 @@ mod forge_poc_g2 {
         transcript.append_message(protocol::label::PARAM_HASH_ID, b"blake3");
         protocol::append_u64::<Blake3>(&mut transcript, protocol::label::PARAM_ZK_ENABLED, 0);
         protocol::append_u64::<Blake3>(&mut transcript, protocol::label::PARAM_ZK_MASK_DEGREE, 0);
-        transcript.append_message(protocol::label::COMMIT_TRACE_LDE_ROOT, trace_root.as_bytes());
+        transcript.append_message(
+            protocol::label::COMMIT_TRACE_LDE_ROOT,
+            trace_root.as_bytes(),
+        );
         let alpha_boundary =
             transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
         let alpha_transition =
@@ -1534,9 +1540,7 @@ mod forge_poc_g2 {
             let x = lde_domain.element(i);
             let z_h = x.pow(padded_len as u64).sub(F::ONE);
             let z_h_inv = z_h.inverse().unwrap();
-            let l0 = z_h
-                .mul(n_inv)
-                .mul(x.sub(F::ONE).inverse().unwrap());
+            let l0 = z_h.mul(n_inv).mul(x.sub(F::ONE).inverse().unwrap());
             let l_last = z_h
                 .mul(omega_last)
                 .mul(n_inv)
@@ -1568,7 +1572,9 @@ mod forge_poc_g2 {
         );
 
         let trace_commitment = Commitment::Stark { root: trace_root };
-        let composition_commitment = Commitment::Stark { root: quotient_root };
+        let composition_commitment = Commitment::Stark {
+            root: quotient_root,
+        };
 
         // --- v5 FRI commit over the (high-degree) quotient codeword. ---
         let fri_seed = FriTranscriptSeedV5 {
@@ -1601,15 +1607,17 @@ mod forge_poc_g2 {
         );
 
         // --- Grinding (bits=0 ⇒ nonce 0) then sample base queries. ---
-        let grinding_nonce =
-            grinding::grind::<Blake3>(&transcript, protocol::label::FRI_GRINDING_NONCE, grinding_bits);
+        let grinding_nonce = grinding::grind::<Blake3>(
+            &transcript,
+            protocol::label::FRI_GRINDING_NONCE,
+            grinding_bits,
+        );
         protocol::append_u64::<Blake3>(
             &mut transcript,
             protocol::label::FRI_GRINDING_NONCE,
             grinding_nonce,
         );
-        let base_queries =
-            generate_queries::<F>(&mut transcript, lde_len, query_count).unwrap();
+        let base_queries = generate_queries::<F>(&mut transcript, lde_len, query_count).unwrap();
 
         // --- Openings: trace + quotient (F) and FRI (K). ---
         let mut trace_queries = Vec::with_capacity(base_queries.len());
@@ -1679,8 +1687,7 @@ mod forge_poc_g2 {
         // NOT reproduce the shipped final layer.
         {
             let final_size = proof.fri_proof.final_layer.len();
-            let base_len =
-                proof.trace_length.next_power_of_two() * proof.params.lde_blowup_factor;
+            let base_len = proof.trace_length.next_power_of_two() * proof.params.lde_blowup_factor;
             let dom_f =
                 EvaluationDomain::<F>::new_coset(base_len, F::from_u64(LDE_COSET_OFFSET)).unwrap();
             let mut ld = hc_fri::layer::LayerDomain::<K> {

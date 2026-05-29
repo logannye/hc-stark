@@ -3,7 +3,7 @@ use std::sync::Arc;
 use hc_commit::merkle::{height_dfs::StreamingMerkle, reconstruct_path_from_replay, MerklePath};
 use hc_core::{
     error::{HcError, HcResult},
-    field::{FieldElement, QuadExtension, GoldilocksField},
+    field::{FieldElement, GoldilocksField, QuadExtension},
 };
 use hc_hash::{hash::HashDigest, Blake3, HashFunction};
 

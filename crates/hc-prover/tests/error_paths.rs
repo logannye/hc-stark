@@ -5,10 +5,7 @@ use hc_prover::config::{ProverConfig, SecurityFloor};
 #[test]
 fn default_config_has_grinding_bits_20() {
     let config = ProverConfig::with_security_floor(8, 2, 80, 2, SecurityFloor::relaxed()).unwrap();
-    assert_eq!(
-        config.grinding_bits, 20,
-        "default grinding_bits must be 20"
-    );
+    assert_eq!(config.grinding_bits, 20, "default grinding_bits must be 20");
 }
 
 #[test]
@@ -24,7 +21,10 @@ fn relaxed_floor_allows_zero_grinding_bits() {
     let floor = SecurityFloor::relaxed();
     assert_eq!(floor.min_grinding_bits, 0);
     let result = ProverConfig::with_security_floor(8, 2, 10, 2, floor);
-    assert!(result.is_ok(), "relaxed floor must accept default grinding_bits=20");
+    assert!(
+        result.is_ok(),
+        "relaxed floor must accept default grinding_bits=20"
+    );
 }
 
 #[test]

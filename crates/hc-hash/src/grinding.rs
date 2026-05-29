@@ -141,7 +141,10 @@ mod tests {
         let t = base_transcript();
         let nonce_a = grind::<Blake3>(&t, b"test/nonce", BITS);
         let nonce_b = grind::<Blake3>(&t, b"test/nonce", BITS);
-        assert_eq!(nonce_a, nonce_b, "grind must be deterministic for the same base transcript");
+        assert_eq!(
+            nonce_a, nonce_b,
+            "grind must be deterministic for the same base transcript"
+        );
     }
 
     #[test]

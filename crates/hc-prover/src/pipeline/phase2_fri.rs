@@ -325,16 +325,19 @@ mod tests {
             let poly: Vec<GoldilocksField> = (0..=deg)
                 .map(|i| GoldilocksField::from_u64((i as u64).wrapping_mul(7919) + 13))
                 .collect();
-            let points: Vec<GoldilocksField> =
-                (0..base_len).map(|j| dom_f.element(j)).collect();
+            let points: Vec<GoldilocksField> = (0..base_len).map(|j| dom_f.element(j)).collect();
             let values = hc_core::poly::evaluate_batch(&poly, &points);
 
             let config = FriConfig::new(final_size).unwrap();
             let producer: Arc<dyn BlockProducer<GoldilocksField>> =
                 Arc::new(VecBlockProducer::new(values));
-            let artifacts =
-                run_fri_v5(config, producer, base_len, seed_v5(base_len, blowup, final_size))
-                    .unwrap();
+            let artifacts = run_fri_v5(
+                config,
+                producer,
+                base_len,
+                seed_v5(base_len, blowup, final_size),
+            )
+            .unwrap();
 
             assert_eq!(
                 artifacts.proof.final_coeffs.len(),
@@ -359,8 +362,9 @@ mod tests {
     #[test]
     fn run_fri_v5_grinding_bits_bound_into_transcript() {
         let (base_len, blowup, final_size) = (64usize, 2usize, 2usize);
-        let values: Vec<GoldilocksField> =
-            (0..base_len as u64).map(GoldilocksField::from_u64).collect();
+        let values: Vec<GoldilocksField> = (0..base_len as u64)
+            .map(GoldilocksField::from_u64)
+            .collect();
         let config = FriConfig::new(final_size).unwrap();
 
         let run = |bits: u64| {
@@ -405,8 +409,13 @@ mod tests {
             max_read: Arc::clone(&max_read),
         });
         let config = FriConfig::new(final_size).unwrap();
-        let _ = run_fri_v5(config, producer, base_len, seed_v5(base_len, blowup, final_size))
-            .unwrap();
+        let _ = run_fri_v5(
+            config,
+            producer,
+            base_len,
+            seed_v5(base_len, blowup, final_size),
+        )
+        .unwrap();
         let peak = max_read.load(Ordering::Relaxed);
         assert!(
             peak <= 1024,

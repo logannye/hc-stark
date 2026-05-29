@@ -657,8 +657,7 @@ mod tests {
                 let base_points: Vec<K> = (0..base_len).map(|j| base_domain.point(j)).collect();
                 let values = hc_core::poly::evaluate_batch(&poly, &base_points);
 
-                let producer: Arc<dyn BlockProducer<K>> =
-                    Arc::new(VecBlockProducer::new(values));
+                let producer: Arc<dyn BlockProducer<K>> = Arc::new(VecBlockProducer::new(values));
                 let mut t = Transcript::<Blake3>::new(protocol::DOMAIN_FRI_V5);
                 let artifacts = FriProver::<K, Blake3>::new(config, &mut t)
                     .prove_with_producer_v5(producer, base_domain.clone(), base_len, blowup)
@@ -680,10 +679,8 @@ mod tests {
                     n /= 2;
                 }
                 let final_points: Vec<K> = (0..final_size).map(|j| dom.point(j)).collect();
-                let reeval = hc_core::poly::evaluate_batch(
-                    &artifacts.proof.final_coeffs,
-                    &final_points,
-                );
+                let reeval =
+                    hc_core::poly::evaluate_batch(&artifacts.proof.final_coeffs, &final_points);
                 assert_eq!(
                     reeval, artifacts.proof.final_layer,
                     "evaluating final_coeffs on the final coset must reproduce final_layer \
@@ -702,8 +699,7 @@ mod tests {
             let mut any_c1_nonzero = false;
             for seed in 0u64..4 {
                 let values = det_kvec(0x5EED ^ seed.wrapping_mul(0x9999), base_len);
-                let producer: Arc<dyn BlockProducer<K>> =
-                    Arc::new(VecBlockProducer::new(values));
+                let producer: Arc<dyn BlockProducer<K>> = Arc::new(VecBlockProducer::new(values));
                 let mut t = Transcript::<Blake3>::new(protocol::DOMAIN_FRI_V5);
                 let artifacts = FriProver::<K, Blake3>::new(config, &mut t)
                     .prove_with_producer_v5(producer, base_domain.clone(), base_len, 2)

@@ -73,9 +73,7 @@ fn frame<H: HashFunction>(state: &mut H::State, label: &[u8], data: &[u8]) {
 
 #[cfg(test)]
 mod tests {
-    use hc_core::field::{
-        extension::QuadExtension, prime_field::GoldilocksField, FieldElement,
-    };
+    use hc_core::field::{extension::QuadExtension, prime_field::GoldilocksField, FieldElement};
 
     use super::*;
     use crate::blake3::Blake3;
@@ -147,13 +145,12 @@ mod tests {
         let digest = t_ref.challenge_bytes("fri-alpha");
         let bytes = digest.as_bytes();
 
-        let expected_c0 = GoldilocksField::from_u64(u64::from_le_bytes(bytes[0..8].try_into().unwrap()));
-        let expected_c1 = GoldilocksField::from_u64(u64::from_le_bytes(bytes[8..16].try_into().unwrap()));
+        let expected_c0 =
+            GoldilocksField::from_u64(u64::from_le_bytes(bytes[0..8].try_into().unwrap()));
+        let expected_c1 =
+            GoldilocksField::from_u64(u64::from_le_bytes(bytes[8..16].try_into().unwrap()));
 
-        assert_eq!(
-            k_challenge.c0, expected_c0,
-            "c0 must come from bytes[0..8]"
-        );
+        assert_eq!(k_challenge.c0, expected_c0, "c0 must come from bytes[0..8]");
         assert_eq!(
             k_challenge.c1, expected_c1,
             "c1 must come from bytes[8..16]"
