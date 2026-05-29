@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Optional
 
 import flask
+import requests
 import stripe
 
 import tenant_store
@@ -404,6 +405,20 @@ def stripe_webhook():
 INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "")
 
 
+def _require_internal_secret() -> bool:
+    req = flask.request.headers.get("X-Internal-Secret", "")
+    return bool(INTERNAL_SECRET) and secrets.compare_digest(req, INTERNAL_SECRET)
+
+
+def _session_tenant(conn):
+    """Resolve the request body's session_token to a tenant_id, or None."""
+    data = flask.request.get_json(silent=True) or {}
+    tok = (data.get("session_token") or "").strip()
+    if not tok or len(tok) != 64:
+        return None
+    return tenant_store.validate_session(conn, hashlib.sha256(tok.encode()).hexdigest())
+
+
 @app.route("/provision-free", methods=["POST"])
 def provision_free():
     """Create a free-tier tenant (no Stripe subscription).
@@ -464,36 +479,52 @@ def provision_free():
 
 @app.route("/rotate", methods=["POST"])
 def rotate_key():
-    """Rotate a tenant's API key. Authenticates via the current Bearer token.
+    """Rotate a tenant's API key. Authenticates via session_token or current_key.
 
     Called by the Cloudflare Pages Function, not directly by clients.
+    Accepts either:
+      - session_token (64-hex chars) — session-based auth (new path)
+      - current_key (tzk_...) — direct API-key auth (legacy path, no regression)
     """
     req_secret = flask.request.headers.get("X-Internal-Secret", "")
     if not INTERNAL_SECRET or not secrets.compare_digest(req_secret, INTERNAL_SECRET):
         return flask.jsonify(error="unauthorized"), 403
 
     data = flask.request.get_json(silent=True) or {}
-    current_key = data.get("current_key", "").strip()
-
-    if not current_key or not current_key.startswith("tzk_"):
-        return flask.jsonify(error="valid current API key required"), 400
-
-    current_hash = hashlib.sha256(current_key.encode()).hexdigest()
-
     conn = tenant_store.open_db()
 
-    # Find tenant by key hash.
-    row = conn.execute(
-        "SELECT * FROM tenants WHERE api_key_hash = ?", (current_hash,)
-    ).fetchone()
+    # --- session_token path (new) ---
+    session_tok = (data.get("session_token") or "").strip()
+    if session_tok and len(session_tok) == 64:
+        tid = tenant_store.validate_session(conn, hashlib.sha256(session_tok.encode()).hexdigest())
+        if not tid:
+            conn.close()
+            return flask.jsonify(error="invalid session"), 401
+        row = conn.execute(
+            "SELECT * FROM tenants WHERE tenant_id = ?", (tid,)
+        ).fetchone()
+        if not row or row["status"] != "active":
+            conn.close()
+            return flask.jsonify(error="account is not active"), 403
+    else:
+        # --- current_key path (legacy — no regression) ---
+        current_key = data.get("current_key", "").strip()
+        if not current_key or not current_key.startswith("tzk_"):
+            conn.close()
+            return flask.jsonify(error="valid current API key or session_token required"), 400
 
-    if not row:
-        conn.close()
-        return flask.jsonify(error="invalid API key"), 401
+        current_hash = hashlib.sha256(current_key.encode()).hexdigest()
+        row = conn.execute(
+            "SELECT * FROM tenants WHERE api_key_hash = ?", (current_hash,)
+        ).fetchone()
 
-    if row["status"] != "active":
-        conn.close()
-        return flask.jsonify(error="account is not active"), 403
+        if not row:
+            conn.close()
+            return flask.jsonify(error="invalid API key"), 401
+
+        if row["status"] != "active":
+            conn.close()
+            return flask.jsonify(error="account is not active"), 403
 
     # Rate limit: max 1 rotation per 24 hours.
     now_ms = int(time.time() * 1000)
@@ -614,20 +645,84 @@ def verify_magic_link_route():
         return flask.jsonify(error="Invalid or expired link"), 401
 
     tenant = tenant_store.get_tenant(conn, tenant_id)
-    conn.close()
 
     if not tenant or tenant["status"] != "active":
+        conn.close()
         return flask.jsonify(error="Account not active"), 403
 
-    api_key = _recover_api_key(tenant_id)
-
+    session_token = secrets.token_hex(32)
+    tenant_store.create_session(conn, hashlib.sha256(session_token.encode()).hexdigest(), tenant_id)
+    conn.close()
     return flask.jsonify(
+        session_token=session_token,
         tenant_id=tenant_id,
         email=tenant["email"],
         plan=tenant["plan"],
-        api_key=api_key or "",
         api_key_prefix=tenant["api_key_prefix"],
     ), 200
+
+
+@app.route("/session/resolve", methods=["POST"])
+def session_resolve():
+    if not _require_internal_secret():
+        return flask.jsonify(error="unauthorized"), 403
+    conn = tenant_store.open_db()
+    tid = _session_tenant(conn)
+    if not tid:
+        conn.close(); return flask.jsonify(error="invalid session"), 401
+    t = tenant_store.get_tenant(conn, tid); conn.close()
+    if not t:
+        return flask.jsonify(error="invalid session"), 401
+    return flask.jsonify(tenant_id=tid, email=t["email"], plan=t["plan"],
+                         api_key_prefix=t["api_key_prefix"], status=t["status"],
+                         stripe_customer_id=t["stripe_customer_id"]), 200
+
+
+@app.route("/session/reveal-key", methods=["POST"])
+def session_reveal_key():
+    if not _require_internal_secret():
+        return flask.jsonify(error="unauthorized"), 403
+    conn = tenant_store.open_db()
+    tid = _session_tenant(conn); conn.close()
+    if not tid:
+        return flask.jsonify(error="invalid session"), 401
+    key = _recover_api_key(tid)
+    if not key:
+        return flask.jsonify(error="key unavailable"), 500
+    return flask.jsonify(api_key=key), 200
+
+
+@app.route("/session/usage", methods=["POST"])
+def session_usage():
+    if not _require_internal_secret():
+        return flask.jsonify(error="unauthorized"), 403
+    conn = tenant_store.open_db()
+    tid = _session_tenant(conn); conn.close()
+    if not tid:
+        return flask.jsonify(error="invalid session"), 401
+    key = _recover_api_key(tid)
+    if not key:
+        return flask.jsonify(error="key unavailable"), 500
+    try:
+        r = requests.get("http://localhost:8080/usage",
+                         headers={"Authorization": f"Bearer {key}"}, timeout=10)
+        return (r.text, r.status_code, {"Content-Type": "application/json"})
+    except Exception as e:
+        print(f"session/usage upstream error: {e}", file=sys.stderr)
+        return flask.jsonify(error="usage unavailable"), 502
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    if not _require_internal_secret():
+        return flask.jsonify(error="unauthorized"), 403
+    data = flask.request.get_json(silent=True) or {}
+    tok = (data.get("session_token") or "").strip()
+    if tok and len(tok) == 64:
+        conn = tenant_store.open_db()
+        tenant_store.delete_session(conn, hashlib.sha256(tok.encode()).hexdigest())
+        conn.close()
+    return flask.jsonify(ok=True), 200
 
 
 @app.route("/tenant-purge", methods=["POST"])
