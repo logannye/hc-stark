@@ -106,15 +106,23 @@ pub fn enforcement_for(id: &str) -> Option<Enforcement> {
     if let Some(t) = crate::templates::template_by_id(id) {
         return Some(t.enforcement);
     }
-    if crate::zkml_templates::describe_zkml_template(id).is_some()
-        || crate::spartan_templates::describe_spartan_template(id).is_some()
+    // Cheap existence check via the inventory lookups (no info-struct
+    // allocation): enforcement_for is on the per-request dispatch path.
+    // NOTE: the zkML and Spartan registries carry no per-template
+    // `enforcement` field, so they are assumed `StructureOnly`; revisit
+    // this when either registry grows an `enforcement` field.
+    if crate::zkml_templates::zkml_template_by_id(id).is_some()
+        || crate::spartan_templates::spartan_template_by_id(id).is_some()
     {
         return Some(Enforcement::StructureOnly);
     }
     None
 }
 
-/// Should this enforcement level appear in public listings?
+/// Whether a template at this enforcement level should appear in public
+/// listings. Enforced templates are always visible; StructureOnly
+/// templates are visible only when `allow_unaudited` is true (i.e.
+/// `HC_ALLOW_UNAUDITED_TEMPLATES=true`).
 pub fn is_listable(enforcement: Enforcement, allow_unaudited: bool) -> bool {
     matches!(enforcement, Enforcement::Enforced) || allow_unaudited
 }
@@ -177,6 +185,11 @@ mod tests {
         let range = all.iter().find(|t| t.id == "range_proof").unwrap();
         assert_eq!(
             range.enforcement,
+            crate::templates::Enforcement::StructureOnly
+        );
+        let zkml = all.iter().find(|t| t.id == "zkml_matmul").unwrap();
+        assert_eq!(
+            zkml.enforcement,
             crate::templates::Enforcement::StructureOnly
         );
     }
