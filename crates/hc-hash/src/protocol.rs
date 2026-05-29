@@ -26,6 +26,20 @@ pub const DOMAIN_FRI_V3: &[u8] = b"hc-stark/fri/v3";
 pub const DOMAIN_MAIN_V4: &[u8] = b"hc-stark/v4";
 pub const DOMAIN_FRI_V4: &[u8] = b"hc-stark/fri/v4";
 
+/// Soundness-hardened DEEP-STARK protocol domains (v5).
+///
+/// v5 extends v4 with a cryptographic grinding check and a configurable
+/// challenge field, providing stronger soundness guarantees for the FRI
+/// low-degree test.
+pub const DOMAIN_MAIN_V5: &[u8] = b"hc-stark/v5";
+pub const DOMAIN_FRI_V5: &[u8] = b"hc-stark/fri/v5";
+
+/// Recursive-friendly soundness-hardened DEEP-STARK protocol domains (v6).
+///
+/// v6 extends v5 with optimisations targeting recursive composition.
+pub const DOMAIN_MAIN_V6: &[u8] = b"hc-stark/v6";
+pub const DOMAIN_FRI_V6: &[u8] = b"hc-stark/fri/v6";
+
 /// Transcript labels (canonical).
 ///
 /// Policy:
@@ -73,6 +87,11 @@ pub mod label {
 
     // FRI folding
     pub const CHAL_FRI_BETA: &[u8] = b"chal/fri_beta";
+
+    // Grinding / challenge-field parameters (v5+)
+    pub const PARAM_GRINDING_BITS: &[u8] = b"param/grinding_bits";
+    pub const PARAM_CHALLENGE_FIELD: &[u8] = b"param/challenge_field";
+    pub const FRI_GRINDING_NONCE: &[u8] = b"fri/grinding_nonce";
 }
 
 /// Helper to append a u64 in little-endian encoding.
