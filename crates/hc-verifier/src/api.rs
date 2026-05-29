@@ -1275,196 +1275,427 @@ fn mock_query_commitments(commitment: &Commitment) -> QueryCommitments {
     }
 }
 
-/// Forge proof-of-concept for audit finding **G2**: the current FRI verifier's
-/// low-degree test is *vacuous*.
+/// Forge proof-of-concept for audit finding **G2** — now GREEN against the v5
+/// verifier.
 ///
-/// The prover builds each FRI layer as `fold(prev_layer)` and the verifier
-/// re-checks that exact recurrence against the prover's *own* committed layers.
-/// Because the recurrence is self-referential, the checks pass for ANY base
-/// codeword — including a high-degree one that is NOT low-degree. A sound FRI
-/// low-degree test must REJECT such a codeword; this one accepts it.
+/// **History.** The v3 FRI "low-degree test" is *vacuous*: the prover builds
+/// each layer as `fold(prev_layer)` and the verifier re-checks that exact
+/// self-referential recurrence, so it accepts ANY base codeword — including a
+/// high-degree one. The old PoC committed a high-degree codeword through the v3
+/// FRI path and asserted `verify_fri_queries` rejected it; against v3 it does
+/// NOT, so the test was RED and `#[ignore]`d.
 ///
-/// This module lives inside `crate::api` so it can call the private
-/// [`verify_fri_queries`] directly (no production visibility change). It uses
-/// the prover crate (a normal dependency of `hc-verifier`) to commit the
-/// forged codeword and to *reuse* the prover's own opening builder
-/// (`answer_fri_queries`) so the openings are byte-for-byte what an honest
-/// prover would ship for those query indices.
+/// **Now.** Phase 1A added the soundness-hardened v5 verifier
+/// ([`crate::v5::verify_v5`]). This module forges a *complete, self-consistent*
+/// [`hc_prover::queries::ProofV5`] whose committed trace LDE is a **high-degree
+/// random table** (NOT a valid low-degree extension). The DEEP-STARK quotient
+/// is then computed *pointwise* from that forged trace, so the quotient
+/// relation `q(x)·(x^N − 1) == C(x)` holds at **every** point by construction —
+/// the trace/quotient Merkle openings verify and the quotient-relation check
+/// passes. The FRI base is that high-degree quotient codeword.
 ///
-/// The test ASSERTS rejection (`is_err`). Against the current code the forgery
-/// is ACCEPTED, so the assertion fails and the test is RED — that RED result is
-/// the demonstration of G2. It is `#[ignore]`d so the suite stays green until
-/// the Task 8 fix lands; removing `#[ignore]` should then make it pass.
+/// Running [`crate::v5::verify_v5_with_floor`] under a **relaxed** floor (so the
+/// floor cannot be the thing that rejects) drives the verifier all the way to
+/// the FRI low-degree check, where the **final-degree check** fires: the final
+/// FRI layer of a high-degree codeword is not the evaluation of a degree-`<
+/// final_size/blowup` polynomial, so `eval(final_coeffs, final_coset) !=
+/// final_layer` and the proof is REJECTED. That rejection — under a relaxed
+/// floor — is the proof that the v5 low-degree test is sound (G2 closed).
+///
+/// The forge helper replays `hc_prover::prove::prove_stark_v5`'s transcript
+/// construction byte-for-byte (same labels/order), differing ONLY in that the
+/// trace LDE is forged high-degree instead of a real trace's LDE.
 #[cfg(test)]
 mod forge_poc_g2 {
-    use hc_core::field::prime_field::GoldilocksField;
-    use hc_core::field::FieldElement;
+    use hc_air::{DeepStarkAir, ToyAir};
+    use hc_commit::merkle::{height_dfs::StreamingMerkle, reconstruct_path_from_replay_mut};
+    use hc_core::domain::{generate_lde_coset_domain, generate_trace_domain, EvaluationDomain};
+    use hc_core::error::HcResult;
+    use hc_core::field::{prime_field::GoldilocksField, FieldElement, QuadExtension};
     use hc_fri::FriConfig;
-    use hc_hash::hash::HashDigest;
+    use hc_hash::hash::{HashDigest, HashFunction};
+    use hc_hash::{grinding, protocol, Blake3, Transcript};
     use hc_prover::commitment::{commitment_digest, Commitment};
-    use hc_prover::pipeline::phase2_fri::{run_fri, FriTranscriptSeed};
-    use hc_prover::pipeline::phase3_queries::answer_fri_queries;
-    use hc_prover::queries::{CompositionQuery, ProofParams, QueryResponse};
+    use hc_prover::pipeline::phase2_fri::{run_fri_v5, FriTranscriptSeedV5};
+    use hc_prover::pipeline::phase3_queries::{
+        answer_fri_queries_v5, generate_queries,
+    };
+    use hc_prover::queries::{
+        CompositionQuery, NextTraceRow, OodOpenings, ProofParams, ProofV5, QueryResponseV5,
+        TraceQuery, TraceWitness,
+    };
     use hc_replay::traits::VecBlockProducer;
     use std::sync::Arc;
 
-    use crate::api::{verify_fri_queries, Proof};
+    use crate::v5::{verify_v5_with_floor, VerifierSecurityFloor};
 
     type F = GoldilocksField;
+    type K = QuadExtension<GoldilocksField>;
 
-    /// A deterministic, high-degree codeword.
-    ///
-    /// These values are an explicit degree-`(len-1)` evaluation table (a simple
-    /// pseudo-random recurrence). With overwhelming probability — and in fact by
-    /// the assertion below — this is NOT the low-degree extension of its first
-    /// `len / blowup` entries, i.e. it is genuinely high-degree.
-    fn high_degree_codeword(len: usize) -> Vec<F> {
-        let mut out = Vec::with_capacity(len);
-        // Arbitrary deterministic recurrence over the field.
-        let mut state: u64 = 0x1234_5678_9abc_def1;
-        for _ in 0..len {
-            state = state
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1_442_695_040_888_963_407);
-            // Keep values inside the field; the exact mapping is irrelevant, only
-            // that the resulting table is not a low-degree extension.
-            out.push(F::from_u64(state ^ (state >> 29)));
-        }
-        out
+    const LDE_COSET_OFFSET: u64 = 7;
+
+    fn hash_trace_pair(left: &F, right: &F) -> HashDigest {
+        let mut bytes = [0u8; 16];
+        bytes[..8].copy_from_slice(&left.to_u64().to_le_bytes());
+        bytes[8..].copy_from_slice(&right.to_u64().to_le_bytes());
+        Blake3::hash(&bytes)
     }
 
-    #[test]
-    #[ignore = "RED until G2 fix lands in Task 8 (Phase 1A); demonstrates the vacuous low-degree test"]
-    fn current_fri_accepts_high_degree_codeword() {
-        // --- Parameters (tiny, so every FRI layer is trivial to materialize). ---
-        // verify_fri_queries derives the FRI base length for a v3 Stark proof as
-        //   base_len = trace_length.next_power_of_two() * lde_blowup_factor.max(1)
-        // so trace_length=8, blowup=2  =>  base_len = 16.
-        let trace_length: usize = 8;
+    fn hash_field_element(value: &F) -> HashDigest {
+        Blake3::hash(&value.to_u64().to_le_bytes())
+    }
+
+    fn commit_trace_lde(trace_lde: &[[F; 2]]) -> HashDigest {
+        let mut builder = StreamingMerkle::<Blake3>::new();
+        for row in trace_lde {
+            builder.push(hash_trace_pair(&row[0], &row[1]));
+        }
+        builder.finalize().unwrap()
+    }
+
+    fn commit_quotient_lde(quotient_lde: &[F]) -> HashDigest {
+        let mut builder = StreamingMerkle::<Blake3>::new();
+        for v in quotient_lde {
+            builder.push(hash_field_element(v));
+        }
+        builder.finalize().unwrap()
+    }
+
+    fn open_trace_query(
+        trace_lde: &[[F; 2]],
+        idx: usize,
+        lde_len: usize,
+        shift: usize,
+    ) -> HcResult<TraceQuery<F>> {
+        let evaluation = trace_lde[idx];
+        let mut leaf_hash =
+            |li: usize| -> HcResult<HashDigest> { Ok(hash_trace_pair(&trace_lde[li][0], &trace_lde[li][1])) };
+        let witness = reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)?;
+        let next_idx = (idx + shift) % lde_len;
+        let next_eval = trace_lde[next_idx];
+        let mut leaf_hash2 =
+            |li: usize| -> HcResult<HashDigest> { Ok(hash_trace_pair(&trace_lde[li][0], &trace_lde[li][1])) };
+        let next_witness =
+            reconstruct_path_from_replay_mut::<Blake3, _>(next_idx, lde_len, 2, &mut leaf_hash2)?;
+        Ok(TraceQuery {
+            index: idx,
+            evaluation,
+            witness: TraceWitness::Merkle(witness),
+            next: Some(NextTraceRow {
+                index: next_idx,
+                evaluation: next_eval,
+                witness: next_witness,
+            }),
+        })
+    }
+
+    fn open_composition_query(
+        quotient_lde: &[F],
+        idx: usize,
+        lde_len: usize,
+    ) -> HcResult<CompositionQuery<F>> {
+        let value = quotient_lde[idx];
+        let mut leaf_hash = |li: usize| -> HcResult<HashDigest> { Ok(hash_field_element(&quotient_lde[li])) };
+        let witness = reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)?;
+        Ok(CompositionQuery {
+            index: idx,
+            value,
+            witness,
+        })
+    }
+
+    /// Deterministic, genuinely high-degree per-column values on the LDE coset:
+    /// a pseudo-random table (NOT a valid low-degree extension). Used for BOTH
+    /// trace columns so the resulting quotient is high-degree.
+    fn high_degree_column(seed: u64, len: usize) -> Vec<F> {
+        let mut state = seed;
+        (0..len)
+            .map(|_| {
+                state = state
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                F::from_u64(state ^ (state >> 29))
+            })
+            .collect()
+    }
+
+    /// Build a complete, self-consistent v5 proof whose committed trace LDE is a
+    /// HIGH-DEGREE random table. Mirrors `prove_stark_v5`'s transcript flow
+    /// exactly; the quotient is computed pointwise so the quotient relation
+    /// holds everywhere. The ONLY unsound part is that the FRI base
+    /// (= the quotient codeword) is high-degree.
+    fn forge_high_degree_v5_proof() -> ProofV5<F> {
+        // Tiny params so each FRI layer is trivial. trace_length=5 → padded=8 →
+        // lde_len = 8 * 2 = 16. grinding_bits = 0 ⇒ nonce 0 (fast, deterministic).
+        let trace_length: usize = 5;
         let blowup: usize = 2;
-        let base_len: usize = trace_length.next_power_of_two() * blowup; // 16
-        let fri_final_poly_size: usize = 2; // layers 16 -> 8 -> 4 -> 2 (3 betas)
+        let fri_final_poly_size: usize = 2;
         let query_count: usize = 4;
-        let protocol_version: u32 = 3;
+        let grinding_bits: u32 = 0;
+        let version: u32 = 5;
 
-        // --- 1) Build a HIGH-DEGREE base codeword C of length base_len. ---
-        let codeword = high_degree_codeword(base_len);
+        let initial_acc = F::new(5);
+        let final_acc = F::new(15);
 
-        // Optional (nice-to-have) sanity: C is genuinely high-degree, i.e. it is
-        // NOT the low-degree extension of its first base_len/blowup values. We
-        // detect this cheaply: a degree-(k-1) poly on a blowup-`b` evaluation
-        // table is fully determined by any k points, so a true LDE would have a
-        // huge amount of structure; a random table almost never does. We simply
-        // assert the table is not eventually constant / not all-equal, which is
-        // enough to rule out the degenerate low-degree cases for this PoC.
-        let k = base_len / blowup;
-        assert!(k >= 1);
-        assert!(
-            codeword.iter().any(|&v| v != codeword[0]),
-            "codeword must be non-constant (a basic high-degree witness)"
+        let padded_len = trace_length.next_power_of_two(); // 8
+        let lde_len = padded_len * blowup; // 16
+
+        // --- Phase 1 (F): a HIGH-DEGREE trace LDE (random per-column tables). ---
+        let acc_eval = high_degree_column(0x1234_5678_9abc_def1, lde_len);
+        let delta_eval = high_degree_column(0xfeed_face_cafe_b00b, lde_len);
+        let trace_lde: Vec<[F; 2]> = (0..lde_len).map(|i| [acc_eval[i], delta_eval[i]]).collect();
+        let trace_root = commit_trace_lde(&trace_lde);
+
+        // --- v5 MAIN transcript (byte-for-byte the prover's order). ---
+        let mut transcript = Transcript::<Blake3>::new(protocol::DOMAIN_MAIN_V5);
+        transcript.append_message(
+            protocol::label::PUB_INITIAL_ACC,
+            initial_acc.to_u64().to_le_bytes(),
+        );
+        transcript.append_message(
+            protocol::label::PUB_FINAL_ACC,
+            final_acc.to_u64().to_le_bytes(),
+        );
+        protocol::append_u64::<Blake3>(
+            &mut transcript,
+            protocol::label::PUB_TRACE_LENGTH,
+            trace_length as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut transcript,
+            protocol::label::PARAM_QUERY_COUNT,
+            query_count as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut transcript,
+            protocol::label::PARAM_LDE_BLOWUP,
+            blowup as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut transcript,
+            protocol::label::PARAM_FRI_FINAL_SIZE,
+            fri_final_poly_size as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut transcript,
+            protocol::label::PARAM_FRI_FOLDING_RATIO,
+            hc_fri::get_folding_ratio() as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut transcript,
+            protocol::label::PARAM_GRINDING_BITS,
+            grinding_bits as u64,
+        );
+        transcript.append_message(protocol::label::PARAM_HASH_ID, b"blake3");
+        protocol::append_u64::<Blake3>(&mut transcript, protocol::label::PARAM_ZK_ENABLED, 0);
+        protocol::append_u64::<Blake3>(&mut transcript, protocol::label::PARAM_ZK_MASK_DEGREE, 0);
+        transcript.append_message(protocol::label::COMMIT_TRACE_LDE_ROOT, trace_root.as_bytes());
+        let alpha_boundary =
+            transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
+        let alpha_transition =
+            transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
+
+        // --- Quotient computed POINTWISE from the forged trace, so the quotient
+        //     relation `q(x)*(x^N-1) == C(x)` holds at every LDE point. ---
+        let coset_offset = F::from_u64(LDE_COSET_OFFSET);
+        let lde_domain = generate_lde_coset_domain::<F>(padded_len, blowup, coset_offset).unwrap();
+        let omega_last = generate_trace_domain::<F>(padded_len)
+            .unwrap()
+            .generator()
+            .inverse()
+            .unwrap();
+        let n_inv = F::from_u64(padded_len as u64).inverse().unwrap();
+        let shift = blowup % lde_len;
+        let air = ToyAir;
+        let mut quotient_lde = Vec::with_capacity(lde_len);
+        for i in 0..lde_len {
+            let x = lde_domain.element(i);
+            let z_h = x.pow(padded_len as u64).sub(F::ONE);
+            let z_h_inv = z_h.inverse().unwrap();
+            let l0 = z_h
+                .mul(n_inv)
+                .mul(x.sub(F::ONE).inverse().unwrap());
+            let l_last = z_h
+                .mul(omega_last)
+                .mul(n_inv)
+                .mul(x.sub(omega_last).inverse().unwrap());
+            let selector_last = F::ONE.sub(l_last);
+            let acc = trace_lde[i][0];
+            let delta = trace_lde[i][1];
+            let acc_next = trace_lde[(i + shift) % lde_len][0];
+            let delta_next = trace_lde[(i + shift) % lde_len][1];
+            let c = air
+                .quotient_numerator(
+                    &[acc, delta],
+                    &[acc_next, delta_next],
+                    l0,
+                    l_last,
+                    selector_last,
+                    alpha_boundary,
+                    alpha_transition,
+                    initial_acc,
+                    final_acc,
+                )
+                .unwrap();
+            quotient_lde.push(c.mul(z_h_inv));
+        }
+        let quotient_root = commit_quotient_lde(&quotient_lde);
+        transcript.append_message(
+            protocol::label::COMMIT_QUOTIENT_ROOT,
+            quotient_root.as_bytes(),
         );
 
-        // --- 2) Commit C through the prover's FRI path. ---
-        // Record the seed values so we can place the SAME values in the proof;
-        // the verifier rederives identical betas from these fields.
-        let trace_commitment_root = HashDigest::new([0xA5u8; 32]);
-        let composition_commitment_root = HashDigest::new([0x5Au8; 32]);
-        let trace_commitment = Commitment::Stark {
-            root: trace_commitment_root,
-        };
-        let composition_commitment = Commitment::Stark {
-            root: composition_commitment_root,
-        };
+        let trace_commitment = Commitment::Stark { root: trace_root };
+        let composition_commitment = Commitment::Stark { root: quotient_root };
 
-        let initial_acc = F::from_u64(5);
-        let final_acc = F::from_u64(8);
-
-        let seed = FriTranscriptSeed {
-            protocol_version,
+        // --- v5 FRI commit over the (high-degree) quotient codeword. ---
+        let fri_seed = FriTranscriptSeedV5 {
+            protocol_version: version,
             initial_acc: initial_acc.to_u64(),
             final_acc: final_acc.to_u64(),
             trace_length: trace_length as u64,
             query_count: query_count as u64,
             lde_blowup: blowup as u64,
             fri_final_size: fri_final_poly_size as u64,
-            folding_ratio: 2,
+            folding_ratio: hc_fri::get_folding_ratio() as u64,
+            grinding_bits: grinding_bits as u64,
             zk_enabled: false,
             zk_mask_degree: 0,
-            // These MUST equal commitment_digest(&proof.{trace,composition}_commitment),
-            // which for a Stark commitment is just the stored root.
             trace_commitment: commitment_digest(&trace_commitment),
             composition_commitment: commitment_digest(&composition_commitment),
         };
+        let fri_config = FriConfig::new(fri_final_poly_size).unwrap();
+        let base_producer: Arc<dyn hc_replay::traits::BlockProducer<F>> =
+            Arc::new(VecBlockProducer::new(quotient_lde.clone()));
+        let artifacts = run_fri_v5(fri_config, base_producer, lde_len, fri_seed).unwrap();
+        let fri_proof = artifacts.proof.clone();
 
-        let config = FriConfig::new(fri_final_poly_size).unwrap();
-        let producer: Arc<dyn hc_replay::traits::BlockProducer<F>> =
-            Arc::new(VecBlockProducer::new(codeword.clone()));
-        // NOTE: run_fri's `trace_length` argument is the FRI *base codeword*
-        // length (the producer length), which is base_len here. The transcript's
-        // PUB_TRACE_LENGTH comes from `seed.trace_length` (= 8) instead.
-        let artifacts = run_fri::<F>(config, producer, base_len, seed)
-            .expect("FRI commitment over the forged codeword should succeed");
+        for root in &fri_proof.layer_roots {
+            transcript.append_message(protocol::label::COMMIT_FRI_LAYER_ROOT, root.as_bytes());
+        }
+        transcript.append_message(
+            protocol::label::COMMIT_FRI_FINAL_ROOT,
+            fri_proof.final_root.as_bytes(),
+        );
 
-        // --- 3) Choose base query indices directly (verify_fri_queries takes
-        //         them as a parameter, so we need not reproduce generate_queries). ---
-        let base_queries: Vec<usize> = vec![0, 3, 6, 11];
+        // --- Grinding (bits=0 ⇒ nonce 0) then sample base queries. ---
+        let grinding_nonce =
+            grinding::grind::<Blake3>(&transcript, protocol::label::FRI_GRINDING_NONCE, grinding_bits);
+        protocol::append_u64::<Blake3>(
+            &mut transcript,
+            protocol::label::FRI_GRINDING_NONCE,
+            grinding_nonce,
+        );
+        let base_queries =
+            generate_queries::<F>(&mut transcript, lde_len, query_count).unwrap();
 
-        // --- 4) Build the matching FRI openings by REUSING the prover's own
-        //         opening builder on the committed artifacts. ---
-        let fri_queries = answer_fri_queries(&base_queries, &artifacts)
-            .expect("building FRI openings for the chosen indices should succeed");
+        // --- Openings: trace + quotient (F) and FRI (K). ---
+        let mut trace_queries = Vec::with_capacity(base_queries.len());
+        let mut composition_queries = Vec::with_capacity(base_queries.len());
+        for &idx in &base_queries {
+            trace_queries.push(open_trace_query(&trace_lde, idx, lde_len, shift).unwrap());
+            composition_queries.push(open_composition_query(&quotient_lde, idx, lde_len).unwrap());
+        }
+        trace_queries.sort_by_key(|q| q.index);
+        composition_queries.sort_by_key(|q| q.index);
 
-        // Base-layer binding the verifier seeds `expected_value` from: it reads
-        // only `index` and `value` (the Merkle witness is NOT checked here).
-        let composition_queries: Vec<CompositionQuery<F>> = base_queries
-            .iter()
-            .map(|&q| CompositionQuery {
-                index: q,
-                value: codeword[q],
-                witness: hc_commit::merkle::MerklePath::default(),
-            })
-            .collect();
+        let fri_queries = answer_fri_queries_v5(&base_queries, &artifacts).unwrap();
 
-        let query_response = QueryResponse {
-            trace_queries: Vec::new(),
+        // --- OOD-style extra opening (mirrors the prover). ---
+        transcript.append_message(protocol::label::CHAL_OOD_POINT, [0u8]);
+        let ood_fe = transcript.challenge_field::<F>(protocol::label::CHAL_OOD_INDEX);
+        let ood_index = (ood_fe.to_u64() as usize) % lde_len;
+        let ood = Some(OodOpenings {
+            index: ood_index,
+            trace: open_trace_query(&trace_lde, ood_index, lde_len, shift).unwrap(),
+            quotient: open_composition_query(&quotient_lde, ood_index, lde_len).unwrap(),
+        });
+
+        let query_response = QueryResponseV5 {
+            trace_queries,
             composition_queries,
             fri_queries,
             boundary: None,
-            ood: None,
+            ood,
         };
 
-        // --- 5) Assemble a v3 Stark Proof matching the committed FRI + seed. ---
-        let params = ProofParams {
-            query_count,
-            lde_blowup_factor: blowup,
-            fri_final_poly_size,
-            fri_folding_ratio: 2,
-            protocol_version,
-            zk_enabled: false,
-            zk_mask_degree: 0,
-            grinding_bits: 0,
-        };
-        let proof = Proof::<F> {
-            version: protocol_version,
+        ProofV5 {
+            version,
             trace_commitment,
             composition_commitment,
-            fri_proof: artifacts.proof.clone(),
+            fri_proof,
             initial_acc,
             final_acc,
-            query_response: Some(query_response.clone()),
+            query_response,
             trace_length,
-            params,
-        };
+            params: ProofParams {
+                query_count,
+                lde_blowup_factor: blowup,
+                fri_final_poly_size,
+                fri_folding_ratio: hc_fri::get_folding_ratio(),
+                protocol_version: version,
+                zk_enabled: false,
+                zk_mask_degree: 0,
+                grinding_bits,
+            },
+            grinding_nonce,
+        }
+    }
 
-        // --- 6/7) Call the private low-degree check directly and ASSERT rejection. ---
-        let result = verify_fri_queries::<F>(&proof, &base_queries, &query_response);
+    /// A self-consistent v5 proof of a HIGH-DEGREE quotient codeword must be
+    /// REJECTED by the v5 verifier under a RELAXED security floor — proving the
+    /// rejection comes from the FRI low-degree / final-degree logic, NOT the
+    /// floor. This flips the G2 forge-PoC from RED (vacuous v3 test) to GREEN.
+    #[test]
+    fn v5_rejects_high_degree_codeword() {
+        let proof = forge_high_degree_v5_proof();
 
-        // Surface the observed outcome for the RED commit body / CI logs.
-        eprintln!("forge_poc_g2: verify_fri_queries returned {result:?}");
+        // Sanity: the forged FRI base really is high-degree, i.e. NOT the
+        // low-degree extension reconstructed by its own final_coeffs. We detect
+        // this exactly the way the verifier's final-degree check does: re-evaluate
+        // the (degree-bounded) final_coeffs on the final coset and confirm it does
+        // NOT reproduce the shipped final layer.
+        {
+            let final_size = proof.fri_proof.final_layer.len();
+            let base_len =
+                proof.trace_length.next_power_of_two() * proof.params.lde_blowup_factor;
+            let dom_f =
+                EvaluationDomain::<F>::new_coset(base_len, F::from_u64(LDE_COSET_OFFSET)).unwrap();
+            let mut ld = hc_fri::layer::LayerDomain::<K> {
+                offset: K::from_base(dom_f.offset()),
+                gen: K::from_base(dom_f.generator()),
+                size: dom_f.size(),
+            };
+            let mut n = base_len;
+            while n > final_size {
+                ld = ld.squared();
+                n /= 2;
+            }
+            let pts: Vec<K> = (0..final_size).map(|j| ld.point(j)).collect();
+            let reeval = hc_core::poly::evaluate_batch(&proof.fri_proof.final_coeffs, &pts);
+            assert_ne!(
+                reeval, proof.fri_proof.final_layer,
+                "forged base must be genuinely high-degree (final layer is NOT a \
+                 degree-(final/blowup) evaluation)"
+            );
+        }
 
+        // THE forge-PoC assertion: rejected under a RELAXED floor.
+        let result = verify_v5_with_floor(&proof, VerifierSecurityFloor::relaxed());
+        eprintln!("forge_poc_g2 (v5): verify_v5_with_floor returned {result:?}");
+        let err = result.expect_err(
+            "G2: the v5 FRI low-degree test MUST reject a high-degree codeword \
+             (under a relaxed floor)",
+        );
+        let msg = err.to_string();
+        // The rejection must come from the FRI / final-degree path, not the floor.
         assert!(
-            result.is_err(),
-            "G2: FRI accepted a high-degree codeword — low-degree test is vacuous"
+            msg.contains("fri") || msg.contains("final-layer degree"),
+            "rejection must be from the FRI / final-degree logic, got: {msg}"
+        );
+        assert!(
+            !msg.contains("security floor") && !msg.contains("legacy protocol version"),
+            "rejection must NOT be the security floor, got: {msg}"
         );
     }
 }

@@ -47,6 +47,14 @@ pub enum VerifierError {
     KzgProofInvalid,
     #[error("proof params do not match proof version")]
     ProofParamsVersionMismatch,
+    #[error("proof parameters are below the verifier security floor")]
+    BelowSecurityFloor,
+    #[error("proof declares an unsound legacy protocol version")]
+    UnsoundLegacyVersion,
+    #[error("proof-of-work grinding check failed")]
+    GrindingCheckFailed,
+    #[error("fri final-layer degree check failed")]
+    FriFinalDegreeMismatch,
 }
 
 impl From<VerifierError> for HcError {
