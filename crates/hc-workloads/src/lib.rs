@@ -88,7 +88,8 @@ pub mod unified;
 pub mod zkml_templates;
 
 pub use unified::{
-    enforcement_for, is_dispatchable, is_listable, list_all_templates, UnifiedTemplateInfo,
+    allow_unaudited_templates, enforcement_for, is_dispatchable, is_listable, list_all_templates,
+    UnifiedTemplateInfo,
 };
 pub use templates::Enforcement;
 

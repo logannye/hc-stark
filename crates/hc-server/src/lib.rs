@@ -1359,6 +1359,16 @@ async fn prove_submit(
                 message: format!("unknown template_id: {tid}"),
             });
         }
+        if !hc_workloads::is_dispatchable(tid, hc_workloads::allow_unaudited_templates()) {
+            return Err(ApiError {
+                status: StatusCode::FORBIDDEN,
+                code: "template_unavailable",
+                message: format!(
+                    "template '{tid}' does not currently enforce its named predicate \
+                     and is disabled in this deployment"
+                ),
+            });
+        }
         if req.template_params.is_none() {
             return Err(ApiError {
                 status: StatusCode::BAD_REQUEST,
@@ -1723,6 +1733,16 @@ async fn prove_batch(
         // Server-side parameter caps.
         validate_prove_params(&req, &state.cfg)?;
 
+        if let Some(tid) = req.template_id.as_deref() {
+            if !hc_workloads::is_dispatchable(tid, hc_workloads::allow_unaudited_templates()) {
+                return Err(ApiError::new(
+                    StatusCode::FORBIDDEN,
+                    "template_unavailable",
+                    format!("template '{tid}' is not available in this deployment"),
+                ));
+            }
+        }
+
         // Validate each request.
         if let Some(id) = req.workload_id.as_deref() {
             if !crate::workloads::known_workload(id) {
@@ -2014,16 +2034,6 @@ fn smart_block_size(program_len: usize) -> usize {
     }
 }
 
-/// Whether unaudited (StructureOnly) templates are exposed/dispatchable.
-/// Default `false`: production offers only templates whose AIR enforces
-/// their predicate. Set `HC_ALLOW_UNAUDITED_TEMPLATES=true` for dev/Phase-1B.
-fn allow_unaudited_templates() -> bool {
-    matches!(
-        std::env::var("HC_ALLOW_UNAUDITED_TEMPLATES").as_deref(),
-        Ok("true") | Ok("1")
-    )
-}
-
 /// GET /templates — list all available proof templates across every
 /// backend (public, no auth).
 ///
@@ -2034,7 +2044,7 @@ fn allow_unaudited_templates() -> bool {
 /// flat list directly.
 #[utoipa::path(get, path = "/templates", responses((status = 200, body = TemplateListResponse)))]
 async fn templates_list() -> Json<TemplateListResponse> {
-    let allow = allow_unaudited_templates();
+    let allow = hc_workloads::allow_unaudited_templates();
     let unified = hc_workloads::list_all_templates();
     let summaries: Vec<TemplateSummary> = unified
         .iter()
@@ -2045,10 +2055,10 @@ async fn templates_list() -> Json<TemplateListResponse> {
             tags: t.tags.clone(),
             cost_category: t.cost_category.clone(),
             backend: t.backend.to_string(),
-            enforcement: serde_json::to_value(t.enforcement)
-                .ok()
-                .and_then(|v| v.as_str().map(str::to_string))
-                .unwrap_or_else(|| "structure_only".to_string()),
+            enforcement: match t.enforcement {
+                hc_workloads::Enforcement::Enforced => "enforced".to_string(),
+                hc_workloads::Enforcement::StructureOnly => "structure_only".to_string(),
+            },
         })
         .collect();
     let count = summaries.len();
@@ -2068,7 +2078,7 @@ async fn templates_list() -> Json<TemplateListResponse> {
 async fn template_detail(
     Path(template_id): Path<String>,
 ) -> Result<axum::response::Response, ApiError> {
-    let allow = allow_unaudited_templates();
+    let allow = hc_workloads::allow_unaudited_templates();
     if let Some(enf) = hc_workloads::enforcement_for(&template_id) {
         if !hc_workloads::is_listable(enf, allow) {
             return Err(ApiError::new(
@@ -2106,9 +2116,7 @@ async fn prove_template(
     Path(template_id): Path<String>,
     Json(req): Json<TemplateProveRequest>,
 ) -> Result<Json<ProveSubmitResponse>, ApiError> {
-    state.metrics.prove_submitted.inc();
-
-    if !hc_workloads::is_dispatchable(&template_id, allow_unaudited_templates()) {
+    if !hc_workloads::is_dispatchable(&template_id, hc_workloads::allow_unaudited_templates()) {
         return Err(ApiError::new(
             StatusCode::FORBIDDEN,
             "template_unavailable",
@@ -2118,6 +2126,8 @@ async fn prove_template(
             ),
         ));
     }
+
+    state.metrics.prove_submitted.inc();
 
     let tenant = guarded_auth(&state, &headers)?;
     let tenant_id = tenant.tenant_id.clone();
@@ -2495,7 +2505,7 @@ async fn estimate(Json(req): Json<EstimateRequest>) -> Result<Json<EstimateRespo
                 "params required when template_id is set",
             )
         })?;
-        if !hc_workloads::is_dispatchable(tid, allow_unaudited_templates()) {
+        if !hc_workloads::is_dispatchable(tid, hc_workloads::allow_unaudited_templates()) {
             return Err(ApiError::new(
                 StatusCode::FORBIDDEN,
                 "template_unavailable",
@@ -3448,17 +3458,6 @@ mod pricing_parity_tests {
 #[cfg(test)]
 mod honest_catalog_tests {
     use super::*;
-
-    #[test]
-    fn allow_helper_defaults_false_and_reads_true() {
-        std::env::remove_var("HC_ALLOW_UNAUDITED_TEMPLATES");
-        assert!(!allow_unaudited_templates());
-        std::env::set_var("HC_ALLOW_UNAUDITED_TEMPLATES", "true");
-        assert!(allow_unaudited_templates());
-        std::env::set_var("HC_ALLOW_UNAUDITED_TEMPLATES", "false");
-        assert!(!allow_unaudited_templates());
-        std::env::remove_var("HC_ALLOW_UNAUDITED_TEMPLATES");
-    }
 
     #[test]
     fn default_catalog_lists_only_enforced() {

@@ -136,6 +136,18 @@ pub fn is_dispatchable(id: &str, allow_unaudited: bool) -> bool {
     }
 }
 
+/// Whether unaudited (StructureOnly) templates are exposed/dispatchable in
+/// this deployment. Default `false`: only templates whose AIR enforces their
+/// predicate are offered. Set `HC_ALLOW_UNAUDITED_TEMPLATES=true` (or `1`)
+/// for dev / Phase-1B work. Shared by hc-server and hc-mcp so both surfaces
+/// agree on a single parse of the flag.
+pub fn allow_unaudited_templates() -> bool {
+    matches!(
+        std::env::var("HC_ALLOW_UNAUDITED_TEMPLATES").as_deref(),
+        Ok("true") | Ok("1")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +227,18 @@ mod tests {
         assert!(is_dispatchable("range_proof", true));
         // Unknown id: never dispatchable.
         assert!(!is_dispatchable("does_not_exist", true));
+    }
+
+    #[test]
+    fn allow_unaudited_flag_parses_true_and_one() {
+        std::env::remove_var("HC_ALLOW_UNAUDITED_TEMPLATES");
+        assert!(!allow_unaudited_templates());
+        std::env::set_var("HC_ALLOW_UNAUDITED_TEMPLATES", "1");
+        assert!(allow_unaudited_templates());
+        std::env::set_var("HC_ALLOW_UNAUDITED_TEMPLATES", "true");
+        assert!(allow_unaudited_templates());
+        std::env::set_var("HC_ALLOW_UNAUDITED_TEMPLATES", "false");
+        assert!(!allow_unaudited_templates());
+        std::env::remove_var("HC_ALLOW_UNAUDITED_TEMPLATES");
     }
 }
