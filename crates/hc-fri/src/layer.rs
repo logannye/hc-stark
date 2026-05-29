@@ -3,9 +3,32 @@ use std::sync::Arc;
 use hc_commit::merkle::{height_dfs::StreamingMerkle, reconstruct_path_from_replay, MerklePath};
 use hc_core::{
     error::{HcError, HcResult},
-    field::FieldElement,
+    field::{FieldElement, QuadExtension, GoldilocksField},
 };
 use hc_hash::{hash::HashDigest, Blake3, HashFunction};
+
+/// Trait for extension-field values that can be deterministically serialized
+/// to a fixed-size byte array suitable for Merkle leaf hashing.
+///
+/// This is a narrow local seam: only `hash_value_ext` depends on it.  It
+/// avoids hard-coupling the leaf-hash function to a concrete type while
+/// keeping the `hc-fri`→`hc-core` dependency surface unchanged (we already
+/// import `QuadExtension` in this crate's tests).
+pub trait ExtLeafHashable {
+    /// Serialize self to a fixed-size byte array that binds ALL field
+    /// coefficients.  Two values that differ in any coefficient must produce
+    /// different byte strings.
+    fn to_leaf_bytes(&self) -> [u8; 16];
+}
+
+impl ExtLeafHashable for QuadExtension<GoldilocksField> {
+    /// 16-byte LE encoding: `[c0_u64_le (8 bytes) || c1_u64_le (8 bytes)]`.
+    /// Delegates to `QuadExtension::to_le_bytes` defined in `hc-core`.
+    #[inline]
+    fn to_leaf_bytes(&self) -> [u8; 16] {
+        self.to_le_bytes()
+    }
+}
 
 /// Hash function for committing to FRI layer evaluations.
 ///
@@ -16,6 +39,20 @@ pub fn hash_value<F: FieldElement>(value: &F) -> HashDigest {
     bytes[..8].copy_from_slice(&value.to_u64().to_le_bytes());
     bytes[8..].copy_from_slice(&value.square().to_u64().to_le_bytes());
     Blake3::hash(&bytes)
+}
+
+/// Merkle-leaf hash for K-valued (extension-field) FRI layers.
+///
+/// Binds the FULL extension element (both coefficients) via the 16-byte
+/// `to_leaf_bytes` encoding: `Blake3(c0_le ∥ c1_le)`.  Distinct extension
+/// elements — whether differing in c0 OR c1 — produce distinct hashes with
+/// overwhelming probability.
+///
+/// This function is ADDITIVE and leaves `hash_value` unchanged.  The FRI
+/// base layer (layer 0) remains committed with `hash_value`; only folded
+/// layers ≥ 1 that operate in K will use `hash_value_ext` (Tasks 7/8).
+pub fn hash_value_ext<K: ExtLeafHashable>(value: &K) -> HashDigest {
+    Blake3::hash(&value.to_leaf_bytes())
 }
 
 pub fn compute_leaf_hashes<F: FieldElement>(values: &[F]) -> Vec<HashDigest> {
@@ -190,8 +227,54 @@ mod tests {
     use super::*;
     use hc_core::{
         domain::EvaluationDomain,
-        field::{prime_field::GoldilocksField, FieldElement},
+        field::{prime_field::GoldilocksField, FieldElement, QuadExtension},
     };
+
+    type K = QuadExtension<GoldilocksField>;
+
+    // --- hash_value_ext ---
+
+    /// Equal K values must hash to the same digest.
+    #[test]
+    fn hash_value_ext_equal_values_equal_hashes() {
+        let x = K::new(GoldilocksField::from_u64(42), GoldilocksField::from_u64(7));
+        assert_eq!(hash_value_ext(&x), hash_value_ext(&x));
+    }
+
+    /// Values differing ONLY in c0 must hash differently.
+    #[test]
+    fn hash_value_ext_distinct_c0_distinct_hashes() {
+        let c1 = GoldilocksField::from_u64(999);
+        let x = K::new(GoldilocksField::from_u64(1), c1);
+        let y = K::new(GoldilocksField::from_u64(2), c1);
+        assert_ne!(
+            hash_value_ext(&x),
+            hash_value_ext(&y),
+            "distinct c0 must produce distinct leaf hashes"
+        );
+    }
+
+    /// Values differing ONLY in c1 must hash differently.
+    /// This is the critical c1-binding check: a c0-only encoding would be a
+    /// commitment weakness that would let an adversary swap c1 without
+    /// invalidating a Merkle proof.
+    #[test]
+    fn hash_value_ext_distinct_c1_distinct_hashes() {
+        let c0 = GoldilocksField::from_u64(42);
+        let x = K::new(c0, GoldilocksField::from_u64(0));
+        let y = K::new(c0, GoldilocksField::from_u64(1));
+        assert_ne!(
+            hash_value_ext(&x),
+            hash_value_ext(&y),
+            "distinct c1 must produce distinct leaf hashes (c1 binding)"
+        );
+    }
+
+    /// K::ZERO and K::ONE hash differently from each other.
+    #[test]
+    fn hash_value_ext_zero_ne_one() {
+        assert_ne!(hash_value_ext(&K::ZERO), hash_value_ext(&K::ONE));
+    }
 
     type F = GoldilocksField;
 
