@@ -645,14 +645,17 @@ async fn prove_wrong_auth_rejected() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
+/// Audit finding G2 follow-on (Phase-1A Task 9): the `/aggregate` endpoint
+/// must return HTTP 410 Gone for ALL requests — the in-circuit Halo2 FRI fold
+/// is unsound and the endpoint is gated off until Phase 1B.
 #[tokio::test]
-async fn aggregate_rejects_invalid_job_ids() {
+async fn aggregate_is_gated_off_with_410() {
     let tmp = tempfile::tempdir().unwrap();
     let state = hc_server::test_state(tmp.path().to_path_buf());
     let app = hc_server::build_app(state);
 
-    // Invalid UUID → 400.
-    let req_body = serde_json::json!({"job_ids": ["abc"]});
+    // Any request body — the gate fires before body parsing.
+    let req_body = serde_json::json!({"job_ids": ["00000000-0000-0000-0000-000000000001"]});
     let resp = app
         .oneshot(
             Request::builder()
@@ -664,11 +667,26 @@ async fn aggregate_rejects_invalid_job_ids() {
         )
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        resp.status(),
+        StatusCode::GONE,
+        "/aggregate must return 410 (recursion gate, audit finding G2)"
+    );
+    // The error body must mention recursion / soundness so clients can act.
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let msg = json["error"]["message"].as_str().unwrap_or("");
+    assert!(
+        msg.contains("soundness") || msg.contains("G2"),
+        "error message should mention soundness or G2, got: {msg}"
+    );
 }
 
+/// Gate fires regardless of input shape — empty job_ids also yields 410.
 #[tokio::test]
-async fn aggregate_rejects_empty_job_ids() {
+async fn aggregate_gate_fires_before_input_validation() {
     let tmp = tempfile::tempdir().unwrap();
     let state = hc_server::test_state(tmp.path().to_path_buf());
     let app = hc_server::build_app(state);
@@ -685,7 +703,11 @@ async fn aggregate_rejects_empty_job_ids() {
         )
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        resp.status(),
+        StatusCode::GONE,
+        "/aggregate must return 410 even for empty job_ids (gate fires first)"
+    );
 }
 
 #[tokio::test]

@@ -1085,6 +1085,20 @@ fn verify_stark<F: FieldElement>(proof: &Proof<F>) -> HcResult<VerificationSumma
     })
 }
 
+/// Verify a KZG-scheme proof.
+///
+/// # Soundness warning — audit finding G2 follow-on
+///
+/// This function uses a **hardcoded trusted-setup seed** (`KZG_SEED =
+/// 0x5a51_d34d_c0de` in `hc_prover::kzg`) — NOT a ceremony-derived SRS.
+/// The legacy path (`verify_kzg_legacy`, reached when
+/// `proof.query_response.is_none()`) accepts proofs **unconditionally**
+/// without any cryptographic query-response check.
+///
+/// **DO NOT call this function from a live HTTP/MCP endpoint** until a proper
+/// trusted-setup ceremony has been conducted and the legacy path hardened.
+/// The `verify_proof_bytes` gate in `hc-sdk` blocks KZG-scheme proofs at the
+/// public API boundary (Phase-1A Task 9 enforcement).
 fn verify_kzg<F: FieldElement>(proof: &Proof<F>) -> HcResult<VerificationSummary<F>> {
     if proof.query_response.is_none() {
         // Backward compatibility with legacy proofs that did not bundle witnesses.
@@ -1255,6 +1269,14 @@ fn verify_kzg_trace_queries<F: FieldElement>(
     Ok(())
 }
 
+/// Legacy KZG path — accepts proofs with `query_response = None`
+/// unconditionally (no cryptographic query check).
+///
+/// # Soundness warning
+///
+/// This function performs **no cryptographic verification** of query responses.
+/// It must not be reachable from any live endpoint. See [`verify_kzg`] for the
+/// full warning.
 fn verify_kzg_legacy<F: FieldElement>(proof: &Proof<F>) -> HcResult<VerificationSummary<F>> {
     Ok(VerificationSummary {
         trace_commitment_digest: commitment_digest(&proof.trace_commitment),

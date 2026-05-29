@@ -232,6 +232,25 @@ pub fn verify_proof_bytes(proof: &ProofBytes, allow_legacy_v2: bool) -> VerifyRe
             error: Some("legacy v2 proofs require allow_legacy_v2".to_string()),
         };
     }
+    // SOUNDNESS GATE — audit finding G2 (Phase 1A follow-on, Task 9).
+    //
+    // `verify_kzg` in hc-verifier uses a hardcoded trusted-setup seed
+    // (KZG_SEED = 0x5a51_d34d_c0de) and the legacy v2 path (`verify_kzg_legacy`)
+    // accepts proofs with `query_response = None` unconditionally — neither is
+    // suitable for a production live endpoint. The KZG scheme is only reachable
+    // here when a caller submits a proof whose serialized `commitment_scheme`
+    // field decodes to `"kzg"`. Block it until a proper trusted-setup ceremony
+    // and query-response validation are in place (Phase 1B KZG audit).
+    if matches!(decoded.trace_commitment.scheme(), CommitmentScheme::Kzg) {
+        return VerifyResult {
+            ok: false,
+            error: Some(
+                "KZG-scheme proofs are not accepted on this endpoint (unaudited trusted setup; \
+                 audit finding G2 follow-on); use a STARK-scheme proof"
+                    .to_string(),
+            ),
+        };
+    }
     let proof_obj = hc_verifier::Proof {
         version: decoded.version,
         trace_commitment: decoded.trace_commitment.clone(),
@@ -752,4 +771,86 @@ fn hex_to_g1(data: &str) -> Result<G1Projective> {
     let affine = G1Affine::deserialize_compressed(&mut cursor)
         .map_err(|err| anyhow::anyhow!("failed to decode KZG commitment: {err}"))?;
     Ok(G1Projective::from(affine))
+}
+
+#[cfg(test)]
+mod soundness_gate_tests {
+    use super::*;
+    use hc_prover::{config::ProverConfig, prove, PublicInputs};
+    use hc_vm::{Instruction, Program};
+
+    /// Audit finding G2 follow-on (Phase-1A Task 9): `verify_proof_bytes` must
+    /// reject KZG-scheme proofs regardless of `allow_legacy_v2`. A client
+    /// submitting a crafted proof with `commitment_scheme: "kzg"` must NOT reach
+    /// `verify_kzg` (hardcoded trusted-setup seed, unconditional legacy path).
+    #[test]
+    fn kzg_scheme_proof_is_rejected_by_gate() {
+        // Build a real STARK proof then serialize it with commitment_scheme = "kzg"
+        // so that deserialization produces a Commitment::Kzg variant — this
+        // exercises exactly the gate path a malicious client would trigger.
+        let program = Program::new(vec![
+            Instruction::AddImmediate(1),
+            Instruction::AddImmediate(2),
+        ]);
+        let inputs = PublicInputs {
+            initial_acc: hc_core::field::prime_field::GoldilocksField::new(5),
+            final_acc: hc_core::field::prime_field::GoldilocksField::new(8),
+        };
+        let config = ProverConfig::new(2, 2).unwrap();
+        let prover_out = prove(config, program, inputs).unwrap();
+
+        // Serialize through the SDK serializer, then patch commitment_scheme and
+        // trace_commitment to the KZG variant. The serde tag for SerializableCommitment
+        // is "type" (lowercase), so the KZG variant is {"type": "kzg", "points": []}.
+        // Keep version consistent between envelope and payload (both = original version).
+        let serializable = SerializableProof::from_output(&prover_out);
+        let original_version = prover_out.version;
+        let mut json_val = serde_json::to_value(&serializable).unwrap();
+        json_val["commitment_scheme"] = serde_json::Value::String("kzg".to_string());
+        // Patch trace_commitment to produce Commitment::Kzg{points:[]} after deserialization.
+        json_val["trace_commitment"] = serde_json::json!({"type": "kzg", "points": []});
+
+        let patched_bytes = serde_json::to_vec(&json_val).unwrap();
+        let proof_bytes = ProofBytes {
+            version: original_version,
+            bytes: patched_bytes,
+        };
+
+        // allow_legacy_v2 = true: gate must still fire before reaching verify_kzg.
+        let result = verify_proof_bytes(&proof_bytes, true);
+        assert!(
+            !result.ok,
+            "KZG-scheme proof must be rejected by the soundness gate"
+        );
+        let err = result.error.unwrap_or_default();
+        assert!(
+            err.contains("KZG") || err.contains("kzg") || err.contains("not accepted"),
+            "error message should identify the KZG gate, got: {err}"
+        );
+    }
+
+    /// STARK proofs are unaffected by the KZG gate — verify_proof_bytes still
+    /// accepts them normally (gate does not block the correct path).
+    #[test]
+    fn stark_scheme_proof_is_not_blocked_by_kzg_gate() {
+        let program = Program::new(vec![
+            Instruction::AddImmediate(1),
+            Instruction::AddImmediate(2),
+        ]);
+        let inputs = PublicInputs {
+            initial_acc: hc_core::field::prime_field::GoldilocksField::new(5),
+            final_acc: hc_core::field::prime_field::GoldilocksField::new(8),
+        };
+        let config = ProverConfig::new(2, 2).unwrap();
+        let prover_out = prove(config, program, inputs).unwrap();
+
+        let proof_bytes = encode_proof_bytes(&prover_out).unwrap();
+
+        let result = verify_proof_bytes(&proof_bytes, true);
+        assert!(
+            result.ok,
+            "STARK proof must not be blocked by the KZG gate: {:?}",
+            result.error
+        );
+    }
 }
