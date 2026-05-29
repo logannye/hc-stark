@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TinyZKP — Zero-Knowledge Proofs as an API · O(√N) Memory · Native MCP for AI agents</title>
-<meta name="description" content="Zero-knowledge proofs (ZK-STARK) as an API. The only production prover with O(√N) memory instead of O(N), where N is the size of the computation — a 100M-step proof fits on a laptop, not a 256-GB server. Native MCP for AI agents. Free tier, no credit card.">
+<meta name="description" content="Zero-knowledge proofs (ZK-STARK) as an API. A ZK-STARK prover with O(√N) memory instead of O(N), where N is the size of the computation — a 100M-step proof fits on a laptop, not a 256-GB server. Native MCP for AI agents. Free tier, no credit card.">
 <meta property="og:title" content="TinyZKP — Zero-Knowledge Proofs as an API · O(√N) Memory">
-<meta property="og:description" content="ZK-STARK proofs in one API call. The only production prover with O(√N) memory instead of O(N) — a 100M-step proof runs on a laptop instead of a 256-GB server. Verify in under 5ms. Native MCP for AI agents.">
+<meta property="og:description" content="ZK-STARK proofs in one API call. A ZK-STARK prover with O(√N) memory instead of O(N) — a 100M-step proof runs on a laptop instead of a 256-GB server. Verify in under 5ms. Native MCP for AI agents.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="TinyZKP — Zero-Knowledge Proofs as an API · O(√N) Memory">
-<meta name="twitter:description" content="ZK-STARK proofs as an API. The only production prover with O(√N) memory instead of O(N). Free tier, no credit card.">
+<meta name="twitter:description" content="ZK-STARK proofs as an API. A ZK-STARK prover with O(√N) memory instead of O(N). Free tier, no credit card.">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -49,7 +49,7 @@
       "name": "TinyZKP",
       "applicationCategory": "DeveloperApplication",
       "operatingSystem": "Web, macOS, Linux, Windows",
-      "description": "Zero-knowledge proofs (ZK-STARK) as an API. The only production prover with O(√N) memory instead of O(N), where N is the size of the computation. Native MCP for AI agents. Mint a proof for any computation in one API call; verify in milliseconds.",
+      "description": "Zero-knowledge proofs (ZK-STARK) as an API. A ZK-STARK prover with O(√N) memory instead of O(N), where N is the size of the computation. Native MCP for AI agents. Mint a proof for any computation in one API call; verify in milliseconds.",
       "offers": [
         {"@type": "Offer", "name": "Free",      "price": "0",   "priceCurrency": "USD", "description": "100 proofs/month, no credit card"},
         {"@type": "Offer", "name": "Developer", "price": "19",  "priceCurrency": "USD", "description": "$19/month — 5,000 proofs/mo + usage overage"},
@@ -76,7 +76,7 @@
           "name": "Is TinyZKP zero-knowledge?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. TinyZKP uses ZK-STARKs — transparent (no trusted setup), post-quantum secure (hash-based), and supports a ZK-masked mode that hides the computation as well as the inputs."
+            "text": "Yes. TinyZKP uses ZK-STARKs — transparent (no trusted setup), post-quantum (hash-based), and supports a ZK-masked mode that hides the computation as well as the inputs."
           }
         },
         {
@@ -447,7 +447,7 @@ footer .right a:hover{color:var(--muted)}
   <h1>Zero-knowledge proofs,<br>in one API call.</h1>
   <p class="sub">Mint a ZK-STARK for any computation &mdash; cryptographic proof your code ran on the inputs it claims, without revealing them. Generate in seconds, verify in milliseconds. One <code style="background:var(--bg);padding:1px 6px;border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--border)">curl</code>, or one MCP install.</p>
   <p class="sub" style="margin-top:-18px;font-size:14.5px;max-width:640px;color:var(--text)">
-    <strong style="color:var(--accent)">The only production prover that runs in O(&radic;N) memory instead of O(N)</strong>
+    <strong style="color:var(--accent)">Runs in O(&radic;N) memory instead of O(N)</strong>
     <span style="color:var(--dim);font-weight:400">(where N = size of the computation)</span>
     &mdash; a 100M-step proof fits on a laptop instead of a 256-GB server.
   </p>
@@ -468,9 +468,9 @@ footer .right a:hover{color:var(--muted)}
       <span>Terminal</span>
     </div>
     <div class="demo-body" id="demoBody">
-      <div><span class="prompt">$</span> <span class="cmd">curl -X POST https://api.tinyzkp.com/prove/template/range_proof \</span></div>
+      <div><span class="prompt">$</span> <span class="cmd">curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \</span></div>
       <div><span class="cmd">  -H "Authorization: Bearer tzk_demo..." \</span></div>
-      <div><span class="cmd">  -d '{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'</span></div>
+      <div><span class="cmd">  -d '{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'</span></div>
       <div style="margin-top:8px"><span class="output">{"job_id":"<span class="highlight">a1b2c3d4-e5f6-7890-abcd-ef1234567890</span>"}</span></div>
       <div style="margin-top:16px"><span class="prompt">$</span> <span class="cmd">curl https://api.tinyzkp.com/prove/a1b2c3d4-e5f6-7890-abcd-ef1234567890</span></div>
       <div style="margin-top:8px"><span class="output">{"status":"<span class="ok">succeeded</span>","proof":{"version":4,"bytes":[106,143,...]}}</span></div>
@@ -478,7 +478,7 @@ footer .right a:hover{color:var(--muted)}
       <div style="margin-top:8px"><span class="output">{"<span class="ok">ok</span>":<span class="ok">true</span>,"error":<span class="highlight">null</span>}  <span class="comment"># free, auth required</span></span></div>
     </div>
   </div>
-  <p class="demo-sub">Proved that 42 is in range [0, 100] without revealing the value. Verified in 2.8ms.</p>
+  <p class="demo-sub">Proved that accumulator stepped from 1000 to 1045 via deltas [10, 20, 15]. Verified in 2.8ms.</p>
 </div>
 </section>
 
@@ -522,7 +522,7 @@ claude mcp add --transport http \
     <div class="step fade-in">
       <span class="num">1</span>
       <h3>Submit</h3>
-      <p>POST to <code>/prove/template/range_proof</code> with your parameters. Choose from 6 built-in templates &mdash; or browse them via <code>/templates</code>. You get a job ID instantly.</p>
+      <p>POST to <code>/prove/template/accumulator_step</code> with your parameters. More proof types in development &mdash; browse available types via <code>/templates</code>. You get a job ID instantly.</p>
     </div>
     <div class="step fade-in">
       <span class="num">2</span>
@@ -532,7 +532,7 @@ claude mcp add --transport http \
     <div class="step fade-in">
       <span class="num">3</span>
       <h3>Verify</h3>
-      <p>Anyone can verify the proof in milliseconds via <code>/verify</code>. Always free. Or get <code>/calldata</code> for on-chain verification. The verifier learns nothing except that the statement is true.</p>
+      <p>Anyone can verify the proof in milliseconds via <code>/verify</code>. Always free. The verifier learns nothing except that the statement is true.</p>
     </div>
   </div>
 </div>
@@ -555,7 +555,7 @@ claude mcp add --transport http \
 <pre><span class="keyword">from</span> tinyzkp <span class="keyword">import</span> TinyZKP
 
 <span class="keyword">async with</span> <span class="func">TinyZKP</span>(<span class="string">"https://api.tinyzkp.com"</span>, api_key=<span class="string">"tzk_..."</span>) <span class="keyword">as</span> client:
-    job_id = <span class="keyword">await</span> client.<span class="func">prove_template</span>(<span class="string">"range_proof"</span>, params={<span class="string">"min"</span>: <span class="string">0</span>, <span class="string">"max"</span>: <span class="string">100</span>, <span class="string">"witness_steps"</span>: [<span class="string">42</span>, <span class="string">44</span>]})
+    job_id = <span class="keyword">await</span> client.<span class="func">prove_template</span>(<span class="string">"accumulator_step"</span>, params={<span class="string">"initial"</span>: <span class="string">1000</span>, <span class="string">"final"</span>: <span class="string">1045</span>, <span class="string">"deltas"</span>: [<span class="string">10</span>, <span class="string">20</span>, <span class="string">15</span>]})
     proof  = <span class="keyword">await</span> client.<span class="func">wait_for_proof</span>(job_id)
     result = <span class="keyword">await</span> client.<span class="func">verify</span>(proof)  <span class="comment"># free!</span></pre>
   </div>
@@ -564,17 +564,17 @@ claude mcp add --transport http \
 <pre><span class="keyword">import</span> { HcClient } <span class="keyword">from</span> <span class="string">"tinyzkp"</span>;
 
 <span class="keyword">const</span> client = <span class="keyword">new</span> <span class="func">HcClient</span>(<span class="string">"https://api.tinyzkp.com"</span>, { apiKey: <span class="string">"tzk_..."</span> });
-<span class="keyword">const</span> jobId  = <span class="keyword">await</span> client.<span class="func">proveTemplate</span>(<span class="string">"range_proof"</span>, { min: <span class="string">0</span>, max: <span class="string">100</span>, witness_steps: [<span class="string">42</span>, <span class="string">44</span>] });
+<span class="keyword">const</span> jobId  = <span class="keyword">await</span> client.<span class="func">proveTemplate</span>(<span class="string">"accumulator_step"</span>, { initial: <span class="string">1000</span>, final: <span class="string">1045</span>, deltas: [<span class="string">10</span>, <span class="string">20</span>, <span class="string">15</span>] });
 <span class="keyword">const</span> proof  = <span class="keyword">await</span> client.<span class="func">waitForProof</span>(jobId);
 <span class="keyword">const</span> result = <span class="keyword">await</span> client.<span class="func">verify</span>(proof);  <span class="comment">// free!</span></pre>
   </div>
   <div class="code-block" id="tab-curl">
 <button class="copy-btn" onclick="copyCode(this)">Copy</button>
 <pre><span class="comment"># Submit a proof via template (recommended)</span>
-curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
+curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
   -H <span class="string">"Authorization: Bearer tzk_..."</span> \
   -H <span class="string">"Content-Type: application/json"</span> \
-  -d <span class="string">'{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'</span>
+  -d <span class="string">'{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'</span>
 <span class="comment"># {"job_id":"abc123..."}</span>
 
 <span class="comment"># Poll for result</span>
@@ -590,7 +590,7 @@ curl -X POST https://api.tinyzkp.com/verify \
 <button class="copy-btn" onclick="copyCode(this)">Copy</button>
 <pre><span class="comment"># Zero install, runs anywhere with Node 18+</span>
 <span class="keyword">export</span> TINYZKP_API_KEY=tzk_...
-npx @tinyzkp/cli prove range_proof <span class="string">'{"min":0,"max":100,"witness_steps":[42,44]}'</span> --wait > proof.json
+npx @tinyzkp/cli prove accumulator_step <span class="string">'{"initial":1000,"final":1045,"deltas":[10,20,15]}'</span> --wait > proof.json
 npx @tinyzkp/cli verify proof.json
 <span class="comment"># → ✔ valid  (round-trip 8 ms)</span></pre>
   </div>
@@ -620,7 +620,7 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
 
   <!-- AGENT-RECEIPT TIERS -->
   <div class="audience-panel" id="panel-agents">
-    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">Range proofs, hash preimages, policy compliance, data integrity, accumulator steps, computation attestations. <strong style="color:var(--text)">Sub-second proofs.</strong> The wedge for AI-agent receipts.</p>
+    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">State-transition (accumulator) proofs today &mdash; more proof types in development. <strong style="color:var(--text)">Sub-second proofs.</strong> The wedge for AI-agent receipts.</p>
 
     <div class="pricing-grid" style="grid-template-columns:repeat(3,1fr);max-width:960px;margin:0 auto">
       <div class="price-card fade-in">
@@ -658,7 +658,7 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
         <div class="tier">Compute</div>
         <div class="amount">$0.50</div>
         <div class="unit">per million trace steps</div>
-        <div class="desc" style="color:var(--accent)">No monthly base fee &middot; up to 100M-step traces &middot; 100 RPM &middot; 8 inflight &middot; &ge;128-bit soundness &middot; email 24h</div>
+        <div class="desc" style="color:var(--accent)">No monthly base fee &middot; up to 100M-step traces &middot; 100 RPM &middot; 8 inflight &middot; email 24h</div>
         <a class="cta" href="/signup?plan=compute" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Start usage-based</a>
       </div>
       <div class="price-card fade-in">
@@ -689,7 +689,7 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
         <tr><td style="padding:10px 14px;color:var(--text)">100M steps</td><td style="text-align:center;padding:10px 14px;color:var(--muted);font-weight:600">Needs fleet sharding</td><td style="text-align:center;padding:10px 14px;color:var(--accent);font-weight:600">~300 MB</td></tr>
       </tbody>
     </table>
-    <p style="color:var(--dim);font-size:12px;margin-top:14px;text-align:center;font-weight:500">Same cryptographic guarantees: ZK-STARK, &ge;128-bit soundness, transparent, post-quantum. <a href="/compute" style="color:var(--accent)">See the whitepaper &rarr;</a></p>
+    <p style="color:var(--dim);font-size:12px;margin-top:14px;text-align:center;font-weight:500">Same architecture: ZK-STARK, transparent, post-quantum (hash-based). <a href="/compute" style="color:var(--accent)">See the whitepaper &rarr;</a></p>
   </div>
 
   <p class="verify-free" style="margin-top:36px">Verification is always free across every tier &middot; <a href="https://npmjs.com/package/@tinyzkp/verify" style="color:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px"><code>@tinyzkp/verify</code></a> WASM package verifies anywhere in 5 ms</p>
@@ -754,11 +754,10 @@ function showAudience(name) {
 <div class="container">
   <div class="proof-badges">
     <div class="proof-badge"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> No trusted setup</div>
-    <div class="proof-badge"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Post-quantum secure</div>
+    <div class="proof-badge"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Post-quantum (hash-based)</div>
     <div class="proof-badge"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Open source</div>
     <div class="proof-badge"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Sub-5ms verification</div>
     <div class="proof-badge"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Zero-knowledge mode</div>
-    <div class="proof-badge"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg> EVM on-chain ready</div>
   </div>
 </div>
 </section>
