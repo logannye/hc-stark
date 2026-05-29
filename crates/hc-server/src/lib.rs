@@ -106,15 +106,26 @@ impl PlanLimits {
                 monthly_cap_cents: 250_000,
                 max_prove_seconds: 1800, // 30 min
             },
-            "scale" => Self {
+            "scale" | "pro" => Self {
+                // "pro" is the legacy Stripe product label for scale; pricing.json
+                // plan_aliases routes it here. Both get scale's limits.
                 prove_rpm: 500,
                 verify_rpm: 1500,
                 max_inflight: 16,
                 monthly_cap_cents: 1_000_000,
                 max_prove_seconds: 3600, // 60 min
             },
+            "compute" => Self {
+                // Billed via trace_step_usage meter, not cents-per-proof tiers.
+                // monthly_cap_cents is a coarse safety bound only.
+                prove_rpm: 100,
+                verify_rpm: 300,
+                max_inflight: 8,
+                monthly_cap_cents: 10_000_000,
+                max_prove_seconds: 3600, // 60 min
+            },
             _ => Self {
-                // "developer" is the default; also covers legacy "standard" and "pro"
+                // "developer" is the default; also covers legacy "standard"
                 prove_rpm: 100,
                 verify_rpm: 300,
                 max_inflight: 4,
@@ -3452,6 +3463,67 @@ mod pricing_parity_tests {
                 "trace_length={probe_steps}: in-code price {got} ≠ pricing.json {cents}"
             );
         }
+    }
+
+    /// "pro" is a plan_alias for "scale" in pricing.json. PlanLimits::for_plan
+    /// must route it to scale's exact limits; the default arm must NOT swallow it.
+    #[test]
+    fn pro_alias_resolves_to_scale_limits() {
+        let scale_limits = PlanLimits::for_plan("scale");
+        let pro_limits = PlanLimits::for_plan("pro");
+        assert_eq!(
+            pro_limits.prove_rpm, scale_limits.prove_rpm,
+            "pro: prove_rpm must match scale"
+        );
+        assert_eq!(
+            pro_limits.verify_rpm, scale_limits.verify_rpm,
+            "pro: verify_rpm must match scale"
+        );
+        assert_eq!(
+            pro_limits.max_inflight, scale_limits.max_inflight,
+            "pro: max_inflight must match scale"
+        );
+        assert_eq!(
+            pro_limits.monthly_cap_cents, scale_limits.monthly_cap_cents,
+            "pro: monthly_cap_cents must match scale"
+        );
+        assert_eq!(
+            pro_limits.max_prove_seconds, scale_limits.max_prove_seconds,
+            "pro: max_prove_seconds must match scale"
+        );
+    }
+
+    /// "pro" discount factor must match scale's (0.60). Ensures the billing
+    /// calculation doesn't accidentally use the developer fallback (1.0) for
+    /// pro-plan tenants.
+    #[test]
+    fn pro_discount_matches_scale() {
+        let want = 0.60f64;
+        let got = usage_log::discount_factor_pub("pro");
+        assert!(
+            (got - want).abs() < 1e-9,
+            "pro discount {got} ≠ scale discount {want}"
+        );
+    }
+
+    /// billing_meters in pricing.json declares the meter each plan routes
+    /// through. Verify the SSOT is present and contains the expected mappings.
+    #[test]
+    fn billing_meters_ssot_present() {
+        let cfg = pricing_json();
+        let meters = cfg["billing_meters"]
+            .as_object()
+            .expect("pricing.json must have a billing_meters object");
+        assert_eq!(
+            meters["compute"].as_str().unwrap_or(""),
+            "trace_step_usage",
+            "billing_meters.compute must be trace_step_usage"
+        );
+        assert_eq!(
+            meters["_default"].as_str().unwrap_or(""),
+            "proof_usage",
+            "billing_meters._default must be proof_usage"
+        );
     }
 }
 

@@ -63,6 +63,7 @@ TIERS = [
 ]
 
 # Plan-based discount factors. Team gets 25% off, Scale gets 40% off.
+# compute is not discounted here — it's billed via a different meter entirely.
 DISCOUNT_FACTORS: dict[str, float] = {
     "free": 1.0,
     "developer": 1.0,
@@ -70,6 +71,13 @@ DISCOUNT_FACTORS: dict[str, float] = {
     "team": 0.75,
     "scale": 0.60,
     "pro": 0.60,       # legacy alias — Stripe product is named "Pro" but matches scale's rate sheet
+    "compute": 1.0,    # billed via trace_step_usage meter, not cents-per-proof tiers
+}
+
+# Billing meter routing: maps plan → Stripe meter event_name.
+# Matches pricing.json billing_meters SSOT. sync_usage enforces this mapping.
+BILLING_METERS: dict[str, str] = {
+    "compute": "trace_step_usage",
 }
 
 
@@ -86,6 +94,17 @@ def discounted_price_cents(trace_length: int, plan: str) -> int:
     base = price_cents(trace_length)
     factor = DISCOUNT_FACTORS.get(plan, 1.0)
     return max(1, round(base * factor))
+
+
+def meter_event_for_plan(plan: str, trace_length: int) -> tuple[str, str]:
+    """Return (meter_event_name, value_str) for a given plan and trace_length.
+
+    Compute tenants are metered by raw trace steps via trace_step_usage;
+    all other plans use proof_usage metered in discounted cents.
+    """
+    if plan in BILLING_METERS:
+        return BILLING_METERS[plan], str(trace_length)
+    return METER_EVENT_NAME, str(discounted_price_cents(trace_length, plan))
 
 
 def _log(entry: dict) -> None:
@@ -192,9 +211,13 @@ def main() -> None:
             tid = row["tenant_id"]
             plan = tenant_map.get(tid, {}).get("plan", "developer")
             if tid not in summary:
-                summary[tid] = {"count": 0, "total_cents": 0, "plan": plan}
+                summary[tid] = {"count": 0, "total_cents": 0, "total_steps": 0, "plan": plan}
             summary[tid]["count"] += 1
-            summary[tid]["total_cents"] += discounted_price_cents(row["trace_length"], plan)
+            meter_name, value = meter_event_for_plan(plan, row["trace_length"])
+            if meter_name == "trace_step_usage":
+                summary[tid]["total_steps"] += int(value)
+            else:
+                summary[tid]["total_cents"] += int(value)
         print(json.dumps(summary, indent=2))
         conn.close()
         return
@@ -212,14 +235,14 @@ def main() -> None:
 
         if not customer_id:
             skipped += 1
-            cents = discounted_price_cents(row["trace_length"], plan)
+            _, value = meter_event_for_plan(plan, row["trace_length"])
             if tenant_id not in unbillable:
                 unbillable[tenant_id] = {"count": 0, "estimated_cents": 0}
             unbillable[tenant_id]["count"] += 1
-            unbillable[tenant_id]["estimated_cents"] += cents
+            unbillable[tenant_id]["estimated_cents"] += int(value)
             continue
 
-        cents = discounted_price_cents(row["trace_length"], plan)
+        meter_name, value = meter_event_for_plan(plan, row["trace_length"])
 
         if args.dry_run:
             _log({
@@ -227,9 +250,9 @@ def main() -> None:
                 "tenant_id": tenant_id,
                 "row_id": row["id"],
                 "job_id": row["job_id"],
-                "cents": cents,
+                "meter_value": value,
+                "meter_event": meter_name,
                 "stripe_customer_id": customer_id,
-                "meter_event": METER_EVENT_NAME,
                 "meter_identifier": f"hc-usage-{tenant_id}-{row['job_id']}",
             })
             billed += 1
@@ -247,9 +270,9 @@ def main() -> None:
 
         try:
             stripe.billing.MeterEvent.create(
-                event_name=METER_EVENT_NAME,
+                event_name=meter_name,
                 payload={
-                    "value": str(cents),
+                    "value": value,
                     "stripe_customer_id": customer_id,
                 },
                 identifier=meter_identifier,
@@ -302,7 +325,8 @@ def main() -> None:
             "tenant_id": tenant_id,
             "row_id": row["id"],
             "job_id": row["job_id"],
-            "cents": cents,
+            "meter_event": meter_name,
+            "meter_value": value,
             "meter_identifier": meter_identifier,
         })
 
