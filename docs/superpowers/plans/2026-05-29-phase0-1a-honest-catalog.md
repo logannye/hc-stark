@@ -700,3 +700,19 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - 0.2: G3 portal auth, G4 magic-link session, G10 `/metrics` auth.
 - 0.3: G8 signup uniqueness, full G9 metering/caps, G12 underbill fix.
 - 0.4: repo/infra hygiene (G15). 0.5: off-box backup (G13).
+
+---
+
+## Execution record (completed 2026-05-29, branch `roadmap/production-hardening`)
+
+Implemented via subagent-driven development (fresh implementer → spec-compliance review → code-quality review per task, with fix loops). Code commits `71735be..8743fa6`. Final gates all green: `cargo test` (17 suites, 0 failures), `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`.
+
+**Deviations from the plan as written, discovered during execution/review:**
+- **`TemplateSummary` lives in `crates/hc-sdk/src/types.rs`** (not `hc-server`), so the `enforcement` field + `#[serde(default = "default_enforcement")]` landed there.
+- **The env helper was centralized** into `hc-workloads` (`allow_unaudited_templates()`, re-exported) rather than duplicated per surface, so `hc-server` and `hc-mcp` share one parse of the flag.
+- **[critical — caught by code-quality review] `/prove` (`prove_submit`) and `/prove/batch` were also ungated.** They accept a `template_id` and would have dispatched a StructureOnly template straight to the worker. Both are now gated (commit `4a876c4`). The plan's Task 4 had only covered `/prove/template/:id` + `/estimate`.
+- **zkml/Spartan MCP impls pre-gated** (commit `8743fa6`) though not yet registered as tools, to remove a Phase-1B footgun; `template_detail` gained an `enforcement_for`-coverage invariant comment.
+
+**Deferred (documented, non-blocking):** the env-helper unit test is not `serial`-isolated (no concurrent reader exists today, so it can't flake); `list_all_templates_impl` in hc-mcp is pre-existing dead code (gated for consistency, not registered).
+
+**Net effect:** with `HC_ALLOW_UNAUDITED_TEMPLATES` unset (production default), only `accumulator_step` is listed / describable / dispatchable across the HTTP API **and** MCP; the five predicate-faking templates plus the zkml/Spartan previews are hidden and refused on every entry point (`/templates`, `/templates/:id`, `/prove`, `/prove/batch`, `/prove/template/:id`, `/estimate`, and the MCP `list_templates`/`describe_template`/`prove_template`). No cryptography was changed — this is the **truthful-surface half of audit finding G1**; the real per-template AIRs are Phase 1B.
