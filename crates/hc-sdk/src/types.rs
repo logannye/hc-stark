@@ -118,10 +118,19 @@ pub struct TemplateSummary {
     /// without the field continue to deserialize.
     #[serde(default = "default_backend")]
     pub backend: String,
+    /// Whether the template's AIR enforces its named predicate: `"enforced"`
+    /// or `"structure_only"`. Defaults to the conservative `"structure_only"`
+    /// so responses from older servers without the field still deserialize.
+    #[serde(default = "default_enforcement")]
+    pub enforcement: String,
 }
 
 fn default_backend() -> String {
     "vm".to_string()
+}
+
+fn default_enforcement() -> String {
+    "structure_only".to_string()
 }
 
 /// Response for GET /templates.

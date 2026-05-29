@@ -1,20 +1,21 @@
-// Cloudflare Pages Function — proxies a single canned `range_proof` to
-// api.tinyzkp.com using a server-side demo API key. Heavily rate-limited
-// by IP so this is safe to expose to anonymous /try traffic.
+// Cloudflare Pages Function — proxies a single canned `accumulator_step` proof
+// to api.tinyzkp.com using a server-side demo API key. Heavily rate-limited by
+// IP so this is safe to expose to anonymous /try traffic.
 //
 // Secret required (set via wrangler):
 //   TINYZKP_DEMO_API_KEY  — a tzk_... key for a demo tenant with low caps.
 //
-// Request body: {min: number, max: number, witness_steps: number[]}
-//   - min must be 0..1000
-//   - max must be 0..1000 and >= min
-//   - witness_steps must be 1..10 ints, each 0..1000
+// Request body: {initial: number, deltas: number[]}
+//   - initial: 0..1000
+//   - deltas: 1..10 ints, each 0..1000
+//   final is computed server-side as initial + sum(deltas) so the proof always
+//   builds (the template rejects a mismatched final).
 //
 // Returns: {job_id, status, eta_ms} from upstream, or {error}.
 
 const RATE_LIMIT_MAX = 5;          // 5 demo proofs per IP per window
 const RATE_LIMIT_WINDOW_S = 3600;  // 1-hour window
-const UPSTREAM = "https://api.tinyzkp.com/prove/template/range_proof";
+const UPSTREAM = "https://api.tinyzkp.com/prove/template/accumulator_step";
 
 async function checkRateLimit(ip) {
   const cache = caches.default;
@@ -41,20 +42,16 @@ function corsHeaders(origin) {
 }
 
 function validate(body) {
-  const { min, max, witness_steps } = body || {};
-  if (typeof min !== "number" || min < 0 || min > 1000 || !Number.isFinite(min)) {
-    return "min must be a number in [0, 1000]";
+  const { initial, deltas } = body || {};
+  if (typeof initial !== "number" || !Number.isFinite(initial) || initial < 0 || initial > 1000) {
+    return "initial must be a number in [0, 1000]";
   }
-  if (typeof max !== "number" || max < 0 || max > 1000 || !Number.isFinite(max)) {
-    return "max must be a number in [0, 1000]";
+  if (!Array.isArray(deltas) || deltas.length < 1 || deltas.length > 10) {
+    return "deltas must be an array of 1..10 ints";
   }
-  if (max < min) return "max must be >= min";
-  if (!Array.isArray(witness_steps) || witness_steps.length < 1 || witness_steps.length > 10) {
-    return "witness_steps must be an array of 1..10 ints";
-  }
-  for (const s of witness_steps) {
-    if (typeof s !== "number" || !Number.isFinite(s) || s < 0 || s > 1000) {
-      return "each witness step must be in [0, 1000]";
+  for (const d of deltas) {
+    if (typeof d !== "number" || !Number.isFinite(d) || d < 0 || d > 1000) {
+      return "each delta must be in [0, 1000]";
     }
   }
   return null;
@@ -82,6 +79,7 @@ export async function onRequestPost(context) {
       });
     }
 
+    const finalVal = body.deltas.reduce((a, d) => a + d, body.initial);
     const upstream = await fetch(UPSTREAM, {
       method: "POST",
       headers: {
@@ -89,11 +87,7 @@ export async function onRequestPost(context) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        params: {
-          min: body.min,
-          max: body.max,
-          witness_steps: body.witness_steps,
-        },
+        params: { initial: body.initial, final: finalVal, deltas: body.deltas },
       }),
     });
     const json = await upstream.json();

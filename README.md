@@ -34,7 +34,7 @@ If you want Claude to *recognize* when a use case calls for a proof on its own (
 
 ```bash
 npx @tinyzkp/cli templates                                # list available templates
-npx @tinyzkp/cli prove range_proof '{"min":0,"max":100,"witness_steps":[42,44]}' --wait
+npx @tinyzkp/cli prove accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}' --wait
 npx @tinyzkp/cli verify proof.json                        # always free
 ```
 
@@ -42,29 +42,21 @@ npx @tinyzkp/cli verify proof.json                        # always free
 
 ## What you can prove
 
-Six **production templates** (sub-second proofs, lightweight cost tier) plus two **preview-tier templates** for the long-trace extension surface (zkML inference attestation, sumcheck-based R1CS).
+| Template | What it proves | Typical use |
+|----------|---------------|-------------|
+| `accumulator_step` | "Starting at X, applying these deltas reaches Y" | State machine attestation, rollup transitions |
 
-| Template | Tier | What it proves | Typical use |
-|----------|------|---------------|-------------|
-| `range_proof` | Production | "I know a value between X and Y" — without revealing it | Age verification, salary bands, score thresholds |
-| `hash_preimage` | Production | "I know the secret behind this hash" | Password proofs, file integrity, commitment opening |
-| `computation_attestation` | Production | "f(secret inputs) = this public output" | Agent action receipts, batch compute attestation |
-| `accumulator_step` | Production | "Starting at X, applying these deltas reaches Y" | State machine attestation, rollup transitions |
-| `policy_compliance` | Production | "These actions stayed within the allowed limit" | Spending caps, rate limits, resource quotas |
-| `data_integrity` | Production | "These elements add up to this checksum" | Dataset audits, ledger reconciliation |
-| `zkml_matmul` | Preview | "This MatMul over committed weights produced this output" | AI inference attestation (zkML) — Phase 1 of the [extension roadmap](ROADMAP_EXTENSIONS.md) |
-| `spartan_r1cs` | Preview | "I know a witness that satisfies this R1CS instance" | General-purpose circuits via Spartan-class sumcheck — Phase 3 of the [extension roadmap](ROADMAP_EXTENSIONS.md) |
-
-> Preview templates ship with explicit soundness caveats — see [`ROADMAP_EXTENSIONS.md`](ROADMAP_EXTENSIONS.md) for the production-readiness criteria each must meet before graduating from Preview.
+More proof types are in development.
 
 ## Two-line plain HTTP version
 
 ```bash
-curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
-  -H "Authorization: Bearer tzk_YOUR_KEY" \
-  -d '{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'
-# → {"job_id":"prf_a1b2c3","status":"proving"}
-curl https://api.tinyzkp.com/prove/prf_a1b2c3 -H "Authorization: Bearer tzk_YOUR_KEY"
+curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'
+# → {"job_id":"<job_id>","status":"proving"}
+curl https://api.tinyzkp.com/prove/<job_id> -H "Authorization: Bearer tzk_..."
 # → {"status":"completed","proof":{"version":4,"bytes":"0x6a8f..."}}
 ```
 
@@ -128,9 +120,7 @@ curl -X POST https://api.tinyzkp.com/verify \
 from tinyzkp import TinyZKP
 
 async with TinyZKP("https://api.tinyzkp.com", api_key="tzk_...") as client:
-    job_id = await client.prove_template("range_proof", params={
-        "min": 0, "max": 100, "witness_steps": [42, 44],
-    })
+    job_id = await client.prove_template("accumulator_step", params={"initial":1000,"final":1045,"deltas":[10,20,15]})
     proof  = await client.wait_for_proof(job_id)
     result = await client.verify(proof)  # free!
 ```
@@ -144,9 +134,7 @@ pip install tinyzkp
 import { TinyZKP } from "tinyzkp";   // alias of HcClient — both exported
 
 const client = new TinyZKP("https://api.tinyzkp.com", { apiKey: "tzk_..." });
-const jobId  = await client.proveTemplate("range_proof", {
-  min: 0, max: 100, witness_steps: [42, 44],
-});
+const jobId  = await client.proveTemplate("accumulator_step", { initial:1000, final:1045, deltas:[10,20,15] });
 const proof  = await client.waitForProof(jobId);
 const result = await client.verify(proof);  // free!
 ```
@@ -221,37 +209,31 @@ Scale plans receive automatic 40% discounts on every proof; Team contracts recei
 
 ## Proof templates
 
-Eight built-in templates: six **production** (lightweight, sub-second) plus two **preview-tier** for the long-trace extension surface. Browse them via the discovery API:
+Browse templates via the discovery API:
 
 ```bash
 # List all templates
 curl https://api.tinyzkp.com/templates
 
 # Get full schema + example for a template
-curl https://api.tinyzkp.com/templates/range_proof
+curl https://api.tinyzkp.com/templates/accumulator_step
 
 # Submit a proof using a template (smart defaults, no block_size needed)
-curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
+curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
   -H "Authorization: Bearer tzk_..." \
-  -d '{"params":{"min":0,"max":100,"witness_steps":[42,44]}}'
+  -H "Content-Type: application/json" \
+  -d '{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'
 
 # Estimate cost before proving (no auth required)
 curl -X POST https://api.tinyzkp.com/estimate \
-  -d '{"template_id":"range_proof","params":{"min":0,"max":100,"witness_steps":[42,44]}}'
+  -d '{"template_id":"accumulator_step","params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'
 ```
 
-> **What are `witness_steps`?** Internal computation values that encode your secret. They are never revealed to the verifier — only the proof (which vouches for them) is shared.
+| Template | What It Proves | Key Parameters |
+|----------|---------------|----------------|
+| `accumulator_step` | "Starting from X, applying these deltas reaches Y" | `initial`, `final`, `deltas[]` |
 
-| Template | Tier | What It Proves | Key Parameters |
-|----------|------|---------------|----------------|
-| `range_proof` | Production | "I know a number between X and Y" — without revealing it | `min`, `max`, `witness_steps[]` |
-| `hash_preimage` | Production | "I know the secret that produces this hash" | `digest`, `preimage_steps[]` |
-| `computation_attestation` | Production | "f(secret inputs) = this public output" | `steps[]`, `expected_output` |
-| `accumulator_step` | Production | "Starting from X, applying these deltas reaches Y" | `initial`, `final`, `deltas[]` |
-| `policy_compliance` | Production | "These actions stayed within the allowed limit" | `actions[]`, `threshold` |
-| `data_integrity` | Production | "These data elements add up to this checksum" | `elements[]`, `checksum` |
-| `zkml_matmul` | Preview | "This MatMul over committed weights produced this output" | `weights_commit`, `input_commit`, `output_commit`, `dims` |
-| `spartan_r1cs` | Preview | "I know a witness that satisfies this R1CS" | `r1cs_commit`, `public_inputs[]` |
+More proof types are in development.
 
 ---
 
@@ -291,7 +273,7 @@ Or download a prebuilt binary from the [releases page](https://github.com/logann
 
 ### Companion Claude Skill
 
-The repo also ships a [Claude Skill](./skills/tinyzkp-proofs/SKILL.md) that teaches Claude when and how to use these tools. Install it alongside the MCP and Claude will *recognize* situations where a proof is the right primitive — privacy-preserving range checks, agent-action receipts, hash preimage proofs, policy compliance — without the user having to explicitly say "use TinyZKP."
+The repo also ships a [Claude Skill](./skills/tinyzkp-proofs/SKILL.md) that teaches Claude when and how to use these tools. Install it alongside the MCP and Claude will *recognize* situations where a proof is the right primitive — agent-action receipts, state-transition attestation — without the user having to explicitly say "use TinyZKP."
 
 ### MCP tools
 
@@ -335,10 +317,8 @@ Base URL: `https://api.tinyzkp.com`
 | GET | `/prove` | Required | List jobs (`?status`, `?limit`, `?offset`) |
 | **Verification** | | | |
 | POST | `/verify` | Required | Verify a proof (free, no charge) |
-| POST | `/aggregate` | Required | Aggregate multiple proofs into one digest |
 | **Billing & Ops** | | | |
 | GET | `/usage` | Required | View usage and estimated costs |
-| GET | `/proof/:job_id/calldata` | Required | Get EVM on-chain calldata |
 | GET | `/healthz` | None | Liveness check |
 | GET | `/readyz` | None | Readiness check |
 | GET | `/metrics` | None | Prometheus metrics (incl. `hc_sqlite_lock_wait_seconds`, `hc_worker_spawn_seconds`, `hc_worker_spawn_permits_available`, `hc_job_queue_depth`) |
@@ -420,6 +400,7 @@ See [`docs/operations.md`](docs/operations.md) for full configuration reference.
 | `HC_SERVER_MAX_VERIFY_RPM` | `300` | Per-tenant verify rate limit |
 | `HC_SERVER_JOB_INDEX_SQLITE` | `true` | Enable SQLite job index |
 | `HC_SERVER_PG_URL` | unset | Postgres connection string for dual-write (Phase 1 of [migration plan](docs/postgres_migration.md)). When set, usage_log writes mirror to PG; when unset, SQLite-only |
+| `HC_ALLOW_UNAUDITED_TEMPLATES` | `false` | Expose/dispatch templates whose AIR does not yet enforce their named predicate (every template except `accumulator_step`). Off in production; set `true` only for Phase-1B development. Honored identically by `hc-server` and `hc-mcp`. |
 | `HC_MCP_HTTP_HOST` | `0.0.0.0` | hc-mcp-http bind host |
 | `HC_MCP_HTTP_PORT` | `3001` | hc-mcp-http bind port |
 | `HC_MCP_REQUIRE_AUTH` | `false` | When true, hc-mcp-http rejects unauthenticated requests with 401 |
@@ -452,13 +433,13 @@ hc-stark/
     hc-replay/      # Block producers, deterministic replay
     hc-prover/      # Height-compressed streaming prover
     hc-verifier/    # STARK verifier
-    hc-sdk/         # Proof serialization, EVM calldata
-    hc-workloads/   # 6 proof templates + workload registry
+    hc-sdk/         # Proof serialization, output formats
+    hc-workloads/   # proof templates + workload registry
     hc-mcp/         # MCP server for AI agents (10 tools)
     hc-server/      # axum HTTP API with multi-tenant auth
     hc-cli/         # CLI: prove/verify/bench/recursion
     hc-bench/       # Benchmarking harness
-    hc-recursion/   # Recursive aggregation (Halo2/KZG)
+    hc-recursion/   # Proof aggregation (in development)
     hc-height/      # Height-compression interfaces
     hc-simd/        # SIMD-accelerated field ops
     hc-wasm/        # WASM verifier (@tinyzkp/verify npm package, 785K)
@@ -470,7 +451,7 @@ hc-stark/
   site/             # Marketing site (tinyzkp.com, Cloudflare Pages)
   deploy/           # Docker, Prometheus, Grafana configs
   docs/             # Whitepaper, operations, proof format specs
-  contracts/        # On-chain verifier contracts
+  contracts/        # Verifier contract interfaces
 ```
 
 ---
@@ -536,7 +517,7 @@ This is the system working as intended. A failed verification means one of: the 
 
 ### Long-running proofs / timeouts
 
-Lightweight templates (`range_proof`, `hash_preimage`, `policy_compliance`, `data_integrity`) typically complete in ~1 s and resolve on the first `poll_job`. Heavier templates (`accumulator_step`, `computation_attestation`) may need 2–3 polls. Wait ~1–2 s between polls; do not loop without a delay. If a job stays in `running` state for >30 s, that's a bug — file an issue with the `job_id`.
+The `accumulator_step` template typically completes in ~1–3 s and may need 2–3 polls. Wait ~1–2 s between polls; do not loop without a delay. If a job stays in `running` state for >30 s, that's a bug — file an issue with the `job_id`.
 
 ### "Could not connect to MCP server"
 
@@ -563,15 +544,12 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - **Claude Skill (`tinyzkp-proofs`)** — teaches Claude when and how to mint and verify ZK proofs via the MCP, even when the user doesn't say "zero-knowledge proof" explicitly
 - MCP server with 10 tools for AI agents (stdio + HTTP transport)
 - Streamable HTTP transport for MCP (remote agent access)
-- 6 proof templates with discovery API (`GET /templates`)
+- Proof templates with discovery API (`GET /templates`)
 - Template-based proving (`POST /prove/template/:id`)
 - Cost estimation endpoint (`POST /estimate`)
 - Proof inspection endpoint (`GET /prove/:job_id/inspect`)
-- Proof aggregation (`POST /aggregate` with recursive hash tree)
 - WASM verifier package (`@tinyzkp/verify`, 785K)
 - **`@tinyzkp/cli` published to npm** — `npx @tinyzkp/cli verify proof.json`
-- On-chain verifier contract (recursive KZG, ~300K gas; Solidity interface at [`contracts/IHcStarkVerifier.sol`](contracts/IHcStarkVerifier.sol))
-- EVM calldata generation (`GET /proof/:job_id/calldata`)
 - Self-service API key rotation (`POST /api/rotate-key`)
 - DSL compiler for custom programs
 - Multi-tenant HTTP API with rate limiting
@@ -586,7 +564,7 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - **Browser playground at [`tinyzkp.com/try`](https://tinyzkp.com/try)** — mint and verify proofs without signup
 - Live status page at [`tinyzkp.com/status`](https://tinyzkp.com/status) — real Grafana panels backing it
 - Docker Compose production stack with monitoring (Prometheus + Grafana + Alertmanager)
-- **6 templates with copy-paste examples + integration tests** — full curl + Python + TypeScript snippets shipped on [`tinyzkp.com/docs`](https://tinyzkp.com/docs); integration test at [`crates/hc-workloads/tests/template_examples.rs`](crates/hc-workloads/tests/template_examples.rs) asserts every documented example builds via `build_from_template()`
+- **Templates with copy-paste examples + integration tests** — full curl + Python + TypeScript snippets shipped on [`tinyzkp.com/docs`](https://tinyzkp.com/docs); integration test at [`crates/hc-workloads/tests/template_examples.rs`](crates/hc-workloads/tests/template_examples.rs) asserts every documented example builds via `build_from_template()`
 - **Customer-discovery pipeline** — recruit → script → synthesis playbook in [`marketing/USER_INTERVIEWS.md`](marketing/USER_INTERVIEWS.md), targeting 5 interviews / 14 days against free-tier signups, MCP installs, and playground completions
 - **Protocol transcript v2 contract** — versioned Fiat–Shamir transcript domains (`hc-stark/v2`, `hc-stark/fri/v2`) with canonical labels in `hc_hash::protocol`; treated as a wire-compatibility contract (see [`docs/whitepaper.md`](docs/whitepaper.md) §7.0 and [`docs/design_notes/security_considerations.md`](docs/design_notes/security_considerations.md) §2.4)
 - **Security audit suite** — threat model, soundness proof, and audit checklist under [`docs/security/`](docs/security/), plus per-pillar fuzzing harnesses under [`fuzz/`](fuzz/)
@@ -635,7 +613,6 @@ After that, in priority order:
 - **Custom program sandboxing** (paid tier).
 - **Node.js native bindings package** — scaffolded at [`crates/hc-node`](crates/hc-node/) (NAPI cdylib + rlib).
 - **GPU acceleration** (CUDA/Metal kernels).
-- **On-chain verifier contract deployment** (mainnet) — interface at [`contracts/IHcStarkVerifier.sol`](contracts/IHcStarkVerifier.sol).
 - **Rollup state-transition API** — `hc-rollup` crate already in the workspace.
 - **`hc-zkvm` / `hc-sumcheck` / `hc-ipa`** — Phases 2–4 of the [extension roadmap](ROADMAP_EXTENSIONS.md).
 - **Distributed proving across multiple machines**.

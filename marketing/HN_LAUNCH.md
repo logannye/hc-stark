@@ -26,8 +26,8 @@ can mint a tamper-evident proof for any computation as a native tool call:
     claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 
 After that, the agent has 10 ZK tools (prove, verify, list_workloads, ...) the same
-way it has filesystem or git. Proofs go through 6 templates (range, hash preimage,
-data integrity, etc.) — no circuit writing.
+way it has filesystem or git. Proofs go through state-transition / accumulator
+templates — no circuit writing.
 
 Under the hood, the prover runs in O(√T) memory instead of the usual O(T) by way of
 a height-compressed streaming architecture. That structural advantage is why we can
@@ -36,14 +36,11 @@ no credit card.
 
 What it's good for today:
 - Verifiable agent receipts ("this ran the code I claim")
-- Privacy-preserving compliance (range proofs, policy proofs)
-- Audit trails (data-integrity, accumulator chains)
+- Audit trails (accumulator chains, state-transition proofs)
 - Browser-side verification via @tinyzkp/verify (WASM, 785K)
 
 What it's NOT yet:
 - A zkVM (Risc0/SP1 territory — different product)
-- A polynomial-commitment-bound zkML/Spartan (in progress; current zkml/spartan
-  endpoints ship as Preview tier with explicit soundness caveats)
 
 Free tier: https://tinyzkp.com/signup
 Source: https://github.com/logannye/hc-stark

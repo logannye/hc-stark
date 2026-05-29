@@ -7,7 +7,7 @@ ergonomics).
 ## Why bother
 
 Every feature decision downstream of this loop gets cheaper with five real
-conversations. We have 6 templates, 3 SDKs, an MCP server, and three pricing
+conversations. We have a proving service, 3 SDKs, an MCP server, and three pricing
 tiers — but zero verified evidence about what receipts users actually want to
 mint, what makes them upgrade from free, and what makes them churn. Five
 30-minute calls answers most of it.

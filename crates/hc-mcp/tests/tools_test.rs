@@ -28,20 +28,28 @@ fn extract_text(result: &rmcp::model::CallToolResult) -> String {
 // ── Discovery tools ─────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn list_templates_returns_all_templates() {
+async fn list_templates_returns_enforced_templates_by_default() {
     let s = server();
     let result = s.list_templates_impl().await.unwrap();
     let val = extract_json(&result);
     let arr = val.as_array().unwrap();
+    // With the enforcement gate active (default), only Enforced templates are
+    // listed. The count will be less than the full catalog; just verify the
+    // result is non-empty and that the known Enforced template is present.
     assert!(
-        arr.len() >= 6,
-        "expected at least 6 templates, got {}",
-        arr.len()
+        !arr.is_empty(),
+        "expected at least one template in the default listing, got 0"
     );
 
     // Check that accumulator_step is in the list
     let has_acc = arr.iter().any(|t| t["id"] == "accumulator_step");
     assert!(has_acc, "accumulator_step template missing from listing");
+
+    // StructureOnly templates must NOT appear in the default listing
+    assert!(
+        !arr.iter().any(|t| t["id"] == "range_proof"),
+        "range_proof (StructureOnly) must not appear in the default listing"
+    );
 }
 
 #[tokio::test]

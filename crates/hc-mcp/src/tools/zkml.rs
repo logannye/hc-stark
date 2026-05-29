@@ -6,6 +6,12 @@
 //! call the synchronous `prove_zkml_template` helper because the underlying
 //! MatMul prover is fast enough that no job queue is required.
 
+// NOTE: every template in this backend is `Enforcement::StructureOnly`. The
+// list/describe/prove methods below are gated by
+// `hc_workloads::allow_unaudited_templates()` so that if/when they are
+// registered as MCP `#[tool]`s (Phase 1B), they remain hidden/refused by
+// default — matching tools/discovery.rs and tools/proving.rs.
+
 use base64::engine::{general_purpose::STANDARD as B64, Engine as _};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content};
@@ -16,19 +22,24 @@ use crate::HcMcpServer;
 
 impl HcMcpServer {
     pub async fn list_zkml_templates_impl(&self) -> Result<CallToolResult, ErrorData> {
-        let templates = hc_workloads::zkml_templates::list_zkml_template_infos();
-        let listing: Vec<serde_json::Value> = templates
-            .iter()
-            .map(|t| {
-                serde_json::json!({
-                    "id": t.id,
-                    "summary": t.summary,
-                    "tags": t.tags,
-                    "cost": t.cost_category,
-                    "backend": t.backend,
+        let allow = hc_workloads::allow_unaudited_templates();
+        let listing: Vec<serde_json::Value> = if allow {
+            let templates = hc_workloads::zkml_templates::list_zkml_template_infos();
+            templates
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "id": t.id,
+                        "summary": t.summary,
+                        "tags": t.tags,
+                        "cost": t.cost_category,
+                        "backend": t.backend,
+                    })
                 })
-            })
-            .collect();
+                .collect()
+        } else {
+            Vec::new()
+        };
         let json = Content::json(listing)
             .map_err(|e| ErrorData::internal_error(format!("JSON error: {e}"), None))?;
         Ok(CallToolResult::success(vec![json]))
@@ -38,6 +49,18 @@ impl HcMcpServer {
         &self,
         Parameters(params): Parameters<DescribeZkmlTemplateParams>,
     ) -> Result<CallToolResult, ErrorData> {
+        if !hc_workloads::is_dispatchable(
+            &params.template_id,
+            hc_workloads::allow_unaudited_templates(),
+        ) {
+            return Err(ErrorData::invalid_params(
+                format!(
+                    "Unknown zkml template '{}'. Call list_zkml_templates to see options.",
+                    params.template_id
+                ),
+                None,
+            ));
+        }
         let info = hc_workloads::zkml_templates::describe_zkml_template(&params.template_id)
             .ok_or_else(|| {
                 ErrorData::invalid_params(
@@ -57,6 +80,18 @@ impl HcMcpServer {
         &self,
         Parameters(params): Parameters<ProveZkmlTemplateParams>,
     ) -> Result<CallToolResult, ErrorData> {
+        if !hc_workloads::is_dispatchable(
+            &params.template_id,
+            hc_workloads::allow_unaudited_templates(),
+        ) {
+            return Err(ErrorData::invalid_params(
+                format!(
+                    "Template '{}' is not available in this deployment.",
+                    params.template_id
+                ),
+                None,
+            ));
+        }
         let outcome = hc_workloads::zkml_templates::prove_zkml_template(
             &params.template_id,
             &params.parameters,

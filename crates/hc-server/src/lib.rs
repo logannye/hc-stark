@@ -1359,6 +1359,16 @@ async fn prove_submit(
                 message: format!("unknown template_id: {tid}"),
             });
         }
+        if !hc_workloads::is_dispatchable(tid, hc_workloads::allow_unaudited_templates()) {
+            return Err(ApiError {
+                status: StatusCode::FORBIDDEN,
+                code: "template_unavailable",
+                message: format!(
+                    "template '{tid}' does not currently enforce its named predicate \
+                     and is disabled in this deployment"
+                ),
+            });
+        }
         if req.template_params.is_none() {
             return Err(ApiError {
                 status: StatusCode::BAD_REQUEST,
@@ -1723,6 +1733,16 @@ async fn prove_batch(
         // Server-side parameter caps.
         validate_prove_params(&req, &state.cfg)?;
 
+        if let Some(tid) = req.template_id.as_deref() {
+            if !hc_workloads::is_dispatchable(tid, hc_workloads::allow_unaudited_templates()) {
+                return Err(ApiError::new(
+                    StatusCode::FORBIDDEN,
+                    "template_unavailable",
+                    format!("template '{tid}' is not available in this deployment"),
+                ));
+            }
+        }
+
         // Validate each request.
         if let Some(id) = req.workload_id.as_deref() {
             if !crate::workloads::known_workload(id) {
@@ -2024,15 +2044,21 @@ fn smart_block_size(program_len: usize) -> usize {
 /// flat list directly.
 #[utoipa::path(get, path = "/templates", responses((status = 200, body = TemplateListResponse)))]
 async fn templates_list() -> Json<TemplateListResponse> {
+    let allow = hc_workloads::allow_unaudited_templates();
     let unified = hc_workloads::list_all_templates();
     let summaries: Vec<TemplateSummary> = unified
         .iter()
+        .filter(|t| hc_workloads::is_listable(t.enforcement, allow))
         .map(|t| TemplateSummary {
             id: t.id.clone(),
             summary: t.summary.clone(),
             tags: t.tags.clone(),
             cost_category: t.cost_category.clone(),
             backend: t.backend.to_string(),
+            enforcement: match t.enforcement {
+                hc_workloads::Enforcement::Enforced => "enforced".to_string(),
+                hc_workloads::Enforcement::StructureOnly => "structure_only".to_string(),
+            },
         })
         .collect();
     let count = summaries.len();
@@ -2052,6 +2078,19 @@ async fn templates_list() -> Json<TemplateListResponse> {
 async fn template_detail(
     Path(template_id): Path<String>,
 ) -> Result<axum::response::Response, ApiError> {
+    let allow = hc_workloads::allow_unaudited_templates();
+    if let Some(enf) = hc_workloads::enforcement_for(&template_id) {
+        if !hc_workloads::is_listable(enf, allow) {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                format!("unknown template: {template_id}"),
+            ));
+        }
+    }
+    // INVARIANT: enforcement_for() must cover every backend served below.
+    // It currently resolves vm + zkml + spartan; if a new backend is added
+    // to the serve arms, extend enforcement_for() too or this gate goes stale.
     if let Some(t) = hc_workloads::templates::template_by_id(&template_id) {
         let mut info = serde_json::to_value(t.to_info()).unwrap_or_default();
         if let Some(obj) = info.as_object_mut() {
@@ -2080,6 +2119,17 @@ async fn prove_template(
     Path(template_id): Path<String>,
     Json(req): Json<TemplateProveRequest>,
 ) -> Result<Json<ProveSubmitResponse>, ApiError> {
+    if !hc_workloads::is_dispatchable(&template_id, hc_workloads::allow_unaudited_templates()) {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "template_unavailable",
+            format!(
+                "template '{template_id}' does not currently enforce its named predicate \
+                 and is disabled in this deployment"
+            ),
+        ));
+    }
+
     state.metrics.prove_submitted.inc();
 
     let tenant = guarded_auth(&state, &headers)?;
@@ -2458,6 +2508,13 @@ async fn estimate(Json(req): Json<EstimateRequest>) -> Result<Json<EstimateRespo
                 "params required when template_id is set",
             )
         })?;
+        if !hc_workloads::is_dispatchable(tid, hc_workloads::allow_unaudited_templates()) {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "template_unavailable",
+                "template is not available in this deployment",
+            ));
+        }
         let build = hc_workloads::templates::build_from_template(tid, params).map_err(|e| {
             ApiError::new(
                 StatusCode::BAD_REQUEST,
@@ -3398,5 +3455,20 @@ mod pricing_parity_tests {
                 "trace_length={probe_steps}: in-code price {got} ≠ pricing.json {cents}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod honest_catalog_tests {
+    #[test]
+    fn default_catalog_lists_only_enforced() {
+        let listed: Vec<String> = hc_workloads::list_all_templates()
+            .into_iter()
+            .filter(|t| hc_workloads::is_listable(t.enforcement, false))
+            .map(|t| t.id)
+            .collect();
+        assert!(listed.contains(&"accumulator_step".to_string()));
+        assert!(!listed.contains(&"range_proof".to_string()));
+        assert!(!listed.iter().any(|id| id.starts_with("zkml_")));
     }
 }

@@ -4,10 +4,10 @@ A Claude Skill that teaches Claude when and how to use the **TinyZKP** MCP serve
 
 ## What it does
 
-When you ask Claude something like *"prove this account balance is in [$0, $10k] without revealing the amount"* or *"attach a verifiable receipt to this agent action,"* this skill helps Claude:
+When you ask Claude something like *"prove that starting from 1000, applying these steps, the accumulator reaches 1045"* or *"attach a verifiable receipt to this agent's state transition,"* this skill helps Claude:
 
-1. Recognize that the request maps to a zero-knowledge proof
-2. Pick the right TinyZKP template (`range_proof`, `policy_compliance`, `hash_preimage`, `data_integrity`, `accumulator_step`, or `computation_attestation`)
+1. Recognize that the request maps to a zero-knowledge accumulator proof
+2. Use the `accumulator_step` template
 3. Walk the standard `prove → poll → get_proof → verify` workflow
 4. Communicate results in a way that makes the privacy / public-input / verification contract explicit
 
@@ -23,7 +23,7 @@ No signup, no API key, no credit card. Free tier: 100 proofs/month.
 
 ## What's TinyZKP?
 
-A hosted ZK-STARK proving service. Six production templates, ≥128-bit soundness, MIT-licensed open-source backend at https://github.com/logannye/hc-stark.
+A hosted ZK-STARK proving service. Transparent (no trusted setup), post-quantum (hash-based). MIT-licensed open-source backend at https://github.com/logannye/hc-stark.
 
 Homepage: https://tinyzkp.com
 Browser playground: https://tinyzkp.com/try

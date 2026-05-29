@@ -10,6 +10,18 @@ impl HcMcpServer {
         &self,
         Parameters(params): Parameters<ProveTemplateParams>,
     ) -> Result<CallToolResult, ErrorData> {
+        if !hc_workloads::is_dispatchable(
+            &params.template_id,
+            hc_workloads::allow_unaudited_templates(),
+        ) {
+            return Err(ErrorData::invalid_params(
+                format!(
+                    "Template '{}' is not available in this deployment.",
+                    params.template_id
+                ),
+                None,
+            ));
+        }
         let build_result = hc_workloads::templates::build_from_template(
             &params.template_id,
             &params.parameters,

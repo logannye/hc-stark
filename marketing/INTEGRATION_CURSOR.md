@@ -39,26 +39,16 @@ Restart Cursor. Done. The TinyZKP tools are now available to every chat.
 
 Open a chat in any project and try:
 
-> Use the tinyzkp tools to prove that the file `secrets.txt` hashes to `<digest>` without revealing the contents, then verify the proof.
+> Use the tinyzkp tools to prove that an account moved from 1000 to 1045 via the deltas [10, 20, 15], then verify the proof.
 
 Cursor will:
 
-1. Read the file (locally — never leaves your machine)
-2. Call `prove` on the `hash_preimage` template
-3. Poll `prove_status` until done
-4. Call `verify` to confirm
-5. Hand you back a proof ID + a verifiable byte string
+1. Call `prove` on the `accumulator_step` template
+2. Poll `prove_status` until done
+3. Call `verify` to confirm
+4. Hand you back a proof ID + a verifiable byte string
 
-Other patterns that work well from inside Cursor:
-
-| Prompt to Cursor | Template it picks |
-|---|---|
-| "Prove this user is over 18 without exposing their birthdate." | `range_proof` |
-| "Attest that the test suite passed without revealing the test inputs." | `computation_attestation` |
-| "Prove the spending in this audit log stayed under $1000." | `policy_compliance` |
-| "Prove these CSV rows sum to the checksum in the previous commit." | `data_integrity` |
-
-Each generates a tamper-evident proof your user can verify in their own browser.
+The proof is a tamper-evident receipt your user can verify in their own browser.
 
 ## The 10 tools you just installed
 
@@ -74,24 +64,19 @@ Cursor sees these as regular function calls. You can chain them in agent loops, 
 
 ## When to use which template
 
-The mental model: each template wraps one common privacy/attestation pattern.
+The mental model: each template wraps one common attestation pattern.
 
-- **range_proof** — "I know a number in [X, Y]." For age gates, credit checks, salary bands.
-- **hash_preimage** — "I know the secret behind this hash." For password proofs, commitments, file integrity.
-- **computation_attestation** — "f(secret) = public_output." The general-purpose one.
-- **accumulator_step** — "Starting at X, applying these ops gets to Y." For state machines.
-- **policy_compliance** — "These actions sum stayed under threshold." For spend caps, rate limits.
-- **data_integrity** — "These rows sum to this committed checksum." For datasets, ledgers.
+- **accumulator_step** — "Starting at X, applying these ops gets to Y." For state machines, audit chains, balance receipts.
 
-If none of those fit, the `computation_attestation` template is the catch-all.
+For the current list of available templates, call `list_templates` via MCP or the REST API.
 
 ## Cost
 
 - **Free tier**: 100 proofs/month, no credit card.
-- **Developer ($9/month)**: 100 RPM, 4 concurrent jobs, $500 monthly cap. Per-proof rates from $0.05 (small) to $30 (10M+ steps).
+- **Developer ($19/month)**: 100 RPM, 4 concurrent jobs, $500 monthly cap. Per-proof rates from $0.05 (small) to $30 (10M+ steps).
 - **Verification**: always free. 10K free verify calls/month even on no-card plans.
 
-Most Cursor-side workloads (small range/hash/policy proofs) land squarely in the $0.05 tier. A typical developer pays $9–$25 per month all-in.
+Most Cursor-side workloads (small accumulator / state-transition proofs) land squarely in the $0.05 tier. A typical developer pays $19–$25 per month all-in.
 
 ## Try it
 

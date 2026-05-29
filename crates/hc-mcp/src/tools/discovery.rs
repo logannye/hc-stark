@@ -7,9 +7,11 @@ use crate::HcMcpServer;
 
 impl HcMcpServer {
     pub async fn list_all_templates_impl(&self) -> Result<CallToolResult, ErrorData> {
+        let allow = hc_workloads::allow_unaudited_templates();
         let unified = hc_workloads::list_all_templates();
         let listing: Vec<serde_json::Value> = unified
             .iter()
+            .filter(|t| hc_workloads::is_listable(t.enforcement, allow))
             .map(|t| {
                 serde_json::json!({
                     "id": t.id,
@@ -26,15 +28,21 @@ impl HcMcpServer {
     }
 
     pub async fn list_templates_impl(&self) -> Result<CallToolResult, ErrorData> {
+        let allow = hc_workloads::allow_unaudited_templates();
         let templates = hc_workloads::templates::list_templates();
         let listing: Vec<serde_json::Value> = templates
             .iter()
+            .filter(|t| hc_workloads::is_listable(t.enforcement, allow))
             .map(|t| {
                 serde_json::json!({
                     "id": t.id,
                     "summary": t.summary,
                     "tags": t.tags,
                     "cost": t.cost_category,
+                    "enforcement": match t.enforcement {
+                        hc_workloads::Enforcement::Enforced => "enforced",
+                        hc_workloads::Enforcement::StructureOnly => "structure_only",
+                    },
                 })
             })
             .collect();
@@ -54,8 +62,10 @@ impl HcMcpServer {
         &self,
         Parameters(params): Parameters<DescribeTemplateParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let tmpl =
-            hc_workloads::templates::template_by_id(&params.template_id).ok_or_else(|| {
+        let allow = hc_workloads::allow_unaudited_templates();
+        let tmpl = hc_workloads::templates::template_by_id(&params.template_id)
+            .filter(|t| hc_workloads::is_listable(t.enforcement, allow))
+            .ok_or_else(|| {
                 ErrorData::invalid_params(
                     format!(
                         "Unknown template '{}'. Call list_templates to see available options.",
@@ -97,5 +107,21 @@ impl HcMcpServer {
         let json = Content::json(caps)
             .map_err(|e| ErrorData::internal_error(format!("JSON error: {e}"), None))?;
         Ok(CallToolResult::success(vec![json]))
+    }
+}
+
+#[cfg(test)]
+mod honest_catalog_mcp_tests {
+    #[test]
+    fn default_listing_excludes_structure_only() {
+        // Flag off: the MCP VM listing must exclude StructureOnly templates
+        // (only accumulator_step survives today).
+        let visible: Vec<&str> = hc_workloads::templates::list_templates()
+            .into_iter()
+            .filter(|t| hc_workloads::is_listable(t.enforcement, false))
+            .map(|t| t.id)
+            .collect();
+        assert!(visible.contains(&"accumulator_step"));
+        assert!(!visible.contains(&"range_proof"));
     }
 }

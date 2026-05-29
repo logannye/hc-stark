@@ -45,15 +45,14 @@ Run through this before hitting submit. Every box must be true.
 
 ### One-paragraph description
 
-TinyZKP is a hosted ZK-STARK proving service that exposes verifiable computation as a native MCP tool. An agent can mint a cryptographic proof — that a number falls in a range, that a hash preimage exists, that a policy holds, that a computation ran correctly — in a single tool call, then pass that proof to any third party for independent verification. Six production templates cover the most common attestation patterns. The free tier ships with 100 proofs/month and no credit card. The proving stack runs in O(√T) memory via height-compressed streaming, which is why the hosted price points are an order of magnitude below the alternatives.
+TinyZKP is a hosted ZK-STARK proving service that exposes verifiable computation as a native MCP tool. An agent can mint a cryptographic proof for a state transition — that an accumulator moved from an initial value to a final value by a declared set of deltas — in a single tool call, then pass that proof to any third party for independent verification. The free tier ships with 100 proofs/month and no credit card. The proving stack runs in O(√T) memory via height-compressed streaming, which is why the hosted price points are an order of magnitude below the alternatives.
 
 ### Use cases (3–5 bullets)
 
-- **Verifiable agent receipts.** An agent that runs an action (a trade, a moderation decision, a compliance check) can attach a proof showing the action satisfied the stated rule, without revealing the inputs.
-- **Privacy-preserving range checks.** Prove an integer is in [min, max] without revealing the integer (KYC age, credit score band, transaction limit).
-- **Off-chain compute attestation.** Prove a computation produced a given output, so a smart contract or downstream consumer can accept the result without re-executing.
-- **Hash preimage proofs.** Prove possession of a value whose hash matches a public commitment, without revealing the value.
-- **Policy compliance proofs.** Prove a piece of data satisfies a declared policy (e.g., "all values < threshold") without revealing the data.
+- **Verifiable agent receipts.** An agent that runs an action (a trade, a moderation decision, a state update) can attach a cryptographic proof showing the transition happened as claimed — without revealing private inputs.
+- **Accumulator / audit-chain proofs.** Prove a running total or state machine advanced from a known initial value to a known final value via a sequence of declared steps.
+- **Off-chain compute attestation.** Prove a computation produced a given output, so a downstream consumer can accept the result without re-executing.
+- **Tamper-evident receipts.** Any process that needs a verifiable "this happened" receipt can mint one as a single tool call and hand it to the user for independent verification.
 
 ---
 
@@ -63,7 +62,7 @@ TinyZKP is a hosted ZK-STARK proving service that exposes verifiable computation
 |---|---|
 | **Transport protocol** | Streamable HTTP (`POST /mcp`) — the modern MCP transport. Stdio also available via `hc-mcp-stdio` binary for desktop clients, but the directory listing should point at the remote URL. |
 | **Authentication type** | None today. The endpoint is public and rate-limited via a server-side concurrency cap (`HC_MCP_MAX_INFLIGHT=2`). API-key Bearer enforcement and per-tenant quota are tracked as a follow-up — see §3. |
-| **Read/write capabilities** | Reads: list/describe templates and workloads, poll job, get proof, verify proof. Writes (in the sense of consuming quota and creating server-side jobs): `prove_template`, `prove_workload`, `prove_zkml_template`, `prove_spartan_template`. No external mutation outside the user's own tenant. |
+| **Read/write capabilities** | Reads: list/describe templates and workloads, poll job, get proof, verify proof. Writes (in the sense of consuming quota and creating server-side jobs): `prove_template`, `prove_workload`. No external mutation outside the user's own tenant. |
 | **Connection requirements** | Internet access to `mcp.tinyzkp.com` (port 443). API key in `TINYZKP_API_KEY` env var or `Authorization: Bearer tzk_…` header. |
 | **Origin validation** | The HTTP transport validates the `Origin` header against an allowlist that includes `https://claude.ai`, the Anthropic API, and TinyZKP's own domains. Configurable via `HC_MCP_ALLOWED_ORIGINS`. |
 | **Rate limiting** | Per-tenant quota enforced server-side. Free tier: 100 proofs/month. Higher tiers: see https://tinyzkp.com/#pricing. |
@@ -105,7 +104,7 @@ This is intentional for the launch:
 | `get_proof` | Get Proof Bytes | ✓ | ✗ | ✓ |
 | `get_proof_summary` | Get Proof Summary | ✓ | ✗ | ✓ |
 
-The 6 proof templates available via `list_templates`: `range_proof`, `hash_preimage`, `computation_attestation`, `accumulator_step`, `policy_compliance`, `data_integrity`.
+Proof templates available via `list_templates` include `accumulator_step` (state-transition / accumulator proofs). Call `list_templates` for the current live catalog.
 
 No tool is marked `destructive` because none mutates anything outside the calling tenant's own job queue. The `prove_*` family is non-read-only because each call consumes quota and creates a job record.
 
@@ -157,8 +156,8 @@ Paste this verbatim into the "setup instructions" field.
 > **Setup (30 seconds, no signup, no API key):**
 >
 > 1. Run: `claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com`
-> 2. In a new Claude Code session, ask: *"Use the tinyzkp MCP to list all available proof templates."* → expect 6 templates: `range_proof`, `hash_preimage`, `computation_attestation`, `accumulator_step`, `policy_compliance`, `data_integrity`.
-> 3. Ask: *"Use the range_proof template to prove that 42 is between 0 and 100."* → expect a `job_id`, then `poll_job` returns `succeeded`, then `get_proof` returns base64 proof bytes.
+> 2. In a new Claude Code session, ask: *"Use the tinyzkp MCP to list all available proof templates."* → expect at least `accumulator_step` in the catalog.
+> 3. Ask: *"Use the accumulator_step template to prove that an account moved from 1000 to 1045 via the deltas [10, 20, 15]."* → expect a `job_id`, then `poll_job` returns `succeeded`, then `get_proof` returns base64 proof bytes.
 > 4. Ask: *"Use verify_proof on the proof you just generated."* → expect `{valid: true}`.
 >
 > **Browser-only smoke test (no setup at all):**
@@ -180,9 +179,9 @@ The three submission screenshots live in [`marketing/screenshots/`](./screenshot
 
 | # | File | What it shows | Paired prompt for the form |
 |---|---|---|---|
-| 1 | `shot1_range_prove.png` | `prove_template` with the `range_proof` template — proves an account balance is in `[$0, $10,000]` without revealing the amount. Shows the returned job, the public bounds, and a 379 KB base64 proof blob. | "Use TinyZKP to prove that this account balance is between $0 and $10,000 without revealing the actual amount." |
+| 1 | `shot1_range_prove.png` | `prove_template` with the `accumulator_step` template — proves an account moved from an initial balance to a final balance via a sequence of declared deltas, without revealing private details. Shows the returned job and base64 proof blob. | "Use TinyZKP to prove that this account balance moved from 1000 to 1045 via the deltas [10, 20, 15]." |
 | 2 | `shot2_verify.png` | `verify_proof` on the proof from shot 1 — returns `valid: true` in under a second. Demonstrates that anyone can independently verify without trusting TinyZKP. | "Now verify that proof independently — show me that anyone in the world could do this same check without trusting TinyZKP." |
-| 3 | `shot3_policy_compliance.png` | `prove_template` with the `policy_compliance` template — proves an agent's cumulative spending stayed under $1,000, keeping individual purchases private. Shows breadth beyond range proofs. | "Use TinyZKP's policy_compliance template to prove that this agent's total spending stayed under $1,000, without revealing the individual purchases." |
+| 3 | `shot3_policy_compliance.png` | `prove_template` with the `accumulator_step` template — proves an agent's state machine advanced from a declared start to a declared end via a sequence of recorded steps, keeping intermediate values private. | "Use TinyZKP's accumulator_step template to prove that this agent's running total moved from 0 to 945 via these steps, without revealing the individual values." |
 
 The three shots cover the complete narrative the directory carousel needs to tell: **(1)** the headline use-case (mint a privacy-preserving cryptographic receipt), **(2)** the trust model (independent verification), **(3)** the breadth (a second template that demonstrates this isn't a one-trick tool). Anthropic's submission requirements ask for 3–5; we ship 3 intentional ones rather than 5 mediocre ones.
 

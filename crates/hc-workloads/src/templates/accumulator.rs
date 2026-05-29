@@ -60,6 +60,7 @@ inventory::submit!(ProofTemplate {
     parameters: PARAMS,
     tags: TAGS,
     cost_category: "lightweight",
+    enforcement: Enforcement::Enforced,
     example_json: r#"{"initial":0,"final":15,"deltas":[5,3,7]}"#,
     build_program: build,
 });
