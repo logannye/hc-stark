@@ -8,7 +8,7 @@ for consistency.
 
 ## Prerequisites
 
-- `HC_BACKUP_REMOTE` set in `/opt/hc-stark/.env` (e.g. `b2:hc-stark-backups`)
+- `HC_BACKUP_REMOTE` set in `/opt/hc-stark/.env` (e.g. `b2:hc-stark-backups`) — **must be a private, server-side-encrypted bucket with no public/anonymous read; backups contain plaintext API keys and key hashes**
 - `rclone` installed and configured with access to that remote
 - Root access to the Hetzner box
 

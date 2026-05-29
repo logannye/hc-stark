@@ -4,6 +4,7 @@
 # Retains 30 days of local backups.
 # Off-box push (G13): set HC_BACKUP_REMOTE in /opt/hc-stark/.env and install rclone.
 set -euo pipefail
+umask 077   # backup artifacts (api_keys.txt, sqlite) must not be group/world-readable
 
 # Source .env so HC_BACKUP_REMOTE is available when run from cron.
 # shellcheck source=/dev/null
@@ -15,6 +16,7 @@ DATE=$(date -u +%Y%m%d_%H%M%S)
 RETENTION_DAYS=30
 
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
 
 # --- SQLite snapshots ---
 for db in tenant_store.sqlite usage.sqlite; do
@@ -22,6 +24,7 @@ for db in tenant_store.sqlite usage.sqlite; do
   if [ -f "$src" ]; then
     dest="$BACKUP_DIR/${db%.sqlite}_${DATE}.sqlite"
     sqlite3 "$src" ".backup '$dest'"
+    chmod 600 "$dest"
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Backed up $db -> $dest"
   else
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP $db (not found)"
@@ -30,13 +33,15 @@ done
 
 # --- api_keys.txt snapshot ---
 if [ -f "$DATA_DIR/api_keys.txt" ]; then
-  cp "$DATA_DIR/api_keys.txt" "$BACKUP_DIR/api_keys_${DATE}.txt"
+  install -m 600 "$DATA_DIR/api_keys.txt" "$BACKUP_DIR/api_keys_${DATE}.txt"
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Backed up api_keys.txt -> $BACKUP_DIR/api_keys_${DATE}.txt"
 else
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP api_keys.txt (not found)"
 fi
 
 # --- Off-box copy (G13) ---
+# NOTE: HC_BACKUP_REMOTE must point at a PRIVATE bucket with server-side
+# encryption + no public/anonymous read — these artifacts are credential material.
 # Push today's snapshot to a configured rclone remote.
 # Operator setup:
 #   1. apt-get install rclone
