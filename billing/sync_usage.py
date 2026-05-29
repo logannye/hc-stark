@@ -235,11 +235,18 @@ def main() -> None:
 
         if not customer_id:
             skipped += 1
-            _, value = meter_event_for_plan(plan, row["trace_length"])
+            meter_name, value = meter_event_for_plan(plan, row["trace_length"])
             if tenant_id not in unbillable:
-                unbillable[tenant_id] = {"count": 0, "estimated_cents": 0}
+                unbillable[tenant_id] = {"count": 0, "estimated_cents": 0, "estimated_steps": 0}
             unbillable[tenant_id]["count"] += 1
-            unbillable[tenant_id]["estimated_cents"] += int(value)
+            # Route to the unit-appropriate field so the alert payload is
+            # unambiguous: cents-based plans accumulate dollars, compute plans
+            # accumulate raw trace steps (different units — mixing them would be
+            # misleading). Display/alert only; never sent to Stripe.
+            if meter_name == "trace_step_usage":
+                unbillable[tenant_id]["estimated_steps"] += int(value)
+            else:
+                unbillable[tenant_id]["estimated_cents"] += int(value)
             continue
 
         meter_name, value = meter_event_for_plan(plan, row["trace_length"])
@@ -333,12 +340,15 @@ def main() -> None:
     # Alert on unbillable usage.
     if unbillable:
         for tenant_id, info in unbillable.items():
-            _log({
+            entry: dict = {
                 "action": "unbillable",
                 "tenant_id": tenant_id,
                 "count": info["count"],
                 "estimated_cents": info["estimated_cents"],
-            })
+            }
+            if info["estimated_steps"]:
+                entry["estimated_steps"] = info["estimated_steps"]
+            _log(entry)
         _send_alert(
             f"Unbillable usage detected for {len(unbillable)} tenant(s)",
             unbillable,

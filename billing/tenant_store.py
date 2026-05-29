@@ -62,13 +62,36 @@ def _hash_key(api_key: str) -> str:
     return hashlib.sha256(api_key.encode()).hexdigest()
 
 
+_PARTIAL_INDEX_SQL = """
+CREATE UNIQUE INDEX IF NOT EXISTS idx_one_free_tenant_per_email
+  ON tenants(email) WHERE plan = 'free';
+"""
+
+
 def open_db(path: Optional[str] = None) -> sqlite3.Connection:
-    """Open (and initialize) the tenant store database."""
+    """Open (and initialize) the tenant store database.
+
+    The partial unique index on tenants(email) WHERE plan='free' is created
+    separately from the main schema so that a pre-existing database that
+    already has duplicate free rows for an email (from the pre-fix bug) does
+    not prevent open_db from succeeding. If the index cannot be created, a
+    warning is logged and the database continues to operate without it.
+    """
+    import logging
     path = path or DB_PATH
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(_SCHEMA)
+    try:
+        conn.executescript(_PARTIAL_INDEX_SQL)
+    except sqlite3.OperationalError as exc:
+        logging.warning(
+            "tenant_store: could not create idx_one_free_tenant_per_email "
+            "(pre-existing duplicate free rows?). "
+            "De-duplicate manually then reopen. error=%s",
+            exc,
+        )
     return conn
 
 
