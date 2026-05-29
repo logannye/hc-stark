@@ -9,6 +9,20 @@ use hc_vm::{Instruction, Program};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
+/// Whether a template's AIR actually enforces its named predicate.
+///
+/// `Enforced` — the constraint system cryptographically binds the claim
+/// (e.g. `accumulator_step`). `StructureOnly` — the template currently
+/// only produces a well-formed accumulator proof and does NOT constrain
+/// the named predicate; it must be hidden/refused in production until a
+/// real AIR lands (see the Phase 1B roadmap).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Enforcement {
+    Enforced,
+    StructureOnly,
+}
+
 pub mod accumulator;
 pub mod computation;
 pub mod data_integrity;
@@ -39,6 +53,8 @@ pub struct ProofTemplate {
     /// JSON example as a string literal (parsed on demand).
     pub example_json: &'static str,
     pub build_program: fn(&serde_json::Map<String, JsonValue>) -> Result<TemplateBuildResult>,
+    /// Whether this template's AIR enforces its named predicate.
+    pub enforcement: Enforcement,
 }
 
 inventory::collect!(ProofTemplate);
@@ -64,6 +80,7 @@ pub struct TemplateInfo {
     pub example: JsonValue,
     pub tags: Vec<String>,
     pub cost_category: String,
+    pub enforcement: Enforcement,
 }
 
 impl ProofTemplate {
@@ -86,6 +103,7 @@ impl ProofTemplate {
             example: serde_json::from_str(self.example_json).unwrap_or(JsonValue::Null),
             tags: self.tags.iter().map(|t| t.to_string()).collect(),
             cost_category: self.cost_category.to_string(),
+            enforcement: self.enforcement,
         }
     }
 }
@@ -153,4 +171,62 @@ pub(crate) fn add_immediate_chain(deltas: &[u64]) -> Vec<Instruction> {
         .iter()
         .map(|&d| Instruction::AddImmediate(d))
         .collect()
+}
+
+#[cfg(test)]
+mod enforcement_tests {
+    use super::*;
+
+    #[test]
+    fn enforcement_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&Enforcement::Enforced).unwrap(),
+            "\"enforced\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Enforcement::StructureOnly).unwrap(),
+            "\"structure_only\""
+        );
+    }
+
+    #[test]
+    fn to_info_carries_enforcement() {
+        // accumulator_step is the only enforced template.
+        let t = template_by_id("accumulator_step").expect("accumulator_step registered");
+        assert_eq!(t.enforcement, Enforcement::Enforced);
+        assert_eq!(t.to_info().enforcement, Enforcement::Enforced);
+    }
+}
+
+#[cfg(test)]
+mod enforcement_classification_tests {
+    use super::*;
+
+    #[test]
+    fn only_accumulator_step_is_enforced() {
+        let enforced: Vec<&str> = list_templates()
+            .iter()
+            .filter(|t| t.enforcement == Enforcement::Enforced)
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(enforced, vec!["accumulator_step"]);
+    }
+
+    #[test]
+    fn the_five_predicate_templates_are_structure_only() {
+        for id in [
+            "range_proof",
+            "hash_preimage",
+            "computation_attestation",
+            "data_integrity",
+            "policy_compliance",
+        ] {
+            let t = template_by_id(id).unwrap_or_else(|| panic!("{id} registered"));
+            assert_eq!(
+                t.enforcement,
+                Enforcement::StructureOnly,
+                "{id} must be StructureOnly until its real AIR lands"
+            );
+        }
+    }
 }

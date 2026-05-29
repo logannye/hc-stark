@@ -67,6 +67,7 @@ inventory::submit!(ProofTemplate {
     parameters: PARAMS,
     tags: TAGS,
     cost_category: "lightweight",
+    enforcement: Enforcement::StructureOnly,
     example_json: r#"{"min":18,"max":120,"witness_steps":[7]}"#,
     build_program: build,
 });
