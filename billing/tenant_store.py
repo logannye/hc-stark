@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS magic_links (
   used INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_magic_links_tenant ON magic_links(tenant_id);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash    TEXT PRIMARY KEY,
+  tenant_id     TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  expires_at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions(tenant_id);
 """
 
 
@@ -116,6 +124,7 @@ def set_status(conn: sqlite3.Connection, tenant_id: str, status: str) -> None:
 
 def suspend_tenant(conn: sqlite3.Connection, tenant_id: str) -> None:
     set_status(conn, tenant_id, "suspended")
+    delete_sessions_for_tenant(conn, tenant_id)
 
 
 def activate_tenant(conn: sqlite3.Connection, tenant_id: str) -> None:
@@ -148,6 +157,7 @@ def delete_tenant(conn: sqlite3.Connection, tenant_id: str) -> int:
     """
     with conn:
         conn.execute("DELETE FROM magic_links WHERE tenant_id = ?", (tenant_id,))
+        conn.execute("DELETE FROM sessions WHERE tenant_id = ?", (tenant_id,))
         cur = conn.execute("DELETE FROM tenants WHERE tenant_id = ?", (tenant_id,))
         return cur.rowcount
 
@@ -209,6 +219,39 @@ def verify_magic_link(conn: sqlite3.Connection, token_hash: str) -> Optional[str
     with conn:
         conn.execute("UPDATE magic_links SET used = 1 WHERE token_hash = ?", (token_hash,))
     return row["tenant_id"]
+
+
+def create_session(conn: sqlite3.Connection, token_hash: str, tenant_id: str, ttl_ms: int = 86_400_000) -> None:
+    """Store a session token hash (default 24h TTL). GCs expired rows."""
+    now = _now_ms()
+    with conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at_ms < ?", (now,))
+        conn.execute(
+            "INSERT OR REPLACE INTO sessions (token_hash, tenant_id, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?)",
+            (token_hash, tenant_id, now, now + ttl_ms),
+        )
+
+
+def validate_session(conn: sqlite3.Connection, token_hash: str) -> Optional[str]:
+    """Return tenant_id for a live session whose tenant is active, else None."""
+    now = _now_ms()
+    row = conn.execute(
+        """SELECT s.tenant_id FROM sessions s
+           JOIN tenants t ON t.tenant_id = s.tenant_id
+           WHERE s.token_hash = ? AND s.expires_at_ms > ? AND t.status = 'active'""",
+        (token_hash, now),
+    ).fetchone()
+    return row["tenant_id"] if row else None
+
+
+def delete_session(conn: sqlite3.Connection, token_hash: str) -> None:
+    with conn:
+        conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
+
+
+def delete_sessions_for_tenant(conn: sqlite3.Connection, tenant_id: str) -> None:
+    with conn:
+        conn.execute("DELETE FROM sessions WHERE tenant_id = ?", (tenant_id,))
 
 
 def migrate_from_tenant_map(conn: sqlite3.Connection, tenant_map_path: str, api_keys_path: str) -> int:
