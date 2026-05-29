@@ -1,4 +1,13 @@
 // SPDX-License-Identifier: MIT
+// ============================================================================
+// NOTICE: NON-FUNCTIONAL PLACEHOLDER — DO NOT DEPLOY.
+// This contract does NOT verify proofs. `verifyProof` returns true after a
+// partial parse (no Merkle/FRI checks), the embedded verification-key
+// constants are placeholders, and the file is not part of any audited or
+// shipped on-chain verification path. On-chain verification is future work
+// (see the production-hardening roadmap, Phase 4). Tracked so the source is
+// in version control; it is intentionally excluded from the product surface.
+// ============================================================================
 pragma solidity ^0.8.20;
 
 import "./IHcStarkVerifier.sol";
@@ -171,7 +180,7 @@ contract StarkVerifier is IHcStarkVerifier {
     uint256 constant VK_GAMMA_Y2 = 0x12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa;
 
     // VK.delta (G2) — from trusted setup
-    uint256 constant VK_DELTA_X1 = 0x25f83c43523e8ce6a8d3aa7e99d4cfd3bcfa3ee33415aeeaa3dd6a17b tried29f;
+    uint256 constant VK_DELTA_X1 = 0x25f83c43523e8ce6a8d3aa7e99d4cfd3bcfa3ee33415aeeaa3dd6a17b00029f;
     uint256 constant VK_DELTA_X2 = 0x29a4b1ba7639bbd0da48ff3f9e1fbd0e8cd4fccc87bf4aa36babc6a1c42df58e;
     uint256 constant VK_DELTA_Y1 = 0x0ea44e34ad3c5e80a61cf7db7d08ffde29abf3f60c6fb9b6458b25f70c07b67b;
     uint256 constant VK_DELTA_Y2 = 0x28dd8f5f1b68c99b9e59b0fe70ce0d7f21b51b8454e7b0bc4adf3de3f8c8a42f;
