@@ -209,11 +209,23 @@ mod tests {
     #[test]
     fn enforcement_for_resolves_all_backends() {
         use crate::templates::Enforcement;
-        assert_eq!(enforcement_for("accumulator_step"), Some(Enforcement::Enforced));
-        assert_eq!(enforcement_for("range_proof"), Some(Enforcement::StructureOnly));
+        assert_eq!(
+            enforcement_for("accumulator_step"),
+            Some(Enforcement::Enforced)
+        );
+        assert_eq!(
+            enforcement_for("range_proof"),
+            Some(Enforcement::StructureOnly)
+        );
         // zkML/Spartan are preview => structure-only.
-        assert_eq!(enforcement_for("zkml_matmul"), Some(Enforcement::StructureOnly));
-        assert_eq!(enforcement_for("spartan_r1cs"), Some(Enforcement::StructureOnly));
+        assert_eq!(
+            enforcement_for("zkml_matmul"),
+            Some(Enforcement::StructureOnly)
+        );
+        assert_eq!(
+            enforcement_for("spartan_r1cs"),
+            Some(Enforcement::StructureOnly)
+        );
         assert_eq!(enforcement_for("does_not_exist"), None);
     }
 

@@ -87,11 +87,11 @@ pub mod templates;
 pub mod unified;
 pub mod zkml_templates;
 
+pub use templates::Enforcement;
 pub use unified::{
     allow_unaudited_templates, enforcement_for, is_dispatchable, is_listable, list_all_templates,
     UnifiedTemplateInfo,
 };
-pub use templates::Enforcement;
 
 #[cfg(test)]
 mod tests {
