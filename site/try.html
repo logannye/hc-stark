@@ -163,22 +163,22 @@ footer .right a:hover{color:var(--muted)}
   <div class="try-hero">
     <div class="pill">Browser playground &middot; No signup required</div>
     <h1>Mint a ZK proof in 60 seconds</h1>
-    <p>Pick a value to prove is in the range, hit Generate, then Verify. The proof is real (generated against the live <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--border)">api.tinyzkp.com</code>) — not a simulation.</p>
+    <p>Pick an initial value and a sequence of deltas, hit Generate, then Verify. The proof is real (generated against the live <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--border)">api.tinyzkp.com</code>) — not a simulation.</p>
   </div>
 
   <div class="steps">
     <!-- Step 1: Generate -->
     <div class="card active" id="card-prove">
       <div class="card-header"><span class="card-num">1</span><span class="card-title">Generate the proof</span></div>
-      <p class="card-sub">Prove you know a number in <code style="background:var(--bg);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--accent);border:1px solid var(--border)">[min, max]</code> without revealing it. Witness steps add up to <code style="background:var(--bg);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--accent);border:1px solid var(--border)">value − min</code>; the verifier never sees them.</p>
+      <p class="card-sub">Prove that starting from an initial value and applying a sequence of deltas reaches the final value — without revealing the deltas. The verifier only learns the start and end.</p>
 
       <div class="row">
-        <div><label for="i-min">min</label><input id="i-min" type="number" min="0" max="1000" value="0"></div>
-        <div><label for="i-max">max</label><input id="i-max" type="number" min="0" max="1000" value="100"></div>
+        <div><label for="i-initial">initial (0..1000)</label><input id="i-initial" type="number" min="0" max="1000" value="0" oninput="updateFinal()"></div>
+        <div><label for="i-final-display">final (computed) = initial + &Sigma; deltas</label><input id="i-final-display" type="number" readonly tabindex="-1" style="opacity:.6;cursor:default"></div>
       </div>
       <div class="row full">
-        <div><label for="i-steps">witness_steps (comma-separated, each 0..1000)</label>
-          <input id="i-steps" type="text" value="42,44" placeholder="42,44">
+        <div><label for="i-deltas">deltas (comma-separated 1..10 ints, each 0..1000)</label>
+          <input id="i-deltas" type="text" value="5, 3, 7" placeholder="5, 3, 7" oninput="updateFinal()">
         </div>
       </div>
 
@@ -255,30 +255,43 @@ function makeColoredLine(label, value, valueClass){
   return span;
 }
 
-function parseSteps(s){
+function parseDeltas(s){
   return s.split(',').map(function(x){return x.trim()}).filter(function(x){return x.length>0}).map(function(x){
-    var n = parseInt(x, 10);
-    if (isNaN(n)) throw new Error('"' + x + '" is not a number');
+    var n = Number(x);
+    if (!Number.isFinite(n)) throw new Error('"' + x + '" is not a number');
     return n;
   });
 }
 
+function updateFinal(){
+  var initial = Number(document.getElementById('i-initial').value);
+  var deltasRaw = document.getElementById('i-deltas').value;
+  var display = document.getElementById('i-final-display');
+  try {
+    var deltas = parseDeltas(deltasRaw);
+    if (Number.isFinite(initial) && deltas.length > 0) {
+      display.value = deltas.reduce(function(a,d){return a+d}, initial);
+    } else {
+      display.value = '';
+    }
+  } catch(e) {
+    display.value = '';
+  }
+}
+
 async function onProve(){
   var btn = document.getElementById('btn-prove');
-  var min = parseInt(document.getElementById('i-min').value, 10);
-  var max = parseInt(document.getElementById('i-max').value, 10);
-  var stepsRaw = document.getElementById('i-steps').value;
-  var steps;
-  try { steps = parseSteps(stepsRaw); }
+  var initial = Number(document.getElementById('i-initial').value);
+  var deltasRaw = document.getElementById('i-deltas').value;
+  var deltas;
+  try { deltas = parseDeltas(deltasRaw); }
   catch(e) { setStatus('status-prove', e.message, 'bad'); return; }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) { setStatus('status-prove', 'min and max must be numbers', 'bad'); return; }
-  if (min < 0 || max > 1000) { setStatus('status-prove', 'min and max must be in [0, 1000]', 'bad'); return; }
-  if (max < min) { setStatus('status-prove', 'max must be >= min', 'bad'); return; }
-  if (steps.length < 1 || steps.length > 10) { setStatus('status-prove', 'witness_steps: 1 to 10 entries', 'bad'); return; }
-
-  // Pre-flight sanity: value = min + sum(steps); must be <= max
-  var value = steps.reduce(function(a,b){return a+b}, min);
-  if (value > max) { setStatus('status-prove', 'min + sum(witness_steps) = ' + value + ', exceeds max ' + max + '. Adjust the steps.', 'bad'); return; }
+  if (!Number.isFinite(initial)) { setStatus('status-prove', 'initial must be a number', 'bad'); return; }
+  if (initial < 0 || initial > 1000) { setStatus('status-prove', 'initial must be in [0, 1000]', 'bad'); return; }
+  if (deltas.length < 1 || deltas.length > 10) { setStatus('status-prove', 'deltas: 1 to 10 entries', 'bad'); return; }
+  for (var i = 0; i < deltas.length; i++) {
+    if (deltas[i] < 0 || deltas[i] > 1000) { setStatus('status-prove', 'each delta must be in [0, 1000]', 'bad'); return; }
+  }
 
   btn.disabled = true;
   var s = document.createElement('span'); s.className = 'spinner';
@@ -293,7 +306,7 @@ async function onProve(){
     var resp = await fetch('/api/demo-prove', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({min: min, max: max, witness_steps: steps}),
+      body: JSON.stringify({initial: initial, deltas: deltas}),
     });
     var data = await resp.json();
     if (!resp.ok) {
@@ -414,6 +427,8 @@ async function onVerify(){
   while (btn.firstChild) btn.removeChild(btn.firstChild);
   btn.appendChild(document.createTextNode('Verify again'));
 }
+
+updateFinal();
 
 document.querySelectorAll('nav .links a').forEach(function(a){
   a.addEventListener('click', function(){document.querySelector('.links').classList.remove('open')});
