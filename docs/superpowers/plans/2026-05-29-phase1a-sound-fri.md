@@ -228,6 +228,13 @@ The base layer is committed/opened in `F`; folded layers (≥1) are in `K`. The 
 
 Additive: the old path ignores grinding; v5 (Task 8) enforces it.
 
+> **Scope boundary (refined during execution):** T6 adds ONLY the pure PoW
+> helpers (`grind`, `check_grinding`, `leading_zero_bits`, shared via one digest
+> fn) + `SecurityFloor::min_grinding_bits` + `ProverConfig::grinding_bits`,
+> tested in isolation. Adding `grinding_bits` to `ProofParams`, the proof nonce,
+> serialization, and the actual transcript wiring move to **T7** (v5 proof
+> assembly), so T6 changes no struct literals or v3 behavior.
+
 - [ ] **Step 1 — Add `grinding_bits: u32`** to `ProverConfig` (default 20) and to `ProofParams`, and to `SecurityFloor` as `min_grinding_bits` (default 20; `relaxed()` → 0). Thread it through the `ProverConfig` constructors (preserve existing call sites with the default). Bind it into the transcript wherever the other `PARAM_*` are appended (prover `phase2_fri.rs` seed + the `verify_stark_v3`/`verify_fri_queries` mirrors) using `protocol::label::PARAM_GRINDING_BITS`.
 
 - [ ] **Step 2 — Grind loop** (in the FRI prover after all roots are committed, before query sampling). Search a `u64` nonce so the transcript-derived challenge has ≥ `grinding_bits` leading zero bits:
