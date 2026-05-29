@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::{
     config::FriConfig,
-    layer::{batch_invert, LayerDomain},
+    layer::{batch_invert, hash_value_ext, ExtLeafHashable, LayerDomain},
     parallel::compute_leaf_hashes_parallel,
     queries::FriProof,
     stream::StreamingStats,
@@ -94,11 +94,10 @@ impl<F: FieldElement> BlockProducer<F> for FoldedLayerProducer<F> {
 /// Carries the PREVIOUS layer's [`LayerDomain`]; the squared domain of the
 /// produced layer is `prev_domain.squared()`.
 ///
-/// Currently exercised only by the v5 streaming-parity tests; the prover
-/// itself still drives the legacy [`FoldedLayerProducer`] (strangler pattern),
-/// so this is `dead_code` in non-test builds until a later task swaps it in.
+/// Driven by [`FriProver::prove_with_producer_v5`] (the v5 commit phase). The
+/// legacy v3 [`FriProver::prove_with_producer`] still drives the legacy
+/// [`FoldedLayerProducer`] (strangler pattern); the two paths coexist.
 #[derive(Clone)]
-#[cfg_attr(not(test), allow(dead_code))]
 struct FoldedLayerProducerV5<F: FieldElement> {
     prev: Arc<dyn BlockProducer<F>>,
     prev_len: usize,
@@ -255,6 +254,161 @@ impl<'a, F: FieldElement, H: HashFunction> FriProver<'a, F, H> {
         let producer: Arc<dyn BlockProducer<F>> = Arc::new(VecBlockProducer::new(evaluations));
         self.prove_with_producer(producer, len)
     }
+
+    /// v5 FRI commit phase over a value field `F` (production: `QuadExtension`).
+    ///
+    /// ADDITIVE counterpart to [`Self::prove_with_producer`] that performs the
+    /// cryptographically-correct **antipodal + 1/x** fold (spec §3) entirely in
+    /// `F`, committing each layer with the [`hash_value_ext`] K-leaf hash (binds
+    /// BOTH extension coefficients). The legacy adjacent-pair fold of
+    /// `prove_with_producer` is left untouched.
+    ///
+    /// Differences from v3:
+    /// - leaves are hashed with `hash_value_ext` (K-aware) rather than the
+    ///   base-field `hash_value`;
+    /// - layers advance via [`FoldedLayerProducerV5`] over the running
+    ///   [`LayerDomain`] (`domain = domain.squared()` after each fold), so the
+    ///   coset points enter the fold;
+    /// - the final layer additionally yields explicit low-degree coefficients
+    ///   (`final_coeffs`): the final `F` evals are interpolated over the final
+    ///   coset and the first `final_size / blowup` coefficients are retained
+    ///   (the honest final polynomial has degree `< final_size / blowup`).
+    ///
+    /// Memory stays O(block): leaves are streamed block-at-a-time, and the
+    /// producer chain reads only O(block) per layer. The only full-layer
+    /// materialization is the final layer, which is configured tiny.
+    ///
+    /// `base_domain` is the layer-0 coset (e.g. the LDE coset, offset 7) in `F`;
+    /// `base_len` is the producer length (a power of two); `blowup` is the LDE
+    /// blowup factor used to bound the retained `final_coeffs`.
+    ///
+    /// NOTE: query openings, the v5 proof/output type, grinding wiring, and
+    /// serialization are SEPARATE later tasks (7b-2 / 8). This produces only the
+    /// commit-phase artifacts (`FriProof` with `final_coeffs`, betas, base
+    /// producer, stats).
+    pub fn prove_with_producer_v5(
+        &mut self,
+        producer: Arc<dyn BlockProducer<F>>,
+        base_domain: LayerDomain<F>,
+        base_len: usize,
+        blowup: usize,
+    ) -> HcResult<FriProverArtifacts<F>>
+    where
+        F: ExtLeafHashable,
+    {
+        self.config.validate_trace_length(base_len)?;
+        if blowup == 0 || !blowup.is_power_of_two() {
+            return Err(hc_core::error::HcError::invalid_argument(
+                "blowup must be a non-zero power of two",
+            ));
+        }
+        debug_assert_eq!(
+            base_domain.size, base_len,
+            "base LayerDomain size must equal base_len"
+        );
+
+        let base_producer = Arc::clone(&producer);
+
+        let mut roots: Vec<HashDigest> = Vec::new();
+        let mut betas: Vec<F> = Vec::new();
+        let mut current_producer: Arc<dyn BlockProducer<F>> = producer;
+        let mut current_len = base_len;
+        let mut domain = base_domain;
+
+        while current_len > self.config.final_polynomial_size() {
+            // Commit this layer with K-aware leaf hashes, streaming block-at-a-time.
+            let root = self.commit_layer_ext(&current_producer, current_len)?;
+
+            self.transcript
+                .append_message(protocol::label::COMMIT_FRI_LAYER_ROOT, root.as_bytes());
+            let beta = self
+                .transcript
+                .challenge_field::<F>(protocol::label::CHAL_FRI_BETA);
+
+            roots.push(root);
+            betas.push(beta);
+
+            // Advance to the antipodal + 1/x folded layer over THIS domain,
+            // then square the domain for the next round.
+            current_producer = Arc::new(FoldedLayerProducerV5 {
+                prev: current_producer,
+                prev_len: current_len,
+                prev_domain: domain.clone(),
+                beta,
+            });
+            domain = domain.squared();
+            current_len /= 2;
+        }
+
+        // Materialize the final layer (configured tiny) and commit its root.
+        let mut final_values: Vec<F> = Vec::with_capacity(current_len);
+        let mut builder = hc_commit::merkle::height_dfs::StreamingMerkle::<hc_hash::Blake3>::new();
+        let block_size = current_len.clamp(1, 1024);
+        let mut start = 0usize;
+        while start < current_len {
+            let len = (current_len - start).min(block_size);
+            let block = current_producer.produce(BlockRange::new(start, len))?;
+            for value in &block {
+                builder.push(hash_value_ext(value));
+            }
+            final_values.extend(block);
+            start += len;
+            self.stream_stats.blocks_loaded += 1;
+        }
+        let final_root = builder
+            .finalize()
+            .ok_or_else(|| hc_core::error::HcError::message("failed to finalize final FRI root"))?;
+
+        self.transcript.append_message(
+            protocol::label::COMMIT_FRI_FINAL_ROOT,
+            final_root.as_bytes(),
+        );
+
+        // final_coeffs: interpolate the final evals over the final coset, keep
+        // the first final_size / blowup coefficients (honest degree bound).
+        let final_size = current_len;
+        let coset_points: Vec<F> = (0..final_size).map(|j| domain.point(j)).collect();
+        let mut coeffs = hc_core::poly::interpolate(&final_values, &coset_points);
+        let keep = (final_size / blowup).max(1).min(final_size);
+        coeffs.truncate(keep);
+
+        let proof = FriProof::new(roots, final_values, final_root).with_final_coeffs(coeffs);
+        Ok(FriProverArtifacts {
+            proof,
+            betas,
+            base_producer,
+            base_length: base_len,
+            stats: self.stream_stats,
+        })
+    }
+
+    /// Commit one K-valued FRI layer: stream `len` values block-at-a-time,
+    /// hashing each with the K-aware [`hash_value_ext`] leaf hash, and build the
+    /// Merkle root. O(block) memory.
+    fn commit_layer_ext(
+        &mut self,
+        producer: &Arc<dyn BlockProducer<F>>,
+        len: usize,
+    ) -> HcResult<HashDigest>
+    where
+        F: ExtLeafHashable,
+    {
+        let mut builder = hc_commit::merkle::height_dfs::StreamingMerkle::<hc_hash::Blake3>::new();
+        let block_size = len.clamp(1, 1024);
+        let mut start = 0usize;
+        while start < len {
+            let blk = (len - start).min(block_size);
+            let block = producer.produce(BlockRange::new(start, blk))?;
+            for value in &block {
+                builder.push(hash_value_ext(value));
+            }
+            start += blk;
+            self.stream_stats.blocks_loaded += 1;
+        }
+        builder
+            .finalize()
+            .ok_or_else(|| hc_core::error::HcError::message("failed to finalize FRI layer root"))
+    }
 }
 
 #[cfg(test)]
@@ -399,5 +553,223 @@ mod tests {
             artifacts.proof.final_layer.len(),
             config.final_polynomial_size()
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 7b-1: v5 commit phase over K = QuadExtension<GoldilocksField>.
+    // -----------------------------------------------------------------------
+
+    mod v5 {
+        use super::*;
+        use crate::layer::hash_value_ext;
+        use hc_core::field::QuadExtension;
+
+        type K = QuadExtension<F>;
+
+        /// Build the K `LayerDomain` matching `EvaluationDomain::new_coset(n, 7)`
+        /// embedded into K (offset/generator via `from_base`).
+        fn k_layer_domain(n: usize) -> LayerDomain<K> {
+            let dom = EvaluationDomain::<F>::new_coset(n, F::from_u64(7)).unwrap();
+            LayerDomain {
+                offset: K::from_base(dom.offset()),
+                gen: K::from_base(dom.generator()),
+                size: dom.size(),
+            }
+        }
+
+        /// Deterministic K codeword with nonzero c1 in (most) lanes.
+        fn det_kvec(seed: u64, n: usize) -> Vec<K> {
+            let c0 = det_vec(seed, n);
+            let c1 = det_vec(seed ^ 0xABCD_1234_5678_9F01, n);
+            (0..n).map(|i| K::new(c0[i], c1[i])).collect()
+        }
+
+        /// Independently materialize every committed layer via `fold_layer_v5`
+        /// using the SAME betas, then check each layer's Merkle root (built with
+        /// `hash_value_ext`) equals the committed root, AND the final fold
+        /// equals `proof.final_layer`. This binds the committed roots to the
+        /// correct antipodal + 1/x fold.
+        fn merkle_root_ext(values: &[K]) -> HashDigest {
+            let mut b = hc_commit::merkle::height_dfs::StreamingMerkle::<Blake3>::new();
+            for v in values {
+                b.push(hash_value_ext(v));
+            }
+            b.finalize().unwrap()
+        }
+
+        #[test]
+        fn fold_consistency_committed_layers_match_independent_fold() {
+            for &(base_len, final_size) in &[(16usize, 2usize), (64, 4), (256, 8), (1024, 2)] {
+                let config = FriConfig::new(final_size).unwrap();
+                let base_domain = k_layer_domain(base_len);
+                let values = det_kvec(base_len as u64 + 17, base_len);
+
+                let producer: Arc<dyn BlockProducer<K>> =
+                    Arc::new(VecBlockProducer::new(values.clone()));
+                let mut t = Transcript::<Blake3>::new(protocol::DOMAIN_FRI_V5);
+                let artifacts = FriProver::<K, Blake3>::new(config, &mut t)
+                    .prove_with_producer_v5(producer, base_domain.clone(), base_len, 2)
+                    .unwrap();
+
+                // Independently fold round-by-round with the artifact betas.
+                let mut layer = values.clone();
+                let mut dom = base_domain;
+                let mut expected_roots: Vec<HashDigest> = Vec::new();
+                for &beta in &artifacts.betas {
+                    // Root of the CURRENT layer (committed before folding by beta).
+                    expected_roots.push(merkle_root_ext(&layer));
+                    layer = fold_layer_v5(&layer, &dom, beta).unwrap();
+                    dom = dom.squared();
+                }
+                assert_eq!(
+                    artifacts.proof.layer_roots, expected_roots,
+                    "committed layer roots must match the independent antipodal fold \
+                     (base_len={base_len}, final_size={final_size})"
+                );
+                assert_eq!(
+                    layer, artifacts.proof.final_layer,
+                    "independent final fold must equal proof.final_layer"
+                );
+                assert_eq!(
+                    merkle_root_ext(&artifacts.proof.final_layer),
+                    artifacts.proof.final_root,
+                    "final root must commit the final layer via hash_value_ext"
+                );
+                // betas count == committed layer count.
+                assert_eq!(artifacts.betas.len(), artifacts.proof.layer_roots.len());
+            }
+        }
+
+        /// Honest low-degree base: build the base as the eval table of a
+        /// degree-(base_len/blowup - 1) polynomial in K on the base coset.
+        /// final_coeffs must have length final_size/blowup AND re-evaluating
+        /// them on the final coset must reproduce proof.final_layer exactly.
+        #[test]
+        fn final_coeffs_roundtrip_honest_low_degree() {
+            let blowup = 2usize;
+            for &(base_len, final_size) in &[(16usize, 2usize), (64, 4), (256, 8)] {
+                let config = FriConfig::new(final_size).unwrap();
+                let base_domain = k_layer_domain(base_len);
+
+                // Genuinely low-degree codeword: degree = base_len/blowup - 1.
+                let deg = base_len / blowup - 1;
+                let poly: Vec<K> = det_kvec(0xD06_0F00D ^ base_len as u64, deg + 1);
+                let base_points: Vec<K> = (0..base_len).map(|j| base_domain.point(j)).collect();
+                let values = hc_core::poly::evaluate_batch(&poly, &base_points);
+
+                let producer: Arc<dyn BlockProducer<K>> =
+                    Arc::new(VecBlockProducer::new(values));
+                let mut t = Transcript::<Blake3>::new(protocol::DOMAIN_FRI_V5);
+                let artifacts = FriProver::<K, Blake3>::new(config, &mut t)
+                    .prove_with_producer_v5(producer, base_domain.clone(), base_len, blowup)
+                    .unwrap();
+
+                let keep = final_size / blowup;
+                assert_eq!(
+                    artifacts.proof.final_coeffs.len(),
+                    keep,
+                    "final_coeffs length must be final_size/blowup \
+                     (base_len={base_len}, final_size={final_size})"
+                );
+
+                // Final coset = base coset squared log2(base_len/final_size) times.
+                let mut dom = base_domain;
+                let mut n = base_len;
+                while n > final_size {
+                    dom = dom.squared();
+                    n /= 2;
+                }
+                let final_points: Vec<K> = (0..final_size).map(|j| dom.point(j)).collect();
+                let reeval = hc_core::poly::evaluate_batch(
+                    &artifacts.proof.final_coeffs,
+                    &final_points,
+                );
+                assert_eq!(
+                    reeval, artifacts.proof.final_layer,
+                    "evaluating final_coeffs on the final coset must reproduce final_layer \
+                     (base_len={base_len}, final_size={final_size})"
+                );
+            }
+        }
+
+        /// K betas have genuine entropy: across a few seeds/layers at least one
+        /// beta has c1 != 0. Satisfiable thanks to the 81efb3c challenge fix.
+        #[test]
+        fn k_betas_have_nonzero_c1() {
+            let config = FriConfig::new(2).unwrap();
+            let base_len = 256usize;
+            let base_domain = k_layer_domain(base_len);
+            let mut any_c1_nonzero = false;
+            for seed in 0u64..4 {
+                let values = det_kvec(0x5EED ^ seed.wrapping_mul(0x9999), base_len);
+                let producer: Arc<dyn BlockProducer<K>> =
+                    Arc::new(VecBlockProducer::new(values));
+                let mut t = Transcript::<Blake3>::new(protocol::DOMAIN_FRI_V5);
+                let artifacts = FriProver::<K, Blake3>::new(config, &mut t)
+                    .prove_with_producer_v5(producer, base_domain.clone(), base_len, 2)
+                    .unwrap();
+                if artifacts.betas.iter().any(|b| !b.c1.is_zero()) {
+                    any_c1_nonzero = true;
+                    break;
+                }
+            }
+            assert!(
+                any_c1_nonzero,
+                "at least one K beta must have c1 != 0 (genuine extension challenge)"
+            );
+        }
+
+        /// Block-counting producer: the v5 commit + fold chain must read the
+        /// base producer in bounded blocks, never the whole layer at once.
+        /// We assert the MAX single read never exceeds the layer block cap.
+        #[derive(Clone)]
+        struct CountingProducer {
+            inner: Arc<dyn BlockProducer<K>>,
+            max_read: Arc<std::sync::atomic::AtomicUsize>,
+            total_reads: Arc<std::sync::atomic::AtomicUsize>,
+        }
+        impl BlockProducer<K> for CountingProducer {
+            fn produce(&self, range: BlockRange) -> HcResult<Vec<K>> {
+                use std::sync::atomic::Ordering;
+                self.max_read.fetch_max(range.len, Ordering::Relaxed);
+                self.total_reads.fetch_add(1, Ordering::Relaxed);
+                self.inner.produce(range)
+            }
+        }
+
+        #[test]
+        fn streaming_reads_bounded_blocks() {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            let config = FriConfig::new(2).unwrap();
+            let base_len = 4096usize; // > 1024 block cap, so streaming must chunk.
+            let base_domain = k_layer_domain(base_len);
+            let values = det_kvec(0xBEEF, base_len);
+
+            let max_read = Arc::new(AtomicUsize::new(0));
+            let total_reads = Arc::new(AtomicUsize::new(0));
+            let counting = CountingProducer {
+                inner: Arc::new(VecBlockProducer::new(values)),
+                max_read: Arc::clone(&max_read),
+                total_reads: Arc::clone(&total_reads),
+            };
+            let producer: Arc<dyn BlockProducer<K>> = Arc::new(counting);
+
+            let mut t = Transcript::<Blake3>::new(protocol::DOMAIN_FRI_V5);
+            let _ = FriProver::<K, Blake3>::new(config, &mut t)
+                .prove_with_producer_v5(producer, base_domain, base_len, 2)
+                .unwrap();
+
+            let peak = max_read.load(Ordering::Relaxed);
+            assert!(
+                peak <= 1024,
+                "max single base read ({peak}) must stay within the O(block) cap (1024), \
+                 never O(N)={base_len}"
+            );
+            // And it must actually have streamed in multiple reads.
+            assert!(
+                total_reads.load(Ordering::Relaxed) > 1,
+                "base producer must be read in multiple bounded blocks"
+            );
+        }
     }
 }
