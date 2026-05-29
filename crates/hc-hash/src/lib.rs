@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod blake3;
+pub mod grinding;
 pub mod hash;
 pub mod protocol;
 pub mod sha256;

@@ -12,6 +12,8 @@ pub struct SecurityFloor {
     pub max_block_size: usize,
     pub max_query_count: usize,
     pub max_lde_blowup_factor: usize,
+    /// Minimum required grinding bits (proof-of-work). Default: 20.
+    pub min_grinding_bits: u32,
 }
 
 impl Default for SecurityFloor {
@@ -22,6 +24,7 @@ impl Default for SecurityFloor {
             max_block_size: 1 << 20,
             max_query_count: 200,
             max_lde_blowup_factor: 16,
+            min_grinding_bits: 20,
         }
     }
 }
@@ -35,6 +38,7 @@ impl SecurityFloor {
             max_block_size: usize::MAX,
             max_query_count: usize::MAX,
             max_lde_blowup_factor: usize::MAX,
+            min_grinding_bits: 0,
         }
     }
 }
@@ -63,6 +67,12 @@ pub struct ProverConfig {
     /// Protocol version for proof format / transcript (consensus-critical).
     pub protocol_version: u32,
     pub zk: ZkConfig,
+    /// Number of proof-of-work grinding bits required.
+    ///
+    /// The prover will search for a nonce whose transcript-derived digest has
+    /// at least this many leading zero bits, then include the nonce in the
+    /// proof. The verifier re-checks this condition. Default: 20.
+    pub grinding_bits: u32,
 }
 
 impl ProverConfig {
@@ -165,6 +175,14 @@ impl ProverConfig {
                 lde_blowup_factor, floor.max_lde_blowup_factor
             )));
         }
+        // Default grinding_bits = 20; check against floor (skip when floor = 0, i.e. relaxed).
+        let grinding_bits: u32 = 20;
+        if floor.min_grinding_bits > 0 && grinding_bits < floor.min_grinding_bits {
+            return Err(HcError::invalid_argument(format!(
+                "grinding_bits {} is below minimum {} for security",
+                grinding_bits, floor.min_grinding_bits
+            )));
+        }
         Ok(Self {
             block_size,
             fri_final_poly_size,
@@ -173,6 +191,7 @@ impl ProverConfig {
             commitment: CommitmentScheme::Stark,
             protocol_version: 3,
             zk: ZkConfig::default(),
+            grinding_bits,
         })
     }
 

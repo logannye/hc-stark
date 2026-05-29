@@ -9,6 +9,15 @@ pub struct Transcript<H: HashFunction> {
     counter: u64,
 }
 
+impl<H: HashFunction> Clone for Transcript<H> {
+    fn clone(&self) -> Self {
+        Self {
+            state: self.state.clone(),
+            counter: self.counter,
+        }
+    }
+}
+
 impl<H: HashFunction> Transcript<H> {
     pub fn new(domain: impl AsRef<[u8]>) -> Self {
         let mut state = H::new();
