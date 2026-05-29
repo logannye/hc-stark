@@ -625,7 +625,7 @@ def send_contact():
 
 @app.route("/verify-magic-link", methods=["POST"])
 def verify_magic_link_route():
-    """Verify a magic link token and return tenant credentials."""
+    """Verify a magic link token; mint a session and return safe metadata (no API key)."""
     req_secret = flask.request.headers.get("X-Internal-Secret", "")
     if not INTERNAL_SECRET or not secrets.compare_digest(req_secret, INTERNAL_SECRET):
         return flask.jsonify(error="unauthorized"), 403
@@ -705,8 +705,13 @@ def session_usage():
         return flask.jsonify(error="key unavailable"), 500
     data = flask.request.get_json(silent=True) or {}
     params = {}
-    if data.get("since") is not None: params["since"] = data["since"]
-    if data.get("until") is not None: params["until"] = data["until"]
+    for _k in ("since", "until"):
+        _v = data.get(_k)
+        if _v is not None:
+            try:
+                params[_k] = int(_v)
+            except (TypeError, ValueError):
+                pass
     try:
         r = requests.get("http://localhost:8080/usage", params=params,
                          headers={"Authorization": f"Bearer {key}"}, timeout=10)
