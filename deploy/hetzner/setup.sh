@@ -90,11 +90,31 @@ echo "$CRON_LINE" > "$CRON_FILE"
 chmod 644 "$CRON_FILE"
 
 # ---- Backup cron ----
+# Runs daily at 02:00 UTC. The script itself sources /opt/hc-stark/.env so that
+# HC_BACKUP_REMOTE (and any other env vars) are available to rclone for off-box push (G13).
 BACKUP_CRON_LINE="0 2 * * * root /opt/hc-stark/billing/backup.sh >> /var/log/hc-backup.log 2>&1"
 BACKUP_CRON_FILE="/etc/cron.d/hc-backup"
 echo "$BACKUP_CRON_LINE" > "$BACKUP_CRON_FILE"
 chmod 644 "$BACKUP_CRON_FILE"
 mkdir -p /opt/hc-stark/backups
+
+# ---- Off-box backup (G13) — operator action required ----
+# Without this, the box is a single point of failure for all tenant/usage/key data.
+#
+#   1. Install rclone:
+#        apt-get install -y rclone
+#
+#   2. Configure a remote (Backblaze B2, S3, Hetzner Storage Box, SFTP, etc.):
+#        rclone config
+#
+#   3. Add HC_BACKUP_REMOTE to /opt/hc-stark/.env, e.g.:
+#        HC_BACKUP_REMOTE="b2:hc-stark-backups"
+#        HC_BACKUP_REMOTE="s3:my-bucket/hc-stark"
+#        HC_BACKUP_REMOTE="sftp-box:backups/hc-stark"
+#
+#   backup.sh will log a loud WARNING each run until HC_BACKUP_REMOTE is set.
+#   Verify first push manually: /opt/hc-stark/billing/backup.sh
+echo "NOTICE: Set HC_BACKUP_REMOTE in /opt/hc-stark/.env and install rclone for off-box backups (G13)."
 
 # ---- Billing webhook systemd ----
 cat > /etc/systemd/system/hc-billing-webhook.service <<'UNIT'
@@ -154,3 +174,6 @@ echo "  4. Create Cloudflare DNS records (see above)"
 echo "  5. systemctl start hc-stark"
 echo "  6. systemctl start hc-billing-webhook"
 echo "  7. Verify: curl https://api.tinyzkp.com/healthz"
+echo "  8. Off-box backup (G13): apt-get install rclone && rclone config"
+echo "     Then set HC_BACKUP_REMOTE in /opt/hc-stark/.env"
+echo "     See docs/runbooks/restore.md for restore procedure."
