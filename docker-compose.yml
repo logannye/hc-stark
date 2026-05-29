@@ -21,6 +21,9 @@ services:
       # (volume-mounted at /data inside the container; host path is
       # /opt/hc-stark/data/tenant_store.sqlite).
       - HC_SERVER_AUTH_DB_PATH=/data/tenant_store.sqlite
+      # Prometheus scrape token (G10). Unset → /metrics returns 404.
+      # Set this in your .env or shell before running docker compose.
+      - HC_METRICS_TOKEN=${HC_METRICS_TOKEN:-}
     volumes:
       # Bind-mount the host data dir so hc-server reads the SAME
       # tenant_store.sqlite the host-side billing-webhook writes to.
@@ -87,9 +90,17 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=30d"
+    environment:
+      # Make HC_METRICS_TOKEN available for entrypoint scripts if needed.
+      - HC_METRICS_TOKEN=${HC_METRICS_TOKEN:-}
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      # Write the token to a file inside the container so prometheus.yml's
+      # credentials_file: /etc/prometheus/metrics_token can read it.
+      # The entrypoint script (or operator) should populate this file with
+      # the raw token value matching HC_METRICS_TOKEN on hc-server.
+      - ./deploy/prometheus/metrics_token:/etc/prometheus/metrics_token:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
