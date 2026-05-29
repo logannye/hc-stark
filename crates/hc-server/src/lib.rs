@@ -2088,6 +2088,9 @@ async fn template_detail(
             ));
         }
     }
+    // INVARIANT: enforcement_for() must cover every backend served below.
+    // It currently resolves vm + zkml + spartan; if a new backend is added
+    // to the serve arms, extend enforcement_for() too or this gate goes stale.
     if let Some(t) = hc_workloads::templates::template_by_id(&template_id) {
         let mut info = serde_json::to_value(t.to_info()).unwrap_or_default();
         if let Some(obj) = info.as_object_mut() {
