@@ -12,6 +12,8 @@ services:
       - HC_SERVER_API_KEYS_FILE=/data/api_keys.txt
       - HC_SERVER_ALLOW_CUSTOM_PROGRAMS=false
       - HC_SERVER_JOB_INDEX_SQLITE=true
+      # Prometheus scrape token (G10). Must be set in the host .env.
+      - HC_METRICS_TOKEN=${HC_METRICS_TOKEN}
     volumes:
       - /opt/hc-stark/data:/data
     deploy:
@@ -30,6 +32,8 @@ services:
 
   prometheus:
     restart: unless-stopped
+    environment:
+      - HC_METRICS_TOKEN=${HC_METRICS_TOKEN}
 
   grafana:
     restart: unless-stopped

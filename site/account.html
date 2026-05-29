@@ -584,8 +584,8 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   'use strict';
 
   // ── Constants ──
-  var API = 'https://api.tinyzkp.com';
-  var SESSION_KEY = 'tinyzkp_session';
+  // All /api/* calls are same-origin CF functions that authenticate via the
+  // HttpOnly tz_session cookie.  No direct calls to api.tinyzkp.com from JS.
   var PLAN_CAPS = { free: 5, developer: 500, team: 2500, scale: 10000 };
   var PLAN_LIMITS = {
     free:      { rpm: '10',  vrpm: '30',   inflight: '1',  cap: '$5',      dur: '5 min' },
@@ -602,7 +602,10 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   ];
 
   // ── State ──
+  // session holds ONLY non-secret display metadata: { email, plan, api_key_prefix, status }
+  // No api_key, no token, no localStorage/sessionStorage for credentials.
   var session = null;
+  var revealedKey = null;   // transient only; never persisted
   var keyRevealed = false;
   var currentFilter = 'all';
   var allJobs = [];
@@ -622,39 +625,11 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   var checkoutBanner = document.getElementById('checkout-banner');
 
   // ── Helpers ──
-  function getSession() {
-    try {
-      var s = sessionStorage.getItem(SESSION_KEY);
-      if (s) return JSON.parse(s);
-      s = localStorage.getItem(SESSION_KEY);
-      if (s) return JSON.parse(s);
-    } catch(e) {}
-    return null;
-  }
 
-  function saveSession(data, persist) {
-    var str = JSON.stringify(data);
-    try {
-      if (persist) {
-        localStorage.setItem(SESSION_KEY, str);
-        sessionStorage.removeItem(SESSION_KEY);
-      } else {
-        sessionStorage.setItem(SESSION_KEY, str);
-      }
-    } catch(e) {}
-  }
-
-  function clearSession() {
-    try { sessionStorage.removeItem(SESSION_KEY); } catch(e) {}
-    try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
-  }
-
-  function maskKey(key) {
-    if (!key || key.length < 12) return key || '';
-    var visible = key.substring(0, 12);
-    var masked = '';
-    for (var i = 0; i < Math.min(key.length - 12, 24); i++) masked += '\u2022';
-    return visible + masked;
+  // maskPrefix: display the stored key prefix plus bullet padding.
+  function maskPrefix(prefix) {
+    if (!prefix) return 'tzk_\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
+    return prefix + '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
   }
 
   function escapeText(str) {
@@ -680,11 +655,20 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     loginError.style.display = 'none';
   }
 
+  // Return headers for same-origin /api/* calls.
+  // Credentials flow via the HttpOnly tz_session cookie; no Authorization header.
   function apiHeaders() {
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + (session ? session.api_key : '')
-    };
+    return { 'Content-Type': 'application/json' };
+  }
+
+  // Convenience: POST to a same-origin /api/* path with credentials:include.
+  function apiPost(path, body) {
+    return fetch(path, {
+      method: 'POST',
+      credentials: 'include',
+      headers: apiHeaders(),
+      body: body !== undefined ? JSON.stringify(body) : undefined
+    });
   }
 
   // ── Safe DOM builders ──
@@ -768,15 +752,42 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     }, 8000);
   }
 
-  // Auto-verify token from URL
+  // Auto-verify token from URL, or resolve session from HttpOnly cookie.
   var token = params.get('token');
   if (token && /^[a-f0-9]{64}$/i.test(token)) {
     verifyToken(token);
   } else {
-    session = getSession();
-    if (session && session.api_key) {
+    resolveSession();
+  }
+
+  // ── Session resolve (cookie-based) ──
+  // Called on every page load; 200 = cookie valid, 401 = show login.
+  function resolveSession() {
+    apiPost('/api/session-resolve')
+    .then(function(res) {
+      if (res.status === 401) { return null; }
+      if (!res.ok) throw new Error('Session check failed.');
+      return res.json();
+    })
+    .then(function(data) {
+      if (!data) { showLoginView(); return; }
+      session = {
+        email:          data.email          || '',
+        plan:           data.plan           || 'free',
+        api_key_prefix: data.api_key_prefix || '',
+        status:         data.status         || 'active'
+      };
       enterDashboard();
-    }
+    })
+    .catch(function(err) {
+      console.warn('Session resolve error:', err);
+      showLoginView();
+    });
+  }
+
+  function showLoginView() {
+    loginView.style.display = '';
+    dashView.style.display = 'none';
   }
 
   // ── Token verification ──
@@ -789,11 +800,8 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     loginBtn.appendChild(document.createTextNode('Verifying...'));
     hideError();
 
-    fetch('/api/verify-magic-link', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: tok })
-    })
+    // POST with credentials:include so the CF function can set the HttpOnly cookie.
+    apiPost('/api/verify-magic-link', { token: tok })
     .then(function(res) {
       return res.json().then(function(data) {
         if (!res.ok) throw new Error(data.error || 'Invalid or expired link.');
@@ -801,13 +809,13 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
       });
     })
     .then(function(data) {
+      // Cookie is now set by the server. Store only non-secret display metadata.
       session = {
-        api_key: data.api_key,
-        tenant_id: data.tenant_id,
-        email: data.email,
-        plan: data.plan || 'free'
+        email:          data.email          || '',
+        plan:           data.plan           || 'free',
+        api_key_prefix: data.api_key_prefix || '',
+        status:         'active'
       };
-      saveSession(session, true);
       window.history.replaceState({}, '', '/account');
       enterDashboard();
     })
@@ -870,8 +878,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     navCtaBtn.href = '#';
     navCtaBtn.addEventListener('click', function(e) {
       e.preventDefault();
-      clearSession();
-      window.location.reload();
+      doLogout();
     });
 
     // Populate account header
@@ -885,8 +892,12 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     planEl.textContent = plan.charAt(0).toUpperCase() + plan.slice(1);
     planEl.className = 'plan-badge ' + plan;
 
-    // API key
-    document.getElementById('key-text').textContent = maskKey(session.api_key);
+    // API key: show masked prefix; raw key never held in session
+    revealedKey = null;
+    keyRevealed = false;
+    document.getElementById('key-text').textContent = maskPrefix(session.api_key_prefix);
+    document.getElementById('key-toggle').textContent = 'Reveal';
+    document.getElementById('key-copy').style.display = 'none';
 
     // Plan & billing
     document.getElementById('plan-name').textContent = plan.charAt(0).toUpperCase() + plan.slice(1);
@@ -897,9 +908,9 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
       document.getElementById('billing-paid').style.display = 'block';
     }
 
-    // Quick reference
-    document.getElementById('ref-auth').textContent = 'Authorization: Bearer ' + session.api_key;
-    document.getElementById('curl-key').textContent = session.api_key;
+    // Quick reference: show prefix placeholder; updated to real key after Reveal.
+    document.getElementById('ref-auth').textContent = 'Authorization: Bearer ' + maskPrefix(session.api_key_prefix);
+    document.getElementById('curl-key').textContent = maskPrefix(session.api_key_prefix);
 
     // Set default date range to current month
     var now = new Date();
@@ -918,14 +929,13 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
 
   // ── Fetch usage ──
   function fetchUsage(sinceMs, untilMs) {
-    var url = API + '/usage';
-    var q = [];
-    if (sinceMs) q.push('since=' + sinceMs);
-    if (untilMs) q.push('until=' + untilMs);
-    if (q.length) url += '?' + q.join('&');
+    var body = {};
+    if (sinceMs) body.since = sinceMs;
+    if (untilMs) body.until = untilMs;
 
-    fetch(url, { headers: apiHeaders() })
+    apiPost('/api/usage', body)
     .then(function(res) {
+      if (res.status === 401) { resolveSession(); throw new Error('Not authenticated'); }
       if (!res.ok) throw new Error('Failed to load usage');
       return res.json();
     })
@@ -969,11 +979,12 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
 
   // ── Fetch jobs ──
   function fetchJobs(append) {
-    var url = API + '/prove?limit=50';
-    if (append && jobOffset > 0) url += '&offset=' + jobOffset;
+    var body = { limit: 50 };
+    if (append && jobOffset > 0) body.offset = jobOffset;
 
-    fetch(url, { headers: apiHeaders() })
+    apiPost('/api/jobs', body)
     .then(function(res) {
+      if (res.status === 401) { resolveSession(); throw new Error('Not authenticated'); }
       if (!res.ok) throw new Error('Failed to load jobs');
       return res.json();
     })
@@ -1079,27 +1090,56 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   // Query usage
   document.getElementById('btn-query-usage').addEventListener('click', fetchUsageCustom);
 
-  // Key toggle
+  // Key toggle: Reveal fetches the key transiently via /api/reveal-key;
+  // Hide clears the revealed value from the DOM.
   document.getElementById('key-toggle').addEventListener('click', function() {
     var textEl = document.getElementById('key-text');
     var toggleBtn = document.getElementById('key-toggle');
     var copyBtn = document.getElementById('key-copy');
-    keyRevealed = !keyRevealed;
+
     if (keyRevealed) {
-      textEl.textContent = session.api_key;
-      toggleBtn.textContent = 'Hide';
-      copyBtn.style.display = 'inline-block';
-    } else {
-      textEl.textContent = maskKey(session.api_key);
+      // Hide: clear the revealed key from DOM; do not keep it in memory.
+      revealedKey = null;
+      keyRevealed = false;
+      textEl.textContent = maskPrefix(session.api_key_prefix);
       toggleBtn.textContent = 'Reveal';
       copyBtn.style.display = 'none';
+      return;
     }
+
+    // Reveal: fetch from server, never from session.
+    toggleBtn.disabled = true;
+    toggleBtn.textContent = 'Loading…';
+    apiPost('/api/reveal-key')
+    .then(function(res) {
+      return res.json().then(function(data) {
+        if (!res.ok) throw new Error(data.error || 'Could not reveal key.');
+        return data;
+      });
+    })
+    .then(function(data) {
+      revealedKey = data.api_key || '';
+      keyRevealed = true;
+      textEl.textContent = revealedKey;
+      toggleBtn.disabled = false;
+      toggleBtn.textContent = 'Hide';
+      copyBtn.style.display = 'inline-block';
+    })
+    .catch(function(err) {
+      toggleBtn.disabled = false;
+      toggleBtn.textContent = 'Reveal';
+      alert(err.message);
+    });
   });
 
-  // Key copy
+  // Key copy: copies the transiently revealed key; prompts user to reveal if not yet done.
   document.getElementById('key-copy').addEventListener('click', function() {
     var btn = this;
-    navigator.clipboard.writeText(session.api_key).then(function() {
+    if (!revealedKey) {
+      alert('Please click "Reveal" to view your API key first.');
+      return;
+    }
+    navigator.clipboard.writeText(revealedKey).then(function() {
       btn.textContent = 'Copied!';
       setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
     });
@@ -1110,19 +1150,13 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     document.getElementById('confirm-overlay').classList.add('visible');
   });
 
-  // Confirm rotate
+  // Confirm rotate: POST /api/rotate-key via cookie auth; show new key once as revealed.
   document.getElementById('confirm-rotate-btn').addEventListener('click', function() {
     var btn = this;
     btn.disabled = true;
     btn.textContent = 'Rotating...';
 
-    // Same-origin Cloudflare Pages Function (NOT api.tinyzkp.com — the
-    // rotate-key flow is implemented as a CF Function that proxies to
-    // webhook.tinyzkp.com with the internal secret).
-    fetch('/api/rotate-key', {
-      method: 'POST',
-      headers: apiHeaders()
-    })
+    apiPost('/api/rotate-key')
     .then(function(res) {
       return res.json().then(function(data) {
         if (!res.ok) throw new Error(data.error || data.message || 'Key rotation failed.');
@@ -1130,16 +1164,28 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
       });
     })
     .then(function(data) {
+      if (data.api_key_prefix) {
+        session.api_key_prefix = data.api_key_prefix;
+      }
+      // Show the new key once as a transient reveal (same UX as Reveal button).
       if (data.api_key) {
-        session.api_key = data.api_key;
-        saveSession(session, !!localStorage.getItem(SESSION_KEY));
-        document.getElementById('key-text').textContent = maskKey(session.api_key);
+        revealedKey = data.api_key;
+        keyRevealed = true;
+        document.getElementById('key-text').textContent = revealedKey;
+        document.getElementById('key-toggle').textContent = 'Hide';
+        document.getElementById('key-copy').style.display = 'inline-block';
+      } else {
+        revealedKey = null;
+        keyRevealed = false;
+        document.getElementById('key-text').textContent = maskPrefix(session.api_key_prefix);
         document.getElementById('key-toggle').textContent = 'Reveal';
         document.getElementById('key-copy').style.display = 'none';
-        keyRevealed = false;
-        document.getElementById('ref-auth').textContent = 'Authorization: Bearer ' + session.api_key;
-        document.getElementById('curl-key').textContent = session.api_key;
       }
+      // Update the quick-reference placeholder (still masked until Reveal).
+      var display = keyRevealed ? revealedKey : maskPrefix(session.api_key_prefix);
+      document.getElementById('ref-auth').textContent = 'Authorization: Bearer ' + display;
+      document.getElementById('curl-key').textContent = display;
+
       document.getElementById('confirm-overlay').classList.remove('visible');
       btn.disabled = false;
       btn.textContent = 'Rotate Key';
@@ -1170,7 +1216,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     }
   });
 
-  // Manage billing
+  // Manage billing: POST /api/create-portal-session — no body needed; cookie auth.
   document.getElementById('btn-manage-billing').addEventListener('click', function() {
     var btn = this;
     btn.disabled = true;
@@ -1180,11 +1226,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     btn.appendChild(sp);
     btn.appendChild(document.createTextNode('Opening...'));
 
-    fetch('/api/create-portal-session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: session.email })
-    })
+    apiPost('/api/create-portal-session')
     .then(function(res) {
       return res.json().then(function(data) {
         if (!res.ok) throw new Error(data.error || 'Could not open billing portal.');
@@ -1207,18 +1249,22 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     copyTextFromValue('https://api.tinyzkp.com', this);
   });
 
-  // Copy auth header
+  // Copy auth header: uses revealed key if available, else placeholder.
   document.getElementById('ref-copy-auth').addEventListener('click', function() {
-    var header = 'Authorization: Bearer ' + (session ? session.api_key : 'tzk_YOUR_KEY');
+    var keyStr = revealedKey || maskPrefix(session ? session.api_key_prefix : '');
+    var header = 'Authorization: Bearer ' + keyStr;
     copyTextFromValue(header, this);
   });
 
-  // Copy curl
+  // Copy curl: uses revealed key if available, else prompts user to reveal.
   document.getElementById('curl-copy-btn').addEventListener('click', function() {
     var btn = this;
-    var key = session ? session.api_key : 'tzk_YOUR_KEY';
+    if (!revealedKey) {
+      alert('Click "Reveal" to view your API key, then copy the curl snippet.');
+      return;
+    }
     var cmd = 'curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \\\n' +
-      '  -H "Authorization: Bearer ' + key + '" \\\n' +
+      '  -H "Authorization: Bearer ' + revealedKey + '" \\\n' +
       '  -H "Content-Type: application/json" \\\n' +
       '  -d \'{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}\'';
     navigator.clipboard.writeText(cmd).then(function() {
@@ -1226,6 +1272,25 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
       setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
     });
   });
+
+  // ── Logout ──
+  function doLogout() {
+    function resetToLogin() {
+      session = null;
+      revealedKey = null;
+      keyRevealed = false;
+      allJobs = [];
+      if (usageRefreshTimer) { clearInterval(usageRefreshTimer); usageRefreshTimer = null; }
+      if (jobRefreshTimer)   { clearInterval(jobRefreshTimer);   jobRefreshTimer   = null; }
+      showLoginView();
+      // Restore "Get API Key" nav button.
+      navCtaBtn.textContent = 'Get API Key';
+      navCtaBtn.className = 'nav-cta';
+      navCtaBtn.href = '/signup';
+    }
+    // Best-effort: clear local state whether the server responds or not.
+    apiPost('/api/logout').then(resetToLogin, resetToLogin);
+  }
 
   // Mobile menu close on link click
   var navLinks = document.querySelectorAll('nav .links a');

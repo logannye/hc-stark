@@ -401,6 +401,7 @@ See [`docs/operations.md`](docs/operations.md) for full configuration reference.
 | `HC_SERVER_JOB_INDEX_SQLITE` | `true` | Enable SQLite job index |
 | `HC_SERVER_PG_URL` | unset | Postgres connection string for dual-write (Phase 1 of [migration plan](docs/postgres_migration.md)). When set, usage_log writes mirror to PG; when unset, SQLite-only |
 | `HC_ALLOW_UNAUDITED_TEMPLATES` | `false` | Expose/dispatch templates whose AIR does not yet enforce their named predicate (every template except `accumulator_step`). Off in production; set `true` only for Phase-1B development. Honored identically by `hc-server` and `hc-mcp`. |
+| `HC_METRICS_TOKEN` | unset | Secret token for `/metrics`. Unset (or empty) → `/metrics` returns 404 (disabled). Set → endpoint requires `Authorization: Bearer <token>`; mismatched token → 401. Set in production to prevent leaking per-tenant revenue counters (audit finding G10). |
 | `HC_MCP_HTTP_HOST` | `0.0.0.0` | hc-mcp-http bind host |
 | `HC_MCP_HTTP_PORT` | `3001` | hc-mcp-http bind port |
 | `HC_MCP_REQUIRE_AUTH` | `false` | When true, hc-mcp-http rejects unauthenticated requests with 401 |

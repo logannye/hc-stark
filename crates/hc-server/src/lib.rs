@@ -945,8 +945,45 @@ async fn readyz(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
+/// Constant-time check that `header` is exactly `"Bearer <configured>"` and
+/// `configured` is non-empty. Mirrors the byte-loop approach in auth.rs.
+fn metrics_token_ok(header: Option<&str>, configured: &str) -> bool {
+    if configured.is_empty() {
+        return false;
+    }
+    let expected = format!("Bearer {configured}");
+    let presented = match header {
+        Some(h) => h,
+        None => return false,
+    };
+    // Constant-time byte comparison (same pattern as auth.rs `constant_time_eq`).
+    let a = expected.as_bytes();
+    let b = presented.as_bytes();
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
 #[utoipa::path(get, path = "/metrics", responses((status = 200, description = "prometheus metrics", body = String)))]
-async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
+async fn metrics(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let configured = std::env::var("HC_METRICS_TOKEN").unwrap_or_default();
+    if configured.is_empty() {
+        return (StatusCode::NOT_FOUND, "metrics disabled").into_response();
+    }
+    let auth = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok());
+    if !metrics_token_ok(auth, &configured) {
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+    }
     let encoder = TextEncoder::new();
     let metric_families = state.metrics.registry.gather();
     let mut buf = Vec::new();
@@ -3470,5 +3507,56 @@ mod honest_catalog_tests {
         assert!(listed.contains(&"accumulator_step".to_string()));
         assert!(!listed.contains(&"range_proof".to_string()));
         assert!(!listed.iter().any(|id| id.starts_with("zkml_")));
+    }
+}
+
+#[cfg(test)]
+mod metrics_token_tests {
+    use super::metrics_token_ok;
+
+    #[test]
+    fn empty_configured_always_false() {
+        // If HC_METRICS_TOKEN is unset/empty, metrics are disabled regardless
+        // of the presented header.
+        assert!(!metrics_token_ok(None, ""));
+        assert!(!metrics_token_ok(Some("Bearer sometoken"), ""));
+        assert!(!metrics_token_ok(Some(""), ""));
+    }
+
+    #[test]
+    fn correct_bearer_returns_true() {
+        assert!(metrics_token_ok(
+            Some("Bearer s3cr3t_metrics_tok"),
+            "s3cr3t_metrics_tok"
+        ));
+    }
+
+    #[test]
+    fn wrong_token_returns_false() {
+        assert!(!metrics_token_ok(
+            Some("Bearer wrong_token"),
+            "correct_token"
+        ));
+    }
+
+    #[test]
+    fn missing_header_returns_false() {
+        assert!(!metrics_token_ok(None, "s3cr3t_metrics_tok"));
+    }
+
+    #[test]
+    fn scheme_case_sensitive() {
+        // Must be uppercase "Bearer", not "bearer".
+        assert!(!metrics_token_ok(
+            Some("bearer s3cr3t_metrics_tok"),
+            "s3cr3t_metrics_tok"
+        ));
+    }
+
+    #[test]
+    fn prefix_match_is_not_enough() {
+        // "Bearer tok" against configured "tok_longer" must be false.
+        assert!(!metrics_token_ok(Some("Bearer tok"), "tok_longer"));
+        assert!(!metrics_token_ok(Some("Bearer tok_longer"), "tok"));
     }
 }
