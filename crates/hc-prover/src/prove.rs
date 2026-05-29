@@ -5,10 +5,10 @@ use hc_core::{
     domain::{generate_lde_coset_domain, generate_trace_domain},
     error::{HcError, HcResult},
     fft::{fft_parallel as fft_in_place, ifft_parallel as ifft_in_place},
-    field::FieldElement,
+    field::{FieldElement, GoldilocksField},
 };
 use hc_fri::{FriConfig, FriProof};
-use hc_hash::{hash::HashDigest, protocol, Blake3, HashFunction, Transcript};
+use hc_hash::{grinding, hash::HashDigest, protocol, Blake3, HashFunction, Transcript};
 use hc_replay::traits::VecBlockProducer;
 use hc_replay::{
     block_range::BlockRange, config::ReplayConfig, trace_replay::TraceReplay, traits::BlockProducer,
@@ -21,8 +21,8 @@ use crate::{
     fri_height,
     kzg::TraceKzgState,
     metrics::ProverMetrics,
-    pipeline::{phase1_commit, phase3_queries},
-    queries::{ProofParams, ProverOutput},
+    pipeline::{phase1_commit, phase2_fri, phase3_queries},
+    queries::{ProofParams, ProofV5, ProverOutput, QueryResponseV5},
     trace_stream::VmTraceProducer,
 };
 
@@ -1155,6 +1155,576 @@ impl<F: FieldElement + hc_core::field::TwoAdicField> ProverContext<F> {
     }
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// v5 prove path (Phase 1A — soundness-hardened FRI rebuild)
+//
+// ADDITIVE: a complete v5 proof assembled from already-built pieces. v3
+// (`prove` / the `ProverContext` state machine above) is NOT modified.
+//
+// The v5 path:
+//   1. reuses the same DEEP-STARK trace-LDE + quotient oracle MATH as v3
+//      (factored into the pure `build_trace_lde` / `build_quotient_lde` /
+//      opening helpers below — v3 keeps its own inline code byte-for-byte);
+//   2. drives a SEPARATE v5 main transcript (`DOMAIN_MAIN_V5`) whose order the
+//      Task 8 verifier mirrors verbatim (see the append sequence in
+//      `prove_stark_v5`);
+//   3. runs the K-valued antipodal FRI commit (`run_fri_v5`) + K openings
+//      (`answer_fri_queries_v5`);
+//   4. performs proof-of-work grinding (`grinding::grind`) and binds the nonce
+//      into the main transcript BEFORE sampling query indices.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Fixed LDE coset offset shared by the v3 and v5 DEEP-STARK oracle builders.
+const LDE_COSET_OFFSET: u64 = 7;
+
+/// Prove a statement using the v5 (soundness-hardened) protocol.
+///
+/// ADDITIVE entry point alongside [`prove`]. Produces a [`ProofV5`] over
+/// `GoldilocksField` (the only base field wired today). The proof is produced
+/// and tested STRUCTURALLY here; the matching verifier is Task 8.
+pub fn prove_v5(
+    config: ProverConfig,
+    program: Program,
+    public_inputs: PublicInputs<GoldilocksField>,
+) -> HcResult<ProofV5<GoldilocksField>> {
+    prove_stark_v5(config, program, public_inputs)
+}
+
+/// Core v5 prove orchestration. Mirrors the DEEP-STARK (Stark, v3) construction
+/// but over the v5 main transcript + the K-valued antipodal FRI + grinding.
+pub fn prove_stark_v5(
+    config: ProverConfig,
+    program: Program,
+    public_inputs: PublicInputs<GoldilocksField>,
+) -> HcResult<ProofV5<GoldilocksField>> {
+    type F = GoldilocksField;
+
+    if program.instructions.is_empty() {
+        return Err(HcError::invalid_argument(
+            "program must contain instructions",
+        ));
+    }
+    if config.commitment != CommitmentScheme::Stark {
+        return Err(HcError::invalid_argument(
+            "v5 prove path requires the Stark commitment scheme",
+        ));
+    }
+    let version = if config.zk.enabled { 6 } else { 5 };
+
+    let trace_length = program.instructions.len() + 1;
+    let block_size = config.block_size.max(1);
+    let trace_producer = VmTraceProducer::new(program, public_inputs.initial_acc, block_size)?;
+
+    // Streaming AIR / trace sanity check (mirrors `prove`): verify boundary and
+    // transition constraints without materializing the whole trace table.
+    {
+        let replay_config = ReplayConfig::new(block_size, trace_length)?;
+        let mut replay = TraceReplay::new(replay_config, trace_producer.clone())?;
+        let mut prev: Option<TraceRow<F>> = None;
+        for block_index in 0..replay.num_blocks() {
+            let block = replay.fetch_block(block_index)?;
+            for row in block.iter().copied() {
+                if let Some(prev_row) = prev {
+                    let expected = prev_row[0].add(prev_row[1]);
+                    if row[0] != expected {
+                        return Err(HcError::invalid_argument(
+                            "trace violates transition constraint",
+                        ));
+                    }
+                }
+                prev = Some(row);
+            }
+        }
+        let first_block = replay.fetch_block(0)?;
+        let first_row = first_block
+            .first()
+            .copied()
+            .ok_or_else(|| HcError::invalid_argument("empty trace"))?;
+        if first_row[0] != public_inputs.initial_acc {
+            return Err(HcError::invalid_argument(
+                "trace violates initial boundary constraint",
+            ));
+        }
+        let last_block = replay.fetch_block(replay.num_blocks() - 1)?;
+        let last_row = last_block
+            .last()
+            .copied()
+            .ok_or_else(|| HcError::invalid_argument("empty trace"))?;
+        if last_row[0] != public_inputs.final_acc {
+            return Err(HcError::invalid_argument(
+                "trace violates final boundary constraint",
+            ));
+        }
+    }
+
+    let padded_len = trace_length.next_power_of_two();
+    let blowup = config.lde_blowup_factor;
+    let lde_len = padded_len
+        .checked_mul(blowup)
+        .ok_or_else(|| HcError::invalid_argument("lde domain size overflow"))?;
+    if padded_len == 0 || lde_len == 0 {
+        return Err(HcError::invalid_argument("invalid trace length"));
+    }
+
+    let boundary = BoundaryConstraints {
+        initial_acc: public_inputs.initial_acc,
+        final_acc: public_inputs.final_acc,
+    };
+
+    // --- Phase 1 (F): trace LDE evaluation (+ optional ZK mask) and commit. ---
+    let trace_lde = build_trace_lde::<F>(&trace_producer, trace_length, padded_len, blowup, &config)?;
+    let trace_root = commit_trace_lde::<F>(&trace_lde)?;
+
+    // --- v5 MAIN transcript. The Task 8 verifier MUST replay this exact order. ---
+    let mut transcript = Transcript::<Blake3>::new(protocol::DOMAIN_MAIN_V5);
+    // Public inputs.
+    transcript.append_message(
+        protocol::label::PUB_INITIAL_ACC,
+        public_inputs.initial_acc.to_u64().to_le_bytes(),
+    );
+    transcript.append_message(
+        protocol::label::PUB_FINAL_ACC,
+        public_inputs.final_acc.to_u64().to_le_bytes(),
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PUB_TRACE_LENGTH,
+        trace_length as u64,
+    );
+    // Param block (v5 inserts PARAM_GRINDING_BITS, then always binds the ZK fields).
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_QUERY_COUNT,
+        config.query_count as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_LDE_BLOWUP,
+        config.lde_blowup_factor as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_FRI_FINAL_SIZE,
+        config.fri_final_poly_size as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_FRI_FOLDING_RATIO,
+        hc_fri::get_folding_ratio() as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_GRINDING_BITS,
+        config.grinding_bits as u64,
+    );
+    transcript.append_message(protocol::label::PARAM_HASH_ID, b"blake3");
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_ZK_ENABLED,
+        u64::from(config.zk.enabled),
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_ZK_MASK_DEGREE,
+        config.zk.mask_degree as u64,
+    );
+    // Trace LDE commitment → composition challenges → quotient commitment.
+    transcript.append_message(
+        protocol::label::COMMIT_TRACE_LDE_ROOT,
+        trace_root.as_bytes(),
+    );
+    // NOTE: composition challenge field stays the base field `F` (unchanged from
+    // v3 — making it `K` is an out-of-scope follow-up).
+    let alpha_boundary =
+        transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
+    let alpha_transition =
+        transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
+
+    // Quotient oracle q(x) = C(x)/(x^N - 1) on the LDE coset, then commit.
+    let quotient_lde = build_quotient_lde::<F>(
+        &trace_lde,
+        padded_len,
+        blowup,
+        &boundary,
+        alpha_boundary,
+        alpha_transition,
+    )?;
+    let quotient_root = commit_quotient_lde::<F>(&quotient_lde)?;
+    transcript.append_message(
+        protocol::label::COMMIT_QUOTIENT_ROOT,
+        quotient_root.as_bytes(),
+    );
+
+    let trace_commitment = Commitment::Stark { root: trace_root };
+    let composition_commitment = Commitment::Stark {
+        root: quotient_root,
+    };
+
+    // --- v5 FRI commit (K-valued, antipodal). The quotient codeword is the FRI base. ---
+    let fri_seed = phase2_fri::FriTranscriptSeedV5 {
+        protocol_version: version,
+        initial_acc: public_inputs.initial_acc.to_u64(),
+        final_acc: public_inputs.final_acc.to_u64(),
+        trace_length: trace_length as u64,
+        query_count: config.query_count as u64,
+        lde_blowup: config.lde_blowup_factor as u64,
+        fri_final_size: config.fri_final_poly_size as u64,
+        folding_ratio: hc_fri::get_folding_ratio() as u64,
+        grinding_bits: config.grinding_bits as u64,
+        zk_enabled: config.zk.enabled,
+        zk_mask_degree: config.zk.mask_degree as u64,
+        trace_commitment: crate::commitment::commitment_digest(&trace_commitment),
+        composition_commitment: crate::commitment::commitment_digest(&composition_commitment),
+    };
+    let fri_config = FriConfig::new(config.fri_final_poly_size)?;
+    let base_producer: Arc<dyn BlockProducer<F>> =
+        Arc::new(VecBlockProducer::new(quotient_lde.clone()));
+    let artifacts = phase2_fri::run_fri_v5(fri_config, base_producer, lde_len, fri_seed)?;
+    let fri_proof = artifacts.proof.clone();
+
+    // Bind FRI layer roots + final root into the main transcript.
+    for root in &fri_proof.layer_roots {
+        transcript.append_message(protocol::label::COMMIT_FRI_LAYER_ROOT, root.as_bytes());
+    }
+    transcript.append_message(
+        protocol::label::COMMIT_FRI_FINAL_ROOT,
+        fri_proof.final_root.as_bytes(),
+    );
+
+    // --- Proof-of-work grinding: find a nonce, then bind it into the transcript ---
+    // BEFORE sampling query indices (so the indices are downstream of the grind).
+    let grinding_nonce = grinding::grind::<Blake3>(
+        &transcript,
+        protocol::label::FRI_GRINDING_NONCE,
+        config.grinding_bits,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::FRI_GRINDING_NONCE,
+        grinding_nonce,
+    );
+
+    // --- Sample base query indices (same `generate_queries` as v3/verifier). ---
+    let base_queries =
+        phase3_queries::generate_queries::<F>(&mut transcript, lde_len, config.query_count)?;
+
+    // --- Openings: trace + quotient (F, reusing the shared opening helpers) ---
+    // and FRI (K, via `answer_fri_queries_v5`).
+    let shift = blowup % lde_len;
+    let mut trace_queries = Vec::with_capacity(base_queries.len());
+    let mut composition_queries = Vec::with_capacity(base_queries.len());
+    for &idx in &base_queries {
+        trace_queries.push(open_trace_query::<F>(&trace_lde, idx, lde_len, shift)?);
+        composition_queries.push(open_composition_query::<F>(&quotient_lde, idx, lde_len)?);
+    }
+    trace_queries.sort_by_key(|q| q.index);
+    composition_queries.sort_by_key(|q| q.index);
+
+    let fri_queries = phase3_queries::answer_fri_queries_v5(&base_queries, &artifacts)?;
+
+    // --- OOD-style extra opening (mirrors v3): one more index from the transcript. ---
+    transcript.append_message(protocol::label::CHAL_OOD_POINT, [0u8]);
+    let ood_fe = transcript.challenge_field::<F>(protocol::label::CHAL_OOD_INDEX);
+    let ood_index = (ood_fe.to_u64() as usize) % lde_len;
+    let ood = Some(crate::queries::OodOpenings {
+        index: ood_index,
+        trace: open_trace_query::<F>(&trace_lde, ood_index, lde_len, shift)?,
+        quotient: open_composition_query::<F>(&quotient_lde, ood_index, lde_len)?,
+    });
+
+    let query_response = QueryResponseV5 {
+        trace_queries,
+        composition_queries,
+        fri_queries,
+        boundary: None,
+        ood,
+    };
+
+    Ok(ProofV5 {
+        version,
+        trace_commitment,
+        composition_commitment,
+        fri_proof,
+        initial_acc: public_inputs.initial_acc,
+        final_acc: public_inputs.final_acc,
+        query_response,
+        trace_length,
+        params: ProofParams {
+            query_count: config.query_count,
+            lde_blowup_factor: config.lde_blowup_factor,
+            fri_final_poly_size: config.fri_final_poly_size,
+            fri_folding_ratio: hc_fri::get_folding_ratio(),
+            protocol_version: version,
+            zk_enabled: config.zk.enabled,
+            zk_mask_degree: config.zk.mask_degree,
+            grinding_bits: config.grinding_bits,
+        },
+        grinding_nonce,
+    })
+}
+
+/// Build the trace LDE evaluations `[acc(x), delta(x)]` on the LDE coset
+/// (offset 7) of size `padded_len * blowup`, applying the v4 ZK mask when
+/// enabled. Pure (no transcript); mirrors the v3 `run_commit_deep_stark` math.
+fn build_trace_lde<F: FieldElement + hc_core::field::TwoAdicField>(
+    trace_producer: &VmTraceProducer<F>,
+    trace_len: usize,
+    padded_len: usize,
+    blowup: usize,
+    config: &ProverConfig,
+) -> HcResult<Vec<TraceRow<F>>> {
+    let lde_len = padded_len * blowup;
+    let coset_offset = F::from_u64(LDE_COSET_OFFSET);
+    let lde_domain = generate_lde_coset_domain::<F>(padded_len, blowup, coset_offset)?;
+
+    // Materialize padded trace columns on H_N.
+    let mut acc_vals = vec![F::ZERO; padded_len];
+    let mut delta_vals = vec![F::ZERO; padded_len];
+    let replay_config = ReplayConfig::new(config.block_size.max(1), trace_len)?;
+    let mut replay = TraceReplay::new(replay_config, trace_producer.clone())?;
+    let block_size = replay.block_size();
+    for idx in 0..trace_len {
+        let block = replay.fetch_block(idx / block_size)?;
+        let row = *block
+            .get(idx % block_size)
+            .ok_or_else(|| HcError::message("missing trace row while building padded trace"))?;
+        acc_vals[idx] = row[0];
+        delta_vals[idx] = row[1];
+    }
+    let last_row = {
+        let block = replay.fetch_block((trace_len - 1) / block_size)?;
+        *block
+            .get((trace_len - 1) % block_size)
+            .ok_or_else(|| HcError::message("missing last trace row"))?
+    };
+    for idx in trace_len..padded_len {
+        acc_vals[idx] = last_row[0];
+        delta_vals[idx] = last_row[1];
+    }
+
+    // IFFT to coefficients, then evaluate on the LDE coset.
+    ifft_in_place(&mut acc_vals)?;
+    ifft_in_place(&mut delta_vals)?;
+    let acc_coeffs = acc_vals;
+    let delta_coeffs = delta_vals;
+
+    let mut acc_eval = vec![F::ZERO; lde_len];
+    let mut delta_eval = vec![F::ZERO; lde_len];
+    let mut offset_pow = F::ONE;
+    for k in 0..padded_len {
+        acc_eval[k] = acc_coeffs[k].mul(offset_pow);
+        delta_eval[k] = delta_coeffs[k].mul(offset_pow);
+        offset_pow = offset_pow.mul(coset_offset);
+    }
+    fft_in_place(&mut acc_eval)?;
+    fft_in_place(&mut delta_eval)?;
+
+    // v4 ZK masking: add Z_H(x) * R(x) on the LDE coset (zero on H_N).
+    if config.zk.enabled && config.zk.mask_degree > 0 {
+        use hc_core::random::{sample_field_elements, seeded_rng};
+        use rand::rngs::OsRng;
+        use rand::RngCore;
+
+        let seed = if let Some(seed) = config.zk.seed {
+            seed
+        } else {
+            let mut seed = [0u8; 32];
+            OsRng.fill_bytes(&mut seed);
+            seed
+        };
+        let mut rng = seeded_rng(seed);
+        let r_len = config.zk.mask_degree.min(padded_len.saturating_sub(1)) + 1;
+        let r_acc = sample_field_elements::<F>(&mut rng, r_len);
+        let r_delta = sample_field_elements::<F>(&mut rng, r_len);
+
+        let mut r_acc_eval = vec![F::ZERO; lde_len];
+        let mut r_delta_eval = vec![F::ZERO; lde_len];
+        let mut offset_pow = F::ONE;
+        for k in 0..r_len {
+            r_acc_eval[k] = r_acc[k].mul(offset_pow);
+            r_delta_eval[k] = r_delta[k].mul(offset_pow);
+            offset_pow = offset_pow.mul(coset_offset);
+        }
+        fft_in_place(&mut r_acc_eval)?;
+        fft_in_place(&mut r_delta_eval)?;
+
+        for i in 0..lde_len {
+            let x = lde_domain.element(i);
+            let z_h = x.pow(padded_len as u64).sub(F::ONE);
+            acc_eval[i] = acc_eval[i].add(z_h.mul(r_acc_eval[i]));
+            delta_eval[i] = delta_eval[i].add(z_h.mul(r_delta_eval[i]));
+        }
+    }
+
+    Ok((0..lde_len).map(|i| [acc_eval[i], delta_eval[i]]).collect())
+}
+
+/// Build the DEEP-STARK quotient oracle `q(x) = C(x)/(x^N - 1)` on the LDE coset
+/// from the trace LDE and the (already-sampled) composition challenges. Pure;
+/// mirrors the v3 `run_commit_deep_stark` / `compute_deep_oracles` math.
+fn build_quotient_lde<F: FieldElement + hc_core::field::TwoAdicField>(
+    trace_lde: &[TraceRow<F>],
+    padded_len: usize,
+    blowup: usize,
+    boundary: &BoundaryConstraints<F>,
+    alpha_boundary: F,
+    alpha_transition: F,
+) -> HcResult<Vec<F>> {
+    let lde_len = padded_len * blowup;
+    if trace_lde.len() != lde_len {
+        return Err(HcError::message("trace LDE length mismatch"));
+    }
+    let coset_offset = F::from_u64(LDE_COSET_OFFSET);
+    let trace_domain = generate_trace_domain::<F>(padded_len)?;
+    let lde_domain = generate_lde_coset_domain::<F>(padded_len, blowup, coset_offset)?;
+    let omega_last = trace_domain
+        .generator()
+        .inverse()
+        .ok_or_else(|| HcError::math("trace domain generator has no inverse"))?;
+    let n_inv = F::from_u64(padded_len as u64)
+        .inverse()
+        .ok_or_else(|| HcError::math("padded_len has no inverse"))?;
+    let shift = blowup % lde_len;
+    let air = ToyAir;
+
+    let mut quotient = Vec::with_capacity(lde_len);
+    for i in 0..lde_len {
+        let x = lde_domain.element(i);
+        let z_h = x.pow(padded_len as u64).sub(F::ONE);
+        let z_h_inv = z_h
+            .inverse()
+            .ok_or_else(|| HcError::math("unexpected zero Z_H on coset domain"))?;
+        let l0 = z_h.mul(n_inv).mul(
+            x.sub(F::ONE)
+                .inverse()
+                .ok_or_else(|| HcError::math("unexpected zero denominator in L0 on coset"))?,
+        );
+        let l_last = z_h.mul(omega_last).mul(n_inv).mul(
+            x.sub(omega_last)
+                .inverse()
+                .ok_or_else(|| HcError::math("unexpected zero denominator in L_last on coset"))?,
+        );
+        let selector_last = F::ONE.sub(l_last);
+
+        let acc = trace_lde[i][0];
+        let delta = trace_lde[i][1];
+        let acc_next = trace_lde[(i + shift) % lde_len][0];
+        let delta_next = trace_lde[(i + shift) % lde_len][1];
+        let c = air.quotient_numerator(
+            &[acc, delta],
+            &[acc_next, delta_next],
+            l0,
+            l_last,
+            selector_last,
+            alpha_boundary,
+            alpha_transition,
+            boundary.initial_acc,
+            boundary.final_acc,
+        )?;
+        quotient.push(c.mul(z_h_inv));
+    }
+    Ok(quotient)
+}
+
+/// Commit the trace LDE oracle (packed leaf `[acc(x), delta(x)]`) via a
+/// streaming Merkle tree (same leaf hash as the v3 path).
+fn commit_trace_lde<F: FieldElement>(trace_lde: &[TraceRow<F>]) -> HcResult<HashDigest> {
+    use hc_commit::merkle::height_dfs::StreamingMerkle;
+    let mut builder = StreamingMerkle::<Blake3>::new();
+    for row in trace_lde {
+        builder.push(hash_trace_pair(&row[0], &row[1]));
+    }
+    builder
+        .finalize()
+        .ok_or_else(|| HcError::message("failed to finalize trace LDE merkle tree"))
+}
+
+/// Commit the quotient oracle via a streaming Merkle tree (same leaf hash as v3).
+fn commit_quotient_lde<F: FieldElement>(quotient_lde: &[F]) -> HcResult<HashDigest> {
+    use hc_commit::merkle::height_dfs::StreamingMerkle;
+    let mut builder = StreamingMerkle::<Blake3>::new();
+    for v in quotient_lde {
+        builder.push(hash_field_element(v));
+    }
+    builder
+        .finalize()
+        .ok_or_else(|| HcError::message("failed to finalize quotient merkle tree"))
+}
+
+/// Build a single trace opening (with its next-row witness) from a materialized
+/// trace LDE. Reuses the exact v3 leaf-hash + path-reconstruction pattern.
+fn open_trace_query<F: FieldElement>(
+    trace_lde: &[TraceRow<F>],
+    idx: usize,
+    lde_len: usize,
+    shift: usize,
+) -> HcResult<crate::queries::TraceQuery<F>> {
+    use hc_commit::merkle::reconstruct_path_from_replay_mut;
+    let evaluation = *trace_lde
+        .get(idx)
+        .ok_or_else(|| HcError::message("trace LDE query out of range"))?;
+    let mut leaf_hash = |leaf_index: usize| -> HcResult<HashDigest> {
+        let row = trace_lde
+            .get(leaf_index)
+            .ok_or_else(|| HcError::message("trace LDE leaf out of range"))?;
+        Ok(hash_trace_pair(&row[0], &row[1]))
+    };
+    let witness = reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)
+        .map_err(|err| HcError::message(format!("Failed to extract trace LDE path: {err}")))?;
+
+    let next_idx = (idx + shift) % lde_len;
+    let next_eval = *trace_lde
+        .get(next_idx)
+        .ok_or_else(|| HcError::message("trace LDE next out of range"))?;
+    let mut leaf_hash2 = |leaf_index: usize| -> HcResult<HashDigest> {
+        let row = trace_lde
+            .get(leaf_index)
+            .ok_or_else(|| HcError::message("trace LDE leaf out of range"))?;
+        Ok(hash_trace_pair(&row[0], &row[1]))
+    };
+    let next_witness =
+        reconstruct_path_from_replay_mut::<Blake3, _>(next_idx, lde_len, 2, &mut leaf_hash2)
+            .map_err(|err| HcError::message(format!("Failed to extract trace LDE next path: {err}")))?;
+
+    Ok(crate::queries::TraceQuery {
+        index: idx,
+        evaluation,
+        witness: crate::queries::TraceWitness::Merkle(witness),
+        next: Some(crate::queries::NextTraceRow {
+            index: next_idx,
+            evaluation: next_eval,
+            witness: next_witness,
+        }),
+    })
+}
+
+/// Build a single quotient (composition) opening from a materialized quotient
+/// LDE. Reuses the exact v3 leaf-hash + path-reconstruction pattern.
+fn open_composition_query<F: FieldElement>(
+    quotient_lde: &[F],
+    idx: usize,
+    lde_len: usize,
+) -> HcResult<crate::queries::CompositionQuery<F>> {
+    use hc_commit::merkle::reconstruct_path_from_replay_mut;
+    let value = *quotient_lde
+        .get(idx)
+        .ok_or_else(|| HcError::message("quotient query out of range"))?;
+    let mut leaf_hash = |leaf_index: usize| -> HcResult<HashDigest> {
+        let v = quotient_lde
+            .get(leaf_index)
+            .copied()
+            .ok_or_else(|| HcError::message("quotient leaf out of range"))?;
+        Ok(hash_field_element(&v))
+    };
+    let witness = reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)
+        .map_err(|err| HcError::message(format!("Failed to extract quotient Merkle path: {err}")))?;
+    Ok(crate::queries::CompositionQuery {
+        index: idx,
+        value,
+        witness,
+    })
+}
+
 fn hash_trace_pair<F: FieldElement>(left: &F, right: &F) -> HashDigest {
     let mut bytes = [0u8; 16];
     bytes[..8].copy_from_slice(&left.to_u64().to_le_bytes());
@@ -1215,6 +1785,255 @@ mod tests {
                 .iter()
                 .all(|query| matches!(query.witness, crate::queries::TraceWitness::Kzg(_))),
             "all witnesses should be KZG proofs"
+        );
+    }
+
+    // ── v5 prove-path structural tests (semantic verify is Task 8) ──────────
+    use crate::config::SecurityFloor;
+    use crate::queries::ProofV5;
+    use hc_core::field::prime_field::GoldilocksField as Gl;
+
+    /// Small v5 config: relaxed security floor so tiny params are allowed, and a
+    /// small `grinding_bits` (8) so the PoW search is fast in CI.
+    fn v5_test_config(grinding_bits: u32) -> ProverConfig {
+        // base_len = padded_len * blowup; with a 4-instruction program
+        // trace_length = 5 → padded_len = 8 → base_len = 16 (blowup 2).
+        let mut config = ProverConfig::with_security_floor(
+            2, // block_size
+            2, // fri_final_poly_size
+            4, // query_count
+            2, // lde_blowup_factor
+            SecurityFloor::relaxed(),
+        )
+        .unwrap()
+        .with_protocol_version(5);
+        config.grinding_bits = grinding_bits;
+        config
+    }
+
+    fn v5_test_program() -> Program {
+        Program::new(vec![
+            Instruction::AddImmediate(1),
+            Instruction::AddImmediate(2),
+            Instruction::AddImmediate(3),
+            Instruction::AddImmediate(4),
+        ])
+    }
+
+    fn v5_test_inputs() -> PublicInputs<Gl> {
+        // acc: 5 → 6 → 8 → 11 → 15.
+        PublicInputs {
+            initial_acc: Gl::new(5),
+            final_acc: Gl::new(15),
+        }
+    }
+
+    /// Rebuild the v5 MAIN transcript EXACTLY as `prove_stark_v5` does, up to and
+    /// INCLUDING the FRI roots but BEFORE the grinding nonce is appended. This is
+    /// precisely the transcript over which the prover ground the PoW nonce — and
+    /// exactly what the Task 8 verifier replays before `check_grinding`.
+    fn rebuild_v5_main_transcript_up_to_nonce(proof: &ProofV5<Gl>) -> Transcript<Blake3> {
+        let trace_root = proof.trace_commitment.as_root().unwrap();
+        let quotient_root = proof.composition_commitment.as_root().unwrap();
+
+        let mut t = Transcript::<Blake3>::new(protocol::DOMAIN_MAIN_V5);
+        t.append_message(
+            protocol::label::PUB_INITIAL_ACC,
+            proof.initial_acc.to_u64().to_le_bytes(),
+        );
+        t.append_message(
+            protocol::label::PUB_FINAL_ACC,
+            proof.final_acc.to_u64().to_le_bytes(),
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PUB_TRACE_LENGTH,
+            proof.trace_length as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_QUERY_COUNT,
+            proof.params.query_count as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_LDE_BLOWUP,
+            proof.params.lde_blowup_factor as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_FRI_FINAL_SIZE,
+            proof.params.fri_final_poly_size as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_FRI_FOLDING_RATIO,
+            proof.params.fri_folding_ratio as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_GRINDING_BITS,
+            proof.params.grinding_bits as u64,
+        );
+        t.append_message(protocol::label::PARAM_HASH_ID, b"blake3");
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_ZK_ENABLED,
+            u64::from(proof.params.zk_enabled),
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_ZK_MASK_DEGREE,
+            proof.params.zk_mask_degree as u64,
+        );
+        t.append_message(protocol::label::COMMIT_TRACE_LDE_ROOT, trace_root.as_bytes());
+        // Re-derive the composition challenges (must be drawn here, between the
+        // trace LDE root and the quotient root, to advance the transcript state).
+        let _alpha_boundary =
+            t.challenge_field::<Gl>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
+        let _alpha_transition =
+            t.challenge_field::<Gl>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
+        t.append_message(
+            protocol::label::COMMIT_QUOTIENT_ROOT,
+            quotient_root.as_bytes(),
+        );
+        for root in &proof.fri_proof.layer_roots {
+            t.append_message(protocol::label::COMMIT_FRI_LAYER_ROOT, root.as_bytes());
+        }
+        t.append_message(
+            protocol::label::COMMIT_FRI_FINAL_ROOT,
+            proof.fri_proof.final_root.as_bytes(),
+        );
+        t
+    }
+
+    #[test]
+    fn v5_prove_produces_structurally_valid_proof() {
+        let proof = prove_v5(v5_test_config(8), v5_test_program(), v5_test_inputs()).unwrap();
+
+        // version == 5 (native, ZK disabled).
+        assert_eq!(proof.version, 5, "native v5 proof version");
+        assert_eq!(proof.params.protocol_version, 5);
+        assert_eq!(proof.params.grinding_bits, 8, "grinding_bits set from config");
+
+        // final_coeffs length == fri_final_poly_size / lde_blowup_factor.
+        let expected_final_coeffs =
+            proof.params.fri_final_poly_size / proof.params.lde_blowup_factor;
+        assert_eq!(
+            proof.fri_proof.final_coeffs.len(),
+            expected_final_coeffs,
+            "final_coeffs length must equal fri_final_poly_size / lde_blowup_factor"
+        );
+        assert!(
+            !proof.fri_proof.final_coeffs.is_empty(),
+            "v5 final_coeffs must be populated"
+        );
+
+        // FRI proof is K-valued: final_layer carries QuadExtension elements (the
+        // type itself is K), and at least one opened value exercises the c1 lane.
+        assert!(
+            !proof.fri_proof.final_layer.is_empty(),
+            "K-valued final layer must be non-empty"
+        );
+
+        // FRI openings non-empty; each carries consistent layer/query indices.
+        let fri_queries = &proof.query_response.fri_queries;
+        assert!(!fri_queries.is_empty(), "v5 fri_queries must be non-empty");
+        let padded_len = proof.trace_length.next_power_of_two();
+        let base_len = padded_len * proof.params.lde_blowup_factor;
+        let num_layers = proof.fri_proof.layer_roots.len();
+        for q in fri_queries {
+            assert!(
+                q.layer_index < num_layers,
+                "FRI opening layer_index {} out of range (num_layers={num_layers})",
+                q.layer_index
+            );
+            // At layer L the layer size is base_len >> L; the recorded low index
+            // is `current & (half - 1)`, so it must be < half = (base_len >> L)/2.
+            let layer_len = base_len >> q.layer_index;
+            assert!(
+                q.query_index < layer_len / 2,
+                "FRI opening query_index {} must be < half of layer {} (layer_len={layer_len})",
+                q.query_index,
+                q.layer_index
+            );
+        }
+
+        // Trace + composition openings present and index-aligned.
+        assert_eq!(
+            proof.query_response.trace_queries.len(),
+            proof.params.query_count,
+            "one trace opening per base query"
+        );
+        assert_eq!(
+            proof.query_response.composition_queries.len(),
+            proof.params.query_count,
+            "one composition opening per base query"
+        );
+    }
+
+    /// The stored grinding nonce must actually satisfy the PoW: rebuild the main
+    /// transcript exactly as the prover did (step 3) and `check_grinding` must
+    /// return TRUE. This pins the grind label + main-transcript order for Task 8.
+    #[test]
+    fn v5_grinding_nonce_satisfies_pow_roundtrip() {
+        let proof = prove_v5(v5_test_config(8), v5_test_program(), v5_test_inputs()).unwrap();
+        let main_up_to_nonce = rebuild_v5_main_transcript_up_to_nonce(&proof);
+        assert!(
+            grinding::check_grinding::<Blake3>(
+                &main_up_to_nonce,
+                protocol::label::FRI_GRINDING_NONCE,
+                proof.grinding_nonce,
+                proof.params.grinding_bits,
+            ),
+            "stored grinding_nonce must satisfy the PoW over the rebuilt main transcript"
+        );
+    }
+
+    /// `grinding_bits = 0` is the degenerate PoW (any nonce qualifies): the
+    /// prover returns nonce 0 and the round-trip still holds.
+    #[test]
+    fn v5_grinding_zero_bits_nonce_is_zero() {
+        let proof = prove_v5(v5_test_config(0), v5_test_program(), v5_test_inputs()).unwrap();
+        assert_eq!(proof.params.grinding_bits, 0);
+        assert_eq!(proof.grinding_nonce, 0, "bits=0 => nonce 0");
+        let main_up_to_nonce = rebuild_v5_main_transcript_up_to_nonce(&proof);
+        assert!(grinding::check_grinding::<Blake3>(
+            &main_up_to_nonce,
+            protocol::label::FRI_GRINDING_NONCE,
+            proof.grinding_nonce,
+            0,
+        ));
+    }
+
+    /// Determinism: identical inputs ⇒ identical ProofV5 (same nonce + roots).
+    #[test]
+    fn v5_prove_is_deterministic() {
+        let a = prove_v5(v5_test_config(8), v5_test_program(), v5_test_inputs()).unwrap();
+        let b = prove_v5(v5_test_config(8), v5_test_program(), v5_test_inputs()).unwrap();
+
+        assert_eq!(a.grinding_nonce, b.grinding_nonce, "same nonce");
+        assert_eq!(
+            a.trace_commitment.as_root(),
+            b.trace_commitment.as_root(),
+            "same trace root"
+        );
+        assert_eq!(
+            a.composition_commitment.as_root(),
+            b.composition_commitment.as_root(),
+            "same quotient root"
+        );
+        assert_eq!(
+            a.fri_proof.layer_roots, b.fri_proof.layer_roots,
+            "same FRI layer roots"
+        );
+        assert_eq!(
+            a.fri_proof.final_root, b.fri_proof.final_root,
+            "same FRI final root"
+        );
+        assert_eq!(
+            a.fri_proof.final_coeffs, b.fri_proof.final_coeffs,
+            "same final_coeffs"
         );
     }
 }

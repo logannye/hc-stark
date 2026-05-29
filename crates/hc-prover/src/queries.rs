@@ -1,5 +1,5 @@
 use hc_commit::merkle::MerklePath;
-use hc_core::field::FieldElement;
+use hc_core::field::{FieldElement, QuadExtension};
 use hc_fri::FriProof;
 
 use crate::{
@@ -131,6 +131,50 @@ pub struct ProverOutput<F: FieldElement> {
     pub trace_length: usize,
     pub commitment_scheme: CommitmentScheme,
     pub params: ProofParams,
+}
+
+/// Query response for the soundness-hardened v5 proof (Phase 1A FRI rebuild).
+///
+/// ADDITIVE counterpart to [`QueryResponse`]: the trace and composition (quotient)
+/// openings stay in the base field `F` (reused from the v3 path), while the FRI
+/// openings are **`K`-valued** (`K = QuadExtension<F>`), produced by the antipodal
+/// commit phase ([`crate::pipeline::phase2_fri::run_fri_v5`]) + answered by
+/// [`crate::pipeline::phase3_queries::answer_fri_queries_v5`].
+///
+/// Consumed by the Task 8 v5 verifier.
+#[derive(Clone, Debug)]
+pub struct QueryResponseV5<F: FieldElement> {
+    pub trace_queries: Vec<TraceQuery<F>>,
+    pub composition_queries: Vec<CompositionQuery<F>>,
+    /// `K`-valued FRI openings (antipodal pairs over the extension field).
+    pub fri_queries: Vec<FriQuery<QuadExtension<F>>>,
+    pub boundary: Option<BoundaryOpenings<F>>,
+    pub ood: Option<OodOpenings<F>>,
+}
+
+/// Soundness-hardened v5 proof (Phase 1A FRI rebuild).
+///
+/// ADDITIVE counterpart to the verifier's `Proof`/the prover's [`ProverOutput`]:
+/// the FRI proof is `K`-valued (carries `final_coeffs`), and the proof carries a
+/// proof-of-work `grinding_nonce` (with `params.grinding_bits` set from config).
+///
+/// Consumed by the Task 8 v5 verifier.
+#[derive(Clone, Debug)]
+pub struct ProofV5<F: FieldElement> {
+    /// 5 (native) or 6 (ZK).
+    pub version: u32,
+    pub trace_commitment: Commitment,
+    pub composition_commitment: Commitment,
+    /// `K`-valued FRI proof; carries `final_coeffs`.
+    pub fri_proof: FriProof<QuadExtension<F>>,
+    pub initial_acc: F,
+    pub final_acc: F,
+    pub query_response: QueryResponseV5<F>,
+    pub trace_length: usize,
+    /// Protocol parameters; `params.grinding_bits` is set from config.
+    pub params: ProofParams,
+    /// Proof-of-work nonce satisfying the grinding check (see Task 8 verifier).
+    pub grinding_nonce: u64,
 }
 
 #[cfg(test)]
