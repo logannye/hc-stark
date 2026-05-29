@@ -33,10 +33,12 @@ async fn list_templates_returns_all_templates() {
     let result = s.list_templates_impl().await.unwrap();
     let val = extract_json(&result);
     let arr = val.as_array().unwrap();
+    // With the enforcement gate active (default), only Enforced templates are
+    // listed. The count will be less than the full catalog; just verify the
+    // result is non-empty and that the known Enforced template is present.
     assert!(
-        arr.len() >= 6,
-        "expected at least 6 templates, got {}",
-        arr.len()
+        !arr.is_empty(),
+        "expected at least one template in the default listing, got 0"
     );
 
     // Check that accumulator_step is in the list
