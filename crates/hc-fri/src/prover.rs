@@ -7,7 +7,10 @@ use rayon::prelude::*;
 use std::sync::Arc;
 
 use crate::{
-    config::FriConfig, parallel::compute_leaf_hashes_parallel, queries::FriProof,
+    config::FriConfig,
+    layer::{batch_invert, LayerDomain},
+    parallel::compute_leaf_hashes_parallel,
+    queries::FriProof,
     stream::StreamingStats,
 };
 
@@ -70,6 +73,76 @@ impl<F: FieldElement> BlockProducer<F> for FoldedLayerProducer<F> {
             }
             out
         };
+        Ok(out)
+    }
+}
+
+/// Streaming producer for the correct antipodal, 1/x fold (spec §3).
+///
+/// Produces the folded layer block-at-a-time. The output index `j`
+/// (`j in 0..prev_len/2`) is derived from the *antipodal* pair
+/// `prev[j]` (the "low" value) and `prev[j + prev_len/2]` (the "high"
+/// value) — NOT `prev[2j]`/`prev[2j+1]`. To answer `produce([s, e))` it
+/// therefore issues **two** reads of the previous layer:
+///
+/// - `prev.produce([s, e))` — the low values `a`
+/// - `prev.produce([s + half, e + half))` — the high values `b`
+///
+/// plus computes `x = prev_domain.point(s..e)`. Memory stays O(block): two
+/// block reads of size `e - s`, no full-layer buffering.
+///
+/// Carries the PREVIOUS layer's [`LayerDomain`]; the squared domain of the
+/// produced layer is `prev_domain.squared()`.
+///
+/// Currently exercised only by the v5 streaming-parity tests; the prover
+/// itself still drives the legacy [`FoldedLayerProducer`] (strangler pattern),
+/// so this is `dead_code` in non-test builds until a later task swaps it in.
+#[derive(Clone)]
+#[cfg_attr(not(test), allow(dead_code))]
+struct FoldedLayerProducerV5<F: FieldElement> {
+    prev: Arc<dyn BlockProducer<F>>,
+    prev_len: usize,
+    prev_domain: LayerDomain<F>,
+    beta: F,
+}
+
+impl<F: FieldElement> BlockProducer<F> for FoldedLayerProducerV5<F> {
+    fn produce(&self, range: BlockRange) -> HcResult<Vec<F>> {
+        let out_len = self.prev_len / 2;
+        let half = self.prev_len / 2; // antipodal stride into prev layer
+        let end = range.end().min(out_len);
+        if range.start >= end {
+            return Ok(Vec::new());
+        }
+        let s = range.start;
+        let len = end - s;
+
+        // Two block reads: low values prev[s..e], high values prev[s+half..e+half].
+        let lo = self.prev.produce(BlockRange::new(s, len))?;
+        let hi = self.prev.produce(BlockRange::new(s + half, len))?;
+        debug_assert_eq!(lo.len(), len);
+        debug_assert_eq!(hi.len(), len);
+
+        let two_inv = F::from_u64(2)
+            .inverse()
+            .ok_or_else(|| hc_core::error::HcError::math("2 not invertible"))?;
+        // 1/(2 * D[s + k]) for k in 0..len.
+        let mut inv_two_x: Vec<F> = (0..len)
+            .map(|k| {
+                let x = self.prev_domain.point(s + k);
+                x.add(x)
+            })
+            .collect();
+        batch_invert(&mut inv_two_x)?;
+
+        let mut out = Vec::with_capacity(len);
+        for k in 0..len {
+            let a = lo[k];
+            let b = hi[k];
+            let even = a.add(b).mul(two_inv);
+            let odd = a.sub(b).mul(inv_two_x[k]);
+            out.push(even.add(self.beta.mul(odd)));
+        }
         Ok(out)
     }
 }
@@ -187,8 +260,131 @@ impl<'a, F: FieldElement, H: HashFunction> FriProver<'a, F, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::layer::fold_layer_v5;
+    use hc_core::domain::EvaluationDomain;
     use hc_core::field::prime_field::GoldilocksField;
     use hc_hash::Blake3;
+
+    type F = GoldilocksField;
+
+    fn layer_domain(n: usize) -> (EvaluationDomain<F>, LayerDomain<F>) {
+        let dom = EvaluationDomain::<F>::new_coset(n, F::from_u64(7)).unwrap();
+        let ld = LayerDomain {
+            offset: dom.offset(),
+            gen: dom.generator(),
+            size: dom.size(),
+        };
+        (dom, ld)
+    }
+
+    fn det_vec(seed: u64, n: usize) -> Vec<F> {
+        let mut x = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(1);
+        (0..n)
+            .map(|_| {
+                x = x
+                    .wrapping_mul(0x5851_F42D_4C95_7F2D)
+                    .wrapping_add(0x14_05_7B_7E_F7_67_81_4F);
+                F::from_u64(x)
+            })
+            .collect()
+    }
+
+    /// Streaming v5 producer over a full layer must equal scalar `fold_layer_v5`.
+    #[test]
+    fn streaming_v5_full_layer_matches_scalar() {
+        for &n in &[2usize, 4, 8, 16, 64, 256, 1024] {
+            let (_dom, ld) = layer_domain(n);
+            let values = det_vec(n as u64 + 1, n);
+            let beta = F::from_u64(0x1234_5678_9ABC_DEF0);
+
+            let want = fold_layer_v5(&values, &ld, beta).unwrap();
+
+            let base: Arc<dyn BlockProducer<F>> = Arc::new(VecBlockProducer::new(values.clone()));
+            let producer = FoldedLayerProducerV5 {
+                prev: base,
+                prev_len: n,
+                prev_domain: ld.clone(),
+                beta,
+            };
+            let got = producer.produce(BlockRange::new(0, n / 2)).unwrap();
+            assert_eq!(got, want, "streaming-v5 full layer mismatch at n={n}");
+        }
+    }
+
+    /// Streaming v5 producer over PARTIAL ranges (produce [0,k) then [k,half))
+    /// must concatenate to scalar `fold_layer_v5`. This catches the
+    /// two-cursor antipodal indexing bug — the partner read must use the
+    /// SAME absolute window offset by `half`, not a relative one.
+    #[test]
+    fn streaming_v5_partial_ranges_match_scalar() {
+        for &n in &[8usize, 16, 64, 256, 1024] {
+            let (_dom, ld) = layer_domain(n);
+            let values = det_vec(7 * n as u64 + 3, n);
+            let beta = F::from_u64(0xCAFE_BABE_DEAD_C0DE);
+            let half = n / 2;
+
+            let want = fold_layer_v5(&values, &ld, beta).unwrap();
+
+            let base: Arc<dyn BlockProducer<F>> = Arc::new(VecBlockProducer::new(values.clone()));
+            let producer = FoldedLayerProducerV5 {
+                prev: base,
+                prev_len: n,
+                prev_domain: ld.clone(),
+                beta,
+            };
+
+            // Split the output range at several cut points, including 1 and
+            // half-1 (asymmetric, non-WIDTH-aligned), and reassemble.
+            for &k in &[1usize, half / 3 + 1, half / 2, half - 1] {
+                if k == 0 || k >= half {
+                    continue;
+                }
+                let mut got = producer.produce(BlockRange::new(0, k)).unwrap();
+                let tail = producer.produce(BlockRange::new(k, half - k)).unwrap();
+                got.extend(tail);
+                assert_eq!(
+                    got, want,
+                    "streaming-v5 partial ranges mismatch at n={n}, split k={k}"
+                );
+            }
+
+            // Also a finer 3-way split.
+            let a = producer.produce(BlockRange::new(0, half / 4)).unwrap();
+            let b = producer
+                .produce(BlockRange::new(half / 4, half / 4))
+                .unwrap();
+            let c = producer
+                .produce(BlockRange::new(half / 2, half - half / 2))
+                .unwrap();
+            let mut got3 = a;
+            got3.extend(b);
+            got3.extend(c);
+            assert_eq!(got3, want, "streaming-v5 3-way split mismatch at n={n}");
+        }
+    }
+
+    /// Producing past the output length must clamp (return only valid indices),
+    /// matching the legacy producer's clamp behaviour.
+    #[test]
+    fn streaming_v5_clamps_past_end() {
+        let n = 64usize;
+        let (_dom, ld) = layer_domain(n);
+        let values = det_vec(99, n);
+        let beta = F::from_u64(5);
+        let base: Arc<dyn BlockProducer<F>> = Arc::new(VecBlockProducer::new(values));
+        let producer = FoldedLayerProducerV5 {
+            prev: base,
+            prev_len: n,
+            prev_domain: ld,
+            beta,
+        };
+        // Request more than n/2 outputs; expect exactly n/2.
+        let got = producer.produce(BlockRange::new(0, n)).unwrap();
+        assert_eq!(got.len(), n / 2);
+        // Fully out-of-range start -> empty.
+        let empty = producer.produce(BlockRange::new(n, 4)).unwrap();
+        assert!(empty.is_empty());
+    }
 
     #[test]
     fn prover_emits_commitments_and_final_layer() {
