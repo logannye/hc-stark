@@ -126,13 +126,13 @@ impl<F: FieldElement> BlockProducer<F> for FoldedLayerProducerV5<F> {
         let two_inv = F::from_u64(2)
             .inverse()
             .ok_or_else(|| hc_core::error::HcError::math("2 not invertible"))?;
-        // 1/(2 * D[s + k]) for k in 0..len.
-        let mut inv_two_x: Vec<F> = (0..len)
-            .map(|k| {
-                let x = self.prev_domain.point(s + k);
-                x.add(x)
-            })
-            .collect();
+        // 1/(2 * D[s + k]) for k in 0..len; D[s] via one pow, then running multiply.
+        let mut inv_two_x: Vec<F> = Vec::with_capacity(len);
+        let mut x = self.prev_domain.point(s);
+        for _ in 0..len {
+            inv_two_x.push(x.add(x));
+            x = x.mul(self.prev_domain.gen);
+        }
         batch_invert(&mut inv_two_x)?;
 
         let mut out = Vec::with_capacity(len);

@@ -133,7 +133,9 @@ mod tests {
                 gen: dom.generator(),
                 size: dom.size(),
             };
-            let values: Vec<F> = (0..n as u64).map(|i| F::from_u64(i.wrapping_mul(1000003) + 7)).collect();
+            let values: Vec<F> = (0..n as u64)
+                .map(|i| F::from_u64(i.wrapping_mul(1000003) + 7))
+                .collect();
             let beta = F::from_u64(42);
             let seq = fold_layer_v5(&values, &ld, beta).unwrap();
             let par = fold_layer_v5_parallel(&values, &ld, beta).unwrap();

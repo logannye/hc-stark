@@ -38,7 +38,9 @@ pub fn reference_fold<E: FieldElement>(values: &[E], domain: &[E], beta: E) -> V
         "values and domain must be same length"
     );
     let half = values.len() / 2;
-    let two_inv = E::from_u64(2).inverse().expect("2 must be invertible in the field");
+    let two_inv = E::from_u64(2)
+        .inverse()
+        .expect("2 must be invertible in the field");
     let mut out = Vec::with_capacity(half);
     for j in 0..half {
         let a = values[j];
@@ -222,11 +224,7 @@ mod tests {
         let domain_points: Vec<F> = (0..n).map(|i| domain.element(i)).collect();
 
         // Check domain[0]=7, domain[1]=-7
-        assert_eq!(
-            domain_points[0],
-            F::from_u64(7),
-            "D[0] must equal offset 7"
-        );
+        assert_eq!(domain_points[0], F::from_u64(7), "D[0] must equal offset 7");
         assert_eq!(
             domain_points[1],
             F::from_u64(7).neg(),

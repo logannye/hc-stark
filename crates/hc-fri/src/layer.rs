@@ -165,13 +165,14 @@ pub fn fold_layer_v5<E: FieldElement>(
     let two_inv = E::from_u64(2)
         .inverse()
         .ok_or_else(|| HcError::math("2 not invertible"))?;
-    // two_x[j] = 2 * D[j]; batch-invert in place -> 1/(2*D[j]).
-    let mut two_x: Vec<E> = (0..half)
-        .map(|j| {
-            let x = domain.point(j);
-            x.add(x)
-        })
-        .collect();
+    // two_x[j] = 2 * D[j], via running multiply (O(half), not O(half·log half)):
+    // D[0] = offset, D[j+1] = D[j] * gen. Batch-invert in place -> 1/(2*D[j]).
+    let mut two_x: Vec<E> = Vec::with_capacity(half);
+    let mut x = domain.offset;
+    for _ in 0..half {
+        two_x.push(x.add(x));
+        x = x.mul(domain.gen);
+    }
     batch_invert(&mut two_x)?;
     let mut out = Vec::with_capacity(half);
     for j in 0..half {
@@ -230,11 +231,7 @@ mod tests {
         for &n in &[2usize, 8, 64, 1024] {
             let (dom, ld) = layer_domain_for(n, 7);
             for j in 0..n {
-                assert_eq!(
-                    ld.point(j),
-                    dom.element(j),
-                    "point mismatch at n={n} j={j}"
-                );
+                assert_eq!(ld.point(j), dom.element(j), "point mismatch at n={n} j={j}");
             }
             // squared() must enumerate the squared domain D[j]^2.
             let sq = ld.squared();

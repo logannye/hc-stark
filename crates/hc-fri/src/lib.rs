@@ -19,5 +19,8 @@ pub mod verifier;
 
 pub use config::FriConfig;
 pub use prover::{FriProver, FriProverArtifacts};
-pub use queries::{get_folding_ratio, is_valid_query_index, propagate_query_index, FriProof};
+pub use queries::{
+    get_folding_ratio, is_valid_query_index, propagate_query_index, propagate_query_index_v5,
+    FriProof,
+};
 pub use verifier::FriVerifier;

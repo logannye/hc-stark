@@ -5,6 +5,12 @@
 //! STARK FRI prover — called log₂(N) times per proof, halving the
 //! polynomial each time.
 //!
+//! NOTE: this module hosts TWO folds. `try_fold_goldilocks` is the *legacy*
+//! adjacent-pair fold (`next[i] = pair[0] + beta·pair[1]`), retained only for
+//! compatibility — it is NOT a low-degree test. `try_fold_goldilocks_v5` is the
+//! sound antipodal + 1/x fold (spec §3; see `crate::reference`). New code uses
+//! the v5 path.
+//!
 //! `try_fold_goldilocks` accepts a generic `&[F]` slice and a `beta`,
 //! checks at runtime whether `F == GoldilocksField`, and if so invokes
 //! the packed-field fast path that processes WIDTH lanes at a time.
@@ -141,9 +147,15 @@ pub fn try_fold_goldilocks_v5<F: FieldElement>(
     let values_g: &[GoldilocksField] =
         unsafe { std::mem::transmute::<&[F], &[GoldilocksField]>(values) };
     let beta_g: GoldilocksField = unsafe { std::mem::transmute_copy::<F, GoldilocksField>(&beta) };
-    let domain_g: &LayerDomain<GoldilocksField> =
-        unsafe { std::mem::transmute::<&LayerDomain<F>, &LayerDomain<GoldilocksField>>(domain) };
-    let out_g = match fold_goldilocks_simd_v5(values_g, domain_g, beta_g) {
+    // Rebuild LayerDomain<GoldilocksField> by value via per-field transmute_copy
+    // (same TypeId argument as `beta_g`). This avoids transmuting a compound
+    // struct whose repr(Rust) field layout we do not control.
+    let domain_g: LayerDomain<GoldilocksField> = LayerDomain {
+        offset: unsafe { std::mem::transmute_copy::<F, GoldilocksField>(&domain.offset) },
+        gen: unsafe { std::mem::transmute_copy::<F, GoldilocksField>(&domain.gen) },
+        size: domain.size,
+    };
+    let out_g = match fold_goldilocks_simd_v5(values_g, &domain_g, beta_g) {
         Ok(v) => v,
         Err(e) => return Some(Err(e)),
     };
@@ -174,13 +186,13 @@ fn fold_goldilocks_simd_v5(
         .inverse()
         .ok_or_else(|| HcError::math("2 not invertible"))?;
 
-    // inv_two_x[j] = 1 / (2 * D[j]).
-    let mut inv_two_x: Vec<GoldilocksField> = (0..half)
-        .map(|j| {
-            let x = domain.point(j);
-            x.add(x)
-        })
-        .collect();
+    // inv_two_x[j] = 1 / (2 * D[j]); D[j] via running multiply (O(half)).
+    let mut inv_two_x: Vec<GoldilocksField> = Vec::with_capacity(half);
+    let mut x = domain.offset;
+    for _ in 0..half {
+        inv_two_x.push(x.add(x));
+        x = x.mul(domain.gen);
+    }
     batch_invert(&mut inv_two_x)?;
 
     let mut out: Vec<GoldilocksField> = Vec::with_capacity(half);
@@ -338,8 +350,8 @@ mod tests {
 
     fn layer_domain(n: usize) -> LayerDomain<GoldilocksField> {
         use hc_core::domain::EvaluationDomain;
-        let dom =
-            EvaluationDomain::<GoldilocksField>::new_coset(n, GoldilocksField::from_u64(7)).unwrap();
+        let dom = EvaluationDomain::<GoldilocksField>::new_coset(n, GoldilocksField::from_u64(7))
+            .unwrap();
         LayerDomain {
             offset: dom.offset(),
             gen: dom.generator(),
