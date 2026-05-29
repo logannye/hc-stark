@@ -13,9 +13,9 @@ use serde_json::Value as JsonValue;
 ///
 /// `Enforced` — the constraint system cryptographically binds the claim
 /// (e.g. `accumulator_step`). `StructureOnly` — the template currently
-/// only produces a well-formed accumulator proof and does NOT constrain
-/// the named predicate; it must be hidden/refused in production until a
-/// real AIR lands (see the Phase 1B roadmap).
+/// only produces a structurally valid proof and does NOT cryptographically
+/// constrain the named predicate; it must be hidden/refused in production
+/// until a real AIR lands (see the Phase 1B roadmap).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Enforcement {
@@ -50,11 +50,11 @@ pub struct ProofTemplate {
     pub parameters: &'static [StaticParam],
     pub tags: &'static [&'static str],
     pub cost_category: &'static str,
+    /// Whether this template's AIR enforces its named predicate.
+    pub enforcement: Enforcement,
     /// JSON example as a string literal (parsed on demand).
     pub example_json: &'static str,
     pub build_program: fn(&serde_json::Map<String, JsonValue>) -> Result<TemplateBuildResult>,
-    /// Whether this template's AIR enforces its named predicate.
-    pub enforcement: Enforcement,
 }
 
 inventory::collect!(ProofTemplate);
@@ -209,7 +209,15 @@ mod enforcement_classification_tests {
             .filter(|t| t.enforcement == Enforcement::Enforced)
             .map(|t| t.id)
             .collect();
-        assert_eq!(enforced, vec!["accumulator_step"]);
+        assert_eq!(
+            enforced.len(),
+            1,
+            "expected exactly one Enforced template, got {enforced:?}"
+        );
+        assert!(
+            enforced.contains(&"accumulator_step"),
+            "accumulator_step must be the Enforced template"
+        );
     }
 
     #[test]
