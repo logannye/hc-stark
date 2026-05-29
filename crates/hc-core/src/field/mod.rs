@@ -51,6 +51,19 @@ pub trait FieldElement:
         self.pow(exp)
     }
 
+    /// Number of 64-bit base-field limbs of entropy this field needs when
+    /// sampled from a transcript. Base fields = 1; degree-d extensions = d.
+    const EXTENSION_DEGREE: usize = 1;
+
+    /// Build a field element from `EXTENSION_DEGREE` base-field limbs (uniform
+    /// `u64`s drawn from the transcript digest). The slice length equals
+    /// `EXTENSION_DEGREE`. Default implementation (base fields): reduces the
+    /// single limb via `from_u64`. Extension fields override to fill all
+    /// coefficients independently.
+    fn from_base_u64s(limbs: &[u64]) -> Self {
+        Self::from_u64(limbs[0])
+    }
+
     /// Construct from a canonical `u64`.
     fn from_u64(value: u64) -> Self;
     /// Convert into its canonical `u64` representative.

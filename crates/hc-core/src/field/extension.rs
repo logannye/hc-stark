@@ -140,6 +140,12 @@ impl<F: FieldElement> FieldElement for QuadExtension<F> {
         self.mul(self)
     }
 
+    const EXTENSION_DEGREE: usize = 2;
+
+    fn from_base_u64s(limbs: &[u64]) -> Self {
+        Self::new(F::from_u64(limbs[0]), F::from_u64(limbs[1]))
+    }
+
     fn from_u64(value: u64) -> Self {
         Self {
             c0: F::from_u64(value),
