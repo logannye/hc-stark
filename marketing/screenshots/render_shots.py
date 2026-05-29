@@ -3,8 +3,8 @@
 Render the three TinyZKP MCP directory submission screenshots.
 
 Inputs:
-  - /tmp/mcp-shots/{prove1,poll1,summary1,proof1,verify1}.json  (range_proof)
-  - /tmp/mcp-shots/{prove3,poll3,proof3,verify3}.json           (policy_compliance)
+  - /tmp/mcp-shots/{prove1,poll1,summary1,proof1,verify1}.json  (accumulator_step)
+  - /tmp/mcp-shots/{prove3,poll3,proof3,verify3}.json           (accumulator_step)
 
 Output:
   - marketing/screenshots/shot1_range_prove.png
@@ -38,7 +38,7 @@ def truncate_b64(b64: str, head=44, tail=20) -> str:
 
 
 def shot1_html() -> str:
-    """Range proof: balance in [0, 10000]."""
+    """Accumulator step: balance from 1000 to 1045 via deltas."""
     summary = load("summary1") if isinstance(load("summary1"), dict) else {}
     poll = load("poll1")
     proof = load("proof1")
@@ -57,9 +57,10 @@ def shot1_html() -> str:
 </div>
 
 <div class="caption">
-  Generated a zero-knowledge proof that an account balance falls between
-  <strong>$0</strong> and <strong>$10,000</strong> — without revealing the
-  actual amount. The proof is a self-contained binary blob anyone can verify.
+  Generated a zero-knowledge proof that an account moved from
+  <strong>1,000</strong> to <strong>1,045</strong> via the declared deltas —
+  without revealing private details. The proof is a self-contained binary blob
+  anyone can verify.
 </div>
 
 <div class="card">
@@ -68,17 +69,20 @@ def shot1_html() -> str:
     <div class="tool">prove_template</div>
     <div class="arrow">→</div>
     <div class="server">tinyzkp</div>
-    <div class="meta">range_proof · zk on</div>
+    <div class="meta">accumulator_step · zk on</div>
   </div>
   <div class="body stack">
     <div class="row">
-      <div class="label">Public bounds</div>
-      <div class="value"><span class="accent">min</span> = 0 &nbsp; · &nbsp;
-        <span class="accent">max</span> = 10,000</div>
+      <div class="label">Initial</div>
+      <div class="value"><span class="accent">1,000</span></div>
     </div>
     <div class="row">
-      <div class="label">Private value</div>
-      <div class="value"><span class="muted">⟨ hidden — never sent over the wire ⟩</span></div>
+      <div class="label">Final</div>
+      <div class="value"><span class="accent">1,045</span></div>
+    </div>
+    <div class="row">
+      <div class="label">Deltas</div>
+      <div class="value"><span class="muted">[10, 20, 15] — sum verifies transition</span></div>
     </div>
     <div class="row">
       <div class="label">Status</div>
@@ -88,7 +92,7 @@ def shot1_html() -> str:
     <div class="row">
       <div class="label">Proof</div>
       <div class="value code">{proof_short}
-        <div style="margin-top:8px;color:var(--dim);font-size:12px">{proof_size} KB · base64-encoded · ≥128-bit soundness · template <span class="accent">range_proof</span></div></div>
+        <div style="margin-top:8px;color:var(--dim);font-size:12px">{proof_size} KB · base64-encoded · ZK-STARK · template <span class="accent">accumulator_step</span></div></div>
     </div>
   </div>
 </div>
@@ -150,21 +154,21 @@ def shot2_html() -> str:
     <div class="verdict">
       <div class="icon">✓</div>
       <div class="text">The proof <span class="bold">is valid</span> —
-        the prover's secret value really does lie in [0, 10000], and the
+        the declared transition really did happen as stated, and the
         verifier learned nothing else about it.</div>
     </div>
   </div>
 </div>
 
 <div class="footer">
-  Verifiable from any language: drop-in WASM verifier, EVM contracts, or this MCP tool.
+  Verifiable from any language: drop-in WASM verifier, or this MCP tool — no round-trip needed.
 </div>
 """
     return TEMPLATE.replace("__TITLE__", "TinyZKP — Verify Proof").replace("__CONTENT__", content)
 
 
 def shot3_html() -> str:
-    """Policy compliance: prove sum of agent actions stayed under threshold."""
+    """Accumulator step: prove state machine advanced from start to end via declared steps."""
     poll = load("poll3")
     proof = load("proof3")
     job_id = poll.get("job_id", "—")
@@ -182,9 +186,10 @@ def shot3_html() -> str:
 </div>
 
 <div class="caption">
-  Generated a <strong>policy-compliance receipt</strong> for an agent's
-  spending — proves that the cumulative cost of every action stayed
-  under <strong>$1,000</strong>, without revealing the individual purchases.
+  Generated a <strong>state-transition receipt</strong> for an agent's
+  run — proves that the running total advanced from a declared start to a
+  declared end via a recorded sequence of steps, without revealing intermediate
+  values.
 </div>
 
 <div class="card">
@@ -193,16 +198,20 @@ def shot3_html() -> str:
     <div class="tool">prove_template</div>
     <div class="arrow">→</div>
     <div class="server">tinyzkp</div>
-    <div class="meta">policy_compliance · zk on</div>
+    <div class="meta">accumulator_step · zk on</div>
   </div>
   <div class="body stack">
     <div class="row">
-      <div class="label">Public rule</div>
-      <div class="value"><span class="accent">sum of actions &le; 1,000</span></div>
+      <div class="label">Initial</div>
+      <div class="value"><span class="accent">0</span></div>
     </div>
     <div class="row">
-      <div class="label">Private list</div>
-      <div class="value"><span class="muted">⟨ 5 individual amounts — never sent over the wire ⟩</span></div>
+      <div class="label">Final</div>
+      <div class="value"><span class="accent">945</span></div>
+    </div>
+    <div class="row">
+      <div class="label">Steps</div>
+      <div class="value"><span class="muted">⟨ 5 individual deltas — never sent over the wire ⟩</span></div>
     </div>
     <div class="row">
       <div class="label">Status</div>
@@ -212,13 +221,13 @@ def shot3_html() -> str:
     <div class="row">
       <div class="label">Proof</div>
       <div class="value code">{proof_short}
-        <div style="margin-top:8px;color:var(--dim);font-size:12px">{proof_size} KB · base64-encoded · ≥128-bit soundness · template <span class="accent">policy_compliance</span></div></div>
+        <div style="margin-top:8px;color:var(--dim);font-size:12px">{proof_size} KB · base64-encoded · ZK-STARK · template <span class="accent">accumulator_step</span></div></div>
     </div>
   </div>
 </div>
 
 <div class="footer">
-  6 production templates · range_proof · hash_preimage · policy_compliance · data_integrity · accumulator_step · computation_attestation
+  State-transition proofs · accumulator_step · transparent (no trusted setup) · ZK-STARK
 </div>
 """
     return TEMPLATE.replace("__TITLE__", "TinyZKP — Policy Compliance").replace("__CONTENT__", content)

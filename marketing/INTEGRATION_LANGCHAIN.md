@@ -34,31 +34,28 @@ from tinyzkp import TinyZKP
 
 zkp = TinyZKP("https://api.tinyzkp.com", api_key="tzk_...")
 
-async def prove_range(args: dict) -> str:
-    job_id = await zkp.prove_template("range_proof", params=args)
+async def prove_accumulator(args: dict) -> str:
+    job_id = await zkp.prove_template("accumulator_step", params=args)
     proof = await zkp.wait_for_proof(job_id)
     return f"proof_id={job_id}, version={proof['version']}, bytes_kb={proof['size_kb']}"
 
-tools = [Tool(name="prove_range", func=prove_range, description="Prove a value lies in [min, max] without revealing it. Args: {min, max, witness_steps}.")]
+tools = [Tool(name="prove_accumulator", func=prove_accumulator, description="Prove a state transition from initial to final value via discrete deltas. Args: {initial, final, deltas}.")]
 agent = initialize_agent(tools, ChatAnthropic(model="claude-opus-4-5"), agent=AgentType.OPENAI_FUNCTIONS)
 
-result = agent.run("Prove that 42 is in the range [0, 100] without revealing the value.")
+result = agent.run("Prove that an account moved from 1000 to 1045 via the deltas [10, 20, 15].")
 ```
 
 That's the whole integration. The agent now decides on its own when to mint a proof, gets a `proof_id`, and can return it to the user as a receipt. Verification is a separate `await zkp.verify(proof)` call, free to call, sub-5ms in WASM.
 
 ## What you can prove today
 
-TinyZKP ships 6 templates that cover most attestation patterns agents care about:
+TinyZKP supports state-transition and accumulator proofs — the patterns agents care about most:
 
-| Template | When the agent uses it |
+| Pattern | When the agent uses it |
 |---|---|
-| `range_proof` | "User is between 18 and 65" — without storing the birthdate |
-| `hash_preimage` | "I know the password that hashes to X" — for credential checks |
-| `computation_attestation` | "I ran f() on these private inputs and got this public output" |
-| `accumulator_step` | "The state machine moved from A to B by these specific deltas" |
-| `policy_compliance` | "The agent's spending stayed under the $100 cap this session" |
-| `data_integrity` | "These data rows sum to this checksum the user committed to earlier" |
+| `accumulator_step` | "The state machine moved from A to B by these specific deltas" — for receipts, audit chains, balance proofs |
+
+For the current list of available patterns, call `list_templates` via the MCP server or the REST API.
 
 The patterns map cleanly onto things a LangChain agent already does — chain-of-thought verification, tool-call provenance, RAG output attestation.
 
