@@ -49,7 +49,6 @@ pub const FRI_GRINDING_NONCE: &[u8] = b"fri/grinding_nonce";
 **Files:**
 - Create: `crates/hc-fri/src/reference.rs`
 - Modify: `crates/hc-fri/src/lib.rs` (add `pub mod reference;`)
-- Create: `docs/fri-reference-vectors.md` (the independent derivation)
 
 This is the differential oracle (spec §10.2) and the executable definition of the correct fold. Pure, obvious, un-optimized.
 
@@ -87,18 +86,15 @@ pub fn reference_fold<E: FieldElement>(values: &[E], domain: &[E], beta: E) -> V
 
 (If `FieldElement` lacks `sub`, use `a.add(b.neg())` — check the trait in `hc-core/src/field/mod.rs` and match it.)
 
-- [ ] **Step 2 — Independently compute vectors.** Write `docs/fri-reference-vectors.md` containing a short Python/sage snippet that computes, over Goldilocks `p = 2^64 - 2^32 + 1`, the fold of 2–3 small codewords on an explicit coset domain, and paste its numeric outputs. Example structure:
+- [ ] **Step 2 — Independent oracle: polynomial round-trip** (supersedes the earlier Python-vectors idea — strictly better: no interpolation, no domain-generator replication, and it directly tests the degree-halving property). The fold of `f`'s evaluations must equal the evaluations of the *directly-computed* half-degree polynomial `g(Y) = f_e(Y) + β·f_o(Y)` where `g.coeffs[i] = c[2i] + β·c[2i+1]`. Add a tiny convention-free `eval_poly(coeffs, x) = Σ coeffs[i]·xⁱ` (Horner) helper in the test module.
 
-```
-# Goldilocks p = 18446744069414584321
-# domain: D[j] = offset * g^j, g a 2^k-th root of unity, offset = 7
-# fold: out[j] = (f[j]+f[j+n/2])/2 + beta*(f[j]-f[j+n/2])/(2*D[j])  mod p
-# (snippet that prints out[] for n=4 and n=8; values pasted below)
-```
+- [ ] **Step 3 — Write tests** in `reference.rs`:
+  - **Polynomial round-trip (primary differential):** for assorted even `n` (2,4,8,16,64) and random `coeffs: [F; n]`, random `β`, build the coset `D` via `hc_core::domain::EvaluationDomain::new_coset(n, offset=7)` (this enumeration guarantees `D[j+n/2] = −D[j]`, which the antipodal pairing requires — assert this property once as a guard). Then `values[i] = eval_poly(&coeffs, D[i])`; `g_coeffs[i] = coeffs[2i] + β·coeffs[2i+1]` for `i in 0..n/2`; `expected[j] = eval_poly(&g_coeffs, D[j]·D[j])`. Assert `reference_fold(values, D_points, β) == expected`. (All in `E = GoldilocksField` here; `D_points[j] = D.element(j)`.)
+  - **Hand anchor (n=2):** `D = [offset, −offset]`, `out[0] = (f0+f1)/2 + β·(f0−f1)/(2·offset)`. Assert `reference_fold` matches this closed form for fixed small `f0,f1,β,offset` (document the by-hand arithmetic in a comment).
 
-- [ ] **Step 3 — Write tests** in `reference.rs` asserting `reference_fold` reproduces the pasted vectors exactly (build the domain with `hc_core::domain::EvaluationDomain::new_coset`, offset 7, embed to `E = GoldilocksField` for these base-field vectors). Run `cargo test -p hc-fri reference`. Expected: PASS.
+  Run `cargo test -p hc-fri reference`. Expected: PASS.
 
-- [ ] **Step 4 — Commit.** `test(fri): naive antipodal reference fold + independent vectors (differential oracle)`.
+- [ ] **Step 4 — Commit.** `test(fri): naive antipodal reference fold + polynomial round-trip oracle (differential)`.
 
 ---
 
