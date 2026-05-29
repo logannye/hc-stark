@@ -21,7 +21,7 @@
 //!   backend field, so this module attaches `"vm"` to it explicitly.
 
 use crate::spartan_templates::SpartanTemplateInfo;
-use crate::templates::TemplateInfo;
+use crate::templates::{Enforcement, TemplateInfo};
 use crate::zkml_templates::ZkmlTemplateInfo;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -41,6 +41,7 @@ pub struct UnifiedTemplateInfo {
     pub example: JsonValue,
     /// One of: `"vm"`, `"zkml"`, `"spartan"`.
     pub backend: &'static str,
+    pub enforcement: Enforcement,
 }
 
 impl UnifiedTemplateInfo {
@@ -53,6 +54,7 @@ impl UnifiedTemplateInfo {
             cost_category: info.cost_category,
             example: info.example,
             backend: "vm",
+            enforcement: info.enforcement,
         }
     }
 
@@ -65,6 +67,7 @@ impl UnifiedTemplateInfo {
             cost_category: info.cost_category,
             example: info.example,
             backend: info.backend,
+            enforcement: Enforcement::StructureOnly,
         }
     }
 
@@ -77,6 +80,7 @@ impl UnifiedTemplateInfo {
             cost_category: info.cost_category,
             example: info.example,
             backend: info.backend,
+            enforcement: Enforcement::StructureOnly,
         }
     }
 }
@@ -94,6 +98,34 @@ pub fn list_all_templates() -> Vec<UnifiedTemplateInfo> {
         out.push(UnifiedTemplateInfo::from_spartan(t.to_info()));
     }
     out
+}
+
+/// Resolve a template's enforcement across all backends. `None` if the id
+/// is unknown. zkML and Spartan templates are preview => `StructureOnly`.
+pub fn enforcement_for(id: &str) -> Option<Enforcement> {
+    if let Some(t) = crate::templates::template_by_id(id) {
+        return Some(t.enforcement);
+    }
+    if crate::zkml_templates::describe_zkml_template(id).is_some()
+        || crate::spartan_templates::describe_spartan_template(id).is_some()
+    {
+        return Some(Enforcement::StructureOnly);
+    }
+    None
+}
+
+/// Should this enforcement level appear in public listings?
+pub fn is_listable(enforcement: Enforcement, allow_unaudited: bool) -> bool {
+    matches!(enforcement, Enforcement::Enforced) || allow_unaudited
+}
+
+/// May a prove/estimate request for this template id proceed?
+/// Unknown ids are never dispatchable.
+pub fn is_dispatchable(id: &str, allow_unaudited: bool) -> bool {
+    match enforcement_for(id) {
+        Some(e) => is_listable(e, allow_unaudited),
+        None => false,
+    }
 }
 
 #[cfg(test)]
@@ -135,5 +167,40 @@ mod tests {
     fn unified_listing_is_nonempty() {
         let all = list_all_templates();
         assert!(!all.is_empty());
+    }
+
+    #[test]
+    fn unified_info_carries_enforcement() {
+        let all = list_all_templates();
+        let acc = all.iter().find(|t| t.id == "accumulator_step").unwrap();
+        assert_eq!(acc.enforcement, crate::templates::Enforcement::Enforced);
+        let range = all.iter().find(|t| t.id == "range_proof").unwrap();
+        assert_eq!(
+            range.enforcement,
+            crate::templates::Enforcement::StructureOnly
+        );
+    }
+
+    #[test]
+    fn enforcement_for_resolves_all_backends() {
+        use crate::templates::Enforcement;
+        assert_eq!(enforcement_for("accumulator_step"), Some(Enforcement::Enforced));
+        assert_eq!(enforcement_for("range_proof"), Some(Enforcement::StructureOnly));
+        // zkML/Spartan are preview => structure-only.
+        assert_eq!(enforcement_for("zkml_matmul"), Some(Enforcement::StructureOnly));
+        assert_eq!(enforcement_for("spartan_r1cs"), Some(Enforcement::StructureOnly));
+        assert_eq!(enforcement_for("does_not_exist"), None);
+    }
+
+    #[test]
+    fn dispatch_and_listing_truth_table() {
+        // Enforced: always listable + dispatchable.
+        assert!(is_dispatchable("accumulator_step", false));
+        assert!(is_dispatchable("accumulator_step", true));
+        // StructureOnly: only when unaudited explicitly allowed.
+        assert!(!is_dispatchable("range_proof", false));
+        assert!(is_dispatchable("range_proof", true));
+        // Unknown id: never dispatchable.
+        assert!(!is_dispatchable("does_not_exist", true));
     }
 }
