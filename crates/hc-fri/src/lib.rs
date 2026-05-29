@@ -11,6 +11,7 @@ pub mod oracles;
 pub mod parallel;
 pub mod prover;
 pub mod queries;
+pub mod reference;
 pub mod simd_fold;
 pub mod stream;
 pub mod util;
