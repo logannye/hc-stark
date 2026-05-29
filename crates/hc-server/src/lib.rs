@@ -3457,8 +3457,6 @@ mod pricing_parity_tests {
 
 #[cfg(test)]
 mod honest_catalog_tests {
-    use super::*;
-
     #[test]
     fn default_catalog_lists_only_enforced() {
         let listed: Vec<String> = hc_workloads::list_all_templates()
