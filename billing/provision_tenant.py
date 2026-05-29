@@ -703,13 +703,48 @@ def session_usage():
     key = _recover_api_key(tid)
     if not key:
         return flask.jsonify(error="key unavailable"), 500
+    data = flask.request.get_json(silent=True) or {}
+    params = {}
+    if data.get("since") is not None: params["since"] = data["since"]
+    if data.get("until") is not None: params["until"] = data["until"]
     try:
-        r = requests.get("http://localhost:8080/usage",
+        r = requests.get("http://localhost:8080/usage", params=params,
                          headers={"Authorization": f"Bearer {key}"}, timeout=10)
         return (r.text, r.status_code, {"Content-Type": "application/json"})
     except Exception as e:
         print(f"session/usage upstream error: {e}", file=sys.stderr)
         return flask.jsonify(error="usage unavailable"), 502
+
+
+@app.route("/session/jobs", methods=["POST"])
+def session_jobs():
+    if not _require_internal_secret():
+        return flask.jsonify(error="unauthorized"), 403
+    conn = tenant_store.open_db()
+    tid = _session_tenant(conn); conn.close()
+    if not tid:
+        return flask.jsonify(error="invalid session"), 401
+    key = _recover_api_key(tid)
+    if not key:
+        return flask.jsonify(error="key unavailable"), 500
+    data = flask.request.get_json(silent=True) or {}
+    try:
+        limit = max(1, min(100, int(data.get("limit", 50))))
+    except (TypeError, ValueError):
+        limit = 50
+    params = {"limit": limit}
+    if data.get("offset") is not None:
+        try:
+            params["offset"] = max(0, int(data["offset"]))
+        except (TypeError, ValueError):
+            pass
+    try:
+        r = requests.get("http://localhost:8080/prove", params=params,
+                         headers={"Authorization": f"Bearer {key}"}, timeout=10)
+        return (r.text, r.status_code, {"Content-Type": "application/json"})
+    except Exception as e:
+        print(f"session/jobs upstream error: {e}", file=sys.stderr)
+        return flask.jsonify(error="jobs unavailable"), 502
 
 
 @app.route("/logout", methods=["POST"])
