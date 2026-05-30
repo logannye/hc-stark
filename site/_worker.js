@@ -21,6 +21,11 @@ import * as demoVerify         from "./functions/api/demo-verify.js";
 import * as rotateKey          from "./functions/api/rotate-key.js";
 import * as sendMagicLink      from "./functions/api/send-magic-link.js";
 import * as verifyMagicLink    from "./functions/api/verify-magic-link.js";
+import * as sessionResolve     from "./functions/api/session-resolve.js";
+import * as revealKey          from "./functions/api/reveal-key.js";
+import * as logout             from "./functions/api/logout.js";
+import * as usage              from "./functions/api/usage.js";
+import * as jobs               from "./functions/api/jobs.js";
 
 const ROUTES = {
   "/api/contact":              contact,
@@ -33,6 +38,11 @@ const ROUTES = {
   "/api/rotate-key":           rotateKey,
   "/api/send-magic-link":      sendMagicLink,
   "/api/verify-magic-link":    verifyMagicLink,
+  "/api/session-resolve":      sessionResolve,
+  "/api/reveal-key":           revealKey,
+  "/api/logout":               logout,
+  "/api/usage":                usage,
+  "/api/jobs":                 jobs,
 };
 
 // Map HTTP method → expected export name on the function module.
