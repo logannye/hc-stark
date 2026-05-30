@@ -135,10 +135,16 @@ log "── API: Health & Monitoring ──"
 test_api GET "/healthz"
 test_api GET "/readyz"
 
-# Metrics — verify Prometheus text format
-metrics_resp=$(test_api GET "/metrics")
-if ! echo "$metrics_resp" | grep -q "hc_prove_submitted_total"; then
-    log "  WARN  /metrics missing expected counter hc_prove_submitted_total"
+# Metrics — G10: /metrics is now gated by HC_METRICS_TOKEN. An unauthenticated
+# request must be rejected (401); Prometheus scrapes it with the token. The
+# audit confirms the gate is live, and — if HC_METRICS_TOKEN is exported —
+# additionally verifies the counter is exposed to an authorized scraper.
+test_api GET "/metrics" "" "401" > /dev/null
+if [ -n "${HC_METRICS_TOKEN:-}" ]; then
+    metrics_resp=$(test_api GET "/metrics" "" "200" "15" "Authorization: Bearer $HC_METRICS_TOKEN")
+    if ! echo "$metrics_resp" | grep -q "hc_prove_submitted_total"; then
+        log "  WARN  /metrics missing expected counter hc_prove_submitted_total"
+    fi
 fi
 
 # ══════════════════════════════════════════════════════════════════
@@ -162,8 +168,9 @@ if ! echo "$estimate_resp" | grep -q '"estimated_cost_cents"'; then
     log "  WARN  /estimate response missing 'estimated_cost_cents'"
 fi
 
-# Template detail
-test_api GET "/templates/range_proof" > /dev/null
+# Template detail — accumulator_step is the current built-in template
+# (range_proof was retired in the v5 sound-FRI cutover, Phase 1A).
+test_api GET "/templates/accumulator_step" > /dev/null
 
 # ══════════════════════════════════════════════════════════════════
 # 3. API SERVER — Auth Rejection (3 tests)
@@ -177,11 +184,13 @@ test_api GET  "/usage" "" "401" > /dev/null
 test_api POST "/prove/batch" \
     '{"requests":[{"initial_acc":0,"final_acc":10,"block_size":8,"fri_final_poly_size":4}]}' \
     "401" > /dev/null
-# Send a structurally-valid body so the Json extractor succeeds and the
-# auth check runs (matches how /prove and /prove/batch are tested above).
+# /aggregate (recursive aggregation) is gated OFF pending the G2 soundness
+# fix: it returns 410 Gone for any structurally-valid request, before the
+# auth check. Restore this to a 401 auth-rejection test when Phase 1B
+# re-enables the endpoint.
 test_api POST "/aggregate" \
     '{"job_ids":["00000000-0000-0000-0000-000000000000"]}' \
-    "401" > /dev/null
+    "410" > /dev/null
 test_api GET  "/prove" "" "401" > /dev/null
 
 # ══════════════════════════════════════════════════════════════════
@@ -328,10 +337,11 @@ if [ -n "$API_KEY" ]; then
         FAILURES="$FAILURES\n  --- prove (cancel test) returned no job_id"
     fi
 
-    # Template proof — range_proof template using minimal valid params.
-    # Schema requires the parameters wrapped in a "params" object.
-    template_resp=$(test_api POST "/prove/template/range_proof" \
-        '{"params":{"min":0,"max":100,"witness_steps":[42]}}' \
+    # Template proof — accumulator_step template using minimal valid params
+    # (range_proof was retired in the v5 cutover). Schema requires the
+    # parameters wrapped in a "params" object.
+    template_resp=$(test_api POST "/prove/template/accumulator_step" \
+        '{"params":{"initial":0,"final":15,"deltas":[5,3,7]}}' \
         "200" "60" "$AUTH_HDR")
     TEMPLATE_JOB=$(echo "$template_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
     if [ -n "$TEMPLATE_JOB" ]; then
@@ -652,7 +662,22 @@ test_cf_function() {
 # Signup / billing
 test_cf_function POST /api/create-free-account "free-signup route"
 test_cf_function POST /api/create-checkout     "checkout route"
-test_cf_function POST /api/create-portal-session "Stripe billing portal"
+# create-portal-session is session-gated (G3): an unauthenticated request
+# returns 401 ("no session"), not a 400 body-validation error. Confirm the
+# route is mounted and refuses portal access without a session.
+TOTAL=$((TOTAL + 1))
+portal_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+    -X POST -H "Content-Type: application/json" -H "Origin: https://tinyzkp.com" \
+    -d '{}' "$SITE/api/create-portal-session" 2>/dev/null) || portal_code="000"
+if [ "$portal_code" = "401" ] || [ "$portal_code" = "429" ]; then
+    log "  PASS  $portal_code  POST /api/create-portal-session (session-gated)"
+    PASS=$((PASS + 1))
+else
+    log "  FAIL  $portal_code  POST /api/create-portal-session (expected 401|429)"
+    FAIL=$((FAIL + 1))
+    FAILURES="$FAILURES\n  $portal_code POST /api/create-portal-session (expected 401|429)"
+fi
+sleep 0.5
 test_cf_function POST /api/contact             "contact form"
 
 # Auth (magic-link)
