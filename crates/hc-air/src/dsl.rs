@@ -236,6 +236,65 @@ impl<F: FieldElement> ConstraintSystem<F> {
         Ok(result)
     }
 
+    /// Compute raw boundary and transition sums in the base field, BEFORE any α-combination.
+    ///
+    /// Returns `(boundary_sum, transition_sum)` where:
+    /// - `boundary_sum` = sum of all boundary constraint evaluations (each multiplied by its
+    ///   Lagrange selector l0 or l_last, but NOT by any power of alpha).
+    /// - `transition_sum` = sum of all transition constraint evaluations (each masked by
+    ///   `selector_last`, but NOT by any power of alpha).
+    ///
+    /// These raw values let callers form the α-combination in an extension field K:
+    /// `alpha_boundary * boundary_sum + alpha_transition * transition_sum`.
+    ///
+    /// Note: this differs from `evaluate_quotient_numerator` which uses a single alpha
+    /// across a power series over ALL constraints. For `DslAir` the consistency invariant
+    /// `alpha_b * b + alpha_t * t == quotient_numerator` only holds for single-constraint
+    /// systems; with multiple constraints the power-series mixing differs.
+    pub fn evaluate_constraint_values(
+        &self,
+        current: &[F],
+        next: &[F],
+        l0: F,
+        l_last: F,
+        selector_last: F,
+    ) -> HcResult<(F, F)> {
+        if current.len() != self.width || next.len() != self.width {
+            return Err(HcError::invalid_argument(format!(
+                "row width mismatch: got ({}, {}), expected {}",
+                current.len(),
+                next.len(),
+                self.width
+            )));
+        }
+
+        let mut boundary_sum = F::ZERO;
+        for bp in &self.boundaries {
+            let diff = current[bp.column].sub(bp.value);
+            let eval = match bp.position {
+                BoundaryPosition::First => diff.mul(l0),
+                BoundaryPosition::Last => diff.mul(l_last),
+            };
+            boundary_sum = boundary_sum.add(eval);
+        }
+
+        let mut transition_sum = F::ZERO;
+        for tc in &self.transitions {
+            transition_sum = transition_sum.add(selector_last.mul(tc(current, next)));
+        }
+        for ct in &self.conditional_transitions {
+            let selector_match = current[ct.selector_col].sub(ct.selector_value);
+            let eval = if selector_match == F::ZERO {
+                selector_last.mul((ct.constraint)(current, next))
+            } else {
+                F::ZERO
+            };
+            transition_sum = transition_sum.add(eval);
+        }
+
+        Ok((boundary_sum, transition_sum))
+    }
+
     /// Evaluate the quotient numerator for DEEP-STARK.
     ///
     /// This is similar to `evaluate_composition` but uses Lagrange selectors
@@ -365,6 +424,21 @@ impl<F: FieldElement> super::air::DeepStarkAir<F> for DslAir<F> {
             selector_last,
             alpha_boundary,
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn constraint_values(
+        &self,
+        current: &[F],
+        next: &[F],
+        l0: F,
+        l_last: F,
+        selector_last: F,
+        _initial_acc: F,
+        _final_acc: F,
+    ) -> HcResult<(F, F)> {
+        self.system
+            .evaluate_constraint_values(current, next, l0, l_last, selector_last)
     }
 }
 
