@@ -2646,120 +2646,28 @@ pub struct AggregateProofSummary {
     responses(
         (status = 200, body = AggregateResponse),
         (status = 400, description = "Bad request"),
-        (status = 409, description = "One or more proofs not ready")
+        (status = 409, description = "One or more proofs not ready"),
+        (status = 410, description = "Endpoint disabled pending soundness fix (audit finding G2)")
     )
 )]
 async fn aggregate(
-    State(state): State<AppState>,
-    headers: axum::http::HeaderMap,
-    Json(req): Json<AggregateRequest>,
+    State(_state): State<AppState>,
+    _headers: axum::http::HeaderMap,
+    _req: axum::extract::Json<AggregateRequest>,
 ) -> Result<Json<AggregateResponse>, ApiError> {
-    let tenant = guarded_auth(&state, &headers)?;
-
-    if !check_rate_limit(&state, &tenant.tenant_id, &tenant.plan, RateEndpoint::Prove) {
-        state
-            .metrics
-            .rate_limit_rejections
-            .with_label_values(&["prove"])
-            .inc();
-        return Err(ApiError::new(
-            StatusCode::TOO_MANY_REQUESTS,
-            "rate_limited",
-            "rate limit exceeded",
-        ));
-    }
-
-    if req.job_ids.is_empty() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "bad_request",
-            "must provide at least one job_id",
-        ));
-    }
-    if req.job_ids.len() > 100 {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "bad_request",
-            "aggregate batch exceeds maximum of 100 proofs",
-        ));
-    }
-
-    // Load and decode all proofs into verifier Proof objects.
-    let mut verifier_proofs = Vec::with_capacity(req.job_ids.len());
-    for jid_str in &req.job_ids {
-        let jid = Uuid::parse_str(jid_str).map_err(|_| {
-            ApiError::new(
-                StatusCode::BAD_REQUEST,
-                "bad_request",
-                format!("invalid job_id: {jid_str}"),
-            )
-        })?;
-        let proof_bytes = load_completed_proof(&state, &tenant.tenant_id, jid)?;
-        let output = decode_proof_bytes(&proof_bytes)
-            .map_err(|e| ApiError::internal(format!("failed to decode proof {jid_str}: {e}")))?;
-
-        verifier_proofs.push(hc_verifier::Proof {
-            version: output.version,
-            trace_commitment: output.trace_commitment,
-            composition_commitment: output.composition_commitment,
-            fri_proof: output.fri_proof,
-            initial_acc: output.public_inputs.initial_acc,
-            final_acc: output.public_inputs.final_acc,
-            query_response: output.query_response,
-            trace_length: output.trace_length,
-            params: output.params,
-        });
-    }
-
-    let spec = hc_recursion::RecursionSpec {
-        max_depth: req.max_depth.unwrap_or(4),
-        fan_in: req.fan_in.unwrap_or(8),
-    };
-
-    // Aggregation is CPU-intensive — run on blocking thread pool.
-    let start = std::time::Instant::now();
-    let aggregated = tokio::task::spawn_blocking(move || {
-        hc_recursion::aggregate_with_spec(&spec, &verifier_proofs)
-    })
-    .await
-    .map_err(|e| ApiError::internal(format!("aggregation task failed: {e}")))?
-    .map_err(|e| ApiError::internal(format!("aggregation failed: {e}")))?;
-
-    let elapsed_ms = start.elapsed().as_millis() as u64;
-
-    let summaries: Vec<AggregateProofSummary> = aggregated
-        .summaries
-        .iter()
-        .map(|s| {
-            use hc_core::field::FieldElement;
-            AggregateProofSummary {
-                trace_commitment_digest: hex::encode(s.trace_commitment_digest.as_bytes()),
-                initial_acc: s.initial_acc.to_u64(),
-                final_acc: s.final_acc.to_u64(),
-                trace_length: s.trace_length,
-            }
-        })
-        .collect();
-
-    // Record usage — bill aggregate based on total trace length.
-    if let Some(ref usage) = state.usage_log {
-        let total_trace: usize = aggregated.summaries.iter().map(|s| s.trace_length).sum();
-        let _ = usage.record(
-            &tenant.tenant_id,
-            &format!("agg-{}", Uuid::new_v4()),
-            total_trace,
-            Some("aggregate"),
-            elapsed_ms,
-        );
-    }
-
-    Ok(Json(AggregateResponse {
-        status: "completed".to_string(),
-        proof_count: aggregated.total_proofs,
-        root_digest: hex::encode(aggregated.digest.as_bytes()),
-        aggregation_time_ms: elapsed_ms,
-        summaries,
-    }))
+    // SOUNDNESS GATE — audit finding G2 (Phase 1A follow-on, Task 9).
+    //
+    // The in-circuit Halo2 FRI fold in `hc_recursion::circuit::verify_fri`
+    // (verify_fri.rs:74) is vacuous: it checks `vnext - (v0 + beta*v1)`
+    // (adjacent-pair, no 1/x), so any recursively-aggregated proof inherits
+    // the G2 unsoundness. This endpoint is DISABLED until the Phase-1B
+    // in-circuit fold fix lands.
+    Err(ApiError::new(
+        StatusCode::GONE,
+        "recursion_disabled",
+        "recursive aggregation is unavailable pending a soundness fix (audit finding G2); \
+         this endpoint will be re-enabled in Phase 1B",
+    ))
 }
 
 // ---- Job list/cancel/delete endpoints ----

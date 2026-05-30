@@ -8,6 +8,7 @@
 
 use hc_core::field::{prime_field::GoldilocksField, FieldElement};
 use hc_examples::zkml::DenseLayerInstance;
+#[allow(deprecated)] // scaling tests exercise the legacy v3 prove (deprecated; retained).
 use hc_prover::{config::ProverConfig, prove, PublicInputs};
 use hc_vm::{Instruction, Program};
 
@@ -24,6 +25,7 @@ fn program_with_steps(steps: usize) -> Program {
 }
 
 #[test]
+#[allow(deprecated)] // exercises the legacy v3 prove.
 fn trace_blocks_loaded_scales_approximately_linearly_in_t_over_b() {
     // Keep params stable; change only trace length.
     let block_size = 64;
@@ -74,6 +76,7 @@ fn trace_blocks_loaded_scales_approximately_linearly_in_t_over_b() {
 }
 
 #[test]
+#[allow(deprecated)] // exercises the legacy v3 prove.
 fn dense_layer_trace_blocks_loaded_scales_with_program_size() {
     // This is a more "realistic" workload that expands to many toy VM steps while still
     // exercising the same proving pipeline.

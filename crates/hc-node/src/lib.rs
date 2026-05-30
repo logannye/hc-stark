@@ -108,6 +108,9 @@ pub fn prove_core(
         prover_config = prover_config.with_zk_masking(zk_mask_degree);
     }
 
+    // Node binding still exposes the legacy v3 prove surface (out of the Phase
+    // 1A server/MCP v5 cutover scope). Deprecated but retained.
+    #[allow(deprecated)]
     let output = hc_prover::prove(prover_config, vm_program, inputs)
         .map_err(|err| err.to_string())?;
 

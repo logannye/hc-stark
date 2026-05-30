@@ -4,11 +4,13 @@ use hc_core::{
     error::{HcError, HcResult},
     field::prime_field::GoldilocksField,
 };
+#[allow(deprecated)] // benchmarks the legacy v3 prove path (deprecated; retained).
 use hc_prover::{config::ProverConfig, prove, PublicInputs};
 use hc_verifier::{verify, Proof};
 use hc_vm::{Instruction, Program};
 use serde_json::json;
 
+#[allow(deprecated)] // exercises the legacy v3 prove for verifier benchmarking.
 pub fn bench_verifier(iterations: usize) -> HcResult<serde_json::Value> {
     let iterations = iterations.max(1);
     let program = Program::new(vec![

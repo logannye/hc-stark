@@ -64,13 +64,27 @@ async fn prove_then_verify_roundtrip() {
     let state = hc_server::test_state(tmp.path().to_path_buf());
     let app = hc_server::build_app(state);
 
+    // Phase 1A cutover: the server now produces SOUND v5 proofs (blowup ≥ 8),
+    // which require the padded trace length to be ≥ 8 (≈ ≥ 7 instructions). The
+    // 2-instruction `toy_add_1_2` workload is too small, so prove with a custom
+    // 8-instruction accumulator program (test_state allows custom programs).
+    // acc: 5 + (1+2+3+4+5+6+7+8) = 41. Trace length 9 → padded 16.
     let prove_req = ProveRequest {
-        workload_id: Some("toy_add_1_2".to_string()),
+        workload_id: None,
         template_id: None,
         template_params: None,
-        program: None,
+        program: Some(vec![
+            "add_immediate 1".to_string(),
+            "add_immediate 2".to_string(),
+            "add_immediate 3".to_string(),
+            "add_immediate 4".to_string(),
+            "add_immediate 5".to_string(),
+            "add_immediate 6".to_string(),
+            "add_immediate 7".to_string(),
+            "add_immediate 8".to_string(),
+        ]),
         initial_acc: 5,
-        final_acc: 8,
+        final_acc: 41,
         block_size: 8,
         fri_final_poly_size: 2,
         query_count: 10,
@@ -96,9 +110,12 @@ async fn prove_then_verify_roundtrip() {
         .unwrap();
     let submit: hc_sdk::types::ProveSubmitResponse = serde_json::from_slice(&body).unwrap();
 
-    // Poll.
+    // Poll. The production v5 path pins grinding_bits = 20 (~1M blake3 hashes),
+    // which takes several seconds in a debug build, so the poll budget is
+    // generous (up to 60s) — this is the cost of exercising the real
+    // production prove config end-to-end through the worker process.
     let mut proof = None;
-    for _ in 0..50 {
+    for _ in 0..300 {
         let resp = app
             .clone()
             .oneshot(
@@ -121,12 +138,13 @@ async fn prove_then_verify_roundtrip() {
             }
             ProveJobStatus::Failed { error } => panic!("prove failed: {error}"),
             _ => {
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
         }
     }
     let proof = proof.expect("prove should complete");
 
+    // Sound v5 proof: the production /verify endpoint (default floor) accepts it.
     let verify_req = VerifyRequest {
         proof,
         allow_legacy_v2: true,
@@ -645,14 +663,17 @@ async fn prove_wrong_auth_rejected() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
+/// Audit finding G2 follow-on (Phase-1A Task 9): the `/aggregate` endpoint
+/// must return HTTP 410 Gone for ALL requests — the in-circuit Halo2 FRI fold
+/// is unsound and the endpoint is gated off until Phase 1B.
 #[tokio::test]
-async fn aggregate_rejects_invalid_job_ids() {
+async fn aggregate_is_gated_off_with_410() {
     let tmp = tempfile::tempdir().unwrap();
     let state = hc_server::test_state(tmp.path().to_path_buf());
     let app = hc_server::build_app(state);
 
-    // Invalid UUID → 400.
-    let req_body = serde_json::json!({"job_ids": ["abc"]});
+    // Any request body — the gate fires before body parsing.
+    let req_body = serde_json::json!({"job_ids": ["00000000-0000-0000-0000-000000000001"]});
     let resp = app
         .oneshot(
             Request::builder()
@@ -664,11 +685,26 @@ async fn aggregate_rejects_invalid_job_ids() {
         )
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        resp.status(),
+        StatusCode::GONE,
+        "/aggregate must return 410 (recursion gate, audit finding G2)"
+    );
+    // The error body must mention recursion / soundness so clients can act.
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let msg = json["error"]["message"].as_str().unwrap_or("");
+    assert!(
+        msg.contains("soundness") || msg.contains("G2"),
+        "error message should mention soundness or G2, got: {msg}"
+    );
 }
 
+/// Gate fires regardless of input shape — empty job_ids also yields 410.
 #[tokio::test]
-async fn aggregate_rejects_empty_job_ids() {
+async fn aggregate_gate_fires_before_input_validation() {
     let tmp = tempfile::tempdir().unwrap();
     let state = hc_server::test_state(tmp.path().to_path_buf());
     let app = hc_server::build_app(state);
@@ -685,7 +721,11 @@ async fn aggregate_rejects_empty_job_ids() {
         )
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        resp.status(),
+        StatusCode::GONE,
+        "/aggregate must return 410 even for empty job_ids (gate fires first)"
+    );
 }
 
 #[tokio::test]

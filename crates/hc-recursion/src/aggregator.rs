@@ -45,10 +45,29 @@ impl<F: FieldElement> AggregatedProof<F> {
     }
 }
 
+/// Aggregate proofs using the default [`RecursionSpec`].
+///
+/// # Soundness warning — audit finding G2
+///
+/// The in-circuit Halo2 FRI fold in [`crate::circuit::verify_fri`]
+/// (`verify_fri.rs:74`) is **vacuous**: it constrains `vnext - (v0 + beta*v1)`
+/// (adjacent-pair, no 1/x), so any aggregated proof produced by this function
+/// inherits the G2 unsoundness documented in the Phase-1A audit.
+///
+/// **DO NOT expose this function through a live HTTP/MCP endpoint** until the
+/// Phase-1B in-circuit fold fix lands. The `/aggregate` HTTP endpoint is gated
+/// off (returns HTTP 410) precisely because of this. This library-level gate is
+/// documentation-only; the enforcement happens at the server layer.
 pub fn aggregate(proofs: &[Proof<GoldilocksField>]) -> HcResult<AggregatedProof<GoldilocksField>> {
     aggregate_with_spec(&RecursionSpec::default(), proofs)
 }
 
+/// Aggregate proofs with an explicit [`RecursionSpec`].
+///
+/// # Soundness warning — audit finding G2
+///
+/// See [`aggregate`] for the full warning. The in-circuit FRI fold is unsound;
+/// do not expose through live endpoints before the Phase-1B fix.
 pub fn aggregate_with_spec(
     spec: &RecursionSpec,
     proofs: &[Proof<GoldilocksField>],

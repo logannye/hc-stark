@@ -110,11 +110,16 @@ async fn get_capabilities_returns_expected_fields() {
 async fn prove_template_accumulator_roundtrip() {
     let s = server();
 
-    // Submit proof job via template
+    // Submit proof job via template.
+    //
+    // Phase 1A: production proving now uses the SOUND v5 path with blowup ≥ 8,
+    // which requires the padded trace length to be ≥ 8 (≈ ≥ 7 instructions).
+    // Use an 8-delta chain (trace length 9 → padded 16) so the v5 prover and
+    // the default-floor verifier are both satisfied.
     let params = hc_mcp::types::ProveTemplateParams {
         template_id: "accumulator_step".to_string(),
         parameters: serde_json::from_value::<serde_json::Map<String, serde_json::Value>>(
-            json!({"initial": 0, "final": 15, "deltas": [5, 3, 7]}),
+            json!({"initial": 0, "final": 36, "deltas": [1, 2, 3, 4, 5, 6, 7, 8]}),
         )
         .unwrap(),
         zk: Some(false),
@@ -224,11 +229,12 @@ async fn poll_unknown_job_returns_error() {
 async fn get_proof_summary_for_completed_job() {
     let s = server();
 
-    // Submit and wait for a small proof
+    // Submit and wait for a proof. Phase 1A: the sound v5 path (blowup ≥ 8)
+    // needs padded trace length ≥ 8, so use an 8-delta chain.
     let params = hc_mcp::types::ProveTemplateParams {
         template_id: "accumulator_step".to_string(),
         parameters: serde_json::from_value::<serde_json::Map<String, serde_json::Value>>(
-            json!({"initial": 10, "final": 20, "deltas": [4, 6]}),
+            json!({"initial": 10, "final": 46, "deltas": [1, 2, 3, 4, 5, 6, 7, 8]}),
         )
         .unwrap(),
         zk: Some(false),

@@ -5,6 +5,7 @@ use ark_bn254::{G1Affine, G1Projective};
 use ark_serialize::CanonicalSerialize;
 use clap::ValueEnum;
 use hc_core::field::prime_field::GoldilocksField;
+#[allow(deprecated)] // hc-cli still wraps the legacy v3 prove (deprecated; retained).
 use hc_prover::{
     block_tuner::{
         default_history_path, detect_hardware_profile, recommend_block_size_with_feedback,
@@ -120,6 +121,7 @@ impl Default for ProveOptions {
     }
 }
 
+#[allow(deprecated)] // hc-cli prove still drives the legacy v3 prover.
 pub fn run_prove(opts: &ProveOptions) -> Result<hc_prover::queries::ProverOutput<GoldilocksField>> {
     let program = Program::new(vec![
         Instruction::AddImmediate(1),

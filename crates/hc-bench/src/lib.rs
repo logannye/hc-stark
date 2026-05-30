@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use hc_core::field::prime_field::GoldilocksField;
+#[allow(deprecated)] // benchmarks the legacy v3 prove path (deprecated; retained).
 use hc_prover::{config::ProverConfig, metrics::ProverMetrics, prove, PublicInputs};
 use hc_vm::{Instruction, Program};
 use serde_json::json;
@@ -16,6 +17,7 @@ pub use merkle_paths::bench_merkle_paths;
 pub use recursion::bench_recursion;
 pub use verifier::bench_verifier;
 
+#[allow(deprecated)] // exercises the legacy v3 prove for benchmarking.
 pub fn benchmark(
     iterations: usize,
     block_size: usize,

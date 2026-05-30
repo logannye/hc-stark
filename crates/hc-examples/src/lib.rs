@@ -1,11 +1,13 @@
 #![forbid(unsafe_code)]
 
 use hc_core::field::prime_field::GoldilocksField;
+#[allow(deprecated)] // example still demonstrates the legacy v3 prove (deprecated; retained).
 use hc_prover::{config::ProverConfig, prove, PublicInputs};
 use hc_vm::{Instruction, Program};
 
 pub mod zkml;
 
+#[allow(deprecated)] // demonstrates the legacy v3 prove.
 pub fn run_toy_example() -> hc_core::error::HcResult<()> {
     let program = Program::new(vec![
         Instruction::AddImmediate(1),

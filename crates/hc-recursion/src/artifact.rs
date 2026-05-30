@@ -103,12 +103,14 @@ pub fn build_recursive_artifact(
 #[cfg(test)]
 mod tests {
     use hc_core::field::prime_field::GoldilocksField;
+    #[allow(deprecated)] // recursion artifact test fixtures use the legacy v3 prove.
     use hc_prover::{config::ProverConfig, prove, PublicInputs};
     use hc_verifier::Proof;
     use hc_vm::{Instruction, Program};
 
     use super::*;
 
+    #[allow(deprecated)] // builds a v3 proof fixture via the legacy prover.
     fn sample_proof(offset: u64) -> Proof<GoldilocksField> {
         let program = Program::new(vec![
             Instruction::AddImmediate(1),

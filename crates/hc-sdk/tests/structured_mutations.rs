@@ -79,7 +79,12 @@ fn tampering_fri_final_layer_rejects() {
 #[test]
 fn structured_json_mutation_rejects() {
     // Mutate the serialized proof bytes in a structured way: flip a nibble in the JSON payload,
-    // keep the envelope version constant, and ensure verification fails.
+    // keep the envelope version constant, and ensure it does not verify.
+    //
+    // Phase 1A note: the production `verify_proof_bytes` endpoint now rejects
+    // pre-v5 proofs by version alone, so this drives the lower-level v3 path to
+    // keep testing that a corrupted v3 payload is not accepted: either decoding
+    // fails outright, or the decoded-but-tampered proof fails verification.
     let output = read_proof_json(fixture_path("v3_toy_stark_proof.json").as_path()).unwrap();
     let mut bytes = encode_proof_bytes(&output).unwrap();
     // Flip in the middle to avoid trivially corrupting the JSON header most of the time.
@@ -87,6 +92,12 @@ fn structured_json_mutation_rejects() {
         let idx = bytes.bytes.len() / 2;
         bytes.bytes[idx] ^= 0x0f;
     }
-    let result = hc_sdk::proof::verify_proof_bytes(&bytes, false);
-    assert!(!result.ok);
+    let accepted = match hc_sdk::proof::decode_proof_bytes(&bytes) {
+        Ok(decoded) => {
+            let proof = to_verifier_proof(&decoded);
+            hc_verifier::verify(&proof).is_ok()
+        }
+        Err(_) => false, // decode failure counts as rejection.
+    };
+    assert!(!accepted, "structurally mutated v3 proof must not verify");
 }

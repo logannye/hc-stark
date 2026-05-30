@@ -17,5 +17,9 @@ thiserror.workspace = true
 [dev-dependencies]
 hc-vm = { path = "../hc-vm" }
 hc-sdk = { path = "../hc-sdk" }
+# Test-only: used by the forge_poc_g2 module (BlockProducer/VecBlockProducer to
+# feed the prover's FRI path; MerklePath to populate an unchecked witness).
+hc-replay = { path = "../hc-replay" }
+hc-commit = { path = "../hc-commit" }
 proptest = "1.4"
 
