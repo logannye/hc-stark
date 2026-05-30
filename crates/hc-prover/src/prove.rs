@@ -2178,6 +2178,160 @@ mod tests {
         ));
     }
 
+    // ── Phase 1A.2 validation tests ─────────────────────────────────────────
+
+    /// Differential — the K path faithfully generalises F.
+    ///
+    /// When `α_b` and `α_t` are embedded base-field scalars (c1 = 0), the K-valued
+    /// quotient `build_quotient_lde_k(…, K::from_base(α_b_f), K::from_base(α_t_f))`
+    /// must equal `K::from_base(build_quotient_lde(…, α_b_f, α_t_f))` for every LDE
+    /// coset point. This pins the algebraic equivalence that justifies the K
+    /// generalisation.
+    #[test]
+    fn k_quotient_with_embedded_alpha_equals_f_quotient() {
+        type F = Gl;
+        type K = QuadExtensionK;
+
+        // Build a small honest trace (4 instructions → 5 trace rows → padded_len=8).
+        let program = v5_test_program();
+        let inputs = v5_test_inputs();
+        let config = v5_test_config(0);
+        let block_size = config.block_size.max(1);
+        let trace_length = program.instructions.len() + 1;
+        let padded_len = trace_length.next_power_of_two();
+        let blowup = config.lde_blowup_factor;
+
+        let trace_producer = VmTraceProducer::new(program, inputs.initial_acc, block_size).unwrap();
+        let trace_lde =
+            build_trace_lde::<F>(&trace_producer, trace_length, padded_len, blowup, &config)
+                .unwrap();
+
+        let boundary = hc_air::constraints::boundary::BoundaryConstraints {
+            initial_acc: inputs.initial_acc,
+            final_acc: inputs.final_acc,
+        };
+
+        // Use deterministic base-field alphas (non-zero, non-one to avoid trivial cancellations).
+        let alpha_b_f = F::from_u64(42_000_000_007);
+        let alpha_t_f = F::from_u64(99_999_999_037);
+
+        // F path.
+        let q_f = build_quotient_lde::<F>(
+            &trace_lde, padded_len, blowup, &boundary, alpha_b_f, alpha_t_f,
+        )
+        .unwrap();
+
+        // K path with embedded (c1 = 0) alphas.
+        let alpha_b_k = K::from_base(alpha_b_f);
+        let alpha_t_k = K::from_base(alpha_t_f);
+        let q_k = build_quotient_lde_k(
+            &trace_lde, padded_len, blowup, &boundary, alpha_b_k, alpha_t_k,
+        )
+        .unwrap();
+
+        assert_eq!(
+            q_f.len(),
+            q_k.len(),
+            "F and K quotient oracles must have the same length"
+        );
+
+        for (i, (qf, qk)) in q_f.iter().zip(q_k.iter()).enumerate() {
+            let qf_embedded = K::from_base(*qf);
+            assert_eq!(
+                qf_embedded, *qk,
+                "K quotient with embedded α must equal embedded F quotient at index {i}: \
+                 F={qf:?} K={qk:?}"
+            );
+        }
+    }
+
+    /// α-entropy — composition challenges span K, not just the embedded base field.
+    ///
+    /// Replays the v5 main transcript exactly as `prove_stark_v5` does (up to the
+    /// two composition α draws) and asserts that both `α_boundary` and `α_transition`
+    /// have `c1 != 0`. A c1 = 0 challenge would be indistinguishable from a
+    /// base-field challenge and would not provide the full ~128-bit entropy.
+    #[test]
+    fn v5_composition_alpha_challenges_use_k_extension() {
+        type K = QuadExtensionK;
+
+        let proof = prove_v5(v5_test_config(0), v5_test_program(), v5_test_inputs()).unwrap();
+        let trace_root = proof.trace_commitment.as_root().unwrap();
+
+        // Replay the main transcript up to the composition α draws (verbatim mirror
+        // of the first section of `prove_stark_v5`).
+        let mut t = Transcript::<Blake3>::new(protocol::DOMAIN_MAIN_V5);
+        t.append_message(
+            protocol::label::PUB_INITIAL_ACC,
+            proof.initial_acc.to_u64().to_le_bytes(),
+        );
+        t.append_message(
+            protocol::label::PUB_FINAL_ACC,
+            proof.final_acc.to_u64().to_le_bytes(),
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PUB_TRACE_LENGTH,
+            proof.trace_length as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_QUERY_COUNT,
+            proof.params.query_count as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_LDE_BLOWUP,
+            proof.params.lde_blowup_factor as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_FRI_FINAL_SIZE,
+            proof.params.fri_final_poly_size as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_FRI_FOLDING_RATIO,
+            proof.params.fri_folding_ratio as u64,
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_GRINDING_BITS,
+            proof.params.grinding_bits as u64,
+        );
+        t.append_message(protocol::label::PARAM_HASH_ID, b"blake3");
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_ZK_ENABLED,
+            u64::from(proof.params.zk_enabled),
+        );
+        protocol::append_u64::<Blake3>(
+            &mut t,
+            protocol::label::PARAM_ZK_MASK_DEGREE,
+            proof.params.zk_mask_degree as u64,
+        );
+        t.append_message(
+            protocol::label::COMMIT_TRACE_LDE_ROOT,
+            trace_root.as_bytes(),
+        );
+
+        // Draw both composition alphas in K — exactly as `prove_stark_v5` does.
+        let alpha_boundary: K = t.challenge_field::<K>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
+        let alpha_transition: K =
+            t.challenge_field::<K>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
+
+        assert!(
+            !alpha_boundary.c1.is_zero(),
+            "α_boundary must have c1 != 0 (full K entropy); got c1 = {:?}",
+            alpha_boundary.c1
+        );
+        assert!(
+            !alpha_transition.c1.is_zero(),
+            "α_transition must have c1 != 0 (full K entropy); got c1 = {:?}",
+            alpha_transition.c1
+        );
+    }
+
     /// Determinism: identical inputs ⇒ identical ProofV5 (same nonce + roots).
     #[test]
     fn v5_prove_is_deterministic() {

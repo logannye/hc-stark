@@ -288,7 +288,11 @@ mod tests {
         let air = ToyAir;
         let bad = [F::ZERO; 3];
         let good = [F::ZERO; 2];
-        assert!(air.constraint_values(&bad, &good, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO).is_err());
-        assert!(air.constraint_values(&good, &bad, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO).is_err());
+        assert!(air
+            .constraint_values(&bad, &good, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO)
+            .is_err());
+        assert!(air
+            .constraint_values(&good, &bad, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO)
+            .is_err());
     }
 }
