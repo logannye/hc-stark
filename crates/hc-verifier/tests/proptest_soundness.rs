@@ -6,7 +6,11 @@
 use hc_core::field::prime_field::GoldilocksField;
 use hc_core::field::{FieldElement, QuadExtension};
 use hc_prover::config::{ProverConfig, SecurityFloor};
-use hc_prover::{prove, prove_v5, PublicInputs};
+// `prove` (v3) is deprecated but the v3 soundness proptests still build v3
+// proofs through it; the v5 proptests use `prove_v5`.
+#[allow(deprecated)]
+use hc_prover::prove;
+use hc_prover::{prove_v5, PublicInputs};
 use hc_sdk::proof::{decode_proof_v5, encode_proof_bytes, encode_proof_v5, verify_proof_bytes};
 use hc_verifier::v5::{verify_v5_with_floor, VerifierSecurityFloor};
 use hc_vm::{Instruction, Program};
@@ -14,7 +18,8 @@ use proptest::prelude::*;
 
 type K = QuadExtension<GoldilocksField>;
 
-/// Generate a valid proof for a simple computation.
+/// Generate a valid (legacy v3) proof for a simple computation.
+#[allow(deprecated)] // v3 soundness proptests build proofs via the legacy prover.
 fn make_valid_proof_bytes() -> (Vec<u8>, u32) {
     let program = Program::new(vec![
         Instruction::AddImmediate(1),

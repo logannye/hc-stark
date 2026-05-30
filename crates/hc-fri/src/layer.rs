@@ -88,15 +88,24 @@ pub fn merkle_path_from_hashes(hashes: Arc<Vec<HashDigest>>, index: usize) -> Hc
 /// non-WIDTH-aligned suffixes. See `simd_fold::tests` for the parity
 /// gate.
 ///
-/// NOTE: this is the *legacy* fold and is NOT a low-degree test (no
-/// antipodal pairing, no 1/x). It is retained because production callers
-/// still depend on it; new code should use [`fold_layer_v5`].
+/// NOTE: this is the *legacy* (vacuous) fold and is NOT a low-degree test (no
+/// antipodal pairing, no 1/x). New code MUST use [`fold_layer_v5`].
+///
+/// DEPRECATED (Phase 1A): part of the v3 FRI path that the sound v5 path
+/// (`fold_layer_v5` + the v5 prover/verifier) supersedes. Retained, not
+/// removed, to keep the v3 test corpus stable; removal is a documented
+/// follow-up.
+#[deprecated(
+    note = "legacy vacuous fold superseded by the sound v5 path (`fold_layer_v5`); not used in \
+            production; removal tracked as a follow-up"
+)]
 pub fn fold_layer<F: FieldElement>(values: &[F], beta: F) -> HcResult<Vec<F>> {
     if values.len() % 2 != 0 {
         return Err(HcError::invalid_argument(
             "FRI layer size must be even for folding",
         ));
     }
+    #[allow(deprecated)] // legacy fold delegates to the legacy SIMD fold.
     if let Some(out) = crate::simd_fold::try_fold_goldilocks(values, beta) {
         return Ok(out);
     }

@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf};
 use anyhow::Context;
 use hc_core::field::prime_field::GoldilocksField;
 use hc_prover::{config::ProverConfig, PublicInputs};
-use hc_sdk::{proof::encode_proof_bytes, types::ProveRequest};
+use hc_sdk::{proof::encode_proof_v5, types::ProveRequest};
 use hc_vm::Program;
 
 /// Minimal "prove worker" process.
@@ -69,20 +69,25 @@ fn main() -> anyhow::Result<()> {
         initial_acc: GoldilocksField::new(initial_acc),
         final_acc: GoldilocksField::new(final_acc),
     };
-    let config = ProverConfig::with_security_floor(
+
+    // Phase 1A cutover: production proving now produces SOUND v5 proofs.
+    // `production_v5` clamps the request-derived params UP to the v5 verifier
+    // floor (blowup ≥ 8, query_count ≥ 40, grinding_bits = 20) and pins the
+    // protocol version to 5 (or 6 for ZK). This keeps the live service
+    // self-consistent: the proof produced here re-verifies under the default
+    // v5 floor used by `verify_proof_bytes`. The request's block_size and
+    // fri_final_poly_size are honored as-is; query_count and lde_blowup_factor
+    // are treated as lower bounds.
+    let config = ProverConfig::production_v5(
         req.block_size,
         req.fri_final_poly_size,
         req.query_count,
         req.lde_blowup_factor,
-        hc_prover::config::SecurityFloor::relaxed(),
+        req.zk_mask_degree,
     )?;
-    let config = match req.zk_mask_degree {
-        Some(deg) if deg > 0 => config.with_zk_masking(deg),
-        _ => config,
-    };
 
-    let output = hc_prover::prove(config, program, inputs)?;
-    let proof = encode_proof_bytes(&output)?;
+    let proof_v5 = hc_prover::prove_v5(config, program, inputs)?;
+    let proof = encode_proof_v5(&proof_v5)?;
     let serialized = serde_json::to_vec_pretty(&proof)?;
     fs::write(&out_path, serialized).with_context(|| format!("write {}", out_path.display()))?;
     Ok(())

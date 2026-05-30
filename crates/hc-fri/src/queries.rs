@@ -47,6 +47,14 @@ impl<F: FieldElement> FriProof<F> {
 /// NOTE: this matches the legacy adjacent-pair fold (`out[i]` from
 /// `values[2i]`/`values[2i+1]`). The correct antipodal fold uses
 /// [`propagate_query_index_v5`].
+///
+/// DEPRECATED (Phase 1A): part of the legacy v3 FRI query path superseded by
+/// [`propagate_query_index_v5`] in the sound v5 path. Retained, not removed, to
+/// keep the v3 test corpus stable; removal is a documented follow-up.
+#[deprecated(
+    note = "legacy adjacent-pair query propagation superseded by the sound v5 path \
+            (`propagate_query_index_v5`); not used in production; removal tracked as a follow-up"
+)]
 pub fn propagate_query_index(current_index: usize, folding_ratio: usize) -> usize {
     current_index / folding_ratio
 }

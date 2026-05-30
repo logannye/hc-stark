@@ -37,6 +37,16 @@ pub struct FriProver<'a, F: FieldElement, H: HashFunction> {
     stream_stats: StreamingStats,
 }
 
+/// Legacy (v3) streaming fold producer: adjacent-pair `out[j] = prev[2j] +
+/// beta*prev[2j+1]`. This is NOT a low-degree-preserving (antipodal) fold.
+///
+/// DEPRECATED (Phase 1A): superseded by [`FoldedLayerProducerV5`] in the sound
+/// v5 commit phase. Retained, not removed, so the v3 commit path and its tests
+/// stay green this sprint; removal is a documented follow-up.
+#[deprecated(
+    note = "legacy adjacent-pair fold producer superseded by the sound v5 \
+            `FoldedLayerProducerV5`; not used in production; removal tracked as a follow-up"
+)]
 #[derive(Clone)]
 struct FoldedLayerProducer<F: FieldElement> {
     prev: Arc<dyn BlockProducer<F>>,
@@ -48,6 +58,7 @@ struct FoldedLayerProducer<F: FieldElement> {
 /// Below this, Rayon overhead exceeds the computation benefit.
 const PARALLEL_FOLD_THRESHOLD: usize = 512;
 
+#[allow(deprecated)] // impl on the legacy (deprecated) v3 fold producer.
 impl<F: FieldElement> BlockProducer<F> for FoldedLayerProducer<F> {
     fn produce(&self, range: BlockRange) -> HcResult<Vec<F>> {
         let out_len = self.prev_len / 2;
@@ -156,6 +167,10 @@ impl<'a, F: FieldElement, H: HashFunction> FriProver<'a, F, H> {
         }
     }
 
+    /// Legacy (v3) FRI commit phase. Drives the deprecated
+    /// [`FoldedLayerProducer`]; superseded by [`Self::prove_with_producer_v5`].
+    /// Retained for the v3 test corpus this sprint; removal is a follow-up.
+    #[allow(deprecated)] // instantiates the legacy (deprecated) v3 fold producer.
     pub fn prove_with_producer(
         &mut self,
         producer: Arc<dyn BlockProducer<F>>,

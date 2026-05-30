@@ -200,6 +200,9 @@ fn prove(config: &ProverConfig, program: Vec<String>, initial_acc: u64, final_ac
         prover_config = prover_config.with_zk_masking(config.zk_mask_degree);
     }
 
+    // Python binding still exposes the legacy v3 prove surface (out of the
+    // Phase 1A server/MCP v5 cutover scope). Deprecated but retained.
+    #[allow(deprecated)]
     let output = hc_prover::prove(prover_config, vm_program, inputs)
         .map_err(|err| pyo3::exceptions::PyRuntimeError::new_err(err.to_string()))?;
 

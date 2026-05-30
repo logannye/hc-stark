@@ -20,6 +20,9 @@ pub use wrapper::{
 
 #[cfg(test)]
 mod tests {
+    // Recursion tests build v3 proof fixtures via the legacy (deprecated)
+    // `prove`; allow module-wide.
+    #![allow(deprecated)]
     use hc_core::field::prime_field::GoldilocksField;
     use hc_prover::{config::ProverConfig, prove, PublicInputs};
     use hc_verifier::Proof;

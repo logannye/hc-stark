@@ -164,6 +164,9 @@ impl Circuit<Fr> for MerkleCircuit {
 
 #[cfg(test)]
 mod tests {
+    // Recursion-circuit tests build v3 proof fixtures via the legacy (deprecated)
+    // `prove`; allow module-wide.
+    #![allow(deprecated)]
     use super::*;
     use halo2_proofs::dev::MockProver;
     use hc_core::field::prime_field::GoldilocksField;

@@ -1,7 +1,17 @@
 use hc_core::field::prime_field::GoldilocksField;
+#[allow(deprecated)] // exercises the legacy v3 prove + lower-level verify on purpose.
 use hc_prover::{config::ProverConfig, prove, PublicInputs};
+use hc_sdk::proof::decode_proof_bytes;
 use hc_vm::{Instruction, Program};
 
+/// Tampering a consensus-critical field (the trace commitment root) of a v3
+/// proof must be rejected by the lower-level `hc_verifier::verify`.
+///
+/// Phase 1A note: the production `verify_proof_bytes` endpoint now rejects
+/// every pre-v5 proof by version alone, which would mask tampering detection.
+/// To keep this test MEANINGFUL (it asserts the crypto rejects a tampered
+/// witness, not merely that v3 is unsupported), it drives the lower-level v3
+/// verifier directly.
 #[test]
 fn mutated_proof_bytes_reject() {
     let program = Program::new(vec![
@@ -13,6 +23,7 @@ fn mutated_proof_bytes_reject() {
         final_acc: GoldilocksField::new(8),
     };
     let config = ProverConfig::new(8, 2).unwrap();
+    #[allow(deprecated)]
     let output = prove(config, program, inputs).unwrap();
     let proof = hc_sdk::proof::encode_proof_bytes(&output).unwrap();
 
@@ -33,9 +44,23 @@ fn mutated_proof_bytes_reject() {
         bytes: serde_json::to_vec(&v).expect("serialize mutated json"),
     };
 
-    let result = hc_sdk::proof::verify_proof_bytes(&mutated, true);
+    // Decode the tampered bytes and run them through the lower-level v3 verifier.
+    let decoded = decode_proof_bytes(&mutated).expect("tampered-but-structurally-valid proof");
+    let lower = hc_verifier::Proof {
+        version: decoded.version,
+        trace_commitment: decoded.trace_commitment.clone(),
+        composition_commitment: decoded.composition_commitment.clone(),
+        fri_proof: decoded.fri_proof.clone(),
+        initial_acc: decoded.public_inputs.initial_acc,
+        final_acc: decoded.public_inputs.final_acc,
+        query_response: decoded.query_response.clone(),
+        trace_length: decoded.trace_length,
+        params: decoded.params,
+    };
+    #[allow(deprecated)]
+    let result = hc_verifier::verify(&lower);
     assert!(
-        !result.ok,
+        result.is_err(),
         "mutated proof unexpectedly verified (tampered trace root)"
     );
 }

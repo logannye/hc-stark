@@ -248,4 +248,88 @@ impl ProverConfig {
         self.zk.seed = Some(seed);
         self
     }
+
+    // ─── v5 (sound) production policy ────────────────────────────────────────
+    //
+    // The v5 verifier enforces a hard security floor (`hc_verifier::v5::
+    // VerifierSecurityFloor::default`): blowup ≥ 8, query_count ≥ 40,
+    // grinding_bits ≥ 20, protocol version ≥ 5. A v5 prove config that asks for
+    // less than the floor produces a proof the verifier (and therefore the live
+    // /verify endpoint) will reject. These helpers keep the production prove
+    // path self-consistent: the proof a server produces always re-verifies under
+    // the default floor.
+
+    /// Minimum LDE blowup the v5 production floor accepts.
+    pub const V5_MIN_BLOWUP: usize = 8;
+    /// Minimum FRI query count the v5 production floor accepts.
+    pub const V5_MIN_QUERY_COUNT: usize = 40;
+    /// Grinding bits the v5 production floor requires.
+    pub const V5_GRINDING_BITS: u32 = 20;
+
+    /// Clamp this config UP to the v5 production security floor: blowup ≥ 8,
+    /// query_count ≥ 40, grinding_bits = 20. Values already at/above the floor
+    /// are preserved (a tier may legitimately ask for more security). Never
+    /// clamps DOWN.
+    ///
+    /// Also raises `fri_final_poly_size` so the v5 final-layer degree check is
+    /// well-formed: the committed final-coeffs count is
+    /// `fri_final_poly_size / blowup`, which must be ≥ 1, so
+    /// `fri_final_poly_size ≥ blowup`. With blowup clamped to 8 a requested
+    /// `fri_final_poly_size` of 2 would otherwise yield `2 / 8 = 0` coeffs and
+    /// the verifier's `final-layer degree check` would fail. The value is
+    /// rounded up to a power of two (required by `FriConfig`). NOTE: the v5
+    /// prover also requires the padded trace length to be ≥ `fri_final_poly_size`
+    /// — i.e. the production v5 floor is only satisfiable for programs whose
+    /// padded trace length is ≥ `blowup` (≥ 8). Smaller programs cannot be
+    /// proven soundly at this floor.
+    ///
+    /// Leaves `block_size`, ZK config, and protocol version untouched — call
+    /// this on a config whose protocol version is already 5 (or 6 for ZK).
+    pub fn clamped_to_v5_floor(mut self) -> Self {
+        self.lde_blowup_factor = self.lde_blowup_factor.max(Self::V5_MIN_BLOWUP);
+        self.query_count = self.query_count.max(Self::V5_MIN_QUERY_COUNT);
+        self.grinding_bits = self.grinding_bits.max(Self::V5_GRINDING_BITS);
+        // fri_final_poly_size must be ≥ blowup (so final_coeffs.len ≥ 1) and a
+        // power of two (FriConfig). Round max(requested, blowup) up to a pow2.
+        let min_final = self.fri_final_poly_size.max(self.lde_blowup_factor).max(1);
+        self.fri_final_poly_size = min_final.next_power_of_two();
+        self
+    }
+
+    /// Build a production v5 prove config from request-derived parameters,
+    /// clamping every security knob UP to the v5 verifier floor and pinning the
+    /// protocol version to 5 (or 6 when ZK masking is enabled).
+    ///
+    /// `block_size` and `fri_final_poly_size` come from the request/tier;
+    /// `query_count` and `lde_blowup_factor` are treated as lower bounds (the
+    /// floor wins if a tier asked for less). Uses [`SecurityFloor::relaxed`] for
+    /// the *constructor* validation because the clamp below already enforces the
+    /// real v5 floor — this avoids a double rejection when a tier requests
+    /// below-floor params that we are about to clamp up anyway.
+    pub fn production_v5(
+        block_size: usize,
+        fri_final_poly_size: usize,
+        query_count: usize,
+        lde_blowup_factor: usize,
+        zk_mask_degree: Option<usize>,
+    ) -> HcResult<Self> {
+        let mut config = Self::with_security_floor(
+            block_size,
+            fri_final_poly_size,
+            query_count.max(Self::V5_MIN_QUERY_COUNT),
+            lde_blowup_factor.max(Self::V5_MIN_BLOWUP),
+            SecurityFloor::relaxed(),
+        )?;
+        // Apply ZK masking BEFORE pinning the protocol version: `with_zk_masking`
+        // forces protocol_version = 4, so the version pin must come last.
+        if let Some(degree) = zk_mask_degree {
+            if degree > 0 {
+                config = config.with_zk_masking(degree);
+            }
+        }
+        // v6 when ZK, else v5 — matches `prove_stark_v5`'s own version selection.
+        let version = if config.zk.enabled { 6 } else { 5 };
+        config = config.with_protocol_version(version);
+        Ok(config.clamped_to_v5_floor())
+    }
 }

@@ -64,13 +64,27 @@ async fn prove_then_verify_roundtrip() {
     let state = hc_server::test_state(tmp.path().to_path_buf());
     let app = hc_server::build_app(state);
 
+    // Phase 1A cutover: the server now produces SOUND v5 proofs (blowup ≥ 8),
+    // which require the padded trace length to be ≥ 8 (≈ ≥ 7 instructions). The
+    // 2-instruction `toy_add_1_2` workload is too small, so prove with a custom
+    // 8-instruction accumulator program (test_state allows custom programs).
+    // acc: 5 + (1+2+3+4+5+6+7+8) = 41. Trace length 9 → padded 16.
     let prove_req = ProveRequest {
-        workload_id: Some("toy_add_1_2".to_string()),
+        workload_id: None,
         template_id: None,
         template_params: None,
-        program: None,
+        program: Some(vec![
+            "add_immediate 1".to_string(),
+            "add_immediate 2".to_string(),
+            "add_immediate 3".to_string(),
+            "add_immediate 4".to_string(),
+            "add_immediate 5".to_string(),
+            "add_immediate 6".to_string(),
+            "add_immediate 7".to_string(),
+            "add_immediate 8".to_string(),
+        ]),
         initial_acc: 5,
-        final_acc: 8,
+        final_acc: 41,
         block_size: 8,
         fri_final_poly_size: 2,
         query_count: 10,
@@ -96,9 +110,12 @@ async fn prove_then_verify_roundtrip() {
         .unwrap();
     let submit: hc_sdk::types::ProveSubmitResponse = serde_json::from_slice(&body).unwrap();
 
-    // Poll.
+    // Poll. The production v5 path pins grinding_bits = 20 (~1M blake3 hashes),
+    // which takes several seconds in a debug build, so the poll budget is
+    // generous (up to 60s) — this is the cost of exercising the real
+    // production prove config end-to-end through the worker process.
     let mut proof = None;
-    for _ in 0..50 {
+    for _ in 0..300 {
         let resp = app
             .clone()
             .oneshot(
@@ -121,12 +138,13 @@ async fn prove_then_verify_roundtrip() {
             }
             ProveJobStatus::Failed { error } => panic!("prove failed: {error}"),
             _ => {
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
         }
     }
     let proof = proof.expect("prove should complete");
 
+    // Sound v5 proof: the production /verify endpoint (default floor) accepts it.
     let verify_req = VerifyRequest {
         proof,
         allow_legacy_v2: true,

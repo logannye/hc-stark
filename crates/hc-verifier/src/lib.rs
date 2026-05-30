@@ -14,6 +14,11 @@ pub use v5::{enforce_floor, verify_v5, verify_v5_with_floor, VerifierSecurityFlo
 
 #[cfg(test)]
 mod tests {
+    // The v3/v4 verifier is intentionally kept and tested here; building the v3
+    // test proofs uses the deprecated legacy `prove`. Allow it module-wide so
+    // the v3 verify corpus stays green without the production v5 cutover
+    // warnings firing.
+    #![allow(deprecated)]
     use hc_core::field::{prime_field::GoldilocksField, FieldElement};
     use hc_hash::HashFunction;
     use hc_prover::{

@@ -100,7 +100,10 @@ pub fn commit_layer_parallel<F: FieldElement>(values: &[F]) -> Option<HashDigest
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layer::{compute_leaf_hashes, fold_layer};
+    use crate::layer::compute_leaf_hashes;
+    // Legacy fold is deprecated but still parity-tested against the parallel variant.
+    #[allow(deprecated)]
+    use crate::layer::fold_layer;
     use hc_core::field::prime_field::GoldilocksField;
 
     type F = GoldilocksField;
@@ -117,6 +120,7 @@ mod tests {
     fn parallel_fold_matches_sequential() {
         let values: Vec<F> = (0..128).map(F::from_u64).collect();
         let beta = F::from_u64(42);
+        #[allow(deprecated)]
         let seq = fold_layer(&values, beta).unwrap();
         let par = fold_layer_parallel(&values, beta);
         assert_eq!(seq, par);

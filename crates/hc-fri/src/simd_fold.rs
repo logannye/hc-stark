@@ -46,6 +46,15 @@ use crate::layer::{batch_invert, LayerDomain};
 ///
 /// Output layout: `out[i] = values[2*i] + beta * values[2*i + 1]`.
 /// Length contract: `values.len()` must be even and equal `2 * out.len()`.
+///
+/// DEPRECATED (Phase 1A): this is the *legacy* (adjacent-pair, non-antipodal)
+/// SIMD fold backing the vacuous v3 `fold_layer`. The sound v5 path uses
+/// [`try_fold_goldilocks_v5`]. Retained, not removed, to keep the v3 test
+/// corpus stable; removal is a documented follow-up.
+#[deprecated(
+    note = "legacy SIMD fold superseded by the sound v5 path (`try_fold_goldilocks_v5`); not used \
+            in production; removal tracked as a follow-up"
+)]
 pub fn try_fold_goldilocks<F: FieldElement>(values: &[F], beta: F) -> Option<Vec<F>> {
     if TypeId::of::<F>() != TypeId::of::<GoldilocksField>() {
         return None;
@@ -277,6 +286,7 @@ mod tests {
     fn try_fold_returns_some_for_goldilocks() {
         let values = det_vec(1, 16);
         let beta = GoldilocksField::from_u64(7);
+        #[allow(deprecated)] // parity-test the legacy SIMD fold.
         let got = try_fold_goldilocks::<GoldilocksField>(&values, beta);
         assert!(got.is_some());
         assert_eq!(got.unwrap(), scalar_ref(&values, beta));
@@ -340,6 +350,7 @@ mod tests {
         let values: Vec<QuadExtension<GoldilocksField>> =
             (0..16u64).map(QuadExtension::from_u64).collect();
         let beta = QuadExtension::from_u64(7);
+        #[allow(deprecated)] // parity-test the legacy SIMD fold's type guard.
         let got = try_fold_goldilocks::<QuadExtension<GoldilocksField>>(&values, beta);
         assert!(got.is_none(), "non-Goldilocks F must take scalar path");
     }

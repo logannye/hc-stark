@@ -4,12 +4,14 @@ use hc_core::{
     error::{HcError, HcResult},
     field::prime_field::GoldilocksField,
 };
+#[allow(deprecated)] // recursion benchmark builds inputs via the legacy v3 prove.
 use hc_prover::{config::ProverConfig, prove, PublicInputs};
 use hc_recursion::wrap_proofs;
 use hc_verifier::Proof;
 use hc_vm::{Instruction, Program};
 use serde_json::json;
 
+#[allow(deprecated)] // exercises the legacy v3 prove for the recursion benchmark.
 pub fn bench_recursion(proofs: usize) -> HcResult<serde_json::Value> {
     if proofs == 0 {
         return Err(HcError::invalid_argument(

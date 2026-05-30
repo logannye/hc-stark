@@ -5,7 +5,11 @@ use hc_core::{
     error::{HcError, HcResult},
     field::{prime_field::GoldilocksField, FieldElement, TwoAdicField},
 };
-use hc_fri::{get_folding_ratio, is_valid_query_index, propagate_query_index, FriConfig};
+use hc_fri::{get_folding_ratio, is_valid_query_index, FriConfig};
+// Legacy v3 query propagation: deprecated in favor of the sound v5 path, but
+// the v3 verifier (kept for tests) still depends on it.
+#[allow(deprecated)]
+use hc_fri::propagate_query_index;
 use hc_hash::{hash::HashDigest, protocol, Blake3, HashFunction, Transcript};
 use hc_prover::kzg::{
     commitment_from_projective, deserialize_fr, deserialize_proof, goldilocks_to_fr,
@@ -658,6 +662,7 @@ fn verify_stark_boundary_openings<F: FieldElement>(
     Ok(())
 }
 
+#[allow(deprecated)] // v3 FRI query verification uses the legacy propagate_query_index.
 fn verify_fri_queries<F: FieldElement>(
     proof: &Proof<F>,
     base_queries: &[usize],

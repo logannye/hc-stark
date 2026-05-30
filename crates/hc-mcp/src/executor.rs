@@ -6,7 +6,7 @@ use anyhow::Result;
 use hc_core::field::prime_field::GoldilocksField;
 use hc_core::field::FieldElement;
 use hc_prover::{config::ProverConfig, PublicInputs};
-use hc_sdk::proof::encode_proof_bytes;
+use hc_sdk::proof::encode_proof_v5;
 use hc_vm::Program;
 
 use crate::types::{JobEntry, JobStatus};
@@ -112,14 +112,15 @@ fn run_prove(
     final_acc: u64,
     zk_mask_degree: Option<usize>,
 ) -> Result<hc_sdk::types::ProofBytes> {
-    let mut config = ProverConfig::with_full_config(2, 2, 80, 2)?;
-    if let Some(degree) = zk_mask_degree {
-        config = config.with_zk_masking(degree);
-    }
+    // Phase 1A cutover: the MCP prove path now produces SOUND v5 proofs.
+    // `production_v5` pins blowup ≥ 8, query_count ≥ 40, grinding_bits = 20 and
+    // protocol version 5 (or 6 for ZK) so the proof re-verifies under the
+    // default v5 floor used by `verify_proof_impl`.
+    let config = ProverConfig::production_v5(2, 2, 80, 8, zk_mask_degree)?;
     let public_inputs = PublicInputs {
         initial_acc: GoldilocksField::from_u64(initial_acc),
         final_acc: GoldilocksField::from_u64(final_acc),
     };
-    let output = hc_prover::prove(config, program, public_inputs)?;
-    encode_proof_bytes(&output)
+    let proof_v5 = hc_prover::prove_v5(config, program, public_inputs)?;
+    encode_proof_v5(&proof_v5)
 }

@@ -34,6 +34,18 @@ pub struct PublicInputs<F> {
     pub final_acc: F,
 }
 
+/// Legacy (v3/v4) prove entry point.
+///
+/// DEPRECATED (Phase 1A): superseded by the sound v5 path ([`prove_v5`]). The
+/// v3 FRI low-degree test is vacuous (audit finding G2) and this proof is
+/// rejected by the production `verify_proof_bytes` endpoint. It is retained,
+/// not removed, so the large v3 test corpus stays green this sprint; removal is
+/// tracked as a documented follow-up. Production proving uses [`prove_v5`].
+#[deprecated(
+    note = "v3/v4 prove is superseded by the sound v5 path (`prove_v5`); not used in production \
+            (its proofs are rejected by the v5-only `verify_proof_bytes`); removal tracked as a \
+            follow-up"
+)]
 pub fn prove<F: FieldElement + hc_core::field::TwoAdicField>(
     config: ProverConfig,
     program: Program,
@@ -1743,6 +1755,9 @@ fn hash_field_element<F: FieldElement>(value: &F) -> HashDigest {
 
 #[cfg(test)]
 mod tests {
+    // These tests exercise the legacy v3 `prove` (deprecated but retained); allow
+    // module-wide so the v3 prover tests stay green after the v5 cutover.
+    #![allow(deprecated)]
     use super::*;
     use crate::commitment::CommitmentScheme;
     use hc_vm::isa::Instruction;

@@ -19,8 +19,9 @@ pub mod verifier;
 
 pub use config::FriConfig;
 pub use prover::{FriProver, FriProverArtifacts};
-pub use queries::{
-    get_folding_ratio, is_valid_query_index, propagate_query_index, propagate_query_index_v5,
-    FriProof,
-};
+pub use queries::{get_folding_ratio, is_valid_query_index, propagate_query_index_v5, FriProof};
+// Legacy v3 query propagation: deprecated, re-exported for the v3 verifier/test
+// corpus that still depends on it.
+#[allow(deprecated)]
+pub use queries::propagate_query_index;
 pub use verifier::FriVerifier;

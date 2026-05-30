@@ -2,6 +2,7 @@ use hc_core::{
     error::HcResult,
     field::{prime_field::GoldilocksField, FieldElement},
 };
+#[allow(deprecated)] // example still demonstrates the legacy v3 prove (deprecated; retained).
 use hc_prover::{config::ProverConfig, prove, PublicInputs, TraceRow};
 use hc_replay::{
     block_range::BlockRange, config::ReplayConfig, trace_replay::TraceReplay, traits::BlockProducer,
@@ -62,6 +63,7 @@ impl DenseLayerInstance {
     }
 }
 
+#[allow(deprecated)] // demonstrates the legacy v3 prove.
 pub fn run_dense_layer_example(instance: DenseLayerInstance) -> HcResult<()> {
     instance.validate()?;
     let program = instance.to_program();

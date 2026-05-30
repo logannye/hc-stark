@@ -14,7 +14,11 @@ use hc_core::{
     error::{HcError, HcResult},
     field::{FieldElement, GoldilocksField, QuadExtension},
 };
-use hc_fri::{get_folding_ratio, is_valid_query_index, propagate_query_index};
+use hc_fri::{get_folding_ratio, is_valid_query_index};
+// Legacy v3 query propagation: deprecated in favor of the sound v5 path
+// (`propagate_query_index_v5`), but the v3 query answerer still depends on it.
+#[allow(deprecated)]
+use hc_fri::propagate_query_index;
 use hc_hash::protocol;
 use hc_hash::{hash::HashDigest, Blake3, HashFunction};
 use hc_replay::{trace_replay::TraceReplay, traits::BlockProducer};
@@ -293,7 +297,8 @@ where
     Ok(results)
 }
 
-/// Answer queries for FRI layer evaluations and Merkle paths
+/// Answer queries for FRI layer evaluations and Merkle paths (legacy v3 path).
+#[allow(deprecated)] // v3 FRI query answering uses the legacy propagate_query_index.
 pub fn answer_fri_queries<F>(
     base_queries: &[usize],
     fri_artifacts: &hc_fri::FriProverArtifacts<F>,
@@ -391,43 +396,53 @@ where
             return Err(HcError::invalid_argument("fri leaf index out of range"));
         }
 
-        let mut values: HashMap<usize, F> = HashMap::with_capacity(leaf_indices.len());
-        let mut stream = ProducerValueStream::new(Arc::clone(&producer), len);
-        let mut cursor = 0usize;
-        let mut targets = std::collections::HashSet::with_capacity(leaf_indices.len());
-        for idx in &leaf_indices {
-            targets.insert(*idx);
-        }
-        let mut leaf_hash_producer = |idx: usize| -> HcResult<HashDigest> {
-            if idx != cursor {
-                return Err(HcError::message(
-                    "fri merkle path reconstruction called out of order",
-                ));
-            }
-            let value = stream
-                .next_value()?
-                .ok_or_else(|| HcError::message("fri producer ended early"))?;
-            if targets.contains(&idx) {
-                values.insert(idx, value);
-            }
-            cursor += 1;
-            Ok(hash_fri_value(&value))
-        };
-
-        let paths = reconstruct_paths_from_replay_mut::<Blake3, _>(
-            &leaf_indices,
-            len,
-            2,
-            &mut leaf_hash_producer,
-        )
-        .map_err(|err| HcError::message(format!("Failed to extract FRI Merkle paths: {err}")))?;
+        // `reconstruct_paths_from_replay_mut` tracks targets with a u64 bitmask
+        // → max 64 leaves per pass. Open in chunks of ≤ 64; each chunk is an
+        // independent streaming pass and yields byte-identical per-leaf paths
+        // (a path depends only on the leaf index + the fixed Merkle tree).
+        const MERKLE_MULTI_OPEN_MAX: usize = 64;
 
         let mut out = HashMap::with_capacity(leaf_indices.len());
-        for (idx, path) in leaf_indices.into_iter().zip(paths) {
-            let value = values
-                .remove(&idx)
-                .ok_or_else(|| HcError::message("missing fri opened value"))?;
-            out.insert(idx, (value, path));
+        for chunk in leaf_indices.chunks(MERKLE_MULTI_OPEN_MAX) {
+            let mut values: HashMap<usize, F> = HashMap::with_capacity(chunk.len());
+            let mut stream = ProducerValueStream::new(Arc::clone(&producer), len);
+            let mut cursor = 0usize;
+            let mut targets = std::collections::HashSet::with_capacity(chunk.len());
+            for idx in chunk {
+                targets.insert(*idx);
+            }
+            let mut leaf_hash_producer = |idx: usize| -> HcResult<HashDigest> {
+                if idx != cursor {
+                    return Err(HcError::message(
+                        "fri merkle path reconstruction called out of order",
+                    ));
+                }
+                let value = stream
+                    .next_value()?
+                    .ok_or_else(|| HcError::message("fri producer ended early"))?;
+                if targets.contains(&idx) {
+                    values.insert(idx, value);
+                }
+                cursor += 1;
+                Ok(hash_fri_value(&value))
+            };
+
+            let paths = reconstruct_paths_from_replay_mut::<Blake3, _>(
+                chunk,
+                len,
+                2,
+                &mut leaf_hash_producer,
+            )
+            .map_err(|err| {
+                HcError::message(format!("Failed to extract FRI Merkle paths: {err}"))
+            })?;
+
+            for (&idx, path) in chunk.iter().zip(paths) {
+                let value = values
+                    .remove(&idx)
+                    .ok_or_else(|| HcError::message("missing fri opened value"))?;
+                out.insert(idx, (value, path));
+            }
         }
         Ok(out)
     }
@@ -660,6 +675,17 @@ pub fn answer_fri_queries_v5(
     /// Open the given leaf indices of one K layer: stream leaves in order,
     /// hashing each with `hash_value_ext`, recording the requested values and
     /// reconstructing a Merkle path for each.
+    ///
+    /// `reconstruct_paths_from_replay_mut` tracks the in-flight target set with
+    /// a `u64` bitmask, so it accepts at most 64 leaf indices per call. The v5
+    /// FRI floor requires `query_count ≥ 40`, and layer 0 opens an antipodal
+    /// PAIR `(low, low+half)` per base query — up to `2 * query_count` (≈ 80)
+    /// distinct leaves on a non-trivial domain — which exceeds 64. We therefore
+    /// open in chunks of ≤ 64 indices, each chunk a fresh streaming pass. This
+    /// is purely a batching detail: the per-leaf Merkle path a chunk emits is a
+    /// function only of the leaf index and the (fixed) layer Merkle tree, so the
+    /// resulting paths — and thus the proof bytes — are byte-identical to a
+    /// single 64-bounded call. No crypto changes.
     fn open_many(
         producer: Arc<dyn hc_replay::traits::BlockProducer<K>>,
         len: usize,
@@ -677,43 +703,50 @@ pub fn answer_fri_queries_v5(
             return Err(HcError::invalid_argument("fri v5 leaf index out of range"));
         }
 
-        let mut values: HashMap<usize, K> = HashMap::with_capacity(leaf_indices.len());
-        let mut stream = ProducerValueStream::new(Arc::clone(&producer), len);
-        let mut cursor = 0usize;
-        let mut targets: HashSet<usize> = HashSet::with_capacity(leaf_indices.len());
-        for idx in &leaf_indices {
-            targets.insert(*idx);
-        }
-        let mut leaf_hash_producer = |idx: usize| -> HcResult<HashDigest> {
-            if idx != cursor {
-                return Err(HcError::message(
-                    "fri v5 merkle path reconstruction called out of order",
-                ));
-            }
-            let value = stream
-                .next_value()?
-                .ok_or_else(|| HcError::message("fri v5 producer ended early"))?;
-            if targets.contains(&idx) {
-                values.insert(idx, value);
-            }
-            cursor += 1;
-            Ok(hash_value_ext(&value))
-        };
-
-        let paths = reconstruct_paths_from_replay_mut::<Blake3, _>(
-            &leaf_indices,
-            len,
-            2,
-            &mut leaf_hash_producer,
-        )
-        .map_err(|err| HcError::message(format!("Failed to extract v5 FRI Merkle paths: {err}")))?;
+        // Merkle multi-opening bitmask cap (u64) → at most 64 leaves per pass.
+        const MERKLE_MULTI_OPEN_MAX: usize = 64;
 
         let mut out = HashMap::with_capacity(leaf_indices.len());
-        for (idx, path) in leaf_indices.into_iter().zip(paths) {
-            let value = values
-                .remove(&idx)
-                .ok_or_else(|| HcError::message("missing v5 fri opened value"))?;
-            out.insert(idx, (value, path));
+        for chunk in leaf_indices.chunks(MERKLE_MULTI_OPEN_MAX) {
+            let mut values: HashMap<usize, K> = HashMap::with_capacity(chunk.len());
+            let mut stream = ProducerValueStream::new(Arc::clone(&producer), len);
+            let mut cursor = 0usize;
+            let mut targets: HashSet<usize> = HashSet::with_capacity(chunk.len());
+            for idx in chunk {
+                targets.insert(*idx);
+            }
+            let mut leaf_hash_producer = |idx: usize| -> HcResult<HashDigest> {
+                if idx != cursor {
+                    return Err(HcError::message(
+                        "fri v5 merkle path reconstruction called out of order",
+                    ));
+                }
+                let value = stream
+                    .next_value()?
+                    .ok_or_else(|| HcError::message("fri v5 producer ended early"))?;
+                if targets.contains(&idx) {
+                    values.insert(idx, value);
+                }
+                cursor += 1;
+                Ok(hash_value_ext(&value))
+            };
+
+            let paths = reconstruct_paths_from_replay_mut::<Blake3, _>(
+                chunk,
+                len,
+                2,
+                &mut leaf_hash_producer,
+            )
+            .map_err(|err| {
+                HcError::message(format!("Failed to extract v5 FRI Merkle paths: {err}"))
+            })?;
+
+            for (&idx, path) in chunk.iter().zip(paths) {
+                let value = values
+                    .remove(&idx)
+                    .ok_or_else(|| HcError::message("missing v5 fri opened value"))?;
+                out.insert(idx, (value, path));
+            }
         }
         Ok(out)
     }
