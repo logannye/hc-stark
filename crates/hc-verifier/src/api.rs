@@ -1346,7 +1346,7 @@ mod forge_poc_g2 {
     use hc_prover::pipeline::phase2_fri::{run_fri_v5, FriTranscriptSeedV5};
     use hc_prover::pipeline::phase3_queries::{answer_fri_queries_v5, generate_queries};
     use hc_prover::queries::{
-        CompositionQuery, NextTraceRow, OodOpenings, ProofParams, ProofV5, QueryResponseV5,
+        CompositionQuery, NextTraceRow, OodOpeningsV5, ProofParams, ProofV5, QueryResponseV5,
         TraceQuery, TraceWitness,
     };
     use hc_replay::traits::VecBlockProducer;
@@ -1366,10 +1366,6 @@ mod forge_poc_g2 {
         Blake3::hash(&bytes)
     }
 
-    fn hash_field_element(value: &F) -> HashDigest {
-        Blake3::hash(&value.to_u64().to_le_bytes())
-    }
-
     fn commit_trace_lde(trace_lde: &[[F; 2]]) -> HashDigest {
         let mut builder = StreamingMerkle::<Blake3>::new();
         for row in trace_lde {
@@ -1378,10 +1374,11 @@ mod forge_poc_g2 {
         builder.finalize().unwrap()
     }
 
-    fn commit_quotient_lde(quotient_lde: &[F]) -> HashDigest {
+    fn commit_quotient_lde_k(quotient_lde: &[K]) -> HashDigest {
+        use hc_fri::layer::hash_value_ext;
         let mut builder = StreamingMerkle::<Blake3>::new();
         for v in quotient_lde {
-            builder.push(hash_field_element(v));
+            builder.push(hash_value_ext(v));
         }
         builder.finalize().unwrap()
     }
@@ -1417,14 +1414,15 @@ mod forge_poc_g2 {
         })
     }
 
-    fn open_composition_query(
-        quotient_lde: &[F],
+    fn open_composition_query_k(
+        quotient_lde: &[K],
         idx: usize,
         lde_len: usize,
-    ) -> HcResult<CompositionQuery<F>> {
+    ) -> HcResult<CompositionQuery<K>> {
+        use hc_fri::layer::hash_value_ext;
         let value = quotient_lde[idx];
         let mut leaf_hash =
-            |li: usize| -> HcResult<HashDigest> { Ok(hash_field_element(&quotient_lde[li])) };
+            |li: usize| -> HcResult<HashDigest> { Ok(hash_value_ext(&quotient_lde[li])) };
         let witness =
             reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)?;
         Ok(CompositionQuery {
@@ -1523,13 +1521,15 @@ mod forge_poc_g2 {
             protocol::label::COMMIT_TRACE_LDE_ROOT,
             trace_root.as_bytes(),
         );
+        // Phase 1A.2: composition challenges are sampled in K.
         let alpha_boundary =
-            transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
+            transcript.challenge_field::<K>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
         let alpha_transition =
-            transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
+            transcript.challenge_field::<K>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
 
-        // --- Quotient computed POINTWISE from the forged trace, so the quotient
-        //     relation `q(x)*(x^N-1) == C(x)` holds at every LDE point. ---
+        // --- Quotient computed POINTWISE from the forged trace in K, so the
+        //     quotient relation `q(x)*(x^N-1) == C(x)` holds at every LDE point.
+        //     The trace stays F; the α-combination + division by Z_H are in K. ---
         let coset_offset = F::from_u64(LDE_COSET_OFFSET);
         let lde_domain = generate_lde_coset_domain::<F>(padded_len, blowup, coset_offset).unwrap();
         let omega_last = generate_trace_domain::<F>(padded_len)
@@ -1540,7 +1540,7 @@ mod forge_poc_g2 {
         let n_inv = F::from_u64(padded_len as u64).inverse().unwrap();
         let shift = blowup % lde_len;
         let air = ToyAir;
-        let mut quotient_lde = Vec::with_capacity(lde_len);
+        let mut quotient_lde: Vec<K> = Vec::with_capacity(lde_len);
         for i in 0..lde_len {
             let x = lde_domain.element(i);
             let z_h = x.pow(padded_len as u64).sub(F::ONE);
@@ -1555,22 +1555,23 @@ mod forge_poc_g2 {
             let delta = trace_lde[i][1];
             let acc_next = trace_lde[(i + shift) % lde_len][0];
             let delta_next = trace_lde[(i + shift) % lde_len][1];
-            let c = air
-                .quotient_numerator(
+            let (b, t) = air
+                .constraint_values(
                     &[acc, delta],
                     &[acc_next, delta_next],
                     l0,
                     l_last,
                     selector_last,
-                    alpha_boundary,
-                    alpha_transition,
                     initial_acc,
                     final_acc,
                 )
                 .unwrap();
-            quotient_lde.push(c.mul(z_h_inv));
+            let c = K::from_base(b)
+                .mul(alpha_boundary)
+                .add(K::from_base(t).mul(alpha_transition));
+            quotient_lde.push(c.mul(K::from_base(z_h_inv)));
         }
-        let quotient_root = commit_quotient_lde(&quotient_lde);
+        let quotient_root = commit_quotient_lde_k(&quotient_lde);
         transcript.append_message(
             protocol::label::COMMIT_QUOTIENT_ROOT,
             quotient_root.as_bytes(),
@@ -1598,7 +1599,7 @@ mod forge_poc_g2 {
             composition_commitment: commitment_digest(&composition_commitment),
         };
         let fri_config = FriConfig::new(fri_final_poly_size).unwrap();
-        let base_producer: Arc<dyn hc_replay::traits::BlockProducer<F>> =
+        let base_producer: Arc<dyn hc_replay::traits::BlockProducer<K>> =
             Arc::new(VecBlockProducer::new(quotient_lde.clone()));
         let artifacts = run_fri_v5(fri_config, base_producer, lde_len, fri_seed).unwrap();
         let fri_proof = artifacts.proof.clone();
@@ -1629,7 +1630,8 @@ mod forge_poc_g2 {
         let mut composition_queries = Vec::with_capacity(base_queries.len());
         for &idx in &base_queries {
             trace_queries.push(open_trace_query(&trace_lde, idx, lde_len, shift).unwrap());
-            composition_queries.push(open_composition_query(&quotient_lde, idx, lde_len).unwrap());
+            composition_queries
+                .push(open_composition_query_k(&quotient_lde, idx, lde_len).unwrap());
         }
         trace_queries.sort_by_key(|q| q.index);
         composition_queries.sort_by_key(|q| q.index);
@@ -1640,10 +1642,10 @@ mod forge_poc_g2 {
         transcript.append_message(protocol::label::CHAL_OOD_POINT, [0u8]);
         let ood_fe = transcript.challenge_field::<F>(protocol::label::CHAL_OOD_INDEX);
         let ood_index = (ood_fe.to_u64() as usize) % lde_len;
-        let ood = Some(OodOpenings {
+        let ood = Some(OodOpeningsV5 {
             index: ood_index,
             trace: open_trace_query(&trace_lde, ood_index, lde_len, shift).unwrap(),
-            quotient: open_composition_query(&quotient_lde, ood_index, lde_len).unwrap(),
+            quotient: open_composition_query_k(&quotient_lde, ood_index, lde_len).unwrap(),
         });
 
         let query_response = QueryResponseV5 {

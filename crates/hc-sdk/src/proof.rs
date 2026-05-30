@@ -807,6 +807,53 @@ struct SerializableFriQueryV5 {
     merkle_paths: [SerializableMerklePath; 2],
 }
 
+/// A single K-valued quotient (composition) opening (Phase 1A.2): the opened
+/// value is a K element (hex of the 16-byte LE encoding).
+#[derive(Serialize, Deserialize)]
+struct SerializableCompositionQueryV5 {
+    index: usize,
+    /// Hex-encoded K value (16 bytes LE).
+    value: String,
+    witness: SerializableMerklePath,
+}
+
+/// OOD-style opening for v5: trace opening in F, quotient opening in K.
+#[derive(Serialize, Deserialize)]
+struct SerializableOodOpeningsV5 {
+    index: usize,
+    trace: SerializableTraceQuery,
+    quotient: SerializableCompositionQueryV5,
+}
+
+/// Boundary openings for v5: trace openings in F, composition openings in K.
+#[derive(Serialize, Deserialize)]
+struct SerializableBoundaryOpeningsV5 {
+    first_trace: SerializableTraceQuery,
+    last_trace: SerializableTraceQuery,
+    first_composition: SerializableCompositionQueryV5,
+    last_composition: SerializableCompositionQueryV5,
+}
+
+fn serialize_composition_query_v5(
+    cq: &hc_prover::queries::CompositionQuery<K>,
+) -> SerializableCompositionQueryV5 {
+    SerializableCompositionQueryV5 {
+        index: cq.index,
+        value: k_to_hex(cq.value),
+        witness: serialize_merkle_path(&cq.witness),
+    }
+}
+
+fn deserialize_composition_query_v5(
+    cq: SerializableCompositionQueryV5,
+) -> Result<hc_prover::queries::CompositionQuery<K>> {
+    Ok(hc_prover::queries::CompositionQuery {
+        index: cq.index,
+        value: k_from_hex(&cq.value)?,
+        witness: deserialize_merkle_path(cq.witness)?,
+    })
+}
+
 /// Serializable form of a `ProofV5<GoldilocksField>`.
 ///
 /// Version tag 5 (or 6 for ZK) is stored in the `version` field; the
@@ -831,12 +878,13 @@ struct SerializableProofV5 {
     grinding_nonce: u64,
     // Query openings.
     trace_queries: Vec<SerializableTraceQuery>,
-    composition_queries: Vec<SerializableCompositionQuery>,
+    /// K-valued quotient (composition) openings (Phase 1A.2).
+    composition_queries: Vec<SerializableCompositionQueryV5>,
     fri_queries: Vec<SerializableFriQueryV5>,
     #[serde(default)]
-    boundary: Option<SerializableBoundaryOpenings>,
+    boundary: Option<SerializableBoundaryOpeningsV5>,
     #[serde(default)]
-    ood: Option<SerializableOodOpenings>,
+    ood: Option<SerializableOodOpeningsV5>,
 }
 
 impl SerializableProofV5 {
@@ -866,7 +914,7 @@ impl SerializableProofV5 {
         let composition_queries = qr
             .composition_queries
             .iter()
-            .map(serialize_composition_query)
+            .map(serialize_composition_query_v5)
             .collect();
         let fri_queries = qr
             .fri_queries
@@ -881,16 +929,19 @@ impl SerializableProofV5 {
                 ],
             })
             .collect();
-        let boundary = qr.boundary.as_ref().map(|b| SerializableBoundaryOpenings {
-            first_trace: serialize_trace_query(&b.first_trace),
-            last_trace: serialize_trace_query(&b.last_trace),
-            first_composition: serialize_composition_query(&b.first_composition),
-            last_composition: serialize_composition_query(&b.last_composition),
-        });
-        let ood = qr.ood.as_ref().map(|ood| SerializableOodOpenings {
+        let boundary = qr
+            .boundary
+            .as_ref()
+            .map(|b| SerializableBoundaryOpeningsV5 {
+                first_trace: serialize_trace_query(&b.first_trace),
+                last_trace: serialize_trace_query(&b.last_trace),
+                first_composition: serialize_composition_query_v5(&b.first_composition),
+                last_composition: serialize_composition_query_v5(&b.last_composition),
+            });
+        let ood = qr.ood.as_ref().map(|ood| SerializableOodOpeningsV5 {
             index: ood.index,
             trace: serialize_trace_query(&ood.trace),
-            quotient: serialize_composition_query(&ood.quotient),
+            quotient: serialize_composition_query_v5(&ood.quotient),
         });
 
         Self {
@@ -980,7 +1031,7 @@ impl SerializableProofV5 {
         let composition_queries = self
             .composition_queries
             .into_iter()
-            .map(deserialize_composition_query)
+            .map(deserialize_composition_query_v5)
             .collect::<Result<Vec<_>>>()?;
         let fri_queries = self
             .fri_queries
@@ -1000,12 +1051,12 @@ impl SerializableProofV5 {
         let boundary = self
             .boundary
             .map(
-                |b| -> Result<hc_prover::queries::BoundaryOpenings<GoldilocksField>> {
-                    Ok(hc_prover::queries::BoundaryOpenings {
+                |b| -> Result<hc_prover::queries::BoundaryOpeningsV5<GoldilocksField>> {
+                    Ok(hc_prover::queries::BoundaryOpeningsV5 {
                         first_trace: deserialize_trace_query(b.first_trace)?,
                         last_trace: deserialize_trace_query(b.last_trace)?,
-                        first_composition: deserialize_composition_query(b.first_composition)?,
-                        last_composition: deserialize_composition_query(b.last_composition)?,
+                        first_composition: deserialize_composition_query_v5(b.first_composition)?,
+                        last_composition: deserialize_composition_query_v5(b.last_composition)?,
                     })
                 },
             )
@@ -1013,11 +1064,11 @@ impl SerializableProofV5 {
         let ood = self
             .ood
             .map(
-                |ood| -> Result<hc_prover::queries::OodOpenings<GoldilocksField>> {
-                    Ok(hc_prover::queries::OodOpenings {
+                |ood| -> Result<hc_prover::queries::OodOpeningsV5<GoldilocksField>> {
+                    Ok(hc_prover::queries::OodOpeningsV5 {
                         index: ood.index,
                         trace: deserialize_trace_query(ood.trace)?,
-                        quotient: deserialize_composition_query(ood.quotient)?,
+                        quotient: deserialize_composition_query_v5(ood.quotient)?,
                     })
                 },
             )

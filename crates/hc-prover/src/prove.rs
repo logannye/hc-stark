@@ -5,7 +5,7 @@ use hc_core::{
     domain::{generate_lde_coset_domain, generate_trace_domain},
     error::{HcError, HcResult},
     fft::{fft_parallel as fft_in_place, ifft_parallel as ifft_in_place},
-    field::{FieldElement, GoldilocksField},
+    field::{FieldElement, GoldilocksField, QuadExtension},
 };
 use hc_fri::{FriConfig, FriProof};
 use hc_hash::{grinding, hash::HashDigest, protocol, Blake3, HashFunction, Transcript};
@@ -27,6 +27,9 @@ use crate::{
 };
 
 pub type TraceRow<F> = [F; 2];
+
+/// Extension field used by the v5 (Phase 1A.2) composition challenges + quotient.
+type QuadExtensionK = QuadExtension<GoldilocksField>;
 
 #[derive(Clone, Debug)]
 pub struct PublicInputs<F> {
@@ -1210,6 +1213,8 @@ pub fn prove_stark_v5(
     public_inputs: PublicInputs<GoldilocksField>,
 ) -> HcResult<ProofV5<GoldilocksField>> {
     type F = GoldilocksField;
+    // Extension field for the v5 composition challenges + quotient (Phase 1A.2).
+    type K = QuadExtensionK;
 
     if program.instructions.is_empty() {
         return Err(HcError::invalid_argument(
@@ -1346,15 +1351,19 @@ pub fn prove_stark_v5(
         protocol::label::COMMIT_TRACE_LDE_ROOT,
         trace_root.as_bytes(),
     );
-    // NOTE: composition challenge field stays the base field `F` (unchanged from
-    // v3 — making it `K` is an out-of-scope follow-up).
+    // Phase 1A.2: the composition challenges are sampled in `K = QuadExtension<F>`
+    // (~128-bit), promoting the α-combination and the whole quotient/composition
+    // oracle to K. The trace stays in F; only the α-combination and the division
+    // by Z_H go to K. (The transcript state is unchanged: one squeeze either way;
+    // only the challenge gains entropy.)
     let alpha_boundary =
-        transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
+        transcript.challenge_field::<K>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
     let alpha_transition =
-        transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
+        transcript.challenge_field::<K>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
 
-    // Quotient oracle q(x) = C(x)/(x^N - 1) on the LDE coset, then commit.
-    let quotient_lde = build_quotient_lde::<F>(
+    // Quotient oracle q(x) = C(x)/(x^N - 1) on the LDE coset, K-valued, then commit
+    // with K leaves (`hash_value_ext`).
+    let quotient_lde = build_quotient_lde_k(
         &trace_lde,
         padded_len,
         blowup,
@@ -1362,7 +1371,7 @@ pub fn prove_stark_v5(
         alpha_boundary,
         alpha_transition,
     )?;
-    let quotient_root = commit_quotient_lde::<F>(&quotient_lde)?;
+    let quotient_root = commit_quotient_lde_k(&quotient_lde)?;
     transcript.append_message(
         protocol::label::COMMIT_QUOTIENT_ROOT,
         quotient_root.as_bytes(),
@@ -1390,7 +1399,9 @@ pub fn prove_stark_v5(
         composition_commitment: crate::commitment::commitment_digest(&composition_commitment),
     };
     let fri_config = FriConfig::new(config.fri_final_poly_size)?;
-    let base_producer: Arc<dyn BlockProducer<F>> =
+    // The quotient codeword is now natively K — feed it directly to the K-valued
+    // antipodal FRI commit (no F→K embedding wrapper).
+    let base_producer: Arc<dyn BlockProducer<K>> =
         Arc::new(VecBlockProducer::new(quotient_lde.clone()));
     let artifacts = phase2_fri::run_fri_v5(fri_config, base_producer, lde_len, fri_seed)?;
     let fri_proof = artifacts.proof.clone();
@@ -1428,7 +1439,7 @@ pub fn prove_stark_v5(
     let mut composition_queries = Vec::with_capacity(base_queries.len());
     for &idx in &base_queries {
         trace_queries.push(open_trace_query::<F>(&trace_lde, idx, lde_len, shift)?);
-        composition_queries.push(open_composition_query::<F>(&quotient_lde, idx, lde_len)?);
+        composition_queries.push(open_composition_query_k(&quotient_lde, idx, lde_len)?);
     }
     trace_queries.sort_by_key(|q| q.index);
     composition_queries.sort_by_key(|q| q.index);
@@ -1439,10 +1450,10 @@ pub fn prove_stark_v5(
     transcript.append_message(protocol::label::CHAL_OOD_POINT, [0u8]);
     let ood_fe = transcript.challenge_field::<F>(protocol::label::CHAL_OOD_INDEX);
     let ood_index = (ood_fe.to_u64() as usize) % lde_len;
-    let ood = Some(crate::queries::OodOpenings {
+    let ood = Some(crate::queries::OodOpeningsV5 {
         index: ood_index,
         trace: open_trace_query::<F>(&trace_lde, ood_index, lde_len, shift)?,
-        quotient: open_composition_query::<F>(&quotient_lde, ood_index, lde_len)?,
+        quotient: open_composition_query_k(&quotient_lde, ood_index, lde_len)?,
     });
 
     let query_response = QueryResponseV5 {
@@ -1575,6 +1586,11 @@ fn build_trace_lde<F: FieldElement + hc_core::field::TwoAdicField>(
 /// Build the DEEP-STARK quotient oracle `q(x) = C(x)/(x^N - 1)` on the LDE coset
 /// from the trace LDE and the (already-sampled) composition challenges. Pure;
 /// mirrors the v3 `run_commit_deep_stark` / `compute_deep_oracles` math.
+///
+/// Phase 1A.2 superseded the v5 use of this F helper with [`build_quotient_lde_k`]
+/// (the composition challenges + quotient are now K). It is retained as the
+/// F reference (and the `..._k` doc anchor); the v3 path uses its own inline math.
+#[allow(dead_code)]
 fn build_quotient_lde<F: FieldElement + hc_core::field::TwoAdicField>(
     trace_lde: &[TraceRow<F>],
     padded_len: usize,
@@ -1639,6 +1655,83 @@ fn build_quotient_lde<F: FieldElement + hc_core::field::TwoAdicField>(
     Ok(quotient)
 }
 
+/// Build the DEEP-STARK quotient oracle `q(x) = C(x)/(x^N - 1)` on the LDE coset
+/// in `K = QuadExtension<GoldilocksField>` (Phase 1A.2).
+///
+/// ADDITIVE counterpart to [`build_quotient_lde`] (which stays F-valued for the
+/// v3 path). The trace LDE stays in F; per LDE point we get the two base-field
+/// constraint values `(b, t)` from [`DeepStarkAir::constraint_values`], combine
+/// them with the K composition challenges
+/// `c = K::from_base(b)·α_b + K::from_base(t)·α_t`, and divide by `Z_H(x)` in K
+/// (`q = c · K::from_base(z_h_inv)`). For ToyAir this combination is exactly
+/// `α_b·boundary + α_t·transition`, matching `quotient_numerator`.
+fn build_quotient_lde_k(
+    trace_lde: &[TraceRow<GoldilocksField>],
+    padded_len: usize,
+    blowup: usize,
+    boundary: &BoundaryConstraints<GoldilocksField>,
+    alpha_boundary: QuadExtensionK,
+    alpha_transition: QuadExtensionK,
+) -> HcResult<Vec<QuadExtensionK>> {
+    type F = GoldilocksField;
+    let lde_len = padded_len * blowup;
+    if trace_lde.len() != lde_len {
+        return Err(HcError::message("trace LDE length mismatch"));
+    }
+    let coset_offset = F::from_u64(LDE_COSET_OFFSET);
+    let trace_domain = generate_trace_domain::<F>(padded_len)?;
+    let lde_domain = generate_lde_coset_domain::<F>(padded_len, blowup, coset_offset)?;
+    let omega_last = trace_domain
+        .generator()
+        .inverse()
+        .ok_or_else(|| HcError::math("trace domain generator has no inverse"))?;
+    let n_inv = F::from_u64(padded_len as u64)
+        .inverse()
+        .ok_or_else(|| HcError::math("padded_len has no inverse"))?;
+    let shift = blowup % lde_len;
+    let air = ToyAir;
+
+    let mut quotient = Vec::with_capacity(lde_len);
+    for i in 0..lde_len {
+        let x = lde_domain.element(i);
+        let z_h = x.pow(padded_len as u64).sub(F::ONE);
+        let z_h_inv = z_h
+            .inverse()
+            .ok_or_else(|| HcError::math("unexpected zero Z_H on coset domain"))?;
+        let l0 = z_h.mul(n_inv).mul(
+            x.sub(F::ONE)
+                .inverse()
+                .ok_or_else(|| HcError::math("unexpected zero denominator in L0 on coset"))?,
+        );
+        let l_last = z_h.mul(omega_last).mul(n_inv).mul(
+            x.sub(omega_last)
+                .inverse()
+                .ok_or_else(|| HcError::math("unexpected zero denominator in L_last on coset"))?,
+        );
+        let selector_last = F::ONE.sub(l_last);
+
+        let acc = trace_lde[i][0];
+        let delta = trace_lde[i][1];
+        let acc_next = trace_lde[(i + shift) % lde_len][0];
+        let delta_next = trace_lde[(i + shift) % lde_len][1];
+        // Base-field constraint values, then combine + divide in K.
+        let (b, t) = air.constraint_values(
+            &[acc, delta],
+            &[acc_next, delta_next],
+            l0,
+            l_last,
+            selector_last,
+            boundary.initial_acc,
+            boundary.final_acc,
+        )?;
+        let c = QuadExtensionK::from_base(b)
+            .mul(alpha_boundary)
+            .add(QuadExtensionK::from_base(t).mul(alpha_transition));
+        quotient.push(c.mul(QuadExtensionK::from_base(z_h_inv)));
+    }
+    Ok(quotient)
+}
+
 /// Commit the trace LDE oracle (packed leaf `[acc(x), delta(x)]`) via a
 /// streaming Merkle tree (same leaf hash as the v3 path).
 fn commit_trace_lde<F: FieldElement>(trace_lde: &[TraceRow<F>]) -> HcResult<HashDigest> {
@@ -1653,11 +1746,30 @@ fn commit_trace_lde<F: FieldElement>(trace_lde: &[TraceRow<F>]) -> HcResult<Hash
 }
 
 /// Commit the quotient oracle via a streaming Merkle tree (same leaf hash as v3).
+///
+/// Phase 1A.2 superseded the v5 use of this F helper with [`commit_quotient_lde_k`]
+/// (K leaves). Retained as the F reference.
+#[allow(dead_code)]
 fn commit_quotient_lde<F: FieldElement>(quotient_lde: &[F]) -> HcResult<HashDigest> {
     use hc_commit::merkle::height_dfs::StreamingMerkle;
     let mut builder = StreamingMerkle::<Blake3>::new();
     for v in quotient_lde {
         builder.push(hash_field_element(v));
+    }
+    builder
+        .finalize()
+        .ok_or_else(|| HcError::message("failed to finalize quotient merkle tree"))
+}
+
+/// Commit the K-valued quotient oracle via a streaming Merkle tree, binding BOTH
+/// extension coefficients per leaf (`hash_value_ext`). Phase 1A.2 — the v5
+/// quotient is K; the v3 `commit_quotient_lde` (F leaves) is unchanged.
+fn commit_quotient_lde_k(quotient_lde: &[QuadExtensionK]) -> HcResult<HashDigest> {
+    use hc_commit::merkle::height_dfs::StreamingMerkle;
+    use hc_fri::layer::hash_value_ext;
+    let mut builder = StreamingMerkle::<Blake3>::new();
+    for v in quotient_lde {
+        builder.push(hash_value_ext(v));
     }
     builder
         .finalize()
@@ -1715,6 +1827,10 @@ fn open_trace_query<F: FieldElement>(
 
 /// Build a single quotient (composition) opening from a materialized quotient
 /// LDE. Reuses the exact v3 leaf-hash + path-reconstruction pattern.
+///
+/// Phase 1A.2 superseded the v5 use of this F helper with [`open_composition_query_k`]
+/// (K value + K leaf). Retained as the F reference.
+#[allow(dead_code)]
 fn open_composition_query<F: FieldElement>(
     quotient_lde: &[F],
     idx: usize,
@@ -1730,6 +1846,37 @@ fn open_composition_query<F: FieldElement>(
             .copied()
             .ok_or_else(|| HcError::message("quotient leaf out of range"))?;
         Ok(hash_field_element(&v))
+    };
+    let witness = reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)
+        .map_err(|err| {
+            HcError::message(format!("Failed to extract quotient Merkle path: {err}"))
+        })?;
+    Ok(crate::queries::CompositionQuery {
+        index: idx,
+        value,
+        witness,
+    })
+}
+
+/// Build a single K-valued quotient (composition) opening from a materialized K
+/// quotient LDE, binding both extension coefficients per leaf (`hash_value_ext`).
+/// Phase 1A.2 — the v5 composition openings are K; the v3 `open_composition_query`
+/// (F values, F leaves) is unchanged.
+fn open_composition_query_k(
+    quotient_lde: &[QuadExtensionK],
+    idx: usize,
+    lde_len: usize,
+) -> HcResult<crate::queries::CompositionQuery<QuadExtensionK>> {
+    use hc_commit::merkle::reconstruct_path_from_replay_mut;
+    use hc_fri::layer::hash_value_ext;
+    let value = *quotient_lde
+        .get(idx)
+        .ok_or_else(|| HcError::message("quotient query out of range"))?;
+    let mut leaf_hash = |leaf_index: usize| -> HcResult<HashDigest> {
+        let v = quotient_lde
+            .get(leaf_index)
+            .ok_or_else(|| HcError::message("quotient leaf out of range"))?;
+        Ok(hash_value_ext(v))
     };
     let witness = reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)
         .map_err(|err| {

@@ -5,7 +5,6 @@ use hc_fri::{FriConfig, FriProver, FriProverArtifacts};
 use hc_hash::protocol;
 use hc_hash::Blake3;
 use hc_hash::HashDigest;
-use hc_replay::block_range::BlockRange;
 use hc_replay::traits::BlockProducer;
 use std::sync::Arc;
 
@@ -144,40 +143,25 @@ pub struct FriTranscriptSeedV5 {
     pub composition_commitment: HashDigest,
 }
 
-/// Streaming adapter that embeds a base-field `F` producer into `K = Quad(F)`
-/// via [`QuadExtension::from_base`].
-///
-/// Preserves O(block) streaming: each `produce(range)` issues exactly one
-/// underlying `F` read and maps it value-by-value (no full-layer buffering).
-struct EmbeddingProducer<F: FieldElement> {
-    inner: Arc<dyn BlockProducer<F>>,
-}
-
-impl<F: FieldElement> BlockProducer<QuadExtension<F>> for EmbeddingProducer<F> {
-    fn produce(&self, range: BlockRange) -> HcResult<Vec<QuadExtension<F>>> {
-        let base = self.inner.produce(range)?;
-        Ok(base.into_iter().map(QuadExtension::from_base).collect())
-    }
-}
-
-/// Run the v5 (uniform-K) FRI commit phase over a base-field quotient producer.
+/// Run the v5 (uniform-K) FRI commit phase over a K-valued quotient producer.
 ///
 /// ADDITIVE counterpart to [`run_fri`]: builds the v5 FRI transcript
 /// ([`protocol::DOMAIN_FRI_V5`]) seeded with the same public/param/commitment
-/// fields as `run_fri` PLUS the grinding-bits param, embeds the base-field `F`
-/// quotient codeword into `K = QuadExtension<F>` through a streaming adapter,
-/// builds the layer-0 `LayerDomain<K>` from the LDE coset (offset 7) embedded
-/// into K, and drives the antipodal + 1/x commit phase
-/// ([`FriProver::prove_with_producer_v5`]).
+/// fields as `run_fri` PLUS the grinding-bits param, builds the layer-0
+/// `LayerDomain<K>` from the LDE coset (offset 7) embedded into K, and drives the
+/// antipodal + 1/x commit phase ([`FriProver::prove_with_producer_v5`]).
+///
+/// Phase 1A.2: the composition challenges are now sampled in `K`, so the quotient
+/// codeword is natively `K = QuadExtension<F>`; this takes the K producer directly
+/// (no F→K embedding adapter).
 ///
 /// `base_len` is the FRI base codeword length (the producer length, = the LDE
 /// coset size, a power of two). Returns the K-valued commit-phase artifacts
 /// (a [`hc_fri::FriProof`] carrying `final_coeffs`, the K betas, the base K
-/// producer, and streaming stats). Query openings, grinding nonce search, the
-/// v5 proof/output type, and serialization are SEPARATE later tasks.
+/// producer, and streaming stats).
 pub fn run_fri_v5(
     config: FriConfig,
-    producer: Arc<dyn BlockProducer<GoldilocksField>>,
+    producer: Arc<dyn BlockProducer<K>>,
     base_len: usize,
     seed: FriTranscriptSeedV5,
 ) -> HcResult<FriProverArtifacts<K>> {
@@ -245,9 +229,6 @@ pub fn run_fri_v5(
         seed.composition_commitment.as_bytes(),
     );
 
-    // Embed the base-field quotient producer into K (streaming, O(block)).
-    let k_producer: Arc<dyn BlockProducer<K>> = Arc::new(EmbeddingProducer { inner: producer });
-
     // Layer-0 coset = LDE coset (offset 7) of size base_len, embedded into K.
     let base_domain_f = hc_core::domain::EvaluationDomain::<GoldilocksField>::new_coset(
         base_len,
@@ -261,7 +242,7 @@ pub fn run_fri_v5(
 
     let blowup = seed.lde_blowup.max(1) as usize;
     let mut prover = FriProver::<K, Blake3>::new(config, &mut transcript);
-    prover.prove_with_producer_v5(k_producer, base_domain, base_len, blowup)
+    prover.prove_with_producer_v5(producer, base_domain, base_len, blowup)
 }
 
 #[cfg(test)]
@@ -308,9 +289,9 @@ mod tests {
         (0..final_size).map(|j| ld.point(j)).collect()
     }
 
-    /// End-to-end: a genuinely low-degree F base codeword on the LDE coset,
-    /// embedded into K by the adapter, must yield `final_coeffs` of length
-    /// `final_size/blowup` that re-evaluate to `proof.final_layer`.
+    /// End-to-end: a genuinely low-degree K base codeword on the LDE coset must
+    /// yield `final_coeffs` of length `final_size/blowup` that re-evaluate to
+    /// `proof.final_layer`. (Phase 1A.2: the FRI base is natively K.)
     #[test]
     fn run_fri_v5_honest_low_degree_final_coeffs_roundtrip() {
         let blowup = 2usize;
@@ -326,11 +307,13 @@ mod tests {
                 .map(|i| GoldilocksField::from_u64((i as u64).wrapping_mul(7919) + 13))
                 .collect();
             let points: Vec<GoldilocksField> = (0..base_len).map(|j| dom_f.element(j)).collect();
-            let values = hc_core::poly::evaluate_batch(&poly, &points);
+            let values: Vec<K> = hc_core::poly::evaluate_batch(&poly, &points)
+                .into_iter()
+                .map(K::from_base)
+                .collect();
 
             let config = FriConfig::new(final_size).unwrap();
-            let producer: Arc<dyn BlockProducer<GoldilocksField>> =
-                Arc::new(VecBlockProducer::new(values));
+            let producer: Arc<dyn BlockProducer<K>> = Arc::new(VecBlockProducer::new(values));
             let artifacts = run_fri_v5(
                 config,
                 producer,
@@ -362,15 +345,15 @@ mod tests {
     #[test]
     fn run_fri_v5_grinding_bits_bound_into_transcript() {
         let (base_len, blowup, final_size) = (64usize, 2usize, 2usize);
-        let values: Vec<GoldilocksField> = (0..base_len as u64)
-            .map(GoldilocksField::from_u64)
+        let values: Vec<K> = (0..base_len as u64)
+            .map(|i| K::from_base(GoldilocksField::from_u64(i)))
             .collect();
         let config = FriConfig::new(final_size).unwrap();
 
         let run = |bits: u64| {
             let mut s = seed_v5(base_len, blowup, final_size);
             s.grinding_bits = bits;
-            let producer: Arc<dyn BlockProducer<GoldilocksField>> =
+            let producer: Arc<dyn BlockProducer<K>> =
                 Arc::new(VecBlockProducer::new(values.clone()));
             run_fri_v5(config, producer, base_len, s).unwrap().betas
         };
@@ -381,15 +364,15 @@ mod tests {
         );
     }
 
-    /// The embedding adapter preserves O(block) streaming: the underlying F
-    /// producer is read in bounded blocks, never the whole layer at once.
+    /// The v5 commit phase preserves O(block) streaming: the K base producer is
+    /// read in bounded blocks, never the whole layer at once.
     #[derive(Clone)]
-    struct CountingF {
-        inner: Arc<dyn BlockProducer<GoldilocksField>>,
+    struct CountingK {
+        inner: Arc<dyn BlockProducer<K>>,
         max_read: Arc<std::sync::atomic::AtomicUsize>,
     }
-    impl BlockProducer<GoldilocksField> for CountingF {
-        fn produce(&self, range: BlockRange) -> HcResult<Vec<GoldilocksField>> {
+    impl BlockProducer<K> for CountingK {
+        fn produce(&self, range: hc_replay::block_range::BlockRange) -> HcResult<Vec<K>> {
             self.max_read
                 .fetch_max(range.len, std::sync::atomic::Ordering::Relaxed);
             self.inner.produce(range)
@@ -397,14 +380,14 @@ mod tests {
     }
 
     #[test]
-    fn run_fri_v5_embedding_adapter_streams_bounded_blocks() {
+    fn run_fri_v5_base_producer_streams_bounded_blocks() {
         use std::sync::atomic::{AtomicUsize, Ordering};
         let (base_len, blowup, final_size) = (4096usize, 2usize, 2usize);
-        let values: Vec<GoldilocksField> = (0..base_len as u64)
-            .map(|i| GoldilocksField::from_u64(i.wrapping_mul(1_000_003) + 7))
+        let values: Vec<K> = (0..base_len as u64)
+            .map(|i| K::from_base(GoldilocksField::from_u64(i.wrapping_mul(1_000_003) + 7)))
             .collect();
         let max_read = Arc::new(AtomicUsize::new(0));
-        let producer: Arc<dyn BlockProducer<GoldilocksField>> = Arc::new(CountingF {
+        let producer: Arc<dyn BlockProducer<K>> = Arc::new(CountingK {
             inner: Arc::new(VecBlockProducer::new(values)),
             max_read: Arc::clone(&max_read),
         });
@@ -419,7 +402,7 @@ mod tests {
         let peak = max_read.load(Ordering::Relaxed);
         assert!(
             peak <= 1024,
-            "embedding adapter must read the F producer in O(block) chunks (peak={peak}), not O(N)={base_len}"
+            "v5 commit must read the K base producer in O(block) chunks (peak={peak}), not O(N)={base_len}"
         );
     }
 }

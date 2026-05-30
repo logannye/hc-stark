@@ -133,23 +133,50 @@ pub struct ProverOutput<F: FieldElement> {
     pub params: ProofParams,
 }
 
+/// OOD-style opening for the v5 proof: the trace opening stays in the base field
+/// `F`, while the quotient (composition) opening is **`K`-valued** (Phase 1A.2 —
+/// the composition challenges + quotient are in `K = QuadExtension<F>`).
+///
+/// ADDITIVE counterpart to [`OodOpenings`] (which stays fully F for v3).
+#[derive(Clone, Debug)]
+pub struct OodOpeningsV5<F: FieldElement> {
+    pub index: usize,
+    pub trace: TraceQuery<F>,
+    pub quotient: CompositionQuery<QuadExtension<F>>,
+}
+
+/// Boundary openings for the v5 proof: trace openings in `F`, composition
+/// (quotient) openings in **`K`** (Phase 1A.2). ADDITIVE counterpart to
+/// [`BoundaryOpenings`] (which stays fully F for v3). Currently always `None` in
+/// the v5 path (the OOD + base-query composition openings cover soundness), but
+/// kept so the v5 query response mirrors the v3 shape.
+#[derive(Clone, Debug)]
+pub struct BoundaryOpeningsV5<F: FieldElement> {
+    pub first_trace: TraceQuery<F>,
+    pub last_trace: TraceQuery<F>,
+    pub first_composition: CompositionQuery<QuadExtension<F>>,
+    pub last_composition: CompositionQuery<QuadExtension<F>>,
+}
+
 /// Query response for the soundness-hardened v5 proof (Phase 1A FRI rebuild).
 ///
-/// ADDITIVE counterpart to [`QueryResponse`]: the trace and composition (quotient)
-/// openings stay in the base field `F` (reused from the v3 path), while the FRI
-/// openings are **`K`-valued** (`K = QuadExtension<F>`), produced by the antipodal
-/// commit phase ([`crate::pipeline::phase2_fri::run_fri_v5`]) + answered by
+/// ADDITIVE counterpart to [`QueryResponse`]: the trace openings stay in the base
+/// field `F` (reused from the v3 path), while the composition (quotient) openings
+/// and the FRI openings are **`K`-valued** (`K = QuadExtension<F>`, Phase 1A.2 —
+/// composition challenges + quotient in K). Produced by the antipodal commit
+/// phase ([`crate::pipeline::phase2_fri::run_fri_v5`]) + answered by
 /// [`crate::pipeline::phase3_queries::answer_fri_queries_v5`].
 ///
 /// Consumed by the Task 8 v5 verifier.
 #[derive(Clone, Debug)]
 pub struct QueryResponseV5<F: FieldElement> {
     pub trace_queries: Vec<TraceQuery<F>>,
-    pub composition_queries: Vec<CompositionQuery<F>>,
+    /// `K`-valued quotient (composition) openings.
+    pub composition_queries: Vec<CompositionQuery<QuadExtension<F>>>,
     /// `K`-valued FRI openings (antipodal pairs over the extension field).
     pub fri_queries: Vec<FriQuery<QuadExtension<F>>>,
-    pub boundary: Option<BoundaryOpenings<F>>,
-    pub ood: Option<OodOpenings<F>>,
+    pub boundary: Option<BoundaryOpeningsV5<F>>,
+    pub ood: Option<OodOpeningsV5<F>>,
 }
 
 /// Soundness-hardened v5 proof (Phase 1A FRI rebuild).

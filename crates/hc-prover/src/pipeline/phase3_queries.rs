@@ -1023,9 +1023,10 @@ mod v5_query_tests {
         }
     }
 
-    /// A genuinely low-degree F base codeword (degree `base_len/blowup - 1`) on
-    /// the LDE coset, ready to be embedded into K by `run_fri_v5`'s adapter.
-    fn low_degree_base(base_len: usize, blowup: usize) -> Vec<GoldilocksField> {
+    /// A genuinely low-degree K base codeword (degree `base_len/blowup - 1`) on
+    /// the LDE coset. Phase 1A.2: the v5 FRI base is natively K (the quotient is
+    /// K), so this returns K directly (the values lie in the base subfield).
+    fn low_degree_base(base_len: usize, blowup: usize) -> Vec<K> {
         let dom_f = EvaluationDomain::<GoldilocksField>::new_coset(
             base_len,
             GoldilocksField::from_u64(LDE_COSET_OFFSET),
@@ -1037,6 +1038,9 @@ mod v5_query_tests {
             .collect();
         let points: Vec<GoldilocksField> = (0..base_len).map(|j| dom_f.element(j)).collect();
         hc_core::poly::evaluate_batch(&poly, &points)
+            .into_iter()
+            .map(K::from_base)
+            .collect()
     }
 
     /// The antipodal + 1/x fold of a single opened pair at domain point `x`:
@@ -1064,8 +1068,7 @@ mod v5_query_tests {
         for &(base_len, final_size) in &[(16usize, 2usize), (64, 4), (256, 8), (1024, 2)] {
             let config = FriConfig::new(final_size).unwrap();
             let values = low_degree_base(base_len, blowup);
-            let producer: Arc<dyn BlockProducer<GoldilocksField>> =
-                Arc::new(VecBlockProducer::new(values));
+            let producer: Arc<dyn BlockProducer<K>> = Arc::new(VecBlockProducer::new(values));
             let artifacts = run_fri_v5(
                 config,
                 producer,
@@ -1110,8 +1113,7 @@ mod v5_query_tests {
         for &(base_len, final_size) in &[(64usize, 2usize), (256, 4), (1024, 2)] {
             let config = FriConfig::new(final_size).unwrap();
             let values = low_degree_base(base_len, blowup);
-            let producer: Arc<dyn BlockProducer<GoldilocksField>> =
-                Arc::new(VecBlockProducer::new(values));
+            let producer: Arc<dyn BlockProducer<K>> = Arc::new(VecBlockProducer::new(values));
             let artifacts = run_fri_v5(
                 config,
                 producer,
@@ -1190,8 +1192,7 @@ mod v5_query_tests {
         let (base_len, final_size) = (256usize, 4usize);
         let config = FriConfig::new(final_size).unwrap();
         let values = low_degree_base(base_len, blowup);
-        let producer: Arc<dyn BlockProducer<GoldilocksField>> =
-            Arc::new(VecBlockProducer::new(values));
+        let producer: Arc<dyn BlockProducer<K>> = Arc::new(VecBlockProducer::new(values));
         let artifacts = run_fri_v5(
             config,
             producer,
@@ -1229,10 +1230,9 @@ mod v5_query_tests {
         let blowup = 2usize;
         let (base_len, final_size) = (256usize, 4usize);
         let config = FriConfig::new(final_size).unwrap();
-        let base_values_f = low_degree_base(base_len, blowup);
-        let base_values_k: Vec<K> = base_values_f.iter().map(|&v| K::from_base(v)).collect();
-        let producer: Arc<dyn BlockProducer<GoldilocksField>> =
-            Arc::new(VecBlockProducer::new(base_values_f));
+        let base_values_k: Vec<K> = low_degree_base(base_len, blowup);
+        let producer: Arc<dyn BlockProducer<K>> =
+            Arc::new(VecBlockProducer::new(base_values_k.clone()));
         let artifacts = run_fri_v5(
             config,
             producer,

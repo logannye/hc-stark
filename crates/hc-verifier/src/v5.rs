@@ -245,12 +245,13 @@ fn verify_stark_v5_inner(proof: &ProofV5<F>) -> HcResult<()> {
         protocol::label::COMMIT_TRACE_LDE_ROOT,
         trace_root.as_bytes(),
     );
-    // Draw the two composition α challenges to advance the transcript state
-    // (the quotient relation stays in F; the challenge field is F as in v3).
+    // Draw the two composition α challenges in `K` (Phase 1A.2): the quotient /
+    // composition relation is K-valued (~128-bit). The transcript state is
+    // identical to squeezing F (one squeeze either way); only α gains entropy.
     let alpha_boundary =
-        transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
+        transcript.challenge_field::<K>(protocol::label::COMPOSITION_ALPHA_BOUNDARY);
     let alpha_transition =
-        transcript.challenge_field::<F>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
+        transcript.challenge_field::<K>(protocol::label::COMPOSITION_ALPHA_TRANSITION);
     transcript.append_message(
         protocol::label::COMMIT_QUOTIENT_ROOT,
         quotient_root.as_bytes(),
@@ -417,11 +418,11 @@ fn recompute_fri_betas_v5(
     Ok(betas)
 }
 
-/// Verify trace + quotient (composition) openings in F at the given query
-/// indices, plus the quotient relation at each queried point. This is the same
-/// logic the v3 verifier (`verify_stark_v3_trace_and_quotient`) applies; it is
-/// re-implemented here over the v5 query types (`QueryResponseV5`) without
-/// touching v3.
+/// Verify trace + quotient (composition) openings at the given query indices,
+/// plus the quotient relation at each queried point. Phase 1A.2: the trace
+/// openings stay in `F`, but the composition (quotient) openings and the
+/// α-combination / quotient relation are **`K`-valued** (~128-bit). Re-implemented
+/// over the v5 query types (`QueryResponseV5`) without touching v3.
 #[allow(clippy::too_many_arguments)]
 fn verify_v5_trace_and_quotient(
     proof: &ProofV5<F>,
@@ -430,10 +431,10 @@ fn verify_v5_trace_and_quotient(
     base_queries: &[usize],
     padded_len: usize,
     lde_len: usize,
-    alpha_boundary: F,
-    alpha_transition: F,
+    alpha_boundary: K,
+    alpha_transition: K,
     trace_queries: &[TraceQuery<F>],
-    composition_queries: &[CompositionQuery<F>],
+    composition_queries: &[CompositionQuery<K>],
     check_query_indices: bool,
 ) -> HcResult<()> {
     use hc_air::{DeepStarkAir, ToyAir};
@@ -472,8 +473,8 @@ fn verify_v5_trace_and_quotient(
     }
 
     for cq in composition_queries {
-        // Verify quotient Merkle opening (same leaf hash as the prover).
-        let leaf_hash = Blake3::hash(&cq.value.to_u64().to_le_bytes());
+        // Verify quotient Merkle opening (K leaf, same `hash_value_ext` as the prover).
+        let leaf_hash = hash_value_ext(&cq.value);
         if !cq.witness.verify::<Blake3>(quotient_root, leaf_hash) {
             return Err(VerifierError::CompositionQueryMerkleMismatch.into());
         }
@@ -505,8 +506,11 @@ fn verify_v5_trace_and_quotient(
             return Err(VerifierError::TraceQueryMerkleMismatch.into());
         }
 
-        // Quotient relation at x = domain[idx]:
-        // q(x) * (x^N - 1) == C(x), the DEEP-STARK numerator.
+        // Quotient relation at x = domain[idx], checked in K (Phase 1A.2):
+        // q(x) * (x^N - 1) == C(x), where C(x) = α_b·boundary + α_t·transition
+        // and α_b, α_t ∈ K. The selectors/Z_H and the two base-field constraint
+        // values come from the F trace opening; the combination + the equality
+        // are evaluated in K.
         let x = lde_domain.element(tq.index);
         let z_h = x.pow(padded_len as u64).sub(F::ONE);
         let l0 = z_h.mul(n_inv).mul(
@@ -526,19 +530,20 @@ fn verify_v5_trace_and_quotient(
         let acc_next = next.evaluation[0];
         let delta_next = next.evaluation[1];
         let air = ToyAir;
-        let c = air.quotient_numerator(
+        let (b, t) = air.constraint_values(
             &[acc, delta],
             &[acc_next, delta_next],
             l0,
             l_last,
             selector_last,
-            alpha_boundary,
-            alpha_transition,
             proof.initial_acc,
             proof.final_acc,
         )?;
+        let c = K::from_base(b)
+            .mul(alpha_boundary)
+            .add(K::from_base(t).mul(alpha_transition));
 
-        let lhs = cq.value.mul(z_h);
+        let lhs = cq.value.mul(K::from_base(z_h));
         if lhs != c {
             return Err(VerifierError::CompositionQueryValueMismatch.into());
         }
@@ -557,7 +562,7 @@ fn verify_fri_low_degree_v5(
     base_queries: &[usize],
     betas: &[K],
     lde_len: usize,
-    composition_queries: &[CompositionQuery<F>],
+    composition_queries: &[CompositionQuery<K>],
 ) -> HcResult<()> {
     let fri = &proof.fri_proof;
     let num_layers = fri.layer_roots.len();
@@ -565,8 +570,8 @@ fn verify_fri_low_degree_v5(
         return Err(VerifierError::FriFailure.into());
     }
 
-    // Composition value by index (the FRI base binding).
-    let composition_by_index: std::collections::HashMap<usize, F> = composition_queries
+    // Composition value by index (the FRI base binding) — now K-valued.
+    let composition_by_index: std::collections::HashMap<usize, K> = composition_queries
         .iter()
         .map(|q| (q.index, q.value))
         .collect();
@@ -618,11 +623,13 @@ fn verify_fri_low_degree_v5(
         let mut domain = base_domain.clone();
         let mut n = lde_len;
         // Seed the expected value from the composition opening (FRI base binding).
-        let mut expected: Option<K> = Some(K::from_base(
+        // The quotient codeword is natively K, so this is the opened K value
+        // directly (no F→K embedding).
+        let mut expected: Option<K> = Some(
             *composition_by_index
                 .get(&base_query)
                 .ok_or(VerifierError::QueryIndexMismatch)?,
-        ));
+        );
 
         for (layer_idx, beta) in betas.iter().enumerate() {
             if !is_valid_query_index(current, n) {
@@ -858,7 +865,7 @@ mod tests {
             .composition_queries
             .first_mut()
             .expect("composition query");
-        first.value = first.value.add(F::ONE);
+        first.value = first.value.add(K::ONE);
         let err = verify_v5_with_floor(&proof, VerifierSecurityFloor::relaxed())
             .expect_err("tampered composition value must be rejected");
         eprintln!("v5_tampered_composition_value_rejected: {err}");
