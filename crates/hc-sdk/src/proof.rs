@@ -2066,4 +2066,23 @@ mod v7_serialization_tests {
             result.error
         );
     }
+
+    /// v7 proving is deterministic: the same (AIR, trace, public inputs, config)
+    /// yields byte-identical proofs. v7 is sound-only (no ZK randomness);
+    /// grinding is a deterministic search and the Fiat–Shamir challenges are
+    /// transcript-derived, so the serialized proof is reproducible. This is the
+    /// non-brittle stand-in for a byte-exact KAT — a frozen hex vector is
+    /// deferred until the wire format is frozen at the Phase 4 audit (range is
+    /// gated until then, so the format is not yet a public commitment).
+    #[test]
+    fn v7_range_proof_is_deterministic() {
+        let cfg = v7_relaxed_cfg();
+        let a = encode_proof_v7(&range_proof(18, 120, 42, &cfg)).unwrap();
+        let b = encode_proof_v7(&range_proof(18, 120, 42, &cfg)).unwrap();
+        assert_eq!(a.version, b.version);
+        assert_eq!(
+            a.bytes, b.bytes,
+            "v7 proving must be deterministic (byte-reproducible)"
+        );
+    }
 }
