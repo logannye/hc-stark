@@ -8,6 +8,7 @@ pub mod domain_mapping;
 pub mod dsl;
 pub mod eval;
 pub mod multi_column;
+pub mod range_air;
 pub mod selectors;
 pub mod trace;
 
@@ -18,6 +19,9 @@ pub use air_general::{Air as GeneralAir, ConstraintMeta, MaskKind};
 pub use dsl::{ConstraintSystem, DslAir};
 pub use eval::{evaluate, PublicInputs};
 pub use multi_column::MultiColumnTrace;
+pub use range_air::{
+    build_range_trace, build_range_trace_n, RangeAir, DEFAULT_N as RANGE_DEFAULT_N,
+};
 pub use trace::TraceTable;
 
 #[cfg(test)]
