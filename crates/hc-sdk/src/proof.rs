@@ -234,8 +234,15 @@ pub fn decode_proof_bytes(
 pub fn verify_proof_bytes(proof: &ProofBytes, allow_legacy_v2: bool) -> VerifyResult {
     let _ = allow_legacy_v2; // legacy v2/v3/v4 are unconditionally rejected below.
 
-    // Route v5+ proofs to the v5 verifier (soundness-hardened, G2/G7 +
-    // production security floor). This is the only accepted path.
+    // Route v7+ (general-AIR sound) proofs to the v7 verifier. ADDITIVE (Phase
+    // 1B): this does NOT cut over the v5 path — v5/v6 proofs still route to the
+    // v5 verifier below, so both protocol families are accepted.
+    if proof.version >= 7 {
+        return verify_proof_bytes_v7(proof);
+    }
+
+    // Route v5/v6 proofs to the v5 verifier (soundness-hardened, G2/G7 +
+    // production security floor).
     if proof.version >= 5 {
         return verify_proof_bytes_v5(proof);
     }
@@ -1151,6 +1158,388 @@ fn verify_proof_bytes_v5(proof: &ProofBytes) -> VerifyResult {
     }
 }
 
+// ─── v7 (general-AIR) serialization + verify routing ─────────────────────────
+//
+// ADDITIVE counterpart to the v5 serializer. The v7 proof carries width-N trace
+// openings (`Vec<F>` per row), a public-input VECTOR (replacing v5's scalar
+// `initial_acc`/`final_acc`), the trace width (Merkle leaf arity), and the AIR
+// id (by which the verifier selects the constraint set). The quotient
+// (composition) + FRI openings reuse the v5 K-valued serializers unchanged — the
+// quotient is a single K column regardless of trace width.
+
+/// Width-N trace opening (v7): the row is a `Vec<u64>`, one value per column.
+#[derive(Serialize, Deserialize)]
+struct SerializableTraceQueryN {
+    index: usize,
+    evaluation: Vec<u64>,
+    witness: SerializableTraceWitness,
+    #[serde(default)]
+    next: Option<SerializableNextTraceRowN>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SerializableNextTraceRowN {
+    index: usize,
+    evaluation: Vec<u64>,
+    witness: SerializableMerklePath,
+}
+
+/// OOD-style opening for the v7 proof: width-N trace opening (F) + K quotient.
+#[derive(Serialize, Deserialize)]
+struct SerializableOodOpeningsV7 {
+    index: usize,
+    trace: SerializableTraceQueryN,
+    quotient: SerializableCompositionQueryV5,
+}
+
+fn serialize_trace_query_n(
+    tq: &hc_prover::queries::TraceQueryN<GoldilocksField>,
+) -> SerializableTraceQueryN {
+    SerializableTraceQueryN {
+        index: tq.index,
+        evaluation: tq.evaluation.iter().map(|v| v.to_u64()).collect(),
+        witness: match &tq.witness {
+            hc_prover::queries::TraceWitness::Merkle(path) => SerializableTraceWitness::Merkle {
+                path: serialize_merkle_path(path),
+            },
+            hc_prover::queries::TraceWitness::Kzg(kzg) => SerializableTraceWitness::Kzg {
+                point: hex::encode(&kzg.point),
+                proofs: kzg
+                    .proofs
+                    .iter()
+                    .map(|proof| SerializableKzgProof {
+                        column: proof.column,
+                        proof: hex::encode(&proof.proof),
+                    })
+                    .collect(),
+                evaluations: kzg
+                    .evaluations
+                    .iter()
+                    .enumerate()
+                    .map(|(column, value)| SerializableKzgEvaluation {
+                        column,
+                        value: hex::encode(value),
+                    })
+                    .collect(),
+            },
+        },
+        next: tq.next.as_ref().map(|n| SerializableNextTraceRowN {
+            index: n.index,
+            evaluation: n.evaluation.iter().map(|v| v.to_u64()).collect(),
+            witness: serialize_merkle_path(&n.witness),
+        }),
+    }
+}
+
+fn deserialize_trace_query_n(
+    tq: SerializableTraceQueryN,
+) -> Result<hc_prover::queries::TraceQueryN<GoldilocksField>> {
+    let witness = match tq.witness {
+        SerializableTraceWitness::Merkle { path } => {
+            hc_prover::queries::TraceWitness::Merkle(deserialize_merkle_path(path)?)
+        }
+        SerializableTraceWitness::Kzg { .. } => {
+            // v7 proofs are produced STARK-only; KZG trace witnesses are not part
+            // of the general-AIR path.
+            anyhow::bail!("v7 trace witness must be Merkle (KZG is not supported on the v7 path)");
+        }
+    };
+    Ok(hc_prover::queries::TraceQueryN {
+        index: tq.index,
+        evaluation: tq
+            .evaluation
+            .into_iter()
+            .map(GoldilocksField::from_u64)
+            .collect(),
+        witness,
+        next: match tq.next {
+            Some(n) => Some(hc_prover::queries::NextTraceRowN {
+                index: n.index,
+                evaluation: n
+                    .evaluation
+                    .into_iter()
+                    .map(GoldilocksField::from_u64)
+                    .collect(),
+                witness: deserialize_merkle_path(n.witness)?,
+            }),
+            None => None,
+        },
+    })
+}
+
+/// Serializable form of a `ProofV7<GoldilocksField>` (version tag 7, or 8 with
+/// ZK). The `ProofBytes` envelope carries the same version.
+#[derive(Serialize, Deserialize)]
+struct SerializableProofV7 {
+    version: u32,
+    params: SerializableProofParams5,
+    trace_commitment: SerializableCommitment,
+    composition_commitment: SerializableCommitment,
+    fri_layer_roots: Vec<String>,
+    fri_final_layer: Vec<String>,
+    fri_final_root: String,
+    fri_final_coeffs: Vec<String>,
+    /// Public-input vector (replaces v5's `initial_acc`/`final_acc`).
+    public_inputs: Vec<u64>,
+    /// Trace width N (Merkle leaf arity).
+    trace_width: usize,
+    /// AIR identity; the verifier selects the constraint set by this id.
+    air_id: u32,
+    trace_length: usize,
+    grinding_nonce: u64,
+    trace_queries: Vec<SerializableTraceQueryN>,
+    composition_queries: Vec<SerializableCompositionQueryV5>,
+    fri_queries: Vec<SerializableFriQueryV5>,
+    #[serde(default)]
+    ood: Option<SerializableOodOpeningsV7>,
+}
+
+impl SerializableProofV7 {
+    fn from_proof(proof: &hc_prover::queries::ProofV7<GoldilocksField>) -> Self {
+        let fri_layer_roots = proof
+            .fri_proof
+            .layer_roots
+            .iter()
+            .map(|d| format!("{d}"))
+            .collect();
+        let fri_final_layer = proof
+            .fri_proof
+            .final_layer
+            .iter()
+            .map(|k| k_to_hex(*k))
+            .collect();
+        let fri_final_root = format!("{}", proof.fri_proof.final_root);
+        let fri_final_coeffs = proof
+            .fri_proof
+            .final_coeffs
+            .iter()
+            .map(|k| k_to_hex(*k))
+            .collect();
+
+        let qr = &proof.query_response;
+        let trace_queries = qr
+            .trace_queries
+            .iter()
+            .map(serialize_trace_query_n)
+            .collect();
+        let composition_queries = qr
+            .composition_queries
+            .iter()
+            .map(serialize_composition_query_v5)
+            .collect();
+        let fri_queries = qr
+            .fri_queries
+            .iter()
+            .map(|fq| SerializableFriQueryV5 {
+                layer_index: fq.layer_index,
+                query_index: fq.query_index,
+                values: [k_to_hex(fq.values[0]), k_to_hex(fq.values[1])],
+                merkle_paths: [
+                    serialize_merkle_path(&fq.merkle_paths[0]),
+                    serialize_merkle_path(&fq.merkle_paths[1]),
+                ],
+            })
+            .collect();
+        let ood = qr.ood.as_ref().map(|ood| SerializableOodOpeningsV7 {
+            index: ood.index,
+            trace: serialize_trace_query_n(&ood.trace),
+            quotient: serialize_composition_query_v5(&ood.quotient),
+        });
+
+        Self {
+            version: proof.version,
+            params: SerializableProofParams5 {
+                query_count: proof.params.query_count,
+                lde_blowup: proof.params.lde_blowup_factor,
+                fri_final_size: proof.params.fri_final_poly_size,
+                fri_folding_ratio: proof.params.fri_folding_ratio,
+                hash_id: "blake3".to_string(),
+                protocol_version: proof.params.protocol_version,
+                zk_enabled: proof.params.zk_enabled,
+                zk_mask_degree: proof.params.zk_mask_degree,
+                grinding_bits: proof.params.grinding_bits,
+            },
+            trace_commitment: SerializableCommitment::from_commitment(&proof.trace_commitment),
+            composition_commitment: SerializableCommitment::from_commitment(
+                &proof.composition_commitment,
+            ),
+            fri_layer_roots,
+            fri_final_layer,
+            fri_final_root,
+            fri_final_coeffs,
+            public_inputs: proof.public_inputs.iter().map(|f| f.to_u64()).collect(),
+            trace_width: proof.trace_width,
+            air_id: proof.air_id,
+            trace_length: proof.trace_length,
+            grinding_nonce: proof.grinding_nonce,
+            trace_queries,
+            composition_queries,
+            fri_queries,
+            ood,
+        }
+    }
+
+    fn into_proof(self) -> Result<hc_prover::queries::ProofV7<GoldilocksField>> {
+        if !self.params.hash_id.eq_ignore_ascii_case("blake3") {
+            anyhow::bail!("v7 proofs require blake3 hash_id");
+        }
+        if self.params.query_count == 0
+            || self.params.lde_blowup == 0
+            || self.params.fri_final_size == 0
+            || self.params.fri_folding_ratio == 0
+        {
+            anyhow::bail!("v7 proof parameters must be non-zero");
+        }
+
+        let params = ProofParams {
+            query_count: self.params.query_count,
+            lde_blowup_factor: self.params.lde_blowup,
+            fri_final_poly_size: self.params.fri_final_size,
+            fri_folding_ratio: self.params.fri_folding_ratio,
+            protocol_version: self.params.protocol_version,
+            zk_enabled: self.params.zk_enabled,
+            zk_mask_degree: self.params.zk_mask_degree,
+            grinding_bits: self.params.grinding_bits,
+        };
+
+        let layer_roots = self
+            .fri_layer_roots
+            .into_iter()
+            .map(|r| digest_from_hex(&r))
+            .collect::<Result<Vec<_>>>()?;
+        let final_layer = self
+            .fri_final_layer
+            .iter()
+            .map(|s| k_from_hex(s))
+            .collect::<Result<Vec<_>>>()?;
+        let final_root = digest_from_hex(&self.fri_final_root)?;
+        let final_coeffs = self
+            .fri_final_coeffs
+            .iter()
+            .map(|s| k_from_hex(s))
+            .collect::<Result<Vec<_>>>()?;
+
+        let fri_proof = FriProof::<K>::new(layer_roots, final_layer, final_root)
+            .with_final_coeffs(final_coeffs);
+
+        let trace_commitment = self.trace_commitment.to_commitment()?;
+        let composition_commitment = self.composition_commitment.to_commitment()?;
+
+        let trace_queries = self
+            .trace_queries
+            .into_iter()
+            .map(deserialize_trace_query_n)
+            .collect::<Result<Vec<_>>>()?;
+        let composition_queries = self
+            .composition_queries
+            .into_iter()
+            .map(deserialize_composition_query_v5)
+            .collect::<Result<Vec<_>>>()?;
+        let fri_queries = self
+            .fri_queries
+            .into_iter()
+            .map(|fq| -> Result<hc_prover::queries::FriQuery<K>> {
+                Ok(hc_prover::queries::FriQuery {
+                    layer_index: fq.layer_index,
+                    query_index: fq.query_index,
+                    values: [k_from_hex(&fq.values[0])?, k_from_hex(&fq.values[1])?],
+                    merkle_paths: [
+                        deserialize_merkle_path(fq.merkle_paths[0].clone())?,
+                        deserialize_merkle_path(fq.merkle_paths[1].clone())?,
+                    ],
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let ood = self
+            .ood
+            .map(
+                |ood| -> Result<hc_prover::queries::OodOpeningsV7<GoldilocksField>> {
+                    Ok(hc_prover::queries::OodOpeningsV7 {
+                        index: ood.index,
+                        trace: deserialize_trace_query_n(ood.trace)?,
+                        quotient: deserialize_composition_query_v5(ood.quotient)?,
+                    })
+                },
+            )
+            .transpose()?;
+
+        let query_response = hc_prover::queries::QueryResponseV7 {
+            trace_queries,
+            composition_queries,
+            fri_queries,
+            ood,
+        };
+
+        Ok(hc_prover::queries::ProofV7 {
+            version: self.version,
+            trace_commitment,
+            composition_commitment,
+            fri_proof,
+            public_inputs: self
+                .public_inputs
+                .into_iter()
+                .map(GoldilocksField::from_u64)
+                .collect(),
+            trace_width: self.trace_width,
+            air_id: self.air_id,
+            query_response,
+            trace_length: self.trace_length,
+            params,
+            grinding_nonce: self.grinding_nonce,
+        })
+    }
+}
+
+/// Encode a `ProofV7<GoldilocksField>` to `ProofBytes` (JSON, version tag 7 or 8
+/// in both the envelope and the payload). ADDITIVE: does not touch v3/v5 encode.
+pub fn encode_proof_v7(proof: &hc_prover::queries::ProofV7<GoldilocksField>) -> Result<ProofBytes> {
+    let serializable = SerializableProofV7::from_proof(proof);
+    let bytes = serde_json::to_vec(&serializable)?;
+    Ok(ProofBytes {
+        version: proof.version,
+        bytes,
+    })
+}
+
+/// Decode a `ProofBytes` previously produced by [`encode_proof_v7`]. Verifies
+/// that the envelope version matches the payload version tag.
+pub fn decode_proof_v7(proof: &ProofBytes) -> Result<hc_prover::queries::ProofV7<GoldilocksField>> {
+    let serializable: SerializableProofV7 = serde_json::from_slice(&proof.bytes)?;
+    if serializable.version != proof.version {
+        anyhow::bail!(
+            "v7 proof version mismatch: envelope {} vs payload {}",
+            proof.version,
+            serializable.version
+        );
+    }
+    serializable.into_proof()
+}
+
+/// Route a decoded v7/v8 proof bytes object to the v7 verifier (production
+/// floor, `min_sound_version = 7`). Called from `verify_proof_bytes` when the
+/// envelope version is ≥ 7.
+fn verify_proof_bytes_v7(proof: &ProofBytes) -> VerifyResult {
+    let decoded = match decode_proof_v7(proof) {
+        Ok(p) => p,
+        Err(err) => {
+            return VerifyResult {
+                ok: false,
+                error: Some(format!("v7 decode error: {err}")),
+            }
+        }
+    };
+    match hc_verifier::v5::verify_v7(&decoded) {
+        Ok(_) => VerifyResult {
+            ok: true,
+            error: None,
+        },
+        Err(err) => VerifyResult {
+            ok: false,
+            error: Some(err.to_string()),
+        },
+    }
+}
+
 #[cfg(test)]
 mod soundness_gate_tests {
     use super::*;
@@ -1570,5 +1959,111 @@ mod v5_serialization_tests {
             bytes: bytes.bytes[..bytes.bytes.len() / 2].to_vec(),
         };
         let _ = decode_proof_v5(&truncated); // must not panic
+    }
+}
+
+// ─── v7 (general-AIR) serialization + bytes round-trip E2E tests ──────────────
+
+#[cfg(test)]
+mod v7_serialization_tests {
+    use super::*;
+    use hc_core::field::prime_field::GoldilocksField as F;
+    use hc_prover::config::{ProverConfig, SecurityFloor};
+    use hc_prover::queries::ProofV7;
+    use hc_verifier::v5::{verify_v7_with_floor, VerifierSecurityFloor};
+
+    /// Small relaxed v7 config (tiny params, no grinding) for fast structural
+    /// round-trip tests — verified under `VerifierSecurityFloor::relaxed`.
+    fn v7_relaxed_cfg() -> ProverConfig {
+        let mut c = ProverConfig::with_security_floor(2, 2, 4, 2, SecurityFloor::relaxed())
+            .unwrap()
+            .with_protocol_version(7);
+        c.grinding_bits = 0;
+        c
+    }
+
+    /// Build a sound v7 range proof for `min ≤ value ≤ max` with the given config.
+    fn range_proof(min: u64, max: u64, value: u64, cfg: &ProverConfig) -> ProofV7<F> {
+        let air = hc_air::RangeAir::new(hc_air::RANGE_DEFAULT_N);
+        let trace = hc_air::build_range_trace(min, max, value).unwrap();
+        hc_prover::prove_v7(&air, &trace, &[F::new(min), F::new(max)], cfg).unwrap()
+    }
+
+    /// A sound v7 `range_proof` survives `encode_proof_v7 → decode_proof_v7` with
+    /// every field intact (width, AIR id, public inputs) and still verifies. `V`
+    /// (42) is NOT among the public inputs — only `[min, max]`.
+    #[test]
+    fn v7_range_proof_roundtrips_structurally() {
+        let proof = range_proof(18, 120, 42, &v7_relaxed_cfg());
+
+        let bytes = encode_proof_v7(&proof).expect("encode_proof_v7 must succeed");
+        assert_eq!(bytes.version, 7, "v7 envelope version tag");
+
+        let decoded = decode_proof_v7(&bytes).expect("decode_proof_v7 must succeed");
+        assert_eq!(decoded.trace_width, 4, "range AIR is width-4");
+        assert_eq!(decoded.air_id, 2, "range AIR id");
+        assert_eq!(
+            decoded.public_inputs,
+            vec![F::new(18), F::new(120)],
+            "public inputs [min,max] round-trip; V (42) is absent"
+        );
+        verify_v7_with_floor(&decoded, VerifierSecurityFloor::relaxed())
+            .expect("decoded v7 proof must verify");
+    }
+
+    /// Tampering an opened trace value in the serialized v7 proof is caught: the
+    /// Merkle opening no longer matches the committed leaf. (Verified under the
+    /// relaxed floor so the rejection is the TAMPER, not the production floor.)
+    #[test]
+    fn tampered_v7_trace_opening_rejected() {
+        let proof = range_proof(18, 120, 42, &v7_relaxed_cfg());
+        let bytes = encode_proof_v7(&proof).unwrap();
+
+        // Flip the first opened trace cell of the first query to a bogus value.
+        let mut json: serde_json::Value = serde_json::from_slice(&bytes.bytes).unwrap();
+        json["trace_queries"][0]["evaluation"][0] = serde_json::Value::from(999_999_999u64);
+        let tampered = crate::types::ProofBytes {
+            version: bytes.version,
+            bytes: serde_json::to_vec(&json).unwrap(),
+        };
+        let decoded = decode_proof_v7(&tampered).expect("tampered value still decodes");
+        assert!(
+            verify_v7_with_floor(&decoded, VerifierSecurityFloor::relaxed()).is_err(),
+            "a tampered trace opening must be rejected"
+        );
+    }
+
+    /// The envelope version and payload version must agree (mismatch detected).
+    #[test]
+    fn v7_version_mismatch_is_detected() {
+        let proof = range_proof(18, 120, 42, &v7_relaxed_cfg());
+        let mut bytes = encode_proof_v7(&proof).unwrap();
+        bytes.version = bytes.version.wrapping_add(1); // 7 → 8 (payload still says 7)
+        let err = decode_proof_v7(&bytes).expect_err("version mismatch must be detected");
+        assert!(
+            err.to_string().contains("version mismatch"),
+            "error should mention version mismatch, got: {err}"
+        );
+    }
+
+    /// THE production-path assertion: a PRODUCTION v7 range proof (blowup ≥ 8,
+    /// query_count ≥ 40, grinding_bits = 20) round-trips through `encode_proof_v7`
+    /// and is ACCEPTED by `verify_proof_bytes` under the DEFAULT production floor
+    /// (which now routes version ≥ 7 to the v7 verifier). Mirrors the v5
+    /// `production_v5_config_roundtrips_through_verify_proof_bytes` test.
+    #[test]
+    fn production_v7_range_roundtrips_through_verify_proof_bytes() {
+        let cfg = ProverConfig::production_v7(2, 2, 40, 8, None).unwrap();
+        assert_eq!(cfg.grinding_bits, 20, "grinding pinned to 20");
+        let proof = range_proof(18, 120, 42, &cfg);
+        assert_eq!(proof.version, 7);
+
+        let bytes = encode_proof_v7(&proof).unwrap();
+        let result = verify_proof_bytes(&bytes, false);
+        assert!(
+            result.ok,
+            "production v7 range proof must verify through verify_proof_bytes: {:?}",
+            result.error
+        );
     }
 }
