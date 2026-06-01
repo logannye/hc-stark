@@ -218,3 +218,96 @@ fn hash_field_element<F: FieldElement>(value: &F) -> HashDigest {
     let bytes = value.to_u64().to_le_bytes();
     Blake3::hash(&bytes)
 }
+
+/// Width-N trace leaf hash (v7+): absorb each column value as 8 LE bytes in
+/// canonical column order. For a width-2 row this is byte-identical to
+/// [`hash_trace_pair`], so the v7 leaf format is backward-compatible with the
+/// v5 width-2 commitment.
+///
+/// Consumed by the v7 prover (`prove_v7`, T6) and mirrored on the verifier.
+#[allow(dead_code)] // wired into prove_v7 in T6
+pub(crate) fn hash_trace_row_n<F: FieldElement>(row: &[F]) -> HashDigest {
+    let mut bytes = Vec::with_capacity(row.len() * 8);
+    for v in row {
+        bytes.extend_from_slice(&v.to_u64().to_le_bytes());
+    }
+    Blake3::hash(&bytes)
+}
+
+/// Commit a width-N trace LDE (column-major: `columns[col][row]`, every column
+/// the same length = `lde_len`) via the streaming Merkle tree, one width-N leaf
+/// per row. ADDITIVE counterpart to the width-2 streaming commit above.
+///
+/// Consumed by the v7 prover (`prove_v7`, T6).
+#[allow(dead_code)] // wired into prove_v7 in T6
+pub(crate) fn commit_trace_lde_n<F: FieldElement>(columns: &[Vec<F>]) -> HcResult<HashDigest> {
+    let width = columns.len();
+    if width == 0 {
+        return Err(HcError::invalid_argument(
+            "commit_trace_lde_n: zero columns",
+        ));
+    }
+    let lde_len = columns[0].len();
+    for (j, col) in columns.iter().enumerate() {
+        if col.len() != lde_len {
+            return Err(HcError::invalid_argument(format!(
+                "commit_trace_lde_n: column {j} length {} != {lde_len}",
+                col.len()
+            )));
+        }
+    }
+    let mut builder = StreamingMerkle::<Blake3>::new();
+    let mut row = vec![F::ZERO; width];
+    for i in 0..lde_len {
+        for (j, col) in columns.iter().enumerate() {
+            row[j] = col[i];
+        }
+        builder.push(hash_trace_row_n(&row));
+    }
+    builder
+        .finalize()
+        .ok_or_else(|| HcError::message("failed to finalize width-N trace merkle tree"))
+}
+
+#[cfg(test)]
+mod width_n_tests {
+    use super::*;
+    use hc_core::field::prime_field::GoldilocksField as F;
+
+    #[test]
+    fn width_n_leaf_hash_order_sensitive() {
+        let a = hash_trace_row_n(&[F::from_u64(1), F::from_u64(2), F::from_u64(3)]);
+        let b = hash_trace_row_n(&[F::from_u64(1), F::from_u64(2), F::from_u64(3)]);
+        let c = hash_trace_row_n(&[F::from_u64(3), F::from_u64(2), F::from_u64(1)]);
+        assert_eq!(a, b, "same row → same leaf");
+        assert_ne!(a, c, "column order must matter");
+    }
+
+    #[test]
+    fn width_2_row_matches_legacy_pair_hash() {
+        // Back-compat: the N-hash on a width-2 row equals the legacy pair hash.
+        let pair = hash_trace_pair(&F::from_u64(7), &F::from_u64(9));
+        let via_n = hash_trace_row_n(&[F::from_u64(7), F::from_u64(9)]);
+        assert_eq!(pair, via_n);
+    }
+
+    #[test]
+    fn commit_trace_lde_n_roundtrips_and_validates_widths() {
+        // 4 columns × 2 rows.
+        let cols = vec![
+            vec![F::from_u64(1), F::from_u64(5)],
+            vec![F::from_u64(2), F::from_u64(6)],
+            vec![F::from_u64(3), F::from_u64(7)],
+            vec![F::from_u64(4), F::from_u64(8)],
+        ];
+        let root = commit_trace_lde_n(&cols).unwrap();
+        // Deterministic: same input → same root.
+        assert_eq!(root, commit_trace_lde_n(&cols).unwrap());
+        // Ragged columns are rejected.
+        let ragged = vec![vec![F::from_u64(1), F::from_u64(2)], vec![F::from_u64(3)]];
+        assert!(commit_trace_lde_n(&ragged).is_err());
+        // Zero columns rejected.
+        let empty: Vec<Vec<F>> = vec![];
+        assert!(commit_trace_lde_n(&empty).is_err());
+    }
+}
