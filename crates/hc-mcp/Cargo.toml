@@ -12,6 +12,7 @@ schemars = "1.0"
 hc-sdk = { path = "../hc-sdk" }
 hc-workloads = { path = "../hc-workloads" }
 hc-vm = { path = "../hc-vm" }
+hc-air = { path = "../hc-air" }
 hc-core = { path = "../hc-core" }
 hc-prover = { path = "../hc-prover" }
 hc-verifier = { path = "../hc-verifier" }

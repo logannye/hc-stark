@@ -19,7 +19,7 @@ fn build(params: &serde_json::Map<String, JsonValue>) -> Result<TemplateBuildRes
     }
 
     let instructions = add_immediate_chain(&elements);
-    Ok(TemplateBuildResult {
+    Ok(TemplateBuildResult::Vm {
         program: Program::new(instructions),
         initial_acc: 0,
         final_acc: checksum,
@@ -55,6 +55,7 @@ inventory::submit!(ProofTemplate {
     tags: TAGS,
     cost_category: "lightweight",
     enforcement: Enforcement::StructureOnly,
+    audited: false,
     example_json: r#"{"elements":[100,200,300],"checksum":600}"#,
     build_program: build,
 });

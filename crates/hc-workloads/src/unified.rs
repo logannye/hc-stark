@@ -42,6 +42,11 @@ pub struct UnifiedTemplateInfo {
     /// One of: `"vm"`, `"zkml"`, `"spartan"`.
     pub backend: &'static str,
     pub enforcement: Enforcement,
+    /// Whether the template has cleared the external audit (Phase 4). Combined
+    /// with `enforcement` by [`is_live`] to decide production exposure. zkML and
+    /// Spartan are preview backends and are always `false`.
+    #[serde(default)]
+    pub audited: bool,
 }
 
 impl UnifiedTemplateInfo {
@@ -55,6 +60,7 @@ impl UnifiedTemplateInfo {
             example: info.example,
             backend: "vm",
             enforcement: info.enforcement,
+            audited: info.audited,
         }
     }
 
@@ -68,6 +74,7 @@ impl UnifiedTemplateInfo {
             example: info.example,
             backend: info.backend,
             enforcement: Enforcement::StructureOnly,
+            audited: false,
         }
     }
 
@@ -81,6 +88,7 @@ impl UnifiedTemplateInfo {
             example: info.example,
             backend: info.backend,
             enforcement: Enforcement::StructureOnly,
+            audited: false,
         }
     }
 }
@@ -119,21 +127,36 @@ pub fn enforcement_for(id: &str) -> Option<Enforcement> {
     None
 }
 
-/// Whether a template at this enforcement level should appear in public
-/// listings. Enforced templates are always visible; StructureOnly
-/// templates are visible only when `allow_unaudited` is true (i.e.
-/// `HC_ALLOW_UNAUDITED_TEMPLATES=true`).
-pub fn is_listable(enforcement: Enforcement, allow_unaudited: bool) -> bool {
-    matches!(enforcement, Enforcement::Enforced) || allow_unaudited
+/// Whether a template should be exposed (listed AND dispatchable) in this
+/// deployment.
+///
+/// A template is live iff it BOTH cryptographically binds its predicate
+/// (`Enforced`) AND has cleared the external audit (`audited`) — or the
+/// deployment explicitly opts into unaudited templates
+/// (`HC_ALLOW_UNAUDITED_TEMPLATES`). This single predicate governs both the
+/// `/templates` listing and prove/estimate dispatch so both surfaces agree.
+///
+/// `enforcement` and `audited` are independent axes: `range_proof` is
+/// `Enforced` (sound v7 AIR) yet `audited = false`, so it stays gated until the
+/// Phase 4 audit even though it genuinely enforces its predicate.
+pub fn is_live(enforcement: Enforcement, audited: bool, allow_unaudited: bool) -> bool {
+    (matches!(enforcement, Enforcement::Enforced) && audited) || allow_unaudited
 }
 
-/// May a prove/estimate request for this template id proceed?
-/// Unknown ids are never dispatchable.
+/// May a prove/estimate request for this template id proceed? Looks up the
+/// template's enforcement + audit status across all backends and applies
+/// [`is_live`]. Unknown ids are never dispatchable.
 pub fn is_dispatchable(id: &str, allow_unaudited: bool) -> bool {
-    match enforcement_for(id) {
-        Some(e) => is_listable(e, allow_unaudited),
-        None => false,
+    if let Some(t) = crate::templates::template_by_id(id) {
+        return is_live(t.enforcement, t.audited, allow_unaudited);
     }
+    // zkML / Spartan are preview backends: StructureOnly + unaudited.
+    if crate::zkml_templates::zkml_template_by_id(id).is_some()
+        || crate::spartan_templates::spartan_template_by_id(id).is_some()
+    {
+        return is_live(Enforcement::StructureOnly, false, allow_unaudited);
+    }
+    false
 }
 
 /// Whether unaudited (StructureOnly) templates are exposed/dispatchable in
@@ -190,20 +213,21 @@ mod tests {
     }
 
     #[test]
-    fn unified_info_carries_enforcement() {
+    fn unified_info_carries_enforcement_and_audited() {
         let all = list_all_templates();
         let acc = all.iter().find(|t| t.id == "accumulator_step").unwrap();
         assert_eq!(acc.enforcement, crate::templates::Enforcement::Enforced);
+        assert!(acc.audited, "accumulator_step is audited");
+        // range_proof now Enforced (real AIR) but NOT yet audited → gated.
         let range = all.iter().find(|t| t.id == "range_proof").unwrap();
-        assert_eq!(
-            range.enforcement,
-            crate::templates::Enforcement::StructureOnly
-        );
+        assert_eq!(range.enforcement, crate::templates::Enforcement::Enforced);
+        assert!(!range.audited, "range_proof is not yet audited");
         let zkml = all.iter().find(|t| t.id == "zkml_matmul").unwrap();
         assert_eq!(
             zkml.enforcement,
             crate::templates::Enforcement::StructureOnly
         );
+        assert!(!zkml.audited);
     }
 
     #[test]
@@ -213,10 +237,8 @@ mod tests {
             enforcement_for("accumulator_step"),
             Some(Enforcement::Enforced)
         );
-        assert_eq!(
-            enforcement_for("range_proof"),
-            Some(Enforcement::StructureOnly)
-        );
+        // range_proof graduated to Enforced (sound v7 AIR).
+        assert_eq!(enforcement_for("range_proof"), Some(Enforcement::Enforced));
         // zkML/Spartan are preview => structure-only.
         assert_eq!(
             enforcement_for("zkml_matmul"),
@@ -231,14 +253,48 @@ mod tests {
 
     #[test]
     fn dispatch_and_listing_truth_table() {
-        // Enforced: always listable + dispatchable.
+        // Audited + Enforced: always dispatchable (accumulator_step).
         assert!(is_dispatchable("accumulator_step", false));
         assert!(is_dispatchable("accumulator_step", true));
-        // StructureOnly: only when unaudited explicitly allowed.
+        // Enforced but unaudited (range_proof): only when unaudited allowed.
         assert!(!is_dispatchable("range_proof", false));
         assert!(is_dispatchable("range_proof", true));
+        // StructureOnly + unaudited: only when unaudited allowed.
+        assert!(!is_dispatchable("hash_preimage", false));
+        assert!(is_dispatchable("hash_preimage", true));
         // Unknown id: never dispatchable.
         assert!(!is_dispatchable("does_not_exist", true));
+    }
+
+    #[test]
+    fn range_proof_is_enforced_but_gated_until_audit() {
+        use crate::templates::{template_by_id, Enforcement};
+        let r = template_by_id("range_proof").unwrap();
+        assert_eq!(
+            r.enforcement,
+            Enforcement::Enforced,
+            "range now truly enforces its predicate"
+        );
+        assert!(!r.audited, "range is not yet audited → gated");
+        // gated off by default, on with the unaudited flag:
+        assert!(!is_dispatchable("range_proof", false));
+        assert!(is_dispatchable("range_proof", true));
+        // accumulator stays live unconditionally:
+        assert!(is_dispatchable("accumulator_step", false));
+    }
+
+    #[test]
+    fn only_accumulator_step_is_live_by_default() {
+        let live: Vec<String> = list_all_templates()
+            .into_iter()
+            .filter(|t| is_live(t.enforcement, t.audited, false))
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(
+            live,
+            vec!["accumulator_step".to_string()],
+            "only accumulator_step is live without HC_ALLOW_UNAUDITED_TEMPLATES, got {live:?}"
+        );
     }
 
     #[test]
