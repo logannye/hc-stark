@@ -59,6 +59,20 @@ When ZK masking is enabled (`zk_mask_degree > 0`), a random polynomial R(x) of d
 
 Since R(x) * Z_H(x) vanishes on H, the masked polynomial agrees with T on the trace domain, preserving completeness. The LDE evaluations outside H are uniformly distributed (conditioned on T), hiding the trace values.
 
+### Step 6: General-AIR composition soundness (Protocol Version 7)
+
+Protocol v7 generalizes the single hardcoded accumulator AIR to an arbitrary AIR with `n_c` ordered constraints `c_0, …, c_{n_c-1}`. The prover and verifier combine them into one composition polynomial using powers of a **single** challenge `α` drawn from the degree-2 extension field `K = QuadExtension<Goldilocks>` (|K| ≈ 2^128):
+
+    C(x) = Σ_{i=0}^{n_c-1} α^i · mask_i(x) · c_i(x)
+
+where `mask_i ∈ {l0, l_last, selector_last, 1}` localizes constraint `i` to the rows it governs (first / last / all-but-last / every row), so that `mask_i · c_i` vanishes on the whole trace domain `H` for a valid witness and `q = C / Z_H` is a polynomial.
+
+**Soundness of the combination.** Suppose the witness violates at least one constraint, i.e. some `mask_i · c_i` does not vanish on `H`. Viewing `C(x)` at a fixed `x ∈ H` as a polynomial in the formal variable `α` of degree `< n_c`, it is the zero polynomial only if every `mask_i(x)·c_i(x) = 0`. Hence for a uniformly random `α ∈ K`,
+
+    Pr[ C ≡ 0 on H | some constraint is violated ] ≤ (n_c − 1) / |K| ≈ n_c / 2^128
+
+by Schwartz–Zippel. When `C` does not vanish on `H`, `q = C/Z_H` has a pole, is not a low-degree polynomial, and is rejected by the sound (v5/v7) FRI low-degree test of Step 2. The combination therefore adds only this `n_c / 2^128` term over the single-constraint case — negligible for realistic constraint counts (`range_proof`: `n_c = 7`). `α` is bound to the transcript AFTER the trace commitment and the public-input vector, so it depends on the committed witness and the statement (Fiat–Shamir, Step 4).
+
 ## Known Limitations
 
 1. **Metrics are not cryptographically bound**: The proof's metrics fields (timing data, block counts) are not part of the Fiat-Shamir transcript. Modifying them does not affect verification.
@@ -66,6 +80,8 @@ Since R(x) * Z_H(x) vanishes on H, the masked polynomial agrees with T on the tr
 2. **JSON proof format**: The current proof serialization uses JSON, which has some redundancy. A more compact binary format would reduce the attack surface for deserialization.
 
 3. **Single hash function**: The protocol uses Blake3 exclusively. A hash function break would compromise both commitment binding and Fiat-Shamir security. Dual-hash support (Blake3 + Poseidon) is planned for recursion.
+
+4. **Zero-knowledge is limited for degree-≥2 AIRs.** The trace-additive mask of Step 5 (`T'(x) = T(x) + R(x)·Z_H(x)`) raises the trace-polynomial degree by `deg(R) + |H|`. For a constraint of degree `d` this pushes the quotient degree to `≈ d·|H|`, which exceeds the FRI degree bound (`lde_len / blowup = |H|`) whenever `d ≥ 2`. Concretely, `range_proof`'s booleanity constraints are degree 2, so the trace-additive mask cannot hide its query openings without breaking the FRI low-degree test (confirmed empirically across blowup/final-size/mask-degree settings). The deployed `range_proof` is therefore **sound but not zero-knowledge** at protocol v7: `V` is not a public input, but the unmasked witness openings can leak it. Genuine zero-knowledge for degree-≥2 AIRs requires randomized trace *rows* (selector-gated so they do not constrain the random padding), raising `|H|` to create degree headroom — a planned follow-up gated behind the external audit. See [`zk_range.md`](zk_range.md).
 
 ## Concrete Security Parameters
 
