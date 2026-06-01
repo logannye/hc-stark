@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod accumulator_air;
 pub mod air;
 pub mod air_general;
 pub mod constraints;
@@ -10,6 +11,7 @@ pub mod multi_column;
 pub mod selectors;
 pub mod trace;
 
+pub use accumulator_air::AccumulatorAir;
 pub use air::DeepStarkAir;
 pub use air::{Air, ToyAir};
 pub use air_general::{Air as GeneralAir, ConstraintMeta, MaskKind};
