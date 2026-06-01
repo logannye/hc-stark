@@ -24,18 +24,21 @@
 //!   reject any proof below hard minimums (version, blowup, query count,
 //!   grinding bits, final-poly size) BEFORE any crypto runs.
 
+use hc_air::{AccumulatorAir, GeneralAir, RangeAir};
 use hc_core::{
     domain::{generate_lde_coset_domain, generate_trace_domain, EvaluationDomain},
     error::{HcError, HcResult},
     field::{prime_field::GoldilocksField, FieldElement, QuadExtension},
 };
 use hc_fri::layer::{hash_value_ext, LayerDomain};
-use hc_fri::{is_valid_query_index, propagate_query_index_v5};
+use hc_fri::{is_valid_query_index, propagate_query_index_v5, FriProof};
 use hc_hash::{grinding, hash::HashDigest, protocol, Blake3, HashFunction, Transcript};
 use hc_prover::{
     commitment::CommitmentScheme,
     pipeline::phase3_queries::generate_queries,
-    queries::{CompositionQuery, ProofV5, TraceQuery, TraceWitness},
+    queries::{
+        CompositionQuery, FriQuery, ProofV5, ProofV7, TraceQuery, TraceQueryN, TraceWitness,
+    },
 };
 
 use crate::errors::VerifierError;
@@ -142,6 +145,473 @@ pub fn verify_v5(proof: &ProofV5<F>) -> HcResult<()> {
 pub fn verify_v5_with_floor(proof: &ProofV5<F>, floor: VerifierSecurityFloor) -> HcResult<()> {
     enforce_floor(proof, floor)?;
     verify_stark_v5_inner(proof)
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// v7 (general-AIR) verification — Phase 1B.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Production v7 security floor: identical to [`VerifierSecurityFloor::default`]
+/// but requires protocol version ≥ 7 (the general-AIR sound proofs).
+pub fn verifier_floor_v7() -> VerifierSecurityFloor {
+    VerifierSecurityFloor {
+        min_sound_version: 7,
+        ..VerifierSecurityFloor::default()
+    }
+}
+
+/// Enforce a security floor against a v7 proof's declared parameters. Mirrors
+/// [`enforce_floor`] for the [`ProofV7`] shape; runs BEFORE any crypto.
+fn enforce_floor_v7(proof: &ProofV7<F>, floor: VerifierSecurityFloor) -> HcResult<()> {
+    if proof.version < floor.min_sound_version {
+        return Err(VerifierError::UnsoundLegacyVersion.into());
+    }
+    let p = &proof.params;
+    if p.lde_blowup_factor < floor.min_blowup
+        || p.query_count < floor.min_queries
+        || p.grinding_bits < floor.min_grinding_bits
+        || p.fri_final_poly_size > floor.max_fri_final_poly_size
+    {
+        return Err(VerifierError::BelowSecurityFloor.into());
+    }
+    Ok(())
+}
+
+/// Verify a v7 proof under the production v7 floor ([`verifier_floor_v7`]).
+pub fn verify_v7(proof: &ProofV7<F>) -> HcResult<()> {
+    enforce_floor_v7(proof, verifier_floor_v7())?;
+    verify_stark_v7_inner(proof)
+}
+
+/// Verify a v7 proof under a caller-supplied floor (tests use `relaxed`).
+pub fn verify_v7_with_floor(proof: &ProofV7<F>, floor: VerifierSecurityFloor) -> HcResult<()> {
+    enforce_floor_v7(proof, floor)?;
+    verify_stark_v7_inner(proof)
+}
+
+/// Resolve the AIR a v7 proof claims, by its bound `air_id`, validating the
+/// declared shape WITHOUT panicking (a malicious proof must not crash the
+/// verifier). 1 = accumulator (width 2), 2 = range (width 4).
+fn resolve_air(
+    air_id: u32,
+    trace_width: usize,
+    trace_length: usize,
+) -> HcResult<Box<dyn GeneralAir>> {
+    match air_id {
+        1 => {
+            if trace_width != 2 {
+                return Err(HcError::invalid_argument(
+                    "accumulator AIR expects trace width 2",
+                ));
+            }
+            Ok(Box::new(AccumulatorAir))
+        }
+        2 => {
+            if trace_width != 4 {
+                return Err(HcError::invalid_argument("range AIR expects trace width 4"));
+            }
+            // RangeAir::new asserts these; validate first so the verifier never panics.
+            if !trace_length.is_power_of_two() || trace_length + 1 >= 64 {
+                return Err(HcError::invalid_argument(
+                    "range AIR trace length must be a power of two with 2^(n+1) < p",
+                ));
+            }
+            Ok(Box::new(RangeAir::new(trace_length)))
+        }
+        other => Err(HcError::invalid_argument(format!("unknown AIR id {other}"))),
+    }
+}
+
+/// The cryptographic core of v7 verification (assumes the floor was enforced).
+fn verify_stark_v7_inner(proof: &ProofV7<F>) -> HcResult<()> {
+    if proof.trace_commitment.scheme() != CommitmentScheme::Stark
+        || proof.composition_commitment.scheme() != CommitmentScheme::Stark
+    {
+        return Err(VerifierError::TraceWitnessUnsupported.into());
+    }
+    if proof.params.protocol_version != proof.version {
+        return Err(VerifierError::ProofParamsVersionMismatch.into());
+    }
+
+    // Resolve the AIR by its bound id; validate the declared shape.
+    let air = resolve_air(proof.air_id, proof.trace_width, proof.trace_length)?;
+    if proof.public_inputs.len() != air.public_input_len() || proof.trace_width != air.width() {
+        return Err(VerifierError::InvalidPublicInputs.into());
+    }
+
+    let trace_root = proof
+        .trace_commitment
+        .as_root()
+        .ok_or_else(|| HcError::invalid_argument("missing Merkle root for trace commitment"))?;
+    let quotient_root = proof
+        .composition_commitment
+        .as_root()
+        .ok_or_else(|| HcError::invalid_argument("missing Merkle root for quotient commitment"))?;
+
+    let padded_len = proof.trace_length.next_power_of_two();
+    if padded_len == 0 {
+        return Err(HcError::invalid_argument("trace length must be non-zero"));
+    }
+    let blowup = proof.params.lde_blowup_factor;
+    let lde_len = padded_len
+        .checked_mul(blowup)
+        .ok_or_else(|| HcError::invalid_argument("lde domain size overflow"))?;
+    if lde_len == 0 {
+        return Err(HcError::invalid_argument(
+            "lde domain size must be non-zero",
+        ));
+    }
+
+    // --- Rebuild the v7 MAIN transcript EXACTLY as `prove_v7`. ---
+    let mut transcript = Transcript::<Blake3>::new(protocol::DOMAIN_MAIN_V7);
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PUB_INPUT_COUNT,
+        proof.public_inputs.len() as u64,
+    );
+    for pi in &proof.public_inputs {
+        protocol::append_u64::<Blake3>(
+            &mut transcript,
+            protocol::label::PUB_INPUT_ELEM,
+            pi.to_u64(),
+        );
+    }
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PUB_TRACE_LENGTH,
+        proof.trace_length as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_QUERY_COUNT,
+        proof.params.query_count as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_LDE_BLOWUP,
+        proof.params.lde_blowup_factor as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_FRI_FINAL_SIZE,
+        proof.params.fri_final_poly_size as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_FRI_FOLDING_RATIO,
+        proof.params.fri_folding_ratio as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_GRINDING_BITS,
+        proof.params.grinding_bits as u64,
+    );
+    transcript.append_message(protocol::label::PARAM_HASH_ID, b"blake3");
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_ZK_ENABLED,
+        u64::from(proof.params.zk_enabled),
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_ZK_MASK_DEGREE,
+        proof.params.zk_mask_degree as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_TRACE_WIDTH,
+        proof.trace_width as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::AIR_ID,
+        proof.air_id as u64,
+    );
+    transcript.append_message(
+        protocol::label::COMMIT_TRACE_LDE_ROOT,
+        trace_root.as_bytes(),
+    );
+
+    // Single composition challenge α ∈ K (mirrors prove_v7).
+    let alpha = transcript.challenge_field::<K>(protocol::label::COMPOSITION_ALPHA);
+    transcript.append_message(
+        protocol::label::COMMIT_QUOTIENT_ROOT,
+        quotient_root.as_bytes(),
+    );
+    for root in &proof.fri_proof.layer_roots {
+        transcript.append_message(protocol::label::COMMIT_FRI_LAYER_ROOT, root.as_bytes());
+    }
+    transcript.append_message(
+        protocol::label::COMMIT_FRI_FINAL_ROOT,
+        proof.fri_proof.final_root.as_bytes(),
+    );
+
+    // Grinding PoW check over the transcript the prover ground (before the nonce).
+    if !grinding::check_grinding::<Blake3>(
+        &transcript,
+        protocol::label::FRI_GRINDING_NONCE,
+        proof.grinding_nonce,
+        proof.params.grinding_bits,
+    ) {
+        return Err(VerifierError::GrindingCheckFailed.into());
+    }
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::FRI_GRINDING_NONCE,
+        proof.grinding_nonce,
+    );
+    let base_queries = generate_queries::<F>(&mut transcript, lde_len, proof.params.query_count)?;
+
+    let betas = recompute_fri_betas_v7(proof, trace_root, quotient_root)?;
+
+    verify_v7_trace_and_quotient(
+        air.as_ref(),
+        &proof.public_inputs,
+        trace_root,
+        quotient_root,
+        &base_queries,
+        padded_len,
+        lde_len,
+        blowup,
+        alpha,
+        &proof.query_response.trace_queries,
+        &proof.query_response.composition_queries,
+        /* check_query_indices = */ true,
+    )?;
+
+    // OOD-style extra opening (mirrors prove_v7).
+    transcript.append_message(protocol::label::CHAL_OOD_POINT, [0u8]);
+    let ood_fe = transcript.challenge_field::<F>(protocol::label::CHAL_OOD_INDEX);
+    let ood_index = (ood_fe.to_u64() as usize) % lde_len;
+    if let Some(ood) = &proof.query_response.ood {
+        if ood.index != ood_index {
+            return Err(VerifierError::QueryIndexMismatch.into());
+        }
+        verify_v7_trace_and_quotient(
+            air.as_ref(),
+            &proof.public_inputs,
+            trace_root,
+            quotient_root,
+            &[ood.index],
+            padded_len,
+            lde_len,
+            blowup,
+            alpha,
+            std::slice::from_ref(&ood.trace),
+            std::slice::from_ref(&ood.quotient),
+            /* check_query_indices = */ true,
+        )?;
+    }
+
+    verify_fri_low_degree_v5(
+        &proof.fri_proof,
+        &proof.query_response.fri_queries,
+        proof.params.lde_blowup_factor,
+        proof.params.fri_final_poly_size,
+        &base_queries,
+        &betas,
+        lde_len,
+        &proof.query_response.composition_queries,
+    )?;
+
+    Ok(())
+}
+
+/// Recompute the K FRI betas for a v7 proof by replaying `run_fri_v5`'s seed
+/// transcript (`DOMAIN_FRI_V5`). v7 binds public inputs via the MAIN transcript,
+/// so the FRI seed's `initial_acc`/`final_acc` slots are 0 (as `prove_v7` set).
+fn recompute_fri_betas_v7(
+    proof: &ProofV7<F>,
+    trace_root: HashDigest,
+    quotient_root: HashDigest,
+) -> HcResult<Vec<K>> {
+    let mut t = Transcript::<Blake3>::new(protocol::DOMAIN_FRI_V5);
+    protocol::append_u64::<Blake3>(&mut t, protocol::label::PUB_INITIAL_ACC, 0);
+    protocol::append_u64::<Blake3>(&mut t, protocol::label::PUB_FINAL_ACC, 0);
+    protocol::append_u64::<Blake3>(
+        &mut t,
+        protocol::label::PUB_TRACE_LENGTH,
+        proof.trace_length as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut t,
+        protocol::label::PARAM_QUERY_COUNT,
+        proof.params.query_count as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut t,
+        protocol::label::PARAM_LDE_BLOWUP,
+        proof.params.lde_blowup_factor as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut t,
+        protocol::label::PARAM_FRI_FINAL_SIZE,
+        proof.params.fri_final_poly_size as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut t,
+        protocol::label::PARAM_FRI_FOLDING_RATIO,
+        proof.params.fri_folding_ratio as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut t,
+        protocol::label::PARAM_GRINDING_BITS,
+        proof.params.grinding_bits as u64,
+    );
+    t.append_message(protocol::label::PARAM_HASH_ID, b"blake3");
+    protocol::append_u64::<Blake3>(
+        &mut t,
+        protocol::label::PARAM_ZK_ENABLED,
+        u64::from(proof.params.zk_enabled),
+    );
+    protocol::append_u64::<Blake3>(
+        &mut t,
+        protocol::label::PARAM_ZK_MASK_DEGREE,
+        proof.params.zk_mask_degree as u64,
+    );
+    t.append_message(
+        protocol::label::COMMIT_TRACE_LDE_ROOT,
+        trace_root.as_bytes(),
+    );
+    t.append_message(
+        protocol::label::COMMIT_QUOTIENT_ROOT,
+        quotient_root.as_bytes(),
+    );
+    let mut betas = Vec::with_capacity(proof.fri_proof.layer_roots.len());
+    for root in &proof.fri_proof.layer_roots {
+        t.append_message(protocol::label::COMMIT_FRI_LAYER_ROOT, root.as_bytes());
+        betas.push(t.challenge_field::<K>(protocol::label::CHAL_FRI_BETA));
+    }
+    Ok(betas)
+}
+
+/// Verify width-N trace + K quotient openings and the quotient relation at each
+/// queried point, using the AIR's single-α `compose_at`. The v7 analog of
+/// [`verify_v5_trace_and_quotient`].
+#[allow(clippy::too_many_arguments)]
+fn verify_v7_trace_and_quotient(
+    air: &dyn GeneralAir,
+    public_inputs: &[F],
+    trace_root: HashDigest,
+    quotient_root: HashDigest,
+    base_queries: &[usize],
+    padded_len: usize,
+    lde_len: usize,
+    blowup: usize,
+    alpha: K,
+    trace_queries: &[TraceQueryN<F>],
+    composition_queries: &[CompositionQuery<K>],
+    check_query_indices: bool,
+) -> HcResult<()> {
+    if check_query_indices {
+        let mut expected = base_queries.to_vec();
+        expected.sort_unstable();
+        let mut tidx: Vec<usize> = trace_queries.iter().map(|q| q.index).collect();
+        tidx.sort_unstable();
+        if tidx != expected {
+            return Err(VerifierError::QueryIndexMismatch.into());
+        }
+        let mut qidx: Vec<usize> = composition_queries.iter().map(|q| q.index).collect();
+        qidx.sort_unstable();
+        if qidx != expected {
+            return Err(VerifierError::QueryIndexMismatch.into());
+        }
+    }
+
+    let shift = blowup % lde_len;
+    let coset_offset = F::from_u64(LDE_COSET_OFFSET);
+    let lde_domain = generate_lde_coset_domain::<F>(padded_len, blowup, coset_offset)?;
+    let omega_last = generate_trace_domain::<F>(padded_len)?
+        .generator()
+        .inverse()
+        .ok_or_else(|| HcError::math("trace domain generator has no inverse"))?;
+    let n_inv = F::from_u64(padded_len as u64)
+        .inverse()
+        .ok_or_else(|| HcError::math("padded_len has no inverse"))?;
+
+    let mut trace_by_index: std::collections::HashMap<usize, &TraceQueryN<F>> =
+        std::collections::HashMap::new();
+    for tq in trace_queries {
+        trace_by_index.insert(tq.index, tq);
+    }
+
+    for cq in composition_queries {
+        let leaf_hash = hash_value_ext(&cq.value);
+        if !cq.witness.verify::<Blake3>(quotient_root, leaf_hash) {
+            return Err(VerifierError::CompositionQueryMerkleMismatch.into());
+        }
+
+        let tq = trace_by_index
+            .get(&cq.index)
+            .copied()
+            .ok_or(VerifierError::QueryIndexMismatch)?;
+        if tq.evaluation.len() != air.width() {
+            return Err(VerifierError::TraceQueryMerkleMismatch.into());
+        }
+        let leaf_hash = hash_trace_row_n(&tq.evaluation);
+        match &tq.witness {
+            TraceWitness::Merkle(path) => {
+                if !path.verify::<Blake3>(trace_root, leaf_hash) {
+                    return Err(VerifierError::TraceQueryMerkleMismatch.into());
+                }
+            }
+            TraceWitness::Kzg(_) => return Err(VerifierError::TraceWitnessUnsupported.into()),
+        }
+
+        let next = tq.next.as_ref().ok_or(VerifierError::TraceNextRowMissing)?;
+        let expected_next = (tq.index + shift) % lde_len;
+        if next.index != expected_next {
+            return Err(VerifierError::TraceNextRowMissing.into());
+        }
+        if next.evaluation.len() != air.width() {
+            return Err(VerifierError::TraceQueryMerkleMismatch.into());
+        }
+        let next_leaf_hash = hash_trace_row_n(&next.evaluation);
+        if !next.witness.verify::<Blake3>(trace_root, next_leaf_hash) {
+            return Err(VerifierError::TraceQueryMerkleMismatch.into());
+        }
+
+        // Quotient relation at x: q(x)·Z_H(x) == C(x) = Σ αⁱ·cᵢ (in K).
+        let x = lde_domain.element(tq.index);
+        let z_h = x.pow(padded_len as u64).sub(F::ONE);
+        let l0 = z_h.mul(n_inv).mul(
+            x.sub(F::ONE)
+                .inverse()
+                .ok_or_else(|| HcError::math("unexpected zero denominator in L0 on coset"))?,
+        );
+        let l_last = z_h.mul(omega_last).mul(n_inv).mul(
+            x.sub(omega_last)
+                .inverse()
+                .ok_or_else(|| HcError::math("unexpected zero denominator in L_last on coset"))?,
+        );
+        let selector_last = F::ONE.sub(l_last);
+
+        let c = air.compose_at(
+            &tq.evaluation,
+            &next.evaluation,
+            l0,
+            l_last,
+            selector_last,
+            public_inputs,
+            alpha,
+        )?;
+        let lhs = cq.value.mul(K::from_base(z_h));
+        if lhs != c {
+            return Err(VerifierError::CompositionQueryValueMismatch.into());
+        }
+    }
+
+    Ok(())
+}
+
+/// Width-N trace leaf hash — must match the prover's
+/// `hc_prover::pipeline::phase1_commit::hash_trace_row_n` byte-for-byte.
+fn hash_trace_row_n(row: &[F]) -> HashDigest {
+    let mut bytes = Vec::with_capacity(row.len() * 8);
+    for v in row {
+        bytes.extend_from_slice(&v.to_u64().to_le_bytes());
+    }
+    Blake3::hash(&bytes)
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -328,7 +798,10 @@ fn verify_stark_v5_inner(proof: &ProofV5<F>) -> HcResult<()> {
     // --- (d)+(e) FRI low-degree verification: antipodal + 1/x fold in K,
     //     bound to the composition openings, + final-degree check. ---
     verify_fri_low_degree_v5(
-        proof,
+        &proof.fri_proof,
+        &proof.query_response.fri_queries,
+        proof.params.lde_blowup_factor,
+        proof.params.fri_final_poly_size,
         &base_queries,
         &betas,
         lde_len,
@@ -557,14 +1030,17 @@ fn verify_v5_trace_and_quotient(
 /// composition opening, Merkle-verify every opened layer value against the
 /// committed roots, then enforce the final-degree bound and tie the descended
 /// value into the final layer.
+#[allow(clippy::too_many_arguments)]
 fn verify_fri_low_degree_v5(
-    proof: &ProofV5<F>,
+    fri: &FriProof<K>,
+    fri_queries: &[FriQuery<K>],
+    blowup: usize,
+    fri_final_poly_size: usize,
     base_queries: &[usize],
     betas: &[K],
     lde_len: usize,
     composition_queries: &[CompositionQuery<K>],
 ) -> HcResult<()> {
-    let fri = &proof.fri_proof;
     let num_layers = fri.layer_roots.len();
     if betas.len() != num_layers {
         return Err(VerifierError::FriFailure.into());
@@ -578,8 +1054,8 @@ fn verify_fri_low_degree_v5(
 
     // --- (e)(i) Final-layer degree bound: REJECT a too-long `final_coeffs`. ---
     let final_size = fri.final_layer.len();
-    let blowup = proof.params.lde_blowup_factor.max(1);
-    let expected_final_coeffs = proof.params.fri_final_poly_size / blowup;
+    let blowup = blowup.max(1);
+    let expected_final_coeffs = fri_final_poly_size / blowup;
     if fri.final_coeffs.len() != expected_final_coeffs {
         return Err(VerifierError::FriFinalDegreeMismatch.into());
     }
@@ -616,7 +1092,7 @@ fn verify_fri_low_degree_v5(
 
     // Per-base-query antipodal descent. Each base query contributes a chain of
     // `min(num_layers, descent depth)` openings, recorded in order.
-    let mut fri_iter = proof.query_response.fri_queries.iter();
+    let mut fri_iter = fri_queries.iter();
 
     for &base_query in base_queries {
         let mut current = base_query;
@@ -741,7 +1217,98 @@ mod tests {
     use super::*;
     use hc_prover::config::{ProverConfig, SecurityFloor};
     use hc_prover::prove_v5;
+    use hc_prover::prove_v7;
     use hc_prover::PublicInputs;
+
+    // ── v7 (general-AIR) verification tests (Phase 1B T7) ───────────────────
+
+    /// Small relaxed v7 config (tiny params, no grinding) — verified under
+    /// `VerifierSecurityFloor::relaxed`.
+    fn v7_cfg() -> ProverConfig {
+        let mut c = ProverConfig::with_security_floor(2, 2, 4, 2, SecurityFloor::relaxed())
+            .unwrap()
+            .with_protocol_version(7);
+        c.grinding_bits = 0;
+        c
+    }
+
+    /// Width-2 accumulator trace, height 4: acc 5→6→8→8, deltas 1,2,0,0.
+    fn v7_acc_trace() -> hc_air::MultiColumnTrace<F> {
+        let acc = vec![F::new(5), F::new(6), F::new(8), F::new(8)];
+        let delta = vec![F::new(1), F::new(2), F::new(0), F::new(0)];
+        hc_air::MultiColumnTrace::from_columns(vec![acc, delta]).unwrap()
+    }
+
+    #[test]
+    fn v7_accumulator_roundtrip_verifies() {
+        let proof = prove_v7(
+            &AccumulatorAir,
+            &v7_acc_trace(),
+            &[F::new(5), F::new(8)],
+            &v7_cfg(),
+        )
+        .unwrap();
+        verify_v7_with_floor(&proof, VerifierSecurityFloor::relaxed())
+            .expect("honest accumulator v7 proof must verify");
+    }
+
+    #[test]
+    fn v7_range_roundtrip_verifies() {
+        // THE Phase 1B milestone: an end-to-end sound range proof verifies.
+        let air = RangeAir::new(hc_air::RANGE_DEFAULT_N);
+        let trace = hc_air::build_range_trace(18, 120, 42).unwrap();
+        let proof = prove_v7(&air, &trace, &[F::new(18), F::new(120)], &v7_cfg()).unwrap();
+        verify_v7_with_floor(&proof, VerifierSecurityFloor::relaxed())
+            .expect("honest range v7 proof must verify");
+    }
+
+    #[test]
+    fn v7_range_tampered_composition_value_rejected() {
+        let air = RangeAir::new(hc_air::RANGE_DEFAULT_N);
+        let trace = hc_air::build_range_trace(18, 120, 42).unwrap();
+        let mut proof = prove_v7(&air, &trace, &[F::new(18), F::new(120)], &v7_cfg()).unwrap();
+        proof.query_response.composition_queries[0].value =
+            proof.query_response.composition_queries[0]
+                .value
+                .add(K::ONE);
+        assert!(verify_v7_with_floor(&proof, VerifierSecurityFloor::relaxed()).is_err());
+    }
+
+    #[test]
+    fn v7_range_tampered_trace_value_rejected() {
+        let air = RangeAir::new(hc_air::RANGE_DEFAULT_N);
+        let trace = hc_air::build_range_trace(18, 120, 42).unwrap();
+        let mut proof = prove_v7(&air, &trace, &[F::new(18), F::new(120)], &v7_cfg()).unwrap();
+        proof.query_response.trace_queries[0].evaluation[0] =
+            proof.query_response.trace_queries[0].evaluation[0].add(F::new(1));
+        assert!(verify_v7_with_floor(&proof, VerifierSecurityFloor::relaxed()).is_err());
+    }
+
+    #[test]
+    fn v7_production_floor_rejects_relaxed_proof() {
+        // Relaxed params (blowup 2, grinding 0) are below the production v7 floor.
+        let proof = prove_v7(
+            &AccumulatorAir,
+            &v7_acc_trace(),
+            &[F::new(5), F::new(8)],
+            &v7_cfg(),
+        )
+        .unwrap();
+        assert!(verify_v7(&proof).is_err());
+    }
+
+    #[test]
+    fn v7_tampered_version_rejected() {
+        let mut proof = prove_v7(
+            &AccumulatorAir,
+            &v7_acc_trace(),
+            &[F::new(5), F::new(8)],
+            &v7_cfg(),
+        )
+        .unwrap();
+        proof.version = 5; // altered version must be rejected
+        assert!(verify_v7_with_floor(&proof, VerifierSecurityFloor::relaxed()).is_err());
+    }
     use hc_vm::{Instruction, Program};
 
     /// Small honest v5 config (relaxed floor so tiny params are allowed; small
