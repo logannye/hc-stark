@@ -204,6 +204,76 @@ pub struct ProofV5<F: FieldElement> {
     pub grinding_nonce: u64,
 }
 
+// ─── v7 (general-AIR) parallel proof types (Phase 1B) ────────────────────────
+//
+// ADDITIVE counterparts to the v5 types. The v5 path stays exactly as-is (its
+// trace openings are the fixed `[F; 2]` `TraceRow`); the v7 path carries
+// width-N trace rows (`Vec<F>`), a public-input vector, and the AIR identity.
+// The quotient/composition + FRI openings are reused from the v5 K-valued
+// shapes (the quotient is a single K column regardless of trace width).
+
+/// Width-N trace opening (v7+): the row is a `Vec<F>` of length = trace width.
+#[derive(Clone, Debug)]
+pub struct TraceQueryN<F: FieldElement> {
+    pub index: usize,
+    pub evaluation: Vec<F>,
+    pub witness: TraceWitness,
+    /// Optional next-row opening needed for transition constraints at index `i`.
+    pub next: Option<NextTraceRowN<F>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NextTraceRowN<F: FieldElement> {
+    pub index: usize,
+    pub evaluation: Vec<F>,
+    pub witness: MerklePath,
+}
+
+/// OOD-style opening for the v7 proof: width-N trace opening (F) + K quotient.
+#[derive(Clone, Debug)]
+pub struct OodOpeningsV7<F: FieldElement> {
+    pub index: usize,
+    pub trace: TraceQueryN<F>,
+    pub quotient: CompositionQuery<QuadExtension<F>>,
+}
+
+/// Query response for the v7 (general-AIR) proof. Width-N trace openings in `F`;
+/// quotient (composition) + FRI openings are `K`-valued (`K = QuadExtension<F>`).
+#[derive(Clone, Debug)]
+pub struct QueryResponseV7<F: FieldElement> {
+    pub trace_queries: Vec<TraceQueryN<F>>,
+    pub composition_queries: Vec<CompositionQuery<QuadExtension<F>>>,
+    pub fri_queries: Vec<FriQuery<QuadExtension<F>>>,
+    pub ood: Option<OodOpeningsV7<F>>,
+}
+
+/// General-AIR soundness-hardened proof (v7 = general sound, v8 = v7 + ZK).
+///
+/// ADDITIVE counterpart to [`ProofV5`]: carries a width-N trace, a public-input
+/// vector (replacing `initial_acc`/`final_acc`), the trace width (leaf arity),
+/// and the AIR identity (by which the verifier selects the constraint set).
+#[derive(Clone, Debug)]
+pub struct ProofV7<F: FieldElement> {
+    /// 7 (general sound) or 8 (ZK).
+    pub version: u32,
+    pub trace_commitment: Commitment,
+    pub composition_commitment: Commitment,
+    /// `K`-valued FRI proof; carries `final_coeffs`.
+    pub fri_proof: FriProof<QuadExtension<F>>,
+    /// AIR public inputs (replaces v5's `initial_acc`/`final_acc`).
+    pub public_inputs: Vec<F>,
+    /// Trace width N (number of columns / Merkle leaf arity).
+    pub trace_width: usize,
+    /// AIR identity; the verifier selects the constraint set by this id.
+    pub air_id: u32,
+    pub query_response: QueryResponseV7<F>,
+    pub trace_length: usize,
+    /// Protocol parameters (`grinding_bits` set from config).
+    pub params: ProofParams,
+    /// Proof-of-work nonce satisfying the grinding check.
+    pub grinding_nonce: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

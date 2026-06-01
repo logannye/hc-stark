@@ -77,6 +77,9 @@ impl Air for RangeAir {
     fn public_input_len(&self) -> usize {
         2
     }
+    fn air_id(&self) -> u32 {
+        2
+    }
     fn constraints(&self) -> &'static [ConstraintMeta] {
         RANGE_CONSTRAINTS
     }

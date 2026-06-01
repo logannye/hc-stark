@@ -37,6 +37,9 @@ impl Air for AccumulatorAir {
     fn public_input_len(&self) -> usize {
         2
     }
+    fn air_id(&self) -> u32 {
+        1
+    }
     fn constraints(&self) -> &'static [ConstraintMeta] {
         ACC_CONSTRAINTS
     }

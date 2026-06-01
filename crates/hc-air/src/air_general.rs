@@ -65,6 +65,12 @@ pub trait Air {
     /// Number of public inputs this AIR consumes.
     fn public_input_len(&self) -> usize;
 
+    /// Stable AIR identity bound into the v7 transcript; the verifier selects the
+    /// constraint set by this id. `0` = unspecified (tests only); real AIRs override.
+    fn air_id(&self) -> u32 {
+        0
+    }
+
     /// Ordered constraint metadata. Index `i` is the α power for constraint `i`.
     fn constraints(&self) -> &'static [ConstraintMeta];
 
