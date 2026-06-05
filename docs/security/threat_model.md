@@ -29,12 +29,24 @@ The verifier must reject ALL invalid proofs. A valid proof must only be producib
 
 A computationally bounded adversary cannot produce a proof that verifies for a false statement, except with negligible probability.
 
-**Soundness error bound**: `1/|F|^query_count` where `|F| = 2^64 - 2^32 + 1` (Goldilocks) and default `query_count = 30`. This gives soundness error < `2^{-1920}`.
+**Soundness error**: FRI soundness is governed by the **proximity gap** for
+Reed-Solomon codes, *not* by `1/|F|^query_count`. The per-query error is a
+function of the code rate ρ = 1/blowup (deployed blowup 8 ⇒ ρ = 1/8), giving
+≈ √ρ … ρ per query (conservative vs. ethSTARK-conjecture regimes); soundness-
+critical challenges are drawn from the quadratic extension K ≈ 2^128. At the
+**deployed verifier floor** (40 queries, blowup 8, 20 grinding bits, min proof
+version 5) this is a **conjectured ~80–140-bit** level — **conjectured** because
+it relies on the ethSTARK proximity-gap conjecture, and **audit-pending** (no
+bit figure is advertised until the external Phase 4 audit). See
+[`soundness_proof.md`](soundness_proof.md) for the full argument and parameter
+table.
 
 **Dependencies**:
-- FRI folding correctness (each layer halves the degree)
+- The ethSTARK proximity-gap conjecture for Reed-Solomon codes
+- FRI low-degree test correctness (antipodal + 1/x fold, final-degree check)
 - Merkle commitment binding (Blake3 collision resistance)
-- Fiat-Shamir transcript determinism (no malleability)
+- Constraint composition over K ≈ 2^128 (single composition challenge)
+- Fiat-Shamir transcript determinism + grinding (no malleability)
 - Constraint polynomial evaluation correctness
 
 ### Zero-Knowledge (when enabled)
