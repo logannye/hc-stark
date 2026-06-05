@@ -23,19 +23,48 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 cd "$REPO"
 
-echo "==> [1/4] Pull latest main"
+echo "==> [1/5] Pull latest main"
 git fetch --quiet origin main
 git checkout --quiet main
 git pull --ff-only origin main
 echo "    now at: $(git log -1 --pretty='%h %s')"
 
-echo "==> [2/4] Rebuild + restart containerized tiers (hc-server, hc-mcp, prometheus, grafana, alertmanager)"
+echo "==> [2/5] Rebuild + restart containerized tiers (hc-server, hc-mcp, prometheus, grafana, alertmanager)"
 $COMPOSE up -d --build
 
-echo "==> [3/4] Restart host billing-webhook (systemd) so provision_tenant.py / tenant_store.py changes take effect"
+echo "==> [3/5] Sync Caddy reverse-proxy config (host systemd) if changed"
+# Caddy runs as a HOST systemd unit reading /etc/caddy/Caddyfile — NOT a compose
+# service and NOT the repo copy. A `git pull` updates deploy/hetzner/Caddyfile but
+# Caddy keeps serving the old config until it is copied + reloaded. (That gap left
+# wildcard CORS live after the 2026-06-04 deploy.) Sync safely: validate first,
+# back up, graceful reload, and roll back on any failure.
+REPO_CADDY="$REPO/deploy/hetzner/Caddyfile"
+LIVE_CADDY="/etc/caddy/Caddyfile"
+if systemctl is-active --quiet caddy && [ -f "$REPO_CADDY" ]; then
+    if diff -q "$LIVE_CADDY" "$REPO_CADDY" >/dev/null 2>&1; then
+        echo "    Caddyfile unchanged — skip"
+    else
+        BK="$LIVE_CADDY.bak.$(date -u +%Y%m%d_%H%M%S)"
+        cp -a "$LIVE_CADDY" "$BK"
+        cp "$REPO_CADDY" "$LIVE_CADDY"
+        if caddy validate --config "$LIVE_CADDY" --adapter caddyfile >/dev/null 2>&1 \
+            && systemctl reload caddy; then
+            echo "    Caddy config synced + reloaded OK (backup: $BK)"
+        else
+            echo "    FAIL Caddy validate/reload — restoring $BK" >&2
+            cp "$BK" "$LIVE_CADDY"
+            systemctl reload caddy || true
+            exit 1
+        fi
+    fi
+else
+    echo "    Caddy not a host systemd service (or repo Caddyfile missing) — skip"
+fi
+
+echo "==> [4/5] Restart host billing-webhook (systemd) so provision_tenant.py / tenant_store.py changes take effect"
 systemctl restart hc-billing-webhook
 
-echo "==> [4/4] Health checks"
+echo "==> [5/5] Health checks"
 sleep 5
 fail=0
 check() { # label url expected
