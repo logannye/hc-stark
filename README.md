@@ -10,7 +10,7 @@
 
 **[tinyzkp.com](https://tinyzkp.com)** &middot; **[Try it in browser](https://tinyzkp.com/try)** &middot; **[API docs](https://tinyzkp.com/docs)** &middot; **[Free signup](https://tinyzkp.com/signup)**
 
-Mint a tamper-evident proof that your agent ran the code it claims, on the inputs it claims. **One MCP install. One API call. Verify in milliseconds.** No cryptography degree required.
+Mint a tamper-evident proof that a state-transition chain is consistent — *start at X, apply these steps, provably reach Y* — so an agent (or any caller) can hand over a verifiable receipt instead of "trust me." **One MCP install. One API call. Verify in milliseconds.** No cryptography degree required.
 
 ## Three ways to start in under a minute
 
@@ -568,7 +568,7 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - **Templates with copy-paste examples + integration tests** — full curl + Python + TypeScript snippets shipped on [`tinyzkp.com/docs`](https://tinyzkp.com/docs); integration test at [`crates/hc-workloads/tests/template_examples.rs`](crates/hc-workloads/tests/template_examples.rs) asserts every documented example builds via `build_from_template()`
 - **Customer-discovery pipeline** — recruit → script → synthesis playbook in [`marketing/USER_INTERVIEWS.md`](marketing/USER_INTERVIEWS.md), targeting 5 interviews / 14 days against free-tier signups, MCP installs, and playground completions
 - **Protocol transcript v2 contract** — versioned Fiat–Shamir transcript domains (`hc-stark/v2`, `hc-stark/fri/v2`) with canonical labels in `hc_hash::protocol`; treated as a wire-compatibility contract (see [`docs/whitepaper.md`](docs/whitepaper.md) §7.0 and [`docs/design_notes/security_considerations.md`](docs/design_notes/security_considerations.md) §2.4)
-- **Security audit suite** — threat model, soundness proof, and audit checklist under [`docs/security/`](docs/security/), plus per-pillar fuzzing harnesses under [`fuzz/`](fuzz/)
+- **Security audit suite** — threat model, soundness argument (conjectured, audit-pending), and audit checklist under [`docs/security/`](docs/security/), plus per-pillar fuzzing harnesses under [`fuzz/`](fuzz/)
 
 ### Recently shipped (production-readiness sweep)
 
@@ -648,7 +648,7 @@ After that, in priority order:
 - **Operations:** [`docs/operations.md`](docs/operations.md)
 - **Hetzner deploy runbooks:** [`docs/runbooks/`](docs/runbooks/)
 - **Postgres migration plan:** [`docs/postgres_migration.md`](docs/postgres_migration.md)
-- **Security audit suite (threat model, soundness proof, audit checklist):** [`docs/security/`](docs/security/)
+- **Security audit suite (threat model, soundness argument [conjectured, audit-pending], audit checklist):** [`docs/security/`](docs/security/)
 - **MCP directory submission packets:** [`marketing/MCP_DIRECTORY*.md`](marketing/)
 - **Customer-discovery playbook:** [`marketing/USER_INTERVIEWS.md`](marketing/USER_INTERVIEWS.md)
 - **HN launch draft:** [`marketing/HN_LAUNCH.md`](marketing/HN_LAUNCH.md)

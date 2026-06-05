@@ -145,11 +145,18 @@ footer .right a:hover{color:var(--muted)}
     <tr><td class="label">1M steps</td><td class="others">10–20 GB RAM</td><td class="tinyzkp">~30 MB</td></tr>
     <tr><td class="label">10M steps</td><td class="others">100+ GB RAM</td><td class="tinyzkp">~100 MB</td></tr>
     <tr><td class="label">100M steps</td><td class="others">Fleet sharding required</td><td class="tinyzkp">~300 MB</td></tr>
-    <tr><td class="label">1B steps</td><td class="others">Not feasible without segmentation + recursion</td><td class="tinyzkp">~1 GB</td></tr>
+    <tr><td class="label">1B steps <span style="color:var(--amber);font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em">projected</span></td><td class="others">Not feasible without segmentation + recursion</td><td class="tinyzkp">~1 GB *</td></tr>
   </tbody>
 </table>
 
+<p style="font-size:13px;color:var(--dim);margin-top:8px">* Architectural projection. The <strong>live single-proof cap is 100M steps</strong>; 1B-step proving is a roadmap target, not available today. What's provable on Compute today: long accumulator / state-transition traces up to 100M steps — zkVM and zkML proving (below) are in development.</p>
+
 <p>The trade-off is honest: extra time for less memory. We pay roughly <code>&radic;N</code> more cycles to use <code>&radic;N</code> less RAM. For large computations, this trade-off is the only one that matters — RAM is the wall you hit first, and recovering memory unlocks workloads that conventional provers simply cannot run on commodity hardware.</p>
+
+<div class="callout accent">
+<h3>Measured, not just asymptotic</h3>
+<p>In a reproducible sweep, the streaming commitment's peak working set stays <strong>~0.04 MB</strong> as the trace grows to <strong>16.7M elements</strong>, while the conventional O(N) path climbs to <strong>513 MB</strong> — a &radic;N (≈4,096×) reduction at the <em>identical</em> Merkle root (~1.2× the time). That height-compression is what bounds the full prover's memory in the table above. Re-run it: <code>./scripts/bench/run_sqrt_sweep.sh</code> — numbers + method in <a href="https://github.com/logannye/hc-stark/blob/main/docs/benchmarks/sqrt_memory_scaling.md" target="_blank">docs/benchmarks/sqrt_memory_scaling.md</a>.</p>
+</div>
 
 <h2>Where the moat applies</h2>
 

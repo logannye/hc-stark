@@ -95,7 +95,7 @@ footer .right a:hover{color:var(--muted)}
 <div class="content">
 <a class="back" href="/">&larr; Back to TinyZKP</a>
 <h1>Terms of Service</h1>
-<p>Last updated: March 2026</p>
+<p>Last updated: June 2026</p>
 
 <h2>1. Acceptance</h2>
 <p>By using the TinyZKP API ("Service"), you agree to these terms. If you do not agree, do not use the Service.</p>
@@ -115,7 +115,9 @@ footer .right a:hover{color:var(--muted)}
 
 <h2>4. Billing</h2>
 <ul>
-<li>Proof generation is billed monthly based on usage.</li>
+<li>Proof generation is billed by usage (per proof, by trace complexity); verification is free. Plans and per-proof rates are published at <a href="/#pricing">tinyzkp.com</a>.</li>
+<li>Each plan has a monthly spend cap; usage beyond the cap is blocked until the next billing cycle or a plan upgrade.</li>
+<li>The free tier is limited to one account per email address.</li>
 <li>Prices are listed on our website and may change with 30 days notice.</li>
 <li>Payments are processed via Stripe. You agree to Stripe's terms of service.</li>
 <li>Overdue accounts may have API access suspended.</li>
@@ -130,8 +132,9 @@ footer .right a:hover{color:var(--muted)}
 <li>Use the Service to facilitate illegal activities.</li>
 </ul>
 
-<h2>6. Availability and SLA</h2>
+<h2>6. Availability, Warranty, and Cryptographic Guarantees</h2>
 <p>We aim for high availability but do not guarantee uptime. The Service is provided "as is" without warranty of any kind.</p>
+<p><strong>Cryptographic soundness is conjectured and pending independent audit.</strong> TinyZKP's STARK soundness rests on standard, widely-used but <em>conjectured</em> assumptions (the Reed-Solomon proximity-gap / ethSTARK conjecture) and has not yet completed an external cryptographer audit. Zero-knowledge masking is opt-in and off by default; the default proof is sound but not zero-knowledge. You should not rely on a TinyZKP proof as the sole basis for a high-value financial, legal, or safety-critical attestation until that independent audit is complete. See the <a href="https://github.com/logannye/hc-stark/blob/main/docs/security/soundness_proof.md" target="_blank">soundness argument</a> for details.</p>
 
 <h2>7. Limitation of Liability</h2>
 <p>To the maximum extent permitted by law, TinyZKP shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the Service.</p>
