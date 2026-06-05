@@ -9,6 +9,10 @@
 > validate the implementation against that conjecture, not to prove the
 > conjecture. Everything in **§Out of scope** is fenced from every live path and
 > should not consume audit budget.
+>
+> **Start here:** the [`auditor_guide.md`](auditor_guide.md) maps each soundness
+> claim to the test that demonstrates it, and `./scripts/run_soundness_suite.sh`
+> runs them all in one command (~70 s, 10/10 groups).
 
 ## Priority 1 — Live verifier (the forgery boundary)
 
