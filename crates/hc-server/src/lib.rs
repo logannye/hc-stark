@@ -1227,6 +1227,33 @@ fn try_reserve_inflight(
     Ok(())
 }
 
+/// Estimate the billed cents a single proof of `trace_length` adds to a tenant's
+/// monthly usage on `plan`. Mirrors `usage_log`'s recorded formula
+/// (`price_cents * discount_factor`, rounded) so a cap projection matches what
+/// will actually be billed (BILL-05).
+fn estimated_job_cost_cents(trace_length: usize, plan: &str) -> u64 {
+    (usage_log::price_cents_pub(trace_length) as f64 * usage_log::discount_factor_pub(plan)).round()
+        as u64
+}
+
+/// Whether admitting a batch whose per-job trace lengths are `trace_lengths`
+/// would push a tenant currently at `base_cost_cents` over `cap_cents` on
+/// `plan`. The per-loop inflight gate alone can't catch this: each cheap proof
+/// individually passes a `cost < cap` check, but a 100-request batch sums past
+/// the cap. prove_batch projects the whole batch up front and rejects it
+/// atomically (BILL-05).
+fn batch_would_exceed_cap(
+    base_cost_cents: u64,
+    cap_cents: u64,
+    trace_lengths: &[usize],
+    plan: &str,
+) -> bool {
+    let projected = trace_lengths.iter().fold(base_cost_cents, |acc, &t| {
+        acc.saturating_add(estimated_job_cost_cents(t, plan))
+    });
+    projected > cap_cents
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_prove_worker(
     state: &AppState,
@@ -1788,17 +1815,40 @@ async fn prove_batch(
         ));
     }
 
-    // Usage cap enforcement.
+    // Usage cap enforcement. Project the WHOLE batch up front: the per-request
+    // inflight gate alone can't stop a batch of cheap proofs that each pass a
+    // `cost < cap` check but collectively overshoot the monthly cap (BILL-05).
+    // Reject atomically before admitting any job so the batch never overshoots
+    // (consistent with the existing cap-before-validate ordering).
     let plan_limits = PlanLimits::for_plan(&tenant.plan);
     let max_inflight = plan_limits.max_inflight.min(state.cfg.max_inflight_jobs);
     if let Some(ref usage) = state.usage_log {
-        if let Ok(cost) = usage.monthly_cost_cents(&tenant.tenant_id, &tenant.plan) {
-            if cost >= plan_limits.monthly_cap_cents {
+        if let Ok(base_cost) = usage.monthly_cost_cents(&tenant.tenant_id, &tenant.plan) {
+            // Mirror the loop's server-side trace_length formula, overflow-safe
+            // since this runs before per-request validation.
+            let trace_lengths: Vec<usize> = batch
+                .requests
+                .iter()
+                .map(|req| {
+                    let program_len = req.program.as_ref().map(|p| p.len()).unwrap_or(1);
+                    program_len
+                        .max(1)
+                        .checked_next_power_of_two()
+                        .unwrap_or(usize::MAX)
+                        .saturating_mul(req.block_size.max(1))
+                })
+                .collect();
+            if batch_would_exceed_cap(
+                base_cost,
+                plan_limits.monthly_cap_cents,
+                &trace_lengths,
+                &tenant.plan,
+            ) {
                 state.metrics.usage_cap_rejections.inc();
                 return Err(ApiError {
                     status: StatusCode::PAYMENT_REQUIRED,
                     code: "usage_cap_reached",
-                    message: "monthly usage cap reached".to_string(),
+                    message: "batch would exceed the monthly usage cap".to_string(),
                 });
             }
         }
@@ -3797,5 +3847,62 @@ mod g12_trace_length_billing_tests {
             cost > 5,
             "computed trace_length={computed} should cost more than the 5¢ floor, got {cost}¢"
         );
+    }
+}
+
+// ── BILL-05: per-batch cap projection ──────────────────────────────────────
+//
+// #21 added the atomic inflight gate to prove_batch, but the monthly cap was
+// still only checked ONCE before the loop, so a 100-request batch of cheap
+// proofs could each pass `cost < cap` and collectively blow past it. These pin
+// the cost-projection helpers prove_batch uses to reject such a batch up front.
+#[cfg(test)]
+mod bill05_batch_cap_tests {
+    use super::*;
+
+    #[test]
+    fn estimated_job_cost_matches_billing_formula() {
+        // Developer (no discount): price_cents passes through.
+        assert_eq!(estimated_job_cost_cents(100, "developer"), 5);
+        assert_eq!(estimated_job_cost_cents(10_000, "developer"), 50);
+        // Scale (40% off): 50 * 0.60 = 30.
+        assert_eq!(estimated_job_cost_cents(10_000, "scale"), 30);
+        // "pro" is the legacy alias for scale — same discounted cost.
+        assert_eq!(estimated_job_cost_cents(10_000, "pro"), 30);
+        // Team (25% off): round(50 * 0.75) = round(37.5) = 38.
+        assert_eq!(estimated_job_cost_cents(10_000, "team"), 38);
+    }
+
+    #[test]
+    fn single_job_under_cap_does_not_exceed() {
+        // base 0, developer cap $500 (50_000c), one 10k-step proof (50c).
+        assert!(!batch_would_exceed_cap(0, 50_000, &[10_000], "developer"));
+    }
+
+    #[test]
+    fn batch_of_cheap_jobs_that_each_pass_the_single_check_still_trips_cap() {
+        // THE BILL-05 regression: base 480c is under the free $5 (500c) cap, so the
+        // old single pre-loop check (`cost >= cap`) admitted the whole batch — but
+        // 100 proofs at 5c each (developer) add 500c, overshooting to 980c.
+        let trace_lengths = [100usize; 100];
+        assert!(batch_would_exceed_cap(
+            480,
+            500,
+            &trace_lengths,
+            "developer"
+        ));
+    }
+
+    #[test]
+    fn batch_that_exactly_fits_is_allowed() {
+        // base 0, cap 500c, 100 proofs at 5c = exactly 500c → allowed (not > cap).
+        let trace_lengths = [100usize; 100];
+        assert!(!batch_would_exceed_cap(0, 500, &trace_lengths, "developer"));
+    }
+
+    #[test]
+    fn already_at_cap_rejects_any_batch() {
+        // base already == cap and any non-zero job pushes projected > cap.
+        assert!(batch_would_exceed_cap(50_000, 50_000, &[100], "developer"));
     }
 }
