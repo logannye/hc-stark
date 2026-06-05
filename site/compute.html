@@ -153,6 +153,11 @@ footer .right a:hover{color:var(--muted)}
 
 <p>The trade-off is honest: extra time for less memory. We pay roughly <code>&radic;N</code> more cycles to use <code>&radic;N</code> less RAM. For large computations, this trade-off is the only one that matters — RAM is the wall you hit first, and recovering memory unlocks workloads that conventional provers simply cannot run on commodity hardware.</p>
 
+<div class="callout accent">
+<h3>Measured, not just asymptotic</h3>
+<p>In a reproducible sweep, the streaming commitment's peak working set stays <strong>~0.04 MB</strong> as the trace grows to <strong>16.7M elements</strong>, while the conventional O(N) path climbs to <strong>513 MB</strong> — a &radic;N (≈4,096×) reduction at the <em>identical</em> Merkle root (~1.2× the time). That height-compression is what bounds the full prover's memory in the table above. Re-run it: <code>./scripts/bench/run_sqrt_sweep.sh</code> — numbers + method in <a href="https://github.com/logannye/hc-stark/blob/main/docs/benchmarks/sqrt_memory_scaling.md" target="_blank">docs/benchmarks/sqrt_memory_scaling.md</a>.</p>
+</div>
+
 <h2>Where the moat applies</h2>
 
 <h3>zkVM execution proofs <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(in development)</span></h3>
