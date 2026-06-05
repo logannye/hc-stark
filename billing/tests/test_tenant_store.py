@@ -176,6 +176,34 @@ class TestEventIdempotency:
         assert tenant_store.is_event_processed(db, "evt_123")
 
 
+class TestPartialUniqueIndexFreeTenant:
+    """G8 race-safety: at most one free-plan tenant per email (DB-layer guard)."""
+
+    def test_two_free_tenants_same_email_raises(self, db):
+        """Second free signup for the same email must raise IntegrityError."""
+        tenant_store.create_tenant(db, "t_free_1", "dup@example.com", "key_free_1", plan="free")
+        with pytest.raises(sqlite3.IntegrityError):
+            tenant_store.create_tenant(db, "t_free_2", "dup@example.com", "key_free_2", plan="free")
+
+    def test_free_and_paid_same_email_both_succeed(self, db):
+        """A free tenant and a paid tenant for the same email must BOTH succeed.
+
+        This covers the free→paid upgrade path: a new paid tenant is created
+        for the same email without touching or replacing the free row.
+        """
+        tenant_store.create_tenant(db, "t_free_1", "shared@example.com", "key_free_1", plan="free")
+        # developer is a paid plan — the partial index WHERE plan='free' must
+        # not block this insert.
+        tenant_store.create_tenant(db, "t_dev_1", "shared@example.com", "key_dev_1", plan="developer")
+
+        free_row = tenant_store.get_tenant(db, "t_free_1")
+        paid_row = tenant_store.get_tenant(db, "t_dev_1")
+        assert free_row is not None
+        assert paid_row is not None
+        assert free_row["plan"] == "free"
+        assert paid_row["plan"] == "developer"
+
+
 class TestMigrateFromTenantMap:
     def test_migrate(self, db, tmp_path):
         tenant_map = {

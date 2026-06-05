@@ -377,8 +377,9 @@ fn price_cents(trace_length: usize) -> u64 {
 /// the same on its side. Edit `pricing.json` FIRST when changing.
 fn discount_factor(plan: &str) -> f64 {
     match plan {
-        "team" => 0.75,  // 25% off
-        "scale" => 0.60, // 40% off
+        "team" => 0.75,          // 25% off
+        "scale" | "pro" => 0.60, // 40% off; "pro" is the legacy alias for scale
+        "compute" => 1.0,        // billed via trace_step_usage meter, no cents discount
         _ => 1.0,
     }
 }

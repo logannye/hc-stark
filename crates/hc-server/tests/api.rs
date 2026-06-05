@@ -984,3 +984,120 @@ async fn worker_crash_lands_job_in_failed_state() {
         _ => unreachable!(),
     }
 }
+
+/// G12 regression: two concurrent /prove submissions from the same tenant
+/// with max_inflight=1 must yield exactly one 200 and one 429
+/// too_many_inflight.  This exercises the atomic gate introduced to close
+/// the TOCTOU race where both requests could read inflight=0 before either
+/// inserted its job.
+///
+/// The test does NOT spin up a real worker (hc-worker path); the gate fires
+/// in the HTTP handler before the worker spawn, so no binary is needed.
+/// Both requests are dispatched via separate `oneshot` calls into the same
+/// cloned `app` with `max_inflight_jobs=1` on the server config.
+#[tokio::test]
+async fn concurrent_submissions_respect_inflight_limit() {
+    let tmp = tempfile::tempdir().unwrap();
+    // max_inflight_jobs=1 at the server level; the default free-plan
+    // PlanLimits.max_inflight is also 1, so min(1,1)=1.
+    let state = hc_server::test_state_with_max_inflight(tmp.path().to_path_buf(), 1);
+    let app = hc_server::build_app(state);
+
+    let prove_req = ProveRequest {
+        workload_id: Some("toy_add_1_2".to_string()),
+        template_id: None,
+        template_params: None,
+        program: None,
+        initial_acc: 5,
+        final_acc: 8,
+        // block_size=8 so computed_trace_length = 1*8 = 8 (workload, no program bytes)
+        block_size: 8,
+        fri_final_poly_size: 2,
+        query_count: 10,
+        lde_blowup_factor: 2,
+        zk_mask_degree: None,
+    };
+    let body = serde_json::to_vec(&prove_req).unwrap();
+
+    // Submit two requests back-to-back (sequential oneshot calls share the
+    // same in-memory job map).  The first should land as Pending before the
+    // second checks the count, so the second must be rejected.
+    let resp1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/prove")
+                .header("content-type", "application/json")
+                .body(Body::from(body.clone()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/prove")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let statuses = [resp1.status(), resp2.status()];
+    let ok_count = statuses.iter().filter(|&&s| s == StatusCode::OK).count();
+    let toomany_count = statuses
+        .iter()
+        .filter(|&&s| s == StatusCode::TOO_MANY_REQUESTS)
+        .count();
+
+    assert_eq!(
+        ok_count, 1,
+        "exactly one submission should be accepted; got statuses {:?}",
+        statuses
+    );
+    assert_eq!(
+        toomany_count, 1,
+        "exactly one submission should be rejected 429; got statuses {:?}",
+        statuses
+    );
+
+    // Confirm the 429 body carries the expected error code.
+    // We re-issue a fresh second request to read its body.
+    let prove_req2 = ProveRequest {
+        workload_id: Some("toy_add_1_2".to_string()),
+        template_id: None,
+        template_params: None,
+        program: None,
+        initial_acc: 5,
+        final_acc: 8,
+        block_size: 8,
+        fri_final_poly_size: 2,
+        query_count: 10,
+        lde_blowup_factor: 2,
+        zk_mask_degree: None,
+    };
+    let resp3 = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/prove")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&prove_req2).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp3.status(), StatusCode::TOO_MANY_REQUESTS);
+    let body3 = axum::body::to_bytes(resp3.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json3: serde_json::Value = serde_json::from_slice(&body3).unwrap();
+    assert_eq!(
+        json3["error"]["code"], "too_many_inflight",
+        "429 body should carry error.code='too_many_inflight'"
+    );
+}

@@ -82,3 +82,92 @@ class TestPriceTiersParity:
             f"sync_usage.TIERS has {len(sync_usage.TIERS)} entries; "
             f"pricing.json has {len(cfg['tiers_cents'])}"
         )
+
+
+class TestComputePlanParity:
+    """Verify the compute plan is present with the correct limits/discount on
+    both the Python (sync_usage) and SSOT (pricing.json) sides.  The Rust
+    side is covered by pricing_parity_tests::plan_limits_match_pricing_json
+    (iterates all pricing.json plans) plus the new explicit assertions."""
+
+    def test_compute_plan_in_pricing_json(self):
+        cfg = _pricing_json()
+        assert "compute" in cfg["plans"], "pricing.json must define a 'compute' plan"
+        p = cfg["plans"]["compute"]
+        assert p["prove_rpm"] == 100
+        assert p["verify_rpm"] == 300
+        assert p["max_inflight"] == 8
+        assert p["monthly_cap_cents"] == 10_000_000
+        assert p["max_prove_seconds"] == 3600
+        assert p["discount"] == 1.0
+
+    def test_compute_discount_in_sync_usage(self):
+        got = sync_usage.DISCOUNT_FACTORS.get("compute")
+        assert got == 1.0, (
+            f"sync_usage.DISCOUNT_FACTORS['compute']={got} ≠ 1.0 (compute is metered by steps)"
+        )
+
+    def test_pro_resolves_to_scale_discount(self):
+        """'pro' is a plan_alias for 'scale'; its discount must match scale's 0.60."""
+        cfg = _pricing_json()
+        scale_discount = cfg["plans"]["scale"]["discount"]
+        got = sync_usage.DISCOUNT_FACTORS.get("pro", 1.0)
+        assert got == scale_discount, (
+            f"sync_usage.DISCOUNT_FACTORS['pro']={got} ≠ scale discount {scale_discount}"
+        )
+
+
+class TestBillingMetersParity:
+    """Verify the billing_meters SSOT in pricing.json is consistent with
+    sync_usage.py's BILLING_METERS routing table."""
+
+    def test_billing_meters_ssot_present(self):
+        cfg = _pricing_json()
+        assert "billing_meters" in cfg, "pricing.json must define a billing_meters object"
+        bm = cfg["billing_meters"]
+        assert bm.get("compute") == "trace_step_usage", (
+            f"billing_meters.compute={bm.get('compute')} ≠ trace_step_usage"
+        )
+        assert bm.get("_default") == "proof_usage", (
+            f"billing_meters._default={bm.get('_default')} ≠ proof_usage"
+        )
+
+    def test_compute_routes_to_trace_step_usage(self):
+        """compute plan must use trace_step_usage meter (raw steps, not cents)."""
+        assert sync_usage.BILLING_METERS.get("compute") == "trace_step_usage", (
+            "sync_usage.BILLING_METERS['compute'] must be 'trace_step_usage'"
+        )
+
+    def test_compute_meter_event_for_plan(self):
+        """meter_event_for_plan returns (trace_step_usage, raw_steps) for compute."""
+        trace_len = 500_000
+        meter_name, value = sync_usage.meter_event_for_plan("compute", trace_len)
+        assert meter_name == "trace_step_usage", (
+            f"compute meter_name={meter_name!r} ≠ 'trace_step_usage'"
+        )
+        assert value == str(trace_len), (
+            f"compute meter value={value!r} ≠ str(trace_len)={str(trace_len)!r}"
+        )
+
+    def test_non_compute_meter_event_for_plan(self):
+        """meter_event_for_plan returns (proof_usage, cents) for non-compute plans."""
+        for plan in ("free", "developer", "scale", "pro", "team"):
+            trace_len = 50_000  # 50K steps → tier 2 → 50 cents base
+            meter_name, value = sync_usage.meter_event_for_plan(plan, trace_len)
+            assert meter_name == sync_usage.METER_EVENT_NAME, (
+                f"plan={plan}: meter_name={meter_name!r} ≠ METER_EVENT_NAME"
+            )
+            # value must be a stringified integer (discounted cents)
+            assert value.isdigit() or (value.startswith("-") and value[1:].isdigit()), (
+                f"plan={plan}: meter value={value!r} is not an integer string"
+            )
+
+    def test_billing_meters_matches_ssot(self):
+        """sync_usage.BILLING_METERS keys must all appear in pricing.json billing_meters."""
+        cfg = _pricing_json()
+        ssot = cfg["billing_meters"]
+        for plan, meter in sync_usage.BILLING_METERS.items():
+            assert ssot.get(plan) == meter, (
+                f"sync_usage.BILLING_METERS[{plan!r}]={meter!r} ≠ "
+                f"pricing.json billing_meters[{plan!r}]={ssot.get(plan)!r}"
+            )

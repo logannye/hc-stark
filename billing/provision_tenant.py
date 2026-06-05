@@ -4,7 +4,8 @@
 Events handled:
   - checkout.session.completed → create tenant, deliver API key
   - customer.subscription.deleted → suspend tenant
-  - invoice.payment_failed → suspend tenant
+  - customer.subscription.updated → plan change, or suspend on terminal dunning state
+  - invoice.payment_failed → log only; Stripe dunning retries (no hard suspend)
 """
 
 import hashlib
@@ -207,6 +208,29 @@ def _recover_api_key(tenant_id: str) -> Optional[str]:
     return None
 
 
+# Canonical paid plans (pricing.json) the webhook may store, plus the checkout
+# aliases. create-checkout.js emits metadata.plan in {developer, pro, compute}
+# (it maps team/scale -> "pro" before writing, create-checkout.js:108-110), and
+# pricing.json plan_aliases defines pro -> scale, standard -> developer. Without
+# this mapping a "pro" (=$199 Scale) or "compute" checkout was silently stored as
+# "developer", delivering developer entitlements to a paying Scale/Compute
+# customer (audit BILL-01).
+_PLAN_ALIASES = {"pro": "scale", "standard": "developer"}
+_CANONICAL_PAID_PLANS = {"developer", "team", "scale", "compute"}
+
+
+def _normalize_plan(raw: str | None, default: str = "developer") -> str:
+    """Resolve a checkout/subscription plan slug to a canonical stored plan.
+
+    Applies pricing.json plan_aliases (pro -> scale, standard -> developer) and
+    falls back to `default` for missing/unrecognized slugs.
+    """
+    if not raw:
+        return default
+    plan = _PLAN_ALIASES.get(raw, raw)
+    return plan if plan in _CANONICAL_PAID_PLANS else default
+
+
 def _handle_checkout_completed(event: dict) -> tuple[str, int]:
     """Handle checkout.session.completed — provision new tenant."""
     conn = tenant_store.open_db()
@@ -245,9 +269,9 @@ def _handle_checkout_completed(event: dict) -> tuple[str, int]:
     api_key = generate_api_key()
 
     # Extract plan from checkout session metadata (set by create-checkout.js).
-    plan = (session.get("metadata") or {}).get("plan", "developer")
-    if plan not in ("developer", "team", "scale"):
-        plan = "developer"
+    # Normalize so pro -> scale and compute -> compute instead of silently
+    # downgrading a paying Scale/Compute customer to developer (BILL-01).
+    plan = _normalize_plan((session.get("metadata") or {}).get("plan"))
 
     tenant_store.create_tenant(
         conn,
@@ -307,7 +331,7 @@ def _handle_subscription_deleted(event: dict) -> tuple[str, int]:
 
 
 def _handle_payment_failed(event: dict) -> tuple[str, int]:
-    """Handle invoice.payment_failed — suspend tenant."""
+    """Handle invoice.payment_failed — log only; let Stripe dunning retry (BILL-07)."""
     conn = tenant_store.open_db()
 
     event_id = event["id"]
@@ -324,10 +348,14 @@ def _handle_payment_failed(event: dict) -> tuple[str, int]:
     tenant = tenant_store.get_by_subscription_id(conn, subscription_id)
 
     if tenant:
-        tenant_store.suspend_tenant(conn, tenant["tenant_id"])
+        # BILL-07: do NOT hard-suspend on a failed charge. Stripe Smart Retries
+        # recover most transient declines (expired cards, momentary insufficient
+        # funds); suspending here turns a recoverable hiccup into involuntary
+        # churn. Keep the tenant active through dunning — we suspend only on the
+        # terminal signals (subscription.deleted, or subscription.updated ->
+        # unpaid/canceled).
         tenant_store.mark_event_processed(conn, event_id)
-        sync_keys.regenerate(conn, API_KEYS_FILE)
-        print(f"Suspended tenant={tenant['tenant_id']} (payment failed)")
+        print(f"Payment failed for tenant={tenant['tenant_id']}; leaving active for Stripe dunning")
     else:
         tenant_store.mark_event_processed(conn, event_id)
         print(f"WARNING: No tenant found for subscription {subscription_id}", file=sys.stderr)
@@ -338,10 +366,13 @@ def _handle_payment_failed(event: dict) -> tuple[str, int]:
 
 def _plan_from_subscription(subscription: dict) -> str:
     """Determine plan from subscription metadata or items."""
-    # Check metadata first (set during checkout).
-    plan = (subscription.get("metadata") or {}).get("plan")
-    if plan in ("developer", "team", "scale"):
-        return plan
+    # Check metadata first (set during checkout). Normalize pro -> scale,
+    # compute -> compute (BILL-01); only fall through to the item-count
+    # heuristic when metadata carries no recognizable plan.
+    raw = (subscription.get("metadata") or {}).get("plan")
+    normalized = _PLAN_ALIASES.get(raw, raw) if raw else None
+    if normalized in _CANONICAL_PAID_PLANS:
+        return normalized
     # Fallback: count line items — 1 item = developer, 2+ = team/scale.
     items = subscription.get("items", {}).get("data", [])
     if len(items) >= 2:
@@ -352,7 +383,7 @@ def _plan_from_subscription(subscription: dict) -> str:
 
 
 def _handle_subscription_updated(event: dict) -> tuple[str, int]:
-    """Handle customer.subscription.updated — plan changes via Stripe Portal."""
+    """Handle customer.subscription.updated — plan changes; suspend on terminal dunning state (BILL-07)."""
     conn = tenant_store.open_db()
 
     event_id = event["id"]
@@ -365,11 +396,21 @@ def _handle_subscription_updated(event: dict) -> tuple[str, int]:
     tenant = tenant_store.get_by_subscription_id(conn, subscription_id)
 
     if tenant:
-        plan = _plan_from_subscription(subscription)
-        tenant_store.set_plan(conn, tenant["tenant_id"], plan)
-        tenant_store.mark_event_processed(conn, event_id)
-        sync_keys.regenerate(conn, API_KEYS_FILE)
-        print(f"Updated plan for tenant={tenant['tenant_id']} to '{plan}'")
+        # BILL-07: terminal dunning states arrive as a status change — suspend
+        # when Stripe gives up (unpaid/canceled/incomplete_expired). Otherwise
+        # this is a normal plan change from the customer portal.
+        status = subscription.get("status")
+        if status in ("unpaid", "canceled", "incomplete_expired"):
+            tenant_store.suspend_tenant(conn, tenant["tenant_id"])
+            tenant_store.mark_event_processed(conn, event_id)
+            sync_keys.regenerate(conn, API_KEYS_FILE)
+            print(f"Suspended tenant={tenant['tenant_id']} (subscription {status})")
+        else:
+            plan = _plan_from_subscription(subscription)
+            tenant_store.set_plan(conn, tenant["tenant_id"], plan)
+            tenant_store.mark_event_processed(conn, event_id)
+            sync_keys.regenerate(conn, API_KEYS_FILE)
+            print(f"Updated plan for tenant={tenant['tenant_id']} to '{plan}'")
     else:
         tenant_store.mark_event_processed(conn, event_id)
         print(f"WARNING: No tenant found for subscription {subscription_id}", file=sys.stderr)
@@ -438,6 +479,12 @@ def provision_free():
         return flask.jsonify(error="valid email required"), 400
 
     conn = tenant_store.open_db()
+
+    # G8: one free tenant per email — reject duplicates before create_tenant.
+    existing = tenant_store.get_by_email(conn, email)
+    if existing:
+        conn.close()
+        return flask.jsonify(error="account already exists for this email"), 409
 
     tenant_id = generate_tenant_id()
     api_key = generate_api_key()

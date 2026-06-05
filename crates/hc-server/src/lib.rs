@@ -106,15 +106,26 @@ impl PlanLimits {
                 monthly_cap_cents: 250_000,
                 max_prove_seconds: 1800, // 30 min
             },
-            "scale" => Self {
+            "scale" | "pro" => Self {
+                // "pro" is the legacy Stripe product label for scale; pricing.json
+                // plan_aliases routes it here. Both get scale's limits.
                 prove_rpm: 500,
                 verify_rpm: 1500,
                 max_inflight: 16,
                 monthly_cap_cents: 1_000_000,
                 max_prove_seconds: 3600, // 60 min
             },
+            "compute" => Self {
+                // Billed via trace_step_usage meter, not cents-per-proof tiers.
+                // monthly_cap_cents is a coarse safety bound only.
+                prove_rpm: 100,
+                verify_rpm: 300,
+                max_inflight: 8,
+                monthly_cap_cents: 10_000_000,
+                max_prove_seconds: 3600, // 60 min
+            },
             _ => Self {
-                // "developer" is the default; also covers legacy "standard" and "pro"
+                // "developer" is the default; also covers legacy "standard"
                 prove_rpm: 100,
                 verify_rpm: 300,
                 max_inflight: 4,
@@ -919,6 +930,15 @@ pub fn test_state_with_rate_limits(
     state
 }
 
+/// Test helper: build a state with a custom `max_inflight_jobs` cap.
+/// Used by G12 regression tests that need to set the server-wide inflight
+/// limit to 1 without going through the full `ServerConfig` constructor.
+pub fn test_state_with_max_inflight(temp_dir: PathBuf, max_inflight_jobs: usize) -> AppState {
+    let mut state = test_state(temp_dir);
+    state.cfg.max_inflight_jobs = max_inflight_jobs;
+    state
+}
+
 async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
 }
@@ -1177,6 +1197,64 @@ fn verify_zkml_proof_bytes(proof: &hc_sdk::types::ProofBytes) -> hc_sdk::types::
     }
 }
 
+/// Atomically check the per-tenant in-flight count and, if below `max`,
+/// insert `new_key`/`new_job` into the map in the same critical section.
+/// Returns `Ok(())` if the slot was claimed, or `Err(ApiError 429)` if the
+/// limit is already reached.  The caller must already hold no other lock
+/// to avoid deadlock.
+fn try_reserve_inflight(
+    jobs: &mut HashMap<JobKey, JobState>,
+    tenant_id: &str,
+    max: usize,
+    new_key: JobKey,
+    new_job: JobState,
+) -> Result<(), ApiError> {
+    let inflight = jobs
+        .iter()
+        .filter(|(k, j)| {
+            k.tenant_id == tenant_id
+                && matches!(j.status, ProveJobStatus::Pending | ProveJobStatus::Running)
+        })
+        .count();
+    if inflight >= max {
+        return Err(ApiError {
+            status: StatusCode::TOO_MANY_REQUESTS,
+            code: "too_many_inflight",
+            message: "too many in-flight prove jobs".to_string(),
+        });
+    }
+    jobs.insert(new_key, new_job);
+    Ok(())
+}
+
+/// Estimate the billed cents a single proof of `trace_length` adds to a tenant's
+/// monthly usage on `plan`. Mirrors `usage_log`'s recorded formula
+/// (`price_cents * discount_factor`, rounded) so a cap projection matches what
+/// will actually be billed (BILL-05).
+fn estimated_job_cost_cents(trace_length: usize, plan: &str) -> u64 {
+    (usage_log::price_cents_pub(trace_length) as f64 * usage_log::discount_factor_pub(plan)).round()
+        as u64
+}
+
+/// Whether admitting a batch whose per-job trace lengths are `trace_lengths`
+/// would push a tenant currently at `base_cost_cents` over `cap_cents` on
+/// `plan`. The per-loop inflight gate alone can't catch this: each cheap proof
+/// individually passes a `cost < cap` check, but a 100-request batch sums past
+/// the cap. prove_batch projects the whole batch up front and rejects it
+/// atomically (BILL-05).
+fn batch_would_exceed_cap(
+    base_cost_cents: u64,
+    cap_cents: u64,
+    trace_lengths: &[usize],
+    plan: &str,
+) -> bool {
+    let projected = trace_lengths.iter().fold(base_cost_cents, |acc, &t| {
+        acc.saturating_add(estimated_job_cost_cents(t, plan))
+    });
+    projected > cap_cents
+}
+
+#[allow(clippy::too_many_arguments)]
 fn spawn_prove_worker(
     state: &AppState,
     key: JobKey,
@@ -1185,6 +1263,7 @@ fn spawn_prove_worker(
     plan: &str,
     job_dir: &std::path::Path,
     req: ProveRequest,
+    computed_trace_length: usize,
 ) {
     let state2 = state.clone();
     let key2 = key.clone();
@@ -1249,20 +1328,20 @@ fn spawn_prove_worker(
         let elapsed_secs = prove_start.elapsed().as_secs_f64();
         state2.metrics.prove_duration.observe(elapsed_secs);
         match &status {
-            ProveJobStatus::Succeeded { ref proof } => {
+            ProveJobStatus::Succeeded { .. } => {
                 state2
                     .metrics
                     .prove_completed
                     .with_label_values(&[&tenant_id2])
                     .inc();
                 if let Some(ref usage) = state2.usage_log {
-                    #[derive(serde::Deserialize)]
-                    struct TraceOnly {
-                        trace_length: usize,
-                    }
-                    let trace_len = serde_json::from_slice::<TraceOnly>(&proof.bytes)
-                        .map(|t| t.trace_length)
-                        .unwrap_or(0);
+                    // Use the server-computed trace_length (program_len.max(1)
+                    // .next_power_of_two() * block_size) that was calculated
+                    // at submission time, rather than parsing it from the proof
+                    // bytes.  The proof-bytes parse could silently return 0 on
+                    // a version mismatch, which would bill the cheapest 5¢ tier
+                    // regardless of actual work (G12 under-bill fix).
+                    let trace_len = computed_trace_length;
                     let lock_t0 = std::time::Instant::now();
                     let _ = usage.record(
                         &tenant_id2,
@@ -1367,26 +1446,6 @@ async fn prove_submit(
         }
     }
 
-    let inflight = {
-        let jobs = state
-            .jobs
-            .lock()
-            .map_err(|_| ApiError::internal("job lock poisoned"))?;
-        jobs.iter()
-            .filter(|(k, j)| {
-                k.tenant_id == tenant_id
-                    && matches!(j.status, ProveJobStatus::Pending | ProveJobStatus::Running)
-            })
-            .count()
-    };
-    if inflight >= max_inflight {
-        return Err(ApiError {
-            status: StatusCode::TOO_MANY_REQUESTS,
-            code: "too_many_inflight",
-            message: "too many in-flight prove jobs".to_string(),
-        });
-    }
-
     // Validate workload/template/program selection up-front.
     if let Some(tid) = req.template_id.as_deref() {
         if hc_workloads::templates::template_by_id(tid).is_none() {
@@ -1438,6 +1497,14 @@ async fn prove_submit(
     // Server-side parameter caps.
     validate_prove_params(&req, &state.cfg)?;
 
+    // Compute the authoritative trace_length server-side for billing.
+    // For workload/template requests `req.program` is None; fall back to
+    // `program_len = 1` which yields `block_size` as a non-zero minimum
+    // rather than the silent 0 that `.unwrap_or(0)` on a proof-byte parse
+    // would produce (G12 under-bill fix).
+    let program_len = req.program.as_ref().map(|p| p.len()).unwrap_or(1);
+    let computed_trace_length = program_len.max(1).next_power_of_two() * req.block_size.max(1);
+
     let job_dir = state
         .cfg
         .data_dir
@@ -1463,22 +1530,38 @@ async fn prove_submit(
         job_id,
     };
 
+    // Atomic gate: count in-flight + insert in one critical section so
+    // concurrent submissions cannot both read inflight < max and both
+    // proceed (TOCTOU race — G12).  Only the gate + insert are held under
+    // the lock; no .await occurs inside.
     {
         let mut jobs = state
             .jobs
             .lock()
             .map_err(|_| ApiError::internal("job lock poisoned"))?;
-        jobs.insert(
+        try_reserve_inflight(
+            &mut jobs,
+            &tenant_id,
+            max_inflight,
             key.clone(),
             JobState {
                 status: ProveJobStatus::Pending,
                 handle: None,
                 cancel: CancellationToken::new(),
             },
-        );
+        )?;
     }
 
-    spawn_prove_worker(&state, key, job_id, &tenant_id, &tenant_plan, &job_dir, req);
+    spawn_prove_worker(
+        &state,
+        key,
+        job_id,
+        &tenant_id,
+        &tenant_plan,
+        &job_dir,
+        req,
+        computed_trace_length,
+    );
 
     state.metrics.jobs_inflight.inc();
 
@@ -1732,16 +1815,40 @@ async fn prove_batch(
         ));
     }
 
-    // Usage cap enforcement.
+    // Usage cap enforcement. Project the WHOLE batch up front: the per-request
+    // inflight gate alone can't stop a batch of cheap proofs that each pass a
+    // `cost < cap` check but collectively overshoot the monthly cap (BILL-05).
+    // Reject atomically before admitting any job so the batch never overshoots
+    // (consistent with the existing cap-before-validate ordering).
     let plan_limits = PlanLimits::for_plan(&tenant.plan);
+    let max_inflight = plan_limits.max_inflight.min(state.cfg.max_inflight_jobs);
     if let Some(ref usage) = state.usage_log {
-        if let Ok(cost) = usage.monthly_cost_cents(&tenant.tenant_id, &tenant.plan) {
-            if cost >= plan_limits.monthly_cap_cents {
+        if let Ok(base_cost) = usage.monthly_cost_cents(&tenant.tenant_id, &tenant.plan) {
+            // Mirror the loop's server-side trace_length formula, overflow-safe
+            // since this runs before per-request validation.
+            let trace_lengths: Vec<usize> = batch
+                .requests
+                .iter()
+                .map(|req| {
+                    let program_len = req.program.as_ref().map(|p| p.len()).unwrap_or(1);
+                    program_len
+                        .max(1)
+                        .checked_next_power_of_two()
+                        .unwrap_or(usize::MAX)
+                        .saturating_mul(req.block_size.max(1))
+                })
+                .collect();
+            if batch_would_exceed_cap(
+                base_cost,
+                plan_limits.monthly_cap_cents,
+                &trace_lengths,
+                &tenant.plan,
+            ) {
                 state.metrics.usage_cap_rejections.inc();
                 return Err(ApiError {
                     status: StatusCode::PAYMENT_REQUIRED,
                     code: "usage_cap_reached",
-                    message: "monthly usage cap reached".to_string(),
+                    message: "batch would exceed the monthly usage cap".to_string(),
                 });
             }
         }
@@ -1797,6 +1904,11 @@ async fn prove_batch(
             ));
         }
 
+        // Compute the authoritative trace_length server-side for billing
+        // (G12 under-bill fix).
+        let program_len = req.program.as_ref().map(|p| p.len()).unwrap_or(1);
+        let computed_trace_length = program_len.max(1).next_power_of_two() * req.block_size.max(1);
+
         let job_dir = state
             .cfg
             .data_dir
@@ -1822,19 +1934,25 @@ async fn prove_batch(
             tenant_id: tenant.tenant_id.clone(),
             job_id,
         };
+
+        // Atomic gate: count + insert in one critical section so
+        // concurrent/batched submissions can't overshoot max_inflight (G12).
         {
             let mut jobs = state
                 .jobs
                 .lock()
                 .map_err(|_| ApiError::internal("job lock poisoned"))?;
-            jobs.insert(
+            try_reserve_inflight(
+                &mut jobs,
+                &tenant.tenant_id,
+                max_inflight,
                 key.clone(),
                 JobState {
                     status: ProveJobStatus::Pending,
                     handle: None,
                     cancel: CancellationToken::new(),
                 },
-            );
+            )?;
         }
 
         spawn_prove_worker(
@@ -1845,6 +1963,7 @@ async fn prove_batch(
             &tenant.plan,
             &job_dir,
             req,
+            computed_trace_length,
         );
         state.metrics.jobs_inflight.inc();
 
@@ -2202,32 +2321,15 @@ async fn prove_template(
         }
     }
 
-    let inflight = {
-        let jobs = state
-            .jobs
-            .lock()
-            .map_err(|_| ApiError::internal("job lock poisoned"))?;
-        jobs.iter()
-            .filter(|(k, j)| {
-                k.tenant_id == tenant_id
-                    && matches!(j.status, ProveJobStatus::Pending | ProveJobStatus::Running)
-            })
-            .count()
-    };
-    if inflight >= max_inflight {
-        return Err(ApiError::new(
-            StatusCode::TOO_MANY_REQUESTS,
-            "too_many_inflight",
-            "too many in-flight prove jobs",
-        ));
-    }
-
     // ── zkML fast-path ────────────────────────────────────────────────
     // Templates whose ID starts with "zkml_" route through the synchronous
     // zkML dispatcher in hc-workloads. The matmul prover finishes in the
     // hundreds of milliseconds for typical sizes, so we skip the worker
     // pipeline entirely and write the envelope into the standard job-dir
     // layout with status=Succeeded.
+    //
+    // NOTE: zkml/spartan fast-paths do their own inflight check inside
+    // their dispatchers; the atomic gate below only guards the worker path.
     if template_id.starts_with("zkml_") {
         return dispatch_zkml_template(&state, &tenant_id, &tenant_plan, template_id, req).await;
     }
@@ -2258,6 +2360,10 @@ async fn prove_template(
         .block_size
         .unwrap_or_else(|| smart_block_size(program_len));
     let fri_final_poly_size = req.fri_final_poly_size.unwrap_or(2);
+
+    // Authoritative trace_length for billing: known here since we just
+    // built the template program (G12 under-bill fix).
+    let computed_trace_length = program_len.max(1).next_power_of_two() * block_size.max(1);
 
     // Build a ProveRequest for the worker pipeline.
     let prove_req = ProveRequest {
@@ -2301,19 +2407,25 @@ async fn prove_template(
         tenant_id: tenant_id.clone(),
         job_id,
     };
+
+    // Atomic gate: count + insert in one critical section so concurrent
+    // submissions can't overshoot max_inflight (G12 TOCTOU fix).
     {
         let mut jobs = state
             .jobs
             .lock()
             .map_err(|_| ApiError::internal("job lock poisoned"))?;
-        jobs.insert(
+        try_reserve_inflight(
+            &mut jobs,
+            &tenant_id,
+            max_inflight,
             key.clone(),
             JobState {
                 status: ProveJobStatus::Pending,
                 handle: None,
                 cancel: CancellationToken::new(),
             },
-        );
+        )?;
     }
 
     spawn_prove_worker(
@@ -2324,6 +2436,7 @@ async fn prove_template(
         &tenant_plan,
         &job_dir,
         prove_req,
+        computed_trace_length,
     );
     state.metrics.jobs_inflight.inc();
 
@@ -3401,6 +3514,67 @@ mod pricing_parity_tests {
             );
         }
     }
+
+    /// "pro" is a plan_alias for "scale" in pricing.json. PlanLimits::for_plan
+    /// must route it to scale's exact limits; the default arm must NOT swallow it.
+    #[test]
+    fn pro_alias_resolves_to_scale_limits() {
+        let scale_limits = PlanLimits::for_plan("scale");
+        let pro_limits = PlanLimits::for_plan("pro");
+        assert_eq!(
+            pro_limits.prove_rpm, scale_limits.prove_rpm,
+            "pro: prove_rpm must match scale"
+        );
+        assert_eq!(
+            pro_limits.verify_rpm, scale_limits.verify_rpm,
+            "pro: verify_rpm must match scale"
+        );
+        assert_eq!(
+            pro_limits.max_inflight, scale_limits.max_inflight,
+            "pro: max_inflight must match scale"
+        );
+        assert_eq!(
+            pro_limits.monthly_cap_cents, scale_limits.monthly_cap_cents,
+            "pro: monthly_cap_cents must match scale"
+        );
+        assert_eq!(
+            pro_limits.max_prove_seconds, scale_limits.max_prove_seconds,
+            "pro: max_prove_seconds must match scale"
+        );
+    }
+
+    /// "pro" discount factor must match scale's (0.60). Ensures the billing
+    /// calculation doesn't accidentally use the developer fallback (1.0) for
+    /// pro-plan tenants.
+    #[test]
+    fn pro_discount_matches_scale() {
+        let want = 0.60f64;
+        let got = usage_log::discount_factor_pub("pro");
+        assert!(
+            (got - want).abs() < 1e-9,
+            "pro discount {got} ≠ scale discount {want}"
+        );
+    }
+
+    /// billing_meters in pricing.json declares the meter each plan routes
+    /// through. Verify the SSOT is present and contains the expected mappings.
+    #[test]
+    fn billing_meters_ssot_present() {
+        let cfg = pricing_json();
+        let meters = cfg["billing_meters"]
+            .as_object()
+            .expect("pricing.json must have a billing_meters object");
+        assert_eq!(
+            meters["compute"].as_str().unwrap_or(""),
+            "trace_step_usage",
+            "billing_meters.compute must be trace_step_usage"
+        );
+        assert_eq!(
+            meters["_default"].as_str().unwrap_or(""),
+            "proof_usage",
+            "billing_meters._default must be proof_usage"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -3466,5 +3640,269 @@ mod metrics_token_tests {
         // "Bearer tok" against configured "tok_longer" must be false.
         assert!(!metrics_token_ok(Some("Bearer tok"), "tok_longer"));
         assert!(!metrics_token_ok(Some("Bearer tok_longer"), "tok"));
+    }
+}
+
+// ── G12 regression tests ───────────────────────────────────────────────────
+//
+// Part B: atomic inflight gate — `try_reserve_inflight` unit tests.
+// Part A: computed trace_length — billing records a non-cheapest value even
+//         when the proof bytes don't carry a parseable trace_length.
+#[cfg(test)]
+mod g12_inflight_gate_tests {
+    use super::*;
+
+    fn make_pending_job() -> JobState {
+        JobState {
+            status: ProveJobStatus::Pending,
+            handle: None,
+            cancel: CancellationToken::new(),
+        }
+    }
+
+    fn make_key(tenant: &str, n: u64) -> JobKey {
+        JobKey {
+            tenant_id: tenant.to_string(),
+            job_id: Uuid::from_u128(n as u128),
+        }
+    }
+
+    /// With max_inflight=1: first reservation succeeds, second is rejected
+    /// with 429 too_many_inflight — the core TOCTOU guard.
+    #[test]
+    fn two_concurrent_reserves_at_max_one_yields_one_accept_one_reject() {
+        let mut jobs: HashMap<JobKey, JobState> = HashMap::new();
+        let tenant = "tenantA";
+        let max = 1;
+
+        // First reservation must succeed.
+        let r1 = try_reserve_inflight(
+            &mut jobs,
+            tenant,
+            max,
+            make_key(tenant, 1),
+            make_pending_job(),
+        );
+        assert!(r1.is_ok(), "first reservation should be accepted");
+        assert_eq!(jobs.len(), 1);
+
+        // Second reservation must be rejected (inflight == max now).
+        let r2 = try_reserve_inflight(
+            &mut jobs,
+            tenant,
+            max,
+            make_key(tenant, 2),
+            make_pending_job(),
+        );
+        assert!(r2.is_err(), "second reservation should be rejected (429)");
+        let err = r2.unwrap_err();
+        assert_eq!(err.status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(err.code, "too_many_inflight");
+
+        // Map still contains exactly the one accepted job.
+        assert_eq!(jobs.len(), 1);
+    }
+
+    /// Tenants are isolated: tenantA at capacity does not block tenantB.
+    #[test]
+    fn inflight_gate_is_per_tenant() {
+        let mut jobs: HashMap<JobKey, JobState> = HashMap::new();
+        let max = 1;
+
+        // tenantA takes its one slot.
+        try_reserve_inflight(
+            &mut jobs,
+            "tenantA",
+            max,
+            make_key("tenantA", 1),
+            make_pending_job(),
+        )
+        .unwrap_or_else(|_| panic!("tenantA first slot should be accepted"));
+
+        // tenantA is at capacity.
+        let r = try_reserve_inflight(
+            &mut jobs,
+            "tenantA",
+            max,
+            make_key("tenantA", 2),
+            make_pending_job(),
+        );
+        assert!(r.is_err(), "tenantA second slot should be rejected");
+
+        // tenantB still gets its slot.
+        try_reserve_inflight(
+            &mut jobs,
+            "tenantB",
+            max,
+            make_key("tenantB", 1),
+            make_pending_job(),
+        )
+        .unwrap_or_else(|_| panic!("tenantB should not be blocked by tenantA"));
+
+        assert_eq!(jobs.len(), 2);
+    }
+
+    /// Once a job transitions to Succeeded/Failed it no longer counts toward
+    /// the inflight limit.
+    #[test]
+    fn completed_jobs_do_not_count_toward_inflight() {
+        let mut jobs: HashMap<JobKey, JobState> = HashMap::new();
+        let tenant = "tenantA";
+        let max = 1;
+
+        // Insert a Succeeded job directly (simulates a completed worker).
+        jobs.insert(
+            make_key(tenant, 1),
+            JobState {
+                status: ProveJobStatus::Succeeded {
+                    proof: hc_sdk::types::ProofBytes {
+                        version: 3,
+                        bytes: vec![],
+                    },
+                },
+                handle: None,
+                cancel: CancellationToken::new(),
+            },
+        );
+
+        // A new reservation should succeed because the completed job doesn't count.
+        try_reserve_inflight(
+            &mut jobs,
+            tenant,
+            max,
+            make_key(tenant, 2),
+            make_pending_job(),
+        )
+        .unwrap_or_else(|_| panic!("new reservation allowed when only completed jobs exist"));
+    }
+}
+
+#[cfg(test)]
+mod g12_trace_length_billing_tests {
+    use super::*;
+
+    /// The server-side computed trace_length formula must never return 0
+    /// (which would silently hit the cheapest billing tier).
+    #[test]
+    fn computed_trace_length_is_nonzero_for_workload_request() {
+        // Workload request: program=None, block_size=8 (typical default).
+        let program_len = None::<Vec<String>>
+            .as_ref()
+            .map(|p: &Vec<String>| p.len())
+            .unwrap_or(1);
+        let block_size: usize = 8;
+        let computed = program_len.max(1).next_power_of_two() * block_size.max(1);
+        assert!(
+            computed > 0,
+            "computed trace_length must be > 0 (got {computed})"
+        );
+        // With program_len=1, block_size=8: 1.next_power_of_two()=1, 1*8=8.
+        assert_eq!(computed, 8);
+    }
+
+    /// Custom-program request with a non-empty program.
+    #[test]
+    fn computed_trace_length_uses_program_len_when_present() {
+        let program = vec!["ADD".to_string(); 10];
+        let program_len = program.len();
+        let block_size: usize = 4;
+        let computed = program_len.max(1).next_power_of_two() * block_size.max(1);
+        // program_len=10, next_power_of_two=16, block_size=4 → 64.
+        assert_eq!(computed, 64);
+    }
+
+    /// Edge case: block_size=0 (if somehow validation is bypassed) must
+    /// still produce a non-zero computed value via .max(1).
+    #[test]
+    fn computed_trace_length_survives_zero_block_size() {
+        let program_len = 1usize;
+        let block_size = 0usize;
+        let computed = program_len.max(1).next_power_of_two() * block_size.max(1);
+        assert!(
+            computed > 0,
+            "block_size=0 edge case must still be non-zero"
+        );
+        assert_eq!(computed, 1);
+    }
+
+    /// Verify that a non-zero computed trace_length does NOT map to the
+    /// cheapest billing tier (5¢) when it's ≥ 10_000.  This pins the
+    /// price_cents_pub boundary so under-billing is caught early.
+    #[test]
+    fn large_trace_length_bills_above_cheapest_tier() {
+        // 10_000 is the boundary above which price exceeds 5¢.
+        let at_boundary = usage_log::price_cents_pub(10_000);
+        assert!(
+            at_boundary > 5,
+            "trace_length=10_000 should bill above the 5¢ floor, got {at_boundary}¢"
+        );
+        // A typical large workload (block_size=512, program_len=64).
+        let program_len = 64usize;
+        let block_size = 512usize;
+        let computed = program_len.max(1).next_power_of_two() * block_size.max(1);
+        // 64 → next_power_of_two = 64, 64 * 512 = 32_768.
+        assert_eq!(computed, 32_768);
+        let cost = usage_log::price_cents_pub(computed);
+        assert!(
+            cost > 5,
+            "computed trace_length={computed} should cost more than the 5¢ floor, got {cost}¢"
+        );
+    }
+}
+
+// ── BILL-05: per-batch cap projection ──────────────────────────────────────
+//
+// #21 added the atomic inflight gate to prove_batch, but the monthly cap was
+// still only checked ONCE before the loop, so a 100-request batch of cheap
+// proofs could each pass `cost < cap` and collectively blow past it. These pin
+// the cost-projection helpers prove_batch uses to reject such a batch up front.
+#[cfg(test)]
+mod bill05_batch_cap_tests {
+    use super::*;
+
+    #[test]
+    fn estimated_job_cost_matches_billing_formula() {
+        // Developer (no discount): price_cents passes through.
+        assert_eq!(estimated_job_cost_cents(100, "developer"), 5);
+        assert_eq!(estimated_job_cost_cents(10_000, "developer"), 50);
+        // Scale (40% off): 50 * 0.60 = 30.
+        assert_eq!(estimated_job_cost_cents(10_000, "scale"), 30);
+        // "pro" is the legacy alias for scale — same discounted cost.
+        assert_eq!(estimated_job_cost_cents(10_000, "pro"), 30);
+        // Team (25% off): round(50 * 0.75) = round(37.5) = 38.
+        assert_eq!(estimated_job_cost_cents(10_000, "team"), 38);
+    }
+
+    #[test]
+    fn single_job_under_cap_does_not_exceed() {
+        // base 0, developer cap $500 (50_000c), one 10k-step proof (50c).
+        assert!(!batch_would_exceed_cap(0, 50_000, &[10_000], "developer"));
+    }
+
+    #[test]
+    fn batch_of_cheap_jobs_that_each_pass_the_single_check_still_trips_cap() {
+        // THE BILL-05 regression: base 480c is under the free $5 (500c) cap, so the
+        // old single pre-loop check (`cost >= cap`) admitted the whole batch — but
+        // 100 proofs at 5c each (developer) add 500c, overshooting to 980c.
+        let trace_lengths = [100usize; 100];
+        assert!(batch_would_exceed_cap(
+            480,
+            500,
+            &trace_lengths,
+            "developer"
+        ));
+    }
+
+    #[test]
+    fn batch_that_exactly_fits_is_allowed() {
+        // base 0, cap 500c, 100 proofs at 5c = exactly 500c → allowed (not > cap).
+        let trace_lengths = [100usize; 100];
+        assert!(!batch_would_exceed_cap(0, 500, &trace_lengths, "developer"));
+    }
+
+    #[test]
+    fn already_at_cap_rejects_any_batch() {
+        // base already == cap and any non-zero job pushes projected > cap.
+        assert!(batch_would_exceed_cap(50_000, 50_000, &[100], "developer"));
     }
 }
