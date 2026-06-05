@@ -34,8 +34,9 @@ Hi [first name] —
 
 I built TinyZKP, a hosted ZK proof service that ships as an MCP server. Looked
 at [their product] this morning. The [specific feature you actually used] is
-exactly the kind of agent action that benefits from a tamper-evident receipt:
-"the agent ran X on input Y and got output Z" — verifiable by the user offline.
+exactly the kind of agent step that benefits from a tamper-evident receipt: a
+reported state transition ("start at X, apply these steps, reach Y") the user can
+verify offline without re-running it.
 
 Install is one line:
 

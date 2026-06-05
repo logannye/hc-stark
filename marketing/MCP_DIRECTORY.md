@@ -49,7 +49,7 @@ TinyZKP is a hosted ZK-STARK proving service that exposes verifiable computation
 
 ### Use cases (3–5 bullets)
 
-- **Verifiable agent receipts.** An agent that runs an action (a trade, a moderation decision, a state update) can attach a cryptographic proof showing the transition happened as claimed — without revealing private inputs.
+- **Verifiable state-transition receipts.** An agent tracking a running total or state machine (a balance, a spend counter, a step chain) can attach a cryptographic proof that the reported transition is arithmetically consistent — start at X, apply these declared steps, reach Y — tamper-evident and verifiable offline. (Hiding the intermediate steps is opt-in ZK, not the default; do not imply input privacy unless it is enabled.)
 - **Accumulator / audit-chain proofs.** Prove a running total or state machine advanced from a known initial value to a known final value via a sequence of declared steps.
 - **Off-chain compute attestation.** Prove a computation produced a given output, so a downstream consumer can accept the result without re-executing.
 - **Tamper-evident receipts.** Any process that needs a verifiable "this happened" receipt can mint one as a single tool call and hand it to the user for independent verification.

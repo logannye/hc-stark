@@ -35,7 +35,7 @@ price the small-proof tier at $0.05/proof and the free tier at 100 proofs/month 
 no credit card.
 
 What it's good for today:
-- Verifiable agent receipts ("this ran the code I claim")
+- Verifiable state-transition receipts ("start at X, these steps reach Y" — tamper-evident, no re-run)
 - Audit trails (accumulator chains, state-transition proofs)
 - Browser-side verification via @tinyzkp/verify (WASM, 785K)
 

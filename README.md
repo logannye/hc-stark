@@ -10,7 +10,7 @@
 
 **[tinyzkp.com](https://tinyzkp.com)** &middot; **[Try it in browser](https://tinyzkp.com/try)** &middot; **[API docs](https://tinyzkp.com/docs)** &middot; **[Free signup](https://tinyzkp.com/signup)**
 
-Mint a tamper-evident proof that your agent ran the code it claims, on the inputs it claims. **One MCP install. One API call. Verify in milliseconds.** No cryptography degree required.
+Mint a tamper-evident proof that a state-transition chain is consistent — *start at X, apply these steps, provably reach Y* — so an agent (or any caller) can hand over a verifiable receipt instead of "trust me." **One MCP install. One API call. Verify in milliseconds.** No cryptography degree required.
 
 ## Three ways to start in under a minute
 
