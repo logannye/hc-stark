@@ -77,6 +77,8 @@ Verification is always free. SDKs ship for Python (`pip install tinyzkp`), TypeS
 | Transparent (no trusted setup) | Yes | Yes |
 | Post-quantum (hash-based) | Yes | Yes |
 
+**Measured, not asserted:** in a reproducible sweep, the streaming commitment's peak working set stays ~0.04 MB from a 64-element trace up to a 16.7M-element one, where the conventional O(T) path needs **513 MB** — a √T (≈4,096×) reduction, at the identical Merkle root. Re-run it with `./scripts/bench/run_sqrt_sweep.sh`; numbers + method in [`docs/benchmarks/sqrt_memory_scaling.md`](docs/benchmarks/sqrt_memory_scaling.md).
+
 The technical writeup is in [`docs/whitepaper.md`](docs/whitepaper.md).
 
 ---

@@ -1,3 +1,19 @@
+// ============================================================================
+// DO NOT USE IN PRODUCTION — legacy / experimental KZG commitment.
+//
+// This module is NOT a secure trusted setup: `setup()` derives the SRS from a
+// hardcoded RNG seed (`KZG_SEED`), so the toxic-waste τ is recoverable from this
+// source file and any KZG commitment it produces is forgeable. It exists only as
+// a legacy/experimental commitment scheme and is fenced from every live path:
+//   * the default commitment is `CommitmentScheme::Stark` (config.rs), and the
+//     hosted worker only ever proves via the Stark v5/v7 path;
+//   * KZG is pinned to the legacy v2 transcript and is REJECTED by
+//     `hc_sdk::verify_proof_bytes` (which refuses any proof with version < 5).
+// Production soundness lives entirely in the Stark path (see
+// docs/security/audit_checklist.md §Out of scope). Slated for feature-gating
+// out of the default build; do not wire this into any customer-facing route.
+// ============================================================================
+
 use std::{borrow::Cow, sync::Arc};
 
 use ark_bn254::{Bn254, Fr, G1Affine, G1Projective};
