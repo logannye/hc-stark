@@ -4,7 +4,8 @@
 Events handled:
   - checkout.session.completed → create tenant, deliver API key
   - customer.subscription.deleted → suspend tenant
-  - invoice.payment_failed → suspend tenant
+  - customer.subscription.updated → plan change, or suspend on terminal dunning state
+  - invoice.payment_failed → log only; Stripe dunning retries (no hard suspend)
 """
 
 import hashlib
@@ -330,7 +331,7 @@ def _handle_subscription_deleted(event: dict) -> tuple[str, int]:
 
 
 def _handle_payment_failed(event: dict) -> tuple[str, int]:
-    """Handle invoice.payment_failed — suspend tenant."""
+    """Handle invoice.payment_failed — log only; let Stripe dunning retry (BILL-07)."""
     conn = tenant_store.open_db()
 
     event_id = event["id"]
@@ -347,10 +348,14 @@ def _handle_payment_failed(event: dict) -> tuple[str, int]:
     tenant = tenant_store.get_by_subscription_id(conn, subscription_id)
 
     if tenant:
-        tenant_store.suspend_tenant(conn, tenant["tenant_id"])
+        # BILL-07: do NOT hard-suspend on a failed charge. Stripe Smart Retries
+        # recover most transient declines (expired cards, momentary insufficient
+        # funds); suspending here turns a recoverable hiccup into involuntary
+        # churn. Keep the tenant active through dunning — we suspend only on the
+        # terminal signals (subscription.deleted, or subscription.updated ->
+        # unpaid/canceled).
         tenant_store.mark_event_processed(conn, event_id)
-        sync_keys.regenerate(conn, API_KEYS_FILE)
-        print(f"Suspended tenant={tenant['tenant_id']} (payment failed)")
+        print(f"Payment failed for tenant={tenant['tenant_id']}; leaving active for Stripe dunning")
     else:
         tenant_store.mark_event_processed(conn, event_id)
         print(f"WARNING: No tenant found for subscription {subscription_id}", file=sys.stderr)
@@ -378,7 +383,7 @@ def _plan_from_subscription(subscription: dict) -> str:
 
 
 def _handle_subscription_updated(event: dict) -> tuple[str, int]:
-    """Handle customer.subscription.updated — plan changes via Stripe Portal."""
+    """Handle customer.subscription.updated — plan changes; suspend on terminal dunning state (BILL-07)."""
     conn = tenant_store.open_db()
 
     event_id = event["id"]
@@ -391,11 +396,21 @@ def _handle_subscription_updated(event: dict) -> tuple[str, int]:
     tenant = tenant_store.get_by_subscription_id(conn, subscription_id)
 
     if tenant:
-        plan = _plan_from_subscription(subscription)
-        tenant_store.set_plan(conn, tenant["tenant_id"], plan)
-        tenant_store.mark_event_processed(conn, event_id)
-        sync_keys.regenerate(conn, API_KEYS_FILE)
-        print(f"Updated plan for tenant={tenant['tenant_id']} to '{plan}'")
+        # BILL-07: terminal dunning states arrive as a status change — suspend
+        # when Stripe gives up (unpaid/canceled/incomplete_expired). Otherwise
+        # this is a normal plan change from the customer portal.
+        status = subscription.get("status")
+        if status in ("unpaid", "canceled", "incomplete_expired"):
+            tenant_store.suspend_tenant(conn, tenant["tenant_id"])
+            tenant_store.mark_event_processed(conn, event_id)
+            sync_keys.regenerate(conn, API_KEYS_FILE)
+            print(f"Suspended tenant={tenant['tenant_id']} (subscription {status})")
+        else:
+            plan = _plan_from_subscription(subscription)
+            tenant_store.set_plan(conn, tenant["tenant_id"], plan)
+            tenant_store.mark_event_processed(conn, event_id)
+            sync_keys.regenerate(conn, API_KEYS_FILE)
+            print(f"Updated plan for tenant={tenant['tenant_id']} to '{plan}'")
     else:
         tenant_store.mark_event_processed(conn, event_id)
         print(f"WARNING: No tenant found for subscription {subscription_id}", file=sys.stderr)
