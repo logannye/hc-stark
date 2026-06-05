@@ -14,7 +14,10 @@ fn params(value: serde_json::Value) -> serde_json::Map<String, serde_json::Value
 
 #[test]
 fn range_proof_doc_example_builds() {
-    let p = params(json!({"min": 0, "max": 10000, "witness_steps": [2000, 2237]}));
+    // Phase 1B: range_proof now takes the secret `value` directly (real range
+    // AIR), replacing the old `witness_steps` accumulator encoding. The doc
+    // example at tinyzkp.com/docs#template-examples must be updated to match.
+    let p = params(json!({"min": 0, "max": 10000, "value": 4237}));
     build_from_template("range_proof", &p).expect("range_proof builds");
 }
 

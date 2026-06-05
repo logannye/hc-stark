@@ -10,9 +10,9 @@ use hc_prover::config::{ProverConfig, SecurityFloor};
 // proofs through it; the v5 proptests use `prove_v5`.
 #[allow(deprecated)]
 use hc_prover::prove;
-use hc_prover::{prove_v5, PublicInputs};
+use hc_prover::{prove_v5, prove_v7, PublicInputs};
 use hc_sdk::proof::{decode_proof_v5, encode_proof_bytes, encode_proof_v5, verify_proof_bytes};
-use hc_verifier::v5::{verify_v5_with_floor, VerifierSecurityFloor};
+use hc_verifier::v5::{verify_v5_with_floor, verify_v7_with_floor, VerifierSecurityFloor};
 use hc_vm::{Instruction, Program};
 use proptest::prelude::*;
 
@@ -261,5 +261,66 @@ proptest! {
         proof.fri_proof.final_layer[idx] = old.add(K::from_u64(c0_delta));
         let result = verify_v5_with_floor(&proof, VerifierSecurityFloor::relaxed());
         prop_assert!(result.is_err(), "final_layer mutation must be rejected");
+    }
+}
+
+// ─── v7 (general-AIR) range proptests ─────────────────────────────────────────
+//
+// Additive (Phase 1B): for a RANDOM (min, span, value) triple, an in-range,
+// field-safe witness builds, proves on the sound v7 path, and verifies; an
+// out-of-range witness is REFUSED at trace construction, so it can never be
+// proved at all. This is the soundness contract of `range_proof` exercised over
+// the whole witness space (not just the worked example). Relaxed floor +
+// grinding 0 for speed; the production-floor `verify_proof_bytes` path is
+// covered by the hc-sdk v7 serialization tests.
+
+/// Relaxed v7 config (tiny params, no grinding) for fast property runs.
+fn v7_range_cfg() -> ProverConfig {
+    let mut c = ProverConfig::with_security_floor(2, 2, 4, 2, SecurityFloor::relaxed())
+        .unwrap()
+        .with_protocol_version(7);
+    c.grinding_bits = 0;
+    c
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(48))]
+
+    /// In-range witnesses prove + verify; out-of-range witnesses are refused at
+    /// `build_range_trace` (and therefore cannot be proved). The builder accepts
+    /// a witness IFF it is genuinely in [min, max] and the span is field-safe.
+    #[test]
+    fn v7_range_roundtrip_in_and_out(
+        min in 0u64..1_000,
+        span in 0u64..1_000,
+        voff in 0u64..2_000,
+    ) {
+        let max = min + span;                  // min ≤ max by construction
+        let value = min.saturating_add(voff);  // value ≥ min always
+        let air = hc_air::RangeAir::new(hc_air::RANGE_DEFAULT_N);
+        let public = [GoldilocksField::new(min), GoldilocksField::new(max)];
+
+        match hc_air::build_range_trace(min, max, value) {
+            Ok(trace) => {
+                // The builder only succeeds for genuinely in-range witnesses.
+                prop_assert!(value >= min && value <= max);
+                let proof = prove_v7(&air, &trace, &public, &v7_range_cfg())
+                    .expect("in-range witness must prove on v7");
+                prop_assert!(
+                    verify_v7_with_floor(&proof, VerifierSecurityFloor::relaxed()).is_ok(),
+                    "honest in-range v7 proof must verify (min={min}, max={max}, value={value})"
+                );
+            }
+            Err(_) => {
+                // Refused: value out of [min, max], or span too wide for the
+                // field-safety bound (2^(n+1) < p). Both mean it is unprovable.
+                prop_assert!(
+                    value < min
+                        || value > max
+                        || (max - min) >= (1u64 << hc_air::RANGE_DEFAULT_N),
+                    "builder refused an in-range, field-safe witness (min={min}, max={max}, value={value})"
+                );
+            }
+        }
     }
 }

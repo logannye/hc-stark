@@ -20,7 +20,7 @@ fn build(params: &serde_json::Map<String, JsonValue>) -> Result<TemplateBuildRes
     }
 
     let instructions = add_immediate_chain(&deltas);
-    Ok(TemplateBuildResult {
+    Ok(TemplateBuildResult::Vm {
         program: Program::new(instructions),
         initial_acc: initial,
         final_acc: final_val,
@@ -61,6 +61,7 @@ inventory::submit!(ProofTemplate {
     tags: TAGS,
     cost_category: "lightweight",
     enforcement: Enforcement::Enforced,
+    audited: true,
     example_json: r#"{"initial":0,"final":15,"deltas":[5,3,7]}"#,
     build_program: build,
 });

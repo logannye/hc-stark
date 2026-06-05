@@ -11,7 +11,7 @@ impl HcMcpServer {
         let unified = hc_workloads::list_all_templates();
         let listing: Vec<serde_json::Value> = unified
             .iter()
-            .filter(|t| hc_workloads::is_listable(t.enforcement, allow))
+            .filter(|t| hc_workloads::is_live(t.enforcement, t.audited, allow))
             .map(|t| {
                 serde_json::json!({
                     "id": t.id,
@@ -32,7 +32,7 @@ impl HcMcpServer {
         let templates = hc_workloads::templates::list_templates();
         let listing: Vec<serde_json::Value> = templates
             .iter()
-            .filter(|t| hc_workloads::is_listable(t.enforcement, allow))
+            .filter(|t| hc_workloads::is_live(t.enforcement, t.audited, allow))
             .map(|t| {
                 serde_json::json!({
                     "id": t.id,
@@ -64,7 +64,7 @@ impl HcMcpServer {
     ) -> Result<CallToolResult, ErrorData> {
         let allow = hc_workloads::allow_unaudited_templates();
         let tmpl = hc_workloads::templates::template_by_id(&params.template_id)
-            .filter(|t| hc_workloads::is_listable(t.enforcement, allow))
+            .filter(|t| hc_workloads::is_live(t.enforcement, t.audited, allow))
             .ok_or_else(|| {
                 ErrorData::invalid_params(
                     format!(
@@ -113,12 +113,13 @@ impl HcMcpServer {
 #[cfg(test)]
 mod honest_catalog_mcp_tests {
     #[test]
-    fn default_listing_excludes_structure_only() {
-        // Flag off: the MCP VM listing must exclude StructureOnly templates
-        // (only accumulator_step survives today).
+    fn default_listing_includes_only_live_templates() {
+        // Flag off: the MCP VM listing must include only LIVE templates
+        // (Enforced AND audited). Only accumulator_step survives today; the
+        // sound-but-unaudited range_proof stays hidden until the audit.
         let visible: Vec<&str> = hc_workloads::templates::list_templates()
             .into_iter()
-            .filter(|t| hc_workloads::is_listable(t.enforcement, false))
+            .filter(|t| hc_workloads::is_live(t.enforcement, t.audited, false))
             .map(|t| t.id)
             .collect();
         assert!(visible.contains(&"accumulator_step"));

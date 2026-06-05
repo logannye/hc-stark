@@ -36,26 +36,52 @@ impl HcMcpServer {
             )
         })?;
 
-        let zk = params.zk.unwrap_or(build_result.recommended_zk);
-        let zk_mask_degree = if zk { Some(1) } else { None };
-
-        let job_id = self
-            .executor
-            .submit(
-                build_result.program,
-                build_result.initial_acc,
-                build_result.final_acc,
-                Some(params.template_id.clone()),
-                zk_mask_degree,
-            )
-            .await
-            .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+        // VM templates prove on the v5 accumulator path (ZK optional via the
+        // trace-additive mask); AIR templates (e.g. range_proof) prove on the
+        // sound v7 path, which is NOT zero-knowledge for degree-≥2 AIRs (ZK
+        // deferred — see docs/security/zk_range.md), so zk_enabled is false.
+        let (job_id, zk_enabled) = match build_result {
+            hc_workloads::templates::TemplateBuildResult::Vm {
+                program,
+                initial_acc,
+                final_acc,
+                recommended_zk,
+            } => {
+                let zk = params.zk.unwrap_or(recommended_zk);
+                let zk_mask_degree = if zk { Some(1) } else { None };
+                let id = self
+                    .executor
+                    .submit(
+                        program,
+                        initial_acc,
+                        final_acc,
+                        Some(params.template_id.clone()),
+                        zk_mask_degree,
+                    )
+                    .await
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                (id, zk)
+            }
+            hc_workloads::templates::TemplateBuildResult::Air {
+                air,
+                trace,
+                public_inputs,
+                ..
+            } => {
+                let id = self
+                    .executor
+                    .submit_air(air, trace, public_inputs, Some(params.template_id.clone()))
+                    .await
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                (id, false)
+            }
+        };
 
         let resp = serde_json::json!({
             "job_id": job_id,
             "status": "running",
             "template_id": params.template_id,
-            "zk_enabled": zk,
+            "zk_enabled": zk_enabled,
             "hint": "Call poll_job with this job_id to check progress.",
         });
         let json = Content::json(resp)

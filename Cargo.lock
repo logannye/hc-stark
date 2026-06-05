@@ -1343,6 +1343,7 @@ dependencies = [
  "anyhow",
  "axum",
  "base64",
+ "hc-air",
  "hc-core",
  "hc-prover",
  "hc-sdk",
@@ -1555,6 +1556,7 @@ name = "hc-workloads"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "hc-air",
  "hc-core",
  "hc-sdk",
  "hc-sumcheck",

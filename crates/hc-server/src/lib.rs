@@ -2204,7 +2204,7 @@ async fn templates_list() -> Json<TemplateListResponse> {
     let unified = hc_workloads::list_all_templates();
     let summaries: Vec<TemplateSummary> = unified
         .iter()
-        .filter(|t| hc_workloads::is_listable(t.enforcement, allow))
+        .filter(|t| hc_workloads::is_live(t.enforcement, t.audited, allow))
         .map(|t| TemplateSummary {
             id: t.id.clone(),
             summary: t.summary.clone(),
@@ -2235,14 +2235,17 @@ async fn template_detail(
     Path(template_id): Path<String>,
 ) -> Result<axum::response::Response, ApiError> {
     let allow = hc_workloads::allow_unaudited_templates();
-    if let Some(enf) = hc_workloads::enforcement_for(&template_id) {
-        if !hc_workloads::is_listable(enf, allow) {
-            return Err(ApiError::new(
-                StatusCode::NOT_FOUND,
-                "not_found",
-                format!("unknown template: {template_id}"),
-            ));
-        }
+    // A known-but-not-live template (e.g. the gated, unaudited range_proof) is
+    // hidden behind a 404 exactly like an unknown id, so its existence is not
+    // disclosed until it is exposed in this deployment.
+    if hc_workloads::enforcement_for(&template_id).is_some()
+        && !hc_workloads::is_dispatchable(&template_id, allow)
+    {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            format!("unknown template: {template_id}"),
+        ));
     }
     // INVARIANT: enforcement_for() must cover every backend served below.
     // It currently resolves vm + zkml + spartan; if a new backend is added
@@ -2353,9 +2356,9 @@ async fn prove_template(
             )
         })?;
 
-    let zk = req.zk.unwrap_or(build.recommended_zk);
+    let zk = req.zk.unwrap_or(build.recommended_zk());
     let zk_mask_degree = if zk { Some(1) } else { None };
-    let program_len = build.program.len();
+    let program_len = build.size_hint();
     let block_size = req
         .block_size
         .unwrap_or_else(|| smart_block_size(program_len));
@@ -2365,14 +2368,17 @@ async fn prove_template(
     // built the template program (G12 under-bill fix).
     let computed_trace_length = program_len.max(1).next_power_of_two() * block_size.max(1);
 
-    // Build a ProveRequest for the worker pipeline.
+    // Build a ProveRequest for the worker pipeline. For AIR templates the worker
+    // rebuilds the statement from (template_id, template_params) and branches to
+    // the v7 path; initial_acc/final_acc carry the cosmetic public-input scalars
+    // (e.g. range [min,max]) and are not consumed for AIR proving.
     let prove_req = ProveRequest {
         workload_id: None,
         template_id: Some(template_id.clone()),
         template_params: Some(req.params.clone()),
         program: None,
-        initial_acc: build.initial_acc,
-        final_acc: build.final_acc,
+        initial_acc: build.initial_acc(),
+        final_acc: build.final_acc(),
         block_size,
         fri_final_poly_size,
         query_count: 80,
@@ -2672,7 +2678,7 @@ async fn estimate(Json(req): Json<EstimateRequest>) -> Result<Json<EstimateRespo
                 format!("template build failed: {e}"),
             )
         })?;
-        build.program.len()
+        build.size_hint()
     } else if let Some(len) = req.program_length {
         len
     } else {
@@ -3580,15 +3586,65 @@ mod pricing_parity_tests {
 #[cfg(test)]
 mod honest_catalog_tests {
     #[test]
-    fn default_catalog_lists_only_enforced() {
+    fn default_catalog_lists_only_live() {
         let listed: Vec<String> = hc_workloads::list_all_templates()
             .into_iter()
-            .filter(|t| hc_workloads::is_listable(t.enforcement, false))
+            .filter(|t| hc_workloads::is_live(t.enforcement, t.audited, false))
             .map(|t| t.id)
             .collect();
         assert!(listed.contains(&"accumulator_step".to_string()));
+        // range_proof is now Enforced (real AIR) but still gated until the audit
+        // (audited = false), so it stays hidden in the default catalog.
         assert!(!listed.contains(&"range_proof".to_string()));
         assert!(!listed.iter().any(|id| id.starts_with("zkml_")));
+    }
+}
+
+#[cfg(test)]
+mod worker_dispatch_tests {
+    use super::smart_block_size;
+    use hc_workloads::templates::{build_from_template, TemplateBuildResult};
+
+    /// End-to-end coverage of the hc-worker `TemplateBuildResult::Air` arm using
+    /// the SERVER's own config derivation: `build_from_template("range_proof")`
+    /// → AIR → `prove_v7` (server `block_size`/`query_count`) →
+    /// `encode_proof_v7` → `verify_proof_bytes` accepts it. This mirrors exactly
+    /// what `hc-worker` does for AIR templates and locks in that the gated
+    /// range_proof genuinely proves and verifies when dispatched.
+    #[test]
+    fn range_template_proves_and_verifies_through_air_path() {
+        let params = serde_json::json!({"min": 18, "max": 120, "value": 42})
+            .as_object()
+            .unwrap()
+            .clone();
+        let build = build_from_template("range_proof", &params).expect("range_proof builds");
+        // The server derives block_size from the build's size hint exactly so.
+        let block_size = smart_block_size(build.size_hint());
+
+        let bytes = match build {
+            TemplateBuildResult::Air {
+                air,
+                trace,
+                public_inputs,
+                ..
+            } => {
+                let cfg =
+                    hc_prover::config::ProverConfig::production_v7(block_size, 2, 80, 2, None)
+                        .expect("production_v7 config");
+                let proof = hc_prover::prove_v7(&*air, &trace, &public_inputs, &cfg)
+                    .expect("prove_v7 must succeed for an in-range witness");
+                hc_sdk::proof::encode_proof_v7(&proof).expect("encode_proof_v7")
+            }
+            TemplateBuildResult::Vm { .. } => panic!("range_proof must build an AIR, not a VM"),
+        };
+
+        assert_eq!(bytes.version, 7, "range_proof proves on the v7 path");
+        let result = hc_sdk::proof::verify_proof_bytes(&bytes, false);
+        assert!(
+            result.ok,
+            "range proof via the worker AIR path must verify: {:?}",
+            result.error
+        );
     }
 }
 

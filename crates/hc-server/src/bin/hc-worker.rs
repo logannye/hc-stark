@@ -3,8 +3,12 @@ use std::{fs, path::PathBuf};
 use anyhow::Context;
 use hc_core::field::prime_field::GoldilocksField;
 use hc_prover::{config::ProverConfig, PublicInputs};
-use hc_sdk::{proof::encode_proof_v5, types::ProveRequest};
+use hc_sdk::{
+    proof::{encode_proof_v5, encode_proof_v7},
+    types::{ProofBytes, ProveRequest},
+};
 use hc_vm::Program;
+use hc_workloads::templates::TemplateBuildResult;
 
 /// Minimal "prove worker" process.
 ///
@@ -39,18 +43,50 @@ fn main() -> anyhow::Result<()> {
     let req: ProveRequest =
         serde_json::from_slice(&bytes).with_context(|| format!("parse {}", req_path.display()))?;
 
-    // Resolve the program from one of three sources: template, workload, or custom program.
-    let (program, initial_acc, final_acc) = if let Some(tid) = req.template_id.as_deref() {
+    // Resolve and prove from one of three sources: template, workload, or
+    // custom program. Templates may build EITHER a VM program (sound v5
+    // accumulator path) OR a general AIR (sound v7 path); workload/custom
+    // sources are always VM/v5. The output is a self-describing `ProofBytes`
+    // (envelope version 5/6 for v5, 7 for v7) that re-verifies under
+    // `verify_proof_bytes` (which routes ≥7 to the v7 verifier, ≥5 to v5).
+    let proof: ProofBytes = if let Some(tid) = req.template_id.as_deref() {
         let params = req
             .template_params
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("template_params required when template_id is set"))?;
         let build = hc_workloads::templates::build_from_template(tid, params)
             .with_context(|| format!("template '{tid}' build failed"))?;
-        (build.program, build.initial_acc, build.final_acc)
+        match build {
+            TemplateBuildResult::Vm {
+                program,
+                initial_acc,
+                final_acc,
+                ..
+            } => prove_v5_bytes(&req, program, initial_acc, final_acc)?,
+            TemplateBuildResult::Air {
+                air,
+                trace,
+                public_inputs,
+                ..
+            } => {
+                // Sound v7 (general-AIR). ZK (v8) is deferred for degree-≥2 AIRs
+                // — range booleanity is degree 2, where the trace-additive mask
+                // breaks the FRI bound (see docs/security/zk_range.md) — so the
+                // v7 path proves SOUND with `zk_mask_degree = None`.
+                let config = ProverConfig::production_v7(
+                    req.block_size,
+                    req.fri_final_poly_size,
+                    req.query_count,
+                    req.lde_blowup_factor,
+                    None,
+                )?;
+                let proof_v7 = hc_prover::prove_v7(&*air, &trace, &public_inputs, &config)?;
+                encode_proof_v7(&proof_v7)?
+            }
+        }
     } else if let Some(_id) = req.workload_id.as_deref() {
         let prog = hc_server::workloads::program_for_request(&req)?;
-        (prog, req.initial_acc, req.final_acc)
+        prove_v5_bytes(&req, prog, req.initial_acc, req.final_acc)?
     } else {
         if !allow_custom {
             anyhow::bail!(
@@ -62,22 +98,28 @@ fn main() -> anyhow::Result<()> {
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("missing program (custom programs enabled)"))?;
         let instr = hc_server::parse_instructions(items)?;
-        (Program::new(instr), req.initial_acc, req.final_acc)
+        prove_v5_bytes(&req, Program::new(instr), req.initial_acc, req.final_acc)?
     };
 
-    let inputs = PublicInputs {
-        initial_acc: GoldilocksField::new(initial_acc),
-        final_acc: GoldilocksField::new(final_acc),
-    };
+    let serialized = serde_json::to_vec_pretty(&proof)?;
+    fs::write(&out_path, serialized).with_context(|| format!("write {}", out_path.display()))?;
+    Ok(())
+}
 
-    // Phase 1A cutover: production proving now produces SOUND v5 proofs.
-    // `production_v5` clamps the request-derived params UP to the v5 verifier
-    // floor (blowup ≥ 8, query_count ≥ 40, grinding_bits = 20) and pins the
-    // protocol version to 5 (or 6 for ZK). This keeps the live service
-    // self-consistent: the proof produced here re-verifies under the default
-    // v5 floor used by `verify_proof_bytes`. The request's block_size and
-    // fri_final_poly_size are honored as-is; query_count and lde_blowup_factor
-    // are treated as lower bounds.
+/// Prove a VM program on the SOUND v5 accumulator path and encode it.
+///
+/// `production_v5` clamps the request-derived params UP to the v5 verifier floor
+/// (blowup ≥ 8, query_count ≥ 40, grinding_bits = 20) and pins the protocol
+/// version to 5 (or 6 for ZK). The request's `block_size`/`fri_final_poly_size`
+/// are honored as-is; `query_count`/`lde_blowup_factor` are treated as lower
+/// bounds. The result re-verifies under the default v5 floor in
+/// `verify_proof_bytes`.
+fn prove_v5_bytes(
+    req: &ProveRequest,
+    program: Program,
+    initial_acc: u64,
+    final_acc: u64,
+) -> anyhow::Result<ProofBytes> {
     let config = ProverConfig::production_v5(
         req.block_size,
         req.fri_final_poly_size,
@@ -85,10 +127,10 @@ fn main() -> anyhow::Result<()> {
         req.lde_blowup_factor,
         req.zk_mask_degree,
     )?;
-
+    let inputs = PublicInputs {
+        initial_acc: GoldilocksField::new(initial_acc),
+        final_acc: GoldilocksField::new(final_acc),
+    };
     let proof_v5 = hc_prover::prove_v5(config, program, inputs)?;
-    let proof = encode_proof_v5(&proof_v5)?;
-    let serialized = serde_json::to_vec_pretty(&proof)?;
-    fs::write(&out_path, serialized).with_context(|| format!("write {}", out_path.display()))?;
-    Ok(())
+    encode_proof_v5(&proof_v5)
 }

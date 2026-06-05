@@ -22,7 +22,7 @@ use crate::{
     kzg::TraceKzgState,
     metrics::ProverMetrics,
     pipeline::{phase1_commit, phase2_fri, phase3_queries},
-    queries::{ProofParams, ProofV5, ProverOutput, QueryResponseV5},
+    queries::{ProofParams, ProofV5, ProofV7, ProverOutput, QueryResponseV5, QueryResponseV7},
     trace_stream::VmTraceProducer,
 };
 
@@ -1487,6 +1487,417 @@ pub fn prove_stark_v5(
     })
 }
 
+// ─── v7 (general-AIR) prove path (Phase 1B) ──────────────────────────────────
+
+/// v7 prove entry point. Produces a sound proof for `air` over the width-N
+/// `trace` and `public_inputs`. Reuses the v5 FRI / grinding / query machinery
+/// (the quotient is one K column regardless of trace width); only the trace
+/// commit, the trace openings, and the quotient numerator (`compose_at`) differ.
+///
+/// Requires a power-of-two trace height (the AIR's trace builder is responsible
+/// for producing one — `RangeAir` does). ZK masking (v8) lands in T8; this
+/// function rejects a ZK-enabled config for now.
+pub fn prove_v7(
+    air: &dyn hc_air::GeneralAir,
+    trace: &hc_air::MultiColumnTrace<GoldilocksField>,
+    public_inputs: &[GoldilocksField],
+    config: &ProverConfig,
+) -> HcResult<ProofV7<GoldilocksField>> {
+    type F = GoldilocksField;
+    type K = QuadExtensionK;
+
+    if config.commitment != CommitmentScheme::Stark {
+        return Err(HcError::invalid_argument(
+            "v7 prove path requires the Stark commitment scheme",
+        ));
+    }
+    if config.zk.enabled {
+        return Err(HcError::invalid_argument(
+            "v7 ZK masking (v8) is not yet implemented (Phase 1B T8)",
+        ));
+    }
+    if trace.width() != air.width() {
+        return Err(HcError::invalid_argument(
+            "trace width does not match AIR width",
+        ));
+    }
+    if public_inputs.len() != air.public_input_len() {
+        return Err(HcError::invalid_argument(
+            "public inputs length does not match AIR",
+        ));
+    }
+    let version: u32 = 7; // zk disabled (guarded above); v8 in T8.
+
+    let padded_len = trace.num_rows();
+    if !padded_len.is_power_of_two() || padded_len < 2 {
+        return Err(HcError::invalid_argument(
+            "v7 trace height must be a power of two ≥ 2",
+        ));
+    }
+    let trace_length = padded_len;
+    let blowup = config.lde_blowup_factor;
+    let lde_len = padded_len
+        .checked_mul(blowup)
+        .ok_or_else(|| HcError::invalid_argument("lde domain size overflow"))?;
+
+    // --- Prover-side witness sanity check: every active constraint vanishes on H. ---
+    {
+        let n = padded_len;
+        for i in 0..n {
+            let cur = trace.row(i);
+            let next = trace.row(if i + 1 < n { i + 1 } else { i });
+            let is_first = i == 0;
+            let is_last = i + 1 == n;
+            for (ci, meta) in air.constraints().iter().enumerate() {
+                let active = match meta.mask {
+                    hc_air::MaskKind::First => is_first,
+                    hc_air::MaskKind::Last => is_last,
+                    hc_air::MaskKind::Transition => !is_last,
+                    hc_air::MaskKind::All => true,
+                };
+                if active
+                    && !air
+                        .eval_constraint(ci, &cur, &next, public_inputs)
+                        .is_zero()
+                {
+                    return Err(HcError::invalid_argument(format!(
+                        "witness violates constraint {ci} at row {i}"
+                    )));
+                }
+            }
+        }
+    }
+
+    // --- Phase 1: width-N trace LDE + commit (width-N leaves). ---
+    let cols_lde = build_trace_lde_n(trace, blowup)?;
+    let trace_root = phase1_commit::commit_trace_lde_n(&cols_lde)?;
+
+    // --- v7 MAIN transcript (the T7 verifier MUST replay this exact order). ---
+    let mut transcript = Transcript::<Blake3>::new(protocol::DOMAIN_MAIN_V7);
+    // Public-input vector (count, then each element).
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PUB_INPUT_COUNT,
+        public_inputs.len() as u64,
+    );
+    for pi in public_inputs {
+        protocol::append_u64::<Blake3>(
+            &mut transcript,
+            protocol::label::PUB_INPUT_ELEM,
+            pi.to_u64(),
+        );
+    }
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PUB_TRACE_LENGTH,
+        trace_length as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_QUERY_COUNT,
+        config.query_count as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_LDE_BLOWUP,
+        config.lde_blowup_factor as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_FRI_FINAL_SIZE,
+        config.fri_final_poly_size as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_FRI_FOLDING_RATIO,
+        hc_fri::get_folding_ratio() as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_GRINDING_BITS,
+        config.grinding_bits as u64,
+    );
+    transcript.append_message(protocol::label::PARAM_HASH_ID, b"blake3");
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_ZK_ENABLED,
+        u64::from(config.zk.enabled),
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_ZK_MASK_DEGREE,
+        config.zk.mask_degree as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::PARAM_TRACE_WIDTH,
+        air.width() as u64,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::AIR_ID,
+        air.air_id() as u64,
+    );
+    transcript.append_message(
+        protocol::label::COMMIT_TRACE_LDE_ROOT,
+        trace_root.as_bytes(),
+    );
+
+    // Single composition challenge α ∈ K (replaces the v5 two-α draw).
+    let alpha = transcript.challenge_field::<K>(protocol::label::COMPOSITION_ALPHA);
+
+    // Quotient q(x) = C(x)/Z_H(x) in K via the AIR's compose_at, then commit (K leaves).
+    let quotient_lde =
+        build_quotient_lde_k_n(air, &cols_lde, public_inputs, padded_len, blowup, alpha)?;
+    let quotient_root = commit_quotient_lde_k(&quotient_lde)?;
+    transcript.append_message(
+        protocol::label::COMMIT_QUOTIENT_ROOT,
+        quotient_root.as_bytes(),
+    );
+
+    let trace_commitment = Commitment::Stark { root: trace_root };
+    let composition_commitment = Commitment::Stark {
+        root: quotient_root,
+    };
+
+    // --- FRI commit (K, antipodal) — reuse run_fri_v5; version-bound seed. ---
+    let fri_seed = phase2_fri::FriTranscriptSeedV5 {
+        protocol_version: version,
+        initial_acc: 0, // v7 binds public inputs via the main transcript, not here
+        final_acc: 0,
+        trace_length: trace_length as u64,
+        query_count: config.query_count as u64,
+        lde_blowup: config.lde_blowup_factor as u64,
+        fri_final_size: config.fri_final_poly_size as u64,
+        folding_ratio: hc_fri::get_folding_ratio() as u64,
+        grinding_bits: config.grinding_bits as u64,
+        zk_enabled: config.zk.enabled,
+        zk_mask_degree: config.zk.mask_degree as u64,
+        trace_commitment: crate::commitment::commitment_digest(&trace_commitment),
+        composition_commitment: crate::commitment::commitment_digest(&composition_commitment),
+    };
+    let fri_config = FriConfig::new(config.fri_final_poly_size)?;
+    let base_producer: Arc<dyn BlockProducer<K>> =
+        Arc::new(VecBlockProducer::new(quotient_lde.clone()));
+    let artifacts = phase2_fri::run_fri_v5(fri_config, base_producer, lde_len, fri_seed)?;
+    let fri_proof = artifacts.proof.clone();
+
+    for root in &fri_proof.layer_roots {
+        transcript.append_message(protocol::label::COMMIT_FRI_LAYER_ROOT, root.as_bytes());
+    }
+    transcript.append_message(
+        protocol::label::COMMIT_FRI_FINAL_ROOT,
+        fri_proof.final_root.as_bytes(),
+    );
+
+    // --- Grinding, then sample base query indices downstream of the grind. ---
+    let grinding_nonce = grinding::grind::<Blake3>(
+        &transcript,
+        protocol::label::FRI_GRINDING_NONCE,
+        config.grinding_bits,
+    );
+    protocol::append_u64::<Blake3>(
+        &mut transcript,
+        protocol::label::FRI_GRINDING_NONCE,
+        grinding_nonce,
+    );
+    let base_queries =
+        phase3_queries::generate_queries::<F>(&mut transcript, lde_len, config.query_count)?;
+
+    // --- Openings: width-N trace (F) + quotient (K) + FRI (K). ---
+    let shift = blowup % lde_len;
+    let mut trace_queries = Vec::with_capacity(base_queries.len());
+    let mut composition_queries = Vec::with_capacity(base_queries.len());
+    for &idx in &base_queries {
+        trace_queries.push(open_trace_query_n(&cols_lde, idx, lde_len, shift)?);
+        composition_queries.push(open_composition_query_k(&quotient_lde, idx, lde_len)?);
+    }
+    trace_queries.sort_by_key(|q| q.index);
+    composition_queries.sort_by_key(|q| q.index);
+    let fri_queries = phase3_queries::answer_fri_queries_v5(&base_queries, &artifacts)?;
+
+    // --- OOD-style extra opening (mirrors v5). ---
+    transcript.append_message(protocol::label::CHAL_OOD_POINT, [0u8]);
+    let ood_fe = transcript.challenge_field::<F>(protocol::label::CHAL_OOD_INDEX);
+    let ood_index = (ood_fe.to_u64() as usize) % lde_len;
+    let ood = Some(crate::queries::OodOpeningsV7 {
+        index: ood_index,
+        trace: open_trace_query_n(&cols_lde, ood_index, lde_len, shift)?,
+        quotient: open_composition_query_k(&quotient_lde, ood_index, lde_len)?,
+    });
+
+    let query_response = QueryResponseV7 {
+        trace_queries,
+        composition_queries,
+        fri_queries,
+        ood,
+    };
+
+    Ok(ProofV7 {
+        version,
+        trace_commitment,
+        composition_commitment,
+        fri_proof,
+        public_inputs: public_inputs.to_vec(),
+        trace_width: air.width(),
+        air_id: air.air_id(),
+        query_response,
+        trace_length,
+        params: ProofParams {
+            query_count: config.query_count,
+            lde_blowup_factor: config.lde_blowup_factor,
+            fri_final_poly_size: config.fri_final_poly_size,
+            fri_folding_ratio: hc_fri::get_folding_ratio(),
+            protocol_version: version,
+            zk_enabled: config.zk.enabled,
+            zk_mask_degree: config.zk.mask_degree,
+            grinding_bits: config.grinding_bits,
+        },
+        grinding_nonce,
+    })
+}
+
+/// Build the width-N trace LDE (column-major: `out[col][row]`) on the LDE coset
+/// (offset 7). Each column is interpolated to coefficients and re-evaluated on
+/// the coset. Pure (no transcript). The ZK mask over all columns lands in T8.
+fn build_trace_lde_n(
+    trace: &hc_air::MultiColumnTrace<GoldilocksField>,
+    blowup: usize,
+) -> HcResult<Vec<Vec<GoldilocksField>>> {
+    type F = GoldilocksField;
+    let padded_len = trace.num_rows();
+    let lde_len = padded_len
+        .checked_mul(blowup)
+        .ok_or_else(|| HcError::invalid_argument("lde domain size overflow"))?;
+    let coset_offset = F::from_u64(LDE_COSET_OFFSET);
+    let width = trace.width();
+    let mut cols_lde = Vec::with_capacity(width);
+    for j in 0..width {
+        let mut vals = trace.column(j).to_vec(); // padded_len values on H_N
+        ifft_in_place(&mut vals)?; // → coefficients
+        let mut eval = vec![F::ZERO; lde_len];
+        let mut offset_pow = F::ONE;
+        for k in 0..padded_len {
+            eval[k] = vals[k].mul(offset_pow);
+            offset_pow = offset_pow.mul(coset_offset);
+        }
+        fft_in_place(&mut eval)?;
+        cols_lde.push(eval);
+    }
+    Ok(cols_lde)
+}
+
+/// Build the v7 quotient oracle `q(x) = C(x)/Z_H(x)` on the LDE coset in K,
+/// using the AIR's single-α `compose_at`. Width-agnostic on the quotient side
+/// (one K column). The K analog of [`build_quotient_lde_k`] (v5's 2-tuple).
+fn build_quotient_lde_k_n(
+    air: &dyn hc_air::GeneralAir,
+    cols: &[Vec<GoldilocksField>],
+    public_inputs: &[GoldilocksField],
+    padded_len: usize,
+    blowup: usize,
+    alpha: QuadExtensionK,
+) -> HcResult<Vec<QuadExtensionK>> {
+    type F = GoldilocksField;
+    let lde_len = padded_len * blowup;
+    if cols.iter().any(|c| c.len() != lde_len) {
+        return Err(HcError::message("trace LDE column length mismatch"));
+    }
+    let coset_offset = F::from_u64(LDE_COSET_OFFSET);
+    let trace_domain = generate_trace_domain::<F>(padded_len)?;
+    let lde_domain = generate_lde_coset_domain::<F>(padded_len, blowup, coset_offset)?;
+    let omega_last = trace_domain
+        .generator()
+        .inverse()
+        .ok_or_else(|| HcError::math("trace domain generator has no inverse"))?;
+    let n_inv = F::from_u64(padded_len as u64)
+        .inverse()
+        .ok_or_else(|| HcError::math("padded_len has no inverse"))?;
+    let shift = blowup % lde_len;
+    let width = air.width();
+    let mut cur = vec![F::ZERO; width];
+    let mut nxt = vec![F::ZERO; width];
+    let mut quotient = Vec::with_capacity(lde_len);
+    for i in 0..lde_len {
+        let x = lde_domain.element(i);
+        let z_h = x.pow(padded_len as u64).sub(F::ONE);
+        let z_h_inv = z_h
+            .inverse()
+            .ok_or_else(|| HcError::math("unexpected zero Z_H on coset domain"))?;
+        let l0 = z_h.mul(n_inv).mul(
+            x.sub(F::ONE)
+                .inverse()
+                .ok_or_else(|| HcError::math("unexpected zero denominator in L0 on coset"))?,
+        );
+        let l_last = z_h.mul(omega_last).mul(n_inv).mul(
+            x.sub(omega_last)
+                .inverse()
+                .ok_or_else(|| HcError::math("unexpected zero denominator in L_last on coset"))?,
+        );
+        let selector_last = F::ONE.sub(l_last);
+        let ni = (i + shift) % lde_len;
+        for (j, col) in cols.iter().enumerate() {
+            cur[j] = col[i];
+            nxt[j] = col[ni];
+        }
+        let c = air.compose_at(&cur, &nxt, l0, l_last, selector_last, public_inputs, alpha)?;
+        quotient.push(c.mul(QuadExtensionK::from_base(z_h_inv)));
+    }
+    Ok(quotient)
+}
+
+/// Open a single width-N trace query (row + next-row) from the column-major LDE,
+/// using the width-N leaf hash. The K analog of [`open_trace_query`] (v5's [F;2]).
+fn open_trace_query_n(
+    cols: &[Vec<GoldilocksField>],
+    idx: usize,
+    lde_len: usize,
+    shift: usize,
+) -> HcResult<crate::queries::TraceQueryN<GoldilocksField>> {
+    use crate::pipeline::phase1_commit::hash_trace_row_n;
+    use hc_commit::merkle::reconstruct_path_from_replay_mut;
+    type F = GoldilocksField;
+    if idx >= lde_len {
+        return Err(HcError::message("trace LDE query out of range"));
+    }
+    let row_at = |i: usize| -> HcResult<Vec<F>> {
+        let mut row = Vec::with_capacity(cols.len());
+        for c in cols {
+            row.push(
+                *c.get(i)
+                    .ok_or_else(|| HcError::message("trace LDE leaf out of range"))?,
+            );
+        }
+        Ok(row)
+    };
+    let evaluation = row_at(idx)?;
+    let mut leaf_hash =
+        |leaf_index: usize| -> HcResult<HashDigest> { Ok(hash_trace_row_n(&row_at(leaf_index)?)) };
+    let witness = reconstruct_path_from_replay_mut::<Blake3, _>(idx, lde_len, 2, &mut leaf_hash)
+        .map_err(|err| HcError::message(format!("Failed to extract trace LDE path: {err}")))?;
+
+    let next_idx = (idx + shift) % lde_len;
+    let next_eval = row_at(next_idx)?;
+    let mut leaf_hash2 =
+        |leaf_index: usize| -> HcResult<HashDigest> { Ok(hash_trace_row_n(&row_at(leaf_index)?)) };
+    let next_witness =
+        reconstruct_path_from_replay_mut::<Blake3, _>(next_idx, lde_len, 2, &mut leaf_hash2)
+            .map_err(|err| {
+                HcError::message(format!("Failed to extract trace LDE next path: {err}"))
+            })?;
+
+    Ok(crate::queries::TraceQueryN {
+        index: idx,
+        evaluation,
+        witness: crate::queries::TraceWitness::Merkle(witness),
+        next: Some(crate::queries::NextTraceRowN {
+            index: next_idx,
+            evaluation: next_eval,
+            witness: next_witness,
+        }),
+    })
+}
+
 /// Build the trace LDE evaluations `[acc(x), delta(x)]` on the LDE coset
 /// (offset 7) of size `padded_len * blowup`, applying the v4 ZK mask when
 /// enabled. Pure (no transcript); mirrors the v3 `run_commit_deep_stark` math.
@@ -1993,6 +2404,90 @@ mod tests {
             initial_acc: Gl::new(5),
             final_acc: Gl::new(15),
         }
+    }
+
+    // ── v7 (general-AIR) prove-only tests (Phase 1B T6) ──────────────────────
+
+    /// Small relaxed v7 config: tiny params, no grinding (fast). Verification
+    /// (T7) runs these under `VerifierSecurityFloor::relaxed`.
+    fn v7_test_config() -> ProverConfig {
+        let mut config = ProverConfig::with_security_floor(
+            2, // block_size
+            2, // fri_final_poly_size
+            4, // query_count
+            2, // lde_blowup_factor
+            SecurityFloor::relaxed(),
+        )
+        .unwrap()
+        .with_protocol_version(7);
+        config.grinding_bits = 0;
+        config
+    }
+
+    /// Width-2 accumulator trace, height 4 (power of two). acc: 5→6→8→8 with
+    /// deltas 1,2,0,0 — transitions hold on rows 0..2; the last row repeats.
+    fn v7_accumulator_trace() -> hc_air::MultiColumnTrace<Gl> {
+        let acc = vec![Gl::new(5), Gl::new(6), Gl::new(8), Gl::new(8)];
+        let delta = vec![Gl::new(1), Gl::new(2), Gl::new(0), Gl::new(0)];
+        hc_air::MultiColumnTrace::from_columns(vec![acc, delta]).unwrap()
+    }
+
+    #[test]
+    fn prove_v7_accumulator_and_range_produce_proofs() {
+        // Accumulator on v7 (width 2); public = [initial_acc, final_acc].
+        let acc_air = hc_air::AccumulatorAir;
+        let p1 = prove_v7(
+            &acc_air,
+            &v7_accumulator_trace(),
+            &[Gl::new(5), Gl::new(8)],
+            &v7_test_config(),
+        )
+        .expect("accumulator v7 prove");
+        assert_eq!(p1.version, 7);
+        assert_eq!(p1.trace_width, 2);
+        assert_eq!(p1.air_id, 1);
+        assert_eq!(p1.public_inputs, vec![Gl::new(5), Gl::new(8)]);
+        assert_eq!(p1.params.protocol_version, 7);
+        assert_eq!(p1.query_response.trace_queries.len(), p1.params.query_count);
+
+        // Range on v7 (width 4); public = [min, max].
+        let range_air = hc_air::RangeAir::new(hc_air::RANGE_DEFAULT_N);
+        let r_trace = hc_air::build_range_trace(18, 120, 42).unwrap();
+        let p2 = prove_v7(
+            &range_air,
+            &r_trace,
+            &[Gl::new(18), Gl::new(120)],
+            &v7_test_config(),
+        )
+        .expect("range v7 prove");
+        assert_eq!(p2.version, 7);
+        assert_eq!(p2.trace_width, 4);
+        assert_eq!(p2.air_id, 2);
+
+        // The prover's witness-sanity check rejects a tampered (non-boolean) trace.
+        let mut cols = r_trace.columns().to_vec();
+        cols[0][0] = Gl::new(2);
+        let bad = hc_air::MultiColumnTrace::from_columns(cols).unwrap();
+        assert!(prove_v7(
+            &range_air,
+            &bad,
+            &[Gl::new(18), Gl::new(120)],
+            &v7_test_config()
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn prove_v7_rejects_zk_enabled_until_t8() {
+        let acc_air = hc_air::AccumulatorAir;
+        let cfg = v7_test_config().with_zk_masking(4); // sets zk.enabled
+        assert!(prove_v7(
+            &acc_air,
+            &v7_accumulator_trace(),
+            &[Gl::new(5), Gl::new(8)],
+            &cfg
+        )
+        .is_err());
     }
 
     /// Rebuild the v5 MAIN transcript EXACTLY as `prove_stark_v5` does, up to and

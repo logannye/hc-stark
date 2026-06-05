@@ -52,6 +52,14 @@ pub struct ProofTemplate {
     pub cost_category: &'static str,
     /// Whether this template's AIR enforces its named predicate.
     pub enforcement: Enforcement,
+    /// Whether this template has cleared the external cryptographic audit
+    /// (Phase 4). A template is exposed/dispatchable in production only when it
+    /// is BOTH `Enforced` AND `audited` — or when the deployment explicitly
+    /// opts into unaudited templates (`HC_ALLOW_UNAUDITED_TEMPLATES`). This is a
+    /// separate axis from `enforcement`: a template can cryptographically bind
+    /// its predicate (`Enforced`) yet remain gated until the audit signs off
+    /// (e.g. `range_proof` on the sound-but-not-yet-audited v7 core).
+    pub audited: bool,
     /// JSON example as a string literal (parsed on demand).
     pub example_json: &'static str,
     pub build_program: fn(&serde_json::Map<String, JsonValue>) -> Result<TemplateBuildResult>,
@@ -81,6 +89,10 @@ pub struct TemplateInfo {
     pub tags: Vec<String>,
     pub cost_category: String,
     pub enforcement: Enforcement,
+    /// Whether the template has cleared the external audit (see
+    /// [`ProofTemplate::audited`]). Defaults to `false` for older clients.
+    #[serde(default)]
+    pub audited: bool,
 }
 
 impl ProofTemplate {
@@ -104,16 +116,79 @@ impl ProofTemplate {
             tags: self.tags.iter().map(|t| t.to_string()).collect(),
             cost_category: self.cost_category.to_string(),
             enforcement: self.enforcement,
+            audited: self.audited,
         }
     }
 }
 
-/// Result of building a program from template parameters.
-pub struct TemplateBuildResult {
-    pub program: Program,
-    pub initial_acc: u64,
-    pub final_acc: u64,
-    pub recommended_zk: bool,
+/// Result of building a provable statement from template parameters.
+///
+/// Two shapes:
+/// - `Vm` — a VM `Program` plus its accumulator boundary, proved on the v5
+///   accumulator path (`prove_v5`). Used by `accumulator_step` and the
+///   structure-only predicate templates that have not yet been ported to a
+///   real AIR.
+/// - `Air` — a general AIR (`hc_air::GeneralAir`) with its width-N trace and
+///   public-input vector, proved on the sound v7 path (`prove_v7`). Used by
+///   templates whose AIR actually binds the named predicate (`range_proof`).
+pub enum TemplateBuildResult {
+    Vm {
+        program: Program,
+        initial_acc: u64,
+        final_acc: u64,
+        recommended_zk: bool,
+    },
+    Air {
+        air: Box<dyn hc_air::GeneralAir + Send + Sync>,
+        trace: hc_air::MultiColumnTrace<hc_air::air_general::F>,
+        public_inputs: Vec<hc_air::air_general::F>,
+        recommended_zk: bool,
+    },
+}
+
+impl TemplateBuildResult {
+    /// Whether ZK masking is recommended for this statement by default.
+    pub fn recommended_zk(&self) -> bool {
+        match self {
+            TemplateBuildResult::Vm { recommended_zk, .. }
+            | TemplateBuildResult::Air { recommended_zk, .. } => *recommended_zk,
+        }
+    }
+
+    /// Size hint for the block-size heuristic: VM program length, or the AIR
+    /// trace height.
+    pub fn size_hint(&self) -> usize {
+        match self {
+            TemplateBuildResult::Vm { program, .. } => program.len(),
+            TemplateBuildResult::Air { trace, .. } => trace.num_rows(),
+        }
+    }
+
+    /// Cosmetic `initial_acc` for the request record. VM: the accumulator's
+    /// initial value; AIR: the first public input (e.g. range `min`), else 0.
+    /// The worker rebuilds AIR statements from the template params and does NOT
+    /// consume this for AIR proving.
+    pub fn initial_acc(&self) -> u64 {
+        use hc_core::field::FieldElement;
+        match self {
+            TemplateBuildResult::Vm { initial_acc, .. } => *initial_acc,
+            TemplateBuildResult::Air { public_inputs, .. } => {
+                public_inputs.first().map(|f| f.to_u64()).unwrap_or(0)
+            }
+        }
+    }
+
+    /// Cosmetic `final_acc` for the request record. VM: the accumulator's final
+    /// value; AIR: the second public input (e.g. range `max`), else 0.
+    pub fn final_acc(&self) -> u64 {
+        use hc_core::field::FieldElement;
+        match self {
+            TemplateBuildResult::Vm { final_acc, .. } => *final_acc,
+            TemplateBuildResult::Air { public_inputs, .. } => {
+                public_inputs.get(1).map(|f| f.to_u64()).unwrap_or(0)
+            }
+        }
+    }
 }
 
 /// List all registered templates.
@@ -203,27 +278,47 @@ mod enforcement_classification_tests {
     use super::*;
 
     #[test]
-    fn only_accumulator_step_is_enforced() {
-        let enforced: Vec<&str> = list_templates()
+    fn accumulator_and_range_are_enforced() {
+        // Phase 1B: `range_proof` now cryptographically binds its predicate
+        // (sound v7 AIR), so it joins `accumulator_step` as Enforced. The two
+        // are distinguished by the `audited` axis (see below), not enforcement.
+        let enforced: std::collections::HashSet<&str> = list_templates()
             .iter()
             .filter(|t| t.enforcement == Enforcement::Enforced)
             .map(|t| t.id)
             .collect();
-        assert_eq!(
-            enforced.len(),
-            1,
-            "expected exactly one Enforced template, got {enforced:?}"
+        assert!(
+            enforced.contains("accumulator_step"),
+            "accumulator_step must be Enforced"
         );
         assert!(
-            enforced.contains(&"accumulator_step"),
-            "accumulator_step must be the Enforced template"
+            enforced.contains("range_proof"),
+            "range_proof must be Enforced once its real AIR lands"
         );
     }
 
     #[test]
-    fn the_five_predicate_templates_are_structure_only() {
+    fn only_accumulator_step_is_audited() {
+        // `audited` gates production exposure. Until the Phase 4 external audit,
+        // only `accumulator_step` is audited; everything else (including the
+        // sound-but-unaudited `range_proof`) stays gated by default.
+        let audited: Vec<&str> = list_templates()
+            .iter()
+            .filter(|t| t.audited)
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(
+            audited,
+            vec!["accumulator_step"],
+            "exactly one audited template (accumulator_step), got {audited:?}"
+        );
+    }
+
+    #[test]
+    fn the_four_remaining_predicate_templates_are_structure_only() {
+        // `range_proof` graduated to Enforced (real AIR). The rest still only
+        // produce structurally valid proofs until their AIRs land.
         for id in [
-            "range_proof",
             "hash_preimage",
             "computation_attestation",
             "data_integrity",
@@ -235,6 +330,7 @@ mod enforcement_classification_tests {
                 Enforcement::StructureOnly,
                 "{id} must be StructureOnly until its real AIR lands"
             );
+            assert!(!t.audited, "{id} must not be audited");
         }
     }
 }

@@ -332,4 +332,35 @@ impl ProverConfig {
         config = config.with_protocol_version(version);
         Ok(config.clamped_to_v5_floor())
     }
+
+    /// Build a production v7/v8 (general-AIR sound) prove config. Identical
+    /// security floor to [`production_v5`] (blowup ≥ 8, query_count ≥ 40,
+    /// grinding_bits = 20); the protocol version is pinned to 7, or 8 when ZK
+    /// masking is enabled. Consumed by `prove_v7` and the production cutover.
+    pub fn production_v7(
+        block_size: usize,
+        fri_final_poly_size: usize,
+        query_count: usize,
+        lde_blowup_factor: usize,
+        zk_mask_degree: Option<usize>,
+    ) -> HcResult<Self> {
+        let mut config = Self::with_security_floor(
+            block_size,
+            fri_final_poly_size,
+            query_count.max(Self::V5_MIN_QUERY_COUNT),
+            lde_blowup_factor.max(Self::V5_MIN_BLOWUP),
+            SecurityFloor::relaxed(),
+        )?;
+        // Apply ZK masking BEFORE pinning the protocol version (`with_zk_masking`
+        // forces protocol_version = 4, so the v7/v8 pin must come last).
+        if let Some(degree) = zk_mask_degree {
+            if degree > 0 {
+                config = config.with_zk_masking(degree);
+            }
+        }
+        // v8 when ZK, else v7.
+        let version = if config.zk.enabled { 8 } else { 7 };
+        config = config.with_protocol_version(version);
+        Ok(config.clamped_to_v5_floor())
+    }
 }

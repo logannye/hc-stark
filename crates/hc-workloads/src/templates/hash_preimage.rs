@@ -21,7 +21,7 @@ fn build(params: &serde_json::Map<String, JsonValue>) -> Result<TemplateBuildRes
     }
 
     let instructions = add_immediate_chain(&preimage_steps);
-    Ok(TemplateBuildResult {
+    Ok(TemplateBuildResult::Vm {
         program: Program::new(instructions),
         initial_acc: 0,
         final_acc: digest,
@@ -58,6 +58,7 @@ inventory::submit!(ProofTemplate {
     tags: TAGS,
     cost_category: "lightweight",
     enforcement: Enforcement::StructureOnly,
+    audited: false,
     example_json: r#"{"digest":100,"preimage_steps":[25,25,25,25]}"#,
     build_program: build,
 });

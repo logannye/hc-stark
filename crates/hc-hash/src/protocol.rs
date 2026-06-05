@@ -40,6 +40,20 @@ pub const DOMAIN_FRI_V5: &[u8] = b"hc-stark/fri/v5";
 pub const DOMAIN_MAIN_V6: &[u8] = b"hc-stark/v6";
 pub const DOMAIN_FRI_V6: &[u8] = b"hc-stark/fri/v6";
 
+/// General-AIR soundness-hardened DEEP-STARK protocol domains (v7).
+///
+/// v7 generalizes v5 from the hardcoded width-2 accumulator (`ToyAir`) to an
+/// arbitrary [`hc_air`-style] AIR: a width-N trace and N constraints combined
+/// via powers of a single composition challenge in `K` (`Σ αⁱ·cᵢ`). It also
+/// carries a public-input vector instead of fixed `initial_acc`/`final_acc`.
+pub const DOMAIN_MAIN_V7: &[u8] = b"hc-stark/v7";
+pub const DOMAIN_FRI_V7: &[u8] = b"hc-stark/fri/v7";
+
+/// Zero-knowledge general-AIR protocol domains (v8 = v7 + ZK masking over all
+/// trace columns).
+pub const DOMAIN_MAIN_V8: &[u8] = b"hc-stark/v8";
+pub const DOMAIN_FRI_V8: &[u8] = b"hc-stark/fri/v8";
+
 /// Transcript labels (canonical).
 ///
 /// Policy:
@@ -92,9 +106,60 @@ pub mod label {
     pub const PARAM_GRINDING_BITS: &[u8] = b"param/grinding_bits";
     pub const PARAM_CHALLENGE_FIELD: &[u8] = b"param/challenge_field";
     pub const FRI_GRINDING_NONCE: &[u8] = b"fri/grinding_nonce";
+
+    // General-AIR seam (v7+). A SINGLE composition challenge whose powers mix all
+    // constraints (`Σ αⁱ·cᵢ`), replacing the two v5 `composition/alpha_{boundary,
+    // transition}` challenges. The trace width, the public-input vector, and the
+    // AIR identity are all bound into the transcript so prover and verifier agree
+    // on the constraint set and leaf arity.
+    pub const COMPOSITION_ALPHA: &[u8] = b"composition/alpha";
+    pub const PARAM_TRACE_WIDTH: &[u8] = b"param/trace_width";
+    pub const AIR_ID: &[u8] = b"param/air_id";
+    pub const PUB_INPUT_COUNT: &[u8] = b"pub/input_count";
+    pub const PUB_INPUT_ELEM: &[u8] = b"pub/input_elem";
 }
 
 /// Helper to append a u64 in little-endian encoding.
 pub fn append_u64<H: HashFunction>(t: &mut crate::Transcript<H>, label: &[u8], value: u64) {
     t.append_message(label, value.to_le_bytes());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v7_v8_domains_present_and_distinct() {
+        assert_eq!(DOMAIN_MAIN_V7, b"hc-stark/v7");
+        assert_eq!(DOMAIN_FRI_V7, b"hc-stark/fri/v7");
+        assert_eq!(DOMAIN_MAIN_V8, b"hc-stark/v8");
+        assert_eq!(DOMAIN_FRI_V8, b"hc-stark/fri/v8");
+        // v7 must differ from every prior main domain (consensus separation).
+        for prior in [
+            DOMAIN_MAIN_V2,
+            DOMAIN_MAIN_V3,
+            DOMAIN_MAIN_V4,
+            DOMAIN_MAIN_V5,
+            DOMAIN_MAIN_V6,
+        ] {
+            assert_ne!(DOMAIN_MAIN_V7, prior);
+            assert_ne!(DOMAIN_MAIN_V8, prior);
+        }
+        assert_ne!(DOMAIN_MAIN_V7, DOMAIN_MAIN_V8);
+    }
+
+    #[test]
+    fn v7_seam_labels_present() {
+        assert_eq!(label::COMPOSITION_ALPHA, b"composition/alpha");
+        assert_eq!(label::PARAM_TRACE_WIDTH, b"param/trace_width");
+        assert_eq!(label::AIR_ID, b"param/air_id");
+        assert_eq!(label::PUB_INPUT_COUNT, b"pub/input_count");
+        assert_eq!(label::PUB_INPUT_ELEM, b"pub/input_elem");
+        // The single v7 composition challenge is distinct from the two v5 ones.
+        assert_ne!(label::COMPOSITION_ALPHA, label::COMPOSITION_ALPHA_BOUNDARY);
+        assert_ne!(
+            label::COMPOSITION_ALPHA,
+            label::COMPOSITION_ALPHA_TRANSITION
+        );
+    }
 }

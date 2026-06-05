@@ -10,7 +10,10 @@ pub mod transcript;
 pub mod v5;
 
 pub use api::{verify, verify_with_summary, Proof, QueryCommitments, VerificationSummary};
-pub use v5::{enforce_floor, verify_v5, verify_v5_with_floor, VerifierSecurityFloor};
+pub use v5::{
+    enforce_floor, verifier_floor_v7, verify_v5, verify_v5_with_floor, verify_v7,
+    verify_v7_with_floor, VerifierSecurityFloor,
+};
 
 #[cfg(test)]
 mod tests {
