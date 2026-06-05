@@ -1,0 +1,12 @@
+name = "tinyzkp-uptime-probe"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Probe every 2 minutes (cron is UTC). A confirmed failure pages within ~2 min
+# instead of "whenever the daily Mac audit next runs".
+[triggers]
+crons = ["*/2 * * * *"]
+
+# Set the alert destination as a secret, never commit it:
+#   npx wrangler secret put ALERT_WEBHOOK_URL
+# (a Slack incoming-webhook, Discord webhook, or any JSON endpoint)
