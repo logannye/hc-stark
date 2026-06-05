@@ -145,9 +145,11 @@ footer .right a:hover{color:var(--muted)}
     <tr><td class="label">1M steps</td><td class="others">10–20 GB RAM</td><td class="tinyzkp">~30 MB</td></tr>
     <tr><td class="label">10M steps</td><td class="others">100+ GB RAM</td><td class="tinyzkp">~100 MB</td></tr>
     <tr><td class="label">100M steps</td><td class="others">Fleet sharding required</td><td class="tinyzkp">~300 MB</td></tr>
-    <tr><td class="label">1B steps</td><td class="others">Not feasible without segmentation + recursion</td><td class="tinyzkp">~1 GB</td></tr>
+    <tr><td class="label">1B steps <span style="color:var(--amber);font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em">projected</span></td><td class="others">Not feasible without segmentation + recursion</td><td class="tinyzkp">~1 GB *</td></tr>
   </tbody>
 </table>
+
+<p style="font-size:13px;color:var(--dim);margin-top:8px">* Architectural projection. The <strong>live single-proof cap is 100M steps</strong>; 1B-step proving is a roadmap target, not available today. What's provable on Compute today: long accumulator / state-transition traces up to 100M steps — zkVM and zkML proving (below) are in development.</p>
 
 <p>The trade-off is honest: extra time for less memory. We pay roughly <code>&radic;N</code> more cycles to use <code>&radic;N</code> less RAM. For large computations, this trade-off is the only one that matters — RAM is the wall you hit first, and recovering memory unlocks workloads that conventional provers simply cannot run on commodity hardware.</p>
 
