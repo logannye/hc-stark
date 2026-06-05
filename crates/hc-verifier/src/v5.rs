@@ -24,7 +24,7 @@
 //!   reject any proof below hard minimums (version, blowup, query count,
 //!   grinding bits, final-poly size) BEFORE any crypto runs.
 
-use hc_air::{AccumulatorAir, GeneralAir, RangeAir};
+use hc_air::{AccumulatorAir, GeneralAir, RangeAir, SortedAir, SORTED_BITS};
 use hc_core::{
     domain::{generate_lde_coset_domain, generate_trace_domain, EvaluationDomain},
     error::{HcError, HcResult},
@@ -217,6 +217,19 @@ fn resolve_air(
                 ));
             }
             Ok(Box::new(RangeAir::new(trace_length)))
+        }
+        3 => {
+            if trace_width != 1 + SORTED_BITS {
+                return Err(HcError::invalid_argument(
+                    "sorted AIR expects trace width 1 + SORTED_BITS",
+                ));
+            }
+            if !trace_length.is_power_of_two() || trace_length < 2 {
+                return Err(HcError::invalid_argument(
+                    "sorted AIR trace length must be a power of two ≥ 2",
+                ));
+            }
+            Ok(Box::new(SortedAir))
         }
         other => Err(HcError::invalid_argument(format!("unknown AIR id {other}"))),
     }

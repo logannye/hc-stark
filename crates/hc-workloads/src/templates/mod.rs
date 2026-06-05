@@ -29,6 +29,7 @@ pub mod data_integrity;
 pub mod hash_preimage;
 pub mod policy;
 pub mod range_proof;
+pub mod sorted_sequence;
 
 // ── Static-friendly types (for inventory registration) ──────────────────────
 

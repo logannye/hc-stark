@@ -3646,6 +3646,57 @@ mod worker_dispatch_tests {
             result.error
         );
     }
+
+    /// Same end-to-end coverage for the gated `sorted_sequence` template: a valid
+    /// non-decreasing sequence builds a v7 AIR that proves and verifies; a
+    /// decreasing sequence is refused at build time (whole-witness soundness).
+    #[test]
+    fn sorted_template_proves_and_verifies_through_air_path() {
+        let params = serde_json::json!({"values": [3, 5, 5, 9, 40, 41, 1000]})
+            .as_object()
+            .unwrap()
+            .clone();
+        let build =
+            build_from_template("sorted_sequence", &params).expect("sorted_sequence builds");
+        let block_size = smart_block_size(build.size_hint());
+
+        let bytes = match build {
+            TemplateBuildResult::Air {
+                air,
+                trace,
+                public_inputs,
+                ..
+            } => {
+                let cfg =
+                    hc_prover::config::ProverConfig::production_v7(block_size, 2, 80, 2, None)
+                        .expect("production_v7 config");
+                let proof = hc_prover::prove_v7(&*air, &trace, &public_inputs, &cfg)
+                    .expect("prove_v7 must succeed for a sorted sequence");
+                hc_sdk::proof::encode_proof_v7(&proof).expect("encode_proof_v7")
+            }
+            TemplateBuildResult::Vm { .. } => {
+                panic!("sorted_sequence must build an AIR, not a VM")
+            }
+        };
+
+        assert_eq!(bytes.version, 7, "sorted_sequence proves on the v7 path");
+        let result = hc_sdk::proof::verify_proof_bytes(&bytes, false);
+        assert!(
+            result.ok,
+            "sorted proof via the AIR path must verify: {:?}",
+            result.error
+        );
+
+        // A decreasing sequence is refused at build — no proof of a false claim.
+        let bad = serde_json::json!({"values": [5, 3, 9]})
+            .as_object()
+            .unwrap()
+            .clone();
+        assert!(
+            build_from_template("sorted_sequence", &bad).is_err(),
+            "a decreasing sequence must be refused at build"
+        );
+    }
 }
 
 #[cfg(test)]
