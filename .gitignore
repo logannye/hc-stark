@@ -22,6 +22,10 @@ clients/rust/Cargo.lock
 # Local secrets / state
 billing/.stripe_ids.json
 billing/.stripe_webhook_secret
+.env
+*.env
+!.env.example
+!*.env.example
 
 # Python bytecode caches
 **/__pycache__/

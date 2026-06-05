@@ -1,8 +1,14 @@
 api.tinyzkp.com {
 	reverse_proxy localhost:8080
 
+	# Post Phase-0.2 the dashboard uses /api/* CF proxies, not api.tinyzkp.com
+	# directly, so first-party-only CORS here is safe.
+	@cors_tinyzkp header Origin https://tinyzkp.com
+	@cors_www header Origin https://www.tinyzkp.com
+	header @cors_tinyzkp Access-Control-Allow-Origin "https://tinyzkp.com"
+	header @cors_www Access-Control-Allow-Origin "https://www.tinyzkp.com"
+
 	header {
-		Access-Control-Allow-Origin "*"
 		Access-Control-Allow-Methods "GET, POST, OPTIONS, DELETE"
 		Access-Control-Allow-Headers "Content-Type, Authorization"
 	}
