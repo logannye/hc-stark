@@ -21,6 +21,16 @@ WEBHOOK="${TINYZKP_AUDIT_WEBHOOK:-}"
 
 mkdir -p "$LOG_DIR"
 
+# Scratch files. test_api writes its response body to RESP_FILE (instead of
+# stdout) so callers never wrap it in $(...) — command substitution runs the
+# function in a SUBSHELL, which silently discards the PASS/FAIL/TOTAL/FAILURES
+# mutations. POST bodies go through BODY_FILE via `curl --data @file`, which
+# avoids the ARG_MAX limit (a multi-MB proof passed as a `-d` argv aborts curl
+# with "argument list too long" → recorded as a phantom 000 failure).
+RESP_FILE="$(mktemp)"
+BODY_FILE="$(mktemp)"
+trap 'rm -f "$RESP_FILE" "$BODY_FILE"' EXIT
+
 PASS=0
 FAIL=0
 FAILURES=""
@@ -72,15 +82,25 @@ test_api() {
     fi
 
     if [ "$method" = "POST" ] && [ -n "$body" ]; then
-        curl_args+=(-X POST -H "Content-Type: application/json" -d "$body")
+        # Stream the body from a file — a multi-MB proof passed as a `-d` argv
+        # exceeds ARG_MAX and aborts curl before it runs (phantom 000 failure).
+        printf '%s' "$body" > "$BODY_FILE"
+        curl_args+=(-X POST -H "Content-Type: application/json" --data @"$BODY_FILE")
     elif [ "$method" = "POST" ]; then
         curl_args+=(-X POST)
     fi
 
-    local raw code response
-    raw=$(curl "${curl_args[@]}" "$API$path" 2>/dev/null) || raw=$'\n000'
-    code=$(echo "$raw" | tail -n1)
-    response=$(echo "$raw" | sed '$d')
+    local raw code response attempt
+    # Retry once on a connection-level failure (000) to absorb transient
+    # cold-start/TLS blips. Real HTTP errors (4xx/5xx) return a code and are
+    # never retried, so genuine outages are still reported.
+    for attempt in 1 2; do
+        raw=$(curl "${curl_args[@]}" "$API$path" 2>/dev/null) || raw=$'\n000'
+        code=$(echo "$raw" | tail -n1)
+        response=$(echo "$raw" | sed '$d')
+        [ "$code" != "000" ] && break
+        [ "$attempt" -eq 1 ] && sleep 2
+    done
 
     if [ "$code" = "$expected" ]; then
         log "  PASS  $code  $label"
@@ -91,7 +111,10 @@ test_api() {
         FAILURES="$FAILURES\n  $code $label (expected $expected)"
     fi
 
-    echo "$response"
+    # Hand the body back via RESP_FILE (NOT stdout) so callers can read it with
+    # `cat "$RESP_FILE"` instead of `$(test_api …)`, which would run this whole
+    # function — counters included — in a subshell and discard the tally.
+    printf '%s' "$response" > "$RESP_FILE"
     sleep 0.5
 }
 
@@ -100,8 +123,12 @@ test_url() {
     local url="$1"
     local expected="${2:-200}"
     TOTAL=$((TOTAL + 1))
-    local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 -L "$url" 2>/dev/null) || code="000"
+    local code attempt
+    for attempt in 1 2; do
+        code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 -L "$url" 2>/dev/null) || code="000"
+        [ "$code" != "000" ] && break
+        [ "$attempt" -eq 1 ] && sleep 2
+    done
     if [ "$code" = "$expected" ]; then
         log "  PASS  $code  $url"
         PASS=$((PASS + 1))
@@ -141,7 +168,8 @@ test_api GET "/readyz"
 # additionally verifies the counter is exposed to an authorized scraper.
 test_api GET "/metrics" "" "401" > /dev/null
 if [ -n "${HC_METRICS_TOKEN:-}" ]; then
-    metrics_resp=$(test_api GET "/metrics" "" "200" "15" "Authorization: Bearer $HC_METRICS_TOKEN")
+    test_api GET "/metrics" "" "200" "15" "Authorization: Bearer $HC_METRICS_TOKEN"
+    metrics_resp=$(cat "$RESP_FILE")
     if ! echo "$metrics_resp" | grep -q "hc_prove_submitted_total"; then
         log "  WARN  /metrics missing expected counter hc_prove_submitted_total"
     fi
@@ -157,13 +185,15 @@ log "── API: Public Endpoints ──"
 test_api GET "/api-doc/openapi.json" > /dev/null
 
 # Templates list — verify JSON array
-templates_resp=$(test_api GET "/templates")
+test_api GET "/templates"
+templates_resp=$(cat "$RESP_FILE")
 if ! echo "$templates_resp" | grep -q '"templates"'; then
     log "  WARN  /templates response missing 'templates' array"
 fi
 
 # Estimate — lightweight cost estimation
-estimate_resp=$(test_api POST "/estimate" '{"program_length":1024}')
+test_api POST "/estimate" '{"program_length":1024}'
+estimate_resp=$(cat "$RESP_FILE")
 if ! echo "$estimate_resp" | grep -q '"estimated_cost_cents"'; then
     log "  WARN  /estimate response missing 'estimated_cost_cents'"
 fi
@@ -201,7 +231,8 @@ if [ -n "$API_KEY" ]; then
 
     log ""
     log "── API: Authenticated — Usage & Listing ──"
-    usage_resp=$(test_api GET "/usage" "" "200" "15" "$AUTH_HDR")
+    test_api GET "/usage" "" "200" "15" "$AUTH_HDR"
+    usage_resp=$(cat "$RESP_FILE")
     if ! echo "$usage_resp" | grep -q '"total_proofs"'; then
         log "  WARN  /usage response missing 'total_proofs'"
     fi
@@ -234,9 +265,10 @@ if [ -n "$API_KEY" ]; then
     log "── API: Authenticated — Prove + Verify ──"
 
     # Submit a minimal proof using the built-in toy workload
-    prove_resp=$(test_api POST "/prove" \
+    test_api POST "/prove" \
         '{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}' \
-        "200" "60" "$AUTH_HDR")
+        "200" "60" "$AUTH_HDR"
+    prove_resp=$(cat "$RESP_FILE")
 
     JOB_ID=$(echo "$prove_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
 
@@ -271,7 +303,8 @@ if [ -n "$API_KEY" ]; then
 
         # Inspect the proof
         if [ "$JOB_STATUS" = "succeeded" ]; then
-            inspect_resp=$(test_api GET "/prove/$JOB_ID/inspect" "" "200" "15" "$AUTH_HDR")
+            test_api GET "/prove/$JOB_ID/inspect" "" "200" "15" "$AUTH_HDR"
+            inspect_resp=$(cat "$RESP_FILE")
             if ! echo "$inspect_resp" | grep -q '"trace_commitment_digest"'; then
                 log "  WARN  /prove/$JOB_ID/inspect missing trace_commitment_digest"
             fi
@@ -279,9 +312,10 @@ if [ -n "$API_KEY" ]; then
             # Verify the proof
             PROOF_JSON=$(echo "$JOB_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d.get('proof',{})))" 2>/dev/null || echo "{}")
             if [ "$PROOF_JSON" != "{}" ]; then
-                verify_resp=$(test_api POST "/verify" \
+                test_api POST "/verify" \
                     "{\"proof\":$PROOF_JSON,\"allow_legacy_v2\":true}" \
-                    "200" "30" "$AUTH_HDR")
+                    "200" "30" "$AUTH_HDR"
+                verify_resp=$(cat "$RESP_FILE")
                 if ! echo "$verify_resp" | grep -q '"ok":true'; then
                     log "  WARN  /verify did not return ok:true"
                 fi
@@ -290,8 +324,11 @@ if [ -n "$API_KEY" ]; then
                 TOTAL=$((TOTAL + 1))
             fi
 
-            # Calldata generation
-            test_api GET "/proof/$JOB_ID/calldata" "" "200" "15" "$AUTH_HDR" > /dev/null
+            # Calldata generation — the production prover now emits v7 (general-AIR)
+            # proofs, for which EVM calldata is intentionally unavailable (there is
+            # no v7 on-chain verifier). The endpoint returns a documented 409, not a
+            # 200. Restore this to 200 if/when a v7 EVM verifier + calldata path ship.
+            test_api GET "/proof/$JOB_ID/calldata" "" "409" "15" "$AUTH_HDR"
         else
             log "  SKIP  /inspect, /verify, /calldata — proof did not succeed"
             TOTAL=$((TOTAL + 3))
@@ -311,9 +348,10 @@ if [ -n "$API_KEY" ]; then
     # Cancel flow: submit a job, immediately cancel. The toy workload
     # finishes in <1s, so 409 ("already in a terminal state") is also a
     # healthy result — both prove the route is mounted and auth passed.
-    cancel_submit=$(test_api POST "/prove" \
+    test_api POST "/prove" \
         '{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}' \
-        "200" "30" "$AUTH_HDR")
+        "200" "30" "$AUTH_HDR"
+    cancel_submit=$(cat "$RESP_FILE")
     CANCEL_JOB=$(echo "$cancel_submit" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
     if [ -n "$CANCEL_JOB" ]; then
         TOTAL=$((TOTAL + 1))
@@ -340,9 +378,10 @@ if [ -n "$API_KEY" ]; then
     # Template proof — accumulator_step template using minimal valid params
     # (range_proof was retired in the v5 cutover). Schema requires the
     # parameters wrapped in a "params" object.
-    template_resp=$(test_api POST "/prove/template/accumulator_step" \
+    test_api POST "/prove/template/accumulator_step" \
         '{"params":{"initial":0,"final":15,"deltas":[5,3,7]}}' \
-        "200" "60" "$AUTH_HDR")
+        "200" "60" "$AUTH_HDR"
+    template_resp=$(cat "$RESP_FILE")
     TEMPLATE_JOB=$(echo "$template_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
     if [ -n "$TEMPLATE_JOB" ]; then
         # Best-effort cleanup; ignore failure.
@@ -402,21 +441,27 @@ if [ -n "$INTERNAL_SECRET" ]; then
     JAR=$(mktemp)
 
     audit_email="audit+autotest-$(date +%s)@tinyzkp.com"
-    signup_resp=$(curl -s --max-time 20 \
+    # Capture the HTTP status (not just the body) so a failure tells us WHICH
+    # layer broke: a function-level 502 carries `upstream_status` in its JSON
+    # body (the webhook's real code), whereas a bare "error code: 502" is a
+    # Cloudflare platform/edge 502 for the Pages function request itself.
+    : > "$RESP_FILE"   # curl -o does NOT truncate on connection failure; clear stale body first
+    signup_code=$(curl -s -o "$RESP_FILE" -w "%{http_code}" --max-time 20 \
         -X POST -H "Content-Type: application/json" \
         -H "Origin: https://tinyzkp.com" \
         -d "{\"email\":\"$audit_email\"}" \
-        "$SITE/api/create-free-account" 2>/dev/null) || signup_resp=""
+        "$SITE/api/create-free-account" 2>/dev/null) || signup_code="000"
+    signup_resp=$(cat "$RESP_FILE")
     DASHBOARD_TOKEN=$(echo "$signup_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('dashboard_token','') or '')" 2>/dev/null || echo "")
 
     TOTAL=$((TOTAL + 1))
     if [ -n "$DASHBOARD_TOKEN" ]; then
-        log "  PASS  200  POST /api/create-free-account (tenant + magic-link issued)"
+        log "  PASS  $signup_code  POST /api/create-free-account (tenant + magic-link issued)"
         PASS=$((PASS + 1))
     else
-        log "  FAIL  ---  POST /api/create-free-account (no dashboard_token: ${signup_resp:0:120})"
+        log "  FAIL  $signup_code  POST /api/create-free-account (no dashboard_token: ${signup_resp:0:120})"
         FAIL=$((FAIL + 1))
-        FAILURES="$FAILURES\n  POST /api/create-free-account did not return a dashboard_token"
+        FAILURES="$FAILURES\n  $signup_code POST /api/create-free-account did not return a dashboard_token"
     fi
     sleep 0.5
 
@@ -609,9 +654,16 @@ sleep 0.5
 # header should return 403 (route exists, auth-rejected). 404 = route gone.
 for path in /provision-free /rotate /send-magic-link /send-contact /verify-magic-link /session/resolve /logout; do
     TOTAL=$((TOTAL + 1))
-    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-        -X POST -H "Content-Type: application/json" -d '{}' \
-        "$WEBHOOK_SVC$path" 2>/dev/null) || code="000"
+    # The webhook origin (Caddy → Flask systemd unit) can cold-start slowly
+    # (~7s observed on /health), so use a 15s budget and retry once on a
+    # connection-level 000 — otherwise a transient blip flaps the audit.
+    for attempt in 1 2; do
+        code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            -X POST -H "Content-Type: application/json" -d '{}' \
+            "$WEBHOOK_SVC$path" 2>/dev/null) || code="000"
+        [ "$code" != "000" ] && break
+        [ "$attempt" -eq 1 ] && sleep 2
+    done
     if [ "$code" = "403" ]; then
         log "  PASS  $code  POST $WEBHOOK_SVC$path (route live, internal-secret-gated)"
         PASS=$((PASS + 1))

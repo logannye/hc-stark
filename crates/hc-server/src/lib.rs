@@ -2135,7 +2135,10 @@ pub struct CalldataResponse {
     get,
     path = "/proof/{job_id}/calldata",
     params(("job_id" = String, Path, description = "prove job id")),
-    responses((status = 200, body = CalldataResponse))
+    responses(
+        (status = 200, body = CalldataResponse),
+        (status = 409, description = "EVM calldata is unavailable for v7 (general-AIR) proofs; no v7 on-chain verifier")
+    )
 )]
 async fn proof_calldata(
     State(state): State<AppState>,
@@ -2155,6 +2158,21 @@ async fn proof_calldata(
         Ok(p) => p,
         Err(e) => return e.into_response(),
     };
+
+    // EVM calldata is defined only for the v5/v6 wire format. The production
+    // prover now emits v7 (general-AIR) proofs, and there is no v7 on-chain
+    // verifier (the Solidity verifier is a v3-era stub, kept out of the product
+    // surface). Return a clear, documented 409 instead of a decode 500 — the same
+    // honest-gate pattern the `/aggregate` endpoint uses for its disabled path.
+    if proof_bytes.version >= 7 {
+        return ApiError::new(
+            StatusCode::CONFLICT,
+            "calldata_unsupported_version",
+            "EVM calldata is not available for v7 (general-AIR) proofs; on-chain \
+             verification is not yet supported for the v7 proof system",
+        )
+        .into_response();
+    }
 
     // Decode proof and produce EVM calldata.
     let output = match decode_proof_bytes(&proof_bytes) {
