@@ -66,12 +66,20 @@ export async function onRequestPost(context) {
     });
 
     if (!resp.ok) {
-      const body = await resp.json().catch(() => ({}));
-      console.error("Provision error:", JSON.stringify(body));
-      return new Response(JSON.stringify({ error: body.error || "Account creation failed." }), {
-        status: 502,
-        headers: jsonHeaders,
-      });
+      // Read the raw upstream body once so NON-JSON failures stay diagnosable
+      // (e.g. a Cloudflare/Caddy "error code: 502" edge page from the webhook
+      // origin, which JSON.parse would silently flatten to a generic message).
+      const raw = await resp.text().catch(() => "");
+      let upstreamError = "";
+      try { upstreamError = (JSON.parse(raw) || {}).error || ""; } catch { /* non-JSON body */ }
+      console.error(`Provision failed: upstream_status=${resp.status} body=${raw.slice(0, 300)}`);
+      return new Response(
+        JSON.stringify({
+          error: upstreamError || "Account creation failed.",
+          upstream_status: resp.status,
+        }),
+        { status: 502, headers: jsonHeaders },
+      );
     }
 
     const result = await resp.json().catch(() => ({ ok: true }));

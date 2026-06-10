@@ -85,7 +85,14 @@ def open_db(path: Optional[str] = None) -> sqlite3.Connection:
     conn.executescript(_SCHEMA)
     try:
         conn.executescript(_PARTIAL_INDEX_SQL)
-    except sqlite3.OperationalError as exc:
+    except (sqlite3.OperationalError, sqlite3.IntegrityError) as exc:
+        # A UNIQUE-constraint violation while building the index (pre-existing
+        # duplicate free rows for an email) raises sqlite3.IntegrityError, which
+        # is a SIBLING of OperationalError — NOT a subclass — so it must be named
+        # explicitly. Missing it here made EVERY open_db() call throw, which 500'd
+        # provision_free and the Stripe subscription-updated webhook. The DB stays
+        # fully usable without the index; one-free-per-email is still enforced by
+        # the application-level get_by_email check in provision_free.
         logging.warning(
             "tenant_store: could not create idx_one_free_tenant_per_email "
             "(pre-existing duplicate free rows?). "

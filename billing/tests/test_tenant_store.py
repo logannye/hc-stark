@@ -247,3 +247,44 @@ class TestMigrateFromTenantMap:
     def test_migrate_missing_file_returns_zero(self, db):
         count = tenant_store.migrate_from_tenant_map(db, "/nonexistent/path.json", "/nonexistent/keys.txt")
         assert count == 0
+
+
+class TestOpenDbDuplicateFreeEmails:
+    """Regression: open_db() must survive a pre-existing DB that already holds
+    duplicate free rows for an email.
+
+    The partial UNIQUE index `idx_one_free_tenant_per_email` cannot be built
+    when such duplicates exist — SQLite raises sqlite3.IntegrityError, which is
+    a SIBLING of sqlite3.OperationalError (both subclass DatabaseError), NOT a
+    subclass. A too-narrow `except sqlite3.OperationalError` let it escape, so
+    EVERY open_db() call threw → provision_free and the Stripe
+    subscription-updated webhook returned 500 (surfaced to free signups as a
+    Cloudflare 502).
+    """
+
+    def test_open_db_survives_duplicate_free_emails(self, tmp_path):
+        db_path = str(tmp_path / "dup.sqlite")
+        # Bootstrap the schema WITHOUT the partial index, then insert two free
+        # tenants that share an email (only possible while the index is absent).
+        boot = sqlite3.connect(db_path)
+        boot.executescript(tenant_store._SCHEMA)
+        for tid in ("t_dup_a", "t_dup_b"):
+            boot.execute(
+                "INSERT INTO tenants (tenant_id,email,api_key_hash,api_key_prefix,"
+                "status,plan,created_at_ms,updated_at_ms) VALUES (?,?,?,?,?,?,?,?)",
+                (tid, "dup@example.com", "h_" + tid, "tzk_dup", "active", "free", 1, 1),
+            )
+        boot.commit()
+        boot.close()
+
+        # Before the fix this raised sqlite3.IntegrityError; it must now return a
+        # usable connection (the index is skipped with a warning, and the
+        # app-level get_by_email check still enforces one-free-per-email).
+        conn = tenant_store.open_db(db_path)
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM tenants WHERE email='dup@example.com'"
+            ).fetchone()
+            assert row["n"] == 2
+        finally:
+            conn.close()

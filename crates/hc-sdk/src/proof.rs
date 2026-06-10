@@ -208,6 +208,19 @@ pub fn encode_proof_bytes(
 pub fn decode_proof_bytes(
     proof: &ProofBytes,
 ) -> Result<hc_prover::queries::ProverOutput<GoldilocksField>> {
+    // EVM-calldata decode path: understands only the v5/v6 `SerializableProof`
+    // wire format. v7 (general-AIR) proofs serialize differently (field elements
+    // as hex strings, not u64) and decode to `ProofV7`, not `ProverOutput`. There
+    // is no v7 on-chain verifier (the Solidity verifier is a v3-era stub kept out
+    // of the product surface), so EVM calldata is undefined for v7. Fail with a
+    // clear, caller-facing message instead of the cryptic serde error that the
+    // `/proof/{id}/calldata` handler previously surfaced as a 500.
+    if proof.version >= 7 {
+        anyhow::bail!(
+            "EVM calldata is not available for v7 proofs: decode_proof_bytes \
+             supports the v5/v6 wire format only (there is no v7 on-chain verifier)"
+        );
+    }
     let serializable: SerializableProof = serde_json::from_slice(&proof.bytes)?;
     if serializable.version != proof.version {
         anyhow::bail!(
@@ -2043,6 +2056,35 @@ mod v7_serialization_tests {
         assert!(
             err.to_string().contains("version mismatch"),
             "error should mention version mismatch, got: {err}"
+        );
+    }
+
+    /// REGRESSION (calldata 500): `decode_proof_bytes` is the v5/v6 decoder the
+    /// `/proof/{id}/calldata` endpoint uses to recover a `ProverOutput` before
+    /// EVM-encoding it. The production prover now emits v7 (general-AIR) proofs,
+    /// whose wire format differs (field elements are hex strings, not u64) and
+    /// which decode to `ProofV7`, not `ProverOutput`. Before the fix,
+    /// `decode_proof_bytes` failed with a cryptic serde error ("invalid type:
+    /// string …, expected u64") that the endpoint surfaced as a daily 500. There
+    /// is no v7 on-chain verifier (the Solidity verifier is a v3-era stub, kept
+    /// out of the product surface), so EVM calldata is not defined for v7. The
+    /// decoder must reject v7 with a CLEAR, caller-facing message instead.
+    #[test]
+    fn decode_proof_bytes_rejects_v7_with_clear_error() {
+        let proof = range_proof(18, 120, 42, &v7_relaxed_cfg());
+        let bytes = encode_proof_v7(&proof).expect("encode_proof_v7");
+        assert_eq!(bytes.version, 7, "fixture must be a v7 proof");
+
+        let err = decode_proof_bytes(&bytes)
+            .expect_err("decode_proof_bytes (v5/v6 path) must reject a v7 proof");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("v7") && msg.to_lowercase().contains("calldata"),
+            "expected a clear v7/calldata gate message, got: {msg}"
+        );
+        assert!(
+            !msg.contains("expected u64"),
+            "must be a clean version gate, not a leaked serde decode failure: {msg}"
         );
     }
 
