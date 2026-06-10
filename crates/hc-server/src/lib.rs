@@ -2137,7 +2137,7 @@ pub struct CalldataResponse {
     params(("job_id" = String, Path, description = "prove job id")),
     responses(
         (status = 200, body = CalldataResponse),
-        (status = 409, description = "EVM calldata is unavailable for v7 (general-AIR) proofs; no v7 on-chain verifier")
+        (status = 409, description = "EVM calldata is unavailable for sound (v5+) proofs; no on-chain verifier has shipped for the current proof system")
     )
 )]
 async fn proof_calldata(
@@ -2159,17 +2159,19 @@ async fn proof_calldata(
         Err(e) => return e.into_response(),
     };
 
-    // EVM calldata is defined only for the v5/v6 wire format. The production
-    // prover now emits v7 (general-AIR) proofs, and there is no v7 on-chain
-    // verifier (the Solidity verifier is a v3-era stub, kept out of the product
-    // surface). Return a clear, documented 409 instead of a decode 500 — the same
-    // honest-gate pattern the `/aggregate` endpoint uses for its disabled path.
-    if proof_bytes.version >= 7 {
+    // EVM calldata is defined only for the legacy pre-v5 `ProverOutput` wire
+    // format that `encode_evm_proof` consumes. The production prover emits sound
+    // v5 (`ProofV5`) proofs — and gated v7 (`ProofV7`) — which the EVM path cannot
+    // decode, and no on-chain verifier has shipped for them (the Solidity verifier
+    // is a v3-era stub, kept out of the product surface). Return a clear, documented
+    // 409 instead of a decode 500 — the same honest-gate pattern `/aggregate` uses.
+    if proof_bytes.version >= 5 {
         return ApiError::new(
             StatusCode::CONFLICT,
             "calldata_unsupported_version",
-            "EVM calldata is not available for v7 (general-AIR) proofs; on-chain \
-             verification is not yet supported for the v7 proof system",
+            "EVM calldata is unavailable for sound (v5+) proofs; on-chain \
+             verification has not shipped for the current proof system (the EVM \
+             calldata path supports only the legacy pre-v5 proof format)",
         )
         .into_response();
     }

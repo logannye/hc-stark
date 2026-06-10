@@ -324,10 +324,11 @@ if [ -n "$API_KEY" ]; then
                 TOTAL=$((TOTAL + 1))
             fi
 
-            # Calldata generation — the production prover now emits v7 (general-AIR)
-            # proofs, for which EVM calldata is intentionally unavailable (there is
-            # no v7 on-chain verifier). The endpoint returns a documented 409, not a
-            # 200. Restore this to 200 if/when a v7 EVM verifier + calldata path ship.
+            # Calldata generation — the production prover emits sound v5/v7 proofs,
+            # for which EVM calldata is intentionally unavailable (no on-chain
+            # verifier has shipped for the sound proof system; the EVM path only
+            # handles the legacy pre-v5 format). The endpoint returns a documented
+            # 409, not a 200. Restore to 200 if/when a v5/v7 EVM verifier ships.
             test_api GET "/proof/$JOB_ID/calldata" "" "409" "15" "$AUTH_HDR"
         else
             log "  SKIP  /inspect, /verify, /calldata — proof did not succeed"

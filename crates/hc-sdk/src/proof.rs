@@ -208,17 +208,20 @@ pub fn encode_proof_bytes(
 pub fn decode_proof_bytes(
     proof: &ProofBytes,
 ) -> Result<hc_prover::queries::ProverOutput<GoldilocksField>> {
-    // EVM-calldata decode path: understands only the v5/v6 `SerializableProof`
-    // wire format. v7 (general-AIR) proofs serialize differently (field elements
-    // as hex strings, not u64) and decode to `ProofV7`, not `ProverOutput`. There
-    // is no v7 on-chain verifier (the Solidity verifier is a v3-era stub kept out
-    // of the product surface), so EVM calldata is undefined for v7. Fail with a
-    // clear, caller-facing message instead of the cryptic serde error that the
-    // `/proof/{id}/calldata` handler previously surfaced as a 500.
-    if proof.version >= 7 {
+    // EVM-calldata decode path. `encode_evm_proof` consumes a legacy
+    // `ProverOutput`, which only the PRE-v5 `SerializableProof` wire format below
+    // deserializes into. The production prover cut over to sound v5 (`ProofV5`,
+    // via `decode_proof_v5`) and v7 (`ProofV7`, via `decode_proof_v7`) proofs,
+    // which this struct cannot parse — a v5/v7 proof here fails with a cryptic
+    // serde "expected u64" error that `/proof/{id}/calldata` surfaced as a daily
+    // 500. No on-chain (EVM) verifier has shipped for the sound proof system (the
+    // Solidity verifier is a v3-era stub kept out of the product surface), so EVM
+    // calldata is undefined for v5+. Gate it with a clear, caller-facing message.
+    if proof.version >= 5 {
         anyhow::bail!(
-            "EVM calldata is not available for v7 proofs: decode_proof_bytes \
-             supports the v5/v6 wire format only (there is no v7 on-chain verifier)"
+            "EVM calldata is unavailable for this proof: the on-chain calldata \
+             path supports only the legacy pre-v5 proof format; the service now \
+             emits sound v5/v7 proofs, for which no on-chain verifier has shipped"
         );
     }
     let serializable: SerializableProof = serde_json::from_slice(&proof.bytes)?;
@@ -2059,33 +2062,47 @@ mod v7_serialization_tests {
         );
     }
 
-    /// REGRESSION (calldata 500): `decode_proof_bytes` is the v5/v6 decoder the
-    /// `/proof/{id}/calldata` endpoint uses to recover a `ProverOutput` before
-    /// EVM-encoding it. The production prover now emits v7 (general-AIR) proofs,
-    /// whose wire format differs (field elements are hex strings, not u64) and
-    /// which decode to `ProofV7`, not `ProverOutput`. Before the fix,
+    /// REGRESSION (calldata 500): `decode_proof_bytes` is the LEGACY (pre-v5)
+    /// decoder the `/proof/{id}/calldata` endpoint uses to recover a
+    /// `ProverOutput` before EVM-encoding it. The production prover emits sound
+    /// v5 (`ProofV5`) proofs — and gated v7 (`ProofV7`) — whose wire format
+    /// differs (field elements are hex strings, not u64). Feeding any of those to
     /// `decode_proof_bytes` failed with a cryptic serde error ("invalid type:
-    /// string …, expected u64") that the endpoint surfaced as a daily 500. There
-    /// is no v7 on-chain verifier (the Solidity verifier is a v3-era stub, kept
-    /// out of the product surface), so EVM calldata is not defined for v7. The
-    /// decoder must reject v7 with a CLEAR, caller-facing message instead.
+    /// string …, expected u64") that the endpoint surfaced as a daily 500.
+    ///
+    /// The observed production proof is **v5** (the original v7 diagnosis was
+    /// wrong) — so the gate must cover every current sound version (v5+), not just
+    /// v7. There is no on-chain verifier for the sound proof system (the Solidity
+    /// verifier is a v3-era stub kept out of the product surface), so EVM calldata
+    /// is undefined for v5+; the decoder must reject it with a CLEAR message.
     #[test]
-    fn decode_proof_bytes_rejects_v7_with_clear_error() {
-        let proof = range_proof(18, 120, 42, &v7_relaxed_cfg());
-        let bytes = encode_proof_v7(&proof).expect("encode_proof_v7");
-        assert_eq!(bytes.version, 7, "fixture must be a v7 proof");
-
-        let err = decode_proof_bytes(&bytes)
-            .expect_err("decode_proof_bytes (v5/v6 path) must reject a v7 proof");
-        let msg = err.to_string();
-        assert!(
-            msg.contains("v7") && msg.to_lowercase().contains("calldata"),
-            "expected a clear v7/calldata gate message, got: {msg}"
-        );
-        assert!(
-            !msg.contains("expected u64"),
-            "must be a clean version gate, not a leaked serde decode failure: {msg}"
-        );
+    fn decode_proof_bytes_gates_current_sound_versions() {
+        // Real v7 proof — the concrete production-shaped case.
+        let v7_bytes = encode_proof_v7(&range_proof(18, 120, 42, &v7_relaxed_cfg()))
+            .expect("encode_proof_v7");
+        // Plus every current sound envelope version (v5 is what prod actually
+        // emits). The gate keys on version, so minimal bytes suffice.
+        let cases = [
+            v7_bytes,
+            crate::types::ProofBytes { version: 5, bytes: b"{}".to_vec() },
+            crate::types::ProofBytes { version: 6, bytes: b"{}".to_vec() },
+            crate::types::ProofBytes { version: 8, bytes: b"{}".to_vec() },
+        ];
+        for bytes in &cases {
+            let err = decode_proof_bytes(bytes)
+                .expect_err("decode_proof_bytes must reject sound (v5+) proofs");
+            let msg = err.to_string().to_lowercase();
+            assert!(
+                msg.contains("calldata"),
+                "v{}: expected a clear calldata gate message, got: {msg}",
+                bytes.version
+            );
+            assert!(
+                !msg.contains("expected u64"),
+                "v{}: must be a clean version gate, not a leaked serde failure: {msg}",
+                bytes.version
+            );
+        }
     }
 
     /// THE production-path assertion: a PRODUCTION v7 range proof (blowup ≥ 8,
