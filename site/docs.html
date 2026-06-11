@@ -907,7 +907,7 @@ claude mcp add --transport http tinyzkp http://localhost:3001/mcp</pre>
       <table>
         <thead><tr><th>Term</th><th>What It Means</th></tr></thead>
         <tbody>
-          <tr><td><code>proof</code></td><td>A short piece of data that proves a computation was done correctly &mdash; without revealing the inputs. Anyone can verify it quickly.</td></tr>
+          <tr><td><code>proof</code></td><td>A short piece of data that proves a computation was done correctly. Anyone can verify it quickly, offline, without re-running the computation.</td></tr>
           <tr><td><code>witness_steps</code></td><td>The private values that encode your secret in a proof template. These are <strong>never revealed</strong> to the verifier &mdash; they stay on the server during proving and are discarded after. Think of them as your secret answer that the proof vouches for.</td></tr>
           <tr><td><code>trace</code></td><td>The step-by-step record of a computation. Each instruction the prover executes creates a row in the trace. A longer trace = more computation = higher cost.</td></tr>
           <tr><td><code>trace_length</code></td><td>How many steps the computation has. This determines which <a href="#pricing">pricing tier</a> your proof falls into (e.g., &lt;10K steps = Tiny tier at $0.05).</td></tr>

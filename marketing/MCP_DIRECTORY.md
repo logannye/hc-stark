@@ -31,7 +31,7 @@ Run through this before hitting submit. Every box must be true.
 | Field | Value |
 |---|---|
 | **Name** | TinyZKP |
-| **Display name** | TinyZKP — Verifiable Receipts for AI Agents |
+| **Display name** | TinyZKP — Transparent State-Transition Attestation |
 | **Server URL** | https://mcp.tinyzkp.com |
 | **Homepage** | https://tinyzkp.com |
 | **Repository** | https://github.com/logannye/hc-stark |
@@ -41,11 +41,11 @@ Run through this before hitting submit. Every box must be true.
 
 ### Tagline (≤80 chars)
 
-> Mint zero-knowledge proofs as a tool call. Free 100/month. No credit card.
+> Prove a state transition as a tool call. Anyone verifies it in ~5 ms. Free 100/month, no card.
 
 ### One-paragraph description
 
-TinyZKP is a hosted ZK-STARK proving service that exposes verifiable computation as a native MCP tool. An agent can mint a cryptographic proof for a state transition — that an accumulator moved from an initial value to a final value by a declared set of deltas — in a single tool call, then pass that proof to any third party for independent verification. The free tier ships with 100 proofs/month and no credit card. The proving stack runs in O(√T) memory via height-compressed streaming, which is why the hosted price points are an order of magnitude below the alternatives.
+TinyZKP is a hosted ZK-STARK service that exposes transparent state-transition attestation as a native MCP tool. An agent can mint a cryptographic receipt that a committed value advanced from an initial value to a final value by a declared, ordered set of steps — in a single tool call — then hand that receipt to any counterparty or auditor for independent offline verification in about 5 ms, with no trusted setup and post-quantum by construction. The free tier ships with 100 proofs/month and no credit card. The proving stack runs in O(√T) memory via height-compressed streaming, which keeps heavy state-transition traces on commodity hardware.
 
 ### Use cases (3–5 bullets)
 
@@ -179,9 +179,9 @@ The three submission screenshots live in [`marketing/screenshots/`](./screenshot
 
 | # | File | What it shows | Paired prompt for the form |
 |---|---|---|---|
-| 1 | `shot1_range_prove.png` | `prove_template` with the `accumulator_step` template — proves an account moved from an initial balance to a final balance via a sequence of declared deltas, without revealing private details. Shows the returned job and base64 proof blob. | "Use TinyZKP to prove that this account balance moved from 1000 to 1045 via the deltas [10, 20, 15]." |
+| 1 | `shot1_range_prove.png` | `prove_template` with the `accumulator_step` template — proves an account moved from an initial balance to a final balance via a sequence of declared deltas. Shows the returned job and base64 proof blob. | "Use TinyZKP to prove that this account balance moved from 1000 to 1045 via the deltas [10, 20, 15]." |
 | 2 | `shot2_verify.png` | `verify_proof` on the proof from shot 1 — returns `valid: true` in under a second. Demonstrates that anyone can independently verify without trusting TinyZKP. | "Now verify that proof independently — show me that anyone in the world could do this same check without trusting TinyZKP." |
-| 3 | `shot3_policy_compliance.png` | `prove_template` with the `accumulator_step` template — proves an agent's state machine advanced from a declared start to a declared end via a sequence of recorded steps, keeping intermediate values private. | "Use TinyZKP's accumulator_step template to prove that this agent's running total moved from 0 to 945 via these steps, without revealing the individual values." |
+| 3 | `shot3_policy_compliance.png` | `prove_template` with the `accumulator_step` template — proves an agent's state machine advanced from a declared start to a declared end via a sequence of recorded steps, transferably verifiable by any third party offline. | "Use TinyZKP's accumulator_step template to prove that this agent's running total moved from 0 to 945 via these steps, so an auditor can verify it without re-running anything." |
 
 The three shots cover the complete narrative the directory carousel needs to tell: **(1)** the headline use-case (mint a privacy-preserving cryptographic receipt), **(2)** the trust model (independent verification), **(3)** the breadth (a second template that demonstrates this isn't a one-trick tool). Anthropic's submission requirements ask for 3–5; we ship 3 intentional ones rather than 5 mediocre ones.
 
