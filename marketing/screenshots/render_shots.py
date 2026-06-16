@@ -58,9 +58,8 @@ def shot1_html() -> str:
 
 <div class="caption">
   Generated a zero-knowledge proof that an account moved from
-  <strong>1,000</strong> to <strong>1,045</strong> via the declared deltas —
-  without revealing private details. The proof is a self-contained binary blob
-  anyone can verify.
+  <strong>1,000</strong> to <strong>1,045</strong> via the declared deltas.
+  The proof is a self-contained binary blob anyone can verify offline in ~5 ms.
 </div>
 
 <div class="card">
@@ -188,8 +187,8 @@ def shot3_html() -> str:
 <div class="caption">
   Generated a <strong>state-transition receipt</strong> for an agent's
   run — proves that the running total advanced from a declared start to a
-  declared end via a recorded sequence of steps, without revealing intermediate
-  values.
+  declared end via a recorded sequence of steps, transferably verifiable by
+  any third party offline.
 </div>
 
 <div class="card">

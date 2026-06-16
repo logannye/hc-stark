@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TinyZKP — Zero-Knowledge Proofs as an API · O(√N) Memory · Native MCP for AI agents</title>
-<meta name="description" content="Zero-knowledge proofs (ZK-STARK) as an API. A ZK-STARK prover with O(√N) memory instead of O(N), where N is the size of the computation — a 100M-step proof fits on a laptop, not a 256-GB server. Native MCP for AI agents. Free tier, no credit card.">
-<meta property="og:title" content="TinyZKP — Zero-Knowledge Proofs as an API · O(√N) Memory">
-<meta property="og:description" content="ZK-STARK proofs in one API call. A ZK-STARK prover with O(√N) memory instead of O(N) — a 100M-step proof runs on a laptop instead of a 256-GB server. Verify in under 5ms. Native MCP for AI agents.">
+<title>TinyZKP — Transparent State-Transition Attestation · ZK-STARK Receipts · Verify in 5 ms</title>
+<meta name="description" content="Mint a transparent ZK-STARK receipt that a committed value advanced from X to Y by exactly these steps. Anyone verifies it offline in ~5 ms — no trusted setup, post-quantum, nothing to re-run. One API call, or one MCP tool in Claude and Cursor. Free tier, no credit card.">
+<meta property="og:title" content="TinyZKP — Transparent State-Transition Attestation · ZK-STARK">
+<meta property="og:description" content="Prove a committed state went from X to Y by exactly these steps. A transparent, post-quantum ZK-STARK receipt anyone verifies in ~5 ms — no trusted setup, nothing to re-run. One API call, or one MCP tool inside Claude and Cursor.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="TinyZKP — Zero-Knowledge Proofs as an API · O(√N) Memory">
-<meta name="twitter:description" content="ZK-STARK proofs as an API. A ZK-STARK prover with O(√N) memory instead of O(N). Free tier, no credit card.">
+<meta name="twitter:title" content="TinyZKP — Transparent State-Transition Attestation · ZK-STARK">
+<meta name="twitter:description" content="Transparent ZK-STARK state-transition receipts. Verify offline in ~5 ms — no trusted setup, post-quantum. Free tier, no credit card.">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -30,7 +30,7 @@
       "name": "TinyZKP",
       "url": "https://tinyzkp.com",
       "logo": "https://tinyzkp.com/og-image.png",
-      "description": "Hosted ZK-STARK proving service with native MCP integration for AI agents.",
+      "description": "Hosted ZK-STARK service for transparent, post-quantum state-transition attestation. Native MCP integration.",
       "sameAs": [
         "https://github.com/logannye/hc-stark"
       ]
@@ -49,12 +49,12 @@
       "name": "TinyZKP",
       "applicationCategory": "DeveloperApplication",
       "operatingSystem": "Web, macOS, Linux, Windows",
-      "description": "Zero-knowledge proofs (ZK-STARK) as an API. A ZK-STARK prover with O(√N) memory instead of O(N), where N is the size of the computation. Native MCP for AI agents. Mint a proof for any computation in one API call; verify in milliseconds.",
+      "description": "Transparent ZK-STARK state-transition attestation as an API. Prove a committed value advanced from X to Y by exactly these steps; anyone verifies offline in ~5 ms — no trusted setup, post-quantum. Native MCP, plus Python, TypeScript, and Rust SDKs.",
       "offers": [
         {"@type": "Offer", "name": "Free",      "price": "0",   "priceCurrency": "USD", "description": "100 proofs/month, no credit card"},
         {"@type": "Offer", "name": "Developer", "price": "19",  "priceCurrency": "USD", "description": "$19/month — usage-metered per proof, $500/mo cap"},
         {"@type": "Offer", "name": "Scale",     "price": "199", "priceCurrency": "USD", "description": "$199/month — 40% off per-proof rates, $10K/mo cap"},
-        {"@type": "Offer", "name": "Compute",   "price": "0",   "priceCurrency": "USD", "description": "Usage-based: $0.50 per million trace steps. zkVM, zkML, rollups."}
+        {"@type": "Offer", "name": "Compute",   "price": "0",   "priceCurrency": "USD", "description": "Usage-based: $0.50 per million trace steps. Large state-transition traces; zkVM and zkML in development."}
       ],
       "aggregateRating": null,
       "publisher": {"@id": "https://tinyzkp.com/#org"}
@@ -443,9 +443,9 @@ footer .right a:hover{color:var(--muted)}
 
 <section class="hero">
 <div class="container">
-  <div class="hero-pill"><span class="pill-dot"></span> Zero-knowledge proofs &middot; ZK-STARK &middot; Native MCP for AI agents</div>
-  <h1>Zero-knowledge proofs,<br>in one API call.</h1>
-  <p class="sub">Mint a ZK-STARK for any computation &mdash; cryptographic proof your code ran on the inputs it claims, without revealing them. Generate in seconds, verify in milliseconds. One <code style="background:var(--bg);padding:1px 6px;border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--border)">curl</code>, or one MCP install.</p>
+  <div class="hero-pill"><span class="pill-dot"></span> Transparent ZK-STARK &middot; No trusted setup &middot; Post-quantum &middot; Native MCP</div>
+  <h1>Prove your state transition.<br>Anyone can check it in 5&nbsp;ms.</h1>
+  <p class="sub">Mint a transparent ZK-STARK receipt that a committed value advanced from X to Y by exactly these steps. Your counterparty or auditor verifies it offline in milliseconds &mdash; no trusted setup, no re-running your system, post-quantum by construction. One <code style="background:var(--bg);padding:1px 6px;border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--border)">curl</code>, or one MCP tool inside Claude and Cursor.</p>
   <p class="sub" style="margin-top:-18px;font-size:14.5px;max-width:640px;color:var(--text)">
     <strong style="color:var(--accent)">Runs in O(&radic;N) memory instead of O(N)</strong>
     <span style="color:var(--dim);font-weight:400">(where N = size of the computation)</span>
@@ -489,7 +489,7 @@ footer .right a:hover{color:var(--muted)}
     <div class="agent-box-grid">
       <div>
         <div class="label">For AI Agent Builders</div>
-        <h3>Mint verifiable receipts inside Claude, Cursor, and OpenAI agents — natively</h3>
+        <h3>Prove and verify a state transition — natively inside Claude, Cursor, and OpenAI agents</h3>
         <p>TinyZKP ships as an MCP server with 10 tools. Your agent calls <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--accent);border:1px solid var(--border)">prove</code> the way it calls any other tool. No glue code, no SDK juggling, no key handling outside the agent.</p>
         <div class="targets">
           <span>Claude Code</span>
@@ -517,7 +517,7 @@ claude mcp add --transport http \
 <div class="container">
   <div class="section-label">How It Works</div>
   <h2 class="section-title">Three Steps to Zero-Knowledge</h2>
-  <p class="section-sub">Prove a state transition is valid &mdash; that a sequence of steps moved from a known start to a known end &mdash; without revealing the steps.</p>
+  <p class="section-sub">Prove a state transition is valid &mdash; that a declared sequence of steps moves from a known start to a known end &mdash; so anyone can verify it offline without re-running it.</p>
   <div class="steps">
     <div class="step fade-in">
       <span class="num">1</span>
@@ -620,7 +620,7 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
 
   <!-- AGENT-RECEIPT TIERS -->
   <div class="audience-panel" id="panel-agents">
-    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">State-transition (accumulator) proofs today &mdash; more proof types in development. <strong style="color:var(--text)">Sub-second proofs.</strong> The wedge for AI-agent receipts.</p>
+    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">State-transition (accumulator) proofs &mdash; transparent, post-quantum, audited. <strong style="color:var(--text)">Sub-second for typical traces.</strong> Simple monthly plans for steady volume.</p>
 
     <div class="pricing-grid" style="grid-template-columns:repeat(3,1fr);max-width:960px;margin:0 auto">
       <div class="price-card fade-in">

@@ -6,11 +6,12 @@ startCommand:
   url: https://mcp.tinyzkp.com
 
 name: tinyzkp
-displayName: "TinyZKP — Verifiable Receipts for AI Agents"
+displayName: "TinyZKP — Transparent State-Transition Attestation"
 description: >
-  Mint zero-knowledge proofs as a tool call. ZK-STARK, transparent (no trusted
-  setup), post-quantum (hash-based). Accumulator-step state-transition proofs
-  available now. Free 100 proofs/month, no credit card.
+  Prove that a committed value advanced from X to Y by exactly these steps, as a
+  tool call. Transparent ZK-STARK (no trusted setup), post-quantum (hash-based).
+  Anyone verifies the receipt offline in ~5 ms. Audited accumulator-step
+  state-transition proofs available now. Free 100 proofs/month, no credit card.
 
 homepage: https://tinyzkp.com
 repository: https://github.com/logannye/hc-stark

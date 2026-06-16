@@ -2078,15 +2078,24 @@ mod v7_serialization_tests {
     #[test]
     fn decode_proof_bytes_gates_current_sound_versions() {
         // Real v7 proof — the concrete production-shaped case.
-        let v7_bytes = encode_proof_v7(&range_proof(18, 120, 42, &v7_relaxed_cfg()))
-            .expect("encode_proof_v7");
+        let v7_bytes =
+            encode_proof_v7(&range_proof(18, 120, 42, &v7_relaxed_cfg())).expect("encode_proof_v7");
         // Plus every current sound envelope version (v5 is what prod actually
         // emits). The gate keys on version, so minimal bytes suffice.
         let cases = [
             v7_bytes,
-            crate::types::ProofBytes { version: 5, bytes: b"{}".to_vec() },
-            crate::types::ProofBytes { version: 6, bytes: b"{}".to_vec() },
-            crate::types::ProofBytes { version: 8, bytes: b"{}".to_vec() },
+            crate::types::ProofBytes {
+                version: 5,
+                bytes: b"{}".to_vec(),
+            },
+            crate::types::ProofBytes {
+                version: 6,
+                bytes: b"{}".to_vec(),
+            },
+            crate::types::ProofBytes {
+                version: 8,
+                bytes: b"{}".to_vec(),
+            },
         ];
         for bytes in &cases {
             let err = decode_proof_bytes(bytes)

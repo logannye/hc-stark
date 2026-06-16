@@ -9,7 +9,7 @@ This directory holds **drafts** of customer-acquisition assets ready to publish 
 | `tinyzkp.com` (homepage with new positioning, JSON-LD, OG image) | **Live** | `curl -I https://tinyzkp.com/ \| grep -i title` |
 | `tinyzkp.com/try` (browser playground, no signup) | **Live, fully functional** | Open the URL, click Generate, click Verify |
 | `tinyzkp.com/status` (real-time API health) | **Live** | Open the URL |
-| `tinyzkp.com/signup` (with monthly/annual toggle, Developer at $9) | **Live** | Real Stripe Checkout flows attached |
+| `tinyzkp.com/signup` (with monthly/annual toggle, Developer at $19) | **Live** | Real Stripe Checkout flows attached |
 | Stripe products + 7 price IDs in production | **Live** | `wrangler pages secret list --project-name tinyzkp` shows all `STRIPE_PRICE_ID_*` |
 | Stripe webhook at `webhook.tinyzkp.com` | **Live** | Subscribed to 4 events, signing secret deployed to `/opt/hc-stark/.env` |
 | `@tinyzkp/cli` on npm | **Published v0.1.0** | `npx @tinyzkp/cli@latest healthz` |
