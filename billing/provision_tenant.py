@@ -208,21 +208,17 @@ def _recover_api_key(tenant_id: str) -> Optional[str]:
     return None
 
 
-# Canonical paid plans (pricing.json) the webhook may store, plus the checkout
-# aliases. create-checkout.js emits metadata.plan in {developer, pro, compute}
-# (it maps team/scale -> "pro" before writing, create-checkout.js:108-110), and
-# pricing.json plan_aliases defines pro -> scale, standard -> developer. Without
-# this mapping a "pro" (=$199 Scale) or "compute" checkout was silently stored as
-# "developer", delivering developer entitlements to a paying Scale/Compute
-# customer (audit BILL-01).
-_PLAN_ALIASES = {"pro": "scale", "standard": "developer"}
-_CANONICAL_PAID_PLANS = {"developer", "team", "scale", "compute"}
+# Canonical paid plans (pricing.json) the webhook may store, plus legacy aliases.
+# Storefront checkout emits {developer, pro, scale, compute}. Older Team links or
+# admin-provisioned rows still resolve to Pro's limits/rates.
+_PLAN_ALIASES = {"team": "pro", "standard": "developer"}
+_CANONICAL_PAID_PLANS = {"developer", "pro", "scale", "compute"}
 
 
 def _normalize_plan(raw: str | None, default: str = "developer") -> str:
     """Resolve a checkout/subscription plan slug to a canonical stored plan.
 
-    Applies pricing.json plan_aliases (pro -> scale, standard -> developer) and
+    Applies pricing.json plan_aliases (team -> pro, standard -> developer) and
     falls back to `default` for missing/unrecognized slugs.
     """
     if not raw:
@@ -269,8 +265,8 @@ def _handle_checkout_completed(event: dict) -> tuple[str, int]:
     api_key = generate_api_key()
 
     # Extract plan from checkout session metadata (set by create-checkout.js).
-    # Normalize so pro -> scale and compute -> compute instead of silently
-    # downgrading a paying Scale/Compute customer to developer (BILL-01).
+    # Normalize storefront and legacy slugs instead of silently downgrading a
+    # paying Pro/Scale/Compute customer to developer (BILL-01).
     plan = _normalize_plan((session.get("metadata") or {}).get("plan"))
 
     tenant_store.create_tenant(
@@ -366,19 +362,19 @@ def _handle_payment_failed(event: dict) -> tuple[str, int]:
 
 def _plan_from_subscription(subscription: dict) -> str:
     """Determine plan from subscription metadata or items."""
-    # Check metadata first (set during checkout). Normalize pro -> scale,
-    # compute -> compute (BILL-01); only fall through to the item-count
+    # Check metadata first (set during checkout). Normalize legacy team -> pro;
+    # only fall through to the item-count
     # heuristic when metadata carries no recognizable plan.
     raw = (subscription.get("metadata") or {}).get("plan")
     normalized = _PLAN_ALIASES.get(raw, raw) if raw else None
     if normalized in _CANONICAL_PAID_PLANS:
         return normalized
-    # Fallback: count line items — 1 item = developer, 2+ = team/scale.
+    # Fallback: count line items — 1 item = developer, 2+ = pro.
     items = subscription.get("items", {}).get("data", [])
     if len(items) >= 2:
-        # If there's a flat-rate item alongside metered, it's team or scale.
-        # Check metadata on the subscription for specifics; default to team.
-        return "team"
+        # If there's a flat-rate item alongside metered, it's a paid self-serve
+        # plan. Check metadata on the subscription for specifics; default to Pro.
+        return "pro"
     return "developer"
 
 

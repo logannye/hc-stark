@@ -52,9 +52,9 @@ const MAX_RATE_LIMIT_ENTRIES: usize = 10_000;
 fn rpm_for_plan(plan: &str) -> u32 {
     match plan {
         "free" => 10,
-        "team" => 300,
+        "pro" | "team" => 300,
         "scale" => 500,
-        // "developer", "standard", "pro", or anything else → developer
+        // "developer", "standard", or anything else → developer
         // tier. Matches hc-server's PlanLimits::for_plan() default arm.
         _ => 100,
     }
@@ -584,7 +584,7 @@ mod tests {
         assert_eq!(rpm_for_plan("free"), 10);
         assert_eq!(rpm_for_plan("developer"), 100);
         assert_eq!(rpm_for_plan("standard"), 100); // legacy alias
-        assert_eq!(rpm_for_plan("pro"), 100); // legacy alias
+        assert_eq!(rpm_for_plan("pro"), 300);
         assert_eq!(rpm_for_plan("team"), 300);
         assert_eq!(rpm_for_plan("scale"), 500);
         assert_eq!(rpm_for_plan(""), 100); // empty → developer fallback

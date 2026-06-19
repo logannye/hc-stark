@@ -24,7 +24,7 @@ Mint and verify a real ZK proof at [**tinyzkp.com/try**](https://tinyzkp.com/try
 claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 ```
 
-Your agent now has 10 ZK proof tools (`list_templates`, `describe_template`, `prove_template`, `poll_job`, `get_proof`, `verify_proof`, ...) as native function calls. **No signup, no API key, no credit card** — the MCP endpoint is public and rate-limited via a server-side concurrency cap. For Claude Desktop, Cursor, OpenAI agents, and other MCP clients, see [the MCP install guide](https://tinyzkp.com/docs#mcp).
+Your agent now has 10 state-transition proof tools (`list_templates`, `describe_template`, `prove_template`, `poll_job`, `get_proof`, `verify_proof`, ...) as native function calls. **No signup, no API key, no credit card** — the MCP endpoint is public and rate-limited via a server-side concurrency cap. For Claude Desktop, Cursor, OpenAI agents, and other MCP clients, see [the MCP install guide](https://tinyzkp.com/docs#mcp).
 
 Discovery via [Smithery](https://smithery.ai/servers/logan/tinyzkp-mcp) works the same way — the directory routes through Smithery's gateway to the same endpoint.
 
@@ -44,7 +44,7 @@ npx @tinyzkp/cli verify proof.json                        # always free
 
 | Template | What it proves | Typical use |
 |----------|---------------|-------------|
-| `accumulator_step` | "Starting at X, applying these deltas reaches Y" | State machine attestation, rollup transitions |
+| `accumulator_step` | "Starting at X, applying these deltas reaches Y" | State machine attestation, audit-log checkpoints |
 
 More proof types are in development.
 
@@ -164,7 +164,7 @@ npm install @tinyzkp/verify
 
 ## Pricing
 
-Pay per proof based on trace complexity. Verification is always free. Our O(√T) architecture means 10–40x lower infrastructure costs — we pass the savings to you.
+Pay for state-transition receipts based on trace complexity. Verification is always free. The O(√T) prover-memory architecture is the pricing advantage: long traces can be metered by steps without forcing customers to reserve high-RAM prover boxes.
 
 `pricing.json` at the repo root is the single source of truth for plan limits and the per-proof rate sheet, with parity tests on both the Rust (`hc-server`) and Python (`billing/`) sides — drift between either side and the JSON fails CI.
 
@@ -174,26 +174,20 @@ Pay per proof based on trace complexity. Verification is always free. Our O(√T
 |------|-------------|-------------------|------------|
 | Free | $0 | — | 100 proofs/mo, 1 inflight, 10 RPM, $5/mo cap |
 | Developer | $19 | Base rates | 4 inflight, 100 RPM, $500/mo cap |
+| Pro | $79 | 25% off | 8 inflight, 300 RPM, $2,500/mo cap |
 | Scale | $199 | 40% off | 16 inflight, 500 RPM, $10,000/mo cap |
 
 Annual billing is 20% off any paid plan.
 
 ### Compute (usage-based, no monthly base)
 
-For zkVM, zkML, and rollup workloads — the long-trace tier where the O(√T) prover replaces a 128 GB-RAM machine.
+For long state-transition traces — the tier where the O(√T) prover replaces the RAM-heavy infrastructure you would otherwise operate yourself. zkVM, zkML, and custom rollup proving are roadmap / early-access work, not default self-serve products.
 
 | Plan | Pricing | Key Limits |
 |------|---------|------------|
 | Compute | $0.50 per million trace steps | up to 100M-step traces, 100 RPM, 8 inflight |
 
-### Sales-only plans
-
-| Plan | Monthly Base | Per-Proof Discount | Key Limits |
-|------|-------------|-------------------|------------|
-| Team | Custom (around $49) | 25% off | 8 inflight, 300 RPM, $2,500/mo cap |
-| Enterprise | Custom | Up to 50% off | Custom limits, SLA |
-
-Team is provisioned by hand as a custom contract via [tinyzkp.com/contact](https://tinyzkp.com/contact); the rate sheet in `pricing.json` already supports it but there is no Stripe self-serve checkout. Enterprise covers reserved capacity, dedicated support, and SOC 2 / BAA / MSA paperwork.
+Enterprise covers reserved capacity, dedicated support, and SOC 2 / BAA / MSA paperwork via [tinyzkp.com/contact](https://tinyzkp.com/contact). The legacy `team` slug remains as an admin/backward-compatibility alias for Pro and is not a public storefront plan.
 
 ### Per-proof base rates (Developer plan)
 
@@ -205,7 +199,7 @@ Team is provisioned by hand as a custom contract via [tinyzkp.com/contact](https
 | 1M – 10M | $8.00/proof |
 | > 10M | $30.00/proof |
 
-Scale plans receive automatic 40% discounts on every proof; Team contracts receive 25% off. See [tinyzkp.com/docs#plans](https://tinyzkp.com/docs#plans) for full details.
+Pro plans receive automatic 25% discounts and Scale plans receive 40% discounts on every regular receipt. Compute uses the step meter instead of the per-proof table, which is the right fit when trace length and RAM requirements are the buyer's pain. See [tinyzkp.com/docs#plans](https://tinyzkp.com/docs#plans) for full details.
 
 ---
 
@@ -250,7 +244,7 @@ hc-stark ships as an **MCP server** so AI agents (Claude, GPT, Cursor) can gener
 claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 ```
 
-The hosted endpoint at `mcp.tinyzkp.com` accepts both public requests (no Authorization header — bounded by `HC_MCP_MAX_INFLIGHT=2`) and authenticated requests (`Authorization: Bearer tzk_...`). Authenticated requests get per-tenant rate limits matched to their plan: Free 10/min, Developer 100/min, Scale 500/min — same ladder as the HTTP API's `prove_rpm`. (Team contracts get 300/min via sales-only provisioning.) Setting `HC_MCP_TENANT_RPM` to a non-zero value overrides the plan ladder with a single global cap (operator throttling during incidents). Authenticated requests bypass the global anonymous cap. Operators who want to lock down the public lane entirely can set `HC_MCP_REQUIRE_AUTH=true` to require Bearer on every call. The HTTP transport also validates the `Origin` header against an allowlist that includes `*.claude.ai`, `*.anthropic.com`, and `tinyzkp.com`.
+The hosted endpoint at `mcp.tinyzkp.com` accepts both public requests (no Authorization header — bounded by `HC_MCP_MAX_INFLIGHT=2`) and authenticated requests (`Authorization: Bearer tzk_...`). Authenticated requests get per-tenant rate limits matched to their plan: Free 10/min, Developer 100/min, Pro 300/min, Scale 500/min — same ladder as the HTTP API's `prove_rpm`. Setting `HC_MCP_TENANT_RPM` to a non-zero value overrides the plan ladder with a single global cap (operator throttling during incidents). Authenticated requests bypass the global anonymous cap. Operators who want to lock down the public lane entirely can set `HC_MCP_REQUIRE_AUTH=true` to require Bearer on every call. The HTTP transport also validates the `Origin` header against an allowlist that includes `*.claude.ai`, `*.anthropic.com`, and `tinyzkp.com`.
 
 Additionally, `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json` serves a static [server card](deploy/server-card.json) (RFC-style description with the full tools list + configSchema) for MCP-directory scanners that prefer not to do live `tools/list` discovery — Smithery uses this path to populate the catalog.
 
@@ -414,11 +408,13 @@ See [`docs/operations.md`](docs/operations.md) for full configuration reference.
 
 ### Zero-knowledge mode
 
-ZK-masked proofs (protocol v4) hide the computation while maintaining verifiability:
+The default public path is transparent state-transition attestation: the receipt proves the transition chain, but it is not a privacy claim. Protocol v4 supports experimental masking parameters for audited use cases:
 
 - **API**: Set `zk_mask_degree > 0` in the prove request
 - **CLI**: `cargo run -p hc-cli -- prove --zk-mask-degree 8`
 - **MCP**: `"zk": true` in prove parameters
+
+Do not describe the default `accumulator_step` receipt as hiding inputs from TinyZKP or from the verifier. Treat privacy-oriented templates as gated until separately audited.
 
 ---
 
@@ -557,7 +553,7 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - DSL compiler for custom programs
 - Multi-tenant HTTP API with rate limiting
 - **Production service at [tinyzkp.com](https://tinyzkp.com)**
-- Stripe billing (Free tier, $19 Developer, $199 Scale, plus a usage-based Compute product at $0.50/M trace steps; monthly + annual variants at 20% off; Team and Enterprise as sales-issued custom contracts)
+- Stripe billing (Free tier, $19 Developer, $79 Pro, $199 Scale, plus a usage-based Compute product at $0.50/M trace steps; monthly + annual variants at 20% off; `team` retained only as a legacy/admin alias for Pro)
 - **Publish-ready client SDKs** — Python (`pip install tinyzkp`, on PyPI), TypeScript (`npm install tinyzkp`, dual ESM+CJS build, on npm), Rust (`cargo add tinyzkp`)
 - **MCP directory listings**:
   - **[Smithery](https://smithery.ai/servers/logan/tinyzkp-mcp)** — live since 2026-04-28. Catalogued from a static [server-card.json](deploy/server-card.json) at `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json`.

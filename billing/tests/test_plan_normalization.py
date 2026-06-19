@@ -1,10 +1,8 @@
 """Tests for Stripe-webhook plan-slug normalization (audit BILL-01).
 
-create-checkout.js emits metadata.plan in {developer, pro, compute} — it maps
-team/scale -> "pro" before writing (create-checkout.js:108-110,171). The webhook
-must resolve those to the canonical pricing.json plans (pro -> scale, compute ->
-compute), NOT silently downgrade pro/compute to "developer" (which would give a
-$199 Scale buyer the $500-cap/4-inflight/no-discount developer entitlements).
+create-checkout.js emits metadata.plan in {developer, pro, scale, compute}. The
+webhook must resolve those to canonical pricing.json plans, and legacy team
+metadata must resolve to pro.
 """
 
 import os
@@ -26,8 +24,10 @@ import provision_tenant
 # The load-bearing cases are pro and compute: they must NOT become "developer".
 CHECKOUT_SLUG_TO_PLAN = [
     ("developer", "developer"),
-    ("pro", "scale"),  # team/scale are mapped to "pro" by checkout; pro is scale
+    ("pro", "pro"),
+    ("scale", "scale"),
     ("compute", "compute"),
+    ("team", "pro"),
 ]
 
 
@@ -43,7 +43,7 @@ def test_normalize_plan_pro_and_compute_never_become_developer():
 
 
 def test_normalize_plan_passes_through_canonical_plans():
-    for plan in ("developer", "team", "scale", "compute"):
+    for plan in ("developer", "pro", "scale", "compute"):
         assert provision_tenant._normalize_plan(plan) == plan
 
 
@@ -60,7 +60,7 @@ def test_normalize_plan_unknown_or_missing_falls_back_to_developer():
 def test_plan_from_subscription_resolves_pro_and_compute_metadata():
     assert (
         provision_tenant._plan_from_subscription({"metadata": {"plan": "pro"}})
-        == "scale"
+        == "pro"
     )
     assert (
         provision_tenant._plan_from_subscription({"metadata": {"plan": "compute"}})
@@ -70,15 +70,19 @@ def test_plan_from_subscription_resolves_pro_and_compute_metadata():
         provision_tenant._plan_from_subscription({"metadata": {"plan": "developer"}})
         == "developer"
     )
+    assert (
+        provision_tenant._plan_from_subscription({"metadata": {"plan": "team"}})
+        == "pro"
+    )
 
 
 def test_plan_from_subscription_item_count_fallback_preserved():
-    # No usable metadata -> fall back to the line-item-count heuristic (2+ => team).
+    # No usable metadata -> fall back to the line-item-count heuristic (2+ => pro).
     assert (
         provision_tenant._plan_from_subscription(
             {"metadata": {}, "items": {"data": [{"id": "si_1"}, {"id": "si_2"}]}}
         )
-        == "team"
+        == "pro"
     )
     # Unknown metadata + single item -> developer floor.
     assert (

@@ -26,9 +26,44 @@
     <priority>0.95</priority>
   </url>
   <url>
+    <loc>https://tinyzkp.com/verify</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
     <loc>https://tinyzkp.com/compute</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://tinyzkp.com/use-cases/verifiable-state-transition</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://tinyzkp.com/use-cases/tamper-evident-audit-log</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.72</priority>
+  </url>
+  <url>
+    <loc>https://tinyzkp.com/use-cases/offline-proof-verification</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.72</priority>
+  </url>
+  <url>
+    <loc>https://tinyzkp.com/use-cases/post-quantum-stark-proving</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://tinyzkp.com/use-cases/mcp-zero-knowledge-proof</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://tinyzkp.com/use-cases/proof-of-reserves-attestation</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.72</priority>
   </url>
   <url>
     <loc>https://tinyzkp.com/status</loc>

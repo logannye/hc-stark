@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Welcome to TinyZKP</title>
-<meta name="description" content="Your TinyZKP account is ready. Get started with your first ZK-STARK proof.">
+<meta name="description" content="Your TinyZKP account is ready. Get started with your first state-transition receipt.">
 <meta property="og:title" content="Welcome to TinyZKP">
-<meta property="og:description" content="Your TinyZKP account is ready. Get started with your first ZK-STARK proof.">
+<meta property="og:description" content="Your TinyZKP account is ready. Get started with your first state-transition receipt.">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -121,6 +121,7 @@ footer .right a:hover{color:var(--muted)}
   </button>
   <div class="links">
     <a href="/#pricing">Pricing</a>
+    <a href="/verify">Verify</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
@@ -209,13 +210,13 @@ deltas [10, 20, 15] reaches 1045, then verify the proof.</div>
   -H "Authorization: Bearer tzk_YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"proof":{"version":4,"bytes":"0x6a8f..."}}'</div>
-    <p class="note">Response: <code>{"valid":true,"verified_in_ms":2.8}</code> &mdash; The verifier confirmed the proof is valid without learning your secret number.</p>
+    <p class="note">Response: <code>{"valid":true,"verified_in_ms":2.8}</code> &mdash; The verifier confirmed the transition receipt is valid.</p>
   </div>
 
   <div class="next-links">
     <a href="/docs" class="next-link">
       <div class="label">Quickstart Guide</div>
-      <div class="desc">The accumulator_step template (more in development), ZK mode, batch proving, and more</div>
+      <div class="desc">The accumulator_step template, client-side verification, pricing, and batch proving</div>
     </a>
     <a href="https://api.tinyzkp.com/docs" target="_blank" class="next-link">
       <div class="label">API Reference</div>

@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Try TinyZKP — Generate &amp; Verify a ZK Proof in Your Browser</title>
-<meta name="description" content="Generate a real zero-knowledge proof and verify it, in 60 seconds. No signup, no API key, no cryptography knowledge required.">
+<title>Try TinyZKP — Generate &amp; Verify a State-Transition Receipt</title>
+<meta name="description" content="Generate a real TinyZKP state-transition receipt and verify it in 60 seconds. No signup, no API key, no cryptography knowledge required.">
 <meta name="robots" content="index,follow">
-<meta property="og:title" content="Try TinyZKP — Mint a ZK proof in 60 seconds">
-<meta property="og:description" content="Real zero-knowledge proof generation, no signup. Type a value, hit prove, hit verify, see the result.">
+<meta property="og:title" content="Try TinyZKP — Mint a state-transition receipt">
+<meta property="og:description" content="Real state-transition proof generation, no signup. Enter a start value and deltas, hit prove, hit verify, see the result.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com/try">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Try TinyZKP">
-<meta name="twitter:description" content="Mint a ZK proof in 60 seconds. No signup.">
+<meta name="twitter:description" content="Mint a verifiable state-transition receipt in 60 seconds. No signup.">
 <meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
 <link rel="canonical" href="https://tinyzkp.com/try">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -149,6 +149,7 @@ footer .right a:hover{color:var(--muted)}
   </button>
   <div class="links">
     <a href="/#pricing">Pricing</a>
+    <a href="/verify">Verify</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
@@ -162,7 +163,7 @@ footer .right a:hover{color:var(--muted)}
 
   <div class="try-hero">
     <div class="pill">Browser playground &middot; No signup required</div>
-    <h1>Mint a ZK proof in 60 seconds</h1>
+    <h1>Mint a state-transition receipt in 60 seconds</h1>
     <p>Pick an initial value and a sequence of deltas, hit Generate, then Verify. The proof is real (generated against the live <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--border)">api.tinyzkp.com</code>) — not a simulation.</p>
   </div>
 
@@ -190,9 +191,10 @@ footer .right a:hover{color:var(--muted)}
     <!-- Step 2: Verify -->
     <div class="card" id="card-verify">
       <div class="card-header"><span class="card-num">2</span><span class="card-title">Verify the proof</span></div>
-      <p class="card-sub">The verifier confirms the proof without learning the secret value. Verification is always free; on production keys it runs ≈3 ms.</p>
+      <p class="card-sub">The verifier confirms the receipt without re-running the transition chain. Verification is always free; the client-side WASM verifier runs in milliseconds.</p>
 
       <button class="btn secondary" id="btn-verify" onclick="onVerify()" disabled>Verify proof</button>
+      <button class="btn secondary" id="btn-share" onclick="copyShareLink()" disabled style="margin-top:10px">Copy share link</button>
       <div class="status-line" id="status-verify">&nbsp;</div>
       <div class="out empty" id="out-verify" style="margin-top:12px">Verification result will appear here.</div>
     </div>
@@ -223,6 +225,20 @@ footer .right a:hover{color:var(--muted)}
 
 <script>
 var lastProof = null;
+var lastShareLink = null;
+
+function b64UrlEncode(text) {
+  var bytes = new TextEncoder().encode(text);
+  var binary = '';
+  for (var i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function buildShareLink(proof) {
+  return window.location.origin + '/verify#proof=' + b64UrlEncode(JSON.stringify(proof));
+}
 
 function setStatus(elId, text, kind){
   var el = document.getElementById(elId);
@@ -351,7 +367,9 @@ async function onProve(){
         setOutput('out-prove', frag);
         setStatus('status-prove', 'Proof completed in ' + elapsed + ' ms', 'ok');
         lastProof = poll.proof;
+        lastShareLink = buildShareLink(lastProof);
         document.getElementById('btn-verify').disabled = false;
+        document.getElementById('btn-share').disabled = false;
         document.getElementById('card-verify').classList.add('active');
         btn.disabled = false;
         while (btn.firstChild) btn.removeChild(btn.firstChild);
@@ -412,7 +430,10 @@ async function onVerify(){
     }
     if (data.round_trip_ms != null) {
       frag.appendChild(makeColoredLine('  round-trip:    ', data.round_trip_ms + ' ms (server-side verify + network)', 'accent'));
-      frag.appendChild(makeColoredLine('                ', '(production WASM verifier runs in <5ms client-side)', 'muted'));
+      frag.appendChild(makeColoredLine('                ', '(the /verify page runs the WASM verifier client-side)', 'muted'));
+    }
+    if (lastShareLink) {
+      frag.appendChild(makeColoredLine('  share link:    ', lastShareLink, 'accent'));
     }
     if (data.error) {
       frag.appendChild(makeColoredLine('  error:         ', data.error, 'bad'));
@@ -426,6 +447,17 @@ async function onVerify(){
   btn.disabled = false;
   while (btn.firstChild) btn.removeChild(btn.firstChild);
   btn.appendChild(document.createTextNode('Verify again'));
+}
+
+async function copyShareLink(){
+  if (!lastShareLink && lastProof) lastShareLink = buildShareLink(lastProof);
+  if (!lastShareLink) return;
+  try {
+    await navigator.clipboard.writeText(lastShareLink);
+    setStatus('status-verify', 'Share link copied', 'ok');
+  } catch(e) {
+    setStatus('status-verify', 'Share link: ' + lastShareLink, 'ok');
+  }
 }
 
 updateFinal();

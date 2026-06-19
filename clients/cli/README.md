@@ -1,10 +1,10 @@
 # @tinyzkp/cli
 
-Generate and verify [TinyZKP](https://tinyzkp.com) zero-knowledge proofs from your terminal. One command, zero setup.
+Generate and verify [TinyZKP](https://tinyzkp.com) state-transition receipts from your terminal. One command, zero setup.
 
 ```bash
 npx @tinyzkp/cli templates
-npx @tinyzkp/cli prove range_proof '{"min":0,"max":100,"witness_steps":[42,44]}' --wait > proof.json
+npx @tinyzkp/cli prove accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}' --wait > proof.json
 npx @tinyzkp/cli verify proof.json
 ```
 
@@ -70,32 +70,29 @@ chmod 600 ~/.tinyzkp/credentials
 $ npx @tinyzkp/cli templates
 Available proof templates:
 
-  range_proof         (lightweight)
-    Prove a secret value lies within a range
-  hash_preimage       (lightweight)
-    Prove knowledge of a hash preimage
-  ...
+  accumulator_step    (lightweight)
+    Prove that starting at X and applying declared deltas reaches Y
 
 # 2. See how to use one
-$ npx @tinyzkp/cli describe range_proof
-range_proof
+$ npx @tinyzkp/cli describe accumulator_step
+accumulator_step
 backend: vm
 
-Prove a secret value lies within a range
+Prove a declared additive state transition
 
 Parameters:
-  min (integer) required
-    Lower bound of the allowed range (inclusive)
-  max (integer) required
-    Upper bound of the allowed range (inclusive)
-  witness_steps (array) required
-    Additive steps from min that sum to (value - min)
+  initial (integer) required
+    Starting accumulator value
+  final (integer) required
+    Ending accumulator value
+  deltas (array) required
+    Additive steps applied to the accumulator
 
 Example:
-  {"min":18,"max":120,"witness_steps":[7]}
+  {"initial":1000,"final":1045,"deltas":[10,20,15]}
 
 # 3. Estimate before paying
-$ npx @tinyzkp/cli estimate range_proof '{"min":0,"max":100,"witness_steps":[42,44]}'
+$ npx @tinyzkp/cli estimate accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}'
 Estimate
   trace length:     128 steps
   cost (Developer): $0.05
@@ -103,7 +100,7 @@ Estimate
   prove time:       1200 ms
 
 # 4. Generate
-$ npx @tinyzkp/cli prove range_proof '{"min":0,"max":100,"witness_steps":[42,44]}' --wait
+$ npx @tinyzkp/cli prove accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}' --wait
 ✔ proof completed (prf_a1b2c3)
   version: 4
   size:    12.4 KB
@@ -120,7 +117,7 @@ $ npx @tinyzkp/cli verify proof.json
 Add `--json` to any command for machine-readable output. Plays nicely with `jq`:
 
 ```bash
-JOB=$(tinyzkp prove range_proof '{"min":0,"max":100,"witness_steps":[42]}' --json | jq -r .job_id)
+JOB=$(tinyzkp prove accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}' --json | jq -r .job_id)
 tinyzkp poll "$JOB" --wait --json | jq .proof.bytes
 ```
 

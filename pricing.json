@@ -1,6 +1,6 @@
 {
   "_comment": "Single source of truth for TinyZKP pricing + plan limits. Read by parity tests in both crates/hc-server/src/usage_log.rs and billing/tests/test_pricing_parity.py — drift between either Rust or Python and this file fails CI. Edit this file FIRST when changing pricing; the parity tests will fail loudly until both sides catch up.",
-  "_plan_visibility": "Stripe self-serve checkout exposes 'free', 'developer', and 'scale' (plus a usage-based Compute product handled outside this rate sheet). The 'team' plan is retained here as a sales-only/grandfathered contract — provisioned by hand via billing/provision_tenant.py with plan=team — because the rate sheet supports it but there is no Stripe self-serve path. Marketing surfaces (site/index.html, site/signup.html) must NOT advertise Team as a checkout option; site/docs.html documents it for completeness.",
+  "_plan_visibility": "Stripe self-serve checkout exposes Free, Developer, Pro, Scale, and Compute. Pro is the public $79/mo rung using the old Team economics (25% off, 8 inflight, 300 RPM, $2,500/mo cap). 'team' is retained only as a legacy/admin alias to 'pro' and must not be advertised as a storefront plan.",
   "billing_meters": {
     "_comment": "Declares which Stripe meter each plan bills through. sync_usage.py and parity tests enforce this mapping. 'compute' tenants are metered by raw trace steps via trace_step_usage ($0.50/1M steps); all other plans use proof_usage (discounted cents-per-proof). The monthly_cap_cents on the compute plan is a coarse safety bound only — real billing is the step meter.",
     "compute": "trace_step_usage",
@@ -30,7 +30,7 @@
       "monthly_cap_cents": 50000,
       "max_prove_seconds": 600
     },
-    "team": {
+    "pro": {
       "discount": 0.75,
       "prove_rpm": 300,
       "verify_rpm": 900,
@@ -57,8 +57,8 @@
     }
   },
   "plan_aliases": {
-    "_comment": "Legacy plan slugs from prior pricing iterations. 'standard' was an early developer-tier label. 'pro' was the Stripe product label that succeeded 'scale'; Cloudflare checkout maps scale -> pro at the Stripe layer, but tenants whose DB row stored plan='pro' should resolve to the scale rate sheet.",
+    "_comment": "Legacy plan slugs from prior pricing iterations. 'standard' was an early developer-tier label. 'team' was the sales-only/intermediate plan and now resolves to the public Pro tier.",
     "standard": "developer",
-    "pro": "scale"
+    "team": "pro"
   }
 }

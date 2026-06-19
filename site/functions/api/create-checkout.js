@@ -4,15 +4,17 @@
 //   STRIPE_SECRET_KEY                  — sk_live_... or sk_test_...
 //   STRIPE_PRICE_ID_METERED            — metered proof-count price (legacy fallback STRIPE_PRICE_ID)
 //   STRIPE_PRICE_ID_TRACE_STEP_METERED — metered trace-step price ($0.50/M, used for Compute and as
-//                                        the large-T overage line on Developer/Pro)
+//                                        the large-T overage line on Developer/Pro/Scale)
 //   STRIPE_PRICE_ID_DEVELOPER          — $19/mo Developer flat price (v2; legacy $9 was DEVELOPER_V1)
 //   STRIPE_PRICE_ID_DEVELOPER_ANNUAL   — $182/yr Developer annual
-//   STRIPE_PRICE_ID_PRO                — $199/mo Pro flat price (renamed from Scale)
-//   STRIPE_PRICE_ID_PRO_ANNUAL         — $1,910/yr Pro annual
+//   STRIPE_PRICE_ID_PRO                — $79/mo Pro flat price
+//   STRIPE_PRICE_ID_PRO_ANNUAL         — $758.40/yr Pro annual
+//   STRIPE_PRICE_ID_SCALE              — $199/mo Scale flat price
+//   STRIPE_PRICE_ID_SCALE_ANNUAL       — $1,910.40/yr Scale annual
 //
 // Request body: { email, plan, cadence }
-//   plan    ∈ {"developer", "pro", "compute"}     (free/verifier-only handled elsewhere)
-//   cadence ∈ {"monthly", "annual"}               (default "monthly"; ignored for "compute")
+//   plan    ∈ {"developer", "pro", "scale", "compute"} (free handled elsewhere)
+//   cadence ∈ {"monthly", "annual"}                    (default "monthly"; ignored for "compute")
 //
 // Compute is pure usage-based (no flat fee, just the trace-step meter).
 
@@ -45,8 +47,8 @@ async function checkRateLimit(ip) {
 // falls back to metered-only billing so an incomplete deploy never breaks
 // a signup.
 //
-// Legacy plan slugs ("team", "scale") map to "pro" so existing signup
-// links keep working through the rollout.
+// Legacy plan slug "team" maps to "pro" so old intermediate-tier links keep
+// working through the rollout.
 function flatPriceFor(env, plan, cadence) {
   const annual = cadence === "annual";
   switch (plan) {
@@ -56,14 +58,17 @@ function flatPriceFor(env, plan, cadence) {
         : (env.STRIPE_PRICE_ID_DEVELOPER || null);
     case "pro":
     case "team":   // legacy alias → Pro
-    case "scale":  // legacy alias → Pro
       return annual
         ? (env.STRIPE_PRICE_ID_PRO_ANNUAL
             || env.STRIPE_PRICE_ID_PRO
-            || env.STRIPE_PRICE_ID_SCALE_ANNUAL
-            || env.STRIPE_PRICE_ID_SCALE
+            || env.STRIPE_PRICE_ID_TEAM_ANNUAL
+            || env.STRIPE_PRICE_ID_TEAM
             || null)
-        : (env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID_SCALE || null);
+        : (env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID_TEAM || null);
+    case "scale":
+      return annual
+        ? (env.STRIPE_PRICE_ID_SCALE_ANNUAL || env.STRIPE_PRICE_ID_SCALE || null)
+        : (env.STRIPE_PRICE_ID_SCALE || null);
     case "compute":
       return null;  // pure usage-based, no flat fee
     default:
@@ -102,12 +107,12 @@ export async function onRequestPost(context) {
       });
     }
 
-    // Plan slug normalization. Legacy "team"/"scale" still map to "pro"
-    // for any signup link minted before the v2 pricing rollout.
+    // Plan slug normalization. Legacy "team" still maps to "pro" for any
+    // signup link minted before the self-serve Pro rollout.
     const planRaw = body.plan;
     const validPlans = new Set(["developer", "pro", "compute", "team", "scale"]);
     let selectedPlan = validPlans.has(planRaw) ? planRaw : "developer";
-    if (selectedPlan === "team" || selectedPlan === "scale") selectedPlan = "pro";
+    if (selectedPlan === "team") selectedPlan = "pro";
     const cadence = body.cadence === "annual" ? "annual" : "monthly";
 
     const STRIPE_SECRET_KEY = context.env.STRIPE_SECRET_KEY;
@@ -128,7 +133,7 @@ export async function onRequestPost(context) {
     params.append("customer_email", email);
 
     // Line-item assembly:
-    //   - Developer / Pro: flat fee + per-proof meter + (if env set) trace-step overage meter
+    //   - Developer / Pro / Scale: flat fee + per-proof meter + (if env set) trace-step overage meter
     //   - Compute: trace-step meter only (no flat fee, no per-proof line)
     let lineItem = 0;
 
@@ -142,7 +147,7 @@ export async function onRequestPost(context) {
       params.append(`line_items[${lineItem}][price]`, STRIPE_PRICE_ID_TRACE_STEP_METERED);
       lineItem += 1;
     } else {
-      // Developer / Pro
+      // Developer / Pro / Scale
       if (STRIPE_PRICE_ID_METERED) {
         params.append(`line_items[${lineItem}][price]`, STRIPE_PRICE_ID_METERED);
         lineItem += 1;

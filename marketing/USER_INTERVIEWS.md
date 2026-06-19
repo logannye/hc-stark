@@ -78,20 +78,20 @@ notes get sloppy.
    *Probe: language? team size? deployed already, or prototype?*
 
 2. **What proof would actually make your system better tomorrow?**
-   *Don't accept "ZK proofs in general." Push for the specific receipt: range
-   check on a number, hash preimage of a secret, attestation of a computation,
-   etc. If they can't name one, that's the answer — they're exploring, not
-   buying.*
+   *Don't accept "ZK proofs in general." Push for the specific receipt: a
+   state-transition checkpoint, audit-log accumulator, proof-of-reserves total,
+   or long trace they do not want to replay. If they can't name one, that's the
+   answer — they're exploring, not buying.*
 
 3. **Did you make it through the quickstart?**
    *Probe at each step: signup, key in env, first SDK call, first
    `prove_template`, first `verify`. Where did they stop?*
 
 4. **What was confusing?**
-   *Specifically about: (a) what `witness_steps` are, (b) which template to
-   pick, (c) how to read the proof JSON, (d) pricing tiers, (e) the difference
-   between the JSON API and MCP. These are our top suspect-failure-modes —
-   probe them by name if they don't volunteer.*
+   *Specifically about: (a) what `initial` / `final` / `deltas` mean, (b) when
+   the only live template is enough, (c) how to read the proof JSON, (d) pricing
+   tiers vs Compute, (e) the difference between the JSON API and MCP. These are
+   our top suspect-failure-modes — probe them by name if they don't volunteer.*
 
 5. **If TinyZKP cost $19/mo, would you pay it tomorrow? Why or why not?**
    *Pricing-sensitivity check. The honest answers tend to come in two
@@ -100,9 +100,9 @@ notes get sloppy.
 
 6. **Where would the receipt go after you mint it?**
    *Probe: stored in DB, attached to a row, posted to a webhook, included in
-   API response, written on-chain, sent to a regulator? This dictates whether
-   we need calldata, batch verification, signature wrapping, or just a JSON
-   blob.*
+   API response, sent to an auditor/regulator, or shared via `/verify`? This
+   dictates whether we need batch verification, signature wrapping, or just a
+   JSON blob.*
 
 7. **What's the closest thing you considered before TinyZKP?**
    *Categories to listen for: rolling your own STARK (rare), zkVM frameworks

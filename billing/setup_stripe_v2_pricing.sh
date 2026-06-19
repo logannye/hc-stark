@@ -2,10 +2,11 @@
 # billing/setup_stripe_v2_pricing.sh
 #
 # Idempotent migration to v2 pricing:
-#   - Drop the Team tier
-#   - Rename Scale → Pro (same $199 price, just renamed product)
+#   - Add public Pro at $79/mo using the old Team economics
+#   - Keep Scale at $199/mo
 #   - Raise Developer from $9 → $19 (creates new prices, archives old)
 #   - Add Compute tier (pure usage-based, $0.50 per million trace steps)
+#   - Preserve legacy Team Stripe artifacts only as rollout fallbacks
 #
 # Safe to re-run; uses application-level idempotency keyed on metadata.
 # Requires: STRIPE_SECRET_KEY (sk_live_... or sk_test_...) in env, jq, curl.
@@ -87,7 +88,7 @@ COMPUTE_PROD=$(find_product_by_metadata tinyzkp_tier compute || true)
 if [ -z "$COMPUTE_PROD" ]; then
   COMPUTE_PROD=$(sk -X POST "$API/products" \
     -d name="Compute" \
-    -d description="Usage-based ZK proving for zkVMs, zkML, rollups. \$0.50 per million trace steps. No monthly base fee." \
+    -d description="Usage-based proving for long state-transition traces. \$0.50 per million trace steps. No monthly base fee." \
     -d "metadata[tinyzkp_tier]=compute" \
     | jq -r .id)
   log "created Compute product: $COMPUTE_PROD"
@@ -151,47 +152,56 @@ else
   log "Developer annual v2 exists: $DEV_19_YR"
 fi
 
-# ─── 4. Rename Scale → Pro ───────────────────────────────────────────────────
-SCALE_PROD=$(find_product_by_metadata tinyzkp_tier scale || true)
-if [ -n "$SCALE_PROD" ]; then
-  CURRENT_NAME=$(sk "$API/products/$SCALE_PROD" | jq -r .name)
-  if [ "$CURRENT_NAME" != "Pro" ]; then
-    sk -X POST "$API/products/$SCALE_PROD" \
-      -d name="Pro" \
-      -d description="Production agent platforms. 50,000 small-T proofs/mo + 1M trace steps included; \$0.30/M for large-T overage." \
-      -d "metadata[tinyzkp_tier]=pro" \
-      > /dev/null
-    log "renamed Scale → Pro: $SCALE_PROD"
-  else
-    log "Pro product (formerly Scale) already renamed: $SCALE_PROD"
-  fi
-  PRO_PROD="$SCALE_PROD"
+# ─── 4. Pro at $79 (public intermediate tier) ────────────────────────────────
+PRO_PROD=$(find_product_by_metadata tinyzkp_tier pro || true)
+if [ -z "$PRO_PROD" ]; then
+  PRO_PROD=$(sk -X POST "$API/products" \
+    -d name="TinyZKP Pro" \
+    -d description="Pro plan — 25% off per-proof rates, 300 RPM, 8 concurrent jobs, \$2,500/mo cap." \
+    -d "metadata[tinyzkp_tier]=pro" \
+    | jq -r .id)
+  log "created Pro product: $PRO_PROD"
 else
-  PRO_PROD=$(find_product_by_metadata tinyzkp_tier pro || true)
-  [ -n "$PRO_PROD" ] || log "(neither Scale nor Pro product found — skipping rename)"
+  log "Pro product exists: $PRO_PROD"
 fi
 
-# ─── 5. Archive Team product + prices ────────────────────────────────────────
-TEAM_PROD=$(find_product_by_metadata tinyzkp_tier team || true)
-if [ -n "$TEAM_PROD" ]; then
-  ACTIVE=$(sk "$API/products/$TEAM_PROD" | jq -r .active)
-  if [ "$ACTIVE" = "true" ]; then
-    sk -X POST "$API/products/$TEAM_PROD" -d active=false > /dev/null
-    log "archived Team product: $TEAM_PROD"
-  else
-    log "Team product already archived: $TEAM_PROD"
-  fi
+# Pro monthly: $79 = 7900 cents
+PRO_79_MO=$(find_price_by_metadata tinyzkp_price_id pro_monthly_v2 || true)
+if [ -z "$PRO_79_MO" ]; then
+  PRO_79_MO=$(sk -X POST "$API/prices" \
+    -d product="$PRO_PROD" \
+    -d currency=usd \
+    -d unit_amount=7900 \
+    -d "recurring[interval]=month" \
+    -d "metadata[tinyzkp_price_id]=pro_monthly_v2" \
+    | jq -r .id)
+  log "created Pro monthly v2 (\$79/mo): $PRO_79_MO"
+else
+  log "Pro monthly v2 exists: $PRO_79_MO"
 fi
-for label in team_monthly team_annual; do
-  P=$(find_price_by_metadata tinyzkp_price_id $label || true)
-  if [ -n "$P" ]; then
-    ACTIVE=$(sk "$API/prices/$P" | jq -r .active)
-    if [ "$ACTIVE" = "true" ]; then
-      sk -X POST "$API/prices/$P" -d active=false > /dev/null
-      log "archived $label price: $P"
-    fi
-  fi
-done
+
+# Pro annual: $79 * 12 * 0.8 = $758.40 → 75840 cents
+PRO_79_YR=$(find_price_by_metadata tinyzkp_price_id pro_annual_v2 || true)
+if [ -z "$PRO_79_YR" ]; then
+  PRO_79_YR=$(sk -X POST "$API/prices" \
+    -d product="$PRO_PROD" \
+    -d currency=usd \
+    -d unit_amount=75840 \
+    -d "recurring[interval]=year" \
+    -d "metadata[tinyzkp_price_id]=pro_annual_v2" \
+    | jq -r .id)
+  log "created Pro annual v2 (\$758.40/yr, -20%): $PRO_79_YR"
+else
+  log "Pro annual v2 exists: $PRO_79_YR"
+fi
+
+# ─── 5. Keep Scale at $199 ──────────────────────────────────────────────────
+SCALE_PROD=$(find_product_by_metadata tinyzkp_tier scale || true)
+if [ -z "$SCALE_PROD" ]; then
+  log "Scale product not found. Create or map STRIPE_PRICE_ID_SCALE manually."
+else
+  log "Scale product remains active: $SCALE_PROD"
+fi
 
 # ─── 6. Archive old Developer $9 prices ──────────────────────────────────────
 for label in developer_monthly developer_annual; do
@@ -206,8 +216,8 @@ for label in developer_monthly developer_annual; do
 done
 
 # ─── 7. Print Cloudflare Pages secrets to set ────────────────────────────────
-PRO_MONTHLY=$(find_price_by_metadata tinyzkp_price_id scale_monthly || find_price_by_metadata tinyzkp_price_id pro_monthly || true)
-PRO_ANNUAL=$(find_price_by_metadata tinyzkp_price_id scale_annual || find_price_by_metadata tinyzkp_price_id pro_annual || true)
+SCALE_MONTHLY=$(find_price_by_metadata tinyzkp_price_id scale_monthly || true)
+SCALE_ANNUAL=$(find_price_by_metadata tinyzkp_price_id scale_annual || true)
 
 cat <<EOF
 
@@ -217,8 +227,9 @@ cat <<EOF
   Products:
     Compute:           $COMPUTE_PROD
     Developer:         $DEV_PROD
-    Pro (was Scale):   ${PRO_PROD:-(not found)}
-    Team:              archived
+    Pro:               $PRO_PROD
+    Scale:             ${SCALE_PROD:-(not found)}
+    Team:              legacy fallback only
 
   Meters:
     proof_usage:       (existing — unchanged)
@@ -228,8 +239,10 @@ cat <<EOF
     Compute (per-M-steps):       $COMPUTE_PRICE
     Developer monthly (\$19):     $DEV_19_MO
     Developer annual (\$182.40):  $DEV_19_YR
-    Pro monthly (\$199):          ${PRO_MONTHLY:-(not found)}
-    Pro annual (\$1,910):         ${PRO_ANNUAL:-(not found)}
+    Pro monthly (\$79):           $PRO_79_MO
+    Pro annual (\$758.40):        $PRO_79_YR
+    Scale monthly (\$199):        ${SCALE_MONTHLY:-(not found)}
+    Scale annual (\$1,910):       ${SCALE_ANNUAL:-(not found)}
 
 ═══════════════════════════════════════════════════════════════════════
 
@@ -243,21 +256,26 @@ cat <<EOF
       --project-name tinyzkp <<< "$DEV_19_YR"
 
     wrangler pages secret put STRIPE_PRICE_ID_PRO \\
-      --project-name tinyzkp <<< "${PRO_MONTHLY:-<set-manually>}"
+      --project-name tinyzkp <<< "$PRO_79_MO"
 
     wrangler pages secret put STRIPE_PRICE_ID_PRO_ANNUAL \\
-      --project-name tinyzkp <<< "${PRO_ANNUAL:-<set-manually>}"
+      --project-name tinyzkp <<< "$PRO_79_YR"
+
+    wrangler pages secret put STRIPE_PRICE_ID_SCALE \\
+      --project-name tinyzkp <<< "${SCALE_MONTHLY:-<set-manually>}"
+
+    wrangler pages secret put STRIPE_PRICE_ID_SCALE_ANNUAL \\
+      --project-name tinyzkp <<< "${SCALE_ANNUAL:-<set-manually>}"
 
     wrangler pages secret put STRIPE_PRICE_ID_TRACE_STEP_METERED \\
       --project-name tinyzkp <<< "$COMPUTE_PRICE"
 
-  Optionally remove the now-unused legacy secrets:
+  Optionally remove these legacy fallback secrets after all old checkout links
+  are retired:
     wrangler pages secret delete STRIPE_PRICE_ID_TEAM         --project-name tinyzkp
     wrangler pages secret delete STRIPE_PRICE_ID_TEAM_ANNUAL  --project-name tinyzkp
-    wrangler pages secret delete STRIPE_PRICE_ID_SCALE        --project-name tinyzkp
-    wrangler pages secret delete STRIPE_PRICE_ID_SCALE_ANNUAL --project-name tinyzkp
 
   Existing subscribers on the old Developer (\$9) and Team (\$49) prices
-  remain on their grandfathered rates until renewal. Email them with the
-  v2 announcement before their renewal date.
+  remain on their grandfathered rates until renewal. New storefront checkout
+  should advertise only Free / Developer / Pro / Scale / Compute.
 EOF

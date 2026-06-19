@@ -171,7 +171,7 @@
     },
     {
       "name": "prove_template",
-      "description": "Generate a zero-knowledge proof from a template ID and parameters. Returns a job_id — call poll_job to check progress. Consumes one proof from your monthly quota.",
+      "description": "Generate a state-transition receipt from a template ID and parameters. Returns a job_id — call poll_job to check progress. Billable prove job; verification remains free.",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -283,7 +283,7 @@
   ],
   "metadata": {
     "displayName": "TinyZKP — Verifiable Receipts for AI Agents",
-    "description": "Mint zero-knowledge proofs as a tool call. ZK-STARK, transparent (no trusted setup), post-quantum (hash-based). Accumulator-step state-transition proofs available now. Free 100 proofs/month, no credit card.",
+    "description": "Mint transparent STARK state-transition receipts as a tool call. No trusted setup, hash-based verification, and accumulator_step available now. Free 100 proofs/month, no credit card.",
     "homepage": "https://tinyzkp.com",
     "documentation": "https://tinyzkp.com/docs",
     "repository": "https://github.com/logannye/hc-stark",

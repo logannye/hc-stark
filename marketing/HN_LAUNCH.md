@@ -11,7 +11,7 @@ Show HN: Verifiable receipts for AI agent actions (free MCP server)
 Alternate title to A/B if the first underperforms:
 
 ```
-Show HN: TinyZKP — ZK proofs as one API call, native MCP for Claude/Cursor
+Show HN: TinyZKP — state-transition receipts as one API call
 ```
 
 ---
@@ -19,13 +19,14 @@ Show HN: TinyZKP — ZK proofs as one API call, native MCP for Claude/Cursor
 **Body:**
 
 ```
-TinyZKP is a hosted ZK-STARK proving service. The angle that makes it different from
-Sindri/Bonsai/etc. is that we ship as an MCP server — your Claude/Cursor/OpenAI agent
-can mint a tamper-evident proof for any computation as a native tool call:
+TinyZKP is a hosted STARK receipt service. The angle that makes it different from
+general zkVM/prover-network products is that we focus on one narrow primitive today:
+state-transition receipts. Your Claude/Cursor/OpenAI agent can mint a tamper-evident
+proof that a declared state transition happened as a native tool call:
 
     claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 
-After that, the agent has 10 ZK tools (prove, verify, list_workloads, ...) the same
+After that, the agent has 10 TinyZKP tools (prove, verify, list_workloads, ...) the same
 way it has filesystem or git. Proofs go through state-transition / accumulator
 templates — no circuit writing.
 
@@ -38,9 +39,12 @@ What it's good for today:
 - Verifiable state-transition receipts ("start at X, these steps reach Y" — tamper-evident, no re-run)
 - Audit trails (accumulator chains, state-transition proofs)
 - Browser-side verification via @tinyzkp/verify (WASM, 785K)
+- Long state-transition traces where O(√T) memory avoids reserving high-RAM prover machines
 
 What it's NOT yet:
 - A zkVM (Risc0/SP1 territory — different product)
+- A zkML service
+- A privacy range-proof API
 
 Free tier: https://tinyzkp.com/signup
 Source: https://github.com/logannye/hc-stark

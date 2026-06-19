@@ -91,4 +91,4 @@ Free key:  tinyzkp.com/signup
 - After 24 hours, if it went well, write a single-tweet update: "X signups today; the most-asked-for next template was [Y]. Building it next." — drives the second wave.
 - DO NOT auto-DM new followers. It tanks deliverability and looks desperate.
 - If the thread underperforms (< 50 likes after 4 hours), DON'T amplify with a paid boost. Pull it next day and try a different hook the following week. Twitter punishes stale ad-boosted dev-tools posts hard.
-- Honesty guardrails for any reply you write live: the audited default path proves a **public** delta chain — do **not** claim it hides inputs (that's the gated `range_proof`, not shipped), do **not** promise a finished 100M-step proof (the per-job time cap is real), and do **not** imply zkVM/zkML is available.
+- Honesty guardrails for any reply you write live: the audited default path proves a **public** delta chain — do **not** claim it hides inputs, do **not** promise a finished 100M-step proof beyond the live cap, and do **not** imply zkVM/zkML is available.

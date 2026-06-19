@@ -107,13 +107,13 @@ class TestComputePlanParity:
             f"sync_usage.DISCOUNT_FACTORS['compute']={got} ≠ 1.0 (compute is metered by steps)"
         )
 
-    def test_pro_resolves_to_scale_discount(self):
-        """'pro' is a plan_alias for 'scale'; its discount must match scale's 0.60."""
+    def test_pro_has_intermediate_discount(self):
+        """Pro is the public self-serve intermediate tier at 25% off."""
         cfg = _pricing_json()
-        scale_discount = cfg["plans"]["scale"]["discount"]
+        pro_discount = cfg["plans"]["pro"]["discount"]
         got = sync_usage.DISCOUNT_FACTORS.get("pro", 1.0)
-        assert got == scale_discount, (
-            f"sync_usage.DISCOUNT_FACTORS['pro']={got} ≠ scale discount {scale_discount}"
+        assert got == pro_discount == 0.75, (
+            f"sync_usage.DISCOUNT_FACTORS['pro']={got} ≠ pro discount {pro_discount}"
         )
 
 
@@ -151,7 +151,7 @@ class TestBillingMetersParity:
 
     def test_non_compute_meter_event_for_plan(self):
         """meter_event_for_plan returns (proof_usage, cents) for non-compute plans."""
-        for plan in ("free", "developer", "scale", "pro", "team"):
+        for plan in ("free", "developer", "pro", "scale", "team"):
             trace_len = 50_000  # 50K steps → tier 2 → 50 cents base
             meter_name, value = sync_usage.meter_event_for_plan(plan, trace_len)
             assert meter_name == sync_usage.METER_EVENT_NAME, (

@@ -99,16 +99,14 @@ impl PlanLimits {
                 monthly_cap_cents: 500,
                 max_prove_seconds: 300, // 5 min
             },
-            "team" => Self {
+            "pro" | "team" => Self {
                 prove_rpm: 300,
                 verify_rpm: 900,
                 max_inflight: 8,
                 monthly_cap_cents: 250_000,
                 max_prove_seconds: 1800, // 30 min
             },
-            "scale" | "pro" => Self {
-                // "pro" is the legacy Stripe product label for scale; pricing.json
-                // plan_aliases routes it here. Both get scale's limits.
+            "scale" => Self {
                 prove_rpm: 500,
                 verify_rpm: 1500,
                 max_inflight: 16,
@@ -3541,44 +3539,44 @@ mod pricing_parity_tests {
         }
     }
 
-    /// "pro" is a plan_alias for "scale" in pricing.json. PlanLimits::for_plan
-    /// must route it to scale's exact limits; the default arm must NOT swallow it.
+    /// "team" is a plan_alias for "pro" in pricing.json. PlanLimits::for_plan
+    /// must route it to Pro's exact limits; the default arm must NOT swallow it.
     #[test]
-    fn pro_alias_resolves_to_scale_limits() {
-        let scale_limits = PlanLimits::for_plan("scale");
+    fn team_alias_resolves_to_pro_limits() {
         let pro_limits = PlanLimits::for_plan("pro");
+        let team_limits = PlanLimits::for_plan("team");
         assert_eq!(
-            pro_limits.prove_rpm, scale_limits.prove_rpm,
-            "pro: prove_rpm must match scale"
+            team_limits.prove_rpm, pro_limits.prove_rpm,
+            "team: prove_rpm must match pro"
         );
         assert_eq!(
-            pro_limits.verify_rpm, scale_limits.verify_rpm,
-            "pro: verify_rpm must match scale"
+            team_limits.verify_rpm, pro_limits.verify_rpm,
+            "team: verify_rpm must match pro"
         );
         assert_eq!(
-            pro_limits.max_inflight, scale_limits.max_inflight,
-            "pro: max_inflight must match scale"
+            team_limits.max_inflight, pro_limits.max_inflight,
+            "team: max_inflight must match pro"
         );
         assert_eq!(
-            pro_limits.monthly_cap_cents, scale_limits.monthly_cap_cents,
-            "pro: monthly_cap_cents must match scale"
+            team_limits.monthly_cap_cents, pro_limits.monthly_cap_cents,
+            "team: monthly_cap_cents must match pro"
         );
         assert_eq!(
-            pro_limits.max_prove_seconds, scale_limits.max_prove_seconds,
-            "pro: max_prove_seconds must match scale"
+            team_limits.max_prove_seconds, pro_limits.max_prove_seconds,
+            "team: max_prove_seconds must match pro"
         );
     }
 
-    /// "pro" discount factor must match scale's (0.60). Ensures the billing
-    /// calculation doesn't accidentally use the developer fallback (1.0) for
-    /// pro-plan tenants.
+    /// "pro" discount factor must match its public intermediate tier (0.75).
+    /// Ensures the billing calculation doesn't accidentally use the developer
+    /// fallback (1.0) for pro-plan tenants.
     #[test]
-    fn pro_discount_matches_scale() {
-        let want = 0.60f64;
+    fn pro_discount_matches_intermediate_tier() {
+        let want = 0.75f64;
         let got = usage_log::discount_factor_pub("pro");
         assert!(
             (got - want).abs() < 1e-9,
-            "pro discount {got} ≠ scale discount {want}"
+            "pro discount {got} ≠ intermediate discount {want}"
         );
     }
 
@@ -3994,9 +3992,9 @@ mod bill05_batch_cap_tests {
         assert_eq!(estimated_job_cost_cents(10_000, "developer"), 50);
         // Scale (40% off): 50 * 0.60 = 30.
         assert_eq!(estimated_job_cost_cents(10_000, "scale"), 30);
-        // "pro" is the legacy alias for scale — same discounted cost.
-        assert_eq!(estimated_job_cost_cents(10_000, "pro"), 30);
-        // Team (25% off): round(50 * 0.75) = round(37.5) = 38.
+        // Pro (25% off): round(50 * 0.75) = round(37.5) = 38.
+        assert_eq!(estimated_job_cost_cents(10_000, "pro"), 38);
+        // Team is a legacy alias for Pro.
         assert_eq!(estimated_job_cost_cents(10_000, "team"), 38);
     }
 

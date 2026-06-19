@@ -1,7 +1,7 @@
 {
   "name": "@tinyzkp/cli",
   "version": "0.1.0",
-  "description": "Generate and verify TinyZKP zero-knowledge proofs from your terminal. One command, no SDK setup.",
+  "description": "Generate and verify TinyZKP state-transition receipts from your terminal. One command, no SDK setup.",
   "keywords": [
     "zk",
     "zero-knowledge",
