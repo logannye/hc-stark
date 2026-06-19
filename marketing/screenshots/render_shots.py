@@ -9,7 +9,7 @@ Inputs:
 Output:
   - marketing/screenshots/shot1_range_prove.png
   - marketing/screenshots/shot2_verify.png
-  - marketing/screenshots/shot3_policy_compliance.png
+  - marketing/screenshots/shot3_agent_state_transition.png
 
 Usage: python3 render_shots.py
 """
@@ -251,9 +251,9 @@ def render_to_png(html: str, out_path: Path):
 
 def main():
     shots = [
-        ("shot1_range_prove.png",       shot1_html()),
+        ("shot1_state_transition.png",  shot1_html()),
         ("shot2_verify.png",            shot2_html()),
-        ("shot3_policy_compliance.png", shot3_html()),
+        ("shot3_agent_state_transition.png", shot3_html()),
     ]
     for name, html in shots:
         out = ROOT / name

@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TinyZKP Compute — O(√N) Proving for zkVM, zkML, Rollups</title>
-<meta name="description" content="A STARK prover with O(√N) memory, where N is the size of the computation. Prove a 100M-step trace on commodity hardware. $0.50 per million trace steps, no monthly base fee.">
+<title>TinyZKP Compute — O(√N) STARK Proving for Long State Transitions</title>
+<meta name="description" content="A STARK prover with O(√N) memory, where N is the trace length. Price large state-transition proofs by trace step instead of renting high-RAM prover infrastructure. $0.50 per million trace steps, no monthly base fee.">
 <meta property="og:title" content="TinyZKP Compute — O(√N) Proving for Long Computations">
 <meta property="og:description" content="Most STARK systems need O(N) memory — linear in computation size. TinyZKP needs only O(√N). $0.50/M trace steps, usage-based.">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
@@ -110,6 +110,7 @@ footer .right a:hover{color:var(--muted)}
   </button>
   <div class="links">
     <a href="/#pricing">Pricing</a>
+    <a href="/verify">Verify</a>
     <a href="/docs">Quickstart</a>
     <a href="/compute" style="color:var(--accent)">Compute</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
@@ -122,11 +123,11 @@ footer .right a:hover{color:var(--muted)}
 
 <div class="content">
 
-<div class="eyebrow">For zkVM, zkML, and rollup teams</div>
+<div class="eyebrow">For long state-transition traces</div>
 
 <h1>A STARK prover with <span class="accent">O(&radic;N)</span> memory.</h1>
 
-<p class="lede">Most STARK systems need <strong>O(N) memory</strong> — linear in the size of the computation, where N is the number of trace steps. A 100M-step proof needs hundreds of GB of RAM, or aggressive segmentation and recursive aggregation. TinyZKP needs only <strong>O(&radic;N)</strong> — that same proof fits comfortably on a 16 GB laptop. Transparent (no trusted setup), post-quantum (hash-based).</p>
+<p class="lede">Most STARK systems need <strong>O(N) memory</strong> — linear in the trace length. Large traces push you toward 128&ndash;512 GB machines, segmentation, and recursive aggregation. TinyZKP needs only <strong>O(&radic;N)</strong>, so the commercial model can be simple: <strong>$0.50 per million trace steps</strong>, no monthly base fee, and no prover fleet to operate. Transparent (no trusted setup), post-quantum (hash-based).</p>
 
 <div class="cta-row">
   <a class="cta" href="/signup?plan=compute">Start at $0.50 / M trace steps</a>
@@ -149,7 +150,7 @@ footer .right a:hover{color:var(--muted)}
   </tbody>
 </table>
 
-<p style="font-size:13px;color:var(--dim);margin-top:8px">* Architectural projection. The <strong>live single-proof cap is 100M steps</strong>; 1B-step proving is a roadmap target, not available today. What's provable on Compute today: long accumulator / state-transition traces up to 100M steps — zkVM and zkML proving (below) are in development.</p>
+<p style="font-size:13px;color:var(--dim);margin-top:8px">* Architectural projection. The <strong>live single-proof cap is 100M steps</strong>; 1B-step proving is a roadmap target, not available today. What's provable on Compute today: long accumulator / state-transition traces. zkVM and zkML proving are early-access roadmap work, not default self-serve capabilities.</p>
 
 <p>The trade-off is honest: extra time for less memory. We pay roughly <code>&radic;N</code> more cycles to use <code>&radic;N</code> less RAM. For large computations, this trade-off is the only one that matters — RAM is the wall you hit first, and recovering memory unlocks workloads that conventional provers simply cannot run on commodity hardware.</p>
 
@@ -160,7 +161,7 @@ footer .right a:hover{color:var(--muted)}
 
 <h2>Where the moat applies</h2>
 
-<h3>zkVM execution proofs <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(in development)</span></h3>
+<h3>zkVM execution proofs <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(early access roadmap)</span></h3>
 
 <p>Long-running programs, many syscalls, complex state. RISC Zero, SP1, and similar systems handle this via <em>continuations</em> — splitting the trace into chunks and recursively aggregating. That works, but it adds:</p>
 <ul>
@@ -168,15 +169,15 @@ footer .right a:hover{color:var(--muted)}
   <li><strong>Aggregation overhead</strong> — every chunk needs to be re-verified to be folded.</li>
   <li><strong>Operational complexity</strong> — orchestrating the chunked prover fleet.</li>
 </ul>
-<p>The O(&radic;N) architecture is designed to run the whole trace in a single shot. Full zkVM support is in development; <a href="/contact">contact us</a> for early access.</p>
+<p>The O(&radic;N) architecture is designed to run the whole trace in a single shot. Full zkVM support is not yet a default self-serve product; <a href="/contact">contact us</a> for early-access discussions.</p>
 
-<h3>zkML inference receipts <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(in development)</span></h3>
+<h3>zkML inference receipts <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(early access roadmap)</span></h3>
 
-<p>Proving a neural net forward-pass. Memory usage is dominated by the largest layer's intermediate activations. Conventional STARK provers need RAM proportional to the entire flattened computation graph. The O(&radic;N) architecture bounds memory to the largest <em>block</em>, not the largest layer or the dataset. zkML proof generation is in development; <a href="/contact">contact us</a> to discuss your use case.</p>
+<p>Proving a neural net forward-pass. Memory usage is dominated by the largest layer's intermediate activations. Conventional STARK provers need RAM proportional to the entire flattened computation graph. The O(&radic;N) architecture bounds memory to the largest <em>block</em>, not the largest layer or the dataset. zkML proof generation is early-access roadmap work; <a href="/contact">contact us</a> to discuss your use case.</p>
 
-<h3>Rollup batch attestation</h3>
+<h3>Rollup batch attestation <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(early access roadmap)</span></h3>
 
-<p>Sequencers want to batch many transactions. Today, the batch size is bounded by RAM — beyond a few thousand transactions, you need a recursive aggregator. With TinyZKP, the batch size is bounded by time and bandwidth, not memory. A continuously-running prover is feasible on a moderately-sized box.</p>
+<p>Sequencers want to batch many transactions. Today, the batch size is bounded by RAM — beyond a few thousand transactions, you often need a recursive aggregator. TinyZKP's architecture is a fit for this shape, but custom rollup batch proving is not a default self-serve template yet. The self-serve Compute lane today is for long accumulator / state-transition traces.</p>
 
 <h2>Cost calculator</h2>
 
@@ -185,11 +186,11 @@ footer .right a:hover{color:var(--muted)}
     <div class="calc-input">
       <label for="calc-steps">Trace steps per proof</label>
       <select id="calc-steps" onchange="recalcCompute()">
-        <option value="1000000">1M (small zkVM run)</option>
-        <option value="5000000" selected>5M (typical zkVM batch)</option>
-        <option value="10000000">10M (rollup batch)</option>
-        <option value="50000000">50M (large zkML inference)</option>
-        <option value="100000000">100M (heavy zkVM workload)</option>
+        <option value="1000000">1M (state-transition trace)</option>
+        <option value="5000000" selected>5M (large receipt)</option>
+        <option value="10000000">10M (long audit trail)</option>
+        <option value="50000000">50M (heavy state transition)</option>
+        <option value="100000000">100M (live cap)</option>
       </select>
     </div>
     <div class="calc-input">
@@ -216,9 +217,9 @@ footer .right a:hover{color:var(--muted)}
 
 <ul>
   <li><strong>$0.50 per million trace steps.</strong> No monthly base fee. Pay for what you prove.</li>
-  <li><strong>Up to 100M-step traces per single proof.</strong> Larger workloads → talk to us about Enterprise.</li>
+  <li><strong>Up to 100M-step traces per single proof.</strong> For long accumulator / state-transition traces; larger workloads → talk to us about Enterprise.</li>
   <li><strong>Transparent, post-quantum (hash-based).</strong> Same ZK-STARK guarantees as the rest of the platform; no trusted setup.</li>
-  <li><strong>100 RPM, 8 inflight jobs.</strong> Enough headroom for production zkVM/zkML pipelines.</li>
+  <li><strong>100 RPM, 8 inflight jobs.</strong> Enough headroom for bursty large-trace proving without a reserved cluster.</li>
   <li><strong>60-minute max prove time per job.</strong> Anything longer almost always benefits from proof aggregation; we'll help you architect it.</li>
   <li><strong>Email support, 24-hour response SLA.</strong> Your job ID, our triage queue.</li>
 </ul>
@@ -230,7 +231,7 @@ footer .right a:hover{color:var(--muted)}
 
 <h2>Get started</h2>
 
-<p>Compute is self-serve from <code>$0/mo + usage</code>. Sign up, paste your API key, prove your first 1M-step trace in under a minute.</p>
+<p>Compute is self-serve from <code>$0/mo + usage</code>. Sign up, paste your API key, and prove your first large state-transition trace without provisioning high-RAM hardware.</p>
 
 <div class="cta-row">
   <a class="cta" href="/signup?plan=compute">Start usage-based</a>

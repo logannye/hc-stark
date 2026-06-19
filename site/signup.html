@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign Up — TinyZKP</title>
-<meta name="description" content="Get a free TinyZKP API key and start generating ZK-STARK proofs in under a minute.">
+<meta name="description" content="Get a TinyZKP API key and start minting transparent ZK-STARK state-transition receipts in under a minute.">
 <meta property="og:title" content="Sign Up — TinyZKP">
-<meta property="og:description" content="Get a free API key and start generating ZK-STARK proofs. 100 proofs/month free, no credit card.">
+<meta property="og:description" content="Start with 100 state-transition receipts/month free, no credit card. Upgrade to Developer, Pro, or Scale when volume grows.">
 <meta property="og:url" content="https://tinyzkp.com/signup">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <meta name="twitter:card" content="summary">
@@ -139,6 +139,7 @@ footer .right a:hover{color:var(--muted)}
   </button>
   <div class="links">
     <a href="/#pricing">Pricing</a>
+    <a href="/verify">Verify</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
@@ -156,7 +157,7 @@ footer .right a:hover{color:var(--muted)}
 <main>
 <div class="signup-card">
   <h1>Get Your API Key</h1>
-  <p class="sub">Choose a plan and start generating proofs in under a minute.</p>
+  <p class="sub">Choose a plan and start minting verifiable state-transition receipts in under a minute.</p>
 
   <!-- Monthly/Annual cadence toggle -->
   <div class="cadence-toggle" id="cadence-toggle" style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:18px;font-size:13px">
@@ -166,7 +167,7 @@ footer .right a:hover{color:var(--muted)}
       style="background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:6px 16px;border-radius:6px;font-family:var(--mono);font-weight:600;cursor:pointer;font-size:12px;letter-spacing:.02em">Annual <span style="color:var(--green);font-weight:700">&minus;20%</span></button>
   </div>
 
-  <div class="plan-toggle" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+  <div class="plan-toggle" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
     <div class="plan-option selected" data-plan="free" onclick="selectPlan('free')">
       <div class="plan-label">Free</div>
       <div class="plan-price free">Free forever</div>
@@ -175,10 +176,18 @@ footer .right a:hover{color:var(--muted)}
       <div class="plan-label">Developer</div>
       <div class="plan-price" id="plan-price-developer">$19/mo + usage</div>
     </div>
-    <div class="plan-option" data-plan="scale" onclick="selectPlan('scale')" style="position:relative">
+    <div class="plan-option" data-plan="pro" onclick="selectPlan('pro')" style="position:relative">
       <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--bg);font-size:9px;font-weight:700;padding:2px 10px;border-radius:8px;letter-spacing:.06em;text-transform:uppercase">Popular</div>
+      <div class="plan-label">Pro</div>
+      <div class="plan-price" id="plan-price-pro">$79/mo + usage</div>
+    </div>
+    <div class="plan-option" data-plan="scale" onclick="selectPlan('scale')">
       <div class="plan-label">Scale</div>
       <div class="plan-price" id="plan-price-scale">$199/mo + usage</div>
+    </div>
+    <div class="plan-option" data-plan="compute" onclick="selectPlan('compute')">
+      <div class="plan-label">Compute</div>
+      <div class="plan-price" id="plan-price-compute">$0.50/M steps</div>
     </div>
   </div>
 
@@ -194,6 +203,12 @@ footer .right a:hover{color:var(--muted)}
     <li>Verification always free</li>
     <li>Usage-based billing via Stripe</li>
   </ul>
+  <ul class="plan-features" id="features-pro" style="display:none">
+    <li>25% off all per-proof rates</li>
+    <li>300 RPM, 8 concurrent jobs, 30 min timeout</li>
+    <li>$2,500/mo spending cap</li>
+    <li>Verification always free</li>
+  </ul>
   <ul class="plan-features" id="features-scale" style="display:none">
     <li>40% off all per-proof rates</li>
     <li>500 RPM, 16 concurrent jobs, 60 min timeout</li>
@@ -201,7 +216,13 @@ footer .right a:hover{color:var(--muted)}
     <li>Verification always free</li>
     <li>Dedicated support</li>
   </ul>
-  <p style="text-align:center;font-size:12px;color:var(--dim);margin-top:14px">Need an intermediate tier? <a href="/contact" style="color:var(--accent)">Contact us</a> for custom pricing.</p>
+  <ul class="plan-features" id="features-compute" style="display:none">
+    <li>No monthly base fee</li>
+    <li>$0.50 per million trace steps, $0.05 minimum</li>
+    <li>Large state-transition traces up to the live cap</li>
+    <li>Use when the alternative is high-RAM prover infrastructure</li>
+  </ul>
+  <p style="text-align:center;font-size:12px;color:var(--dim);margin-top:14px">Need reserved capacity or contractual terms? <a href="/contact" style="color:var(--accent)">Contact us</a>.</p>
 
   <form id="signup-form">
     <div class="form-group">
@@ -250,11 +271,15 @@ footer .right a:hover{color:var(--muted)}
   var planLabels = {
     monthly: {
       developer: '$19/mo + usage',
+      pro:       '$79/mo + usage',
       scale:     '$199/mo + usage',
+      compute:   '$0.50/M steps',
     },
     annual: {
       developer: '$182.40/yr + usage',
+      pro:       '$758.40/yr + usage',
       scale:     '$1,910.40/yr + usage',
+      compute:   '$0.50/M steps',
     },
   };
 
@@ -263,12 +288,16 @@ footer .right a:hover{color:var(--muted)}
       monthly: {
         free:      { btn: 'Get Free API Key',                                btnClass: 'btn-submit free-btn', hint: 'Your API key will be emailed instantly',                       paid: false },
         developer: { btn: 'Start with Developer \u2014 $19/mo',                btnClass: 'btn-submit',          hint: "You'll be redirected to Stripe to set up billing",             paid: true },
+        pro:       { btn: 'Subscribe to Pro \u2014 $79/mo',                    btnClass: 'btn-submit',          hint: '$79/mo base + 25% off per-proof rates',                         paid: true },
         scale:     { btn: 'Subscribe to Scale \u2014 $199/mo',                 btnClass: 'btn-submit',          hint: '$199/mo base + 40% off per-proof rates',                        paid: true },
+        compute:   { btn: 'Start Compute \u2014 $0.50/M steps',                btnClass: 'btn-submit',          hint: 'No monthly base; pay for large state-transition traces by step', paid: true },
       },
       annual: {
         free:      { btn: 'Get Free API Key',                                btnClass: 'btn-submit free-btn', hint: 'Your API key will be emailed instantly',                       paid: false },
         developer: { btn: 'Start with Developer \u2014 $182.40/yr',            btnClass: 'btn-submit',          hint: '20% off via annual prepay (\u2248 $15.20/mo equivalent)',        paid: true },
+        pro:       { btn: 'Subscribe to Pro \u2014 $758.40/yr',                btnClass: 'btn-submit',          hint: '20% off via annual prepay + 25% off per-proof rates',           paid: true },
         scale:     { btn: 'Subscribe to Scale \u2014 $1,910.40/yr',            btnClass: 'btn-submit',          hint: '20% off via annual prepay + 40% off per-proof rates',           paid: true },
+        compute:   { btn: 'Start Compute \u2014 $0.50/M steps',                btnClass: 'btn-submit',          hint: 'Compute is pure usage-based; annual billing does not apply',    paid: true },
       },
     };
     return (configs[cadence] && configs[cadence][plan]) || configs.monthly.developer;
@@ -296,19 +325,24 @@ footer .right a:hover{color:var(--muted)}
     document.querySelectorAll('.plan-option').forEach(function(el) {
       el.classList.toggle('selected', el.dataset.plan === plan);
     });
-    ['free', 'developer', 'scale'].forEach(function(p) {
+    ['free', 'developer', 'pro', 'scale', 'compute'].forEach(function(p) {
       var el = document.getElementById('features-' + p);
       if (el) el.style.display = p === plan ? '' : 'none';
     });
-    // Annual toggle is irrelevant for the Free plan; hide it when Free is selected.
+    // Annual toggle is irrelevant for Free and Compute; hide it there.
     var cadenceToggle = document.getElementById('cadence-toggle');
-    if (cadenceToggle) cadenceToggle.style.display = (plan === 'free') ? 'none' : 'flex';
+    if (cadenceToggle) cadenceToggle.style.display = (plan === 'free' || plan === 'compute') ? 'none' : 'flex';
 
     var cfg = planConfig(plan, currentCadence);
     btn.textContent = cfg.btn;
     btn.className = cfg.btnClass;
     hintText.textContent = cfg.hint;
   };
+
+  var requestedPlan = (params.get('plan') || '').toLowerCase();
+  if (['free', 'developer', 'pro', 'scale', 'compute'].indexOf(requestedPlan) !== -1) {
+    selectPlan(requestedPlan);
+  }
 
   function showError(msg) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
   function hideError() { errorEl.style.display = 'none'; }

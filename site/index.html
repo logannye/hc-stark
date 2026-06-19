@@ -15,9 +15,9 @@
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="TinyZKP — Zero-knowledge proofs as an API. O(√N) memory prover, native MCP for AI agents.">
+<meta property="og:image:alt" content="TinyZKP — transparent state-transition receipts as an API. O(√N) memory prover, native MCP for AI agents.">
 <meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
-<meta name="twitter:image:alt" content="TinyZKP — Zero-knowledge proofs as an API. O(√N) memory.">
+<meta name="twitter:image:alt" content="TinyZKP — transparent state-transition receipts as an API. O(√N) memory.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://tinyzkp.com">
 <script type="application/ld+json">
@@ -44,7 +44,7 @@
       "inLanguage": "en"
     },
     {
-      "@type": "SoftwareApplication",
+  "@type": "SoftwareApplication",
       "@id": "https://tinyzkp.com/#app",
       "name": "TinyZKP",
       "applicationCategory": "DeveloperApplication",
@@ -53,8 +53,9 @@
       "offers": [
         {"@type": "Offer", "name": "Free",      "price": "0",   "priceCurrency": "USD", "description": "100 proofs/month, no credit card"},
         {"@type": "Offer", "name": "Developer", "price": "19",  "priceCurrency": "USD", "description": "$19/month — usage-metered per proof, $500/mo cap"},
+        {"@type": "Offer", "name": "Pro",       "price": "79",  "priceCurrency": "USD", "description": "$79/month — 25% off per-proof rates, $2.5K/mo cap"},
         {"@type": "Offer", "name": "Scale",     "price": "199", "priceCurrency": "USD", "description": "$199/month — 40% off per-proof rates, $10K/mo cap"},
-        {"@type": "Offer", "name": "Compute",   "price": "0",   "priceCurrency": "USD", "description": "Usage-based: $0.50 per million trace steps. Large state-transition traces; zkVM and zkML in development."}
+        {"@type": "Offer", "name": "Compute",   "price": "0",   "priceCurrency": "USD", "description": "Usage-based: $0.50 per million trace steps. Large state-transition traces today; zkVM and zkML are early-access roadmap work."}
       ],
       "aggregateRating": null,
       "publisher": {"@id": "https://tinyzkp.com/#org"}
@@ -65,10 +66,10 @@
       "mainEntity": [
         {
           "@type": "Question",
-          "name": "How do I add ZK proofs to my AI agent?",
+          "name": "How do I add state-transition receipts to my AI agent?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Run claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com (or the equivalent for your MCP client). Your agent gets 10 ZK proof tools as native function calls. Free tier: 100 proofs/month, no credit card."
+            "text": "Run claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com (or the equivalent for your MCP client). Your agent gets 10 TinyZKP tools as native function calls. Free tier: 100 proofs/month, no credit card."
           }
         },
         {
@@ -76,7 +77,7 @@
           "name": "Is TinyZKP zero-knowledge?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. TinyZKP uses ZK-STARKs — transparent (no trusted setup), post-quantum (hash-based), and supports a ZK-masked mode that hides the computation as well as the inputs."
+            "text": "TinyZKP uses STARKs with transparent setup and hash-based verification. The default public product is a transparent state-transition receipt, not an input-privacy claim. Privacy-oriented modes should be used only where explicitly supported and audited."
           }
         },
         {
@@ -131,9 +132,9 @@
   --mono:'IBM Plex Mono',Consolas,'Liberation Mono',Menlo,monospace;
   --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
 }
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;overflow-x:hidden;width:100%}
 body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;
-  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden;width:100%}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 
@@ -153,7 +154,7 @@ a:focus-visible,button:focus-visible{outline-offset:3px}
 /* Smooth transitions on theme-level elements */
 img,svg{vertical-align:middle}
 
-.container{max-width:1100px;margin:0 auto;padding:0 24px}
+.container{width:100%;max-width:1100px;margin:0 auto;padding:0 24px}
 
 /* Dot grid background */
 body::before{content:'';position:fixed;inset:0;z-index:-2;
@@ -208,6 +209,7 @@ nav .nav-cta:hover{transform:translateY(-1px);box-shadow:0 4px 20px var(--accent
   background:linear-gradient(135deg,var(--accent) 0%,#69f5e8 40%,var(--accent2) 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;position:relative;
   text-wrap:balance}
+.mobile-title{display:none}
 .hero .sub{font-size:clamp(15px,1.8vw,18px);color:var(--muted);margin:20px auto 36px;max-width:580px;
   line-height:1.7;font-weight:400;text-wrap:pretty}
 .hero-ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
@@ -409,6 +411,15 @@ footer .right a:hover{color:var(--muted)}
   .pricing-grid{grid-template-columns:1fr 1fr!important}
   .plan-table{margin:40px 16px 0;font-size:12px}
   .plan-table th,.plan-table td{padding:9px 12px}
+  .hero{padding-top:112px}
+  nav .container{width:100vw;max-width:100vw;margin:0;padding:0 24px}
+  .hero h1{font-size:34px;letter-spacing:0;max-width:100%;overflow-wrap:break-word;text-wrap:wrap}
+  .desktop-title{display:none}
+  .mobile-title{display:inline}
+  .hero-pill{display:block;width:100%;max-width:100%;white-space:normal;line-height:1.6;font-size:10.5px;box-sizing:border-box}
+  .hero .sub{max-width:330px}
+  .demo-box{max-width:100%}
+  .demo-body{overflow-x:auto}
   .hero-ctas{flex-direction:column;align-items:center}
   .proof-badges{gap:10px}
 }
@@ -424,6 +435,7 @@ footer .right a:hover{color:var(--muted)}
   </button>
   <div class="links">
     <a href="/try">Try it</a>
+    <a href="/verify">Verify</a>
     <a href="#pricing">Pricing</a>
     <a href="/compute">Compute</a>
     <a href="/docs">Quickstart</a>
@@ -444,7 +456,7 @@ footer .right a:hover{color:var(--muted)}
 <section class="hero">
 <div class="container">
   <div class="hero-pill"><span class="pill-dot"></span> Transparent ZK-STARK &middot; No trusted setup &middot; Post-quantum &middot; Native MCP</div>
-  <h1>Prove your state transition.<br>Anyone can check it in 5&nbsp;ms.</h1>
+  <h1><span class="desktop-title">Prove your state transition.<br>Anyone can check it in 5&nbsp;ms.</span><span class="mobile-title">Prove your state<br>transition.<br>Anyone can<br>check it in 5&nbsp;ms.</span></h1>
   <p class="sub">Mint a transparent ZK-STARK receipt that a committed value advanced from X to Y by exactly these steps. Your counterparty or auditor verifies it offline in milliseconds &mdash; no trusted setup, no re-running your system, post-quantum by construction. One <code style="background:var(--bg);padding:1px 6px;border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--border)">curl</code>, or one MCP tool inside Claude and Cursor.</p>
   <p class="sub" style="margin-top:-18px;font-size:14.5px;max-width:640px;color:var(--text)">
     <strong style="color:var(--accent)">Runs in O(&radic;N) memory instead of O(N)</strong>
@@ -609,20 +621,20 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
 <section id="pricing">
 <div class="container">
   <div class="section-label">Pricing</div>
-  <h2 class="section-title">Two products on one prover</h2>
-  <p class="section-sub">Pick the audience that matches what you're shipping. Verification is always free across every tier.</p>
+  <h2 class="section-title">Pay for receipts, or pay for trace steps</h2>
+  <p class="section-sub">Small state-transition receipts use monthly throughput tiers. Large traces use Compute, priced to beat the high-RAM prover infrastructure you would otherwise rent and operate.</p>
 
   <!-- Audience tabs -->
   <div class="audience-tabs fade-in" style="display:flex;gap:8px;justify-content:center;margin:0 auto 36px;max-width:560px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:6px">
-    <button class="audience-tab active" data-audience="agents" onclick="showAudience('agents')" style="flex:1;padding:12px 20px;background:var(--accent);color:var(--bg);border:none;border-radius:10px;font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .2s">For AI agents</button>
-    <button class="audience-tab" data-audience="compute" onclick="showAudience('compute')" style="flex:1;padding:12px 20px;background:transparent;color:var(--muted);border:none;border-radius:10px;font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .2s">For long-trace compute</button>
+    <button class="audience-tab active" data-audience="compute" onclick="showAudience('compute')" style="flex:1;padding:12px 20px;background:var(--accent);color:var(--bg);border:none;border-radius:10px;font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .2s">Long-trace Compute</button>
+    <button class="audience-tab" data-audience="agents" onclick="showAudience('agents')" style="flex:1;padding:12px 20px;background:transparent;color:var(--muted);border:none;border-radius:10px;font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .2s">Receipt volume</button>
   </div>
 
   <!-- AGENT-RECEIPT TIERS -->
-  <div class="audience-panel" id="panel-agents">
-    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">State-transition (accumulator) proofs &mdash; transparent, post-quantum, audited. <strong style="color:var(--text)">Sub-second for typical traces.</strong> Simple monthly plans for steady volume.</p>
+  <div class="audience-panel" id="panel-agents" style="display:none">
+    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">State-transition (accumulator) receipts &mdash; transparent, post-quantum, audited. Use these plans when you have steady receipt volume and want higher throughput, discounts, and spending caps.</p>
 
-    <div class="pricing-grid" style="grid-template-columns:repeat(3,1fr);max-width:960px;margin:0 auto">
+    <div class="pricing-grid" style="grid-template-columns:repeat(4,1fr);max-width:1040px;margin:0 auto">
       <div class="price-card fade-in">
         <div class="tier">Free</div>
         <div class="amount" style="color:var(--green)">$0</div>
@@ -638,6 +650,13 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
         <a class="cta" href="/signup?plan=developer" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Developer</a>
       </div>
       <div class="price-card featured fade-in">
+        <div class="tier">Pro</div>
+        <div class="amount">$79</div>
+        <div class="unit">per month</div>
+        <div class="desc" style="color:var(--accent)">25% off per-proof rates &middot; 300 RPM &middot; 8 inflight &middot; $2.5K/mo cap &middot; 30 min jobs</div>
+        <a class="cta" href="/signup?plan=pro" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Pro</a>
+      </div>
+      <div class="price-card fade-in">
         <div class="tier">Scale</div>
         <div class="amount">$199</div>
         <div class="unit">per month</div>
@@ -646,31 +665,31 @@ console.log(result.ok); <span class="comment">// true — verified in WASM, offl
       </div>
     </div>
 
-    <p style="text-align:center;margin-top:24px;color:var(--dim);font-size:13px">Annual billing: <strong style="color:var(--muted)">20% off</strong> any paid plan. &middot; Need a one-off large trace? Overage is metered per million steps; Scale tier gets a 40% discount off the per-proof base rate. Team-tier pricing is available — <a href="/contact" style="color:var(--accent)">contact us</a> for an intermediate plan.</p>
+    <p style="text-align:center;margin-top:24px;color:var(--dim);font-size:13px">Annual billing: <strong style="color:var(--muted)">20% off</strong> any paid plan. Need a one-off large trace? Use Compute instead of a subscription.</p>
   </div>
 
   <!-- LONG-TRACE COMPUTE TIERS -->
-  <div class="audience-panel" id="panel-compute" style="display:none">
-    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:680px;margin:0 auto 32px">zkVM execution, zkML inference, rollup batches. The tier where the <strong style="color:var(--accent)">O(&radic;N) prover</strong> replaces a 128 GB-RAM machine. Pure usage-based — pay for what you prove.</p>
+  <div class="audience-panel" id="panel-compute">
+    <p style="text-align:center;color:var(--muted);font-size:14px;line-height:1.7;max-width:720px;margin:0 auto 32px">Long state-transition traces are where the <strong style="color:var(--accent)">O(&radic;N) prover</strong> turns into pricing power: you pay for trace steps instead of renting a 128&ndash;512 GB prover box, building a segmentation pipeline, and operating it.</p>
 
     <div class="pricing-grid" style="grid-template-columns:repeat(2,1fr);max-width:720px;margin:0 auto">
       <div class="price-card featured fade-in">
         <div class="tier">Compute</div>
         <div class="amount">$0.50</div>
         <div class="unit">per million trace steps</div>
-        <div class="desc" style="color:var(--accent)">No monthly base fee &middot; up to 100M-step traces &middot; 100 RPM &middot; 8 inflight &middot; email 24h</div>
+        <div class="desc" style="color:var(--accent)">No monthly base fee &middot; $0.05 minimum &middot; long accumulator/state-transition traces &middot; 100 RPM &middot; 8 inflight</div>
         <a class="cta" href="/signup?plan=compute" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Start usage-based</a>
       </div>
       <div class="price-card fade-in">
         <div class="tier">Enterprise</div>
         <div class="amount">Custom</div>
         <div class="unit">reserved capacity</div>
-        <div class="desc">Unlimited trace size &middot; custom SLAs (99.9–99.99%) &middot; dedicated support &middot; SOC 2, BAA, MSA</div>
+        <div class="desc">Reserved workers &middot; higher caps &middot; dedicated support &middot; security review &middot; contractual terms</div>
         <a class="cta cta-secondary" href="/contact" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Talk to us</a>
       </div>
     </div>
 
-    <p style="text-align:center;margin-top:24px;color:var(--dim);font-size:13px;max-width:640px;margin-left:auto;margin-right:auto;line-height:1.7"><strong style="color:var(--muted)">Worked example:</strong> a 5M-step zkVM proof costs $2.50. A team running 1,000/day pays ~$2,500/mo &mdash; competitive with the cheapest 128 GB-RAM prover instance, with no DevOps. <a href="/compute" style="color:var(--accent)">Read the technical brief &rarr;</a></p>
+    <p style="text-align:center;margin-top:24px;color:var(--dim);font-size:13px;max-width:680px;margin-left:auto;margin-right:auto;line-height:1.7"><strong style="color:var(--muted)">Worked examples:</strong> a 10M-step state-transition proof costs $5; a 100M-step proof costs $50. That is the pricing wedge: sporadic large proofs stay far below the monthly cost and operational drag of high-RAM prover infrastructure. <a href="/compute" style="color:var(--accent)">Read the technical brief &rarr;</a></p>
   </div>
 
   <!-- √N architectural advantage callout (visible on both panels) -->
@@ -757,7 +776,7 @@ function showAudience(name) {
     <div class="proof-badge"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Post-quantum (hash-based)</div>
     <div class="proof-badge"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> Open source</div>
     <div class="proof-badge"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Sub-5ms verification</div>
-    <div class="proof-badge"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Zero-knowledge mode</div>
+    <div class="proof-badge"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Transparent receipts</div>
   </div>
 </div>
 </section>

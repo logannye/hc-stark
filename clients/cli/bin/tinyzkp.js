@@ -3,10 +3,10 @@
 //
 // Usage examples:
 //   npx tinyzkp templates
-//   npx tinyzkp prove range_proof '{"min":0,"max":100,"witness_steps":[42,44]}'
+//   npx tinyzkp prove accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}'
 //   npx tinyzkp poll prf_a1b2c3
 //   npx tinyzkp verify proof.json
-//   npx tinyzkp estimate range_proof '{"min":0,"max":100,"witness_steps":[42,44]}'
+//   npx tinyzkp estimate accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}'
 //   npx tinyzkp healthz
 //
 // API key resolution order:
@@ -358,14 +358,14 @@ ${c.bold('AUTH')}
 ${c.bold('EXAMPLES')}
   ${c.dim('# List templates and describe one')}
   tinyzkp templates
-  tinyzkp describe range_proof
+  tinyzkp describe accumulator_step
 
   ${c.dim('# Estimate cost (no key required)')}
-  tinyzkp estimate range_proof '{"min":0,"max":100,"witness_steps":[42,44]}'
+  tinyzkp estimate accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}'
 
   ${c.dim('# Generate a proof end-to-end')}
   export TINYZKP_API_KEY=tzk_xxxx
-  tinyzkp prove range_proof '{"min":0,"max":100,"witness_steps":[42,44]}' --wait > proof.json
+  tinyzkp prove accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}' --wait > proof.json
   tinyzkp verify proof.json
 
 ${c.bold('LINKS')}

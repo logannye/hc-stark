@@ -8,12 +8,12 @@
 #   1. Pre-flight checks the key (must start with sk_live_).
 #   2. Creates one meter and four products with stable idempotency keys, so
 #      running this twice in a row produces zero duplicates.
-#   3. Creates seven prices (Developer monthly + annual, Team monthly + annual,
-#      Scale monthly + annual, plus the metered usage price).
+#   3. Creates eight prices (Developer monthly + annual, Pro monthly + annual,
+#      Scale monthly + annual, proof-usage metered, and Compute trace-step usage).
 #   4. Writes every resulting Stripe ID to billing/STRIPE_PRODUCT_IDS.md and
 #      billing/.stripe_ids.json (the .json is gitignored).
 #
-# The seven price IDs that flow into Cloudflare Pages secrets are also printed
+# The price IDs that flow into Cloudflare Pages secrets are also printed
 # at the end of the run for easy copy/paste into `wrangler pages secret put`.
 
 set -euo pipefail
@@ -251,11 +251,11 @@ DEVELOPER_PROD="$(find_or_create_product \
   "TinyZKP Developer" \
   "Developer plan — base per-proof rates, 100 RPM, 4 concurrent jobs, \$500/mo cap" \
   "${TMP_DIR}/prod_dev.json")"
-TEAM_PROD="$(find_or_create_product \
-  "Team product" \
-  "TinyZKP Team" \
-  "Team plan — 25% off per-proof rates, 300 RPM, 8 concurrent jobs, \$2,500/mo cap" \
-  "${TMP_DIR}/prod_team.json")"
+PRO_PROD="$(find_or_create_product \
+  "Pro product" \
+  "TinyZKP Pro" \
+  "Pro plan — 25% off per-proof rates, 300 RPM, 8 concurrent jobs, \$2,500/mo cap" \
+  "${TMP_DIR}/prod_pro.json")"
 SCALE_PROD="$(find_or_create_product \
   "Scale product" \
   "TinyZKP Scale" \
@@ -264,8 +264,13 @@ SCALE_PROD="$(find_or_create_product \
 METERED_PROD="$(find_or_create_product \
   "Proof Generation (metered)" \
   "TinyZKP Proof Generation" \
-  "ZK-STARK proof generation API — metered usage (cents per proof)" \
+  "STARK state-transition receipt generation API — metered usage (cents per proof)" \
   "${TMP_DIR}/prod_metered.json")"
+COMPUTE_PROD="$(find_or_create_product \
+  "Compute (trace-step metered)" \
+  "TinyZKP Compute" \
+  "Usage-based proving for long state-transition traces — \$0.50 per million trace steps" \
+  "${TMP_DIR}/prod_compute.json")"
 echo
 
 # ── 3. Prices ──────────────────────────────────────────────────────────
@@ -273,31 +278,31 @@ echo
 echo "=== Step 3: prices ==="
 
 DEV_MONTHLY_PRICE="$(find_or_create_price \
-  "Developer monthly (\$9)" "$DEVELOPER_PROD" "Developer Monthly" \
+  "Developer monthly (\$19)" "$DEVELOPER_PROD" "Developer Monthly v2" \
   "${TMP_DIR}/price_dev_m.json" \
-  --currency usd --unit-amount 900 --product "$DEVELOPER_PROD" \
-  --nickname "Developer Monthly" \
+  --currency usd --unit-amount 1900 --product "$DEVELOPER_PROD" \
+  --nickname "Developer Monthly v2" \
   -d "recurring[interval]=month" -d "recurring[usage_type]=licensed")"
 
 DEV_ANNUAL_PRICE="$(find_or_create_price \
-  "Developer annual (\$86.40)" "$DEVELOPER_PROD" "Developer Annual" \
+  "Developer annual (\$182.40)" "$DEVELOPER_PROD" "Developer Annual v2" \
   "${TMP_DIR}/price_dev_y.json" \
-  --currency usd --unit-amount 8640 --product "$DEVELOPER_PROD" \
-  --nickname "Developer Annual" \
+  --currency usd --unit-amount 18240 --product "$DEVELOPER_PROD" \
+  --nickname "Developer Annual v2" \
   -d "recurring[interval]=year" -d "recurring[usage_type]=licensed")"
 
-TEAM_MONTHLY_PRICE="$(find_or_create_price \
-  "Team monthly (\$49)" "$TEAM_PROD" "Team Monthly" \
-  "${TMP_DIR}/price_team_m.json" \
-  --currency usd --unit-amount 4900 --product "$TEAM_PROD" \
-  --nickname "Team Monthly" \
+PRO_MONTHLY_PRICE="$(find_or_create_price \
+  "Pro monthly (\$79)" "$PRO_PROD" "Pro Monthly v2" \
+  "${TMP_DIR}/price_pro_m.json" \
+  --currency usd --unit-amount 7900 --product "$PRO_PROD" \
+  --nickname "Pro Monthly v2" \
   -d "recurring[interval]=month" -d "recurring[usage_type]=licensed")"
 
-TEAM_ANNUAL_PRICE="$(find_or_create_price \
-  "Team annual (\$470.40)" "$TEAM_PROD" "Team Annual" \
-  "${TMP_DIR}/price_team_y.json" \
-  --currency usd --unit-amount 47040 --product "$TEAM_PROD" \
-  --nickname "Team Annual" \
+PRO_ANNUAL_PRICE="$(find_or_create_price \
+  "Pro annual (\$758.40)" "$PRO_PROD" "Pro Annual v2" \
+  "${TMP_DIR}/price_pro_y.json" \
+  --currency usd --unit-amount 75840 --product "$PRO_PROD" \
+  --nickname "Pro Annual v2" \
   -d "recurring[interval]=year" -d "recurring[usage_type]=licensed")"
 
 SCALE_MONTHLY_PRICE="$(find_or_create_price \
@@ -322,6 +327,14 @@ METERED_PRICE="$(find_or_create_price \
   -d "recurring[meter]=$METER_ID" \
   -d "billing_scheme=per_unit" -d "unit_amount_decimal=1.0")"
 
+COMPUTE_PRICE="$(find_or_create_price \
+  "Compute usage (\$0.50/M steps)" "$COMPUTE_PROD" "Trace-step usage" \
+  "${TMP_DIR}/price_compute.json" \
+  --currency usd --product "$COMPUTE_PROD" --nickname "Trace-step usage" \
+  -d "recurring[interval]=month" -d "recurring[usage_type]=metered" \
+  -d "recurring[meter]=$TRACE_STEP_METER_ID" \
+  -d "billing_scheme=per_unit" -d "unit_amount_decimal=0.00005")"
+
 echo
 
 # ── 4. Write outputs ───────────────────────────────────────────────────
@@ -334,18 +347,20 @@ cat >"$JSON_OUT" <<JSON
   "meter_trace_step": "$TRACE_STEP_METER_ID",
   "products": {
     "developer": "$DEVELOPER_PROD",
-    "team": "$TEAM_PROD",
+    "pro": "$PRO_PROD",
     "scale": "$SCALE_PROD",
-    "proof_generation": "$METERED_PROD"
+    "proof_generation": "$METERED_PROD",
+    "compute": "$COMPUTE_PROD"
   },
   "prices": {
     "developer_monthly": "$DEV_MONTHLY_PRICE",
     "developer_annual": "$DEV_ANNUAL_PRICE",
-    "team_monthly": "$TEAM_MONTHLY_PRICE",
-    "team_annual": "$TEAM_ANNUAL_PRICE",
+    "pro_monthly": "$PRO_MONTHLY_PRICE",
+    "pro_annual": "$PRO_ANNUAL_PRICE",
     "scale_monthly": "$SCALE_MONTHLY_PRICE",
     "scale_annual": "$SCALE_ANNUAL_PRICE",
-    "metered": "$METERED_PRICE"
+    "metered": "$METERED_PRICE",
+    "compute": "$COMPUTE_PRICE"
   }
 }
 JSON
@@ -369,21 +384,23 @@ Generated by \`billing/setup_stripe_products.sh\` on $(date -u +%Y-%m-%d).
 | Plan | Product ID |
 |---|---|
 | TinyZKP Proof Generation (metered) | \`$METERED_PROD\` |
+| TinyZKP Compute | \`$COMPUTE_PROD\` |
 | TinyZKP Developer | \`$DEVELOPER_PROD\` |
-| TinyZKP Team | \`$TEAM_PROD\` |
+| TinyZKP Pro | \`$PRO_PROD\` |
 | TinyZKP Scale | \`$SCALE_PROD\` |
 
 ## Prices
 
 | Plan | Cadence | Amount | Price ID |
 |---|---|---|---|
-| Developer | monthly | \$9.00 | \`$DEV_MONTHLY_PRICE\` |
-| Developer | annual | \$86.40 (20% off) | \`$DEV_ANNUAL_PRICE\` |
-| Team | monthly | \$49.00 | \`$TEAM_MONTHLY_PRICE\` |
-| Team | annual | \$470.40 (20% off) | \`$TEAM_ANNUAL_PRICE\` |
+| Developer | monthly | \$19.00 | \`$DEV_MONTHLY_PRICE\` |
+| Developer | annual | \$182.40 (20% off) | \`$DEV_ANNUAL_PRICE\` |
+| Pro | monthly | \$79.00 | \`$PRO_MONTHLY_PRICE\` |
+| Pro | annual | \$758.40 (20% off) | \`$PRO_ANNUAL_PRICE\` |
 | Scale | monthly | \$199.00 | \`$SCALE_MONTHLY_PRICE\` |
 | Scale | annual | \$1,910.40 (20% off) | \`$SCALE_ANNUAL_PRICE\` |
 | Proof Generation (metered) | per proof | \$0.01/unit | \`$METERED_PRICE\` |
+| Compute (metered) | per trace step | \$0.50/M steps | \`$COMPUTE_PRICE\` |
 
 ## Cloudflare Pages secrets to push
 
@@ -392,11 +409,12 @@ Run these against the \`tinyzkp\` Pages project:
 \`\`\`bash
 echo -n "$DEV_MONTHLY_PRICE"   | wrangler pages secret put STRIPE_PRICE_ID_DEVELOPER          --project-name tinyzkp
 echo -n "$DEV_ANNUAL_PRICE"    | wrangler pages secret put STRIPE_PRICE_ID_DEVELOPER_ANNUAL   --project-name tinyzkp
-echo -n "$TEAM_MONTHLY_PRICE"  | wrangler pages secret put STRIPE_PRICE_ID_TEAM               --project-name tinyzkp
-echo -n "$TEAM_ANNUAL_PRICE"   | wrangler pages secret put STRIPE_PRICE_ID_TEAM_ANNUAL        --project-name tinyzkp
+echo -n "$PRO_MONTHLY_PRICE"   | wrangler pages secret put STRIPE_PRICE_ID_PRO                --project-name tinyzkp
+echo -n "$PRO_ANNUAL_PRICE"    | wrangler pages secret put STRIPE_PRICE_ID_PRO_ANNUAL         --project-name tinyzkp
 echo -n "$SCALE_MONTHLY_PRICE" | wrangler pages secret put STRIPE_PRICE_ID_SCALE              --project-name tinyzkp
 echo -n "$SCALE_ANNUAL_PRICE"  | wrangler pages secret put STRIPE_PRICE_ID_SCALE_ANNUAL       --project-name tinyzkp
 echo -n "$METERED_PRICE"       | wrangler pages secret put STRIPE_PRICE_ID_METERED            --project-name tinyzkp
+echo -n "$COMPUTE_PRICE"       | wrangler pages secret put STRIPE_PRICE_ID_TRACE_STEP_METERED --project-name tinyzkp
 \`\`\`
 
 ## Production server \`.env\`
@@ -406,11 +424,12 @@ Add to \`/opt/hc-stark/.env\`:
 \`\`\`
 STRIPE_PRICE_ID_DEVELOPER=$DEV_MONTHLY_PRICE
 STRIPE_PRICE_ID_DEVELOPER_ANNUAL=$DEV_ANNUAL_PRICE
-STRIPE_PRICE_ID_TEAM=$TEAM_MONTHLY_PRICE
-STRIPE_PRICE_ID_TEAM_ANNUAL=$TEAM_ANNUAL_PRICE
+STRIPE_PRICE_ID_PRO=$PRO_MONTHLY_PRICE
+STRIPE_PRICE_ID_PRO_ANNUAL=$PRO_ANNUAL_PRICE
 STRIPE_PRICE_ID_SCALE=$SCALE_MONTHLY_PRICE
 STRIPE_PRICE_ID_SCALE_ANNUAL=$SCALE_ANNUAL_PRICE
 STRIPE_PRICE_ID_METERED=$METERED_PRICE
+STRIPE_PRICE_ID_TRACE_STEP_METERED=$COMPUTE_PRICE
 \`\`\`
 
 ## Webhook setup
@@ -435,11 +454,12 @@ echo "  STRIPE_METER_ID_PROOF_USAGE       = $METER_ID"
 echo "  STRIPE_METER_ID_TRACE_STEP_USAGE  = $TRACE_STEP_METER_ID"
 echo "  STRIPE_PRICE_ID_DEVELOPER         = $DEV_MONTHLY_PRICE"
 echo "  STRIPE_PRICE_ID_DEVELOPER_ANNUAL  = $DEV_ANNUAL_PRICE"
-echo "  STRIPE_PRICE_ID_TEAM              = $TEAM_MONTHLY_PRICE"
-echo "  STRIPE_PRICE_ID_TEAM_ANNUAL       = $TEAM_ANNUAL_PRICE"
+echo "  STRIPE_PRICE_ID_PRO               = $PRO_MONTHLY_PRICE"
+echo "  STRIPE_PRICE_ID_PRO_ANNUAL        = $PRO_ANNUAL_PRICE"
 echo "  STRIPE_PRICE_ID_SCALE             = $SCALE_MONTHLY_PRICE"
 echo "  STRIPE_PRICE_ID_SCALE_ANNUAL      = $SCALE_ANNUAL_PRICE"
 echo "  STRIPE_PRICE_ID_METERED           = $METERED_PRICE"
+echo "  STRIPE_PRICE_ID_TRACE_STEP_METERED= $COMPUTE_PRICE"
 echo
 echo "Next steps:"
 echo "  1. Push the price IDs as Cloudflare Pages secrets (commands in $MD_OUT)."

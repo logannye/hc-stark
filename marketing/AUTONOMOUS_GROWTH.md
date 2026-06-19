@@ -217,8 +217,8 @@ Write 6 pages once (an afternoon, or have an assistant draft them against the
 template). Maintenance after publish: ~0. This is what turns the one-time HN
 spike into a permanent traffic floor.
 
-> **Disclosure ceiling — never violate it.** No page may claim privacy
-> ("without revealing inputs"), a finished 100M-step proof, or that zkVM/zkML is
+> **Disclosure ceiling — never violate it.** No page may claim input-hiding
+> privacy, a finished 100M-step proof, or that zkVM/zkML is
 > available. The shipped, audited default path proves a **public** delta chain.
 > An honesty slip on a security product is a permanent credibility loss and you
 > won't be there to talk a confused buyer down.

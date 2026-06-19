@@ -11,12 +11,12 @@ API Endpoint:   https://api.tinyzkp.com
 Documentation:  https://tinyzkp.com/docs
 API Reference:  https://api.tinyzkp.com/docs
 
-Quick start — prove a secret is in range [0, 100]:
+Quick start — prove a state transition:
 
-  curl -X POST https://api.tinyzkp.com/prove/template/range_proof \
+  curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
     -H "Authorization: Bearer {api_key}" \
     -H "Content-Type: application/json" \
-    -d '{{"params":{{"min":0,"max":100,"witness_steps":[42,44]}}}}'
+    -d '{{"params":{{"initial":1000,"final":1045,"deltas":[10,20,15]}}}}'
 
 Verify the proof (always free):
 
@@ -25,12 +25,10 @@ Verify the proof (always free):
     -d '{{"proof": YOUR_PROOF_OBJECT}}'
 
 What you can do:
-  - 6 proof templates: range_proof, hash_preimage, accumulator_step,
-    computation_attestation, policy_compliance, data_integrity
-  - Zero-knowledge mode: add "zk_mask_degree": 1 to hide computation
-  - Cost estimation: POST /estimate (no auth required)
+  - Prove accumulator_step receipts: starting at X, applying declared deltas reaches Y
+  - Estimate state-transition proof cost: POST /estimate (no auth required)
   - Batch proving: POST /prove/batch (up to 100 jobs at once)
-  - EVM calldata: GET /proof/:job_id/calldata for on-chain verification
+  - Shareable browser verification: https://tinyzkp.com/verify
   - Client-side verification: npm install @tinyzkp/verify (WASM, no server needed)
 
 Key rotation:

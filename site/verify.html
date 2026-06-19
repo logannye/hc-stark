@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verify a TinyZKP Receipt — Client-Side WASM</title>
+<meta name="description" content="Verify a TinyZKP state-transition receipt in your browser with the WASM verifier. No API key, no TinyZKP server round trip.">
+<meta property="og:title" content="Verify a TinyZKP Receipt">
+<meta property="og:description" content="Paste a proof JSON object or open a share link. Verification runs client-side with @tinyzkp/verify.">
+<meta property="og:url" content="https://tinyzkp.com/verify">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://tinyzkp.com/verify">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+:root{
+  --bg:#050a12;--surface:#0c1424;--surface-2:#101a30;--border:#152040;--border-light:#1e2d52;
+  --text:#e4e9f2;--text-bright:#f4f6fb;--muted:#8899b8;--dim:#6b84a6;
+  --accent:#2ee8d4;--accent-dim:rgba(46,232,212,.08);--accent-glow:rgba(46,232,212,.15);
+  --green:#34d399;--red:#f87171;--amber:#fbbf24;
+  --mono:'IBM Plex Mono',Consolas,Menlo,monospace;--sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+body::before{content:'';position:fixed;inset:0;z-index:-2;background-image:radial-gradient(circle,var(--border) .5px,transparent .5px);background-size:32px 32px;opacity:.3;pointer-events:none}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.container{max-width:940px;margin:0 auto;padding:0 24px;width:100%}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(5,10,18,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+nav .container{max-width:1100px;display:flex;align-items:center;justify-content:space-between;height:56px}
+.logo{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--text-bright);text-decoration:none}.logo span{color:var(--accent)}
+.links{display:flex;gap:24px;align-items:center}.links a{color:var(--muted);font-size:13px;font-weight:500}.links a:hover{color:var(--text);text-decoration:none}
+.nav-cta{background:var(--accent);color:var(--bg)!important;padding:7px 18px;border-radius:6px;font-weight:700;font-size:12.5px;text-transform:uppercase;letter-spacing:.03em}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px}.hamburger svg{width:24px;height:24px;stroke:var(--text);stroke-width:2;fill:none}
+main{flex:1;padding:120px 0 64px}
+.hero{text-align:center;margin-bottom:28px}.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:100px;background:var(--accent-dim);border:1px solid rgba(46,232,212,.2);color:var(--accent);font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:18px}
+h1{font-size:clamp(30px,4.4vw,46px);font-weight:800;letter-spacing:-.02em;color:var(--text-bright);line-height:1.1;margin-bottom:12px}
+.hero p{color:var(--muted);font-size:15px;max-width:620px;margin:0 auto;line-height:1.7}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;box-shadow:0 0 48px rgba(46,232,212,.03)}
+label{display:block;font-family:var(--mono);font-size:11px;color:var(--dim);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px}
+textarea{width:100%;min-height:260px;resize:vertical;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:12.5px;line-height:1.6;outline:none}
+textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+button,.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--accent);color:var(--bg);font-weight:700;font-size:13px;border:none;padding:11px 20px;border-radius:8px;cursor:pointer;font-family:var(--sans);letter-spacing:.02em;text-decoration:none}
+button.secondary,.btn.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}
+button:disabled{opacity:.55;cursor:not-allowed}
+.result{margin-top:18px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;font-family:var(--mono);font-size:12.5px;min-height:88px;white-space:pre-wrap;word-break:break-word;color:var(--muted)}
+.ok{color:var(--green);font-weight:700}.bad{color:var(--red);font-weight:700}.muted{color:var(--dim)}.accent{color:var(--accent)}
+.note{color:var(--dim);font-size:12.5px;margin-top:12px;line-height:1.6}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
+.mini{background:rgba(12,20,36,.65);border:1px solid var(--border);border-radius:10px;padding:16px}
+.mini h3{font-size:14px;color:var(--text-bright);margin-bottom:6px}.mini p{font-size:13px;color:var(--muted);line-height:1.6}
+footer{padding:32px 0;border-top:1px solid var(--border);margin-top:48px}.foot{max-width:1100px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;color:var(--dim);font-size:12.5px}.foot .right{display:flex;gap:20px;flex-wrap:wrap}.foot a{color:var(--dim)}
+@media(max-width:768px){.links{display:none;position:absolute;top:56px;left:0;right:0;background:var(--bg);border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}.links.open{display:flex}.hamburger{display:block}.split{grid-template-columns:1fr}.foot{flex-direction:column;text-align:center}.foot .right{justify-content:center}}
+</style>
+</head>
+<body>
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/try">Try</a>
+    <a href="/#pricing">Pricing</a>
+    <a href="/docs">Quickstart</a>
+    <a href="/compute">Compute</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+<div class="container">
+  <div class="hero">
+    <div class="pill">Client-side verification</div>
+    <h1>Verify a TinyZKP receipt.</h1>
+    <p>Paste a proof JSON object or open a shared <code>#proof=...</code> link. The WASM verifier runs in your browser; it does not call the TinyZKP API and does not need an API key.</p>
+  </div>
+
+  <div class="panel">
+    <label for="proof-input">Proof JSON</label>
+    <textarea id="proof-input" spellcheck="false" placeholder='Paste {"version":4,"bytes":[...]} or {"proof":{"version":4,"bytes":[...]}}'></textarea>
+    <div class="actions">
+      <button id="verify-btn" onclick="verifyNow()">Verify proof</button>
+      <button class="secondary" onclick="makeShareLink()">Copy share link</button>
+      <button class="secondary" onclick="clearProof()">Clear</button>
+    </div>
+    <div class="result" id="result"><span class="muted">Waiting for a proof.</span></div>
+    <p class="note">This page loads <code>@tinyzkp/verify</code> as a browser WASM module. Once loaded, verification is local to the browser. Do not use this page as evidence that a future or gated template is production-ready; it only checks the proof bytes you provide.</p>
+  </div>
+
+  <div class="split">
+    <div class="mini">
+      <h3>What verification means</h3>
+      <p>A valid receipt means the proof bytes satisfy the TinyZKP verifier for the statement encoded in the proof. The verifier does not re-run your system.</p>
+    </div>
+    <div class="mini">
+      <h3>What to send</h3>
+      <p>Send the full proof object returned by <code>/prove/:job_id</code>, or use the share link generated after a browser demo proof completes.</p>
+    </div>
+  </div>
+</div>
+</main>
+
+<footer>
+<div class="container foot">
+  <div>&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/docs">Quickstart</a>
+    <a href="/try">Try</a>
+    <a href="/compute">Compute</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+
+<script type="module">
+let wasmModulePromise = null;
+const input = document.getElementById('proof-input');
+const result = document.getElementById('result');
+const verifyBtn = document.getElementById('verify-btn');
+
+function b64UrlEncode(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function b64UrlDecode(encoded) {
+  const pad = encoded.length % 4 ? '='.repeat(4 - (encoded.length % 4)) : '';
+  const binary = atob((encoded + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+function normalizeProof(value) {
+  if (!value || typeof value !== 'object') throw new Error('Proof JSON must be an object.');
+  const proof = value.proof && typeof value.proof === 'object' ? value.proof : value;
+  if (typeof proof.version !== 'number') throw new Error('Missing numeric proof.version.');
+  if (proof.bytes == null) throw new Error('Missing proof.bytes.');
+  return proof;
+}
+
+async function loadVerifier() {
+  if (!wasmModulePromise) {
+    wasmModulePromise = import('https://esm.sh/@tinyzkp/verify').then(async (mod) => {
+      if (typeof mod.default === 'function') await mod.default();
+      return mod;
+    });
+  }
+  return wasmModulePromise;
+}
+
+function setResult(html) {
+  result.innerHTML = html;
+}
+
+window.verifyNow = async function verifyNow() {
+  verifyBtn.disabled = true;
+  setResult('<span class="muted">Loading WASM verifier...</span>');
+  try {
+    const parsed = JSON.parse(input.value.trim());
+    const proof = normalizeProof(parsed);
+    const mod = await loadVerifier();
+    const t0 = performance.now();
+    const out = typeof mod.verify_json === 'function'
+      ? mod.verify_json(JSON.stringify(proof))
+      : mod.verify(proof);
+    const elapsed = Math.max(0, performance.now() - t0).toFixed(2);
+    const ok = !!(out && (out.ok || out.valid));
+    if (ok) {
+      setResult('<span class="ok">VALID</span>\\n<span class="muted">Verified locally in ' + elapsed + ' ms.</span>');
+    } else {
+      const err = out && out.error ? out.error : 'Verifier rejected the proof.';
+      setResult('<span class="bad">INVALID</span>\\n<span class="muted">' + escapeHtml(err) + '</span>');
+    }
+  } catch (err) {
+    setResult('<span class="bad">Could not verify</span>\\n<span class="muted">' + escapeHtml(err.message || String(err)) + '</span>');
+  } finally {
+    verifyBtn.disabled = false;
+  }
+};
+
+window.makeShareLink = async function makeShareLink() {
+  try {
+    const parsed = JSON.parse(input.value.trim());
+    const proof = normalizeProof(parsed);
+    const link = location.origin + location.pathname + '#proof=' + b64UrlEncode(JSON.stringify(proof));
+    await navigator.clipboard.writeText(link);
+    setResult('<span class="ok">Share link copied.</span>\\n<span class="muted">' + escapeHtml(link) + '</span>');
+  } catch (err) {
+    setResult('<span class="bad">Could not create share link</span>\\n<span class="muted">' + escapeHtml(err.message || String(err)) + '</span>');
+  }
+};
+
+window.clearProof = function clearProof() {
+  input.value = '';
+  history.replaceState(null, '', location.pathname);
+  setResult('<span class="muted">Waiting for a proof.</span>');
+};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+function loadFromHash() {
+  const m = location.hash.match(/(?:^#|&)proof=([^&]+)/);
+  if (!m) return;
+  try {
+    input.value = JSON.stringify(JSON.parse(b64UrlDecode(decodeURIComponent(m[1]))), null, 2);
+    setResult('<span class="accent">Proof loaded from share link.</span>');
+  } catch (err) {
+    setResult('<span class="bad">Invalid share link.</span>\\n<span class="muted">' + escapeHtml(err.message || String(err)) + '</span>');
+  }
+}
+
+loadFromHash();
+window.addEventListener('hashchange', loadFromHash);
+document.querySelectorAll('nav .links a').forEach(function(a){
+  a.addEventListener('click', function(){document.querySelector('.links').classList.remove('open')});
+});
+</script>
+</body>
+</html>

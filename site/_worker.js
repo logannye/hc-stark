@@ -56,6 +56,24 @@ const METHOD_HANDLER = {
   OPTIONS: "onRequestOptions",
 };
 
+async function fetchStaticAsset(request, env, url) {
+  const direct = await env.ASSETS.fetch(request);
+  if (direct.status !== 404) return direct;
+
+  // Cloudflare Pages usually resolves extensionless HTML paths, but Advanced
+  // Mode workers can bypass that behavior. Keep canonical URLs like /verify
+  // and /use-cases/verifiable-state-transition working by trying .html on
+  // static, non-API paths that do not already contain an extension.
+  if (request.method !== "GET" && request.method !== "HEAD") return direct;
+  if (url.pathname === "/" || url.pathname.startsWith("/api/")) return direct;
+  const lastSegment = url.pathname.split("/").pop() || "";
+  if (lastSegment.includes(".")) return direct;
+
+  const htmlUrl = new URL(url);
+  htmlUrl.pathname = `${url.pathname}.html`;
+  return env.ASSETS.fetch(new Request(htmlUrl, request));
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -74,7 +92,7 @@ export default {
           env,
           params: {},
           waitUntil: ctx && ctx.waitUntil ? ctx.waitUntil.bind(ctx) : (() => {}),
-          next:     async () => env.ASSETS.fetch(request),
+          next:     async () => fetchStaticAsset(request, env, url),
           data:     {},
         };
         try {
@@ -97,6 +115,6 @@ export default {
     }
 
     // Not an /api/* route — fall through to static assets.
-    return env.ASSETS.fetch(request);
+    return fetchStaticAsset(request, env, url);
   },
 };

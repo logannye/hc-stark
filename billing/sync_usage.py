@@ -62,15 +62,15 @@ TIERS = [
     (None, 3000),        # > 10M steps   → $30.00
 ]
 
-# Plan-based discount factors. Team gets 25% off, Scale gets 40% off.
+# Plan-based discount factors. Pro gets 25% off, Scale gets 40% off.
 # compute is not discounted here — it's billed via a different meter entirely.
 DISCOUNT_FACTORS: dict[str, float] = {
     "free": 1.0,
     "developer": 1.0,
     "standard": 1.0,   # legacy — same as developer
-    "team": 0.75,
+    "pro": 0.75,
+    "team": 0.75,      # legacy alias — same as Pro
     "scale": 0.60,
-    "pro": 0.60,       # legacy alias — Stripe product is named "Pro" but matches scale's rate sheet
     "compute": 1.0,    # billed via trace_step_usage meter, not cents-per-proof tiers
 }
 

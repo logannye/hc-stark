@@ -179,11 +179,11 @@ The three submission screenshots live in [`marketing/screenshots/`](./screenshot
 
 | # | File | What it shows | Paired prompt for the form |
 |---|---|---|---|
-| 1 | `shot1_range_prove.png` | `prove_template` with the `accumulator_step` template — proves an account moved from an initial balance to a final balance via a sequence of declared deltas. Shows the returned job and base64 proof blob. | "Use TinyZKP to prove that this account balance moved from 1000 to 1045 via the deltas [10, 20, 15]." |
+| 1 | `shot1_state_transition.png` | `prove_template` with the `accumulator_step` template — proves an account moved from an initial balance to a final balance via a sequence of declared deltas. Shows the returned job and base64 proof blob. | "Use TinyZKP to prove that this account balance moved from 1000 to 1045 via the deltas [10, 20, 15]." |
 | 2 | `shot2_verify.png` | `verify_proof` on the proof from shot 1 — returns `valid: true` in under a second. Demonstrates that anyone can independently verify without trusting TinyZKP. | "Now verify that proof independently — show me that anyone in the world could do this same check without trusting TinyZKP." |
-| 3 | `shot3_policy_compliance.png` | `prove_template` with the `accumulator_step` template — proves an agent's state machine advanced from a declared start to a declared end via a sequence of recorded steps, transferably verifiable by any third party offline. | "Use TinyZKP's accumulator_step template to prove that this agent's running total moved from 0 to 945 via these steps, so an auditor can verify it without re-running anything." |
+| 3 | `shot3_agent_state_transition.png` | `prove_template` with the `accumulator_step` template — proves an agent's state machine advanced from a declared start to a declared end via a sequence of recorded steps, transferably verifiable by any third party offline. | "Use TinyZKP's accumulator_step template to prove that this agent's running total moved from 0 to 945 via these steps, so an auditor can verify it without re-running anything." |
 
-The three shots cover the complete narrative the directory carousel needs to tell: **(1)** the headline use-case (mint a privacy-preserving cryptographic receipt), **(2)** the trust model (independent verification), **(3)** the breadth (a second template that demonstrates this isn't a one-trick tool). Anthropic's submission requirements ask for 3–5; we ship 3 intentional ones rather than 5 mediocre ones.
+The three shots cover the complete narrative the directory carousel needs to tell: **(1)** the headline use-case (mint a transparent state-transition receipt), **(2)** the trust model (independent verification), **(3)** a second accumulator example that demonstrates the shape across domains. Anthropic's submission requirements ask for 3–5; we ship 3 intentional ones rather than 5 mediocre ones.
 
 ---
 

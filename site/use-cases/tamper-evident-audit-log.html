@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tamper-Evident Audit Log API — TinyZKP</title>
+<meta name="description" content="Attach verifiable TinyZKP receipts to audit-log checkpoints. Prove that a running state advanced by declared steps and let anyone verify offline.">
+<meta property="og:title" content="Tamper-Evident Audit Log API">
+<meta property="og:description" content="Use transparent ZK-STARK state-transition receipts for audit-log checkpoints that third parties can verify without replaying your system.">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<link rel="canonical" href="https://tinyzkp.com/use-cases/tamper-evident-audit-log">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+main{padding:120px 0 70px}.eyebrow{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}h1{font-size:clamp(34px,5vw,56px);line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);max-width:780px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:740px}.band{border-top:1px solid var(--border);padding-top:34px;margin-top:42px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px}.box h2,.box h3{color:var(--text-bright);font-size:20px;margin-bottom:10px}.box p,.box li{color:var(--muted);font-size:14.5px;line-height:1.7}.box ul{padding-left:20px}.code{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;overflow:auto;margin:18px 0}.code pre{font-family:var(--mono);font-size:12.5px;color:var(--text);line-height:1.7;white-space:pre}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:700;padding:12px 22px;border-radius:8px;text-decoration:none;margin-top:22px}@media(max-width:800px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav><div class="container"><a href="/" class="logo"><span>Tiny</span>ZKP</a><div class="links"><a href="/try">Try</a><a href="/verify">Verify</a><a href="/docs">Docs</a><a href="/signup" class="nav-cta">Get API Key</a></div></div></nav>
+<main><div class="container">
+  <div class="eyebrow">Use case</div>
+  <h1>Tamper-evident audit-log checkpoints that verify without replay.</h1>
+  <p class="lede">Audit logs are useful only if a counterparty can trust the checkpoint. TinyZKP lets you attach a receipt proving that a running accumulator advanced from a prior checkpoint to a new checkpoint by the declared steps.</p>
+  <a class="cta" href="/signup">Start free</a>
+  <section class="band grid">
+    <div class="box"><h2>How to model it</h2><p>Map each event to a deterministic numeric delta in your own application, then prove the checkpoint transition with <code>accumulator_step</code>. The receipt is small enough to store beside the checkpoint row.</p></div>
+    <div class="box"><h2>Why this beats a raw log</h2><ul><li>The verifier does not need your log database.</li><li>The receipt is transferable to auditors or counterparties.</li><li>Long checkpoints use Compute pricing instead of high-RAM prover hardware.</li></ul></div>
+  </section>
+  <section class="band">
+    <h2 style="color:var(--text-bright);font-size:24px">API shape</h2>
+    <div class="code"><pre>curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"params":{"initial":24000,"final":24342,"deltas":[101,77,164]}}'</pre></div>
+  </section>
+  <section class="band grid">
+    <div class="box"><h3>Best paid fit</h3><p>Teams pay when checkpoints get large enough that replay, storage, or high-RAM proving is annoying. Compute keeps sporadic large checkpoints usage-based at $0.50/M trace steps.</p></div>
+    <div class="box"><h3>Limit</h3><p>TinyZKP proves the transition arithmetic, not the semantic truth of every event. Your application must define the event-to-delta mapping.</p></div>
+  </section>
+</div></main>
+<footer><div class="container"><div class="left">&copy; 2026 TinyZKP</div><div class="right"><a href="/docs">Docs</a><a href="/privacy">Privacy</a><a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a></div></div></footer>
+</body>
+</html>

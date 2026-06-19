@@ -377,8 +377,8 @@ fn price_cents(trace_length: usize) -> u64 {
 /// the same on its side. Edit `pricing.json` FIRST when changing.
 fn discount_factor(plan: &str) -> f64 {
     match plan {
-        "team" => 0.75,          // 25% off
-        "scale" | "pro" => 0.60, // 40% off; "pro" is the legacy alias for scale
+        "pro" | "team" => 0.75,  // 25% off; "team" is the legacy alias for Pro
+        "scale" => 0.60,         // 40% off
         "compute" => 1.0,        // billed via trace_step_usage meter, no cents discount
         _ => 1.0,
     }
@@ -474,6 +474,7 @@ mod tests {
         assert_eq!(discount_factor("free"), 1.0);
         assert_eq!(discount_factor("developer"), 1.0);
         assert_eq!(discount_factor("standard"), 1.0); // legacy
+        assert_eq!(discount_factor("pro"), 0.75);
         assert_eq!(discount_factor("team"), 0.75);
         assert_eq!(discount_factor("scale"), 0.60);
     }
@@ -498,9 +499,9 @@ mod tests {
         assert_eq!(summary.failed_proofs, 1);
         assert_eq!(summary.estimated_cost_cents, 55); // 5 + 50
 
-        // Team plan: 25% off → round(5 * 0.75) + round(50 * 0.75) = 4 + 38 = 42
+        // Pro plan: 25% off → round(5 * 0.75) + round(50 * 0.75) = 4 + 38 = 42
         let summary = log
-            .query_usage("t_test", "team", 0, i64::MAX as u64)
+            .query_usage("t_test", "pro", 0, i64::MAX as u64)
             .unwrap();
         assert_eq!(summary.estimated_cost_cents, 42);
 
@@ -522,8 +523,8 @@ mod tests {
         let cost = log.monthly_cost_cents("t_test", "developer").unwrap();
         assert_eq!(cost, 5);
 
-        // Team plan: round(5 * 0.75) = 4
-        let cost = log.monthly_cost_cents("t_test", "team").unwrap();
+        // Pro plan: round(5 * 0.75) = 4
+        let cost = log.monthly_cost_cents("t_test", "pro").unwrap();
         assert_eq!(cost, 4);
 
         // Scale plan: round(5 * 0.60) = 3
