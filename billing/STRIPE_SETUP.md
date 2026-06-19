@@ -2,7 +2,7 @@
 
 One-time setup steps for the self-serve billing model.
 
-> **Current storefront model:** Free, Developer **$19/mo**, Pro **$79/mo**, Scale **$199/mo**, and Compute usage billing at **$0.50 per million trace steps**. Annual paid subscriptions are 20% off. The legacy `team` slug is preserved only as an admin/backward-compatibility alias for Pro.
+> **Current storefront model:** Free, Developer **$19/mo**, Pro **$79/mo**, Scale **$199/mo**, and Compute usage billing at **$0.50 per million trace steps**. Self-serve checkout is monthly only until annual usage metering is wired deliberately. The legacy `team` slug is preserved only as an admin/backward-compatibility alias for Pro.
 
 ## 1. Create Products
 
@@ -23,9 +23,9 @@ In Stripe Dashboard -> Products, create the following products. Save every Price
 - **Description**: Developer plan — base per-proof rates, 100 RPM, 4 concurrent jobs, $500/mo cap
 - **Price**: **$19/month recurring**
 
-### Developer Annual
+### Developer Annual (manual/future only)
 - **Name**: TinyZKP Developer (annual)
-- **Description**: Developer plan — same limits, 20% off via annual prepay
+- **Description**: Optional manual contract price; not wired to current self-serve checkout because usage meters are monthly
 - **Price**: **$182.40/year recurring** (12 x $19 x 0.80)
 
 ### Pro Monthly
@@ -33,9 +33,9 @@ In Stripe Dashboard -> Products, create the following products. Save every Price
 - **Description**: Pro plan — 25% off per-proof rates, 300 RPM, 8 concurrent jobs, $2,500/mo cap
 - **Price**: **$79/month recurring**
 
-### Pro Annual
+### Pro Annual (manual/future only)
 - **Name**: TinyZKP Pro (annual)
-- **Description**: Pro plan — same limits, 20% off via annual prepay
+- **Description**: Optional manual contract price; not wired to current self-serve checkout because usage meters are monthly
 - **Price**: **$758.40/year recurring** (12 x $79 x 0.80)
 
 ### Scale Monthly
@@ -43,9 +43,9 @@ In Stripe Dashboard -> Products, create the following products. Save every Price
 - **Description**: Scale plan — 40% off per-proof rates, 500 RPM, 16 concurrent jobs, $10,000/mo cap
 - **Price**: **$199/month recurring**
 
-### Scale Annual
+### Scale Annual (manual/future only)
 - **Name**: TinyZKP Scale (annual)
-- **Description**: Scale plan — same limits, 20% off via annual prepay
+- **Description**: Optional manual contract price; not wired to current self-serve checkout because usage meters are monthly
 - **Price**: **$1,910.40/year recurring** (12 x $199 x 0.80)
 
 ## 2. Create Meters
@@ -69,7 +69,7 @@ In Stripe Dashboard -> Developers -> Webhooks:
 - **Endpoint URL**: `https://webhook.tinyzkp.com/webhook`
 - **Events to listen for**:
   - `checkout.session.completed` — provisions new tenant
-  - `customer.subscription.updated` — handles plan changes, including monthly <-> annual
+  - `customer.subscription.updated` — handles plan changes
   - `customer.subscription.deleted` — suspends tenant
   - `invoice.payment_failed` — suspends tenant on payment failure
 
@@ -85,14 +85,11 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_ID_METERED=price_...              # proof_usage meter price
 STRIPE_PRICE_ID_TRACE_STEP_METERED=price_...   # trace_step_usage meter price
 STRIPE_PRICE_ID_DEVELOPER=price_...            # $19/mo Developer
-STRIPE_PRICE_ID_DEVELOPER_ANNUAL=price_...     # $182.40/yr Developer
 STRIPE_PRICE_ID_PRO=price_...                  # $79/mo Pro
-STRIPE_PRICE_ID_PRO_ANNUAL=price_...           # $758.40/yr Pro
 STRIPE_PRICE_ID_SCALE=price_...                # $199/mo Scale
-STRIPE_PRICE_ID_SCALE_ANNUAL=price_...         # $1,910.40/yr Scale
 ```
 
-Legacy fallback secrets `STRIPE_PRICE_ID_TEAM` and `STRIPE_PRICE_ID_TEAM_ANNUAL` may remain temporarily during rollout; checkout maps `team` to Pro. Do not advertise Team as a storefront plan.
+Annual flat-price IDs may exist for manual contracts, but do not add them to self-serve checkout until matching annual usage-meter prices and reporting are explicitly wired. Legacy fallback secret `STRIPE_PRICE_ID_TEAM` may remain temporarily during rollout; checkout maps `team` to Pro. Do not advertise Team as a storefront plan.
 
 ## 5. Checkout Flow
 
@@ -106,7 +103,7 @@ Customers sign up at `https://tinyzkp.com/signup` and select a plan:
 
 Developer / Pro / Scale subscriptions may also include the trace-step meter if the secret is configured, so long traces can be priced by the RAM-saving Compute economics instead of the regular per-proof ladder.
 
-The plan name and billing cadence are passed in `metadata.plan` and `metadata.cadence` on the checkout session and subscription, so the webhook handler can extract them during tenant provisioning.
+The plan name and monthly billing cadence are passed in `metadata.plan` and `metadata.cadence` on the checkout session and subscription, so the webhook handler can extract them during tenant provisioning.
 
 ## 6. Cloudflare Pages Secrets
 
@@ -115,9 +112,9 @@ Set via `wrangler pages secret put`:
 - `STRIPE_SECRET_KEY` — Stripe secret key
 - `STRIPE_PRICE_ID_METERED` — metered proof-usage price ID
 - `STRIPE_PRICE_ID_TRACE_STEP_METERED` — metered trace-step price ID
-- `STRIPE_PRICE_ID_DEVELOPER` and `STRIPE_PRICE_ID_DEVELOPER_ANNUAL`
-- `STRIPE_PRICE_ID_PRO` and `STRIPE_PRICE_ID_PRO_ANNUAL`
-- `STRIPE_PRICE_ID_SCALE` and `STRIPE_PRICE_ID_SCALE_ANNUAL`
+- `STRIPE_PRICE_ID_DEVELOPER`
+- `STRIPE_PRICE_ID_PRO`
+- `STRIPE_PRICE_ID_SCALE`
 
 ## 7. Plan-Based Discount Logic
 
@@ -132,7 +129,7 @@ The `sync_usage.py` billing cron applies plan-based discounts before reporting `
 
 Compute does not use these discount factors. It bills raw trace steps at $0.50/M steps, with the existing $0.05 minimum enforced by the base-rate floor where applicable.
 
-Annual variants use the same per-proof discount as their monthly equivalents. The 20% annual savings comes from the recurring base fee, not from lower usage prices.
+Annual self-serve checkout is intentionally disabled until annual usage-meter prices and usage reporting are wired end to end.
 
 ## Price Tiers
 

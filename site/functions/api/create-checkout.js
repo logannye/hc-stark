@@ -6,15 +6,11 @@
 //   STRIPE_PRICE_ID_TRACE_STEP_METERED — metered trace-step price ($0.50/M, used for Compute and as
 //                                        the large-T overage line on Developer/Pro/Scale)
 //   STRIPE_PRICE_ID_DEVELOPER          — $19/mo Developer flat price (v2; legacy $9 was DEVELOPER_V1)
-//   STRIPE_PRICE_ID_DEVELOPER_ANNUAL   — $182/yr Developer annual
 //   STRIPE_PRICE_ID_PRO                — $79/mo Pro flat price
-//   STRIPE_PRICE_ID_PRO_ANNUAL         — $758.40/yr Pro annual
 //   STRIPE_PRICE_ID_SCALE              — $199/mo Scale flat price
-//   STRIPE_PRICE_ID_SCALE_ANNUAL       — $1,910.40/yr Scale annual
 //
-// Request body: { email, plan, cadence }
+// Request body: { email, plan }
 //   plan    ∈ {"developer", "pro", "scale", "compute"} (free handled elsewhere)
-//   cadence ∈ {"monthly", "annual"}                    (default "monthly"; ignored for "compute")
 //
 // Compute is pure usage-based (no flat fee, just the trace-step meter).
 
@@ -49,26 +45,15 @@ async function checkRateLimit(ip) {
 //
 // Legacy plan slug "team" maps to "pro" so old intermediate-tier links keep
 // working through the rollout.
-function flatPriceFor(env, plan, cadence) {
-  const annual = cadence === "annual";
+function flatPriceFor(env, plan) {
   switch (plan) {
     case "developer":
-      return annual
-        ? (env.STRIPE_PRICE_ID_DEVELOPER_ANNUAL || env.STRIPE_PRICE_ID_DEVELOPER || null)
-        : (env.STRIPE_PRICE_ID_DEVELOPER || null);
+      return env.STRIPE_PRICE_ID_DEVELOPER || null;
     case "pro":
     case "team":   // legacy alias → Pro
-      return annual
-        ? (env.STRIPE_PRICE_ID_PRO_ANNUAL
-            || env.STRIPE_PRICE_ID_PRO
-            || env.STRIPE_PRICE_ID_TEAM_ANNUAL
-            || env.STRIPE_PRICE_ID_TEAM
-            || null)
-        : (env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID_TEAM || null);
+      return env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID_TEAM || null;
     case "scale":
-      return annual
-        ? (env.STRIPE_PRICE_ID_SCALE_ANNUAL || env.STRIPE_PRICE_ID_SCALE || null)
-        : (env.STRIPE_PRICE_ID_SCALE || null);
+      return env.STRIPE_PRICE_ID_SCALE || null;
     case "compute":
       return null;  // pure usage-based, no flat fee
     default:
@@ -113,7 +98,9 @@ export async function onRequestPost(context) {
     const validPlans = new Set(["developer", "pro", "compute", "team", "scale"]);
     let selectedPlan = validPlans.has(planRaw) ? planRaw : "developer";
     if (selectedPlan === "team") selectedPlan = "pro";
-    const cadence = body.cadence === "annual" ? "annual" : "monthly";
+    // Self-serve checkout is monthly only. Annual flat fees cannot be safely
+    // combined with the current monthly metered usage prices in Stripe Checkout.
+    const cadence = "monthly";
 
     const STRIPE_SECRET_KEY = context.env.STRIPE_SECRET_KEY;
     // Per-proof metered price (small-T plans). Legacy fallback to STRIPE_PRICE_ID.
@@ -152,7 +139,7 @@ export async function onRequestPost(context) {
         params.append(`line_items[${lineItem}][price]`, STRIPE_PRICE_ID_METERED);
         lineItem += 1;
       }
-      const flatPriceId = flatPriceFor(context.env, selectedPlan, cadence);
+      const flatPriceId = flatPriceFor(context.env, selectedPlan);
       if (flatPriceId) {
         params.append(`line_items[${lineItem}][price]`, flatPriceId);
         params.append(`line_items[${lineItem}][quantity]`, "1");

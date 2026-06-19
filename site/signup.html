@@ -159,12 +159,8 @@ footer .right a:hover{color:var(--muted)}
   <h1>Get Your API Key</h1>
   <p class="sub">Choose a plan and start minting verifiable state-transition receipts in under a minute.</p>
 
-  <!-- Monthly/Annual cadence toggle -->
-  <div class="cadence-toggle" id="cadence-toggle" style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:18px;font-size:13px">
-    <button type="button" class="cadence-btn cadence-active" data-cadence="monthly" onclick="selectCadence('monthly')"
-      style="background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);padding:6px 16px;border-radius:6px;font-family:var(--mono);font-weight:600;cursor:pointer;font-size:12px;letter-spacing:.02em">Monthly</button>
-    <button type="button" class="cadence-btn" data-cadence="annual" onclick="selectCadence('annual')"
-      style="background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:6px 16px;border-radius:6px;font-family:var(--mono);font-weight:600;cursor:pointer;font-size:12px;letter-spacing:.02em">Annual <span style="color:var(--green);font-weight:700">&minus;20%</span></button>
+  <div class="cadence-toggle" id="cadence-toggle" style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:18px;font-size:13px;color:var(--muted);font-family:var(--mono);font-weight:600;letter-spacing:.02em">
+    Monthly self-serve billing
   </div>
 
   <div class="plan-toggle" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
@@ -266,21 +262,14 @@ footer .right a:hover{color:var(--muted)}
   var emailInput = document.getElementById('email');
   var hintText = document.getElementById('hintText');
 
-  // Plan price labels by cadence. Annual prices are 20% off the equivalent
-  // monthly cadence (e.g., Developer monthly $19 -> annual $182.40).
+  // Plan price labels for monthly self-serve checkout.
   var planLabels = {
     monthly: {
       developer: '$19/mo + usage',
       pro:       '$79/mo + usage',
       scale:     '$199/mo + usage',
       compute:   '$0.50/M steps',
-    },
-    annual: {
-      developer: '$182.40/yr + usage',
-      pro:       '$758.40/yr + usage',
-      scale:     '$1,910.40/yr + usage',
-      compute:   '$0.50/M steps',
-    },
+    }
   };
 
   function planConfig(plan, cadence) {
@@ -292,29 +281,16 @@ footer .right a:hover{color:var(--muted)}
         scale:     { btn: 'Subscribe to Scale \u2014 $199/mo',                 btnClass: 'btn-submit',          hint: '$199/mo base + 40% off per-proof rates',                        paid: true },
         compute:   { btn: 'Start Compute \u2014 $0.50/M steps',                btnClass: 'btn-submit',          hint: 'No monthly base; pay for large state-transition traces by step', paid: true },
       },
-      annual: {
-        free:      { btn: 'Get Free API Key',                                btnClass: 'btn-submit free-btn', hint: 'Your API key will be emailed instantly',                       paid: false },
-        developer: { btn: 'Start with Developer \u2014 $182.40/yr',            btnClass: 'btn-submit',          hint: '20% off via annual prepay (\u2248 $15.20/mo equivalent)',        paid: true },
-        pro:       { btn: 'Subscribe to Pro \u2014 $758.40/yr',                btnClass: 'btn-submit',          hint: '20% off via annual prepay + 25% off per-proof rates',           paid: true },
-        scale:     { btn: 'Subscribe to Scale \u2014 $1,910.40/yr',            btnClass: 'btn-submit',          hint: '20% off via annual prepay + 40% off per-proof rates',           paid: true },
-        compute:   { btn: 'Start Compute \u2014 $0.50/M steps',                btnClass: 'btn-submit',          hint: 'Compute is pure usage-based; annual billing does not apply',    paid: true },
-      },
     };
     return (configs[cadence] && configs[cadence][plan]) || configs.monthly.developer;
   }
 
   window.selectCadence = function(cadence) {
-    currentCadence = cadence;
-    document.querySelectorAll('.cadence-btn').forEach(function(el) {
-      var active = el.dataset.cadence === cadence;
-      el.style.background = active ? 'var(--accent-dim)' : 'var(--surface)';
-      el.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
-      el.style.color = active ? 'var(--accent)' : 'var(--muted)';
-    });
+    currentCadence = 'monthly';
     // Update price labels
-    Object.keys(planLabels[cadence]).forEach(function(p) {
+    Object.keys(planLabels.monthly).forEach(function(p) {
       var el = document.getElementById('plan-price-' + p);
-      if (el) el.textContent = planLabels[cadence][p];
+      if (el) el.textContent = planLabels.monthly[p];
     });
     // Re-apply current plan to refresh button
     selectPlan(currentPlan);
@@ -329,9 +305,9 @@ footer .right a:hover{color:var(--muted)}
       var el = document.getElementById('features-' + p);
       if (el) el.style.display = p === plan ? '' : 'none';
     });
-    // Annual toggle is irrelevant for Free and Compute; hide it there.
+    // Paid plans are monthly self-serve only; keep the cadence note visible.
     var cadenceToggle = document.getElementById('cadence-toggle');
-    if (cadenceToggle) cadenceToggle.style.display = (plan === 'free' || plan === 'compute') ? 'none' : 'flex';
+    if (cadenceToggle) cadenceToggle.style.display = plan === 'free' ? 'none' : 'flex';
 
     var cfg = planConfig(plan, currentCadence);
     btn.textContent = cfg.btn;

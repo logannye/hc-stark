@@ -177,7 +177,7 @@ Pay for state-transition receipts based on trace complexity. Verification is alw
 | Pro | $79 | 25% off | 8 inflight, 300 RPM, $2,500/mo cap |
 | Scale | $199 | 40% off | 16 inflight, 500 RPM, $10,000/mo cap |
 
-Annual billing is 20% off any paid plan.
+Self-serve paid plans bill monthly. Annual prepaid contracts should stay manual until annual usage metering is wired deliberately.
 
 ### Compute (usage-based, no monthly base)
 
@@ -553,7 +553,7 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - DSL compiler for custom programs
 - Multi-tenant HTTP API with rate limiting
 - **Production service at [tinyzkp.com](https://tinyzkp.com)**
-- Stripe billing (Free tier, $19 Developer, $79 Pro, $199 Scale, plus a usage-based Compute product at $0.50/M trace steps; monthly + annual variants at 20% off; `team` retained only as a legacy/admin alias for Pro)
+- Stripe billing (Free tier, $19 Developer, $79 Pro, $199 Scale, plus a usage-based Compute product at $0.50/M trace steps; monthly self-serve checkout; `team` retained only as a legacy/admin alias for Pro)
 - **Publish-ready client SDKs** — Python (`pip install tinyzkp`, on PyPI), TypeScript (`npm install tinyzkp`, dual ESM+CJS build, on npm), Rust (`cargo add tinyzkp`)
 - **MCP directory listings**:
   - **[Smithery](https://smithery.ai/servers/logan/tinyzkp-mcp)** — live since 2026-04-28. Catalogued from a static [server-card.json](deploy/server-card.json) at `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json`.
