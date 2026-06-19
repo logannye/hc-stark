@@ -58,16 +58,13 @@ function flatPriceFor(env, plan, cadence) {
         : (env.STRIPE_PRICE_ID_DEVELOPER || null);
     case "pro":
     case "team":   // legacy alias → Pro
-      // Existing production installs may still have STRIPE_PRICE_ID_PRO wired
-      // to the old $199 plan. Prefer the known-$79 Team IDs during rollout;
-      // once those legacy secrets are removed, the new Pro IDs take over.
       return annual
-        ? (env.STRIPE_PRICE_ID_TEAM_ANNUAL
-            || env.STRIPE_PRICE_ID_TEAM
-            || env.STRIPE_PRICE_ID_PRO_ANNUAL
+        ? (env.STRIPE_PRICE_ID_PRO_ANNUAL
             || env.STRIPE_PRICE_ID_PRO
+            || env.STRIPE_PRICE_ID_TEAM_ANNUAL
+            || env.STRIPE_PRICE_ID_TEAM
             || null)
-        : (env.STRIPE_PRICE_ID_TEAM || env.STRIPE_PRICE_ID_PRO || null);
+        : (env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID_TEAM || null);
     case "scale":
       return annual
         ? (env.STRIPE_PRICE_ID_SCALE_ANNUAL || env.STRIPE_PRICE_ID_SCALE || null)
