@@ -169,20 +169,43 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;
 /* Nav */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;
   background:rgba(5,10,18,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
-nav .container{display:flex;align-items:center;justify-content:space-between;height:56px}
+nav .container{display:flex;align-items:center;justify-content:space-between;height:56px;max-width:1180px}
 nav .logo{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--text-bright);text-decoration:none;
   letter-spacing:-.02em}
 nav .logo span{color:var(--accent)}
-nav .links{display:flex;gap:18px;align-items:center}
-nav .links a{color:var(--muted);font-size:13px;font-weight:500;transition:color .2s;letter-spacing:.01em}
-nav .links a:hover{color:var(--text);text-decoration:none}
+nav .links{display:flex;gap:8px;align-items:center}
+nav .links a,
+nav .nav-trigger{color:var(--muted);font-size:13px;font-weight:600;transition:color .2s,background .2s,border-color .2s;
+  letter-spacing:.01em;border-radius:7px}
+nav .links a:hover,
+nav .nav-trigger:hover,
+nav .nav-group:focus-within .nav-trigger{color:var(--text);text-decoration:none;background:rgba(46,232,212,.06)}
+nav .nav-trigger{appearance:none;background:transparent;border:0;font-family:var(--sans);cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;padding:8px 10px;line-height:1}
+nav .nav-trigger::after{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;
+  transform:rotate(45deg) translateY(-1px);opacity:.72}
+nav .links > a:not(.nav-cta){display:inline-flex;align-items:center;min-height:32px;padding:8px 10px;line-height:1}
+nav .nav-link{display:inline-flex;align-items:center;min-height:32px;padding:8px 10px;line-height:1}
+nav .nav-group{position:relative}
+nav .nav-menu{position:absolute;top:calc(100% + 12px);left:0;width:260px;padding:8px;
+  background:rgba(8,13,24,.98);border:1px solid var(--border-light);border-radius:12px;
+  box-shadow:0 18px 52px rgba(0,0,0,.34);opacity:0;visibility:hidden;pointer-events:none;
+  transform:translateY(6px);transition:opacity .16s ease,transform .16s ease,visibility .16s ease}
+nav .nav-menu::before{content:'';position:absolute;left:0;right:0;top:-12px;height:12px}
+nav .nav-group:hover .nav-menu,
+nav .nav-group:focus-within .nav-menu{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0)}
+nav .nav-menu a{display:grid;gap:2px;padding:10px 11px;color:var(--text);border-radius:8px;font-size:13px;
+  line-height:1.25;letter-spacing:0}
+nav .nav-menu a:hover{background:rgba(46,232,212,.08);color:var(--accent)}
+nav .nav-menu a span{color:var(--dim);font-size:11.5px;line-height:1.35;font-weight:500}
 nav .nav-cta{background:var(--accent);color:var(--bg)!important;padding:7px 18px;border-radius:6px;font-weight:700;
   font-size:12.5px;letter-spacing:.03em;text-transform:uppercase;
-  transition:transform .15s,box-shadow .15s}
-nav .nav-cta:hover{transform:translateY(-1px);box-shadow:0 4px 20px var(--accent-glow)}
+  transition:transform .15s,box-shadow .15s;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;
+  min-height:34px;margin-left:2px}
+nav .nav-cta:hover{background:var(--accent);transform:translateY(-1px);box-shadow:0 4px 20px var(--accent-glow)}
 .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;
   vertical-align:middle;box-shadow:0 0 6px rgba(52,211,153,.5)}
-.status-link{font-size:12px!important;display:flex;align-items:center}
+.status-link{font-size:12.5px!important;display:inline-flex;align-items:center;white-space:nowrap}
 
 /* Hamburger */
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px}
@@ -456,11 +479,24 @@ footer .right a:hover{color:var(--muted)}
 .fade-in{opacity:0;transform:translateY(16px);transition:opacity .6s ease,transform .6s ease}
 .fade-in.visible{opacity:1;transform:translateY(0)}
 
-@media(max-width:768px){
+@media(max-width:900px){
   nav .links{display:none;position:absolute;top:56px;left:0;right:0;background:var(--bg);
-    border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}
+    border-bottom:1px solid var(--border);flex-direction:column;align-items:stretch;padding:14px 24px 18px;gap:6px}
   nav .links.open{display:flex}
   nav .links a{width:100%}
+  nav .nav-link,
+  nav .nav-trigger{width:100%;min-height:38px;padding:10px 0;justify-content:space-between;color:var(--text)}
+  nav .nav-group{width:100%}
+  nav .nav-menu{display:none;position:static;width:100%;padding:0 0 8px 12px;background:transparent;border:0;border-left:1px solid var(--border);
+    border-radius:0;box-shadow:none;opacity:1;visibility:visible;pointer-events:auto;transform:none}
+  nav .nav-group.open .nav-menu{display:block}
+  nav .nav-group.open .nav-trigger::after{transform:rotate(225deg) translate(-1px,-1px)}
+  nav .nav-menu::before{display:none}
+  nav .nav-menu a{padding:7px 0;color:var(--muted)}
+  nav .nav-menu a:hover{background:transparent;color:var(--accent)}
+  nav .nav-menu a span{display:none}
+  nav .nav-cta{margin-left:0;margin-top:4px}
+  nav .status-link{justify-content:flex-start}
   .hamburger{display:block}
   .steps{grid-template-columns:1fr}
   .pricing-grid{grid-template-columns:1fr 1fr!important}
@@ -514,23 +550,38 @@ footer .right a:hover{color:var(--muted)}
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/agents">Agents</a>
-    <a href="/platform-rollout">Platforms</a>
-    <a href="/mcp">MCP</a>
-    <a href="/use-cases">Use Cases</a>
-    <a href="/receipts">Receipts</a>
-    <a href="/recipes">Recipes</a>
-    <a href="/examples">Examples</a>
-    <a href="/evaluation">Evaluation</a>
-    <a href="/fit">Fit</a>
-    <a href="/roi">ROI</a>
-    <a href="/limits">Limits</a>
-    <a href="/try">Try it</a>
-    <a href="/verify">Verify</a>
-    <a href="/pricing">Pricing</a>
-    <a href="/compute">Compute</a>
-    <a href="/pilot">Pilot</a>
-    <a class="status-link" href="/status"><span class="status-dot" id="statusDot"></span>Status</a>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Product</button>
+      <div class="nav-menu" aria-label="Product">
+        <a href="/mcp">MCP server<span>Install tools directly into agent clients.</span></a>
+        <a href="/receipts">Proof receipts<span>Attest state changes without replay.</span></a>
+        <a href="/verify">Verifier<span>Check production receipts in the browser.</span></a>
+        <a href="/compute">Compute<span>Large traces and hosted proving capacity.</span></a>
+        <a href="/try">Live demo<span>Generate a receipt in seconds.</span></a>
+      </div>
+    </div>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Solutions</button>
+      <div class="nav-menu" aria-label="Solutions">
+        <a href="/agents">AI agents<span>Receipts for autonomous actions.</span></a>
+        <a href="/platform-rollout">Platforms<span>Embed proof receipts across workflows.</span></a>
+        <a href="/use-cases">Use cases<span>Where verification changes buying behavior.</span></a>
+        <a href="/pilot">Pilot<span>Launch with a defined production route.</span></a>
+      </div>
+    </div>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Resources</button>
+      <div class="nav-menu" aria-label="Resources">
+        <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
+        <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
+        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/fit">Fit<span>Decide whether TinyZKP is right for you.</span></a>
+        <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
+        <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
+      </div>
+    </div>
+    <a class="nav-link" href="/pricing">Pricing</a>
+    <a class="status-link nav-link" href="/status"><span class="status-dot" id="statusDot"></span>Status</a>
     <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
 </div>
@@ -1150,9 +1201,25 @@ function copyCode(btn){
   });
 }
 
+// Mobile grouped navigation
+var navMobileMedia=window.matchMedia('(max-width: 900px)');
+document.querySelectorAll('nav .nav-trigger').forEach(function(trigger){
+  trigger.addEventListener('click',function(){
+    if(!navMobileMedia.matches) return;
+    var group=trigger.closest('.nav-group');
+    if(!group) return;
+    group.classList.toggle('open');
+    trigger.setAttribute('aria-expanded',group.classList.contains('open')?'true':'false');
+  });
+});
+
 // Close mobile menu on link click
 document.querySelectorAll('nav .links a').forEach(function(a){
-  a.addEventListener('click',function(){document.querySelector('.links').classList.remove('open')});
+  a.addEventListener('click',function(){
+    document.querySelector('.links').classList.remove('open');
+    document.querySelectorAll('nav .nav-group.open').forEach(function(group){group.classList.remove('open')});
+    document.querySelectorAll('nav .nav-trigger[aria-expanded]').forEach(function(trigger){trigger.setAttribute('aria-expanded','false')});
+  });
 });
 
 // Cost calculator
