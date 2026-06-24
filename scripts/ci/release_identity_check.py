@@ -11,6 +11,11 @@ import urllib.request
 from dataclasses import dataclass
 from urllib.parse import urljoin
 
+MONITOR_HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": "TinyZKP-Release-Check/1.0 (+https://tinyzkp.com)",
+}
+
 
 @dataclass(frozen=True)
 class ReleaseSurface:
@@ -20,7 +25,7 @@ class ReleaseSurface:
 
 
 def fetch_json(url: str, timeout: int) -> dict[str, object]:
-    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    req = urllib.request.Request(url, headers=MONITOR_HEADERS)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             if resp.status != 200:

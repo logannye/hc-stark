@@ -1,6 +1,11 @@
 import release_identity_check as check
 
 
+def test_fetch_headers_identify_release_monitor():
+    assert check.MONITOR_HEADERS["Accept"] == "application/json"
+    assert check.MONITOR_HEADERS["User-Agent"].startswith("TinyZKP-Release-Check/")
+
+
 def test_validate_payload_requires_service_sha_and_version():
     surface = check.ReleaseSurface("site", "https://tinyzkp.com/api/release", "site")
 
