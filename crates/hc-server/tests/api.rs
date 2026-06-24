@@ -3,7 +3,7 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use hc_sdk::types::{ProveJobStatus, ProveRequest, VerifyRequest};
+use hc_sdk::types::{ProofBytes, ProveJobStatus, ProveRequest, VerifyRequest};
 use tower::ServiceExt;
 
 /// Serialize tests that mutate the process-global HC_SERVER_WORKER_PATH
@@ -35,6 +35,31 @@ async fn healthz_is_ok() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn version_reports_api_release_identity() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state = hc_server::test_state(tmp.path().to_path_buf());
+    let app = hc_server::build_app(state);
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/version")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["service"], "api");
+    assert_eq!(json["package_version"], env!("CARGO_PKG_VERSION"));
+    assert!(json.get("release_sha").is_some());
 }
 
 #[tokio::test]
@@ -143,10 +168,246 @@ async fn prove_then_verify_roundtrip() {
         }
     }
     let proof = proof.expect("prove should complete");
+    let job_dir = tmp.path().join("jobs").join("dev").join(&submit.job_id);
+    assert!(
+        job_dir.join("status.json").exists(),
+        "job status remains available for local polling compatibility"
+    );
+    assert!(
+        !job_dir.join("request.json").exists(),
+        "worker input should be streamed over stdin, not persisted as request.json"
+    );
+    assert!(
+        !job_dir.join("proof.json").exists(),
+        "worker output should be streamed over stdout, not persisted as proof.json"
+    );
 
     // Sound v5 proof: the production /verify endpoint (default floor) accepts it.
     let verify_req = VerifyRequest {
         proof,
+        allow_legacy_v2: true,
+    };
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/verify")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&verify_req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let result: hc_sdk::types::VerifyResult = serde_json::from_slice(&body).unwrap();
+    assert!(result.ok, "verify failed: {:?}", result.error);
+}
+
+#[tokio::test]
+async fn shared_dispatch_enqueues_without_local_worker_artifacts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state = hc_server::test_state_shared_dispatch(tmp.path().to_path_buf());
+    let app = hc_server::build_app(state);
+
+    let prove_req = ProveRequest {
+        workload_id: Some("toy_add_1_2".to_string()),
+        template_id: None,
+        template_params: None,
+        program: None,
+        initial_acc: 1,
+        final_acc: 4,
+        block_size: 8,
+        fri_final_poly_size: 2,
+        query_count: 80,
+        lde_blowup_factor: 2,
+        zk_mask_degree: None,
+    };
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/prove")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&prove_req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let submit: hc_sdk::types::ProveSubmitResponse = serde_json::from_slice(&body).unwrap();
+
+    let job_dir = tmp.path().join("jobs").join("dev").join(&submit.job_id);
+    assert!(
+        !job_dir.exists(),
+        "shared dispatch should not create local job artifacts"
+    );
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/prove/{}", submit.job_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let status: ProveJobStatus = serde_json::from_slice(&body).unwrap();
+    assert!(matches!(status, ProveJobStatus::Pending));
+}
+
+#[tokio::test]
+async fn shared_dispatch_claimed_worker_completion_polls_and_verifies() {
+    let worker = std::env::var("CARGO_BIN_EXE_hc-worker")
+        .or_else(|_| std::env::var("CARGO_BIN_EXE_hc_worker"))
+        .ok()
+        .or_else(|| {
+            let here = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let candidate = here.join("../../target/debug/hc-worker");
+            candidate
+                .exists()
+                .then(|| candidate.to_string_lossy().to_string())
+        });
+    let Some(worker) = worker else {
+        eprintln!("skipping shared-dispatch worker completion test: hc-worker binary not found");
+        return;
+    };
+
+    let tmp = tempfile::tempdir().unwrap();
+    let state = hc_server::test_state_shared_dispatch(tmp.path().to_path_buf());
+    let app = hc_server::build_app(state);
+
+    let prove_req = ProveRequest {
+        workload_id: None,
+        template_id: None,
+        template_params: None,
+        program: Some(vec![
+            "add_immediate 1".to_string(),
+            "add_immediate 2".to_string(),
+            "add_immediate 3".to_string(),
+            "add_immediate 4".to_string(),
+            "add_immediate 5".to_string(),
+            "add_immediate 6".to_string(),
+            "add_immediate 7".to_string(),
+            "add_immediate 8".to_string(),
+        ]),
+        initial_acc: 5,
+        final_acc: 41,
+        block_size: 8,
+        fri_final_poly_size: 2,
+        query_count: 10,
+        lde_blowup_factor: 2,
+        zk_mask_degree: None,
+    };
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/prove")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&prove_req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let submit: hc_sdk::types::ProveSubmitResponse = serde_json::from_slice(&body).unwrap();
+
+    let job_dir = tmp.path().join("jobs").join("dev").join(&submit.job_id);
+    assert!(
+        !job_dir.exists(),
+        "shared dispatch should not create local job artifacts before worker claim"
+    );
+
+    let index = hc_server::job_index::JobIndex::open(tmp.path().join("jobs.sqlite")).unwrap();
+    let claimed = index
+        .claim_next("integration-worker", 30_000)
+        .unwrap()
+        .expect("shared-dispatch job should be claimable");
+    assert_eq!(claimed.tenant_id, "dev");
+    assert_eq!(claimed.job_id, submit.job_id);
+    assert_eq!(claimed.request.final_acc, 41);
+
+    use std::process::Stdio;
+    use tokio::io::AsyncWriteExt;
+
+    let mut child = tokio::process::Command::new(worker)
+        .arg("--stdio")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .env("HC_SERVER_ALLOW_CUSTOM_PROGRAMS", "true")
+        .spawn()
+        .expect("spawn hc-worker --stdio");
+    let mut stdin = child.stdin.take().expect("worker stdin");
+    stdin
+        .write_all(&serde_json::to_vec(&claimed.request).unwrap())
+        .await
+        .expect("write worker request");
+    stdin.shutdown().await.expect("close worker stdin");
+    drop(stdin);
+
+    let output = tokio::time::timeout(std::time::Duration::from_secs(90), child.wait_with_output())
+        .await
+        .expect("hc-worker should finish within test timeout")
+        .expect("wait for hc-worker");
+    assert!(
+        output.status.success(),
+        "hc-worker failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let proof: ProofBytes = serde_json::from_slice(&output.stdout).expect("parse worker proof");
+    index
+        .update_status(
+            "dev",
+            &submit.job_id,
+            &ProveJobStatus::Succeeded {
+                proof: proof.clone(),
+            },
+        )
+        .unwrap();
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/prove/{}", submit.job_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let status: ProveJobStatus = serde_json::from_slice(&body).unwrap();
+    let polled_proof = match status {
+        ProveJobStatus::Succeeded { proof } => proof,
+        other => panic!("expected shared-index success, got {other:?}"),
+    };
+    assert_eq!(polled_proof.version, proof.version);
+    assert_eq!(polled_proof.bytes, proof.bytes);
+
+    let verify_req = VerifyRequest {
+        proof: polled_proof,
         allow_legacy_v2: true,
     };
     let resp = app
@@ -869,10 +1130,10 @@ async fn job_index_handles_concurrent_writes() {
 }
 
 /// Worker crash mid-prove: the spawned hc-worker exits non-zero before
-/// writing proof.json. The hc-server `prove_with_worker_process` must
-/// detect the failed exit and surface a Failed status, not leave the
-/// job stuck in Running. This is the regression guard for the colleague's
-/// "process killed mid-prove" scenario.
+/// returning proof bytes on stdout. The hc-server `prove_with_worker_process`
+/// must detect the failed exit and surface a Failed status, not leave the job
+/// stuck in Running. This is the regression guard for the colleague's "process
+/// killed mid-prove" scenario.
 #[tokio::test]
 async fn worker_crash_lands_job_in_failed_state() {
     use std::os::unix::fs::PermissionsExt;
@@ -881,9 +1142,9 @@ async fn worker_crash_lands_job_in_failed_state() {
     let _guard = WORKER_PATH_LOCK.lock().await;
     let prior = std::env::var("HC_SERVER_WORKER_PATH").ok();
 
-    // Build a fake worker that exits 99 immediately. The arguments
-    // (--request, --out) are ignored — we want the spawn to succeed
-    // but the child to die before writing proof.json.
+    // Build a fake worker that exits 99 immediately. The arguments are ignored:
+    // we want the spawn to succeed but the child to die before returning proof
+    // bytes on stdout.
     let tmp = tempfile::tempdir().unwrap();
     let fake_worker = tmp.path().join("fake-worker");
     std::fs::write(

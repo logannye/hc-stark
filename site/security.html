@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security &amp; Audit Status - TinyZKP</title>
+<meta name="description" content="TinyZKP security posture, proof-system scope, template lifecycle, audit status, and responsible-disclosure contact.">
+<meta property="og:title" content="Security &amp; Audit Status - TinyZKP">
+<meta property="og:description" content="What TinyZKP's live STARK receipt path claims today, what remains audit-gated, and how to report security issues.">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<link rel="canonical" href="https://tinyzkp.com/security">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&amp;family=IBM+Plex+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+main{padding-top:56px}
+.hero{padding:78px 0 48px;border-bottom:1px solid var(--border)}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:22px}
+.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
+h1{max-width:820px;font-size:clamp(34px,5vw,54px);line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);margin-bottom:18px}
+.lede{max-width:760px;color:var(--muted);font-size:17px;line-height:1.75}
+.section{padding:56px 0;border-bottom:1px solid var(--border)}
+.section h2{font-size:26px;line-height:1.2;color:var(--text-bright);letter-spacing:-.02em;margin-bottom:14px}
+.section p{color:var(--muted);font-size:15px;line-height:1.75;max-width:780px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
+.card h3{font-size:16px;color:var(--text-bright);margin-bottom:8px}
+.card p{font-size:13.5px;margin-bottom:0}
+.tag{display:inline-flex;margin-bottom:12px;padding:5px 9px;border-radius:6px;border:1px solid var(--border-light);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:700}
+.tag.live{color:var(--green);background:var(--green-dim);border-color:rgba(52,211,153,.22)}
+.tag.gated{color:var(--amber);background:var(--amber-dim);border-color:rgba(251,191,36,.22)}
+.tag.preview{color:var(--blue);background:var(--blue-dim);border-color:rgba(96,165,250,.22)}
+.status-table{overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin-top:22px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:13px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}
+th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}
+td{color:var(--muted)}
+tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--text)}
+.callout{border:1px solid rgba(251,191,36,.24);background:var(--amber-dim);border-radius:10px;padding:20px;margin-top:22px}
+.callout p{margin-bottom:0;color:var(--text)}
+ul{max-width:780px;color:var(--muted);padding-left:20px}
+li{margin-bottom:8px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/try">Try</a>
+    <a href="/verify">Verify</a>
+    <a href="/docs">Docs</a>
+    <a href="/research">Research</a>
+    <a href="/security">Security</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+  <section class="hero">
+    <div class="container">
+      <div class="eyebrow">Security status</div>
+      <h1>Transparent receipt claims, explicit audit boundaries.</h1>
+      <p class="lede">TinyZKP's live public product is a transparent STARK state-transition receipt service. The verifier floor rejects legacy pre-v5 proofs, the default receipt is not marketed as input privacy, and templates stay hidden until their predicate is enforced and their audit state is appropriate for production exposure.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Current production scope</h2>
+      <p>Template discovery uses three lifecycle values: <code>live</code>, <code>audit_gated</code>, and <code>preview</code>. Only <code>live</code> templates are listed and dispatchable in the default production deployment.</p>
+      <div class="grid">
+        <article class="card">
+          <span class="tag live">Live</span>
+          <h3>accumulator_step</h3>
+          <p>Transparent state-transition receipts: starting from X, applying public deltas reaches Y. Verification can run through the API, SDKs, MCP, CLI, or browser verifier.</p>
+        </article>
+        <article class="card">
+          <span class="tag gated">Audit gated</span>
+          <h3>General AIR templates</h3>
+          <p>Some templates may be implemented on the v7 general-AIR path, but remain hidden from default production listings until external audit coverage is complete.</p>
+        </article>
+        <article class="card">
+          <span class="tag preview">Preview</span>
+          <h3>zkML, Spartan, custom predicates</h3>
+          <p>Preview or structure-only workloads are not part of the self-serve production promise unless explicitly enabled for development or a private design-partner engagement.</p>
+        </article>
+      </div>
+      <div class="callout">
+        <p><strong>Do not treat default TinyZKP receipts as input privacy.</strong> The default self-serve receipt is transparent attestation. Privacy-oriented flows require a separately documented template, configuration, and audit status.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Audit status</h2>
+      <div class="status-table">
+        <table>
+          <thead><tr><th>Area</th><th>Status</th><th>Public artifact</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Threat model</strong></td>
+              <td>Published and maintained in the repo.</td>
+              <td><a href="https://github.com/logannye/hc-stark/blob/main/docs/security/threat_model.md" target="_blank">threat_model.md</a></td>
+            </tr>
+            <tr>
+              <td><strong>Soundness argument</strong></td>
+              <td>Conjectured under standard FRI/STARK assumptions; pending external cryptographer audit.</td>
+              <td><a href="https://github.com/logannye/hc-stark/blob/main/docs/security/soundness_proof.md" target="_blank">soundness_proof.md</a></td>
+            </tr>
+            <tr>
+              <td><strong>External cryptography audit</strong></td>
+              <td>Not complete yet. Customer-facing bit-strength claims should stay qualified until this is done.</td>
+              <td><a href="https://github.com/logannye/hc-stark/blob/main/docs/security/audit_checklist.md" target="_blank">audit_checklist.md</a></td>
+            </tr>
+            <tr>
+              <td><strong>Legacy KZG/BN254 repo</strong></td>
+              <td>Out of production scope. It is research lineage, not the hosted TinyZKP trust boundary.</td>
+              <td><a href="/research">Research lineage</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Responsible disclosure</h2>
+      <p>For suspected vulnerabilities in proof verification, API authentication, billing, tenant isolation, SDK packages, or the browser verifier, email <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a>. Include the affected surface, reproduction steps, proof bytes or request IDs where relevant, and whether the issue affects confidentiality, soundness, billing, or availability.</p>
+      <ul>
+        <li>Do not test against other users' accounts or data.</li>
+        <li>Do not run high-volume denial-of-service testing against the hosted service.</li>
+        <li>Proof-system reports should include the proof version and verifier package used.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/docs">Quickstart</a>
+    <a href="/verify">Verify</a>
+    <a href="/research">Research</a>
+    <a href="/security">Security</a>
+    <a href="/terms">Terms</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+
+</body>
+</html>

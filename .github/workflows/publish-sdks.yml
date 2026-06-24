@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   publish-python:
@@ -24,6 +26,17 @@ jobs:
         run: |
           pip install build twine
           python -m build
+          twine check dist/*
+      - name: Attest Python distributions
+        uses: actions/attest@v4
+        with:
+          subject-path: clients/python/dist/*
+      - name: Upload Python distributions
+        working-directory: clients/python
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
           twine upload dist/*
 
   publish-typescript:
@@ -39,15 +52,23 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm install
+          npm ci
           npm run build
-          npm publish
+          npm test
+          npm publish --provenance --access public
 
   publish-rust:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Package
+        working-directory: clients/rust
+        run: cargo package
+      - name: Attest Rust crate package
+        uses: actions/attest@v4
+        with:
+          subject-path: clients/rust/target/package/*.crate
       - name: Publish
         working-directory: clients/rust
         env:
@@ -71,11 +92,18 @@ jobs:
       - name: Build WASM package
         working-directory: crates/hc-wasm
         run: ./build.sh
+      - name: Test WASM package
+        working-directory: crates/hc-wasm/pkg
+        run: npm pack --dry-run
+      - name: Attest WASM package files
+        uses: actions/attest@v4
+        with:
+          subject-path: crates/hc-wasm/pkg/**
       - name: Publish to npm
         working-directory: crates/hc-wasm/pkg
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+        run: npm publish --provenance --access public
 
   build-mcp-binaries:
     strategy:
@@ -103,8 +131,14 @@ jobs:
           cp target/${{ matrix.target }}/release/hc-mcp-stdio ${{ matrix.name }}-stdio
           cp target/${{ matrix.target }}/release/hc-mcp-http ${{ matrix.name }}-http
           chmod +x ${{ matrix.name }}-stdio ${{ matrix.name }}-http
+          shasum -a 256 -b ${{ matrix.name }}-stdio ${{ matrix.name }}-http > ${{ matrix.name }}.sha256
+      - name: Attest MCP binaries
+        uses: actions/attest@v4
+        with:
+          subject-checksums: ${{ matrix.name }}.sha256
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ matrix.name }}-stdio
             ${{ matrix.name }}-http
+            ${{ matrix.name }}.sha256

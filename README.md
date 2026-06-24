@@ -81,6 +81,21 @@ Verification is always free. SDKs ship for Python (`pip install tinyzkp`), TypeS
 
 The technical writeup is in [`docs/whitepaper.md`](docs/whitepaper.md).
 
+### Research lineage
+
+TinyZKP has an older public repository,
+[`logannye/space-efficient-zero-knowledge-proofs`](https://github.com/logannye/space-efficient-zero-knowledge-proofs),
+that explores sublinear-space proving with KZG commitments over BN254 and
+serves as research lineage for the memory-efficiency thesis. It is not the
+hosted TinyZKP engine and it is not the trust model behind the live API.
+
+The current product path is this repository: transparent STARK-style
+state-transition receipts, no trusted setup ceremony for the receipt path,
+offline verification, SDKs, MCP, billing, and operations. The public
+reconciliation story is at [tinyzkp.com/research](https://tinyzkp.com/research),
+and the operating roadmap is in
+[`docs/strategy/reconciliation_roadmap.md`](docs/strategy/reconciliation_roadmap.md).
+
 ---
 
 ## Use the hosted API
@@ -329,13 +344,16 @@ Interactive API explorer: **[api.tinyzkp.com/docs](https://api.tinyzkp.com/docs)
 
 ### Authentication
 
-All endpoints require a Bearer token:
+Most proving and account-management HTTP API endpoints require a Bearer token:
 
 ```
 Authorization: Bearer tzk_...
 ```
 
-Verification is free but still requires auth to prevent abuse.
+Server-side verification is free but still requires auth to prevent abuse.
+The hosted MCP transport is different: `mcp.tinyzkp.com/mcp` accepts an
+anonymous public lane with a global concurrency cap, and optional Bearer auth
+for per-plan limits.
 
 Rotate a compromised key instantly:
 ```bash
@@ -386,16 +404,32 @@ See [`docs/operations.md`](docs/operations.md) for full configuration reference.
 |----------|---------|-------------|
 | `HC_SERVER_API_KEYS` | unset | `tenant:key` pairs (comma-separated) |
 | `HC_SERVER_API_KEYS_FILE` | unset | Path to API keys file (`tenant:key:plan` per line) |
+| `HC_SERVER_AUTH_PG_URL` | unset | Optional shared Postgres tenant/auth source. When set, API and MCP can authenticate Bearer keys from the `tenants` table instead of relying only on host-local `api_keys.txt` |
+| `HC_SERVER_AUTH_PG_TLS` | inferred from URL | Optional TLS override for `HC_SERVER_AUTH_PG_URL` |
+| `HC_TENANT_PG_URL` | unset | Optional billing-webhook Postgres mirror for tenant/auth rows before API/MCP auth read cutover |
+| `HC_TENANT_PG_REQUIRED` | `false` | Fail tenant mutations if the Postgres mirror write fails; use after parity is proven |
 | `HC_SERVER_AUTH_GRACE_MS` | `300000` | Rotation grace window: rotated-out keys still authenticate for this long after a hot-reload swap |
 | `HC_SERVER_WORKER_PATH` | unset | Explicit path to `hc-worker`; validated at boot. Falls back to sibling-binary lookup, then PATH |
 | `HC_SERVER_MAX_INFLIGHT` | `4` | Max concurrent prove jobs per tenant |
 | `HC_SERVER_MAX_WORKER_SPAWN` | `32` | Global cap on concurrent worker subprocess spawns (EMFILE guard); 0 disables |
 | `HC_SERVER_MAX_PROVE_SECS` | `300` | Per-job timeout |
 | `HC_SERVER_ALLOW_CUSTOM_PROGRAMS` | `false` | Allow arbitrary VM programs |
+| `HC_SERVER_PROVE_DISPATCH` | `local` | Prove dispatch mode: `local` spawns `hc-worker` in the API process; `shared` enqueues to the job index for `hc-job-worker` |
 | `HC_SERVER_MAX_PROVE_RPM` | `100` | Per-tenant prove rate limit |
 | `HC_SERVER_MAX_VERIFY_RPM` | `300` | Per-tenant verify rate limit |
 | `HC_SERVER_JOB_INDEX_SQLITE` | `true` | Enable SQLite job index |
-| `HC_SERVER_PG_URL` | unset | Postgres connection string for dual-write (Phase 1 of [migration plan](docs/postgres_migration.md)). When set, usage_log writes mirror to PG; when unset, SQLite-only |
+| `HC_SERVER_JOB_INDEX_SOURCE` | `sqlite` | Job index backend: `sqlite`, `postgres`, or `disabled`. `postgres` stores request/status JSON and completed proof bytes in Postgres |
+| `HC_JOB_INDEX_PG_URL` | falls back to `HC_SERVER_PG_URL` | Postgres connection string for `HC_SERVER_JOB_INDEX_SOURCE=postgres` |
+| `HC_JOB_INDEX_PG_TLS` | inferred from URL | Optional TLS override for the Postgres job index |
+| `HC_SERVER_PG_URL` | unset | Postgres connection string for Phase 1 usage dual-write. When set, `usage_log`, `verify_log`, and `failed_proofs` writes mirror to Postgres while SQLite remains the read/cap source |
+| `HC_SERVER_PG_TLS` | inferred from URL | Optional Postgres TLS override: `true`/`require` or `false`/`disable`. URL `sslmode=require`, `verify-ca`, or `verify-full` also enables TLS |
+| `HC_SERVER_USAGE_READ_FROM` | `sqlite` | Usage read source for `/usage` and monthly cap checks: `sqlite` or `postgres`. Use `postgres` only after dual-write parity is proven |
+| `HC_RATE_LIMIT_PG_URL` | unset | Optional Postgres shared rate-limit store. Set in both `hc-server` and `hc-mcp-http` so authenticated HTTP and MCP requests consume the same tenant RPM window |
+| `HC_RATE_LIMIT_PG_TLS` | inferred from URL | Optional TLS override for `HC_RATE_LIMIT_PG_URL` |
+| `HC_JOB_WORKER_INDEX_SOURCE` | `postgres` | `hc-job-worker` queue source. Use with `HC_SERVER_PROVE_DISPATCH=shared` and `HC_SERVER_JOB_INDEX_SOURCE=postgres` |
+| `HC_JOB_WORKER_USAGE_PG_URL` | falls back to `HC_SERVER_PG_URL` | Postgres usage recorder for jobs executed by `hc-job-worker` |
+| `HC_JOB_WORKER_LEASE_MS` | `30000` | Shared job lease duration for `hc-job-worker`; renewed while `hc-worker` runs |
+| `HC_JOB_WORKER_HEARTBEAT_MS` | `5000` | How often `hc-job-worker` renews leases and checks cancellation |
 | `HC_ALLOW_UNAUDITED_TEMPLATES` | `false` | Expose/dispatch templates whose AIR does not yet enforce their named predicate (every template except `accumulator_step`). Off in production; set `true` only for Phase-1B development. Honored identically by `hc-server` and `hc-mcp`. |
 | `HC_METRICS_TOKEN` | unset | Secret token for `/metrics`. Unset (or empty) → `/metrics` returns 404 (disabled). Set → endpoint requires `Authorization: Bearer <token>`; mismatched token → 401. Set in production to prevent leaking per-tenant revenue counters (audit finding G10). |
 | `HC_MCP_HTTP_HOST` | `0.0.0.0` | hc-mcp-http bind host |
@@ -563,7 +597,7 @@ Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@
 - **Browser playground at [`tinyzkp.com/try`](https://tinyzkp.com/try)** — mint and verify proofs without signup
 - Live status page at [`tinyzkp.com/status`](https://tinyzkp.com/status) — real Grafana panels backing it
 - Docker Compose production stack with monitoring (Prometheus + Grafana + Alertmanager)
-- **Templates with copy-paste examples + integration tests** — full curl + Python + TypeScript snippets shipped on [`tinyzkp.com/docs`](https://tinyzkp.com/docs); integration test at [`crates/hc-workloads/tests/template_examples.rs`](crates/hc-workloads/tests/template_examples.rs) asserts every documented example builds via `build_from_template()`
+- **Templates with copy-paste examples + integration tests** — full curl, Python, TypeScript, Rust, and CLI snippets shipped on [`tinyzkp.com/docs`](https://tinyzkp.com/docs), with copy buttons and compatibility guidance; integration test at [`crates/hc-workloads/tests/template_examples.rs`](crates/hc-workloads/tests/template_examples.rs) asserts every documented template example builds via `build_from_template()`
 - **Customer-discovery pipeline** — recruit → script → synthesis playbook in [`marketing/USER_INTERVIEWS.md`](marketing/USER_INTERVIEWS.md), targeting 5 interviews / 14 days against free-tier signups, MCP installs, and playground completions
 - **Protocol transcript v2 contract** — versioned Fiat–Shamir transcript domains (`hc-stark/v2`, `hc-stark/fri/v2`) with canonical labels in `hc_hash::protocol`; treated as a wire-compatibility contract (see [`docs/whitepaper.md`](docs/whitepaper.md) §7.0 and [`docs/design_notes/security_considerations.md`](docs/design_notes/security_considerations.md) §2.4)
 - **Security audit suite** — threat model, soundness argument (conjectured, audit-pending), and audit checklist under [`docs/security/`](docs/security/), plus per-pillar fuzzing harnesses under [`fuzz/`](fuzz/)
@@ -585,6 +619,7 @@ flagged in an external code review:
 - **Auth & rate limits**:
   - Optional Bearer auth on MCP with opt-in closed-door (`HC_MCP_REQUIRE_AUTH`)
   - Per-plan MCP rate-limit ladder matching hc-server's `prove_rpm`
+  - Optional Postgres-backed shared quota (`HC_RATE_LIMIT_PG_URL`) across HTTP API and MCP
   - 5-minute API key rotation grace window (no in-flight 401s on rotation)
 - **Ops & resilience**:
   - hc-worker binary validated at boot (refuses to start if missing/non-executable)
@@ -597,16 +632,19 @@ flagged in an external code review:
   - Failure-mode integration tests (auth-file corruption, SQLite contention)
   - Worker-crash mid-prove → Failed status (regression guard)
 - **Docs & infra**:
-  - Postgres migration plan + dual-write `DualWriter` scaffolding
+  - Postgres migration plan + Phase 1 usage dual-write behind `HC_SERVER_PG_URL`
+  - Phase 2-ready Postgres usage read source behind `HC_SERVER_USAGE_READ_FROM=postgres`
+  - Postgres tenant/auth read source behind `HC_SERVER_AUTH_PG_URL`
+  - Postgres job index backend behind `HC_SERVER_JOB_INDEX_SOURCE=postgres`
   - Restored `cargo clippy -- -D warnings` strict gate
 
 ### Next
 
-The next structural unlock is the **Postgres cutover** — the single Hetzner SQLite ceiling sits at roughly tens of proves/min sustained, and horizontal scaling unblocks at Postgres. The migration plan + dual-write `DualWriter` scaffolding is already in [`docs/postgres_migration.md`](docs/postgres_migration.md); `tokio-postgres` deliberately isn't wired yet, so `HC_SERVER_PG_URL` has no effect today.
+The next structural unlock is the **full Postgres cutover** — the single Hetzner SQLite ceiling sits at roughly tens of proves/min sustained, and horizontal scaling unblocks when usage reads, billing sync, tenant auth, and job state move off local SQLite/files. Phase 1 usage dual-write is wired today: set `HC_SERVER_PG_URL` to mirror `usage_log`, `verify_log`, and `failed_proofs` into Postgres while SQLite remains the source of truth. Phase 2 usage reads are implemented behind `HC_SERVER_USAGE_READ_FROM=postgres`; tenant/API-key auth has a billing-webhook mirror behind `HC_TENANT_PG_URL` and shared API/MCP reads behind `HC_SERVER_AUTH_PG_URL`. These switches should only be enabled after parity checks pass. The full operator sequence is in [`docs/postgres_migration.md`](docs/postgres_migration.md).
 
 After that, in priority order:
 
-- **Cross-process tenant quota**: today the MCP and HTTP API maintain independent per-tenant windows. A shared backing store (Redis-class) would let a tenant's quota deplete uniformly across both surfaces.
+- **Worker dispatch cutover**: usage reads, billing sync, shared RPM windows, and the job index now have Postgres migration paths; worker request/proof handoff streams over stdin/stdout; and `hc-job-worker` can claim leased jobs, renew leases, watch cancellation, and publish terminal status/proof bytes. True multi-host proving still needs the production cutover to `HC_SERVER_PROVE_DISPATCH=shared` plus observed Postgres-backed operation.
 - **`hc-zkml` (verifiable AI inference)** — Phase 1 of the four-pillar [extension roadmap](ROADMAP_EXTENSIONS.md). Public API + type contracts already locked in; tiled MatMul AIR + ONNX subset frontend is the next implementation.
 - **Worker warm pool** (vs current spawn-per-job) — ops concern under hundreds-per-min QPS; bounded today via the spawn-cap semaphore.
 - **Custom program sandboxing** (paid tier).
@@ -624,6 +662,8 @@ After that, in priority order:
 - **Marketing site:** [tinyzkp.com](https://tinyzkp.com)
 - **Browser playground:** [tinyzkp.com/try](https://tinyzkp.com/try)
 - **Long-trace compute brief:** [tinyzkp.com/compute](https://tinyzkp.com/compute)
+- **Research lineage:** [tinyzkp.com/research](https://tinyzkp.com/research)
+- **Security & audit status:** [tinyzkp.com/security](https://tinyzkp.com/security)
 - **Account dashboard:** [tinyzkp.com/account](https://tinyzkp.com/account)
 - **Docs:** [tinyzkp.com/docs](https://tinyzkp.com/docs)
 - **Swagger UI:** [api.tinyzkp.com/docs](https://api.tinyzkp.com/docs)
@@ -640,11 +680,16 @@ After that, in priority order:
 
 ### Documents in this repo
 - **Business guide:** [`BUSINESS_GUIDE.md`](BUSINESS_GUIDE.md)
+- **Reconciliation roadmap:** [`docs/strategy/reconciliation_roadmap.md`](docs/strategy/reconciliation_roadmap.md)
+- **Release and compatibility policy:** [`docs/governance/release_policy.md`](docs/governance/release_policy.md)
+- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md)
 - **Extension roadmap (zkML / zkVM / sumcheck / IPA):** [`ROADMAP_EXTENSIONS.md`](ROADMAP_EXTENSIONS.md)
 - **Whitepaper:** [`docs/whitepaper.md`](docs/whitepaper.md)
 - **Proof format v4:** [`docs/proof_format_v4_zk.md`](docs/proof_format_v4_zk.md)
 - **Operations:** [`docs/operations.md`](docs/operations.md)
 - **Hetzner deploy runbooks:** [`docs/runbooks/`](docs/runbooks/)
+- **Incident response runbook:** [`docs/runbooks/incident_response.md`](docs/runbooks/incident_response.md)
+- **Release provenance runbook:** [`docs/runbooks/release_provenance.md`](docs/runbooks/release_provenance.md)
 - **Postgres migration plan:** [`docs/postgres_migration.md`](docs/postgres_migration.md)
 - **Security audit suite (threat model, soundness argument [conjectured, audit-pending], audit checklist):** [`docs/security/`](docs/security/)
 - **MCP directory submission packets:** [`marketing/MCP_DIRECTORY*.md`](marketing/)

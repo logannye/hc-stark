@@ -30,26 +30,27 @@ test("healthz returns false on error", withMockedFetch(
 test("templates() parses list response", withMockedFetch(
   async () => new Response(JSON.stringify({
     count: 1,
-    templates: [{ id: "range_proof", summary: "x", tags: ["a"], cost_category: "small", backend: "vm" }],
+    templates: [{ id: "accumulator_step", summary: "x", tags: ["a"], cost_category: "small", backend: "vm", lifecycle: "live" }],
   }), { status: 200, headers: { "content-type": "application/json" } }),
   async () => {
     const c = new HcClient("https://api.example.com");
     const t = await c.templates();
     assert.equal(t.length, 1);
-    assert.equal(t[0].id, "range_proof");
+    assert.equal(t[0].id, "accumulator_step");
+    assert.equal(t[0].lifecycle, "live");
   },
 ));
 
 test("proveTemplate sends auth header and returns job_id", withMockedFetch(
   async (input, init) => {
-    assert.match(String(input), /\/prove\/template\/range_proof$/);
+    assert.match(String(input), /\/prove\/template\/accumulator_step$/);
     assert.equal(init?.method, "POST");
     assert.equal(init?.headers.Authorization, "Bearer tzk_test");
     return new Response(JSON.stringify({ job_id: "prf_abc" }), { status: 200, headers: { "content-type": "application/json" } });
   },
   async () => {
     const c = new HcClient("https://api.example.com", { apiKey: "tzk_test" });
-    const jobId = await c.proveTemplate("range_proof", { min: 0, max: 100, witness_steps: [42, 44] });
+    const jobId = await c.proveTemplate("accumulator_step", { initial: 1000, final: 1045, deltas: [10, 20, 15] });
     assert.equal(jobId, "prf_abc");
   },
 ));

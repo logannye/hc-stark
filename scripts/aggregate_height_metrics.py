@@ -160,7 +160,8 @@ def main() -> None:
     for entry in history[-args.limit :]:
         metrics = entry.get("metrics", {})
         timestamp = entry.get("generated_at", 0)
-        timestamp_dt = dt.datetime.utcfromtimestamp(timestamp)
+        timestamp_dt = dt.datetime.fromtimestamp(timestamp, dt.UTC)
+
         def fmt_float(value: Optional[float]) -> Optional[str]:
             return f"{value:.3f}" if value is not None else None
 
@@ -198,4 +199,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[test]"
       - run: pytest -x
 
   typescript:
@@ -36,9 +36,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npm install
+      - run: npm ci
       - run: npm run build
-      - run: node --test tests/client.test.ts
+      - run: npm test
 
   rust:
     runs-on: ubuntu-latest

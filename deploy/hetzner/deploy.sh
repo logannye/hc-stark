@@ -16,6 +16,7 @@ REPO="/opt/hc-stark"
 COMPOSE="docker compose -f docker-compose.yml -f deploy/hetzner/docker-compose.prod.yml"
 API_LOCAL="http://127.0.0.1:8080"
 WEBHOOK_LOCAL="http://127.0.0.1:5001"
+SHARED_DISPATCH=0
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "ERROR: must run as root (needs systemctl + docker)." >&2
@@ -23,16 +24,82 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 cd "$REPO"
 
-echo "==> [1/5] Pull latest main"
+if [ "${HC_SERVER_PROVE_DISPATCH:-}" = "shared" ] \
+    || { [ -f "$REPO/.env" ] && grep -Eq '^HC_SERVER_PROVE_DISPATCH=["'\'']?shared["'\'']?$' "$REPO/.env"; }; then
+    SHARED_DISPATCH=1
+    case ",${COMPOSE_PROFILES:-}," in
+        *,shared-workers,*) ;;
+        *)
+            export COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}shared-workers"
+            echo "==> HC_SERVER_PROVE_DISPATCH=shared detected; enabling compose profile: $COMPOSE_PROFILES"
+            ;;
+    esac
+fi
+
+sync_host_billing_services() {
+    cat > /etc/cron.d/hc-billing <<'CRON'
+0 * * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python billing/sync_usage.py >> /var/log/hc-billing.log 2>&1
+CRON
+    chmod 644 /etc/cron.d/hc-billing
+
+    cat > /etc/systemd/system/hc-billing-webhook.service <<'UNIT'
+[Unit]
+Description=TinyZKP Stripe Webhook
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/hc-stark/billing
+ExecStart=/opt/hc-stark/.venv/bin/gunicorn -w 2 -b 127.0.0.1:5001 provision_tenant:app
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/opt/hc-stark/.env
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload
+}
+
+echo "==> [1/10] Pull latest main"
 git fetch --quiet origin main
 git checkout --quiet main
 git pull --ff-only origin main
+RELEASE_SHA="$(git rev-parse HEAD)"
+RELEASE_REF="$(git rev-parse --abbrev-ref HEAD)"
+export HC_RELEASE_SHA="$RELEASE_SHA"
+export HC_RELEASE_REF="$RELEASE_REF"
+export HC_RELEASE_BUILD_URL="${HC_RELEASE_BUILD_URL:-}"
 echo "    now at: $(git log -1 --pretty='%h %s')"
+echo "    release identity: $HC_RELEASE_SHA ($HC_RELEASE_REF)"
 
-echo "==> [2/5] Rebuild + restart containerized tiers (hc-server, hc-mcp, prometheus, grafana, alertmanager)"
-$COMPOSE up -d --build
+echo "==> [2/10] Install/update host billing runtime"
+deploy/hetzner/install_billing_runtime.sh
 
-echo "==> [3/5] Sync Caddy reverse-proxy config (host systemd) if changed"
+echo "==> [3/10] Sync host billing cron/systemd definitions"
+sync_host_billing_services
+
+echo "==> [4/10] Production deploy readiness"
+python3 scripts/ci/deploy_readiness_check.py \
+    --env-file "$REPO/.env" \
+    --production \
+    --check-host-python \
+    --host-python "$REPO/.venv/bin/python"
+
+echo "==> [5/10] Build containerized tiers"
+$COMPOSE build
+
+echo "==> [6/10] Shared worker config preflight"
+if [ "$SHARED_DISPATCH" -eq 1 ]; then
+    $COMPOSE run --rm --no-deps hc-job-worker --check-config
+else
+    echo "    HC_SERVER_PROVE_DISPATCH is not shared — skip hc-job-worker preflight"
+fi
+
+echo "==> [7/10] Restart containerized tiers (hc-server, hc-mcp, prometheus, grafana, alertmanager)"
+$COMPOSE up -d
+
+echo "==> [8/10] Sync Caddy reverse-proxy config (host systemd) if changed"
 # Caddy runs as a HOST systemd unit reading /etc/caddy/Caddyfile — NOT a compose
 # service and NOT the repo copy. A `git pull` updates deploy/hetzner/Caddyfile but
 # Caddy keeps serving the old config until it is copied + reloaded. (That gap left
@@ -61,10 +128,10 @@ else
     echo "    Caddy not a host systemd service (or repo Caddyfile missing) — skip"
 fi
 
-echo "==> [4/5] Restart host billing-webhook (systemd) so provision_tenant.py / tenant_store.py changes take effect"
+echo "==> [9/10] Restart host billing-webhook (systemd) so provision_tenant.py / tenant_store.py changes take effect"
 systemctl restart hc-billing-webhook
 
-echo "==> [5/5] Health checks"
+echo "==> [10/10] Health checks"
 sleep 5
 fail=0
 check() { # label url expected
@@ -77,6 +144,8 @@ check() { # label url expected
     fi
 }
 check "hc-server /healthz" "$API_LOCAL/healthz" 200
+check "hc-server /version" "$API_LOCAL/version" 200
+check "hc-mcp /version" "http://127.0.0.1:3001/version" 200
 check "webhook /health"    "$WEBHOOK_LOCAL/health" 200
 # A live, internal-secret-gated session route returns 403. A 404 here means
 # the webhook is serving stale (pre-Phase-0.2) code — the bug this script prevents.

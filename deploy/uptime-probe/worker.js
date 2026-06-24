@@ -18,9 +18,42 @@
 
 const TARGETS = [
   { name: "api", url: "https://api.tinyzkp.com/healthz", expect: 200 },
-  // The MCP host returns 404 at "/" (tools live under /mcp); ANY HTTP response
-  // means the host is reachable, so only a network error/timeout counts as down.
-  { name: "mcp", url: "https://mcp.tinyzkp.com/", expect: null },
+  {
+    name: "api-templates",
+    url: "https://api.tinyzkp.com/templates",
+    expect: 200,
+    contains: '"lifecycle"',
+  },
+  {
+    name: "mcp-server-card",
+    url: "https://mcp.tinyzkp.com/.well-known/mcp/server-card.json",
+    expect: 200,
+    contains: "accumulator_step available now",
+  },
+  {
+    name: "mcp-server-card-tools",
+    url: "https://mcp.tinyzkp.com/.well-known/mcp/server-card.json",
+    expect: 200,
+    contains: "prove_template",
+  },
+  {
+    name: "site-research",
+    url: "https://tinyzkp.com/research",
+    expect: 200,
+    contains: "One company, one thesis: space-efficient proving.",
+  },
+  {
+    name: "site-security",
+    url: "https://tinyzkp.com/security",
+    expect: 200,
+    contains: "Responsible disclosure",
+  },
+  {
+    name: "site-docs",
+    url: "https://tinyzkp.com/docs",
+    expect: 200,
+    contains: "Template Lifecycle",
+  },
 ];
 
 const TIMEOUT_MS = 10_000;
@@ -36,8 +69,21 @@ async function probe(target) {
       cf: { cacheTtl: 0 },
       headers: { "user-agent": "tinyzkp-uptime-probe" },
     });
-    const ok = target.expect === null ? true : res.status === target.expect;
-    return { name: target.name, ok, status: res.status };
+    const statusOk = target.expect === null ? true : res.status === target.expect;
+    if (!statusOk) return { name: target.name, ok: false, status: res.status };
+
+    if (target.contains) {
+      const body = await res.text();
+      const containsOk = body.includes(target.contains);
+      return {
+        name: target.name,
+        ok: containsOk,
+        status: res.status,
+        missing: containsOk ? undefined : target.contains,
+      };
+    }
+
+    return { name: target.name, ok: true, status: res.status };
   } catch (err) {
     return { name: target.name, ok: false, status: 0, error: String(err) };
   } finally {
@@ -64,7 +110,7 @@ async function alert(env, failures) {
   const text =
     "\u{1F534} TinyZKP DOWN — " +
     failures
-      .map((f) => `${f.name} (status=${f.status}${f.error ? `, ${f.error}` : ""})`)
+      .map((f) => `${f.name} (status=${f.status}${f.missing ? `, missing=${f.missing}` : ""}${f.error ? `, ${f.error}` : ""})`)
       .join(", ");
   // {text} suits Slack; {content} suits Discord; {failures} is the structured form.
   await fetch(env.ALERT_WEBHOOK_URL, {

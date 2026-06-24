@@ -5,7 +5,7 @@
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HC_SERVER_LISTEN` | `0.0.0.0:8080` | Listen address |
-| `HC_SERVER_DATA_DIR` | `.hc-server` | Data directory for job artifacts |
+| `HC_SERVER_DATA_DIR` | `.hc-server` | Data directory for local job status artifacts |
 | `HC_SERVER_MAX_INFLIGHT` | `4` | Max concurrent prove jobs per tenant |
 | `HC_SERVER_MAX_PROVE_SECS` | `300` | Prove job timeout (seconds) |
 | `HC_SERVER_ALLOW_CUSTOM_PROGRAMS` | `false` | Allow arbitrary VM programs |
@@ -13,7 +13,10 @@
 | `HC_SERVER_MAX_VERIFY_INFLIGHT` | `8` | Max concurrent verify requests |
 | `HC_SERVER_VERIFY_TIMEOUT_MS` | `30000` | Verify request timeout |
 | `HC_SERVER_RETENTION_SECS` | `86400` | Job artifact retention (24h) |
-| `HC_SERVER_JOB_INDEX_SQLITE` | `true` | Enable SQLite job index |
+| `HC_SERVER_JOB_INDEX_SQLITE` | `true` | Legacy switch for SQLite job index; superseded by `HC_SERVER_JOB_INDEX_SOURCE` |
+| `HC_SERVER_JOB_INDEX_SOURCE` | `sqlite` | Job index backend: `sqlite`, `postgres`, or `disabled`. `postgres` stores request/status JSON and completed proof bytes in Postgres |
+| `HC_JOB_INDEX_PG_URL` | falls back to `HC_SERVER_PG_URL` | Postgres connection string for `HC_SERVER_JOB_INDEX_SOURCE=postgres` |
+| `HC_JOB_INDEX_PG_TLS` | inferred from URL | Optional TLS override for the Postgres job-index connection |
 | `HC_SERVER_JOB_INDEX_DISABLED` | `false` | Force-disable job index |
 | `HC_SERVER_MAX_PROVE_RPM` | `100` | Prove rate limit (requests/minute, 0=unlimited) |
 | `HC_SERVER_MAX_VERIFY_RPM` | `300` | Verify rate limit (requests/minute, 0=unlimited) |
@@ -23,10 +26,17 @@
 | `HC_SERVER_GC_INTERVAL_SECS` | `300` | Background GC interval |
 | `HC_SERVER_API_KEYS` | (none) | Comma-separated `tenant:key` pairs |
 | `HC_SERVER_API_KEYS_FILE` | (none) | Path to API keys file |
+| `HC_SERVER_AUTH_PG_URL` | (none) | Optional shared Postgres tenant/auth source. Takes precedence over `HC_SERVER_AUTH_DB_PATH` when set |
+| `HC_SERVER_AUTH_PG_TLS` | inferred from URL | Optional TLS override for the Postgres tenant/auth connection |
 | `HC_SERVER_AUTH_GRACE_MS` | `300000` | Rotation grace window: rotated-out keys still authenticate for this long after a hot-reload swap (5min default) |
 | `HC_SERVER_WORKER_PATH` | (auto-detect) | Path to hc-worker binary; **validated at boot** — refusal to start if missing or non-executable |
 | `HC_SERVER_MAX_WORKER_SPAWN` | `32` | Global cap on concurrent worker subprocess spawns (EMFILE / process-table-exhaustion guard); 0 disables |
-| `HC_SERVER_PG_URL` | (none) | Postgres connection string for usage_log dual-write (Phase 1 of [migration plan](postgres_migration.md)). When unset, SQLite-only |
+| `HC_SERVER_PROVE_DISPATCH` | `local` | `local` spawns `hc-worker` inside the API process; `shared` enqueues jobs for `hc-job-worker` |
+| `HC_SERVER_PG_URL` | (none) | Postgres connection string for Phase 1 usage dual-write. When set, usage writes mirror to Postgres while SQLite remains the read/cap source |
+| `HC_SERVER_PG_TLS` | inferred from URL | Optional Postgres TLS override: `true`/`require` or `false`/`disable`. URL `sslmode=require`, `verify-ca`, or `verify-full` also enables TLS |
+| `HC_SERVER_USAGE_READ_FROM` | `sqlite` | Usage read source for `/usage` and monthly cap checks: `sqlite` or `postgres`. Requires `HC_SERVER_PG_URL` when set to `postgres` |
+| `HC_RATE_LIMIT_PG_URL` | (none) | Optional Postgres shared rate-limit store. Set in both `hc-server` and `hc-mcp-http` to share authenticated tenant RPM windows |
+| `HC_RATE_LIMIT_PG_TLS` | inferred from URL | Optional TLS override for the shared rate-limit Postgres connection |
 | `RUST_LOG` | (none) | Logging level (e.g., `info`, `debug`) |
 
 ### MCP server (hc-mcp-http)
@@ -39,16 +49,224 @@
 | `HC_MCP_TENANT_RPM` | `0` | Optional global RPM override for authenticated tenants. 0 (default) = use per-plan ladder (Free 10, Dev 100, Team 300, Scale 500) — same values as hc-server's `prove_rpm` |
 | `HC_MCP_MAX_INFLIGHT` | `2` | Concurrency cap on the anonymous (no-Bearer) lane |
 | `HC_MCP_ALLOWED_ORIGINS` | (none) | Comma-separated extra CORS origins on top of the default allowlist (`*.claude.ai`, `*.anthropic.com`, `tinyzkp.com`) |
+| `HC_SERVER_AUTH_PG_URL` | (none) | Optional shared Postgres tenant/auth source; should match the API server when enabled |
+| `HC_SERVER_AUTH_PG_TLS` | inferred from URL | Optional TLS override for the Postgres tenant/auth connection |
+| `HC_RATE_LIMIT_PG_URL` | (none) | Optional shared authenticated tenant RPM store; must match the API server value when enabled |
+
+### Billing webhook tenant store
+
+The billing webhook still writes SQLite as its primary local store. For the
+Postgres auth cutover, enable continuous mirroring before changing API/MCP auth
+reads:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HC_TENANT_STORE_PATH` | `/opt/hc-stark/data/tenant_store.sqlite` | SQLite tenant store used by the billing webhook and admin scripts |
+| `HC_TENANT_PG_URL` | falls back to `HC_SERVER_AUTH_PG_URL` | Optional Postgres mirror target for tenants, Stripe event idempotency, magic links, and sessions |
+| `HC_TENANT_PG_REQUIRED` | `false` | If true, tenant-store mutations fail when the Postgres mirror write fails. Use during/after auth read cutover |
+
+On Hetzner, the host-level billing webhook and hourly billing cron run from
+`/opt/hc-stark/.venv`, installed by
+`deploy/hetzner/install_billing_runtime.sh` from `billing/requirements.txt`.
+The deploy script refreshes this virtualenv, rewrites the billing cron and
+`hc-billing-webhook.service` definitions to use it, and only then restarts the
+webhook.
+
+### Shared prove worker (hc-job-worker)
+
+Enable only after `HC_SERVER_JOB_INDEX_SOURCE=postgres` and Postgres usage
+recording are proven in production. In Docker Compose, set
+`HC_SERVER_PROVE_DISPATCH=shared` and run with `COMPOSE_PROFILES=shared-workers`
+or use the Hetzner deploy script, which enables the profile automatically when
+the `.env` file sets shared dispatch.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HC_JOB_WORKER_INDEX_SOURCE` | `postgres` | Job queue backend for `hc-job-worker`; production should use Postgres |
+| `HC_JOB_INDEX_PG_URL` | falls back to `HC_SERVER_PG_URL` | Postgres job index used for lease claims |
+| `HC_JOB_WORKER_USAGE_PG_URL` | falls back to `HC_SERVER_PG_URL` | Postgres usage recorder for jobs executed by the shared worker |
+| `HC_JOB_WORKER_ID` | process id derived | Lease owner id recorded in `prove_jobs.lease_owner` |
+| `HC_JOB_WORKER_LEASE_MS` | `30000` | Lease duration; should be comfortably above heartbeat interval |
+| `HC_JOB_WORKER_HEARTBEAT_MS` | `5000` | Lease renewal and cancellation polling interval |
+| `HC_JOB_WORKER_POLL_MS` | `1000` | Idle polling interval when no jobs are claimable |
+| `HC_JOB_WORKER_MAX_PROVE_SECS` | `3600` | Max wall-clock prove time per claimed job |
+| `HC_JOB_WORKER_USAGE_DISABLED` | `false` | Development-only escape hatch; do not enable in production |
+
+Run `hc-job-worker --check-config` on a candidate host before enabling the
+service. It validates the configured job-index and usage-recording connections
+without claiming work. In staging, `hc-job-worker --once` is the controlled
+rehearsal mode: it claims at most one pending job, executes it, records usage,
+and exits.
+
+On `SIGTERM` or Ctrl-C, `hc-job-worker` stops claiming new work. If a proof is
+running, the worker drops the child `hc-worker` process and exits; the job
+remains `running` until its lease expires, then another worker can reclaim it.
+Keep `HC_JOB_WORKER_LEASE_MS` low enough for deploy recovery, but high enough
+that normal heartbeat jitter does not cause duplicate proving.
+
+If a claimed proof exceeds `HC_JOB_WORKER_MAX_PROVE_SECS`, the worker records a
+terminal failed status and a failed-usage row. Timeouts should not loop through
+lease expiry and repeated reclaim attempts.
+
+For successful proofs, `hc-job-worker` records metered usage before publishing a
+`Succeeded` job status. If usage recording is unavailable, the job fails closed
+instead of exposing an unmetered proof.
+
+### Deploy readiness gate
+
+Run the state-cutover policy check before changing production env vars:
+
+```sh
+python3 scripts/ci/deploy_readiness_check.py --env-file /opt/hc-stark/.env --production --check-host-python
+```
+
+The Hetzner deploy script runs this automatically before rebuilding services.
+It fails on dangerous combinations such as Postgres usage reads without
+`HC_SERVER_PG_URL`, shared dispatch without a Postgres job index, or API/MCP
+auth reads without fail-closed tenant Postgres mirroring.
+
+### Launch gate audit
+
+Before a coordinated reconciliation release, run the local launch-gate audit.
+It maps the roadmap phases to concrete repo evidence and keeps deploy/observe
+requirements explicit instead of treating local readiness as production
+completion:
+
+```sh
+python3 scripts/ci/launch_gate_audit.py
+python3 scripts/ci/production_launch_preflight.py
+python3 scripts/ci/server_card_check.py
+```
+
+When the legacy research repo is checked out next to `hc-stark`, include it in
+the audit:
+
+```sh
+python3 scripts/ci/launch_gate_audit.py --require-legacy
+python3 scripts/ci/production_launch_preflight.py --require-legacy
+```
+
+For a production deploy rehearsal, run the aggregate preflight with the
+production env file and Cloudflare Pages binding file. This keeps local repo
+evidence, deploy-readiness policy, Pages configuration, Compose rendering,
+backup/restore drift, and the launch-gate audit under one operator command:
+
+```sh
+python3 scripts/ci/production_launch_preflight.py \
+  --require-legacy \
+  --production \
+  --env-file /opt/hc-stark/.env \
+  --pages-bindings-file /secure/tinyzkp-pages.env \
+  --check-host-python \
+  --host-python /opt/hc-stark/.venv/bin/python
+```
+
+After API/MCP and Pages deploys finish, add `--live` before announcing the
+release. Add `--authenticated-smoke` when `TINYZKP_SMOKE_API_KEY` or
+`TINYZKP_AUDIT_API_KEY` is available and the prove/verify path should be
+exercised end to end.
+
+For coordinated API, MCP, and website releases, pin the expected deployed
+commit and require all three surfaces to report it before announcing:
+
+```sh
+TINYZKP_EXPECT_RELEASE_SHA="$(git rev-parse HEAD)" \
+  python3 scripts/ci/production_launch_preflight.py --live
+```
+
+The API and MCP HTTP server report `HC_RELEASE_SHA` from `/version`. The Pages
+worker reports `TINYZKP_RELEASE_SHA` when set, otherwise Cloudflare's
+`CF_PAGES_COMMIT_SHA`, from `/api/release`.
+
+### Backup and restore gate
+
+Before changing backup scripts or restore instructions, run the static
+backup/restore consistency check:
+
+```sh
+python3 scripts/ci/backup_restore_check.py
+python3 -m pytest scripts/ci/test_backup_restore_check.py billing/tests/test_backup_script.py
+```
+
+This verifies that `backup.sh` still snapshots `tenant_store.sqlite`,
+`usage.sqlite`, and `api_keys.txt` with restrictive permissions and off-box
+`rclone` support, and that the restore runbook still references current API
+and SQLite verification paths. The executable smoke test runs `backup.sh`
+against temporary SQLite databases using `HC_BACKUP_DATA_DIR`, `HC_BACKUP_DIR`,
+`HC_BACKUP_DATE`, and `HC_BACKUP_REMOTE_DATE` overrides, then validates that the
+snapshots are readable and permissioned for restore.
+
+### Cloudflare Pages deploy gate
+
+Run the site deploy preflight before every Pages deploy:
+
+```sh
+python3 scripts/ci/site_deploy_check.py
+python3 scripts/ci/site_deploy_check.py --production --bindings-file /secure/tinyzkp-pages.env
+node scripts/ci/site_worker_dispatch_test.mjs
+```
+
+The static mode verifies `site/wrangler.toml`, the Advanced Mode `_worker.js`
+route table, every Pages API function handler, and classified Cloudflare
+bindings. Production mode also checks that the expected Pages bindings/secrets
+are present: `INTERNAL_SECRET`, Stripe secret/price IDs, and
+`TINYZKP_DEMO_API_KEY`. The worker dispatch test imports the real `_worker.js`
+module with mocked Pages assets/cache APIs and verifies API dispatch, method
+405s, static asset passthrough, extensionless `.html` fallback, and baseline browser security headers on static and API responses.
 
 ### Billing cron (sync_usage.py)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `STRIPE_SECRET_KEY` | required | Stripe API key |
+| `HC_USAGE_SOURCE` | `sqlite` | Billing usage source: `sqlite` or `postgres`. `postgres` uses `HC_SERVER_PG_URL` and `psql` |
 | `HC_USAGE_DB_PATH` | `/opt/hc-stark/data/usage.sqlite` | SQLite usage log path |
+| `HC_SERVER_PG_URL` | required when `HC_USAGE_SOURCE=postgres` | Postgres connection string for billing reads and `billed=1` updates |
 | `STRIPE_METER_EVENT_NAME` | `proof_usage` | Stripe Meter event name |
 | `HC_UNBILLED_ALERT_HOURS` | `12` | Alert if unbilled rows are older than this — must stay below Stripe's ~24h Meter-event dedup window |
 | `ALERT_WEBHOOK_URL` | (none) | Slack/Discord webhook for billing alerts |
+
+### Postgres migration helper (usage_pg_tools.py)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HC_SERVER_PG_URL` | required for Postgres commands | Postgres connection string used by `hc-server` Phase 1 dual-write and `billing/usage_pg_tools.py` |
+| `HC_USAGE_DB_PATH` | `/opt/hc-stark/data/usage.sqlite` | Source SQLite usage log for summaries and backfill |
+| `PSQL_BIN` | `psql` | Path to the `psql` binary |
+
+During the usage-state migration, `hc-server` initializes
+`crates/hc-server/sql/usage_pg.sql` at boot when `HC_SERVER_PG_URL` is set.
+Use `billing/usage_pg_tools.py compare --since-ms <dual_write_start_ms>` to
+prove SQLite/Postgres parity for the dual-write window. After parity is clean,
+operators can switch `/usage` and monthly caps with
+`HC_SERVER_USAGE_READ_FROM=postgres`, then switch Stripe sync with
+`HC_USAGE_SOURCE=postgres`. Set `HC_RATE_LIMIT_PG_URL` in both API and MCP
+processes to share authenticated tenant RPM windows across surfaces. Set
+`HC_SERVER_JOB_INDEX_SOURCE=postgres` to store submitted requests, status, and
+completed proof bytes in Postgres so polling/download can work across API
+processes. Worker request/proof handoff streams over stdin/stdout; local
+`request.json` / `proof.json` files are no longer part of the hot path. The
+shared job index also carries tenant plan, computed trace length, and
+lease-based claim fields used by `hc-job-worker`; do not advertise multi-host
+proving until shared dispatch is deployed, monitored, and observed under load.
+Historical backfill is available for `usage_log` and
+`failed_proofs`; `verify_log` is compare-only because it has no semantic
+idempotency key.
+
+Before and after flipping `HC_SERVER_PROVE_DISPATCH=shared`, run the focused
+cutover smoke test against the target environment:
+
+```bash
+TINYZKP_SMOKE_API=https://api.tinyzkp.com \
+TINYZKP_SMOKE_SITE=https://tinyzkp.com \
+TINYZKP_SMOKE_API_KEY=tzk_... \
+  scripts/monitoring/shared_dispatch_smoke.sh
+```
+
+This gate checks public lifecycle metadata, reconciliation site markers, a
+template prove, poll/download, inspect, verify, the cancel route, and `/usage`.
+Use `TINYZKP_SMOKE_PUBLIC_ONLY=1` only for unauthenticated website/API marker
+checks; it is not sufficient for a shared-worker cutover.
 
 ## Deployment
 
@@ -56,6 +274,14 @@
 
 ```bash
 GRAFANA_ADMIN_PASSWORD=changeme docker compose up
+```
+
+Before relying on Compose changes, run the same render gate CI uses. It validates
+the local, production, and shared-worker production invocations with dummy
+non-secret values:
+
+```bash
+python3 scripts/ci/compose_config_check.py
 ```
 
 ### Docker Compose (Production / Hetzner)
@@ -96,6 +322,11 @@ Defined in `deploy/prometheus/alerts.yml`:
 - **HcHighFailureRate**: >10% failure rate over 5 minutes
 - **HcSlowProves**: P99 prove duration >5 minutes over 10 minutes
 - **HcNoCompletions**: No completions despite submissions for 30 minutes
+
+For customer-visible outages, use
+[`docs/runbooks/incident_response.md`](runbooks/incident_response.md). The
+runbook defines SEV1/SEV2/SEV3 levels, incident categories, public update
+templates, billing safeguards, and rollback rules.
 
 ### Grafana
 

@@ -21,7 +21,7 @@
 //!   backend field, so this module attaches `"vm"` to it explicitly.
 
 use crate::spartan_templates::SpartanTemplateInfo;
-use crate::templates::{Enforcement, TemplateInfo};
+use crate::templates::{Enforcement, TemplateInfo, TemplateLifecycle};
 use crate::zkml_templates::ZkmlTemplateInfo;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -47,6 +47,8 @@ pub struct UnifiedTemplateInfo {
     /// Spartan are preview backends and are always `false`.
     #[serde(default)]
     pub audited: bool,
+    /// Public lifecycle label: `live`, `audit_gated`, or `preview`.
+    pub lifecycle: TemplateLifecycle,
 }
 
 impl UnifiedTemplateInfo {
@@ -61,6 +63,7 @@ impl UnifiedTemplateInfo {
             backend: "vm",
             enforcement: info.enforcement,
             audited: info.audited,
+            lifecycle: info.lifecycle,
         }
     }
 
@@ -75,6 +78,7 @@ impl UnifiedTemplateInfo {
             backend: info.backend,
             enforcement: Enforcement::StructureOnly,
             audited: false,
+            lifecycle: TemplateLifecycle::Preview,
         }
     }
 
@@ -89,6 +93,7 @@ impl UnifiedTemplateInfo {
             backend: info.backend,
             enforcement: Enforcement::StructureOnly,
             audited: false,
+            lifecycle: TemplateLifecycle::Preview,
         }
     }
 }
@@ -218,16 +223,19 @@ mod tests {
         let acc = all.iter().find(|t| t.id == "accumulator_step").unwrap();
         assert_eq!(acc.enforcement, crate::templates::Enforcement::Enforced);
         assert!(acc.audited, "accumulator_step is audited");
+        assert_eq!(acc.lifecycle, TemplateLifecycle::Live);
         // range_proof now Enforced (real AIR) but NOT yet audited → gated.
         let range = all.iter().find(|t| t.id == "range_proof").unwrap();
         assert_eq!(range.enforcement, crate::templates::Enforcement::Enforced);
         assert!(!range.audited, "range_proof is not yet audited");
+        assert_eq!(range.lifecycle, TemplateLifecycle::AuditGated);
         let zkml = all.iter().find(|t| t.id == "zkml_matmul").unwrap();
         assert_eq!(
             zkml.enforcement,
             crate::templates::Enforcement::StructureOnly
         );
         assert!(!zkml.audited);
+        assert_eq!(zkml.lifecycle, TemplateLifecycle::Preview);
     }
 
     #[test]

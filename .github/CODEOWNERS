@@ -1,0 +1,44 @@
+# TinyZKP ownership rules.
+#
+# This repo currently has a single maintainer, but paths are split by release
+# surface so future reviewers know which domain is being changed.
+
+* @logannye
+
+# Protocol, proof formats, verifier, recursion, and AIRs.
+/crates/hc-air/ @logannye
+/crates/hc-core/ @logannye
+/crates/hc-hash/ @logannye
+/crates/hc-prover/ @logannye
+/crates/hc-recursion/ @logannye
+/crates/hc-sdk/ @logannye
+/crates/hc-verifier/ @logannye
+/crates/hc-wasm/ @logannye
+/docs/security/ @logannye
+/docs/whitepaper.md @logannye
+/docs/proof_format*.md @logannye
+
+# Hosted API, MCP, workloads, CLI, and deploy/runtime operations.
+/crates/hc-server/ @logannye
+/crates/hc-mcp/ @logannye
+/crates/hc-workloads/ @logannye
+/crates/hc-cli/ @logannye
+/deploy/ @logannye
+/docker-compose.yml @logannye
+/scripts/monitoring/ @logannye
+
+# Website, public docs, positioning, and pricing.
+/site/ @logannye
+/README.md @logannye
+/BUSINESS_GUIDE.md @logannye
+/pricing.json @logannye
+/billing/ @logannye
+/marketing/ @logannye
+/docs/strategy/ @logannye
+/docs/governance/ @logannye
+/docs/runbooks/ @logannye
+
+# SDK packages and release automation.
+/clients/ @logannye
+/.github/workflows/ @logannye
+/CHANGELOG.md @logannye

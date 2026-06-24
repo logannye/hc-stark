@@ -32,11 +32,12 @@ async def test_async_templates_list():
         "count": 1,
         "templates": [
             {
-                "id": "range_proof",
-                "summary": "Prove a value is in [min, max]",
+                "id": "accumulator_step",
+                "summary": "Prove an additive state transition",
                 "tags": ["arithmetic"],
                 "cost_category": "small",
                 "backend": "vm",
+                "lifecycle": "live",
             }
         ],
     }
@@ -46,21 +47,22 @@ async def test_async_templates_list():
             templates = await client.templates()
             assert len(templates) == 1
             assert isinstance(templates[0], TemplateSummary)
-            assert templates[0].id == "range_proof"
+            assert templates[0].id == "accumulator_step"
             assert templates[0].backend == "vm"
+            assert templates[0].lifecycle == "live"
 
 
 @pytest.mark.asyncio
 async def test_async_prove_template_returns_job_id():
     payload = {"job_id": "prf_abc123"}
     with respx.mock(base_url="https://api.example.com") as mock:
-        route = mock.post("/prove/template/range_proof").mock(
+        route = mock.post("/prove/template/accumulator_step").mock(
             return_value=httpx.Response(200, json=payload)
         )
         async with HcClient("https://api.example.com", api_key="tzk_test") as client:
             job_id = await client.prove_template(
-                "range_proof",
-                params={"min": 0, "max": 100, "witness_steps": [42, 44]},
+                "accumulator_step",
+                params={"initial": 1000, "final": 1045, "deltas": [10, 20, 15]},
             )
             assert job_id == "prf_abc123"
             assert route.called
@@ -98,11 +100,14 @@ def test_sync_healthz_ok():
 def test_sync_prove_template_returns_job_id():
     payload = {"job_id": "prf_sync"}
     with respx.mock(base_url="https://api.example.com") as mock:
-        mock.post("/prove/template/range_proof").mock(
+        mock.post("/prove/template/accumulator_step").mock(
             return_value=httpx.Response(200, json=payload)
         )
         with HcClientSync("https://api.example.com", api_key="tzk_test") as client:
-            job_id = client.prove_template("range_proof", params={"min": 0, "max": 100})
+            job_id = client.prove_template(
+                "accumulator_step",
+                params={"initial": 1000, "final": 1045, "deltas": [10, 20, 15]},
+            )
             assert job_id == "prf_sync"
 
 

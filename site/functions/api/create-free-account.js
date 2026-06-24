@@ -46,7 +46,8 @@ export async function onRequestPost(context) {
       });
     }
 
-    const { email } = await context.request.json();
+    const body = await context.request.json();
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!email || !email.includes("@") || email.length > 254) {
       return new Response(JSON.stringify({ error: "Valid email required." }), {
         status: 400,

@@ -123,6 +123,10 @@ pub struct TemplateSummary {
     /// so responses from older servers without the field still deserialize.
     #[serde(default = "default_enforcement")]
     pub enforcement: String,
+    /// Customer-facing lifecycle label: `"live"`, `"audit_gated"`, or
+    /// `"preview"`. Defaults to `"preview"` so older servers are conservative.
+    #[serde(default = "default_lifecycle")]
+    pub lifecycle: String,
 }
 
 fn default_backend() -> String {
@@ -131,6 +135,10 @@ fn default_backend() -> String {
 
 fn default_enforcement() -> String {
     "structure_only".to_string()
+}
+
+fn default_lifecycle() -> String {
+    "preview".to_string()
 }
 
 /// Response for GET /templates.

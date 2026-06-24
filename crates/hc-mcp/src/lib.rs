@@ -109,7 +109,7 @@ impl HcMcpServer {
     }
 
     #[rmcp::tool(
-        description = "Generate a zero-knowledge proof from a template ID and parameters. Returns a job_id — call poll_job to check progress. Consumes one proof from your monthly quota.",
+        description = "Generate a state-transition receipt from a template ID and parameters. Returns a job_id — call poll_job to check progress. Billable prove job; verification remains free.",
         annotations(
             title = "Generate Proof from Template",
             read_only_hint = false,

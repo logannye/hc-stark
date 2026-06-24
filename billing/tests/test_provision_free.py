@@ -48,13 +48,17 @@ class TestProvisionFreeDeduplication:
     def test_first_signup_succeeds(self, client):
         resp = client.post(
             "/provision-free",
-            json={"email": "unique-test@example.com"},
+            json={"email": " Unique-Test@Example.com "},
             headers=HEADERS,
         )
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["ok"] is True
         assert "dashboard_token" in data
+        conn = tenant_store.open_db()
+        tenant = tenant_store.get_by_email(conn, "unique-test@example.com")
+        conn.close()
+        assert tenant is not None
 
     def test_second_signup_same_email_returns_409(self, client, _set_secret):
         db_path = _set_secret
@@ -63,7 +67,7 @@ class TestProvisionFreeDeduplication:
         # First signup — must succeed.
         resp1 = client.post(
             "/provision-free",
-            json={"email": email},
+            json={"email": email.upper()},
             headers=HEADERS,
         )
         assert resp1.status_code == 200
@@ -75,7 +79,7 @@ class TestProvisionFreeDeduplication:
             headers=HEADERS,
         )
         assert resp2.status_code == 409
-        assert "error" in resp2.get_json()
+        assert resp2.get_json()["error"] == "account already exists for this email"
 
         # Exactly one tenant must exist for this email — no second tenant minted.
         conn = tenant_store.open_db(db_path)

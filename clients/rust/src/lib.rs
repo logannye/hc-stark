@@ -14,8 +14,8 @@
 //!     // Prove via a template (recommended).
 //!     let job_id = client
 //!         .prove_template(
-//!             "range_proof",
-//!             json!({ "min": 0, "max": 100, "witness_steps": [42, 44] }),
+//!             "accumulator_step",
+//!             json!({ "initial": 1000, "final": 1045, "deltas": [10, 20, 15] }),
 //!             TemplateProveOptions::default(),
 //!         )
 //!         .await?;
@@ -103,10 +103,16 @@ pub struct TemplateSummary {
     pub cost_category: String,
     #[serde(default = "default_backend")]
     pub backend: String,
+    #[serde(default = "default_lifecycle")]
+    pub lifecycle: String,
 }
 
 fn default_backend() -> String {
     "vm".to_string()
+}
+
+fn default_lifecycle() -> String {
+    "live".to_string()
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -432,9 +438,10 @@ mod tests {
 
     #[test]
     fn template_summary_defaults_backend() {
-        let json = r#"{"id":"range_proof","summary":"x"}"#;
+        let json = r#"{"id":"accumulator_step","summary":"x"}"#;
         let t: TemplateSummary = serde_json::from_str(json).unwrap();
         assert_eq!(t.backend, "vm");
+        assert_eq!(t.lifecycle, "live");
         assert!(t.tags.is_empty());
     }
 }

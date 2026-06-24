@@ -11,8 +11,8 @@ Async::
     async def main():
         async with TinyZKP("https://api.tinyzkp.com", api_key="tzk_...") as client:
             job_id = await client.prove_template(
-                "range_proof",
-                params={"min": 0, "max": 100, "witness_steps": [42, 44]},
+                "accumulator_step",
+                params={"initial": 1000, "final": 1045, "deltas": [10, 20, 15]},
             )
             proof = await client.wait_for_proof(job_id)
             result = await client.verify(proof)
@@ -26,8 +26,8 @@ Sync::
 
     with TinyZKPSync("https://api.tinyzkp.com", api_key="tzk_...") as client:
         job_id = client.prove_template(
-            "range_proof",
-            params={"min": 0, "max": 100, "witness_steps": [42, 44]},
+            "accumulator_step",
+            params={"initial": 1000, "final": 1045, "deltas": [10, 20, 15]},
         )
         proof = client.wait_for_proof(job_id)
         assert client.verify(proof).ok
@@ -101,6 +101,7 @@ class TemplateSummary:
     tags: list[str]
     cost_category: str
     backend: str
+    lifecycle: str
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TemplateSummary:
@@ -110,6 +111,7 @@ class TemplateSummary:
             tags=list(data.get("tags", [])),
             cost_category=data.get("cost_category", ""),
             backend=data.get("backend", "vm"),
+            lifecycle=data.get("lifecycle", "live"),
         )
 
 

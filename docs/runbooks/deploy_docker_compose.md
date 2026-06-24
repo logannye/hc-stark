@@ -43,6 +43,7 @@ Clients must set `workload_id` in `ProveRequest`. Example: `toy_add_1_2`.
 ### 5) Data persistence
 
 Compose mounts a named volume `hc_data` at `/data` inside `hc-server`.
-Job requests/status artifacts are stored under `/data/jobs/...`.
-
+Local job status artifacts are stored under `/data/jobs/...`. The worker
+request/proof handoff streams over stdin/stdout rather than persisted
+`request.json` / `proof.json` files.
 

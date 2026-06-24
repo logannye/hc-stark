@@ -786,4 +786,13 @@ mod db_fallback_tests {
         assert_eq!(ctx.tenant_id, "t_mem", "in-memory match should win");
         assert_eq!(ctx.plan, "developer");
     }
+
+    #[test]
+    fn postgres_tenant_auth_schema_contains_required_tables_and_indexes() {
+        assert!(db::PG_TENANT_AUTH_SCHEMA_SQL.contains("CREATE TABLE IF NOT EXISTS tenants"));
+        assert!(db::PG_TENANT_AUTH_SCHEMA_SQL.contains("api_key_hash"));
+        assert!(db::PG_TENANT_AUTH_SCHEMA_SQL.contains("idx_tenants_active_key"));
+        assert!(db::PG_TENANT_AUTH_SCHEMA_SQL.contains("CREATE TABLE IF NOT EXISTS sessions"));
+        assert!(db::PG_TENANT_AUTH_SCHEMA_SQL.contains("CREATE TABLE IF NOT EXISTS magic_links"));
+    }
 }

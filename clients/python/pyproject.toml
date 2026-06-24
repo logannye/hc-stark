@@ -26,6 +26,7 @@ dependencies = ["httpx>=0.25"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-asyncio>=0.23", "respx>=0.20"]
+test = ["pytest>=7", "pytest-asyncio>=0.23", "respx>=0.20"]
 
 [project.urls]
 Homepage = "https://tinyzkp.com"

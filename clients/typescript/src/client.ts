@@ -9,8 +9,8 @@
  *
  * const client = new TinyZKP("https://api.tinyzkp.com", { apiKey: "tzk_..." });
  *
- * const jobId = await client.proveTemplate("range_proof", {
- *   min: 0, max: 100, witness_steps: [42, 44],
+ * const jobId = await client.proveTemplate("accumulator_step", {
+ *   initial: 1000, final: 1045, deltas: [10, 20, 15],
  * });
  *
  * const proof = await client.waitForProof(jobId);
@@ -76,6 +76,7 @@ export interface TemplateSummary {
   tags: string[];
   cost_category: string;
   backend: string;
+  lifecycle: string;
 }
 
 export interface TemplateListResponse {

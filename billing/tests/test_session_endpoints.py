@@ -136,7 +136,12 @@ class TestVerifyMagicLink:
         assert "session_token" in data
         assert len(data["session_token"]) == 64
         assert data["tenant_id"] == "t_test"
+        assert data["email"] == "test@example.com"
+        assert data["plan"] == "free"
+        assert data["api_key_prefix"] == "tzk_test"
+        assert data["status"] == "active"
         assert "api_key" not in data  # MUST NOT expose raw key
+        assert "stripe_customer_id" not in data
 
     def test_expired_magic_link_returns_401(self, client, _set_secret):
         db_path = _set_secret

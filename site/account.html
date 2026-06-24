@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dashboard — TinyZKP</title>
 <meta name="description" content="Manage your TinyZKP account, view usage analytics, and manage your API key.">
+<meta name="robots" content="noindex,follow">
 <meta property="og:title" content="Dashboard — TinyZKP">
 <meta property="og:description" content="Manage your TinyZKP account, view usage analytics, and manage your API key.">
 <meta property="og:url" content="https://tinyzkp.com/account">
@@ -310,6 +311,7 @@ footer .right a:hover{color:var(--muted)}
   footer .right{flex-wrap:wrap;justify-content:center}
 }
 @media(max-width:480px){
+  .login-view::before{width:320px;height:320px;top:-120px}
   .overview-bar{grid-template-columns:1fr 1fr}
   .stats-grid{grid-template-columns:1fr 1fr}
   .ref-row{flex-direction:column;align-items:stretch;gap:6px}
@@ -815,7 +817,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
         email:          data.email          || '',
         plan:           data.plan           || 'free',
         api_key_prefix: data.api_key_prefix || '',
-        status:         'active'
+        status:         data.status         || 'active'
       };
       window.history.replaceState({}, '', '/account');
       enterDashboard();

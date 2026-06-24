@@ -23,6 +23,40 @@ pub enum Enforcement {
     StructureOnly,
 }
 
+/// Public lifecycle label for customer-facing template discovery.
+///
+/// This combines the cryptographic enforcement axis with audit status into one
+/// product-safe state:
+/// - `Live`: enforced and externally approved for production exposure.
+/// - `AuditGated`: enforced by code, but withheld from default production
+///   listings until external audit sign-off.
+/// - `Preview`: not yet a production proof of its named predicate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TemplateLifecycle {
+    Live,
+    AuditGated,
+    Preview,
+}
+
+impl TemplateLifecycle {
+    pub fn from_axes(enforcement: Enforcement, audited: bool) -> Self {
+        match (enforcement, audited) {
+            (Enforcement::Enforced, true) => Self::Live,
+            (Enforcement::Enforced, false) => Self::AuditGated,
+            (Enforcement::StructureOnly, _) => Self::Preview,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Live => "live",
+            Self::AuditGated => "audit_gated",
+            Self::Preview => "preview",
+        }
+    }
+}
+
 pub mod accumulator;
 pub mod computation;
 pub mod data_integrity;
@@ -94,6 +128,13 @@ pub struct TemplateInfo {
     /// [`ProofTemplate::audited`]). Defaults to `false` for older clients.
     #[serde(default)]
     pub audited: bool,
+    /// Customer-facing lifecycle label derived from `enforcement` + `audited`.
+    #[serde(default = "default_lifecycle")]
+    pub lifecycle: TemplateLifecycle,
+}
+
+fn default_lifecycle() -> TemplateLifecycle {
+    TemplateLifecycle::Preview
 }
 
 impl ProofTemplate {
@@ -118,6 +159,7 @@ impl ProofTemplate {
             cost_category: self.cost_category.to_string(),
             enforcement: self.enforcement,
             audited: self.audited,
+            lifecycle: TemplateLifecycle::from_axes(self.enforcement, self.audited),
         }
     }
 }
@@ -266,11 +308,28 @@ mod enforcement_tests {
     }
 
     #[test]
+    fn lifecycle_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&TemplateLifecycle::Live).unwrap(),
+            "\"live\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TemplateLifecycle::AuditGated).unwrap(),
+            "\"audit_gated\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TemplateLifecycle::Preview).unwrap(),
+            "\"preview\""
+        );
+    }
+
+    #[test]
     fn to_info_carries_enforcement() {
         // accumulator_step is the only enforced template.
         let t = template_by_id("accumulator_step").expect("accumulator_step registered");
         assert_eq!(t.enforcement, Enforcement::Enforced);
         assert_eq!(t.to_info().enforcement, Enforcement::Enforced);
+        assert_eq!(t.to_info().lifecycle, TemplateLifecycle::Live);
     }
 }
 

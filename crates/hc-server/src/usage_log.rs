@@ -5,18 +5,59 @@ use std::{
 };
 
 use anyhow::Context;
+use native_tls::TlsConnector;
+use postgres::{Client, NoTls};
+use postgres_native_tls::MakeTlsConnector;
 use rusqlite::{params, Connection};
 
+const PG_SCHEMA_SQL: &str = include_str!("../sql/usage_pg.sql");
+const PG_RECORD_SQL: &str = r#"
+INSERT INTO usage_log
+  (tenant_id, job_id, trace_length, workload_id, duration_ms, completed_at_ms)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (job_id) DO NOTHING
+"#;
+const PG_RECORD_VERIFY_SQL: &str = r#"
+INSERT INTO verify_log (tenant_id, duration_ms, completed_at_ms)
+VALUES ($1, $2, $3)
+"#;
+const PG_RECORD_FAILURE_SQL: &str = r#"
+INSERT INTO failed_proofs
+  (tenant_id, job_id, error, duration_ms, failed_at_ms)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (job_id) DO NOTHING
+"#;
+const PG_QUERY_USAGE_SQL: &str = r#"
+SELECT trace_length
+FROM usage_log
+WHERE tenant_id = $1
+  AND completed_at_ms >= $2
+  AND completed_at_ms <= $3
+"#;
+const PG_COUNT_VERIFY_SQL: &str = r#"
+SELECT COUNT(*)::bigint
+FROM verify_log
+WHERE tenant_id = $1
+  AND completed_at_ms >= $2
+  AND completed_at_ms <= $3
+"#;
+const PG_COUNT_FAILED_SQL: &str = r#"
+SELECT COUNT(*)::bigint
+FROM failed_proofs
+WHERE tenant_id = $1
+  AND failed_at_ms >= $2
+  AND failed_at_ms <= $3
+"#;
+
 /// Common write surface for usage recording. Implemented by `UsageLog`
-/// (SQLite, current production) and — once Phase 1 of the Postgres
-/// migration lands — `PgUsageRecorder`. A `DualWriter` composition
-/// during the migration window writes to both. See
+/// (SQLite, current production primary) and `PgUsageRecorder`. A
+/// `DualWriter` composition during the migration window writes to both. See
 /// docs/postgres_migration.md for the full plan.
 ///
 /// All methods are best-effort from the caller's perspective: SQLite
 /// writes use INSERT OR IGNORE so a duplicate job_id never errors. A
-/// future Postgres impl should return Ok(()) on `ON CONFLICT DO NOTHING`
-/// for the same idempotency contract.
+/// Postgres returns Ok(()) on `ON CONFLICT DO NOTHING` for the same
+/// idempotency contract.
 pub trait UsageRecorder: Send + Sync {
     /// Record a completed prove job.
     fn record(
@@ -42,12 +83,105 @@ pub trait UsageRecorder: Send + Sync {
     ) -> anyhow::Result<()>;
 }
 
+/// Common read surface for usage summaries and cap enforcement. SQLite remains
+/// the default read source; Postgres read-side cutover is explicitly selected
+/// with `HC_SERVER_USAGE_READ_FROM=postgres` after dual-write parity is proven.
+pub trait UsageReader: Send + Sync {
+    fn query_usage(
+        &self,
+        tenant_id: &str,
+        plan: &str,
+        since_ms: u64,
+        until_ms: u64,
+    ) -> anyhow::Result<UsageSummary>;
+
+    fn monthly_cost_cents(&self, tenant_id: &str, plan: &str) -> anyhow::Result<u64>;
+}
+
 /// SQLite usage log for billing.
 ///
 /// Records every completed proof with tenant, trace length, and duration.
 /// The `billed` column is updated externally by the billing cron script.
 pub struct UsageLog {
     conn: Arc<Mutex<Connection>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PgTlsMode {
+    Disable,
+    Require,
+}
+
+impl PgTlsMode {
+    pub fn from_env_and_url(url: &str) -> Self {
+        let raw_env = std::env::var("HC_SERVER_PG_TLS").ok();
+        Self::from_raw_env_and_url(raw_env.as_deref(), url)
+    }
+
+    pub fn from_raw_env_and_url(raw_env: Option<&str>, url: &str) -> Self {
+        if let Some(raw) = raw_env {
+            let normalized = raw.trim().to_ascii_lowercase();
+            if matches!(normalized.as_str(), "1" | "true" | "require" | "required") {
+                return Self::Require;
+            }
+            if matches!(normalized.as_str(), "0" | "false" | "disable" | "disabled") {
+                return Self::Disable;
+            }
+        }
+
+        let lower = url.to_ascii_lowercase();
+        if lower.contains("sslmode=require")
+            || lower.contains("sslmode=verify-ca")
+            || lower.contains("sslmode=verify-full")
+        {
+            Self::Require
+        } else {
+            Self::Disable
+        }
+    }
+}
+
+/// Synchronous Postgres mirror for Phase 1 usage dual-write.
+///
+/// SQLite remains the read source and billing source during Phase 1. This
+/// recorder is intentionally used behind `DualWriter` as a best-effort
+/// secondary: connection or statement failures are visible in logs but do not
+/// break customer prove/verify requests.
+pub struct PgUsageRecorder {
+    client: Mutex<Client>,
+}
+
+impl PgUsageRecorder {
+    pub fn connect(url: &str, tls_mode: PgTlsMode) -> anyhow::Result<Self> {
+        let mut client = match tls_mode {
+            PgTlsMode::Disable => {
+                Client::connect(url, NoTls).context("connect postgres usage_log mirror")?
+            }
+            PgTlsMode::Require => {
+                let connector = TlsConnector::builder()
+                    .build()
+                    .context("build native TLS connector for postgres usage_log mirror")?;
+                let connector = MakeTlsConnector::new(connector);
+                Client::connect(url, connector).context("connect postgres usage_log mirror")?
+            }
+        };
+
+        client
+            .batch_execute(PG_SCHEMA_SQL)
+            .context("initialize postgres usage schema")?;
+        client
+            .batch_execute("SET statement_timeout = '5s'")
+            .context("set postgres usage statement_timeout")?;
+        Ok(Self {
+            client: Mutex::new(client),
+        })
+    }
+
+    fn lock_client(&self) -> anyhow::Result<std::sync::MutexGuard<'_, Client>> {
+        self.client
+            .lock()
+            .map_err(|_| anyhow::anyhow!("postgres usage client lock poisoned"))
+    }
 }
 
 /// Aggregated usage summary for a tenant.
@@ -282,6 +416,178 @@ impl UsageRecorder for UsageLog {
     }
 }
 
+impl UsageReader for UsageLog {
+    fn query_usage(
+        &self,
+        tenant_id: &str,
+        plan: &str,
+        since_ms: u64,
+        until_ms: u64,
+    ) -> anyhow::Result<UsageSummary> {
+        UsageLog::query_usage(self, tenant_id, plan, since_ms, until_ms)
+    }
+
+    fn monthly_cost_cents(&self, tenant_id: &str, plan: &str) -> anyhow::Result<u64> {
+        UsageLog::monthly_cost_cents(self, tenant_id, plan)
+    }
+}
+
+impl UsageRecorder for PgUsageRecorder {
+    fn record(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        trace_length: usize,
+        workload_id: Option<&str>,
+        duration_ms: u64,
+    ) -> anyhow::Result<()> {
+        let now_ms = now_ms();
+        let trace_length = trace_length.min(i64::MAX as usize) as i64;
+        let duration_ms = duration_ms.min(i64::MAX as u64) as i64;
+        let workload_id = workload_id.map(str::to_owned);
+        let mut client = self.lock_client()?;
+        client.execute(
+            PG_RECORD_SQL,
+            &[
+                &tenant_id,
+                &job_id,
+                &trace_length,
+                &workload_id,
+                &duration_ms,
+                &now_ms,
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn record_verify(&self, tenant_id: &str, duration_ms: u64) -> anyhow::Result<()> {
+        let now_ms = now_ms();
+        let duration_ms = duration_ms.min(i64::MAX as u64) as i64;
+        let mut client = self.lock_client()?;
+        client.execute(PG_RECORD_VERIFY_SQL, &[&tenant_id, &duration_ms, &now_ms])?;
+        Ok(())
+    }
+
+    fn record_failure(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        error: &str,
+        duration_ms: u64,
+    ) -> anyhow::Result<()> {
+        let now_ms = now_ms();
+        let duration_ms = duration_ms.min(i64::MAX as u64) as i64;
+        let mut client = self.lock_client()?;
+        client.execute(
+            PG_RECORD_FAILURE_SQL,
+            &[&tenant_id, &job_id, &error, &duration_ms, &now_ms],
+        )?;
+        Ok(())
+    }
+}
+
+impl UsageReader for PgUsageRecorder {
+    fn query_usage(
+        &self,
+        tenant_id: &str,
+        plan: &str,
+        since_ms: u64,
+        until_ms: u64,
+    ) -> anyhow::Result<UsageSummary> {
+        let factor = discount_factor(plan);
+        let since_i = since_ms.min(i64::MAX as u64) as i64;
+        let until_i = until_ms.min(i64::MAX as u64) as i64;
+        let mut client = self.lock_client()?;
+
+        let mut total_proofs = 0u64;
+        let mut estimated_cost_cents = 0u64;
+        for row in client.query(PG_QUERY_USAGE_SQL, &[&tenant_id, &since_i, &until_i])? {
+            let trace_length: i64 = row.get(0);
+            total_proofs += 1;
+            estimated_cost_cents +=
+                (price_cents(trace_length.max(0) as usize) as f64 * factor).round() as u64;
+        }
+
+        let total_verifies: i64 = client
+            .query_one(PG_COUNT_VERIFY_SQL, &[&tenant_id, &since_i, &until_i])?
+            .get(0);
+        let failed_proofs: i64 = client
+            .query_one(PG_COUNT_FAILED_SQL, &[&tenant_id, &since_i, &until_i])?
+            .get(0);
+
+        Ok(UsageSummary {
+            total_proofs,
+            total_verifies: total_verifies.max(0) as u64,
+            failed_proofs: failed_proofs.max(0) as u64,
+            estimated_cost_cents,
+            period_start_ms: since_ms,
+            period_end_ms: until_ms,
+        })
+    }
+
+    fn monthly_cost_cents(&self, tenant_id: &str, plan: &str) -> anyhow::Result<u64> {
+        let (month_start_ms, month_end_ms) = current_month_bounds_ms();
+        let since_i = month_start_ms.min(i64::MAX as u64) as i64;
+        let until_i = month_end_ms.min(i64::MAX as u64) as i64;
+        let factor = discount_factor(plan);
+        let mut client = self.lock_client()?;
+        let mut cost = 0u64;
+
+        for row in client.query(PG_QUERY_USAGE_SQL, &[&tenant_id, &since_i, &until_i])? {
+            let trace_length: i64 = row.get(0);
+            cost += (price_cents(trace_length.max(0) as usize) as f64 * factor).round() as u64;
+        }
+
+        Ok(cost)
+    }
+}
+
+impl<T: UsageRecorder + ?Sized> UsageRecorder for Arc<T> {
+    fn record(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        trace_length: usize,
+        workload_id: Option<&str>,
+        duration_ms: u64,
+    ) -> anyhow::Result<()> {
+        self.as_ref()
+            .record(tenant_id, job_id, trace_length, workload_id, duration_ms)
+    }
+
+    fn record_verify(&self, tenant_id: &str, duration_ms: u64) -> anyhow::Result<()> {
+        self.as_ref().record_verify(tenant_id, duration_ms)
+    }
+
+    fn record_failure(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+        error: &str,
+        duration_ms: u64,
+    ) -> anyhow::Result<()> {
+        self.as_ref()
+            .record_failure(tenant_id, job_id, error, duration_ms)
+    }
+}
+
+impl<T: UsageReader + ?Sized> UsageReader for Arc<T> {
+    fn query_usage(
+        &self,
+        tenant_id: &str,
+        plan: &str,
+        since_ms: u64,
+        until_ms: u64,
+    ) -> anyhow::Result<UsageSummary> {
+        self.as_ref()
+            .query_usage(tenant_id, plan, since_ms, until_ms)
+    }
+
+    fn monthly_cost_cents(&self, tenant_id: &str, plan: &str) -> anyhow::Result<u64> {
+        self.as_ref().monthly_cost_cents(tenant_id, plan)
+    }
+}
+
 /// Best-effort secondary writer that mirrors every recording call to a
 /// secondary `UsageRecorder`. Used during the Postgres dual-write window
 /// (docs/postgres_migration.md Phase 1). The primary is the source of
@@ -377,9 +683,9 @@ fn price_cents(trace_length: usize) -> u64 {
 /// the same on its side. Edit `pricing.json` FIRST when changing.
 fn discount_factor(plan: &str) -> f64 {
     match plan {
-        "pro" | "team" => 0.75,  // 25% off; "team" is the legacy alias for Pro
-        "scale" => 0.60,         // 40% off
-        "compute" => 1.0,        // billed via trace_step_usage meter, no cents discount
+        "pro" | "team" => 0.75, // 25% off; "team" is the legacy alias for Pro
+        "scale" => 0.60,        // 40% off
+        "compute" => 1.0,       // billed via trace_step_usage meter, no cents discount
         _ => 1.0,
     }
 }
@@ -664,5 +970,44 @@ mod tests {
         dual.record("acme", "job_1", 1000, None, 50).unwrap();
 
         assert_eq!(p_calls.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn postgres_sql_preserves_idempotency_contract() {
+        assert!(PG_RECORD_SQL.contains("ON CONFLICT (job_id) DO NOTHING"));
+        assert!(PG_RECORD_FAILURE_SQL.contains("ON CONFLICT (job_id) DO NOTHING"));
+        assert!(PG_SCHEMA_SQL.contains("CREATE TABLE IF NOT EXISTS usage_log"));
+        assert!(PG_SCHEMA_SQL.contains("CREATE TABLE IF NOT EXISTS verify_log"));
+        assert!(PG_SCHEMA_SQL.contains("CREATE TABLE IF NOT EXISTS failed_proofs"));
+    }
+
+    #[test]
+    fn pg_tls_mode_follows_env_and_url() {
+        assert_eq!(
+            PgTlsMode::from_raw_env_and_url(None, "postgres://u:p@db/app?sslmode=require"),
+            PgTlsMode::Require
+        );
+        assert_eq!(
+            PgTlsMode::from_raw_env_and_url(None, "postgres://u:p@localhost/app"),
+            PgTlsMode::Disable
+        );
+        assert_eq!(
+            PgTlsMode::from_raw_env_and_url(Some("true"), "postgres://u:p@localhost/app"),
+            PgTlsMode::Require
+        );
+        assert_eq!(
+            PgTlsMode::from_raw_env_and_url(
+                Some("disable"),
+                "postgres://u:p@db/app?sslmode=require"
+            ),
+            PgTlsMode::Disable
+        );
+        assert_eq!(
+            PgTlsMode::from_raw_env_and_url(
+                Some("unexpected"),
+                "postgres://u:p@db/app?sslmode=require"
+            ),
+            PgTlsMode::Require
+        );
     }
 }

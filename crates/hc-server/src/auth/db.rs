@@ -1,24 +1,37 @@
 //! DB-backed auth fallback.
 //!
 //! Provides `DbAuthSource`, which looks up the SHA-256 of a presented
-//! Bearer token against the `tenants` table in `tenant_store.sqlite`
-//! (managed by the billing webhook). Used as a fallback when an API key
-//! is not present in `AuthConfig.keys` — typically because it was
-//! provisioned in the last 60s and the file-based hot-reload hasn't
-//! caught up yet.
+//! Bearer token against a `tenants` table. The original backend is
+//! `tenant_store.sqlite` (managed by the billing webhook); production
+//! scale cutovers can use the same table shape in Postgres. Used as a
+//! fallback when an API key is not present in `AuthConfig.keys` —
+//! typically because it was provisioned in the last 60s and the
+//! file-based hot-reload hasn't caught up yet, or because operators are
+//! cutting auth over to shared Postgres state.
 //!
 //! Off by default. Enabled via `AuthConfig::with_db_source` from
-//! `lib.rs` when `HC_SERVER_AUTH_DB_PATH` is set. The original file +
-//! env source remains primary; the DB source is consulted only on miss.
+//! `lib.rs` when `HC_SERVER_AUTH_DB_PATH` or `HC_SERVER_AUTH_PG_URL` is
+//! set. The original file + env source remains primary; the DB source is
+//! consulted only on miss.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use native_tls::TlsConnector;
+use postgres::{Client, NoTls};
+use postgres_native_tls::MakeTlsConnector;
 use rusqlite::{Connection, OpenFlags};
 
+use crate::usage_log::PgTlsMode;
+
 use super::TenantEntry;
+
+/// Postgres schema for shared tenant/auth state. This mirrors
+/// `billing/tenant_store.py` closely enough for auth, account sessions,
+/// magic links, Stripe event idempotency, and later billing cutover tooling.
+pub const PG_TENANT_AUTH_SCHEMA_SQL: &str = include_str!("../../sql/tenant_auth_pg.sql");
 
 /// Cache TTL: matches the file-based hot-reload interval. After 60s a
 /// cached entry is re-validated against the DB; status changes (suspend,
@@ -41,14 +54,19 @@ pub struct DbAuthSource {
     /// One connection guarded by a Mutex. Auth-path lookups normally hit
     /// the cache; the DB is only touched on miss (new keys, evictions).
     /// At expected miss rates (<100/s) the mutex is uncontended.
-    conn: Mutex<Connection>,
+    backend: DbAuthBackend,
     /// Positive-only TTL cache, keyed by the SHA-256 of the bearer
     /// token. Negatives are NOT cached so that a freshly-provisioned
     /// key starts working on first request, not after the next eviction.
     cache: Mutex<HashMap<[u8; 32], CacheEntry>>,
     /// Retained for diagnostics/logging. Not required for runtime.
     #[allow(dead_code)]
-    path: PathBuf,
+    source_label: String,
+}
+
+enum DbAuthBackend {
+    Sqlite(Mutex<Connection>),
+    Postgres(Box<Mutex<Client>>),
 }
 
 fn now_ms() -> u64 {
@@ -94,9 +112,63 @@ impl DbAuthSource {
         drop(stmt);
 
         Ok(Arc::new(Self {
-            conn: Mutex::new(conn),
+            backend: DbAuthBackend::Sqlite(Mutex::new(conn)),
             cache: Mutex::new(HashMap::new()),
-            path: path.to_path_buf(),
+            source_label: path.display().to_string(),
+        }))
+    }
+
+    /// Open a Postgres tenant auth source. Initializes the schema if needed
+    /// and verifies the `tenants` table exposes the columns the auth path
+    /// requires.
+    pub fn connect_postgres(url: &str, tls_mode: PgTlsMode) -> anyhow::Result<Arc<Self>> {
+        let mut client = match tls_mode {
+            PgTlsMode::Disable => Client::connect(url, NoTls)
+                .map_err(|e| anyhow::anyhow!("connect postgres tenant auth source: {e}"))?,
+            PgTlsMode::Require => {
+                let connector = TlsConnector::builder().build().map_err(|e| {
+                    anyhow::anyhow!("build native TLS connector for tenant auth: {e}")
+                })?;
+                Client::connect(url, MakeTlsConnector::new(connector))
+                    .map_err(|e| anyhow::anyhow!("connect postgres tenant auth source: {e}"))?
+            }
+        };
+        client
+            .batch_execute(PG_TENANT_AUTH_SCHEMA_SQL)
+            .map_err(|e| anyhow::anyhow!("initialize postgres tenant auth schema: {e}"))?;
+        client
+            .batch_execute("SET statement_timeout = '2s';")
+            .map_err(|e| anyhow::anyhow!("set postgres tenant auth statement_timeout: {e}"))?;
+
+        let missing: Vec<String> = client
+            .query(
+                "SELECT c FROM (
+                   VALUES ('tenant_id'), ('api_key_hash'), ('status'), ('plan')
+                 ) AS required(c)
+                 WHERE NOT EXISTS (
+                   SELECT 1
+                   FROM information_schema.columns
+                   WHERE table_schema = current_schema()
+                     AND table_name = 'tenants'
+                     AND column_name = required.c
+                 )",
+                &[],
+            )
+            .map_err(|e| anyhow::anyhow!("inspect postgres tenant auth schema: {e}"))?
+            .into_iter()
+            .map(|row| row.get::<_, String>(0))
+            .collect();
+        if !missing.is_empty() {
+            anyhow::bail!(
+                "postgres tenant auth schema missing required columns: {}",
+                missing.join(", ")
+            );
+        }
+
+        Ok(Arc::new(Self {
+            backend: DbAuthBackend::Postgres(Box::new(Mutex::new(client))),
+            cache: Mutex::new(HashMap::new()),
+            source_label: "postgres".to_string(),
         }))
     }
 
@@ -133,18 +205,35 @@ impl DbAuthSource {
         entry
     }
 
-    fn query_active_tenant(&self, hex_hash: &str) -> rusqlite::Result<Option<TenantEntry>> {
-        let conn = self.conn.lock().expect("auth db mutex");
-        let mut stmt = conn.prepare_cached(
-            "SELECT tenant_id, plan FROM tenants WHERE api_key_hash = ?1 AND status = 'active'",
-        )?;
-        let mut rows = stmt.query([hex_hash])?;
-        if let Some(row) = rows.next()? {
-            let tenant_id: String = row.get(0)?;
-            let plan: String = row.get(1)?;
-            Ok(Some(TenantEntry { tenant_id, plan }))
-        } else {
-            Ok(None)
+    fn query_active_tenant(&self, hex_hash: &str) -> anyhow::Result<Option<TenantEntry>> {
+        match &self.backend {
+            DbAuthBackend::Sqlite(conn) => {
+                let conn = conn.lock().expect("auth db mutex");
+                let mut stmt = conn.prepare_cached(
+                    "SELECT tenant_id, plan FROM tenants WHERE api_key_hash = ?1 AND status = 'active'",
+                )?;
+                let mut rows = stmt.query([hex_hash])?;
+                if let Some(row) = rows.next()? {
+                    let tenant_id: String = row.get(0)?;
+                    let plan: String = row.get(1)?;
+                    Ok(Some(TenantEntry { tenant_id, plan }))
+                } else {
+                    Ok(None)
+                }
+            }
+            DbAuthBackend::Postgres(client) => {
+                let mut client = client
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("tenant auth postgres mutex poisoned"))?;
+                let row = client.query_opt(
+                    "SELECT tenant_id, plan FROM tenants WHERE api_key_hash = $1 AND status = 'active'",
+                    &[&hex_hash],
+                )?;
+                Ok(row.map(|row| TenantEntry {
+                    tenant_id: row.get(0),
+                    plan: row.get(1),
+                }))
+            }
         }
     }
 

@@ -139,6 +139,37 @@ class TestReport:
         assert summary["t_1"]["total_cents"] == 55  # 5 + 50
 
 
+class TestPostgresUsageSource:
+    def test_fetch_unbilled_parses_psql_json(self):
+        payload = [
+            {
+                "id": 7,
+                "tenant_id": "t_1",
+                "job_id": "job_pg",
+                "trace_length": 5000,
+                "completed_at_ms": 1234,
+            }
+        ]
+        source = sync_usage.PostgresUsageSource("postgres://example")
+
+        with patch.object(sync_usage, "_run_psql_query", return_value=json.dumps(payload)) as run:
+            rows = source.fetch_unbilled()
+
+        assert rows == payload
+        sql = run.call_args.args[1]
+        assert "WHERE billed = 0" in sql
+        assert "ORDER BY id" in sql
+
+    def test_mark_billed_updates_by_integer_id(self):
+        source = sync_usage.PostgresUsageSource("postgres://example")
+
+        with patch.object(sync_usage, "_run_psql_query", return_value="UPDATE 1") as run:
+            source.mark_billed("42")
+
+        assert run.call_args.args[0] == "postgres://example"
+        assert "WHERE id = 42 AND billed = 0" in run.call_args.args[1]
+
+
 class TestIdempotency:
     """Verify the dedup contract documented in sync_usage.py."""
 
