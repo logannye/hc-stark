@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP Recipes — Agent and Backend Proof Receipts</title>
+<meta name="description" content="Copy-paste recipes for attaching TinyZKP proof receipts to AI agent actions, backend state transitions, audit checkpoints, and reconciliation workflows.">
+<meta property="og:title" content="TinyZKP Recipes">
+<meta property="og:description" content="Agent and backend recipes for proof receipts: MCP, REST, schema envelopes, audit checkpoints, and verified badges.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/recipes">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP Recipes">
+<meta name="twitter:description" content="Agent and backend recipes for proof receipts: MCP, REST, schema envelopes, audit checkpoints, and verified badges.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/recipes">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+main{padding:118px 0 76px}.eyebrow{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}h1{font-size:clamp(34px,5vw,56px);line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);max-width:900px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:790px}.band{border-top:1px solid var(--border);padding-top:34px;margin-top:42px}.band h2{color:var(--text-bright);font-size:26px;line-height:1.22;margin-bottom:14px;letter-spacing:-.02em}.band p{color:var(--muted);font-size:15px;line-height:1.75;max-width:820px;margin-bottom:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;min-width:0}.box h3{color:var(--text-bright);font-size:18px;margin-bottom:10px}.box p,.box li{color:var(--muted);font-size:14px;line-height:1.7}.box ul{padding-left:20px}.code{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;overflow:auto;margin-top:18px;max-width:100%}.code pre{font-family:var(--mono);font-size:12.5px;color:var(--text);line-height:1.75;white-space:pre}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:700;padding:12px 22px;border-radius:8px;text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}@media(max-width:900px){.grid{grid-template-columns:1fr}}
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "TinyZKP Recipes — Agent and Backend Proof Receipts",
+  "url": "https://tinyzkp.com/recipes",
+  "description": "Copy-paste recipes for attaching TinyZKP proof receipts to AI agent actions, backend state transitions, audit checkpoints, and reconciliation workflows.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
+</head>
+<body>
+<nav><div class="container"><a href="/" class="logo"><span>Tiny</span>ZKP</a><button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button><div class="links"><a href="/agents">Agents</a><a href="/mcp">MCP</a><a href="/receipts">Receipts</a><a href="/docs">Docs</a><a href="/signup" class="nav-cta">Get API Key</a></div></div></nav>
+<main><div class="container">
+  <div class="eyebrow">Copy-paste patterns</div>
+  <h1>Recipes for adding proof receipts to agents and backends.</h1>
+  <p class="lede">Start with a narrow transition, mint a receipt after the state mutation, and return the receipt with the output. These recipes are intentionally small so teams can adopt proof receipts without rebuilding their system around ZK.</p>
+  <div class="cta-row"><a class="cta" href="/mcp">Install MCP</a><a class="cta secondary" href="/agent-policy">Agent policy</a><a class="cta secondary" href="/schemas/agent-receipt.schema.json">Agent schema</a><a class="cta secondary" href="/badges">Verified badge</a></div>
+
+  <section class="band grid">
+    <article class="box">
+      <h2>1. Agent action receipt</h2>
+      <p>Return an agent result with a receipt envelope that downstream systems can validate.</p>
+      <div class="code"><pre>{
+  "action": "ledger_checkpoint",
+  "agent_result": {
+    "status": "updated",
+    "checkpoint_id": "ckpt_2026_06_24"
+  },
+  "receipt_url": "https://tinyzkp.com/verify#proof=...",
+  "receipt": {
+    "template": "accumulator_step",
+    "statement": {"initial": 4200, "final": 4387, "deltas": [55, 80, 52]},
+    "proof": {"version": 5, "bytes": [106, 143, "..."]}
+  }
+}</pre></div>
+    </article>
+    <article class="box">
+      <h2>2. MCP tool policy</h2>
+      <p>Use a simple policy: receipt every action that mutates money, records, compliance state, or customer-visible status. The canonical version is available at <a href="/agent-policy">/agent-policy</a>.</p>
+      <div class="code"><pre>When a tool changes durable state:
+1. call prove_template("accumulator_step", params)
+2. poll until the proof is complete
+3. attach receipt_url to the final answer
+4. never put secrets in transparent params</pre></div>
+    </article>
+  </section>
+
+  <section class="band grid">
+    <article class="box">
+      <h2>3. Backend API response</h2>
+      <p>Expose receipts as part of your own API responses instead of forcing users to trust your logs.</p>
+      <div class="code"><pre>HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "balance_checkpoint": 1045,
+  "receipt": {
+    "$schema": "https://tinyzkp.com/schemas/tinyzkp-receipt.schema.json",
+    "template": "accumulator_step",
+    "statement": {"initial": 1000, "final": 1045, "deltas": [10, 20, 15]},
+    "proof": {"version": 5, "bytes": [106, 143, "..."]}
+  }
+}</pre></div>
+    </article>
+    <article class="box">
+      <h2>4. Customer-facing badge</h2>
+      <p>Link the badge to a verifier URL or to your own receipt detail page.</p>
+      <div class="code"><pre>&lt;a href="https://tinyzkp.com/verify#proof=..."&gt;
+  &lt;img
+    src="https://tinyzkp.com/badges/verified-by-tinyzkp.svg"
+    width="202"
+    height="32"
+    alt="Verified by TinyZKP"&gt;
+&lt;/a&gt;</pre></div>
+    </article>
+  </section>
+
+  <section class="band grid">
+    <article class="box"><h3>Best first rollout</h3><ul><li>Pick one state-changing workflow.</li><li>Receipt the checkpoint, not every UI click.</li><li>Show the receipt to a second system or reviewer.</li><li>Measure whether the receipt reduces replay, audit, or support work.</li></ul></article>
+    <article class="box"><h3>Escalate to Compute when</h3><ul><li>Trace length makes high-RAM proving expensive.</li><li>Checkpoints become large or sporadic.</li><li>You need a design review for custom state machines.</li><li>You want reserved capacity or enterprise review.</li></ul></article>
+  </section>
+</div></main>
+<footer><div class="container"><div class="left">&copy; 2026 TinyZKP</div><div class="right"><a href="/agents">Agents</a><a href="/agent-policy">Agent Policy</a><a href="/mcp">MCP</a><a href="/receipts">Receipts</a><a href="/security-review">Security Review</a><a href="/privacy">Privacy</a><a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a></div></div></footer>
+</body>
+</html>

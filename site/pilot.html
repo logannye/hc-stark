@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>Proof Receipt Pilot Program &mdash; TinyZKP</title>
+<meta name="description" content="Run a $5,000 focused TinyZKP proof-receipt pilot for one agent action, API mutation, audit checkpoint, platform rollout, or long state-transition trace.">
+<meta property="og:title" content="TinyZKP Proof Receipt Pilot Program">
+<meta property="og:description" content="A structured pilot path for teams adding verifiable receipts to agent actions, API mutations, audit checkpoints, and long traces.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:url" content="https://tinyzkp.com/pilot">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP Proof Receipt Pilot Program">
+<meta name="twitter:description" content="A structured pilot path for teams adding verifiable receipts to agent actions, API mutations, audit checkpoints, and long traces.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/pilot">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Service",
+  "name": "TinyZKP Proof Receipt Pilot",
+  "url": "https://tinyzkp.com/pilot",
+  "provider": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "serviceType": "Proof receipt integration pilot",
+  "description": "A focused pilot for adding verifiable proof receipts to one production workflow, agent action, API mutation, audit checkpoint, or long state-transition trace."
+}
+</script>
+<style>
+main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(320px,.98fr);gap:40px;align-items:center}.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:22px}.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}h1{font-size:clamp(36px,5vw,62px);line-height:1.06;letter-spacing:-.035em;color:var(--text-bright);max-width:840px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:760px}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none;font-size:14px;letter-spacing:.01em;transition:transform .15s,box-shadow .15s}.cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px var(--accent-glow);text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}.cta.secondary:hover{border-color:var(--accent);box-shadow:none;color:var(--accent)}.visual{border:1px solid var(--border-light);border-radius:18px;background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.32)}.visual img{display:block;width:100%;height:auto;border-bottom:1px solid var(--border)}.receipt-panel{padding:20px}.receipt-row{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding:11px 0}.receipt-row:last-child{border-bottom:none}.receipt-row span{color:var(--muted);font-size:13px}.receipt-row strong{font-family:var(--mono);font-size:12.5px;color:var(--accent);text-align:right}.band{border-top:1px solid var(--border);padding-top:36px;margin-top:48px}.band h2{font-size:clamp(25px,3.3vw,36px);line-height:1.16;color:var(--text-bright);letter-spacing:-.025em;margin-bottom:12px}.band>p{color:var(--muted);font-size:15px;line-height:1.75;max-width:820px;margin-bottom:20px}.band a,.box a,.note a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0}.box h3{font-size:17px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:8px}.box p,.box li{color:var(--muted);font-size:13.5px;line-height:1.7}.box ul{padding-left:18px}.tag{display:inline-flex;margin-bottom:12px;padding:5px 9px;border-radius:6px;border:1px solid var(--border-light);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:700}.tag.live{color:var(--green);background:var(--green-dim);border-color:rgba(52,211,153,.22)}.tag.review{color:var(--amber);background:var(--amber-dim);border-color:rgba(251,191,36,.22)}.timeline{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:22px}.step{background:linear-gradient(180deg,var(--surface),var(--bg-warm));border:1px solid var(--border);border-radius:12px;padding:18px;min-width:0}.step strong{display:block;color:var(--accent);font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;margin-bottom:8px}.step span{display:block;color:var(--muted);font-size:13px;line-height:1.6}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin-top:22px}table{width:100%;border-collapse:collapse;min-width:720px}th,td{padding:13px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}td{color:var(--muted);font-size:13.5px}tbody tr:last-child td{border-bottom:none}td strong{color:var(--text)}.note{color:var(--dim);font-size:12.5px;line-height:1.7;margin-top:14px}.final{background:linear-gradient(180deg,rgba(16,26,48,.72),rgba(7,13,24,.72));border:1px solid var(--border-light);border-radius:16px;padding:28px;margin-top:50px;text-align:center}.final h2{color:var(--text-bright);font-size:28px;line-height:1.18;letter-spacing:-.02em;margin-bottom:10px}.final p{color:var(--muted);font-size:15px;line-height:1.75;max-width:760px;margin:0 auto}@media(max-width:980px){.hero,.grid,.grid.two,.timeline{grid-template-columns:1fr}.visual{max-width:620px}.receipt-row strong{text-align:left}}@media(max-width:560px){main{padding-top:96px}.container{padding:0 20px}h1{font-size:34px;letter-spacing:-.02em}.lede{font-size:16px}.cta-row{display:grid;grid-template-columns:1fr}.cta{width:100%;padding-inline:16px;text-align:center}.receipt-row{display:grid;grid-template-columns:1fr;gap:4px}.final{padding:22px}.final h2{font-size:24px}}
+</style>
+</head>
+<body>
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/agents">Agents</a>
+    <a href="/mcp">MCP</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/trust">Trust</a>
+    <a href="/docs">Docs</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+<div class="container">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Pilot program</div>
+      <h1>Prove one production workflow in 14 days.</h1>
+      <p class="lede">TinyZKP pilots are built around one high-value state transition: an agent action, platform policy, API mutation, reconciliation checkpoint, reserve update, or long trace. The $5,000 package is designed to produce a receipt that a real downstream verifier can inspect, store, and use in a buying decision.</p>
+      <div class="cta-row">
+        <a class="cta" href="/contact?category=Paid%20Pilot&message=I%20want%20to%20scope%20a%20%245%2C000%20TinyZKP%20production%20pilot." data-track="paid_pilot_apply_click" data-source="pilot_hero">Scope paid pilot</a>
+        <a class="cta secondary" href="/evaluation">Evaluate fit</a>
+        <a class="cta secondary" href="/trust">Review trust center</a>
+        <a class="cta secondary" href="/pricing">Estimate pricing</a>
+      </div>
+    </div>
+    <aside class="visual" aria-label="TinyZKP proof receipt pilot preview">
+      <img src="/pilot-preview.jpg" width="720" height="378" fetchpriority="high" decoding="async" alt="TinyZKP proof receipt service preview">
+      <div class="receipt-panel">
+        <div class="receipt-row"><span>Package</span><strong>$5,000 / 14 days</strong></div>
+        <div class="receipt-row"><span>Pilot artifact</span><strong>Receipt URL + verifier result</strong></div>
+        <div class="receipt-row"><span>Scope</span><strong>One workflow, one statement</strong></div>
+        <div class="receipt-row"><span>Credit policy</span><strong>Creditable if converted</strong></div>
+        <div class="receipt-row"><span>Default proof path</span><strong>Transparent STARK receipt</strong></div>
+        <div class="receipt-row"><span>Decision</span><strong>Self-serve, Compute, or custom</strong></div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="band">
+    <h2>The paid pilot package</h2>
+    <p>The pilot is priced to filter for serious workflows while staying small enough to approve quickly. If the pilot converts into an annual or reserved-capacity agreement within 60 days, the $5,000 pilot fee is credited toward that agreement.</p>
+    <div class="grid">
+      <article class="box"><span class="tag live">Included</span><h3>Statement and workflow fit</h3><p>Map one agent action, platform policy, API mutation, audit checkpoint, or long trace into a supported receipt path or design-review boundary.</p></article>
+      <article class="box"><span class="tag live">Included</span><h3>Receipt and verifier surface</h3><p>Generate the receipt, attach it where the verifier will see it, and document the verifier path, data boundary, and proof claim.</p></article>
+      <article class="box"><span class="tag live">Conversion</span><h3>Rollout decision</h3><p>Leave with a plan recommendation, cost model, support needs, and decision route: self-serve, Compute, platform rollout, or reserved capacity.</p></article>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Who should run a pilot</h2>
+    <p>The best pilots start where a receipt changes trust, sales, compliance, or operations. If the workflow only needs a log line, use a log line. If a recipient needs to verify a transition without replaying your system, TinyZKP is worth testing.</p>
+    <div class="grid">
+      <article class="box"><span class="tag live">Agents</span><h3>Agent actions with consequences</h3><p>Receipt tool-call batches that move balances, update records, change permissions, reconcile ledgers, or finalize customer-visible workflow state.</p></article>
+      <article class="box"><span class="tag live">Platforms</span><h3>Agent platform rollout</h3><p>Make proof receipts a native capability for one tool category before expanding policy across an IDE, workflow engine, marketplace, or agent runtime.</p></article>
+      <article class="box"><span class="tag live">APIs</span><h3>State-changing backend mutations</h3><p>Attach a proof receipt to the response so another service, customer, or auditor can verify the encoded transition without replaying internal data.</p></article>
+      <article class="box"><span class="tag live">Audit</span><h3>Recurring checkpoints</h3><p>Prove accumulator, reserve, liability, inventory, or governance checkpoints where a compact receipt is more useful than raw system access.</p></article>
+      <article class="box"><span class="tag live">Compute</span><h3>Large supported traces</h3><p>Use Compute when a long state-transition trace would otherwise require high-RAM prover infrastructure, segmentation, or custom operations.</p></article>
+      <article class="box"><span class="tag review">Design review</span><h3>Custom state machines</h3><p>Start with a design-fit review when the predicate is not covered by current templates or when verifier constraints are unusual.</p></article>
+      <article class="box"><span class="tag review">Boundary</span><h3>Privacy-sensitive workflows</h3><p>Use a review path for private-input requirements. The default public product is transparent state-transition attestation, not a blanket privacy claim.</p></article>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>The 14-day pilot shape</h2>
+    <p>A strong pilot is deliberately narrow. It should prove one workflow, expose the receipt where the recipient will actually see it, and produce a clear next commercial step.</p>
+    <div class="timeline">
+      <div class="step"><strong>Day 0</strong><span>Pick the workflow, owner, verifier, data boundary, and commercial decision the pilot must answer.</span></div>
+      <div class="step"><strong>Days 1-3</strong><span>Map the state transition into a supported template, API call, MCP tool, or Compute workload.</span></div>
+      <div class="step"><strong>Days 4-8</strong><span>Generate receipts against sample and live-like data; verify that no secrets enter transparent parameters.</span></div>
+      <div class="step"><strong>Days 9-12</strong><span>Attach the receipt URL, badge, or agent receipt envelope to the system surface recipients will use.</span></div>
+      <div class="step"><strong>Days 13-14</strong><span>Review cost, latency, verifier experience, support needs, and rollout path.</span></div>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Success metrics</h2>
+    <p>The pilot should end with evidence, not a slide deck. These are the checks that make a TinyZKP integration commercially meaningful.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Metric</th><th>What good looks like</th><th>Why it matters</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Receipt generated</strong></td><td>A real proof receipt is produced for the selected workflow or long trace.</td><td>Confirms the workflow can be encoded into the live product surface.</td></tr>
+          <tr><td><strong>Verifier accepted</strong></td><td>The intended recipient can verify the receipt through the public verifier, API, WASM path where compatible, or agent tool.</td><td>Proves the trust artifact works outside the producer system.</td></tr>
+          <tr><td><strong>No secret leakage</strong></td><td>Transparent receipt parameters contain only public or approved values.</td><td>Keeps the default product aligned with its honest data boundary.</td></tr>
+          <tr><td><strong>Cost model known</strong></td><td>Trace size, expected volume, plan, spend cap, or Compute estimate is documented.</td><td>Turns the pilot into a pricing and rollout decision.</td></tr>
+          <tr><td><strong>Production owner named</strong></td><td>A team owns the API/MCP integration, verifier experience, and support path.</td><td>Prevents successful demos from stalling before deployment.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Commercial paths after the pilot</h2>
+    <div class="grid">
+      <article class="box"><h3>Self-serve rollout</h3><p>Use Developer, Pro, or Scale when the workflow fits current templates and the main need is throughput, discounts, or spend caps.</p><p><a href="/pricing">Review self-serve plans</a></p></article>
+      <article class="box"><h3>Compute workload</h3><p>Use Compute when long supported traces are sporadic, large, or cheaper to outsource than to operate on high-memory prover infrastructure.</p><p><a href="/compute">Read Compute brief</a></p></article>
+      <article class="box"><h3>Reserved-capacity review</h3><p>Use a custom path for contractual support targets, procurement requirements, reserved workers, or custom state-machine design.</p><p><a href="/enterprise">Review enterprise offer</a></p></article>
+    </div>
+  </section>
+
+  <section class="band grid two">
+    <article class="box">
+      <h3>What to bring</h3>
+      <ul>
+        <li>The workflow name and the state transition you want the receipt to prove.</li>
+        <li>Example public parameters, expected trace size, and proof frequency.</li>
+        <li>Who verifies the receipt and where the verifier result should appear.</li>
+        <li>Any privacy, retention, procurement, support, or latency constraints.</li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>What not to ask the pilot to prove</h3>
+      <ul>
+        <li>Real-world truth that is not encoded into the statement.</li>
+        <li>Generic private-input zero knowledge without a documented template.</li>
+        <li>Arbitrary zkVM, zkML, rollup, or on-chain verifier support as if already live.</li>
+        <li>Sub-second proofs for every UI interaction.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="final">
+    <h2>Start with one receipt that matters.</h2>
+    <p>A good pilot creates a durable trust artifact: a receipt URL, verification result, cost model, and rollout decision. Keep the scope small enough to ship, but important enough that verification changes the product conversation.</p>
+    <div class="cta-row" style="justify-content:center">
+      <a class="cta" href="/contact?category=Paid%20Pilot&message=I%20want%20to%20scope%20a%20%245%2C000%20TinyZKP%20production%20pilot." data-track="paid_pilot_apply_click" data-source="pilot_final">Scope paid pilot</a>
+      <a class="cta secondary" href="/security-review">Open security review</a>
+    </div>
+  </section>
+</div>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/agents">Agents</a>
+    <a href="/mcp">MCP</a>
+    <a href="/evaluation">Evaluation</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/enterprise">Enterprise</a>
+    <a href="/trust">Trust</a>
+    <a href="/contact">Contact</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+<script defer src="/analytics.js"></script>
+</body>
+</html>

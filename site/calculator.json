@@ -1,0 +1,132 @@
+{
+  "$schema": "https://tinyzkp.com/schemas/tinyzkp-calculator.schema.json",
+  "name": "TinyZKP Pricing Calculator",
+  "url": "https://tinyzkp.com/calculator",
+  "generated_at": "2026-06-24",
+  "currency": "USD",
+  "source_pricing": "https://tinyzkp.com/pricing.json",
+  "summary": "A buyer-facing estimator for choosing between Free, Developer, Pro, Scale, Compute, and pilot review based on workflow, monthly proof receipt volume, typical trace size, and verifier visibility.",
+  "inputs": {
+    "workflow": [
+      {
+        "id": "agent",
+        "label": "Agent tool call or workflow checkpoint",
+        "guidance": "Start Free or Developer while receipts are internal; move to Pro when agent outputs expose receipt URLs to users."
+      },
+      {
+        "id": "platform",
+        "label": "Agent platform or workflow-engine rollout",
+        "guidance": "Use the $5,000 production pilot before platform rollout because the decision depends on receipt policy, verifier placement, support expectations, and distribution."
+      },
+      {
+        "id": "api",
+        "label": "Backend API mutation",
+        "guidance": "Start Developer for one production workflow; move to Pro or Scale when receipts attach to recurring customer-visible mutations."
+      },
+      {
+        "id": "audit",
+        "label": "Audit, reserve, or reconciliation checkpoint",
+        "guidance": "Use Pro or Scale for recurring checkpoints; use Compute for long traces or backfills."
+      },
+      {
+        "id": "long",
+        "label": "Long trace or backfill",
+        "guidance": "Use Compute when paying per trace step is better than operating high-RAM prover infrastructure."
+      },
+      {
+        "id": "enterprise",
+        "label": "Reserved capacity or procurement review",
+        "guidance": "Use pilot review for contractual terms, reserved workers, procurement packets, support commitments, or custom state-machine boundaries."
+      }
+    ],
+    "volume": {
+      "unit": "proof_receipts_per_month",
+      "min": 1,
+      "max": 10000000
+    },
+    "trace_bands": [
+      { "id": "tiny", "label": "<10K", "representative_trace_steps": 5000 },
+      { "id": "small", "label": "10K-100K", "representative_trace_steps": 50000 },
+      { "id": "medium", "label": "100K-1M", "representative_trace_steps": 500000 },
+      { "id": "large", "label": "1M-10M", "representative_trace_steps": 5000000 },
+      { "id": "xl", "label": ">10M", "representative_trace_steps": 50000000 }
+    ],
+    "external_verifier_visible": {
+      "type": "boolean",
+      "default": true,
+      "guidance": "Set true when a customer, auditor, marketplace, agent supervisor, or external recipient sees the receipt URL or receipt object."
+    }
+  },
+  "recommendation_rules": [
+    "If workflow is platform, recommend the $5,000 production pilot before a sales-assisted platform rollout.",
+    "If workflow is enterprise, recommend pilot review.",
+    "If receipts are internal, volume is at most 100 per month, and workflow is not long-trace, recommend Free.",
+    "If workflow is long-trace, or the trace band is large or xl, prefer Compute when it is within 15% of the best uncapped Pro or Scale estimate, or when no self-serve plan fits without hitting a cap.",
+    "For recurring customer-visible API or agent receipts above 250 per month, prefer Pro when it fits without reaching the cap.",
+    "For high-volume customer-visible receipts above 3,500 per month, prefer Scale when it fits without reaching the cap.",
+    "For audit workflows above 2,500 receipts per month, prefer Scale when it fits; otherwise prefer Pro when it fits.",
+    "If all self-serve plans reach their spend caps and Compute is not the right workload shape, recommend pilot review."
+  ],
+  "sample_estimates": [
+    {
+      "workflow": "api",
+      "volume": 1000,
+      "trace_band": "medium",
+      "external_verifier_visible": true,
+      "recommended": "pro",
+      "estimated_monthly": 1579,
+      "effective_cost_per_receipt": 1.579
+    },
+    {
+      "workflow": "agent",
+      "volume": 75,
+      "trace_band": "tiny",
+      "external_verifier_visible": false,
+      "recommended": "free",
+      "estimated_monthly": 0,
+      "effective_cost_per_receipt": 0
+    },
+    {
+      "workflow": "long",
+      "volume": 20,
+      "trace_band": "xl",
+      "external_verifier_visible": true,
+      "recommended": "compute",
+      "estimated_monthly": 500,
+      "effective_cost_per_receipt": 25
+    },
+    {
+      "workflow": "platform",
+      "volume": 10000,
+      "trace_band": "tiny",
+      "external_verifier_visible": true,
+      "recommended": "production_pilot_then_platform_rollout",
+      "estimated_monthly": 5000,
+      "effective_cost_per_receipt": 0.5
+    }
+  ],
+  "links": {
+    "calculator_page": "https://tinyzkp.com/calculator",
+    "evaluation": "https://tinyzkp.com/evaluation",
+    "evaluation_metadata": "https://tinyzkp.com/evaluation.json",
+    "pricing": "https://tinyzkp.com/pricing",
+    "pricing_metadata": "https://tinyzkp.com/pricing.json",
+    "roi": "https://tinyzkp.com/roi",
+    "roi_metadata": "https://tinyzkp.com/roi.json",
+    "limits": "https://tinyzkp.com/limits",
+    "limits_metadata": "https://tinyzkp.com/limits.json",
+    "signup": "https://tinyzkp.com/signup",
+    "compute": "https://tinyzkp.com/compute",
+    "examples": "https://tinyzkp.com/examples",
+    "examples_metadata": "https://tinyzkp.com/examples.json",
+    "pilot_program": "https://tinyzkp.com/pilot",
+    "platform_rollout": "https://tinyzkp.com/platform-rollout",
+    "platform_rollout_metadata": "https://tinyzkp.com/platform-rollout.json",
+    "enterprise": "https://tinyzkp.com/enterprise",
+    "enterprise_metadata": "https://tinyzkp.com/enterprise.json",
+    "integrations": "https://tinyzkp.com/integrations",
+    "changelog": "https://tinyzkp.com/changelog",
+    "changelog_metadata": "https://tinyzkp.com/changelog.json",
+    "trust_center": "https://tinyzkp.com/trust"
+  }
+}

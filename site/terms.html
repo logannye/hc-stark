@@ -3,15 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#050a12">
 <title>Terms of Service — TinyZKP</title>
 <meta name="description" content="TinyZKP terms of service. Rules governing use of the ZK-STARK proof API.">
 <meta property="og:title" content="Terms of Service — TinyZKP">
 <meta property="og:description" content="TinyZKP terms of service. Rules governing use of the ZK-STARK proof API.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/terms">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Terms of Service — TinyZKP">
+<meta name="twitter:description" content="TinyZKP terms of service. Rules governing use of the ZK-STARK proof API.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="canonical" href="https://tinyzkp.com/terms">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/shared.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -72,6 +80,21 @@ footer .right a:hover{color:var(--muted)}
 }
 @media(max-width:600px){footer .container{flex-direction:column;text-align:center}footer .right{justify-content:center}}
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Terms of Service — TinyZKP",
+  "url": "https://tinyzkp.com/terms",
+  "description": "TinyZKP terms of service. Rules governing use of the ZK-STARK proof API.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 
@@ -82,18 +105,18 @@ footer .right a:hover{color:var(--muted)}
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/#pricing">Pricing</a>
+    <a href="/pricing">Pricing</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
     <a href="/account">Dashboard</a>
-    <a class="status-link" href="https://api.tinyzkp.com/healthz" target="_blank" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green,#34d399);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
+    <a class="status-link" href="/status" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green,#34d399);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
     <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
 </div>
 </nav>
 
-<div class="content">
+<main class="content">
 <a class="back" href="/">&larr; Back to TinyZKP</a>
 <h1>Terms of Service</h1>
 <p>Last updated: June 2026</p>
@@ -107,7 +130,7 @@ footer .right a:hover{color:var(--muted)}
 <li>Proof generation (billed per proof by trace complexity) and verification (free).</li>
 <li>Transparent state-transition receipts. Experimental privacy modes are available only where explicitly documented.</li>
 <li>Batch proving, proof inspection, and cost estimation.</li>
-<li>Client-side proof verification via the <code>@tinyzkp/verify</code> WASM package, which runs entirely on the user's device.</li>
+<li>Proof verification via the public verifier, which tries the <code>@tinyzkp/verify</code> WASM package first and may use a hosted fallback for current production proof formats.</li>
 <li>An MCP server for AI agent integration.</li>
 </ul>
 
@@ -116,7 +139,7 @@ footer .right a:hover{color:var(--muted)}
 
 <h2>4. Billing</h2>
 <ul>
-<li>Proof generation is billed by usage (per proof, by trace complexity); verification is free. Plans and per-proof rates are published at <a href="/#pricing">tinyzkp.com</a>.</li>
+<li>Proof generation is billed by usage (per proof, by trace complexity); verification is free. Plans and per-proof rates are published at <a href="/pricing">tinyzkp.com/pricing</a>.</li>
 <li>Each plan has a monthly spend cap; usage beyond the cap is blocked until the next billing cycle or a plan upgrade.</li>
 <li>The free tier is limited to one account per email address.</li>
 <li>Prices are listed on our website and may change with 30 days notice.</li>
@@ -148,7 +171,7 @@ footer .right a:hover{color:var(--muted)}
 
 <h2>10. Contact</h2>
 <p>Questions, billing issues, or support requests? Use <a href="/contact#support-expectations">the contact form and support expectations</a>, or email <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a>.</p>
-</div>
+</main>
 
 <footer>
 <div class="container">

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>ROI &amp; Business Case &mdash; TinyZKP Proof Receipts</title>
+<meta name="description" content="Build the TinyZKP business case: estimate manual review savings, prover operations avoided, support work reduced, proof receipt spend, and pilot payback for agent, API, audit, and Compute workflows.">
+<meta property="og:title" content="TinyZKP ROI & Business Case">
+<meta property="og:description" content="A finance-ready worksheet for deciding whether proof receipts beat replay, manual evidence, weak logs, or self-hosted prover infrastructure.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:url" content="https://tinyzkp.com/roi">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP ROI &amp; Business Case">
+<meta name="twitter:description" content="A finance-ready worksheet for deciding whether proof receipts beat replay, manual evidence, weak logs, or self-hosted prover infrastructure.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/roi">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="alternate" type="application/json" href="https://tinyzkp.com/roi.json">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "TinyZKP ROI and Business Case",
+  "url": "https://tinyzkp.com/roi",
+  "description": "Business-case worksheet for TinyZKP proof receipts, including avoided review labor, prover operations, support work, and proof receipt spend."
+}
+</script>
+<style>
+main{padding:112px 0 76px}
+.hero{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(320px,.96fr);gap:40px;align-items:center}
+.hero>*,.grid>*,.grid.two>*,.calculator>*{min-width:0}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px}
+.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
+h1{font-size:58px;line-height:1.06;letter-spacing:-.02em;color:var(--text-bright);max-width:880px;margin-bottom:18px;overflow-wrap:break-word}
+.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:800px;overflow-wrap:break-word}
+.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none;font-size:14px;letter-spacing:.01em;text-align:center;white-space:normal;transition:transform .15s,box-shadow .15s}
+.cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px var(--accent-glow);text-decoration:none}
+.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}
+.cta.secondary:hover{border-color:var(--accent);box-shadow:none;color:var(--accent)}
+.panel{background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));border:1px solid var(--border-light);border-radius:18px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.32);max-width:100%;min-width:0}
+.panel h2{font-size:18px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:14px}
+.signal{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding:12px 0}
+.signal:last-child{border-bottom:none}
+.signal span{color:var(--muted);font-size:13px}
+.signal strong{font-family:var(--mono);font-size:12.5px;color:var(--accent);text-align:right;overflow-wrap:anywhere}
+.band{border-top:1px solid var(--border);padding-top:36px;margin-top:48px}
+.band h2{font-size:34px;line-height:1.16;color:var(--text-bright);letter-spacing:-.015em;margin-bottom:12px;overflow-wrap:break-word}
+.band>p{color:var(--muted);font-size:15px;line-height:1.75;max-width:860px;margin-bottom:20px}
+.band a,.box a,.result-card a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}
+.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0;max-width:100%;overflow-wrap:break-word}
+.box.highlight{background:linear-gradient(180deg,rgba(46,232,212,.045),var(--surface));border-color:rgba(46,232,212,.22)}
+.box h3{font-size:17px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:8px}
+.box p,.box li{color:var(--muted);font-size:13.5px;line-height:1.7}
+.box ul{padding-left:18px}
+.box li+li{margin-top:8px}
+.kicker{font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.calculator{display:grid;grid-template-columns:minmax(0,.92fr) minmax(360px,1.08fr);gap:18px;margin-top:24px}
+.controls,.results{background:var(--surface);border:1px solid var(--border-light);border-radius:16px;padding:24px;min-width:0}
+.controls h3,.results h3{font-size:24px;color:var(--text-bright);letter-spacing:-.015em;margin-bottom:8px}
+.intro{color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:20px}
+.field{margin-bottom:15px}
+.field label{display:block;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+.field input,.field select{width:100%;min-height:44px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);font:14px var(--sans);padding:11px 12px}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+.result-card{background:linear-gradient(180deg,rgba(46,232,212,.08),rgba(46,232,212,.025));border:1px solid rgba(46,232,212,.24);border-radius:14px;padding:18px;margin-bottom:14px}
+.result-card .label{font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.result-card strong{display:block;color:var(--text-bright);font-size:32px;line-height:1.1;letter-spacing:-.02em;margin-bottom:8px}
+.result-card p{color:var(--muted);font-size:14px;line-height:1.65}
+.numbers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}
+.number{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;min-width:0}
+.number span{display:block;color:var(--dim);font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:7px}
+.number strong{display:block;color:var(--accent);font-family:var(--mono);font-size:18px;overflow-wrap:anywhere}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin-top:22px;max-width:100%;min-width:0}
+table{width:100%;border-collapse:collapse;min-width:820px}
+th,td{padding:13px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}
+th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}
+td{color:var(--muted);font-size:13.5px}
+tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--text-bright)}
+.note{font-size:12.5px;line-height:1.7;color:var(--dim);margin-top:12px}
+.final{background:linear-gradient(180deg,rgba(16,26,48,.72),rgba(7,13,24,.72));border:1px solid var(--border-light);border-radius:16px;padding:28px;margin-top:50px;text-align:center;max-width:100%;min-width:0;overflow-wrap:break-word}
+.final h2{color:var(--text-bright);font-size:28px;line-height:1.18;letter-spacing:-.015em;margin-bottom:10px}
+.final p{color:var(--muted);font-size:15px;line-height:1.75;max-width:790px;margin:0 auto}
+@media(max-width:980px){.hero,.calculator,.grid,.grid.two{grid-template-columns:minmax(0,1fr)}.panel{max-width:620px}.signal strong{text-align:left}.numbers{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){main{padding-top:96px}.container{padding:0 20px;max-width:100%}h1{font-size:31px;line-height:1.14;letter-spacing:0}.lede{font-size:16px}.band h2{font-size:25px}.cta-row{display:grid;grid-template-columns:minmax(0,1fr)}.cta{width:100%;padding-inline:14px}.panel,.controls,.results,.final{padding:20px}.signal{display:grid;grid-template-columns:minmax(0,1fr);gap:4px}.numbers{grid-template-columns:1fr}.final h2{font-size:24px}}
+</style>
+</head>
+<body>
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/pricing">Pricing</a>
+    <a href="/calculator">Calculator</a>
+    <a href="/evaluation">Evaluation</a>
+    <a href="/trust">Trust</a>
+    <a href="/enterprise">Enterprise</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+<div class="container">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Business case</div>
+      <h1>Justify proof receipts with avoided replay, review, and prover operations.</h1>
+      <p class="lede">TinyZKP is easiest to buy when the business case is tied to one workflow: fewer manual evidence requests, less replay, less support work, and no high-RAM prover stack to operate before you know receipts matter.</p>
+      <div class="cta-row">
+        <a class="cta" href="#worksheet">Estimate ROI</a>
+        <a class="cta secondary" href="/roi.json">Machine-readable ROI</a>
+        <a class="cta secondary" href="/calculator">Pricing calculator</a>
+        <a class="cta secondary" href="/compare/self-hosted-stark-prover">Build-vs-buy</a>
+      </div>
+    </div>
+    <aside class="panel" aria-label="TinyZKP ROI summary">
+      <h2>Business-case levers</h2>
+      <div class="signal"><span>Manual replay avoided</span><strong>Review hours</strong></div>
+      <div class="signal"><span>Prover ops avoided</span><strong>Infra + on-call</strong></div>
+      <div class="signal"><span>Support work reduced</span><strong>Evidence requests</strong></div>
+      <div class="signal"><span>First paid step</span><strong>$5K pilot</strong></div>
+      <div class="signal"><span>Platform route</span><strong>$499/mo + usage</strong></div>
+    </aside>
+  </section>
+
+  <section class="band">
+    <h2>The ROI thesis</h2>
+    <p>Proof receipts are not valuable because cryptography is interesting. They are valuable when a compact, portable verifier result replaces repeated coordination between engineering, customers, agents, auditors, and operations teams.</p>
+    <div class="grid">
+      <article class="box highlight"><div class="kicker">Review</div><h3>Fewer replay requests</h3><p>A receipt lets a verifier check the encoded transition without asking engineering to recreate state, export logs, or explain a transcript.</p></article>
+      <article class="box highlight"><div class="kicker">Operations</div><h3>No prover stack before product fit</h3><p>Hosted receipts and Compute avoid high-RAM workers, queue ownership, verifier packaging, monitoring, and proof-format compatibility work.</p></article>
+      <article class="box highlight"><div class="kicker">Commercial</div><h3>Faster trust in high-value automation</h3><p>Agent and API workflows become easier to sell when the output includes a receipt URL, verifier path, and clear proof boundary.</p></article>
+    </div>
+  </section>
+
+  <section class="band" id="worksheet">
+    <h2>ROI worksheet</h2>
+    <p>Use this for planning, not accounting. It estimates monthly avoided cost and compares it with an indicative TinyZKP spend estimate. Replace defaults with your own numbers before forwarding internally.</p>
+    <div class="calculator">
+      <section class="controls" aria-labelledby="roi-inputs">
+        <h3 id="roi-inputs">Inputs</h3>
+        <p class="intro">Start with one workflow. The defaults model a modest customer-visible receipt rollout.</p>
+        <div class="field"><label for="receipts">Receipts/month</label><input id="receipts" type="number" min="1" max="1000000" value="1000" oninput="recalcRoi()"></div>
+        <div class="field"><label for="trace-band">Typical trace size</label><select id="trace-band" onchange="recalcRoi()"><option value="tiny">&lt;10K steps</option><option value="small">10K-100K steps</option><option value="medium" selected>100K-1M steps</option><option value="large">1M-10M steps</option><option value="xl">&gt;10M steps</option></select></div>
+        <div class="field"><label for="plan">Expected TinyZKP route</label><select id="plan" onchange="recalcRoi()"><option value="developer">Developer</option><option value="pro" selected>Pro</option><option value="scale">Scale</option><option value="compute">Compute</option></select></div>
+        <div class="field"><label for="review-hours">Manual review hours/month avoided</label><input id="review-hours" type="number" min="0" max="10000" value="12" oninput="recalcRoi()"></div>
+        <div class="field"><label for="support-hours">Support/evidence hours/month avoided</label><input id="support-hours" type="number" min="0" max="10000" value="6" oninput="recalcRoi()"></div>
+        <div class="field"><label for="ops-hours">Prover/integration ops hours/month avoided</label><input id="ops-hours" type="number" min="0" max="10000" value="8" oninput="recalcRoi()"></div>
+        <div class="field"><label for="labor-rate">Blended hourly cost</label><input id="labor-rate" type="number" min="0" max="5000" value="150" oninput="recalcRoi()"></div>
+        <div class="field"><label for="infra-cost">Self-hosted prover infra/month avoided</label><input id="infra-cost" type="number" min="0" max="1000000" value="1800" oninput="recalcRoi()"></div>
+      </section>
+
+      <section class="results" aria-labelledby="roi-results">
+        <h3 id="roi-results">Estimated case</h3>
+        <p class="intro">The model uses published TinyZKP self-serve rates and caps. Pilot, platform rollout, and reserved capacity should be scoped separately.</p>
+        <div class="result-card">
+          <div class="label">Estimated monthly net benefit</div>
+          <strong id="net-benefit">$5,200</strong>
+          <p id="roi-reason">Avoided review, support, and prover operations exceed estimated receipt spend.</p>
+        </div>
+        <div class="numbers">
+          <div class="number"><span>Avoided cost</span><strong id="avoided-cost">$6,000</strong></div>
+          <div class="number"><span>TinyZKP spend</span><strong id="tinyzkp-cost">$1,579</strong></div>
+          <div class="number"><span>Pilot payback</span><strong id="payback">1.1 mo</strong></div>
+        </div>
+        <div class="numbers">
+          <div class="number"><span>Effective receipt cost</span><strong id="effective-cost">$1.58</strong></div>
+          <div class="number"><span>Annualized net</span><strong id="annual-net">$62,400</strong></div>
+          <div class="number"><span>Route</span><strong id="route-label">Pro</strong></div>
+        </div>
+        <p class="note">Pilot payback compares a $5,000 scoped pilot against estimated monthly net benefit. If the workflow is custom, platform-native, or procurement-sensitive, use the pilot or platform rollout route even when self-serve pricing looks attractive.</p>
+        <div class="cta-row">
+          <a class="cta" id="roi-primary" href="/signup?plan=pro">Start recommended route</a>
+          <a class="cta secondary" href="/pilot">Scope $5K pilot</a>
+          <a class="cta secondary" href="/contact?category=Business%20Case&message=I%20want%20help%20building%20a%20TinyZKP%20business%20case.">Ask about ROI</a>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>What to include in the internal business case</h2>
+    <p>A finance-ready proof-receipt proposal should show the workflow, the verifier, the evidence artifact, the avoided cost, and the buying route.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Section</th><th>Question</th><th>Evidence to attach</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Workflow</strong></td><td>Which state transition needs an independently verifiable receipt?</td><td>Example receipt, template ID, or pilot statement draft.</td></tr>
+          <tr><td><strong>Verifier</strong></td><td>Who checks the receipt and what decision changes when it verifies?</td><td>Receipt URL placement in product, API response, audit packet, or agent output.</td></tr>
+          <tr><td><strong>Cost avoided</strong></td><td>Which review, replay, support, audit, infrastructure, or on-call work is reduced?</td><td>Hours/month, blended rate, self-hosting estimate, and support ticket examples.</td></tr>
+          <tr><td><strong>TinyZKP route</strong></td><td>Is the path Free, Developer, Pro, Scale, Compute, paid pilot, platform rollout, or reserved capacity?</td><td>Pricing calculator output and buyer route from this worksheet.</td></tr>
+          <tr><td><strong>Risk boundary</strong></td><td>What does the receipt not prove, and what data must stay out of transparent parameters?</td><td>Trust Center, template boundary, security review packet, and release policy.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Common ROI patterns</h2>
+    <div class="grid">
+      <article class="box"><h3>Agent platform</h3><p>Receipts become a differentiated trust feature for high-value tool categories. Business case: platform conversion, fewer disputes, and receipt policy as a paid capability.</p><p><a href="/platform-rollout">Review platform rollout</a></p></article>
+      <article class="box"><h3>Customer-facing API</h3><p>Receipts reduce customer evidence requests after mutations, reconciliations, or status changes. Business case: less support work and stronger enterprise sales proof.</p><p><a href="/recipes">Open API recipes</a></p></article>
+      <article class="box"><h3>Finance and audit</h3><p>Receipts reduce repeated audit exports and replay requests for reserve, liability, inventory, or checkpoint transitions. Business case: fewer review cycles.</p><p><a href="/use-cases/proof-of-reserves-attestation">Read reserve use case</a></p></article>
+      <article class="box"><h3>Long-trace Compute</h3><p>Compute replaces high-RAM prover workers, custom queues, segmentation, and operational ownership for supported long traces. Business case: avoid infrastructure before proof demand is steady.</p><p><a href="/compute">Read Compute brief</a></p></article>
+      <article class="box"><h3>Procurement-heavy sale</h3><p>Forwardable trust, pricing, schema, and release-policy assets shorten buyer review. Business case: fewer custom review cycles before pilot or enterprise rollout.</p><p><a href="/trust">Open Trust Center</a></p></article>
+      <article class="box"><h3>Custom workflow</h3><p>The $5,000 pilot is profitable when it prevents unsupported proof claims, clarifies verifier value, and creates a clean rollout decision within 14 days.</p><p><a href="/pilot">Review paid pilot</a></p></article>
+    </div>
+  </section>
+
+  <section class="band grid two">
+    <article class="box">
+      <h3>Count as value</h3>
+      <ul>
+        <li>Engineering time spent reconstructing state for customers, auditors, or internal reviewers.</li>
+        <li>Support time spent answering evidence requests that a receipt could satisfy.</li>
+        <li>High-RAM proving infrastructure, queue maintenance, verifier packaging, and proof-format compatibility work.</li>
+        <li>Sales or procurement friction caused by weak evidence for automated state changes.</li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>Do not count as value</h3>
+      <ul>
+        <li>Claims the receipt does not encode.</li>
+        <li>Generic private-input, zkVM, zkML, or on-chain verifier claims that are not live for the workflow.</li>
+        <li>Every UI click or low-value event where no recipient will inspect proof.</li>
+        <li>Compliance outcomes that still require legal, audit, or policy review outside TinyZKP.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="final">
+    <h2>The strongest business case starts with one expensive trust boundary.</h2>
+    <p>Pick the workflow where a receipt removes repeated review, replay, support, or infrastructure cost. Then use the smallest commercial route that proves the verifier actually cares.</p>
+    <div class="cta-row" style="justify-content:center">
+      <a class="cta" href="#worksheet">Estimate ROI</a>
+      <a class="cta secondary" href="/evaluation">Open evaluation kit</a>
+      <a class="cta secondary" href="/contact?category=Business%20Case&message=I%20want%20help%20building%20a%20TinyZKP%20business%20case.">Ask about ROI</a>
+    </div>
+  </section>
+</div>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/roi">ROI</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/calculator">Calculator</a>
+    <a href="/evaluation">Evaluation</a>
+    <a href="/trust">Trust</a>
+    <a href="/enterprise">Enterprise</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+<script defer src="/analytics.js"></script>
+<script>
+function roiMoney(n) {
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: n < 10 ? 2 : 0 });
+}
+function roiNumber(id) {
+  return Math.max(0, Number(document.getElementById(id).value || 0));
+}
+function recalcRoi() {
+  var receipts = Math.max(1, roiNumber('receipts'));
+  var band = document.getElementById('trace-band').value;
+  var plan = document.getElementById('plan').value;
+  var reviewHours = roiNumber('review-hours');
+  var supportHours = roiNumber('support-hours');
+  var opsHours = roiNumber('ops-hours');
+  var laborRate = roiNumber('labor-rate');
+  var infra = roiNumber('infra-cost');
+  var base = { developer: 19, pro: 79, scale: 199, compute: 0 };
+  var caps = { developer: 500, pro: 2500, scale: 10000, compute: 100000000 };
+  var rates = {
+    developer: { tiny: .05, small: .50, medium: 2, large: 8, xl: 30 },
+    pro: { tiny: .04, small: .38, medium: 1.50, large: 6, xl: 22.50 },
+    scale: { tiny: .03, small: .30, medium: 1.20, large: 4.80, xl: 18 },
+    compute: { tiny: .05, small: .05, medium: .25, large: 2.50, xl: 25 }
+  };
+  var avoided = (reviewHours + supportHours + opsHours) * laborRate + infra;
+  var subtotal = base[plan] + receipts * rates[plan][band];
+  var tinyzkp = Math.min(subtotal, caps[plan]);
+  var net = avoided - tinyzkp;
+  var effective = tinyzkp / receipts;
+  var payback = net > 0 ? (5000 / net) : Infinity;
+  var routes = {
+    developer: { label: 'Developer', href: '/signup?plan=developer' },
+    pro: { label: 'Pro', href: '/signup?plan=pro' },
+    scale: { label: 'Scale', href: '/signup?plan=scale' },
+    compute: { label: 'Compute', href: '/signup?plan=compute' }
+  };
+  document.getElementById('net-benefit').textContent = roiMoney(net);
+  document.getElementById('avoided-cost').textContent = roiMoney(avoided);
+  document.getElementById('tinyzkp-cost').textContent = roiMoney(tinyzkp);
+  document.getElementById('effective-cost').textContent = roiMoney(effective);
+  document.getElementById('annual-net').textContent = roiMoney(net * 12);
+  document.getElementById('payback').textContent = Number.isFinite(payback) ? payback.toFixed(1) + ' mo' : 'No payback';
+  document.getElementById('route-label').textContent = routes[plan].label;
+  document.getElementById('roi-primary').href = routes[plan].href;
+  document.getElementById('roi-primary').textContent = 'Start ' + routes[plan].label;
+  document.getElementById('roi-reason').textContent = net >= 0
+    ? 'Avoided review, support, and prover operations exceed estimated receipt spend.'
+    : 'Estimated receipt spend is higher than avoided monthly cost; narrow the workflow, use Free first, or run a pilot only if strategic value is clear.';
+}
+recalcRoi();
+document.querySelectorAll('nav .links a').forEach(function(a){
+  a.addEventListener('click',function(){document.querySelector('.links').classList.remove('open')});
+});
+</script>
+</body>
+</html>

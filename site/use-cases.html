@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP Use Cases &mdash; Proof Receipts for Agents, APIs, Audit, and Compute</title>
+<meta name="description" content="Explore TinyZKP use cases for verifiable state transitions, agent actions, audit-log checkpoints, proof-of-reserves, post-quantum STARK receipts, and long-trace Compute.">
+<meta property="og:title" content="TinyZKP Use Cases">
+<meta property="og:description" content="Proof receipts for agents, APIs, audit checkpoints, reserves, portable verification, and long-trace Compute.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:url" content="https://tinyzkp.com/use-cases">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP Use Cases">
+<meta name="twitter:description" content="Proof receipts for agents, APIs, audit checkpoints, reserves, portable verification, and long-trace Compute.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/use-cases">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "TinyZKP Use Cases",
+  "url": "https://tinyzkp.com/use-cases",
+  "description": "Use-case hub for TinyZKP proof receipts across agents, APIs, audit checkpoints, proof-of-reserves, portable verification, and long-trace Compute."
+}
+</script>
+<style>
+main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr);gap:40px;align-items:center}.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:22px}.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}h1{font-size:clamp(36px,5vw,62px);line-height:1.06;letter-spacing:-.035em;color:var(--text-bright);max-width:860px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:780px}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none;font-size:14px;letter-spacing:.01em;transition:transform .15s,box-shadow .15s}.cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px var(--accent-glow);text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}.cta.secondary:hover{border-color:var(--accent);box-shadow:none;color:var(--accent)}.visual{border:1px solid var(--border-light);border-radius:18px;background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.32)}.visual img{display:block;width:100%;height:auto;border-bottom:1px solid var(--border)}.signal-panel{padding:20px}.signal{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding:11px 0}.signal:last-child{border-bottom:none}.signal span{color:var(--muted);font-size:13px}.signal strong{font-family:var(--mono);font-size:12.5px;color:var(--accent);text-align:right}.band{border-top:1px solid var(--border);padding-top:36px;margin-top:48px}.band h2{font-size:clamp(25px,3.3vw,36px);line-height:1.16;color:var(--text-bright);letter-spacing:-.025em;margin-bottom:12px}.band>p{color:var(--muted);font-size:15px;line-height:1.75;max-width:820px;margin-bottom:20px}.band a,.box a,.note a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0}.box h3{font-size:17px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:8px}.box p,.box li{color:var(--muted);font-size:13.5px;line-height:1.7}.box ul{padding-left:18px}.kicker{font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}.tag{display:inline-flex;margin-bottom:12px;padding:5px 9px;border-radius:6px;border:1px solid var(--border-light);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:700}.tag.live{color:var(--green);background:var(--green-dim);border-color:rgba(52,211,153,.22)}.tag.review{color:var(--amber);background:var(--amber-dim);border-color:rgba(251,191,36,.22)}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin-top:22px}table{width:100%;border-collapse:collapse;min-width:760px}th,td{padding:13px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}td{color:var(--muted);font-size:13.5px}tbody tr:last-child td{border-bottom:none}td strong{color:var(--text)}.final{background:linear-gradient(180deg,rgba(16,26,48,.72),rgba(7,13,24,.72));border:1px solid var(--border-light);border-radius:16px;padding:28px;margin-top:50px;text-align:center}.final h2{color:var(--text-bright);font-size:28px;line-height:1.18;letter-spacing:-.02em;margin-bottom:10px}.final p{color:var(--muted);font-size:15px;line-height:1.75;max-width:760px;margin:0 auto}@media(max-width:980px){.hero,.grid,.grid.two{grid-template-columns:1fr}.visual{max-width:620px}.signal strong{text-align:left}}@media(max-width:560px){main{padding-top:96px}.container{padding:0 20px}h1{font-size:34px;letter-spacing:-.02em}.lede{font-size:16px}.cta-row{display:grid;grid-template-columns:1fr}.cta{width:100%;padding-inline:16px;text-align:center}.signal{display:grid;grid-template-columns:1fr;gap:4px}.final{padding:22px}.final h2{font-size:24px}}
+</style>
+</head>
+<body>
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/compare">Compare</a>
+    <a href="/agents">Agents</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/pilot">Pilot</a>
+    <a href="/docs">Docs</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+<div class="container">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Use-case hub</div>
+      <h1>Find the workflow where proof receipts create real leverage.</h1>
+      <p class="lede">TinyZKP works best when a customer, auditor, agent, service, platform, or counterparty needs a compact receipt for a state transition. Use this hub to pick the right first workflow, the right integration surface, and the right buying path.</p>
+      <div class="cta-row">
+        <a class="cta" href="/try" data-track="use_cases_try_click" data-source="use_cases_hero">Generate a receipt</a>
+        <a class="cta secondary" href="/fit">Find best route</a>
+        <a class="cta secondary" href="/platform-rollout">Platform rollout</a>
+        <a class="cta secondary" href="/roi">Build ROI case</a>
+      </div>
+    </div>
+    <aside class="visual" aria-label="TinyZKP use-case preview">
+      <img src="/pilot-preview.jpg" width="720" height="378" fetchpriority="high" decoding="async" alt="TinyZKP proof receipt service preview">
+      <div class="signal-panel">
+        <div class="signal"><span>Best first workflow</span><strong>One state transition</strong></div>
+        <div class="signal"><span>Primary buyer</span><strong>Agent, platform, API, audit</strong></div>
+        <div class="signal"><span>Default proof scope</span><strong>Transparent receipt</strong></div>
+        <div class="signal"><span>Commercial path</span><strong>Free, Pro, Compute, Pilot, Rollout</strong></div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="band">
+    <h2>Best first use cases</h2>
+    <p>Pick one workflow where verification changes behavior. The first receipt should be narrow enough to ship and important enough that the verifier result matters.</p>
+    <div class="grid">
+      <article class="box"><span class="tag live">Core API</span><h3>Verifiable state transitions</h3><p>Prove start state, declared steps, and final state with one hosted template.</p><p><a href="/use-cases/verifiable-state-transition">Read use case</a></p></article>
+      <article class="box"><span class="tag live">Agents</span><h3>MCP proof receipts</h3><p>Give Claude, Cursor, and agent runtimes native proof tools for important tool-call results.</p><p><a href="/use-cases/mcp-zero-knowledge-proof">Read use case</a></p></article>
+      <article class="box"><span class="tag live">Platforms</span><h3>Native agent receipt tools</h3><p>Expose proof receipts across agent IDEs, workflow engines, marketplaces, and tool-calling runtimes.</p><p><a href="/platform-rollout">Review rollout</a> · <a href="/agent-platforms">Guide</a></p></article>
+      <article class="box"><span class="tag live">Output</span><h3>Verifiable agent answers</h3><p>Turn important agent output into a result plus a receipt URL a recipient can check.</p><p><a href="/verifiable-agent-output">Read use case</a></p></article>
+      <article class="box"><span class="tag live">Agent audit</span><h3>Autonomous workflow trails</h3><p>Checkpoint long-running agent work with receipts that survive outside the runtime.</p><p><a href="/agent-audit-trails">Read use case</a></p></article>
+      <article class="box"><span class="tag live">Audit</span><h3>Tamper-evident checkpoints</h3><p>Make long audit trails transferable without forcing every verifier to replay your system.</p><p><a href="/use-cases/tamper-evident-audit-log">Read use case</a></p></article>
+      <article class="box"><span class="tag live">Browser</span><h3>Portable verification</h3><p>Let recipients inspect proof bytes with a first-party verifier and no source-system access.</p><p><a href="/use-cases/offline-proof-verification">Read use case</a></p></article>
+      <article class="box"><span class="tag live">Finance</span><h3>Proof-of-reserves checkpoints</h3><p>Prove aggregate transitions while keeping broader attestation boundaries explicit.</p><p><a href="/use-cases/proof-of-reserves-attestation">Read use case</a></p></article>
+      <article class="box"><span class="tag live">Security</span><h3>Post-quantum STARK receipts</h3><p>Use transparent, hash-based verification with no trusted setup ceremony.</p><p><a href="/use-cases/post-quantum-stark-proving">Read use case</a></p></article>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Choose by buyer and workflow</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Buyer</th><th>First workflow</th><th>Best TinyZKP surface</th><th>Commercial path</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Agent builders</strong></td><td>One high-value tool-call batch or checkpoint.</td><td>MCP server plus agent receipt envelope.</td><td>Use <a href="/fit">Fit Finder</a>, then Free or Developer; Pro when customer-visible.</td></tr>
+          <tr><td><strong>Agent platform teams</strong></td><td>One tool category where proof receipts become a platform policy.</td><td>MCP, REST, schemas, agent policy, receipt URL, and marketplace metadata.</td><td>Use Fit Finder, $5,000 pilot, then platform rollout from $499/month plus usage.</td></tr>
+          <tr><td><strong>API and SaaS teams</strong></td><td>One state-changing backend mutation.</td><td>REST API, SDK, receipt URL, and badge.</td><td>Use Fit Finder; Developer for pilot, Pro or Scale for rollout.</td></tr>
+          <tr><td><strong>Finance and audit teams</strong></td><td>Recurring reserve, liability, or reconciliation checkpoint.</td><td>Hosted receipts or Compute for large backfills.</td><td>Use ROI worksheet, then Pro, Scale, Compute, or pilot review.</td></tr>
+          <tr><td><strong>Infrastructure teams</strong></td><td>Long supported trace that would need high-RAM proving.</td><td>Compute priced by trace steps.</td><td>Compute first, reserved capacity if volume is predictable.</td></tr>
+          <tr><td><strong>Security/procurement</strong></td><td>Validate proof scope, data handling, and review assets.</td><td>Trust Center, security review packet, OpenAPI, schemas.</td><td>Pilot review before contractual terms.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band grid two">
+    <article class="box">
+      <h3>Good fit signals</h3>
+      <ul>
+        <li>The verifier should not replay the producer's system.</li>
+        <li>The statement is a state transition, checkpoint, or accumulator update.</li>
+        <li>The receipt can attach to an API response, agent output, audit record, or customer-facing page.</li>
+        <li>Transparent public parameters are acceptable for the first workflow.</li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>Review first</h3>
+      <ul>
+        <li>You require private-input zero knowledge.</li>
+        <li>You need a custom predicate or unsupported state machine.</li>
+        <li>You need on-chain verification, restricted runtime verification, or contractual support targets.</li>
+        <li>You are evaluating zkVM, zkML, rollup, or bespoke prover work.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="final">
+    <h2>Start with the receipt your buyer will actually inspect.</h2>
+    <p>Do not start by proving everything. Start with one visible receipt that changes a trust boundary, then expand to adjacent workflows once the verifier path and cost model are known.</p>
+    <div class="cta-row" style="justify-content:center">
+      <a class="cta" href="/try">Try in browser</a>
+      <a class="cta secondary" href="/fit">Find route</a>
+      <a class="cta secondary" href="/pilot">Plan a pilot</a>
+    </div>
+  </section>
+</div>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/use-cases">Use Cases</a>
+    <a href="/fit">Fit Finder</a>
+    <a href="/compare">Compare</a>
+    <a href="/agents">Agents</a>
+    <a href="/mcp">MCP</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/trust">Trust</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+<script defer src="/analytics.js"></script>
+</body>
+</html>

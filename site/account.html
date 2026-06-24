@@ -3,19 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
 <title>Dashboard — TinyZKP</title>
 <meta name="description" content="Manage your TinyZKP account, view usage analytics, and manage your API key.">
 <meta name="robots" content="noindex,follow">
 <meta property="og:title" content="Dashboard — TinyZKP">
 <meta property="og:description" content="Manage your TinyZKP account, view usage analytics, and manage your API key.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:url" content="https://tinyzkp.com/account">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Dashboard — TinyZKP">
+<meta name="twitter:description" content="Manage your TinyZKP account, view usage analytics, and manage your API key.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://tinyzkp.com/account">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/shared.css">
 <style>
 :root{
@@ -327,6 +333,21 @@ footer .right a:hover{color:var(--muted)}
 .dash-section:nth-child(5){animation-delay:.2s}
 .dash-section:nth-child(6){animation-delay:.25s}
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Dashboard — TinyZKP",
+  "url": "https://tinyzkp.com/account",
+  "description": "Manage your TinyZKP account, view usage analytics, and manage your API key.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 
@@ -338,12 +359,12 @@ footer .right a:hover{color:var(--muted)}
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/#pricing">Pricing</a>
+    <a href="/pricing">Pricing</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
     <a href="/account">Dashboard</a>
-    <a class="status-link" href="https://api.tinyzkp.com/healthz" target="_blank" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
+    <a class="status-link" href="/status" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
     <a href="/signup" class="nav-cta" id="nav-cta-btn">Get API Key</a>
   </div>
 </div>

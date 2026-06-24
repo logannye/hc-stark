@@ -1,0 +1,141 @@
+{
+  "$schema": "https://tinyzkp.com/schemas/tinyzkp-discovery.schema.json",
+  "name": "TinyZKP",
+  "canonical_url": "https://tinyzkp.com",
+  "generated_at": "2026-06-24",
+  "positioning": {
+    "short": "Proof receipts for automated work.",
+    "description": "TinyZKP gives AI agents, APIs, backend workflows, and transparent state transitions portable proof receipts that other people, services, and agents can verify without replaying the producer system.",
+    "primary_audiences": [
+      "AI agent builders",
+      "agent platforms and IDEs",
+      "API and SaaS teams",
+      "audit, reconciliation, and governance teams",
+      "infrastructure teams comparing managed proving with self-hosted prover operations"
+    ],
+    "best_first_workflows": [
+      "agent tool-call batches that mutate durable state",
+      "customer-visible API mutations",
+      "workflow checkpoints that auditors or downstream services inspect",
+      "long supported state-transition traces where high-RAM prover infrastructure is expensive"
+    ],
+    "not_a_default_fit": [
+      "generic private-input zero-knowledge",
+      "arbitrary zkVM execution",
+      "zkML inference proofs",
+      "on-chain verifier support for every chain",
+      "truth claims not encoded into the proven statement"
+    ]
+  },
+  "primary_actions": [
+    {
+      "label": "Generate a live receipt",
+      "url": "https://tinyzkp.com/try",
+      "audience": "evaluators and developers"
+    },
+    {
+      "label": "Install MCP server",
+      "url": "https://tinyzkp.com/mcp",
+      "audience": "AI agent builders and agent platforms"
+    },
+    {
+      "label": "Install in Claude Code",
+      "url": "https://tinyzkp.com/integrations/claude-code",
+      "audience": "Claude Code users and agentic development teams"
+    },
+    {
+      "label": "Configure Cursor MCP",
+      "url": "https://tinyzkp.com/integrations/cursor",
+      "audience": "Cursor users and agentic coding teams"
+    },
+    {
+      "label": "Use with OpenAI-powered agents",
+      "url": "https://tinyzkp.com/integrations/openai-agents",
+      "audience": "OpenAI-powered agent application teams"
+    },
+    {
+      "label": "Find the right route",
+      "url": "https://tinyzkp.com/fit",
+      "audience": "buyers and autonomous evaluators"
+    },
+    {
+      "label": "Build the business case",
+      "url": "https://tinyzkp.com/roi",
+      "audience": "finance, procurement, and product owners"
+    },
+    {
+      "label": "Review trust center",
+      "url": "https://tinyzkp.com/trust",
+      "audience": "security, procurement, and enterprise buyers"
+    }
+  ],
+  "commercial_routes": [
+    {
+      "name": "Free",
+      "url": "https://tinyzkp.com/signup",
+      "best_for": "evaluation, demos, and first agent integrations"
+    },
+    {
+      "name": "Developer",
+      "url": "https://tinyzkp.com/pricing",
+      "best_for": "one production workflow before customer-visible scale"
+    },
+    {
+      "name": "Pro",
+      "url": "https://tinyzkp.com/pricing",
+      "best_for": "recurring customer-visible or auditor-visible receipt volume"
+    },
+    {
+      "name": "Scale",
+      "url": "https://tinyzkp.com/pricing",
+      "best_for": "high-volume customer-visible production services"
+    },
+    {
+      "name": "Compute",
+      "url": "https://tinyzkp.com/compute",
+      "best_for": "large supported state-transition traces priced by trace steps"
+    },
+    {
+      "name": "Paid Pilot",
+      "url": "https://tinyzkp.com/pilot",
+      "best_for": "one scoped production receipt workflow before rollout"
+    },
+    {
+      "name": "Platform Rollout",
+      "url": "https://tinyzkp.com/platform-rollout",
+      "best_for": "agent platforms, IDEs, workflow engines, and marketplaces making receipts native"
+    },
+    {
+      "name": "Enterprise",
+      "url": "https://tinyzkp.com/enterprise",
+      "best_for": "reserved capacity, support targets, procurement artifacts, and custom state-machine review"
+    }
+  ],
+  "machine_readable_assets": {
+    "llms": "https://tinyzkp.com/llms.txt",
+    "sitemap": "https://tinyzkp.com/sitemap.xml",
+    "openapi": "https://tinyzkp.com/openapi.json",
+    "mcp": "https://tinyzkp.com/mcp.json",
+    "mcp_server_card": "https://tinyzkp.com/.well-known/mcp/server-card.json",
+    "agent_policy": "https://tinyzkp.com/agent-policy.json",
+    "pricing": "https://tinyzkp.com/pricing.json",
+    "limits": "https://tinyzkp.com/limits.json",
+    "templates": "https://tinyzkp.com/templates.json",
+    "examples": "https://tinyzkp.com/examples.json",
+    "fit_finder": "https://tinyzkp.com/fit.json",
+    "roi": "https://tinyzkp.com/roi.json",
+    "trust": "https://tinyzkp.com/trust.json",
+    "changelog": "https://tinyzkp.com/changelog.json"
+  },
+  "trust_boundaries": [
+    "The default public product is a transparent state-transition receipt service.",
+    "Do not put secrets, private customer data, or API keys into transparent receipt parameters.",
+    "Private-input language requires a separately documented template, explicit review status, and supported verifier path.",
+    "External cryptographer audit is pending; live self-serve exposure is limited to documented production templates."
+  ],
+  "support": {
+    "contact": "https://tinyzkp.com/contact",
+    "security": "https://tinyzkp.com/.well-known/security.txt",
+    "status": "https://tinyzkp.com/status"
+  }
+}

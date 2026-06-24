@@ -17,7 +17,7 @@
       "apiKey": {
         "type": "string",
         "title": "TinyZKP API key",
-        "description": "Optional. Get a free key at https://tinyzkp.com/signup (100 proofs/month, no credit card). Without a key, the public lane is bounded by a global concurrency cap.",
+        "description": "Optional. Get a free key at https://tinyzkp.com/signup (100 included receipts/month for evaluation). Without a key, the public lane is bounded by a global concurrency cap.",
         "x-from": "header:Authorization:Bearer ${value}"
       }
     },
@@ -51,7 +51,7 @@
     },
     {
       "name": "get_capabilities",
-      "description": "Get server capabilities, version, and recommended workflow. Start here if you're unsure what this server can do.",
+      "description": "Get server capabilities, product boundary, version, and recommended proof-receipt workflow. Start here if you're unsure what this server can do.",
       "inputSchema": {
         "properties": {},
         "type": "object"
@@ -116,7 +116,7 @@
     },
     {
       "name": "list_templates",
-      "description": "List all available proof templates with IDs, summaries, and tags. Use this to discover what kinds of proofs you can generate.",
+      "description": "List supported proof templates exposed by this deployment with IDs, lifecycle status, summaries, and tags. Treat only live templates as generally available.",
       "inputSchema": {
         "properties": {},
         "type": "object"
@@ -131,7 +131,7 @@
     },
     {
       "name": "list_workloads",
-      "description": "List all registered workload IDs. Workloads are predefined proof programs.",
+      "description": "List registered workload IDs for supported long-running or reviewed proving workflows.",
       "inputSchema": {
         "properties": {},
         "type": "object"
@@ -185,7 +185,7 @@
             "type": "string"
           },
           "zk": {
-            "description": "Enable zero-knowledge mode. Default: use template recommendation.",
+            "description": "Optional privacy/masking flag for templates that explicitly document support. Do not treat this as a generic private-input guarantee.",
             "type": [
               "boolean",
               "null"
@@ -209,7 +209,7 @@
     },
     {
       "name": "prove_workload",
-      "description": "Generate a proof from a registered workload ID. Returns a job_id — call poll_job to check progress. Consumes one proof from your monthly quota.",
+      "description": "Submit a supported workload or Compute proof job. Returns a job_id; call poll_job to check progress. Successful hosted proving is billable, and verification remains free.",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -282,8 +282,8 @@
     }
   ],
   "metadata": {
-    "displayName": "TinyZKP — Verifiable Receipts for AI Agents",
-    "description": "Mint transparent STARK state-transition receipts as a tool call. No trusted setup, hash-based verification, and accumulator_step available now. Free 100 proofs/month, no credit card.",
+    "displayName": "TinyZKP - Proof Receipts for AI Agents",
+    "description": "Mint transparent STARK proof receipts for supported state-transition workflows as an MCP tool call. No trusted setup; hash-based verification. Live self-serve template: accumulator_step; accumulator_step available now. Verification is free; Free includes 100 evaluation receipts/month. Private-input, custom, on-chain, zkVM, and zkML claims require review.",
     "homepage": "https://tinyzkp.com",
     "documentation": "https://tinyzkp.com/docs",
     "repository": "https://github.com/logannye/hc-stark",
@@ -299,6 +299,8 @@
       "proof",
       "verifiable",
       "cryptography",
+      "receipt",
+      "agent",
       "mcp"
     ]
   }

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP Enterprise &mdash; Reserved Capacity for Proof Receipts</title>
+<meta name="description" content="Enterprise and reserved-capacity review for TinyZKP proof receipts: support commitments, procurement packets, custom limits, Compute planning, and state-machine design review.">
+<meta property="og:title" content="TinyZKP Enterprise">
+<meta property="og:description" content="Reserved capacity, procurement review, support commitments, and rollout planning for teams putting TinyZKP proof receipts into production workflows.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:url" content="https://tinyzkp.com/enterprise">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP Enterprise">
+<meta name="twitter:description" content="Reserved capacity, procurement review, support commitments, and rollout planning for teams putting TinyZKP proof receipts into production workflows.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/enterprise">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="alternate" type="application/json" href="https://tinyzkp.com/enterprise.json">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Service",
+  "name": "TinyZKP Enterprise",
+  "url": "https://tinyzkp.com/enterprise",
+  "provider": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "serviceType": "Reserved-capacity proof receipt service",
+  "description": "Enterprise review for reserved TinyZKP proof capacity, procurement packets, support commitments, Compute planning, and custom state-machine design review."
+}
+</script>
+<style>
+main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(320px,.96fr);gap:40px;align-items:center}.hero>*,.grid>*,.grid.two>*{min-width:0}.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px}.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}h1{font-size:clamp(36px,5vw,62px);line-height:1.06;letter-spacing:-.035em;color:var(--text-bright);max-width:860px;margin-bottom:18px;overflow-wrap:break-word}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:790px;overflow-wrap:break-word}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none;font-size:14px;letter-spacing:.01em;text-align:center;white-space:normal;transition:transform .15s,box-shadow .15s}.cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px var(--accent-glow);text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}.cta.secondary:hover{border-color:var(--accent);box-shadow:none;color:var(--accent)}.panel{background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));border:1px solid var(--border-light);border-radius:18px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.32);max-width:100%;min-width:0}.panel h2{font-size:18px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:14px}.signal{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding:12px 0}.signal:last-child{border-bottom:none}.signal span{color:var(--muted);font-size:13px}.signal strong{font-family:var(--mono);font-size:12.5px;color:var(--accent);text-align:right;overflow-wrap:anywhere}.band{border-top:1px solid var(--border);padding-top:36px;margin-top:48px}.band h2{font-size:clamp(25px,3.3vw,36px);line-height:1.16;color:var(--text-bright);letter-spacing:-.025em;margin-bottom:12px}.band>p{color:var(--muted);font-size:15px;line-height:1.75;max-width:850px;margin-bottom:20px}.band a,.box a,.offer a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}.offer{background:linear-gradient(180deg,rgba(46,232,212,.045),var(--surface));border:1px solid rgba(46,232,212,.22);border-radius:16px;padding:24px;display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr);gap:24px;align-items:start;max-width:100%;min-width:0}.tag-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.tag{display:inline-flex;align-items:center;min-height:24px;padding:3px 9px;border:1px solid var(--border-light);border-radius:999px;font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}.tag.live{color:var(--green);background:var(--green-dim);border-color:rgba(52,211,153,.22)}.tag.review{color:var(--amber);background:var(--amber-dim);border-color:rgba(251,191,36,.22)}.tag.hot{color:var(--accent);background:var(--accent-dim);border-color:rgba(46,232,212,.22)}.offer h3{font-size:26px;color:var(--text-bright);letter-spacing:-.02em;margin-bottom:8px;overflow-wrap:break-word}.offer p,.offer li{color:var(--muted);font-size:14px;line-height:1.72;overflow-wrap:break-word}.offer ul{padding-left:18px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0;max-width:100%;overflow-wrap:break-word}.box h3{font-size:17px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:8px}.box p,.box li{color:var(--muted);font-size:13.5px;line-height:1.7}.box ul{padding-left:18px}.box li+li{margin-top:8px}.timeline{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:22px}.step{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;min-width:0}.step strong{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}.step span{display:block;color:var(--muted);font-size:13.5px;line-height:1.65}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin-top:22px;max-width:100%;min-width:0}table{width:100%;border-collapse:collapse;min-width:820px}th,td{padding:13px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}td{color:var(--muted);font-size:13.5px}tbody tr:last-child td{border-bottom:none}td strong{color:var(--text-bright)}.code{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:auto;max-width:100%;min-width:0}.code pre{font-family:var(--mono);font-size:12.5px;line-height:1.75;color:var(--text);white-space:pre}.final{background:linear-gradient(180deg,rgba(16,26,48,.72),rgba(7,13,24,.72));border:1px solid var(--border-light);border-radius:16px;padding:28px;margin-top:50px;text-align:center;max-width:100%;min-width:0;overflow-wrap:break-word}.final h2{color:var(--text-bright);font-size:28px;line-height:1.18;letter-spacing:-.02em;margin-bottom:10px}.final p{color:var(--muted);font-size:15px;line-height:1.75;max-width:770px;margin:0 auto}@media(max-width:980px){.hero,.offer,.grid,.grid.two,.timeline{grid-template-columns:minmax(0,1fr)}.panel{max-width:620px}.signal strong{text-align:left}}@media(max-width:560px){main{padding-top:96px}.container{padding:0 20px;max-width:100%}h1{font-size:31px;line-height:1.14;letter-spacing:0}.lede{font-size:16px}.cta-row{display:grid;grid-template-columns:minmax(0,1fr)}.cta{width:100%;padding-inline:14px}.panel,.offer,.final{padding:20px}.signal{display:grid;grid-template-columns:minmax(0,1fr);gap:4px}.final h2{font-size:24px}}
+</style>
+</head>
+<body>
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/pricing">Pricing</a>
+    <a href="/pilot">Pilot</a>
+    <a href="/trust">Trust</a>
+    <a href="/docs">Docs</a>
+    <a href="/contact">Contact</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+<div class="container">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Enterprise and reserved capacity</div>
+      <h1>Turn proof receipts into a production control surface.</h1>
+      <p class="lede">TinyZKP Enterprise is for teams that need more than a self-serve API key: paid pilot conversion, platform rollout, reserved proving capacity, procurement review, support commitments, custom limits, Compute planning, and careful design review for receipt-bearing workflows.</p>
+      <div class="cta-row">
+        <a class="cta" href="/contact?category=Enterprise&message=I%20want%20to%20discuss%20TinyZKP%20Enterprise%2C%20reserved%20capacity%2C%20or%20support%20commitments." data-track="enterprise_contact_click" data-source="enterprise_hero">Start enterprise review</a>
+        <a class="cta secondary" href="/enterprise.json">Machine-readable offer</a>
+        <a class="cta secondary" href="/security-review">Security packet</a>
+      </div>
+    </div>
+    <aside class="panel" aria-label="TinyZKP enterprise summary">
+      <h2>When enterprise fits</h2>
+      <div class="signal"><span>Paid pilot</span><strong>$5K creditable</strong></div>
+      <div class="signal"><span>Platform rollout</span><strong>From $499/mo + usage</strong></div>
+      <div class="signal"><span>Reserved workers</span><strong>Review path</strong></div>
+      <div class="signal"><span>Support commitments</span><strong>Contract review</strong></div>
+      <div class="signal"><span>Compute planning</span><strong>Trace-based</strong></div>
+      <div class="signal"><span>Custom state machine</span><strong>Design review</strong></div>
+      <div class="signal"><span>Security procurement</span><strong>Packet ready</strong></div>
+    </aside>
+  </section>
+
+  <section class="band">
+    <h2>Commercial packages after fit is clear</h2>
+    <p>These packages are sales-assisted and scoped around one verified workflow. They are not self-serve checkout SKUs; they start after the statement, verifier path, data boundary, and expected usage are understood.</p>
+    <div class="grid">
+      <article class="box"><h3>$5,000 production pilot</h3><p>Fourteen days to prove one workflow, produce a receipt/verifier artifact, and decide whether the rollout is self-serve, Compute, platform, or reserved capacity. Credited toward annual or reserved-capacity agreement if converted within 60 days.</p><p><a href="/pilot">Review pilot package</a></p></article>
+      <article class="box"><h3>Platform rollout from $499/mo + usage</h3><p>For agent platforms, workflow engines, IDEs, and marketplaces exposing receipts as a native policy surface for high-value tool categories.</p><p><a href="/platform-rollout">Open rollout package</a></p></article>
+      <article class="box"><h3>Reserved capacity custom</h3><p>For customer-visible or auditor-visible receipt workloads that need reserved lanes, support targets, procurement artifacts, or custom state-machine review.</p><p><a href="/contact?category=Enterprise">Start enterprise review</a></p></article>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>The enterprise offer</h2>
+    <p>Enterprise starts when a proof receipt becomes part of your product promise, audit package, agent-control plane, or customer-facing verification path.</p>
+    <article class="offer">
+      <div>
+        <div class="tag-row">
+          <span class="tag live">Production path</span>
+          <span class="tag hot">Reserved capacity</span>
+          <span class="tag review">Procurement</span>
+        </div>
+        <h3>Reserved proof receipt infrastructure without owning prover operations.</h3>
+        <p>Use the enterprise path when the cost of unreliable proof capacity, unclear verifier behavior, or slow procurement exceeds the cost of a focused commercial review.</p>
+        <ul>
+          <li><strong>Reserved capacity:</strong> dedicated or reserved proving lanes for high-value receipt workloads.</li>
+          <li><strong>Support commitments:</strong> response targets, escalation route, and incident contact expectations agreed before rollout.</li>
+          <li><strong>Procurement packet:</strong> Trust Center, security-review packet, OpenAPI, schemas, changelog, privacy, terms, and status links.</li>
+          <li><strong>Custom review:</strong> state-machine statement review when the live template is not enough.</li>
+        </ul>
+      </div>
+      <div class="code"><pre>{
+  "offer": "reserved proof receipt capacity",
+  "best_for": [
+    "customer-visible receipts",
+    "agent control planes",
+    "audit checkpoints",
+    "long Compute traces"
+  ],
+  "first_step": "one scoped pilot",
+  "not_a_shortcut": "unsupported privacy or arbitrary zkVM claims"
+}</pre></div>
+    </article>
+  </section>
+
+  <section class="band">
+    <h2>Best-fit enterprise workflows</h2>
+    <p>The best enterprise customers have one workflow where a verifier, auditor, customer, or agent supervisor materially benefits from a portable receipt.</p>
+    <div class="grid">
+      <article class="box"><h3>Agent control planes</h3><p>Receipt high-value tool-call batches, permission changes, fund movements, record mutations, or approvals where a supervisor needs proof after the fact.</p><p><a href="/agents">Read agent guide</a></p></article>
+      <article class="box"><h3>Customer-facing SaaS</h3><p>Attach receipts to API mutations, reconciliation events, marketplace records, or backend state transitions customers need to verify without replaying your system.</p><p><a href="/recipes">Open recipes</a></p></article>
+      <article class="box"><h3>Finance and audit</h3><p>Use recurring receipts or Compute backfills for reserve, liability, balance, inventory, or audit-log checkpoints that must survive outside the source platform.</p><p><a href="/roi">Build ROI case</a> · <a href="/use-cases/proof-of-reserves-attestation">Reserve use case</a></p></article>
+      <article class="box"><h3>Long-trace Compute</h3><p>Reserve capacity for large supported state-transition traces when high-RAM prover operations, queueing, and on-call ownership would slow the business down.</p><p><a href="/compute">Read Compute brief</a></p></article>
+      <article class="box"><h3>Procurement-heavy teams</h3><p>Use enterprise review when security, privacy, legal, data-retention, invoice, and support-review cycles need one coherent packet.</p><p><a href="/trust">Open Trust Center</a></p></article>
+      <article class="box"><h3>Custom state machines</h3><p>Start with design review when the statement is commercially valuable but not expressible as the live self-serve template.</p><p><a href="/templates">Check live templates</a></p></article>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>What can be reviewed commercially</h2>
+    <p>These are the terms and operating questions that become meaningful once the workflow fit is clear.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Area</th><th>Enterprise review topic</th><th>Why it matters</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Capacity</strong></td><td>Reserved workers, concurrency, rate limits, queue priority, and expected trace-size mix.</td><td>Keeps proof generation predictable when receipts become part of production operations.</td></tr>
+          <tr><td><strong>Support</strong></td><td>Response targets, escalation route, incident contacts, and launch-week coverage.</td><td>Defines who responds when proving, verification, billing, or integration behavior blocks users.</td></tr>
+          <tr><td><strong>Security</strong></td><td>Trust boundary, data handling, verifier behavior, audit status, security contact, and release policy.</td><td>Lets procurement evaluate TinyZKP without relying on informal email answers.</td></tr>
+          <tr><td><strong>Commercials</strong></td><td>Invoice or card billing, monthly commit, spend cap, Compute estimate, reserved-capacity window, and renewal trigger.</td><td>Turns a pilot into a measurable buying decision.</td></tr>
+          <tr><td><strong>Design</strong></td><td>Proof statement, template lifecycle, custom state-machine scope, privacy boundary, verifier path, and migration risk.</td><td>Prevents unsupported proof claims from entering a customer-visible product surface.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Rollout shape</h2>
+    <p>Enterprise adoption should still start narrow. The goal is to prove one business-critical workflow, then expand after cost, verification, and support expectations are known.</p>
+    <div class="timeline">
+      <div class="step"><strong>0-14 days</strong><span>Run one scoped pilot with success metrics, verifier path, data boundary, and cost estimate.</span></div>
+      <div class="step"><strong>15-30 days</strong><span>Attach receipts to one production-like workflow and route security/procurement review through the public packet.</span></div>
+      <div class="step"><strong>31-60 days</strong><span>Set reserved capacity, support targets, and commercial terms if the receipt becomes customer- or auditor-visible.</span></div>
+      <div class="step"><strong>After launch</strong><span>Expand to adjacent workflows only after receipt verification and incident ownership are operationally clear.</span></div>
+    </div>
+  </section>
+
+  <section class="band grid two">
+    <article class="box">
+      <h3>Bring this to enterprise review</h3>
+      <ul>
+        <li>Workflow owner, verifier, and business decision the receipt supports.</li>
+        <li>Expected monthly proof volume, trace-size range, and peak concurrency.</li>
+        <li>Whether the receipt is internal, auditor-visible, customer-visible, or agent-supervisor visible.</li>
+        <li>Security, privacy, legal, retention, invoice, and support requirements.</li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>Do not use enterprise review to bypass product boundaries</h3>
+      <ul>
+        <li>No blanket private-input ZK claim without a documented template, explicit review status, and supported verifier path.</li>
+        <li>No arbitrary zkVM or zkML availability claim as if it is live self-serve product.</li>
+        <li>No guarantee that off-chain facts are true unless they are encoded into the proven statement.</li>
+        <li>No production commitment before verifier behavior, data boundary, and support path are clear.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="band grid two">
+    <article class="box">
+      <h3>Review packet</h3>
+      <ul>
+        <li><a href="/enterprise.json">Enterprise metadata</a></li>
+        <li><a href="/schemas/tinyzkp-enterprise.schema.json">Enterprise schema</a></li>
+        <li><a href="/trust">Trust Center</a></li>
+        <li><a href="/security-review">Security review packet</a></li>
+        <li><a href="/changelog">Changelog and release policy</a></li>
+        <li><a href="/pricing.json">Pricing metadata</a></li>
+        <li><a href="/roi">ROI worksheet</a></li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>Recommended next step</h3>
+      <p>If the workflow is already expressible as <code>accumulator_step</code>, start with Developer or Pro and use Enterprise only when volume, procurement, support, or reserved capacity demands it. If the workflow is custom, start with a pilot review first.</p>
+      <p><a href="/roi">Build ROI case</a> · <a href="/pilot">Plan a pilot</a> · <a href="/calculator">Estimate cost</a></p>
+    </article>
+  </section>
+
+  <section class="final">
+    <h2>Enterprise should make receipt adoption less risky.</h2>
+    <p>The goal is not to buy a bigger plan before you know the proof statement. The goal is to make one valuable receipt reliable enough that customers, auditors, or agents can depend on it.</p>
+    <div class="cta-row" style="justify-content:center">
+      <a class="cta" href="/contact?category=Enterprise&message=I%20want%20to%20discuss%20TinyZKP%20Enterprise%20for%20a%20production%20proof-receipt%20workflow." data-track="enterprise_contact_click" data-source="enterprise_final">Start enterprise review</a>
+      <a class="cta secondary" href="/pilot">Plan a pilot first</a>
+    </div>
+  </section>
+</div>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/enterprise">Enterprise</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/pilot">Pilot</a>
+    <a href="/trust">Trust</a>
+    <a href="/security-review">Security Review</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+<script defer src="/analytics.js"></script>
+</body>
+</html>

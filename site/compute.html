@@ -3,18 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#050a12">
 <title>TinyZKP Compute — O(√N) STARK Proving for Long State Transitions</title>
 <meta name="description" content="A STARK prover with O(√N) memory, where N is the trace length. Price large state-transition proofs by trace step instead of renting high-RAM prover infrastructure. $0.50 per million trace steps, no monthly base fee.">
 <meta property="og:title" content="TinyZKP Compute — O(√N) Proving for Long Computations">
 <meta property="og:description" content="Most STARK systems need O(N) memory — linear in computation size. TinyZKP needs only O(√N). $0.50/M trace steps, usage-based.">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com/compute">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP Compute — O(√N) Proving for Long Computations">
+<meta name="twitter:description" content="Most STARK systems need O(N) memory — linear in computation size. TinyZKP needs only O(√N). $0.50/M trace steps, usage-based.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="canonical" href="https://tinyzkp.com/compute">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/shared.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -104,6 +109,21 @@ footer .right a:hover{color:var(--muted)}
   .calc-grid{grid-template-columns:1fr}
 }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "TinyZKP Compute — O(√N) STARK Proving for Long State Transitions",
+  "url": "https://tinyzkp.com/compute",
+  "description": "A STARK prover with O(√N) memory, where N is the trace length. Price large state-transition proofs by trace step instead of renting high-RAM prover infrastructure. $0.50 per million trace steps, no monthly base fee.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 
@@ -114,7 +134,7 @@ footer .right a:hover{color:var(--muted)}
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/#pricing">Pricing</a>
+    <a href="/pricing">Pricing</a>
     <a href="/verify">Verify</a>
     <a href="/docs">Quickstart</a>
     <a href="/compute" style="color:var(--accent)">Compute</a>
@@ -126,7 +146,7 @@ footer .right a:hover{color:var(--muted)}
 </div>
 </nav>
 
-<div class="content">
+<main class="content">
 
 <div class="eyebrow">For long state-transition traces</div>
 
@@ -137,11 +157,12 @@ footer .right a:hover{color:var(--muted)}
 <div class="cta-row">
   <a class="cta" href="/signup?plan=compute" data-track="compute_signup_click" data-plan="compute" data-source="compute_hero">Start at $0.50 / M trace steps</a>
   <a class="cta cta-secondary" href="https://github.com/logannye/hc-stark/blob/main/docs/whitepaper.md" target="_blank">Read the whitepaper →</a>
+  <a class="cta cta-secondary" href="/compare/self-hosted-stark-prover">Compare self-hosting</a>
 </div>
 
 <div class="callout">
 <h3>What is live now on Compute</h3>
-<p><strong>Self-serve Compute is for long accumulator and state-transition traces.</strong> The production path uses TinyZKP's transparent STARK receipt model and the same offline-verifiable proof object as the rest of the hosted service. It is not the older KZG/BN254 research prototype, and it is not a blanket promise that zkVM, zkML, or rollup proving are generally available.</p>
+<p><strong>Self-serve Compute is for long accumulator and state-transition traces.</strong> The production path uses TinyZKP's transparent STARK receipt model and the same portable proof object as the rest of the hosted service. It is not the older KZG/BN254 research prototype, and it is not a blanket promise that zkVM, zkML, or rollup proving are generally available.</p>
 <ul>
   <li><strong>Live:</strong> long state-transition receipts up to the published single-proof cap.</li>
   <li><strong>Design-partner:</strong> custom state machines and very large traces that need sizing before production use.</li>
@@ -251,22 +272,24 @@ footer .right a:hover{color:var(--muted)}
 <div class="cta-row">
   <a class="cta" href="/signup?plan=compute" data-track="compute_signup_click" data-plan="compute" data-source="compute_final_cta">Start usage-based</a>
   <a class="cta cta-secondary" href="/contact">Talk to sales (Enterprise)</a>
+  <a class="cta cta-secondary" href="/compare/self-hosted-stark-prover">Build vs buy</a>
 </div>
 
 <p style="margin-top:24px"><strong>Questions on whether TinyZKP fits your workload?</strong> Email <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a> with a paragraph on what you're proving and we'll either shape it together or tell you straight if it's not the right tool.</p>
 
-</div>
+</main>
 
 <footer>
 <div class="container">
   <div class="left">&copy; 2026 TinyZKP</div>
   <div class="right">
     <a href="/">Home</a>
-    <a href="/#pricing">Pricing</a>
+    <a href="/pricing">Pricing</a>
     <a href="/compute">Compute</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
+    <a href="/compare/self-hosted-stark-prover">Compare</a>
     <a href="/contact">Contact</a>
     <a href="/terms">Terms</a>
     <a href="/privacy">Privacy</a>

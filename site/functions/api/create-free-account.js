@@ -3,6 +3,8 @@
 
 const RATE_LIMIT_MAX = 3;
 const RATE_LIMIT_WINDOW_S = 600;
+const ATTRIBUTION_MAX_LEN = 80;
+const ATTRIBUTION_FIELDS = ["source", "platform", "use_case", "workflow", "intent"];
 
 async function checkRateLimit(ip) {
   const cache = caches.default;
@@ -23,6 +25,23 @@ async function checkRateLimit(ip) {
   });
   await cache.put(key, resp);
   return true;
+}
+
+function cleanAttribution(value) {
+  if (typeof value !== "string") return "";
+  return value
+    .trim()
+    .replace(/[^\w .:/-]/g, "")
+    .slice(0, ATTRIBUTION_MAX_LEN);
+}
+
+function collectAttribution(body) {
+  const out = {};
+  for (const field of ATTRIBUTION_FIELDS) {
+    const clean = cleanAttribution(body[field]);
+    if (clean) out[field] = clean;
+  }
+  return out;
 }
 
 export async function onRequestPost(context) {
@@ -54,6 +73,7 @@ export async function onRequestPost(context) {
         headers: jsonHeaders,
       });
     }
+    const attribution = collectAttribution(body);
 
     // Provision free tenant via the billing webhook on the backend server.
     const WEBHOOK_URL = context.env.WEBHOOK_BASE_URL || "https://webhook.tinyzkp.com";
@@ -63,7 +83,7 @@ export async function onRequestPost(context) {
         "Content-Type": "application/json",
         "X-Internal-Secret": context.env.INTERNAL_SECRET || "",
       },
-      body: JSON.stringify({ email, plan: "free" }),
+      body: JSON.stringify({ email, plan: "free", ...attribution }),
     });
 
     if (!resp.ok) {

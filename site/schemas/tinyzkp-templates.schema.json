@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/tinyzkp-templates.schema.json",
+  "title": "TinyZKP Proof Template Catalog",
+  "type": "object",
+  "required": ["name", "url", "generated_at", "summary", "default_public_product", "templates", "design_review_lanes", "links"],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "name": { "type": "string" },
+    "url": { "type": "string", "format": "uri" },
+    "generated_at": { "type": "string" },
+    "summary": { "type": "string" },
+    "default_public_product": { "type": "string" },
+    "templates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "lifecycle", "availability", "backend", "enforcement", "tags", "summary", "claim", "parameters", "good_fit", "bad_fit", "example_request", "endpoints", "pricing_fit"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "lifecycle": { "type": "string", "enum": ["live", "audit_gated", "preview", "retired"] },
+          "availability": { "type": "string" },
+          "backend": { "type": "string" },
+          "enforcement": { "type": "string" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "summary": { "type": "string" },
+          "claim": { "type": "string" },
+          "parameters": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["name", "type", "required", "description"],
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "required": { "type": "boolean" },
+                "description": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "good_fit": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "bad_fit": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "example_request": { "type": "object" },
+          "endpoints": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "pricing_fit": { "type": "object" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "design_review_lanes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "status", "guidance"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "guidance": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "uri" }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP vs zkVM Provers</title>
+<meta name="description" content="Compare TinyZKP proof receipts with general-purpose zkVM provers. Use TinyZKP for narrow state-transition receipts; use zkVMs when you need arbitrary program execution proofs.">
+<meta property="og:title" content="TinyZKP vs zkVM Provers">
+<meta property="og:description" content="TinyZKP is a narrow hosted receipt API. zkVMs are general-purpose proof systems for program execution. Choose the right integration burden.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/compare/zkvm-provers">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP vs zkVM Provers">
+<meta name="twitter:description" content="TinyZKP is a narrow hosted receipt API. zkVMs are general-purpose proof systems for program execution. Choose the right integration burden.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/compare/zkvm-provers">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/shared.css"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+main{padding:118px 0 76px}.eyebrow{font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}h1{font-size:clamp(34px,5vw,56px);line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);max-width:900px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:800px}.band{border-top:1px solid var(--border);padding-top:34px;margin-top:42px}.band h2{color:var(--text-bright);font-size:26px;line-height:1.22;margin-bottom:14px;letter-spacing:-.02em}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px}.box h3{color:var(--text-bright);font-size:18px;margin-bottom:10px}.box p,.box li{color:var(--muted);font-size:14px;line-height:1.7}.box ul{padding-left:20px}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin-top:22px}table{width:100%;border-collapse:collapse;min-width:760px}th,td{padding:14px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}td{color:var(--muted);font-size:14px}td strong{color:var(--text)}tbody tr:last-child td{border-bottom:none}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}a{text-underline-offset:4px}@media(max-width:820px){.grid{grid-template-columns:1fr}.cta-row{display:grid;grid-template-columns:1fr}.cta{width:100%}}
+html,body{overflow-x:hidden;width:100%}h1,.lede,.box{overflow-wrap:break-word}.grid>*{min-width:0}.table-wrap{max-width:100%;min-width:0}.cta{white-space:normal;text-align:center}@media(max-width:560px){.container{max-width:100%;padding:0 20px}h1{font-size:32px;line-height:1.14;letter-spacing:0}}
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "TinyZKP vs zkVM Provers",
+  "url": "https://tinyzkp.com/compare/zkvm-provers",
+  "description": "Compare TinyZKP proof receipts with general-purpose zkVM provers. Use TinyZKP for narrow state-transition receipts; use zkVMs when you need arbitrary program execution proofs.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
+</head>
+<body>
+<nav><div class="container"><a href="/" class="logo"><span>Tiny</span>ZKP</a><button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button><div class="links"><a href="/compare">Compare</a><a href="/compute">Compute</a><a href="/receipts">Receipts</a><a href="/pilot">Pilot</a><a href="/signup" class="nav-cta">Get API Key</a></div></div></nav>
+<main><div class="container">
+  <div class="eyebrow">Comparison</div>
+  <h1>TinyZKP receipts vs general-purpose zkVM provers.</h1>
+  <p class="lede">A zkVM is the right abstraction when you need to prove arbitrary program execution. TinyZKP is the right abstraction when the buyer needs a hosted, narrow receipt for a supported state transition, with no prover infrastructure or circuit engineering project.</p>
+  <div class="cta-row"><a class="cta" href="/try">Generate a receipt</a><a class="cta secondary" href="/compute">Read Compute brief</a><a class="cta secondary" href="/pilot">Review custom workflow</a></div>
+
+  <section class="band">
+    <h2>Decision table</h2>
+    <div class="table-wrap"><table><thead><tr><th>Question</th><th>TinyZKP</th><th>zkVM prover</th></tr></thead><tbody>
+      <tr><td><strong>What do you prove?</strong></td><td>Supported state-transition receipt templates and reviewed workloads.</td><td>Execution of an arbitrary program compiled into the zkVM environment.</td></tr>
+      <tr><td><strong>Who operates proving?</strong></td><td>TinyZKP hosted API, MCP, or Compute path.</td><td>Your team or a prover network; you still own integration, compatibility, and verifier packaging.</td></tr>
+      <tr><td><strong>Best first buyer</strong></td><td>Agent, SaaS, audit, reconciliation, and platform teams needing receipt artifacts.</td><td>Protocol, chain, or infrastructure teams needing flexible program proofs.</td></tr>
+      <tr><td><strong>Integration burden</strong></td><td>Map a public state transition and attach the receipt.</td><td>Write or compile the program, manage proof generation, tune performance, and expose verification.</td></tr>
+      <tr><td><strong>Default claim</strong></td><td>Transparent proof receipt for an encoded transition.</td><td>Program execution proof with the zkVM's security and privacy model.</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="band grid">
+    <article class="box"><h3>Choose TinyZKP when</h3><ul><li>The workflow is a checkpoint, accumulator, balance, reserve, inventory, or agent action receipt.</li><li>You need API/MCP integration more than arbitrary program expressiveness.</li><li>The verifier should receive a compact receipt URL or object.</li><li>High-RAM prover operations are not your core business.</li></ul></article>
+    <article class="box"><h3>Choose a zkVM when</h3><ul><li>You need to prove arbitrary code execution.</li><li>Your predicate cannot be expressed as a TinyZKP live template or reviewed workload.</li><li>You need ecosystem-specific on-chain verification or protocol-level proof composition.</li><li>Your team is ready to own the full proving and verification stack.</li></ul></article>
+  </section>
+
+  <section class="band">
+    <h2>Positioning boundary</h2>
+    <p class="lede" style="font-size:15px">TinyZKP should not market current self-serve receipts as finished arbitrary zkVM execution. The honest wedge is narrower and stronger: proof receipts for state-changing automated work, plus Compute for long supported traces where memory pressure makes managed proving valuable.</p>
+  </section>
+</div></main>
+<footer><div class="container"><div class="left">&copy; 2026 TinyZKP</div><div class="right"><a href="/compare">Compare</a><a href="/compare/zktls">zkTLS</a><a href="/compare/blockchain-anchoring">Blockchain Anchoring</a><a href="/privacy">Privacy</a><a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a></div></div></footer>
+</body>
+</html>

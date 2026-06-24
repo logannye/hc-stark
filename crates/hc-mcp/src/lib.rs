@@ -50,7 +50,7 @@ impl HcMcpServer {
     }
 
     #[rmcp::tool(
-        description = "List all available proof templates with IDs, summaries, and tags. Use this to discover what kinds of proofs you can generate.",
+        description = "List supported proof templates exposed by this deployment with IDs, lifecycle status, summaries, and tags. Treat only live templates as generally available.",
         annotations(
             title = "List Proof Templates",
             read_only_hint = true,
@@ -64,7 +64,7 @@ impl HcMcpServer {
     }
 
     #[rmcp::tool(
-        description = "List all registered workload IDs. Workloads are predefined proof programs.",
+        description = "List registered workload IDs for supported long-running or reviewed proving workflows.",
         annotations(
             title = "List Workloads",
             read_only_hint = true,
@@ -95,7 +95,7 @@ impl HcMcpServer {
     }
 
     #[rmcp::tool(
-        description = "Get server capabilities, version, and recommended workflow. Start here if you're unsure what this server can do.",
+        description = "Get server capabilities, product boundary, version, and recommended proof-receipt workflow. Start here if you're unsure what this server can do.",
         annotations(
             title = "Get Server Capabilities",
             read_only_hint = true,
@@ -126,7 +126,7 @@ impl HcMcpServer {
     }
 
     #[rmcp::tool(
-        description = "Generate a proof from a registered workload ID. Returns a job_id — call poll_job to check progress. Consumes one proof from your monthly quota.",
+        description = "Submit a supported workload or Compute proof job. Returns a job_id; call poll_job to check progress. Successful hosted proving is billable, and verification remains free.",
         annotations(
             title = "Generate Proof from Workload",
             read_only_hint = false,
@@ -223,13 +223,13 @@ impl ServerHandler for HcMcpServer {
                 ..Default::default()
             },
             instructions: Some(
-                "hc-stark ZK proving service. Workflow: \
-                 (1) list_templates or get_capabilities to discover what's available, \
-                 (2) describe_template to get parameter schema, \
-                 (3) prove_template to submit a proof job, \
+                "TinyZKP proof-receipt service for supported transparent STARK state-transition workflows. \
+                 Workflow: (1) get_capabilities or list_templates to discover live templates and limits, \
+                 (2) describe_template to get the statement boundary and parameter schema, \
+                 (3) prove_template to submit a proof-receipt job, \
                  (4) poll_job until succeeded, \
-                 (5) get_proof to retrieve the proof, \
-                 (6) verify_proof to independently verify."
+                 (5) get_proof or get_proof_summary to attach the receipt to the agent output, \
+                 (6) verify_proof before trusting external receipts. Do not put secrets or private customer data into transparent parameters."
                     .to_string(),
             ),
         }

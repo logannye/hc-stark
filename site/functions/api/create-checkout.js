@@ -16,6 +16,8 @@
 
 const RATE_LIMIT_MAX = 10;         // max requests per window per IP
 const RATE_LIMIT_WINDOW_S = 300;   // 5-minute window
+const ATTRIBUTION_MAX_LEN = 80;
+const ATTRIBUTION_FIELDS = ["source", "platform", "use_case", "workflow", "intent"];
 
 async function checkRateLimit(ip) {
   const cache = caches.default;
@@ -60,6 +62,35 @@ function flatPriceFor(env, plan) {
   }
 }
 
+function cleanAttribution(value) {
+  if (typeof value !== "string") return "";
+  return value
+    .trim()
+    .replace(/[^\w .:/-]/g, "")
+    .slice(0, ATTRIBUTION_MAX_LEN);
+}
+
+function collectAttribution(body) {
+  const out = {};
+  for (const field of ATTRIBUTION_FIELDS) {
+    const clean = cleanAttribution(body[field]);
+    if (clean) out[field] = clean;
+  }
+  return out;
+}
+
+function checkoutReturnUrl(pathname, selectedPlan, cadence, attribution) {
+  const url = new URL(`https://tinyzkp.com${pathname}`);
+  if (pathname === "/welcome") url.searchParams.set("checkout", "success");
+  if (pathname === "/signup") url.searchParams.set("cancelled", "true");
+  url.searchParams.set("plan", selectedPlan);
+  if (pathname === "/welcome") url.searchParams.set("cadence", cadence);
+  for (const [field, value] of Object.entries(attribution)) {
+    url.searchParams.set(field, value);
+  }
+  return url.toString();
+}
+
 export async function onRequestPost(context) {
   const origin = context.request.headers.get("Origin") || "";
   const allowedOrigin = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com"
@@ -100,6 +131,7 @@ export async function onRequestPost(context) {
     // Self-serve checkout is monthly only. Annual flat fees cannot be safely
     // combined with the current monthly metered usage prices in Stripe Checkout.
     const cadence = "monthly";
+    const attribution = collectAttribution(body);
 
     const STRIPE_SECRET_KEY = context.env.STRIPE_SECRET_KEY;
     // Per-proof metered price (small-T plans). Legacy fallback to STRIPE_PRICE_ID.
@@ -163,8 +195,12 @@ export async function onRequestPost(context) {
     params.append("metadata[cadence]", cadence);
     params.append("subscription_data[metadata][plan]", selectedPlan);
     params.append("subscription_data[metadata][cadence]", cadence);
-    params.append("success_url", `https://tinyzkp.com/welcome?plan=${selectedPlan}&cadence=${cadence}`);
-    params.append("cancel_url", "https://tinyzkp.com/signup?cancelled=true");
+    for (const [field, value] of Object.entries(attribution)) {
+      params.append(`metadata[${field}]`, value);
+      params.append(`subscription_data[metadata][${field}]`, value);
+    }
+    params.append("success_url", checkoutReturnUrl("/welcome", selectedPlan, cadence, attribution));
+    params.append("cancel_url", checkoutReturnUrl("/signup", selectedPlan, cadence, attribution));
 
     const resp = await fetch("https://api.stripe.com/v1/checkout/sessions", {
       method: "POST",

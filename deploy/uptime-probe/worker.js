@@ -28,7 +28,7 @@ const TARGETS = [
     name: "mcp-server-card",
     url: "https://mcp.tinyzkp.com/.well-known/mcp/server-card.json",
     expect: 200,
-    contains: "accumulator_step available now",
+    contains: "Live self-serve template: accumulator_step",
   },
   {
     name: "mcp-server-card-tools",

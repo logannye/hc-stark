@@ -1,0 +1,120 @@
+{
+  "$schema": "https://tinyzkp.com/schemas/tinyzkp-roi.schema.json",
+  "name": "TinyZKP ROI and Business Case",
+  "url": "https://tinyzkp.com/roi",
+  "generated_at": "2026-06-24",
+  "summary": "Business-case worksheet for evaluating TinyZKP proof receipts against manual replay, evidence review, support work, and self-hosted prover operations.",
+  "primary_question": "Does one proof-receipt workflow avoid enough recurring review, replay, support, infrastructure, or sales friction to justify the smallest paid route?",
+  "value_drivers": [
+    {
+      "id": "manual_replay_reduction",
+      "name": "Manual replay reduction",
+      "description": "Reviewers can verify the encoded transition without asking engineering to reconstruct state, export logs, or explain an agent transcript.",
+      "evidence": "Monthly review hours avoided and one receipt/verifier artifact."
+    },
+    {
+      "id": "support_evidence_reduction",
+      "name": "Support and evidence reduction",
+      "description": "Customers, auditors, and internal reviewers can inspect a receipt URL instead of opening repeat evidence requests.",
+      "evidence": "Support tickets, audit requests, or customer success workflows that a receipt could satisfy."
+    },
+    {
+      "id": "prover_operations_avoidance",
+      "name": "Prover operations avoidance",
+      "description": "TinyZKP hosted receipts and Compute avoid high-RAM workers, custom queues, verifier packaging, monitoring, and proof-format compatibility work before product fit is proven.",
+      "evidence": "Self-hosted prover infrastructure estimate and monthly prover-ops hours avoided."
+    },
+    {
+      "id": "commercial_trust_acceleration",
+      "name": "Commercial trust acceleration",
+      "description": "Receipt-backed agent and API workflows can shorten sales, procurement, and trust review by giving buyers a portable evidence artifact.",
+      "evidence": "Customer-visible receipt placement, trust packet, and internal buying decision."
+    }
+  ],
+  "worksheet_inputs": [
+    { "id": "receipts_per_month", "label": "Receipts per month", "default": 1000, "unit": "receipts" },
+    { "id": "trace_band", "label": "Typical trace-size band", "default": "100K-1M", "unit": "trace steps" },
+    { "id": "tinyzkp_route", "label": "Expected TinyZKP route", "default": "pro", "unit": "plan" },
+    { "id": "manual_review_hours_avoided", "label": "Manual review hours per month avoided", "default": 12, "unit": "hours/month" },
+    { "id": "support_evidence_hours_avoided", "label": "Support or evidence hours per month avoided", "default": 6, "unit": "hours/month" },
+    { "id": "prover_ops_hours_avoided", "label": "Prover or integration operations hours per month avoided", "default": 8, "unit": "hours/month" },
+    { "id": "blended_hourly_cost", "label": "Blended hourly cost", "default": 150, "unit": "USD/hour" },
+    { "id": "self_hosted_infra_avoided", "label": "Self-hosted prover infrastructure avoided", "default": 1800, "unit": "USD/month" }
+  ],
+  "formula": {
+    "avoided_monthly_cost": "(manual_review_hours_avoided + support_evidence_hours_avoided + prover_ops_hours_avoided) * blended_hourly_cost + self_hosted_infra_avoided",
+    "tinyzkp_monthly_cost": "plan_base + receipts_per_month * rate_for_route_and_trace_band, capped when the selected plan has a published cap",
+    "monthly_net_benefit": "avoided_monthly_cost - tinyzkp_monthly_cost",
+    "pilot_payback_months": "5000 / monthly_net_benefit when monthly_net_benefit is positive"
+  },
+  "sample_cases": [
+    {
+      "id": "customer_visible_api",
+      "name": "Customer-visible API mutation",
+      "route": "Pro",
+      "why_it_pays": "Receipts reduce support and customer evidence requests after important state-changing API calls."
+    },
+    {
+      "id": "agent_platform",
+      "name": "Agent platform receipt policy",
+      "route": "$5,000 pilot then platform rollout from $499/month plus usage",
+      "why_it_pays": "Receipts become a native platform trust feature for high-value tool categories."
+    },
+    {
+      "id": "long_trace_compute",
+      "name": "Long supported state-transition trace",
+      "route": "Compute",
+      "why_it_pays": "Trace-step pricing avoids high-RAM prover workers, custom queues, and on-call ownership for sporadic large proofs."
+    },
+    {
+      "id": "audit_checkpoint",
+      "name": "Audit or reserve checkpoint",
+      "route": "Pro, Scale, Compute, or pilot depending on trace size and visibility",
+      "why_it_pays": "Portable receipts reduce repeated audit exports and replay requests."
+    }
+  ],
+  "recommended_routes": [
+    {
+      "trigger": "Positive ROI with a live supported workflow",
+      "route": "Start with the smallest self-serve plan that supports the expected volume.",
+      "url": "https://tinyzkp.com/pricing"
+    },
+    {
+      "trigger": "Custom statement, procurement, support, or customer-visible rollout uncertainty",
+      "route": "Use the $5,000 production pilot before committing to annual, reserved-capacity, or platform rollout.",
+      "url": "https://tinyzkp.com/pilot"
+    },
+    {
+      "trigger": "Native agent platform or workflow-engine distribution",
+      "route": "Use platform rollout after one receipt-required tool category is proven.",
+      "url": "https://tinyzkp.com/platform-rollout"
+    },
+    {
+      "trigger": "High-RAM prover operations are the primary alternative",
+      "route": "Use Compute or reserved capacity instead of self-hosting before demand is steady.",
+      "url": "https://tinyzkp.com/compute"
+    }
+  ],
+  "guardrails": [
+    "Do not count value from claims the receipt does not encode.",
+    "Do not model generic private-input, zkVM, zkML, or on-chain verifier claims as live value unless the workflow has an explicit supported path.",
+    "Do not use proof receipts for low-value events where no recipient will inspect the proof.",
+    "Treat the worksheet as planning guidance; finance teams should replace defaults with internal cost data."
+  ],
+  "links": {
+    "page": "https://tinyzkp.com/roi",
+    "metadata": "https://tinyzkp.com/roi.json",
+    "schema": "https://tinyzkp.com/schemas/tinyzkp-roi.schema.json",
+    "pricing": "https://tinyzkp.com/pricing",
+    "pricing_metadata": "https://tinyzkp.com/pricing.json",
+    "calculator": "https://tinyzkp.com/calculator",
+    "evaluation": "https://tinyzkp.com/evaluation",
+    "evaluation_metadata": "https://tinyzkp.com/evaluation.json",
+    "pilot": "https://tinyzkp.com/pilot",
+    "platform_rollout": "https://tinyzkp.com/platform-rollout",
+    "enterprise": "https://tinyzkp.com/enterprise",
+    "trust": "https://tinyzkp.com/trust",
+    "self_hosting_comparison": "https://tinyzkp.com/compare/self-hosted-stark-prover",
+    "contact_business_case": "https://tinyzkp.com/contact?category=Business%20Case"
+  }
+}

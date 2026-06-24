@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/tinyzkp-roi.schema.json",
+  "title": "TinyZKP ROI and Business Case Metadata",
+  "type": "object",
+  "required": [
+    "name",
+    "url",
+    "generated_at",
+    "summary",
+    "primary_question",
+    "value_drivers",
+    "worksheet_inputs",
+    "formula",
+    "sample_cases",
+    "recommended_routes",
+    "guardrails",
+    "links"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "name": { "type": "string", "minLength": 1 },
+    "url": { "type": "string", "format": "uri" },
+    "generated_at": { "type": "string" },
+    "summary": { "type": "string", "minLength": 1 },
+    "primary_question": { "type": "string", "minLength": 1 },
+    "value_drivers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "description", "evidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "evidence": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "worksheet_inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "default", "unit"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "default": { "type": ["number", "string"] },
+          "unit": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "formula": {
+      "type": "object",
+      "required": ["avoided_monthly_cost", "tinyzkp_monthly_cost", "monthly_net_benefit", "pilot_payback_months"],
+      "properties": {
+        "avoided_monthly_cost": { "type": "string" },
+        "tinyzkp_monthly_cost": { "type": "string" },
+        "monthly_net_benefit": { "type": "string" },
+        "pilot_payback_months": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "sample_cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "route", "why_it_pays"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "route": { "type": "string" },
+          "why_it_pays": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "recommended_routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["trigger", "route", "url"],
+        "properties": {
+          "trigger": { "type": "string" },
+          "route": { "type": "string" },
+          "url": { "type": "string", "format": "uri" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "guardrails": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "uri" }
+    }
+  },
+  "additionalProperties": false
+}

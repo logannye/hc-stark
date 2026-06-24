@@ -5,7 +5,8 @@
 // Secret required (set via wrangler):
 //   TINYZKP_DEMO_API_KEY  — a tzk_... key for a demo tenant with low caps.
 //
-// Request body: {initial: number, deltas: number[]}
+// Request body: {initial: number, deltas: number[]} or
+//   {params: {initial: number, deltas: number[], final?: number}}
 //   - initial: 0..1000
 //   - deltas: 1..10 ints, each 0..1000
 //   final is computed server-side as initial + sum(deltas) so the proof always
@@ -41,8 +42,14 @@ function corsHeaders(origin) {
   };
 }
 
-function validate(body) {
-  const { initial, deltas } = body || {};
+function normalize(body) {
+  const input = body && typeof body.params === "object" ? body.params : body;
+  if (!input || typeof input !== "object") return {};
+  return { initial: input.initial, deltas: input.deltas };
+}
+
+function validate(input) {
+  const { initial, deltas } = input || {};
   if (typeof initial !== "number" || !Number.isFinite(initial) || initial < 0 || initial > 1000) {
     return "initial must be a number in [0, 1000]";
   }
@@ -64,22 +71,28 @@ export async function onRequestPost(context) {
     const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
     if (!(await checkRateLimit(ip))) {
       return new Response(JSON.stringify({
-        error: "Rate limit reached. Try again in an hour, or sign up for a free key for unlimited proofs.",
+        error: "Rate limit reached. Try again in an hour, or sign up for a free key for higher self-serve limits.",
         signup: "https://tinyzkp.com/signup",
+        limits: "https://tinyzkp.com/limits",
       }), { status: 429, headers });
     }
     const body = await context.request.json();
-    const err = validate(body);
+    const input = normalize(body);
+    const err = validate(input);
     if (err) return new Response(JSON.stringify({ error: err }), { status: 400, headers });
 
     const apiKey = context.env.TINYZKP_DEMO_API_KEY;
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "demo unavailable (server misconfigured)" }), {
+      return new Response(JSON.stringify({
+        error: "The anonymous playground is temporarily unavailable. You can still create a free API key and run the same proof from the quickstart.",
+        signup: "https://tinyzkp.com/signup",
+        docs: "https://tinyzkp.com/docs",
+      }), {
         status: 500, headers,
       });
     }
 
-    const finalVal = body.deltas.reduce((a, d) => a + d, body.initial);
+    const finalVal = input.deltas.reduce((a, d) => a + d, input.initial);
     const upstream = await fetch(UPSTREAM, {
       method: "POST",
       headers: {
@@ -87,7 +100,7 @@ export async function onRequestPost(context) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        params: { initial: body.initial, final: finalVal, deltas: body.deltas },
+        params: { initial: input.initial, final: finalVal, deltas: input.deltas },
       }),
     });
     const json = await upstream.json();

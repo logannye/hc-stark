@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/tinyzkp-agent-policy.schema.json",
+  "title": "TinyZKP Agent Proof Policy Metadata",
+  "type": "object",
+  "required": [
+    "name",
+    "url",
+    "generated_at",
+    "summary",
+    "positioning",
+    "default_policy",
+    "verification_policy",
+    "receipt_envelope",
+    "escalation_triggers",
+    "integration_surfaces",
+    "links"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "name": { "type": "string", "minLength": 1 },
+    "url": { "type": "string", "format": "uri" },
+    "generated_at": { "type": "string" },
+    "summary": { "type": "string", "minLength": 1 },
+    "positioning": {
+      "type": "object",
+      "required": ["primary_use", "best_for", "not_for"],
+      "properties": {
+        "primary_use": { "type": "string" },
+        "best_for": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "not_for": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "default_policy": {
+      "type": "object",
+      "required": ["mint_receipt_when", "skip_receipt_when", "always_attach", "never_send_as_transparent_parameters"],
+      "properties": {
+        "mint_receipt_when": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "skip_receipt_when": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "always_attach": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "never_send_as_transparent_parameters": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "verification_policy": {
+      "type": "object",
+      "required": ["verify_before_trusting_external_receipts", "accepted_paths", "reject_or_review_when"],
+      "properties": {
+        "verify_before_trusting_external_receipts": { "type": "boolean" },
+        "accepted_paths": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "reject_or_review_when": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "receipt_envelope": {
+      "type": "object",
+      "required": ["schema", "required_fields", "recommended_fields", "example"],
+      "properties": {
+        "schema": { "type": "string", "format": "uri" },
+        "required_fields": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "recommended_fields": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "example": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "escalation_triggers": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "integration_surfaces": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "uri" }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "uri" }
+    }
+  },
+  "additionalProperties": false
+}

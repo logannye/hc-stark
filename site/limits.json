@@ -1,0 +1,184 @@
+{
+  "$schema": "https://tinyzkp.com/schemas/tinyzkp-limits.schema.json",
+  "name": "TinyZKP Limits and Capabilities",
+  "url": "https://tinyzkp.com/limits",
+  "generated_at": "2026-06-24",
+  "summary": "Canonical buyer-facing limits, plan quotas, anonymous playground constraints, supported receipt boundaries, and escalation triggers for TinyZKP.",
+  "product_boundary": {
+    "live_default_product": "Transparent STARK state-transition proof receipts",
+    "primary_template": "accumulator_step",
+    "claim": "initial + sum(deltas) = final",
+    "verification": "Free public verification through the browser verifier, hosted API, SDKs, CLI, or MCP where compatible.",
+    "billable_event": "Hosted proof job succeeds.",
+    "privacy_note": "Do not treat default TinyZKP receipts as private-input zero knowledge unless a specific template, masking mode, review status, and verifier path are explicitly documented.",
+    "audit_note": "External cryptography audit is pending; production self-serve exposure is limited to documented live templates."
+  },
+  "anonymous_playground": {
+    "page": "https://tinyzkp.com/try",
+    "endpoint": "https://tinyzkp.com/api/demo-prove",
+    "template_id": "accumulator_step",
+    "rate_limit": {
+      "max_proofs": 5,
+      "window_seconds": 3600,
+      "scope": "per IP address"
+    },
+    "parameter_limits": {
+      "initial": { "type": "integer", "minimum": 0, "maximum": 1000 },
+      "deltas": {
+        "type": "array<integer>",
+        "min_items": 1,
+        "max_items": 10,
+        "item_minimum": 0,
+        "item_maximum": 1000
+      },
+      "final": "computed server-side as initial + sum(deltas)"
+    },
+    "notes": [
+      "The playground is for demos and examples, not production automation.",
+      "Use an API key for production plan limits, account-level spend controls, and supportable workflows.",
+      "Do not send secrets or private customer data into transparent demo parameters."
+    ]
+  },
+  "self_serve_plans": [
+    {
+      "id": "free",
+      "name": "Free",
+      "included_receipts_per_month": 100,
+      "prove_requests_per_minute": 10,
+      "concurrent_jobs": 1,
+      "monthly_spend_cap": 0,
+      "checkout_url": "https://tinyzkp.com/signup",
+      "best_for": "Evaluation, demos, and first agent integrations."
+    },
+    {
+      "id": "developer",
+      "name": "Developer",
+      "included_receipts_per_month": 0,
+      "prove_requests_per_minute": 100,
+      "concurrent_jobs": 4,
+      "monthly_spend_cap": 500,
+      "checkout_url": "https://tinyzkp.com/signup?plan=developer",
+      "best_for": "Production pilots where receipts are attached to one workflow."
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "included_receipts_per_month": 0,
+      "prove_requests_per_minute": 300,
+      "concurrent_jobs": 8,
+      "monthly_spend_cap": 2500,
+      "checkout_url": "https://tinyzkp.com/signup?plan=pro",
+      "best_for": "Teams adding receipts to customer-visible automations."
+    },
+    {
+      "id": "scale",
+      "name": "Scale",
+      "included_receipts_per_month": 0,
+      "prove_requests_per_minute": 500,
+      "concurrent_jobs": 16,
+      "monthly_spend_cap": 10000,
+      "checkout_url": "https://tinyzkp.com/signup?plan=scale",
+      "best_for": "Production services with many receipts and support needs."
+    },
+    {
+      "id": "compute",
+      "name": "Compute",
+      "included_receipts_per_month": 0,
+      "prove_requests_per_minute": 100,
+      "concurrent_jobs": 8,
+      "monthly_spend_cap": null,
+      "checkout_url": "https://tinyzkp.com/signup?plan=compute",
+      "best_for": "Large supported state-transition traces, backfills, and audit packages priced by trace step."
+    }
+  ],
+  "compute": {
+    "price_per_million_trace_steps": 0.50,
+    "minimum_per_proof": 0.05,
+    "best_for": [
+      "Long supported state-transition traces",
+      "Backfills and one-off audit packages",
+      "Workloads where high-RAM prover infrastructure is the economic alternative"
+    ],
+    "review_when": [
+      "Peak concurrency or queue priority needs a commitment",
+      "Trace size is unusual or latency-sensitive",
+      "The statement is not covered by a live self-serve template"
+    ]
+  },
+  "capability_matrix": [
+    {
+      "surface": "Live template",
+      "status": "available",
+      "limit_or_boundary": "Self-serve production exposure is limited to accumulator_step.",
+      "escalation": "Use pilot review for custom predicates or unsupported state machines."
+    },
+    {
+      "surface": "Verification",
+      "status": "available",
+      "limit_or_boundary": "Verification is free; local WASM support depends on proof format compatibility, with hosted fallback for current production receipts.",
+      "escalation": "Use design review when verification must run on-chain or inside a restricted runtime."
+    },
+    {
+      "surface": "MCP",
+      "status": "available",
+      "limit_or_boundary": "Anonymous capabilities are limited; authenticated MCP calls map to the same account limits as the HTTP API.",
+      "escalation": "Use a paid plan or enterprise review for production agent workloads."
+    },
+    {
+      "surface": "Pricing",
+      "status": "available",
+      "limit_or_boundary": "Developer, Pro, and Scale include monthly spend caps; Compute is usage-based by trace step.",
+      "escalation": "Use enterprise review for reserved capacity, invoice billing, or custom usage commitments."
+    },
+    {
+      "surface": "Security review",
+      "status": "available",
+      "limit_or_boundary": "Trust Center, security packet, status page, OpenAPI, schemas, and release policy are public.",
+      "escalation": "Use procurement review for contractual terms, retention requirements, or support targets."
+    }
+  ],
+  "unsupported_without_review": [
+    "Generic private-input zero knowledge",
+    "Arbitrary zkVM execution",
+    "zkML inference proofs",
+    "On-chain verifier support for every chain",
+    "Custom state machines not represented by accumulator_step",
+    "Sub-second proving on every UI interaction",
+    "Contractual support targets before commercial terms are agreed"
+  ],
+  "escalation_triggers": [
+    "The verifier must check a statement other than the live additive accumulator transition.",
+    "Private inputs, masking, or customer secrets are involved.",
+    "Expected monthly spend or concurrency needs a custom cap or reserved workers.",
+    "The receipt is customer-, auditor-, counterparty-, or regulator-visible and procurement needs a security packet.",
+    "The workflow requires on-chain, air-gapped, or restricted-runtime verification.",
+    "Trace size, latency, or backfill volume makes Compute planning necessary."
+  ],
+  "links": {
+    "limits_page": "https://tinyzkp.com/limits",
+    "limits_metadata": "https://tinyzkp.com/limits.json",
+    "limits_schema": "https://tinyzkp.com/schemas/tinyzkp-limits.schema.json",
+    "pricing": "https://tinyzkp.com/pricing",
+    "pricing_metadata": "https://tinyzkp.com/pricing.json",
+    "calculator": "https://tinyzkp.com/calculator",
+    "calculator_metadata": "https://tinyzkp.com/calculator.json",
+    "templates": "https://tinyzkp.com/templates",
+    "templates_metadata": "https://tinyzkp.com/templates.json",
+    "examples": "https://tinyzkp.com/examples",
+    "examples_metadata": "https://tinyzkp.com/examples.json",
+    "agent_policy": "https://tinyzkp.com/agent-policy",
+    "agent_policy_metadata": "https://tinyzkp.com/agent-policy.json",
+    "openapi": "https://tinyzkp.com/openapi.json",
+    "mcp_metadata": "https://tinyzkp.com/mcp.json",
+    "integrations": "https://tinyzkp.com/integrations",
+    "evaluation": "https://tinyzkp.com/evaluation",
+    "enterprise": "https://tinyzkp.com/enterprise",
+    "platform_rollout": "https://tinyzkp.com/platform-rollout",
+    "platform_rollout_metadata": "https://tinyzkp.com/platform-rollout.json",
+    "pilot_program": "https://tinyzkp.com/pilot",
+    "trust_center": "https://tinyzkp.com/trust",
+    "security_review": "https://tinyzkp.com/security-review",
+    "status": "https://tinyzkp.com/status",
+    "changelog": "https://tinyzkp.com/changelog"
+  }
+}

@@ -1,9 +1,9 @@
 // Cloudflare Pages Function — verifies a demo proof against api.tinyzkp.com
 // using the server-side demo API key. Rate-limited by IP.
 //
-// The playground calls this after the proof completes. Future: swap to
-// browser-side WASM verification once @tinyzkp/verify ships to npm and we
-// can host the wasm bundle locally.
+// The playground calls this after the proof completes so users can see the
+// hosted API result too. The /verify page uses the first-party browser WASM
+// verifier for local verification with no API round trip.
 //
 // Request body: {proof: {version: number, bytes: string}}
 
@@ -53,7 +53,7 @@ export async function onRequestPost(context) {
     }
     const apiKey = context.env.TINYZKP_DEMO_API_KEY;
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "demo unavailable" }), {
+      return new Response(JSON.stringify({ error: "Hosted verification fallback is temporarily unavailable." }), {
         status: 500, headers,
       });
     }

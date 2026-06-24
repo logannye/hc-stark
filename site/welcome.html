@@ -3,16 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
 <title>Welcome to TinyZKP</title>
 <meta name="description" content="Your TinyZKP account is ready. Get started with your first state-transition receipt.">
 <meta name="robots" content="noindex,follow">
 <meta property="og:title" content="Welcome to TinyZKP">
 <meta property="og:description" content="Your TinyZKP account is ready. Get started with your first state-transition receipt.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/welcome">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Welcome to TinyZKP">
+<meta name="twitter:description" content="Your TinyZKP account is ready. Get started with your first state-transition receipt.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="canonical" href="https://tinyzkp.com/welcome">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/shared.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -34,8 +42,9 @@
   --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box}
+html{overflow-x:hidden;width:100%}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column;
-  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden;width:100%}
 body::before{content:'';position:fixed;inset:0;z-index:-2;
   background-image:radial-gradient(circle,var(--border) .5px,transparent .5px);
   background-size:32px 32px;opacity:.3;pointer-events:none}
@@ -48,7 +57,7 @@ a:focus-visible,button:focus-visible{outline-offset:3px}
 ::-webkit-scrollbar-thumb:hover{background:var(--dim)}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
-.container{max-width:720px;margin:0 auto;padding:0 24px;width:100%}
+.container{max-width:720px;margin:0 auto;padding:0 24px;width:100%;min-width:0}
 
 nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(5,10,18,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
 nav .container{max-width:1100px;display:flex;align-items:center;justify-content:space-between;height:56px}
@@ -62,7 +71,7 @@ nav .container{max-width:1100px;display:flex;align-items:center;justify-content:
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px}
 .hamburger svg{width:24px;height:24px;stroke:var(--text);stroke-width:2;fill:none}
 
-main{flex:1;padding-top:100px;padding-bottom:80px}
+main{flex:1;padding-top:100px;padding-bottom:80px;min-width:0}
 
 .welcome-header{text-align:center;margin-bottom:48px}
 .welcome-header .check{width:64px;height:64px;border-radius:50%;background:var(--green-dim);
@@ -70,15 +79,28 @@ main{flex:1;padding-top:100px;padding-bottom:80px}
 .welcome-header .check svg{width:32px;height:32px;stroke:var(--green);fill:none;stroke-width:2.5}
 .welcome-header h1{font-size:28px;font-weight:800;margin-bottom:8px;color:var(--text-bright);letter-spacing:-.02em}
 .welcome-header p{color:var(--muted);font-size:16px}
+.plan-context{display:inline-flex;align-items:center;gap:8px;margin-top:16px;border:1px solid rgba(46,232,212,.2);background:var(--accent-dim);border-radius:999px;color:var(--accent);font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:7px 12px}
+.activation-context{display:none;background:rgba(12,20,36,.62);border:1px solid var(--border-light);border-radius:14px;padding:18px;margin:-24px 0 32px}
+.activation-context span{display:block;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.activation-context strong{display:block;color:var(--text-bright);font-size:16px;margin-bottom:6px}
+.activation-context p{color:var(--muted);font-size:13.5px;line-height:1.65}
+.path-picker{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:36px}
+.path-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;text-decoration:none;color:var(--text);transition:border-color .2s,transform .15s,box-shadow .2s;display:block;min-width:0}
+.path-card:hover{border-color:var(--accent);transform:translateY(-1px);text-decoration:none}
+.path-card.primary{background:linear-gradient(135deg,rgba(46,232,212,.06) 0%,var(--surface) 65%);border-color:var(--accent)}
+.path-card .kicker{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+.path-card.primary .kicker{color:var(--accent)}
+.path-card .title{font-size:15px;font-weight:700;color:var(--text-bright);margin-bottom:6px}
+.path-card .desc{color:var(--muted);font-size:13px;line-height:1.5}
 
-.step-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:18px;transition:border-color .2s}
+.step-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:18px;transition:border-color .2s;min-width:0}
 .step-card:hover{border-color:var(--border-light)}
 .step-card h3{font-size:16px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:10px;color:var(--text-bright)}
 .step-card h3 .badge{background:var(--accent-dim);border:1px solid rgba(46,232,212,.2);color:var(--accent);font-size:12px;font-weight:700;
   width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--mono)}
 .step-card p{color:var(--muted);font-size:14px;margin-bottom:12px;line-height:1.6}
 .step-card .code-box{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;
-  font-family:var(--mono);font-size:12.5px;line-height:1.7;overflow-x:auto;position:relative;white-space:pre}
+  font-family:var(--mono);font-size:12.5px;line-height:1.7;overflow-x:auto;position:relative;white-space:pre;max-width:100%;min-width:0}
 .step-card .code-box .copy-btn{position:absolute;top:8px;right:8px;background:var(--surface);border:1px solid var(--border);
   color:var(--dim);padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;font-family:var(--mono);font-weight:600;transition:all .2s}
 .step-card .code-box .copy-btn:hover{color:var(--accent);border-color:var(--accent)}
@@ -105,6 +127,7 @@ footer .right a:hover{color:var(--muted)}
     border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}
   .links.open{display:flex}
   .hamburger{display:block}
+  .path-picker{grid-template-columns:1fr}
   .next-links{flex-direction:column}
   footer .container{flex-direction:column;gap:12px;text-align:center}
   footer .right{flex-wrap:wrap;justify-content:center}
@@ -112,6 +135,21 @@ footer .right a:hover{color:var(--muted)}
 @keyframes checkPop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
 .welcome-header .check{animation:checkPop .4s ease-out}
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Welcome to TinyZKP",
+  "url": "https://tinyzkp.com/welcome",
+  "description": "Your TinyZKP account is ready. Get started with your first state-transition receipt.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 
@@ -122,13 +160,13 @@ footer .right a:hover{color:var(--muted)}
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/#pricing">Pricing</a>
+    <a href="/pricing">Pricing</a>
     <a href="/verify">Verify</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
     <a href="/account">Dashboard</a>
-    <a class="status-link" href="https://api.tinyzkp.com/healthz" target="_blank" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
+    <a class="status-link" href="/status" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
     <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
 </div>
@@ -140,22 +178,25 @@ footer .right a:hover{color:var(--muted)}
     <div class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
     <h1>You're in!</h1>
     <p>Check your email for your API key. Two paths from here &mdash; pick whichever fits your stack.</p>
+    <div class="plan-context" id="planContext">Free activation path</div>
+  </div>
+  <div class="activation-context" id="activationContext" aria-live="polite">
+    <span>Recommended first path</span>
+    <strong id="activationTitle">Start with one verifiable receipt</strong>
+    <p id="activationText">Use the path that matches the workflow that brought you here.</p>
   </div>
 
   <!-- Path picker -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:36px">
-    <a href="#path-mcp" style="background:linear-gradient(135deg,rgba(46,232,212,.06) 0%,var(--surface) 65%);
-      border:1px solid var(--accent);border-radius:12px;padding:20px;text-decoration:none;color:var(--text);
-      transition:transform .15s,box-shadow .2s;display:block">
-      <div style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px">For agent builders</div>
-      <div style="font-size:15px;font-weight:700;color:var(--text-bright);margin-bottom:6px">One-line MCP install</div>
-      <div style="color:var(--muted);font-size:13px;line-height:1.5">Claude Code, Claude Desktop, Cursor, OpenAI agents. ~30 seconds.</div>
+  <div class="path-picker">
+    <a href="#path-mcp" class="path-card primary" id="pathMcpCard">
+      <div class="kicker">For agent builders</div>
+      <div class="title">One-line MCP install</div>
+      <div class="desc">Claude Code, Claude Desktop, Cursor, OpenAI agents. ~30 seconds.</div>
     </a>
-    <a href="#path-curl" style="background:var(--surface);border:1px solid var(--border);
-      border-radius:12px;padding:20px;text-decoration:none;color:var(--text);transition:border-color .2s;display:block">
-      <div style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">For everyone else</div>
-      <div style="font-size:15px;font-weight:700;color:var(--text-bright);margin-bottom:6px">curl &middot; Python &middot; TypeScript</div>
-      <div style="color:var(--muted);font-size:13px;line-height:1.5">Four commands and your first proof verifies. ~2 minutes.</div>
+    <a href="#path-curl" class="path-card" id="pathCurlCard">
+      <div class="kicker">For everyone else</div>
+      <div class="title">curl &middot; Python &middot; TypeScript</div>
+      <div class="desc">Four commands and your first proof verifies. ~2 minutes.</div>
     </a>
   </div>
 
@@ -194,15 +235,15 @@ deltas [10, 20, 15] reaches 1045, then verify the proof.</div>
   -H "Authorization: Bearer tzk_YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'</div>
-    <p class="note">Response: <code>{"job_id":"prf_a1b2c3","status":"proving","eta_ms":1200}</code><br>Save the <code>job_id</code> &mdash; you&rsquo;ll need it in the next step.</p>
+      <p class="note">Response: <code>{"job_id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890"}</code><br>Save the <code>job_id</code> &mdash; you&rsquo;ll need it in the next step.</p>
   </div>
 
   <div class="step-card">
     <h3><span class="badge">3</span> Poll until complete</h3>
-    <p>Proof generation takes 1&ndash;5 seconds. Poll the job until <code>status</code> is <code>"completed"</code>:</p>
-    <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl https://api.tinyzkp.com/prove/prf_a1b2c3 \
+    <p>Proof generation takes 1&ndash;5 seconds. Poll the job until <code>status</code> is <code>"succeeded"</code>:</p>
+    <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl https://api.tinyzkp.com/prove/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
   -H "Authorization: Bearer tzk_YOUR_KEY"</div>
-    <p class="note">Response when done: <code>{"status":"completed","proof":{"version":4,"bytes":"0x6a8f..."}}</code><br>If <code>status</code> is still <code>"proving"</code>, wait a second and try again. Copy the entire <code>proof</code> object for the next step.</p>
+    <p class="note">Response when done: <code>{"status":"succeeded","proof":{"version":5,"bytes":[106,143,59,44,...]}}</code><br>If <code>status</code> is <code>"pending"</code> or <code>"running"</code>, wait a second and try again. Copy the entire <code>proof</code> object for the next step.</p>
   </div>
 
   <div class="step-card">
@@ -211,14 +252,22 @@ deltas [10, 20, 15] reaches 1045, then verify the proof.</div>
     <div class="code-box"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST https://api.tinyzkp.com/verify \
   -H "Authorization: Bearer tzk_YOUR_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"proof":{"version":4,"bytes":"0x6a8f..."}}'</div>
-    <p class="note">Response: <code>{"valid":true,"verified_in_ms":2.8}</code> &mdash; The verifier confirmed the transition receipt is valid.</p>
+  -d '{"proof":{"version":5,"bytes":[106,143,59,44,...]}}'</div>
+    <p class="note">Response: <code>{"ok":true,"error":null}</code> &mdash; The verifier confirmed the transition receipt is valid.</p>
   </div>
 
   <div class="next-links">
     <a href="/docs" class="next-link">
       <div class="label">Quickstart Guide</div>
       <div class="desc">The accumulator_step template, client-side verification, pricing, and batch proving</div>
+    </a>
+    <a href="/mcp" class="next-link">
+      <div class="label">MCP Install Guide</div>
+      <div class="desc">Claude Code, Cursor, and agent-runtime setup for proof tools</div>
+    </a>
+    <a href="/templates" class="next-link">
+      <div class="label">Template Catalog</div>
+      <div class="desc">Live proof statements, limits, parameters, and fit boundaries</div>
     </a>
     <a href="https://api.tinyzkp.com/docs" target="_blank" class="next-link">
       <div class="label">API Reference</div>
@@ -253,6 +302,19 @@ deltas [10, 20, 15] reaches 1045, then verify the proof.</div>
 <script>
 var params = new URLSearchParams(window.location.search);
 var email = params.get('email');
+var plan = (params.get('plan') || 'free').toLowerCase();
+var checkoutSuccess = params.get('checkout') === 'success';
+function cleanContextParam(name, fallbackName) {
+  var raw = params.get(name) || (fallbackName ? params.get(fallbackName) : '') || '';
+  return raw.replace(/[^\w .:/-]/g, '').trim().slice(0, 80);
+}
+var activationContext = {
+  source: cleanContextParam('source', 'utm_source'),
+  platform: cleanContextParam('platform'),
+  use_case: cleanContextParam('use_case'),
+  workflow: cleanContextParam('workflow'),
+  intent: cleanContextParam('intent')
+};
 if (!email) {
   try { email = sessionStorage.getItem('tinyzkp_email'); } catch(e) {}
 }
@@ -261,6 +323,56 @@ if (email) {
   try { sessionStorage.removeItem('tinyzkp_email'); } catch(e) {}
 } else {
   document.getElementById('userEmail').textContent = 'the address you signed up with';
+}
+
+var planLabels = {
+  free: 'Free activation path',
+  developer: 'Developer plan selected',
+  pro: 'Pro plan selected',
+  scale: 'Scale plan selected',
+  compute: 'Compute selected'
+};
+var planContext = document.getElementById('planContext');
+planContext.textContent = checkoutSuccess
+  ? ((planLabels[plan] || 'Paid plan selected') + ' - checkout confirmed')
+  : (planLabels[plan] || 'Activation path');
+
+var sourceLabels = {
+  integration_claude_code: 'Claude Code MCP',
+  integration_cursor: 'Cursor MCP',
+  integration_openai_agents: 'OpenAI-powered agent workflow',
+  integrations_hero: 'Integration catalog',
+  integrations_final: 'Integration catalog',
+  mcp_hero: 'MCP server',
+  templates: 'Proof template catalog'
+};
+var isAgentRoute = /claude|cursor|openai|mcp|agent/i.test([
+  activationContext.source,
+  activationContext.platform,
+  activationContext.use_case,
+  activationContext.workflow,
+  activationContext.intent
+].join(' '));
+var isTemplateRoute = activationContext.source === 'templates' || /template|accumulator/i.test(activationContext.workflow);
+var activationEl = document.getElementById('activationContext');
+var mcpCard = document.getElementById('pathMcpCard');
+var curlCard = document.getElementById('pathCurlCard');
+if (isTemplateRoute && mcpCard && curlCard) {
+  mcpCard.classList.remove('primary');
+  curlCard.classList.add('primary');
+}
+if (activationEl && (activationContext.source || activationContext.platform || activationContext.use_case || activationContext.workflow || activationContext.intent)) {
+  var routeTitle = sourceLabels[activationContext.source] || activationContext.platform || activationContext.source || 'Selected workflow';
+  document.getElementById('activationTitle').textContent = isTemplateRoute
+    ? 'Start with the accumulator_step quickstart'
+    : (isAgentRoute ? 'Install TinyZKP where your agent already works' : routeTitle);
+  var details = [];
+  if (activationContext.use_case) details.push(activationContext.use_case);
+  if (activationContext.workflow) details.push(activationContext.workflow);
+  document.getElementById('activationText').textContent = details.length
+    ? routeTitle + ': ' + details.join(' / ') + '. Use the highlighted path below to generate your first receipt.'
+    : routeTitle + ': use the highlighted path below to generate your first receipt.';
+  activationEl.style.display = 'block';
 }
 
 function copyCode(btn) {

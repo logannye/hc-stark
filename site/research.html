@@ -3,15 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#050a12">
 <title>Research &amp; Lineage - TinyZKP</title>
 <meta name="description" content="How TinyZKP reconciles its early KZG/BN254 space-efficient proof research with the current hc-stark product engine and hosted STARK proving service.">
 <meta property="og:title" content="Research &amp; Lineage - TinyZKP">
 <meta property="og:description" content="TinyZKP's current product is hc-stark: transparent STARK receipts, no trusted setup, live API, SDKs, and MCP. The older KZG/BN254 repository remains research lineage.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/research">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Research &amp; Lineage - TinyZKP">
+<meta name="twitter:description" content="TinyZKP's current product is hc-stark: transparent STARK receipts, no trusted setup, live API, SDKs, and MCP. The older KZG/BN254 repository remains research lineage.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="canonical" href="https://tinyzkp.com/research">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&amp;family=IBM+Plex+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/shared.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -54,6 +62,21 @@ td strong{color:var(--text)}
   .hero{padding-top:64px}
 }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Research & Lineage - TinyZKP",
+  "url": "https://tinyzkp.com/research",
+  "description": "How TinyZKP reconciles its early KZG/BN254 space-efficient proof research with the current hc-stark product engine and hosted STARK proving service.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 
@@ -80,7 +103,7 @@ td strong{color:var(--text)}
     <div class="container">
       <div class="eyebrow">Research lineage</div>
       <h1>One company, one thesis: space-efficient proving.</h1>
-      <p class="lede">TinyZKP grew out of research on reducing prover memory. The current commercial product is <strong>hc-stark</strong>: transparent STARK state-transition receipts with no trusted setup, a live API, offline verification, SDKs, and native MCP support. The older KZG/BN254 repository remains useful research history, but it is not the hosted production engine.</p>
+      <p class="lede">TinyZKP grew out of research on reducing prover memory. The current commercial product is <strong>hc-stark</strong>: transparent STARK state-transition receipts with no trusted setup, a live API, portable verification, SDKs, and native MCP support. The older KZG/BN254 repository remains useful research history, but it is not the hosted production engine.</p>
       <div class="actions">
         <a class="btn primary" href="https://github.com/logannye/hc-stark" target="_blank" data-track="research_outbound_click" data-source="hero" data-plan="hc-stark">Current product repo</a>
         <a class="btn" href="https://github.com/logannye/space-efficient-zero-knowledge-proofs" target="_blank" data-track="research_outbound_click" data-source="hero" data-plan="legacy-repo">Legacy research repo</a>
@@ -97,7 +120,7 @@ td strong{color:var(--text)}
         <article class="card">
           <span class="tag live">Current product</span>
           <h3>hc-stark</h3>
-          <p>The canonical TinyZKP codebase. It powers the hosted service, MCP server, API clients, browser verifier, billing integration, website, and the current state-transition receipt product. Its public positioning is transparent STARK attestation: no trusted setup, hash-based verification, and offline receipt checking.</p>
+          <p>The canonical TinyZKP codebase. It powers the hosted service, MCP server, API clients, browser verifier, billing integration, website, and the current state-transition receipt product. Its public positioning is transparent STARK attestation: no trusted setup, hash-based verification, and portable receipt checking.</p>
         </article>
         <article class="card">
           <span class="tag legacy">Research lineage</span>
@@ -151,7 +174,7 @@ td strong{color:var(--text)}
         </table>
       </div>
       <div class="callout">
-        <p><strong>Important scope note:</strong> TinyZKP's default public product is a transparent state-transition receipt. Do not read "ZKP" here as a blanket claim that every hosted proof hides private inputs. Privacy-oriented templates are treated as separate, audit-gated product work.</p>
+        <p><strong>Important scope note:</strong> TinyZKP's default public product is a transparent state-transition receipt. Do not read "ZKP" here as a blanket claim that every hosted proof hides private inputs. Privacy-oriented templates are treated as separate, review-gated product work.</p>
       </div>
     </div>
   </section>
@@ -169,7 +192,7 @@ td strong{color:var(--text)}
         <article class="step">
           <div class="num">GATED</div>
           <h3>Privacy and specialized templates</h3>
-          <p>Range, privacy-oriented, and custom templates should remain explicitly gated until deployed, documented, and audited for their exact mode.</p>
+          <p>Range, privacy-oriented, and custom templates should remain explicitly gated until deployed, documented, assigned review status, and supported for their exact mode.</p>
         </article>
         <article class="step">
           <div class="num">FUTURE</div>

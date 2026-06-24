@@ -33,6 +33,8 @@ const ALLOWED_EVENTS = new Set([
   "client_verify_share_copied",
   "research_outbound_click",
   "compute_signup_click",
+  "calculator_updated",
+  "calculator_recommendation_click",
   "contact_submitted",
   "contact_failed",
 ]);
@@ -49,6 +51,11 @@ const ALLOWED_PROPS = new Set([
   "target",
   "source",
   "reason",
+  "workflow",
+  "volume_bucket",
+  "band",
+  "external_visible",
+  "recommendation",
 ]);
 
 async function checkRateLimit(ip) {

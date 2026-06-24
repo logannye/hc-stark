@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP for OpenAI Agent Workflows - Verifiable Tool Results</title>
+<meta name="description" content="Use TinyZKP proof receipts with OpenAI-powered agent applications so tool results, backend mutations, and workflow checkpoints carry verifiable evidence.">
+<meta property="og:title" content="TinyZKP for OpenAI Agent Workflows">
+<meta property="og:description" content="Return proof receipts with OpenAI-powered tool results, backend mutations, and agent workflow checkpoints.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:url" content="https://tinyzkp.com/integrations/openai-agents">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP for OpenAI Agent Workflows">
+<meta name="twitter:description" content="Return proof receipts with OpenAI-powered tool results, backend mutations, and agent workflow checkpoints.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/integrations/openai-agents">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "name": "TinyZKP for OpenAI Agent Workflows",
+  "url": "https://tinyzkp.com/integrations/openai-agents",
+  "description": "How to return TinyZKP proof receipts with OpenAI-powered agent tool results.",
+  "publisher": {"@type":"Organization","name":"TinyZKP","url":"https://tinyzkp.com"}
+}
+</script>
+<style>
+main{padding:112px 0 76px}.eyebrow{font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}h1{font-size:clamp(34px,5vw,58px);line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);max-width:940px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:840px}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}.band{border-top:1px solid var(--border);padding-top:34px;margin-top:44px}.band h2{font-size:clamp(24px,3vw,34px);line-height:1.18;color:var(--text-bright);letter-spacing:-.02em;margin-bottom:12px}.band p{color:var(--muted);font-size:15px;line-height:1.75;max-width:860px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:20px}.grid>*{min-width:0}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0}.box h3{color:var(--text-bright);font-size:18px;margin-bottom:8px}.box p,.box li{color:var(--muted);font-size:13.5px;line-height:1.7}.box ul{padding-left:18px}.code{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:18px;overflow:auto;margin-top:16px}.code pre{font-family:var(--mono);font-size:12.5px;line-height:1.8;color:var(--text);white-space:pre}.note{border:1px solid var(--border-light);background:var(--surface);border-radius:12px;padding:18px;margin-top:18px;color:var(--muted);font-size:14px;line-height:1.7}.box a,.note a,.band p a{text-decoration:underline;text-underline-offset:4px}@media(max-width:900px){.grid,.grid.two{grid-template-columns:1fr}.cta-row{display:grid;grid-template-columns:1fr}.cta{width:100%}}
+</style>
+</head>
+<body>
+<nav><div class="container"><a href="/" class="logo"><span>Tiny</span>ZKP</a><button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button><div class="links"><a href="/mcp">MCP</a><a href="/integrations">Integrations</a><a href="/agent-policy">Policy</a><a href="/pricing">Pricing</a><a href="/signup" class="nav-cta">Get API Key</a></div></div></nav>
+<main><div class="container">
+  <div class="eyebrow">OpenAI-powered agent workflows</div>
+  <h1>Return proof receipts with important tool results.</h1>
+  <p class="lede">OpenAI-powered agent applications can call tools, orchestrate workflows, and return structured outputs. TinyZKP fits after the state-changing tool call: your backend proves the supported transition, then the agent returns the result plus a receipt URL that another human, service, or agent can verify.</p>
+  <div class="cta-row"><a class="cta" href="/signup?source=integration_openai_agents&platform=openai_agents&use_case=AI-agent%20state%20receipts&workflow=Backend%20tool%20receipt" data-track="openai_agents_signup_click" data-source="integration_openai_agents">Get API key</a><a class="cta secondary" href="/agent-policy">Adopt agent policy</a><a class="cta secondary" href="/openapi.json">OpenAPI contract</a><a class="cta secondary" href="/recipes">Copy recipes</a></div>
+
+  <section class="band grid two">
+    <div>
+      <h2>Backend tool pattern</h2>
+      <p>Keep proof generation in your server-side tool implementation. The agent should receive a structured result that includes the business output, proof statement, receipt URL, and verifier URL.</p>
+      <div class="code"><pre>async function finalizeCheckpoint(input) {
+  const businessResult = await updateState(input);
+  const receipt = await tinyzkp.proveTemplate("accumulator_step", {
+    initial: input.initial,
+    final: businessResult.final,
+    deltas: businessResult.deltas
+  });
+  return {
+    result: businessResult,
+    receipt_url: receipt.verify_url,
+    proof_boundary: "initial + sum(deltas) = final"
+  };
+}</pre></div>
+    </div>
+    <div>
+      <h2>Agent output contract</h2>
+      <p>Use structured output so the receipt is not buried in prose. Downstream systems should be able to parse the result, verify the receipt, and understand the boundary.</p>
+      <div class="code"><pre>{
+  "action": "checkpoint_finalized",
+  "status": "succeeded",
+  "receipt_url": "https://tinyzkp.com/verify#proof=...",
+  "verifier": "https://tinyzkp.com/verify",
+  "proof_boundary": "encoded state transition only"
+}</pre></div>
+      <p class="note">OpenAI's current developer docs include Agents SDK, tool use, structured output, and MCP/connectors surfaces. TinyZKP should sit behind the tool boundary or connector layer, not inside prompt-only reasoning.</p>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Best first OpenAI-powered workflows</h2>
+    <div class="grid">
+      <article class="box"><h3>Customer-visible tool results</h3><p>Return a receipt when an agent updates a quota, balance, entitlement, workflow checkpoint, or visible status.</p></article>
+      <article class="box"><h3>Supervisor-agent verification</h3><p>Have a second agent verify receipts before relying on another agent's output in a chain of work.</p></article>
+      <article class="box"><h3>Audit and support evidence</h3><p>Store receipts beside support tickets, review logs, and operational checkpoints so teams can verify without replay.</p></article>
+    </div>
+  </section>
+
+  <section class="band grid two">
+    <article class="box"><h3>Use TinyZKP when</h3><ul><li>The tool mutates durable state.</li><li>A customer, auditor, service, or supervisor agent will rely on the result.</li><li>Manual replay would be slow or unavailable.</li><li>The proof statement fits a supported template or a reviewed pilot path.</li></ul></article>
+    <article class="box"><h3>Skip TinyZKP when</h3><ul><li>The answer is draft prose or brainstorming.</li><li>No one will inspect the receipt.</li><li>The needed claim is not encoded by the proof statement.</li><li>The workflow requires unsupported private-input or arbitrary program proofs.</li></ul></article>
+  </section>
+
+  <section class="band"><h2>Buying path</h2><p>Use Free for evaluation, Developer for one backend tool, Pro when receipts become recurring and visible, and pilot review when statement design or verifier placement needs a production decision.</p><div class="cta-row"><a class="cta" href="/fit">Find route</a><a class="cta secondary" href="/pilot">Plan a pilot</a><a class="cta secondary" href="/trust">Review trust center</a></div></section>
+</div></main>
+<footer><div class="container"><div class="left">&copy; 2026 TinyZKP</div><div class="right"><a href="/integrations">Integrations</a><a href="/mcp">MCP</a><a href="/agent-policy">Agent Policy</a><a href="/trust">Trust</a><a href="/privacy">Privacy</a><a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a></div></div></footer>
+<script defer src="/analytics.js"></script>
+</body>
+</html>

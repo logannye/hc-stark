@@ -2,3 +2,10 @@ User-agent: *
 Allow: /
 
 Sitemap: https://tinyzkp.com/sitemap.xml
+Host: tinyzkp.com
+
+# Agent and AI-reader discovery
+# Human-readable: https://tinyzkp.com
+# LLM-readable: https://tinyzkp.com/llms.txt
+# Machine-readable site index: https://tinyzkp.com/discovery.json
+# MCP server card: https://tinyzkp.com/.well-known/mcp/server-card.json

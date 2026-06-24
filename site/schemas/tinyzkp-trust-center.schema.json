@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/tinyzkp-trust-center.schema.json",
+  "title": "TinyZKP Trust Center",
+  "description": "Machine-readable trust-center metadata for TinyZKP procurement, security review, and agent discovery.",
+  "type": "object",
+  "required": [
+    "name",
+    "url",
+    "generated_at",
+    "summary",
+    "product_scope",
+    "security_status",
+    "data_handling",
+    "review_links"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "product_scope": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "security_status": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "external_cryptography_audit": {
+          "type": "string"
+        },
+        "soc2": {
+          "type": "string"
+        },
+        "iso27001": {
+          "type": "string"
+        },
+        "responsible_disclosure_email": {
+          "type": "string"
+        },
+        "security_txt": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "data_handling": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "review_links": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "production_readiness_guidance": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

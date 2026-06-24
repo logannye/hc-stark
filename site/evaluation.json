@@ -1,0 +1,224 @@
+{
+  "$schema": "https://tinyzkp.com/schemas/tinyzkp-evaluation.schema.json",
+  "name": "TinyZKP Evaluation Kit",
+  "url": "https://tinyzkp.com/evaluation",
+  "generated_at": "2026-06-24",
+  "summary": "Business-case and technical evaluation kit for deciding whether TinyZKP proof receipts belong in one agent, API, audit, or Compute workflow.",
+  "evaluation_positioning": {
+    "primary_question": "Does a portable proof receipt change the trust boundary for one consequential state transition?",
+    "best_for": [
+      "AI agent actions with customer, money, record, permission, or workflow consequences",
+      "Backend API mutations where a customer or downstream service benefits from verification",
+      "Audit, reserve, liability, inventory, or reconciliation checkpoints",
+      "Long supported state-transition traces where high-RAM prover operations are the alternative"
+    ],
+    "not_for": [
+      "Generic private-input zero-knowledge claims without a documented template",
+      "Arbitrary zkVM, zkML, rollup, or on-chain verifier availability as if already self-serve",
+      "Workflows where no third party, customer, auditor, service, or agent supervisor will inspect the receipt",
+      "Off-chain truth claims that are not encoded into the proven statement"
+    ]
+  },
+  "evaluation_steps": [
+    {
+      "phase": "00-05 minutes",
+      "action": "Choose one workflow and name the verifier who should trust the receipt.",
+      "output": "Workflow owner, verifier, and business decision are explicit."
+    },
+    {
+      "phase": "05-10 minutes",
+      "action": "Check whether the statement fits the live template or needs pilot review.",
+      "output": "Template fit, design-review need, and data boundary are known."
+    },
+    {
+      "phase": "10-18 minutes",
+      "action": "Generate or inspect a receipt and verify it through the public verifier or API.",
+      "output": "Receipt artifact and verifier result exist."
+    },
+    {
+      "phase": "18-25 minutes",
+      "action": "Estimate monthly volume, trace-size band, plan fit, and Compute applicability.",
+      "output": "Expected cost, cap behavior, and commercial path are documented."
+    },
+    {
+      "phase": "25-30 minutes",
+      "action": "Choose start free, upgrade self-serve, run pilot, request enterprise, or defer.",
+      "output": "Go/no-go decision and next owner are clear."
+    }
+  ],
+  "stakeholders": [
+    {
+      "role": "Product owner",
+      "cares_about": "Whether a receipt changes trust, sales, support, audit, or customer experience.",
+      "assets": ["https://tinyzkp.com/fit", "https://tinyzkp.com/use-cases", "https://tinyzkp.com/receipts"]
+    },
+    {
+      "role": "Engineer",
+      "cares_about": "How to generate, attach, poll, and verify receipts without rebuilding the workflow.",
+      "assets": ["https://tinyzkp.com/integrations", "https://tinyzkp.com/agent-policy", "https://tinyzkp.com/recipes", "https://tinyzkp.com/openapi.json"]
+    },
+    {
+      "role": "Security",
+      "cares_about": "What data enters TinyZKP, what is public, and what is not claimed by default.",
+      "assets": ["https://tinyzkp.com/trust", "https://tinyzkp.com/security-review"]
+    },
+    {
+      "role": "Finance",
+      "cares_about": "Whether receipt cost is lower than replay, audit exports, support work, or prover operations.",
+      "assets": ["https://tinyzkp.com/roi", "https://tinyzkp.com/calculator", "https://tinyzkp.com/pricing.json"]
+    },
+    {
+      "role": "Procurement",
+      "cares_about": "Vendor review, support path, release policy, pricing, privacy, and security packet completeness.",
+      "assets": ["https://tinyzkp.com/enterprise", "https://tinyzkp.com/changelog", "https://tinyzkp.com/trust.json"]
+    }
+  ],
+  "decision_criteria": [
+    {
+      "criterion": "Verifier independence",
+      "pass_signal": "A recipient needs to verify the encoded state transition without trusting the source system.",
+      "route": "Proceed with receipt evaluation."
+    },
+    {
+      "criterion": "Receipt visibility",
+      "pass_signal": "The receipt URL, proof object, badge, or agent envelope appears where the verifier will see it.",
+      "route": "Proceed with integration planning."
+    },
+    {
+      "criterion": "Statement fit",
+      "pass_signal": "The live template covers the workflow or the custom statement is narrow enough for pilot review.",
+      "route": "Use self-serve if live; use pilot if custom."
+    },
+    {
+      "criterion": "Data boundary",
+      "pass_signal": "Transparent parameters contain only public or approved values.",
+      "route": "Proceed; otherwise pause for privacy review."
+    },
+    {
+      "criterion": "Economic replacement",
+      "pass_signal": "The receipt replaces replay, manual evidence, support work, audit exports, or prover operations.",
+      "route": "Proceed with calculator and buying path."
+    }
+  ],
+  "roi_drivers": [
+    {
+      "driver": "Replay reduction",
+      "economic_reason": "Reviewers can verify the encoded transition without accessing or replaying the producer system.",
+      "evidence": "Receipt artifact and verifier result."
+    },
+    {
+      "driver": "Agent accountability",
+      "economic_reason": "Agent outputs can carry machine-checkable proof for approvals, payments, records, and checkpoints.",
+      "evidence": "Agent receipt envelope or receipt URL attached to output."
+    },
+    {
+      "driver": "Prover operations avoidance",
+      "economic_reason": "Long traces can move away from high-RAM workers, custom queues, segmentation, and on-call ownership.",
+      "evidence": "Compute estimate and self-hosting comparison."
+    },
+    {
+      "driver": "Procurement acceleration",
+      "economic_reason": "Public trust, pricing, schemas, OpenAPI, changelog, and evaluation metadata reduce bespoke review cycles.",
+      "evidence": "Forwardable review packet links."
+    }
+  ],
+  "go_no_go_gates": {
+    "go": [
+      "A real verifier benefits from checking the receipt.",
+      "The workflow can be encoded as a supported state transition or scoped pilot.",
+      "Transparent public parameters are acceptable for the first rollout.",
+      "Expected cost is clearer than replay, manual evidence, or prover operations."
+    ],
+    "review_first": [
+      "Custom predicate or unsupported state machine.",
+      "Private-input zero-knowledge requirement.",
+      "Restricted runtime, on-chain verifier, reserved capacity, or contractual support need.",
+      "Long trace near operational limits or unusual latency requirements."
+    ],
+    "no_go": [
+      "No external or downstream verifier will inspect the receipt.",
+      "The desired claim is off-chain truth that is not encoded into the statement.",
+      "The buyer needs generic zkVM, zkML, rollup, or blanket privacy claims as live self-serve product.",
+      "A signed log or hash chain fully satisfies the trust model."
+    ]
+  },
+  "evidence_to_collect": [
+    "Receipt URL, proof object, or agent receipt envelope from the target workflow.",
+    "Fit Finder summary showing workflow, verifier, receipt placement, data boundary, expected volume, and recommended route.",
+    "Verifier result from public verifier, API verifier, SDK, CLI, or compatible WASM path.",
+    "Plain-language statement boundary describing what the receipt proves and does not prove.",
+    "Monthly volume, trace-size band, plan recommendation, spend cap, or Compute estimate.",
+    "Security and procurement packet links for data handling, proof scope, status, schemas, pricing, and release policy.",
+    "Rollout decision: start free, upgrade self-serve, run pilot, request reserved capacity, or defer."
+  ],
+  "recommended_paths": [
+    {
+      "trigger": "Internal demo or early agent workflow",
+      "path": "Free",
+      "next_url": "https://tinyzkp.com/signup"
+    },
+    {
+      "trigger": "One production pilot",
+      "path": "Developer",
+      "next_url": "https://tinyzkp.com/signup?plan=developer"
+    },
+    {
+      "trigger": "Recurring customer-visible receipts",
+      "path": "Pro or Scale",
+      "next_url": "https://tinyzkp.com/pricing"
+    },
+    {
+      "trigger": "Long supported trace or backfill",
+      "path": "Compute",
+      "next_url": "https://tinyzkp.com/signup?plan=compute"
+    },
+    {
+      "trigger": "Custom statement, procurement, support commitments, or reserved capacity",
+      "path": "$5,000 Production Pilot then Enterprise",
+      "next_url": "https://tinyzkp.com/pilot"
+    },
+    {
+      "trigger": "Agent platform, IDE, workflow engine, or marketplace rollout",
+      "path": "$5,000 Production Pilot then sales-assisted platform rollout from $499/month minimum plus usage",
+      "next_url": "https://tinyzkp.com/platform-rollout"
+    }
+  ],
+  "links": {
+    "evaluation_page": "https://tinyzkp.com/evaluation",
+    "evaluation_metadata": "https://tinyzkp.com/evaluation.json",
+    "fit": "https://tinyzkp.com/fit",
+    "fit_metadata": "https://tinyzkp.com/fit.json",
+    "try": "https://tinyzkp.com/try",
+    "examples": "https://tinyzkp.com/examples",
+    "examples_metadata": "https://tinyzkp.com/examples.json",
+    "verify": "https://tinyzkp.com/verify",
+    "receipts": "https://tinyzkp.com/receipts",
+    "templates": "https://tinyzkp.com/templates",
+    "templates_metadata": "https://tinyzkp.com/templates.json",
+    "agent_policy": "https://tinyzkp.com/agent-policy",
+    "agent_policy_metadata": "https://tinyzkp.com/agent-policy.json",
+    "limits": "https://tinyzkp.com/limits",
+    "limits_metadata": "https://tinyzkp.com/limits.json",
+    "integrations": "https://tinyzkp.com/integrations",
+    "pricing": "https://tinyzkp.com/pricing",
+    "pricing_metadata": "https://tinyzkp.com/pricing.json",
+    "roi": "https://tinyzkp.com/roi",
+    "roi_metadata": "https://tinyzkp.com/roi.json",
+    "agent_platforms": "https://tinyzkp.com/agent-platforms",
+    "paid_pilot": "https://tinyzkp.com/pilot",
+    "platform_rollout": "https://tinyzkp.com/platform-rollout",
+    "platform_rollout_metadata": "https://tinyzkp.com/platform-rollout.json",
+    "calculator": "https://tinyzkp.com/calculator",
+    "calculator_metadata": "https://tinyzkp.com/calculator.json",
+    "pilot_program": "https://tinyzkp.com/pilot",
+    "enterprise": "https://tinyzkp.com/enterprise",
+    "enterprise_metadata": "https://tinyzkp.com/enterprise.json",
+    "trust_center": "https://tinyzkp.com/trust",
+    "trust_metadata": "https://tinyzkp.com/trust.json",
+    "security_review": "https://tinyzkp.com/security-review",
+    "changelog": "https://tinyzkp.com/changelog",
+    "changelog_metadata": "https://tinyzkp.com/changelog.json",
+    "openapi": "https://tinyzkp.com/openapi.json",
+    "llms": "https://tinyzkp.com/llms.txt"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/tinyzkp-receipt.schema.json",
+  "title": "TinyZKP Receipt",
+  "description": "A portable TinyZKP proof receipt for a transparent state-transition statement.",
+  "type": "object",
+  "required": ["template", "statement", "proof"],
+  "additionalProperties": true,
+  "properties": {
+    "template": {
+      "type": "string",
+      "description": "The TinyZKP proof template used to mint the receipt.",
+      "examples": ["accumulator_step"]
+    },
+    "statement": {
+      "type": "object",
+      "description": "The public statement encoded by the proof template.",
+      "additionalProperties": true,
+      "properties": {
+        "initial": { "type": "integer" },
+        "final": { "type": "integer" },
+        "deltas": {
+          "type": "array",
+          "items": { "type": "integer" }
+        }
+      }
+    },
+    "proof": {
+      "type": "object",
+      "required": ["version", "bytes"],
+      "additionalProperties": true,
+      "properties": {
+        "version": {
+          "type": "integer",
+          "description": "TinyZKP proof-format version. Current production examples use v5.",
+          "minimum": 5
+        },
+        "bytes": {
+          "type": "array",
+          "description": "Proof bytes encoded as unsigned byte values.",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          }
+        }
+      }
+    },
+    "verify_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional TinyZKP public verifier link."
+    },
+    "job_id": {
+      "type": "string",
+      "description": "Optional hosted proving job identifier."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional receipt creation timestamp."
+    }
+  }
+}

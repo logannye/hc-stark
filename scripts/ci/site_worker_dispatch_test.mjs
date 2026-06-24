@@ -117,6 +117,24 @@ async function postFreeSignup(worker, body, envOverrides = {}, ip = "203.0.113.3
   return { response, env };
 }
 
+async function postContact(worker, body, envOverrides = {}, ip = "203.0.113.50") {
+  const env = siteEnv(envOverrides);
+  const response = await worker.fetch(
+    new Request("https://tinyzkp.com/api/contact", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Origin": "https://tinyzkp.com",
+        "cf-connecting-ip": ip,
+      },
+      body: JSON.stringify(body),
+    }),
+    env,
+    { waitUntil() {} },
+  );
+  return { response, env };
+}
+
 function stripeParams(call) {
   assert.equal(call.url, "https://api.stripe.com/v1/checkout/sessions");
   assert.equal(call.init.method, "POST");
@@ -659,7 +677,15 @@ async function main() {
         async (calls) => {
           const { response, env } = await postCheckout(
             worker,
-            { email: " User@Example.com ", plan: " Developer " },
+            {
+              email: " User@Example.com ",
+              plan: " Developer ",
+              source: "integration_cursor",
+              platform: "cursor",
+              use_case: "AI-agent state receipts",
+              workflow: "Cursor MCP",
+              intent: "developer_signup",
+            },
             {},
             "203.0.113.20",
           );
@@ -675,9 +701,28 @@ async function main() {
           assert.equal(params.get("line_items[3][price]"), null);
           assert.equal(params.get("metadata[plan]"), "developer");
           assert.equal(params.get("metadata[cadence]"), "monthly");
+          assert.equal(params.get("metadata[source]"), "integration_cursor");
+          assert.equal(params.get("metadata[platform]"), "cursor");
+          assert.equal(params.get("metadata[use_case]"), "AI-agent state receipts");
+          assert.equal(params.get("metadata[workflow]"), "Cursor MCP");
+          assert.equal(params.get("metadata[intent]"), "developer_signup");
           assert.equal(params.get("subscription_data[metadata][plan]"), "developer");
-          assert.equal(params.get("success_url"), "https://tinyzkp.com/welcome?plan=developer&cadence=monthly");
-          assert.equal(params.get("cancel_url"), "https://tinyzkp.com/signup?cancelled=true");
+          assert.equal(params.get("subscription_data[metadata][source]"), "integration_cursor");
+          const successUrl = new URL(params.get("success_url"));
+          assert.equal(successUrl.origin + successUrl.pathname, "https://tinyzkp.com/welcome");
+          assert.equal(successUrl.searchParams.get("checkout"), "success");
+          assert.equal(successUrl.searchParams.get("plan"), "developer");
+          assert.equal(successUrl.searchParams.get("cadence"), "monthly");
+          assert.equal(successUrl.searchParams.get("source"), "integration_cursor");
+          assert.equal(successUrl.searchParams.get("platform"), "cursor");
+          assert.equal(successUrl.searchParams.get("use_case"), "AI-agent state receipts");
+          assert.equal(successUrl.searchParams.get("workflow"), "Cursor MCP");
+          assert.equal(successUrl.searchParams.get("intent"), "developer_signup");
+          const cancelUrl = new URL(params.get("cancel_url"));
+          assert.equal(cancelUrl.origin + cancelUrl.pathname, "https://tinyzkp.com/signup");
+          assert.equal(cancelUrl.searchParams.get("cancelled"), "true");
+          assert.equal(cancelUrl.searchParams.get("plan"), "developer");
+          assert.equal(cancelUrl.searchParams.get("source"), "integration_cursor");
           assert.deepEqual(env.ASSETS.calls, []);
           assert.equal(calls.length, 1);
         },
@@ -703,7 +748,7 @@ async function main() {
           assert.equal(params.get("line_items[1][price]"), null);
           assert.equal(params.get("metadata[plan]"), "compute");
           assert.equal(params.get("subscription_data[metadata][plan]"), "compute");
-          assert.equal(params.get("success_url"), "https://tinyzkp.com/welcome?plan=compute&cadence=monthly");
+          assert.equal(params.get("success_url"), "https://tinyzkp.com/welcome?checkout=success&plan=compute&cadence=monthly");
         },
       );
     }
@@ -774,7 +819,12 @@ async function main() {
           assert.equal(String(input), "https://webhook.test/provision-free");
           assert.equal(init.method, "POST");
           assert.equal(init.headers["X-Internal-Secret"], "internal-secret");
-          assert.deepEqual(JSON.parse(init.body), { email: "free@example.com", plan: "free" });
+          assert.deepEqual(JSON.parse(init.body), {
+            email: "free@example.com",
+            plan: "free",
+            source: "templates",
+            workflow: "accumulator_step",
+          });
           return new Response(JSON.stringify({
             ok: true,
             dashboard_token: "c".repeat(64),
@@ -788,7 +838,7 @@ async function main() {
         async (calls) => {
           const { response, env } = await postFreeSignup(
             worker,
-            { email: " Free@Example.com " },
+            { email: " Free@Example.com ", source: "templates", workflow: "accumulator_step" },
             {},
             "203.0.113.31",
           );
@@ -822,6 +872,68 @@ async function main() {
             error: "Account creation failed.",
             upstream_status: 503,
           });
+        },
+      );
+    }
+
+    {
+      await withFetchMock(
+        async (input, init) => {
+          assert.equal(String(input), "https://webhook.test/send-contact");
+          assert.equal(init.method, "POST");
+          assert.equal(init.headers["X-Internal-Secret"], "internal-secret");
+          assert.deepEqual(JSON.parse(init.body), {
+            name: "Agent Buyer",
+            email: "agent@example.com",
+            category: "Platform Rollout",
+            message: "We want proof receipts in our agent platform.",
+            qualification: {
+              source: "integration_openai_agents",
+              platform: "openai_agents",
+              plan: "scale",
+              workflow: "Backend tool receipt",
+              intent: "platform_rollout",
+              current_path: "/contact",
+              referrer: "https://tinyzkp.com/integrations/openai-agents",
+              use_case: "AI-agent state receipts",
+              verification_environment: "AI agent / MCP",
+            },
+          });
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        },
+        async (calls) => {
+          const { response, env } = await postContact(
+            worker,
+            {
+              name: "Agent Buyer",
+              email: "Agent@Example.com",
+              category: "Platform Rollout",
+              message: "We want proof receipts in our agent platform.",
+              context: {
+                source: "integration_openai_agents",
+                platform: "openai_agents",
+                current_path: "/contact",
+                referrer: "https://tinyzkp.com/integrations/openai-agents",
+              },
+              qualification: {
+                plan: "scale",
+                workflow: "Backend tool receipt",
+                intent: "platform_rollout",
+                use_case: "AI-agent state receipts",
+                verification_environment: "AI agent / MCP",
+                ignored: "drop me",
+              },
+            },
+            {},
+            "203.0.113.51",
+          );
+          assert.equal(response.status, 200);
+          assert.deepEqual(await readJson(response), { ok: true });
+          assert.equal(calls.length, 1);
+          assert.deepEqual(env.ASSETS.calls, []);
         },
       );
     }

@@ -1,6 +1,6 @@
 # TinyZKP MCP Server
 
-[Model Context Protocol](https://modelcontextprotocol.io) server for ZK-STARK proof generation and verification. Works with Claude Desktop, Claude Code, Cursor, and any MCP-compatible client.
+[Model Context Protocol](https://modelcontextprotocol.io) server for TinyZKP proof receipts. It lets Claude Desktop, Claude Code, Cursor, and MCP-compatible clients generate, poll, fetch, summarize, and verify transparent STARK state-transition receipts for supported workflows.
 
 ## Install
 
@@ -60,17 +60,16 @@ Add to `.cursor/mcp.json`:
 
 | Tool | Description |
 |---|---|
-| `prove` | Generate a ZK-STARK proof for a program |
-| `verify` | Verify a ZK-STARK proof |
-| `prove_status` | Check status of a prove job |
-| `list_jobs` | List recent prove jobs |
-| `healthz` | Check server health |
-| `list_programs` | List available built-in programs |
-| `describe_program` | Get details about a built-in program |
-| `list_workloads` | List available workloads |
-| `submit_workload` | Submit a named workload for proving |
-| `workload_status` | Check status of a workload job |
+| `list_templates` | List supported proof templates with lifecycle status, summaries, and tags. |
+| `describe_template` | Return the statement boundary, parameter schema, and example for a template. |
+| `prove_template` | Submit a supported proof-template job and receive a job ID. |
+| `poll_job` | Poll a submitted proof job until it succeeds or fails. |
+| `get_proof` | Fetch the proof bytes for a completed job. |
+| `get_proof_summary` | Fetch a compact, agent-friendly receipt summary for a completed job. |
+| `verify_proof` | Verify a TinyZKP proof receipt. Verification is free. |
+| `list_workloads` | List registered workload IDs for supported long-running or reviewed proving workflows. |
+| `prove_workload` | Submit a supported workload or Compute proof job. |
 
 ## Get an API Key
 
-Visit [tinyzkp.com](https://tinyzkp.com) to sign up. Verification is free — no API key required.
+Visit [tinyzkp.com/signup](https://tinyzkp.com/signup) to sign up. Verification is free and does not require an API key. Do not put secrets, private customer data, or raw credentials into transparent receipt parameters; use [the agent policy](https://tinyzkp.com/agent-policy) for when to mint, attach, verify, skip, or escalate receipts.

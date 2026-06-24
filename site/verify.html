@@ -3,17 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Verify a TinyZKP Receipt — Client-Side WASM</title>
-<meta name="description" content="Verify a TinyZKP state-transition receipt in your browser with the WASM verifier. No API key, no TinyZKP server round trip.">
+<meta name="theme-color" content="#050a12">
+<title>Verify a TinyZKP Receipt — WASM First, Hosted Fallback</title>
+<meta name="description" content="Verify a TinyZKP state-transition receipt with a first-party WASM verifier when compatible, or use the hosted verifier fallback for current production receipts. No API key required.">
 <meta property="og:title" content="Verify a TinyZKP Receipt">
-<meta property="og:description" content="Paste a proof JSON object or open a share link. Verification runs client-side with @tinyzkp/verify.">
+<meta property="og:description" content="Paste a proof JSON object or open a share link. TinyZKP verifies with first-party WASM where compatible and a hosted verifier fallback for current v5 receipts.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:url" content="https://tinyzkp.com/verify">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Verify a TinyZKP Receipt">
+<meta name="twitter:description" content="Paste a proof JSON object or open a share link. TinyZKP verifies with first-party WASM where compatible and a hosted verifier fallback for current v5 receipts.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="canonical" href="https://tinyzkp.com/verify">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/shared.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -52,10 +58,25 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .note{color:var(--dim);font-size:12.5px;margin-top:12px;line-height:1.6}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
 .mini{background:rgba(12,20,36,.65);border:1px solid var(--border);border-radius:10px;padding:16px}
-.mini h3{font-size:14px;color:var(--text-bright);margin-bottom:6px}.mini p{font-size:13px;color:var(--muted);line-height:1.6}
+.mini h2{font-size:14px;color:var(--text-bright);margin-bottom:6px}.mini p{font-size:13px;color:var(--muted);line-height:1.6}
 footer{padding:32px 0;border-top:1px solid var(--border);margin-top:48px}.foot{max-width:1100px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;color:var(--dim);font-size:12.5px}.foot .right{display:flex;gap:20px;flex-wrap:wrap}.foot a{color:var(--dim)}
 @media(max-width:768px){.links{display:none;position:absolute;top:56px;left:0;right:0;background:var(--bg);border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}.links.open{display:flex}.hamburger{display:block}.split{grid-template-columns:1fr}.foot{flex-direction:column;text-align:center}.foot .right{justify-content:center}}
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Verify a TinyZKP Receipt — WASM First, Hosted Fallback",
+  "url": "https://tinyzkp.com/verify",
+  "description": "Verify a TinyZKP state-transition receipt with a first-party WASM verifier when compatible, or use the hosted verifier fallback for current production receipts. No API key required.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 <nav>
@@ -66,7 +87,7 @@ footer{padding:32px 0;border-top:1px solid var(--border);margin-top:48px}.foot{m
   </button>
   <div class="links">
     <a href="/try">Try</a>
-    <a href="/#pricing">Pricing</a>
+    <a href="/pricing">Pricing</a>
     <a href="/docs">Quickstart</a>
     <a href="/compute">Compute</a>
     <a href="/signup" class="nav-cta">Get API Key</a>
@@ -77,30 +98,30 @@ footer{padding:32px 0;border-top:1px solid var(--border);margin-top:48px}.foot{m
 <main>
 <div class="container">
   <div class="hero">
-    <div class="pill">Client-side verification</div>
+    <div class="pill">WASM first &middot; hosted fallback</div>
     <h1>Verify a TinyZKP receipt.</h1>
-    <p>Paste a proof JSON object or open a shared <code>#proof=...</code> link. The WASM verifier runs in your browser; it does not call the TinyZKP API and does not need an API key.</p>
+    <p>Paste a proof JSON object or open a shared <code>#proof=...</code> link. This page tries the version-pinned first-party WASM verifier first. If the local verifier package is behind the current production proof format, it falls back to TinyZKP's hosted verifier. No API key is required.</p>
   </div>
 
   <div class="panel">
     <label for="proof-input">Proof JSON</label>
-    <textarea id="proof-input" spellcheck="false" placeholder='Paste {"version":4,"bytes":[...]} or {"proof":{"version":4,"bytes":[...]}}'></textarea>
+    <textarea id="proof-input" spellcheck="false" placeholder='Paste {"version":5,"bytes":[...]} or {"proof":{"version":5,"bytes":[...]}}'></textarea>
     <div class="actions">
       <button id="verify-btn" onclick="verifyNow()">Verify proof</button>
       <button class="secondary" onclick="makeShareLink()">Copy share link</button>
       <button class="secondary" onclick="clearProof()">Clear</button>
     </div>
     <div class="result" id="result"><span class="muted">Waiting for a proof.</span></div>
-    <p class="note">This page loads <code>@tinyzkp/verify</code> as a browser WASM module. Once loaded, verification is local to the browser. Do not use this page as evidence that a future or gated template is production-ready; it only checks the proof bytes you provide.</p>
+    <p class="note">Local verification uses the bundled <code>@tinyzkp/verify</code> browser module from <code>/vendor/tinyzkp-verify/</code>. Hosted fallback sends the pasted proof bytes to TinyZKP's verification endpoint and is used when the browser verifier is older than the current production receipt format. Do not use this page as evidence that a future or gated template is production-ready; it only checks the proof bytes you provide.</p>
   </div>
 
   <div class="split">
     <div class="mini">
-      <h3>What verification means</h3>
-      <p>A valid receipt means the proof bytes satisfy the TinyZKP verifier for the statement encoded in the proof. The verifier does not re-run your system.</p>
+      <h2>What verification means</h2>
+      <p>A valid receipt means the proof bytes satisfy the TinyZKP verifier for the statement encoded in the proof. Verification does not re-run your system.</p>
     </div>
     <div class="mini">
-      <h3>What to send</h3>
+      <h2>What to send</h2>
       <p>Send the full proof object returned by <code>/prove/:job_id</code>, or use the share link generated after a browser demo proof completes.</p>
     </div>
   </div>
@@ -154,7 +175,7 @@ function normalizeProof(value) {
 
 async function loadVerifier() {
   if (!wasmModulePromise) {
-    wasmModulePromise = import('https://esm.sh/@tinyzkp/verify').then(async (mod) => {
+    wasmModulePromise = import('/vendor/tinyzkp-verify/tinyzkp-verify.js').then(async (mod) => {
       if (typeof mod.default === 'function') await mod.default();
       return mod;
     });
@@ -164,6 +185,17 @@ async function loadVerifier() {
 
 function setResult(html) {
   result.innerHTML = html;
+}
+
+async function hostedVerify(proof) {
+  const resp = await fetch('/api/demo-verify', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ proof })
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || 'Hosted verification failed.');
+  return data;
 }
 
 window.verifyNow = async function verifyNow() {
@@ -180,12 +212,26 @@ window.verifyNow = async function verifyNow() {
     const elapsed = Math.max(0, performance.now() - t0).toFixed(2);
     const ok = !!(out && (out.ok || out.valid));
     if (ok) {
-      setResult('<span class="ok">VALID</span>\\n<span class="muted">Verified locally in ' + elapsed + ' ms.</span>');
+      setResult('<span class="ok">VALID</span>\\n<span class="muted">Verified locally with first-party WASM in ' + elapsed + ' ms.</span>');
       if (window.tinyzkpTrack) window.tinyzkpTrack('client_verify_succeeded',{duration_ms:Number(elapsed)});
     } else {
-      const err = out && out.error ? out.error : 'Verifier rejected the proof.';
-      setResult('<span class="bad">INVALID</span>\\n<span class="muted">' + escapeHtml(err) + '</span>');
-      if (window.tinyzkpTrack) window.tinyzkpTrack('client_verify_failed',{reason:'invalid'});
+      const localErr = out && out.error ? out.error : 'Local verifier rejected the proof.';
+      setResult('<span class="muted">Local verifier did not accept this receipt. Trying hosted verifier for current production compatibility...</span>');
+      try {
+        const hosted = await hostedVerify(proof);
+        const hostedOk = !!(hosted && (hosted.ok || hosted.valid));
+        if (hostedOk) {
+          setResult('<span class="ok">VALID</span>\\n<span class="muted">Verified by TinyZKP hosted verifier. Local WASM package returned: ' + escapeHtml(localErr) + '</span>' + (hosted.round_trip_ms != null ? '\\n<span class="accent">Round trip: ' + hosted.round_trip_ms + ' ms</span>' : ''));
+          if (window.tinyzkpTrack) window.tinyzkpTrack('hosted_verify_succeeded',{fallback_from:'wasm', duration_ms:Number(elapsed)});
+        } else {
+          const err = hosted && hosted.error ? hosted.error : localErr;
+          setResult('<span class="bad">INVALID</span>\\n<span class="muted">' + escapeHtml(err) + '</span>');
+          if (window.tinyzkpTrack) window.tinyzkpTrack('client_verify_failed',{reason:'invalid'});
+        }
+      } catch (fallbackErr) {
+        setResult('<span class="bad">Could not verify</span>\\n<span class="muted">Local verifier: ' + escapeHtml(localErr) + '\\nHosted fallback: ' + escapeHtml(fallbackErr.message || String(fallbackErr)) + '</span>');
+        if (window.tinyzkpTrack) window.tinyzkpTrack('client_verify_failed',{reason:'fallback_exception'});
+      }
     }
   } catch (err) {
     setResult('<span class="bad">Could not verify</span>\\n<span class="muted">' + escapeHtml(err.message || String(err)) + '</span>');

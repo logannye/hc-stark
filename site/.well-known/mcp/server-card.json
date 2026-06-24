@@ -1,0 +1,195 @@
+{
+  "$schema": "https://tinyzkp.com/schemas/tinyzkp-mcp-server.schema.json",
+  "name": "TinyZKP MCP Server",
+  "url": "https://tinyzkp.com/mcp",
+  "canonical_metadata": "https://tinyzkp.com/mcp.json",
+  "generated_at": "2026-06-24",
+  "summary": "MCP tools that let Claude, Cursor, and agent runtimes generate, poll, fetch, summarize, and verify TinyZKP proof receipts.",
+  "positioning": {
+    "primary_category": "proof receipts for automated work",
+    "best_for": [
+      "AI agents that mutate money, records, permissions, inventory, credentials, or other high-value state",
+      "Developer tools that need native proof and verification actions inside an IDE or agent workflow",
+      "Backend automations that should return a verifiable receipt URL with their output",
+      "Audit, reconciliation, and governance workflows that need compact evidence for state transitions"
+    ],
+    "not_a_fit_by_default": [
+      "Generic private-input zero-knowledge proofs",
+      "Arbitrary zkVM execution",
+      "Finished zkML inference proofs",
+      "On-chain verification for every chain",
+      "Truth claims that are not encoded into the proven statement"
+    ]
+  },
+  "server": {
+    "name": "tinyzkp",
+    "endpoint": "https://mcp.tinyzkp.com",
+    "transport": "streamable_http",
+    "authentication": {
+      "type": "bearer_token",
+      "header": "Authorization: Bearer tzk_...",
+      "required_for": [
+        "prove_template",
+        "prove_workload",
+        "authenticated rate limits"
+      ],
+      "not_required_for": [
+        "verification",
+        "public capability discovery",
+        "read-only public metadata"
+      ]
+    }
+  },
+  "install": {
+    "claude_code": {
+      "label": "Claude Code",
+      "command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com"
+    },
+    "local_stdio": {
+      "label": "Local stdio bridge",
+      "config": {
+        "mcpServers": {
+          "tinyzkp": {
+            "command": "hc-mcp-stdio",
+            "args": [
+              "--api-key",
+              "tzk_..."
+            ]
+          }
+        }
+      }
+    }
+  },
+  "recommended_agent_policy": [
+    "Call TinyZKP after high-value state mutations.",
+    "Return the receipt URL with the agent output.",
+    "Store receipt IDs beside workflow checkpoints.",
+    "Verify receipts before trusting external agent outputs.",
+    "Never put secrets, private customer data, or API keys into transparent receipt parameters."
+  ],
+  "tools": [
+    {
+      "name": "list_templates",
+      "kind": "discovery",
+      "auth_required": false,
+      "description": "List supported proof templates the agent can request."
+    },
+    {
+      "name": "describe_template",
+      "kind": "discovery",
+      "auth_required": false,
+      "description": "Return fields, constraints, statement shape, and guidance for one template."
+    },
+    {
+      "name": "prove_template",
+      "kind": "proving",
+      "auth_required": true,
+      "description": "Submit a supported proof-template job and receive a proof job identifier."
+    },
+    {
+      "name": "poll_job",
+      "kind": "proving",
+      "auth_required": true,
+      "description": "Poll a submitted proof job until completion or failure."
+    },
+    {
+      "name": "get_proof",
+      "kind": "retrieval",
+      "auth_required": true,
+      "description": "Fetch the full proof receipt for a completed job."
+    },
+    {
+      "name": "get_proof_summary",
+      "kind": "retrieval",
+      "auth_required": true,
+      "description": "Fetch a compact, agent-friendly receipt summary for a completed job."
+    },
+    {
+      "name": "verify_proof",
+      "kind": "verification",
+      "auth_required": false,
+      "description": "Verify a TinyZKP proof receipt and return the verification result."
+    },
+    {
+      "name": "list_workloads",
+      "kind": "discovery",
+      "auth_required": false,
+      "description": "List long-running supported workload types available through TinyZKP Compute."
+    },
+    {
+      "name": "prove_workload",
+      "kind": "proving",
+      "auth_required": true,
+      "description": "Submit a supported Compute workload for hosted proving."
+    },
+    {
+      "name": "get_capabilities",
+      "kind": "discovery",
+      "auth_required": false,
+      "description": "Return server capabilities, proof formats, limits, and supported integration paths."
+    }
+  ],
+  "pricing": {
+    "verification": "free",
+    "free_plan": "100 included receipts per month for evaluation and demos",
+    "self_serve_plans": [
+      "developer",
+      "pro",
+      "scale",
+      "compute"
+    ],
+    "machine_readable_pricing": "https://tinyzkp.com/pricing.json"
+  },
+  "limits": {
+    "public_verification": "Free verifier calls are available for receipt checks.",
+    "proving": "Proving limits and concurrency depend on plan and account configuration.",
+    "spend_controls": "Self-serve paid plans include monthly spend caps; see pricing metadata for current plan details."
+  },
+  "related_assets": {
+    "llms": "https://tinyzkp.com/llms.txt",
+    "openapi": "https://tinyzkp.com/openapi.json",
+    "docs": "https://tinyzkp.com/docs",
+    "recipes": "https://tinyzkp.com/recipes",
+    "examples": "https://tinyzkp.com/examples",
+    "examples_metadata": "https://tinyzkp.com/examples.json",
+    "limits": "https://tinyzkp.com/limits",
+    "limits_metadata": "https://tinyzkp.com/limits.json",
+    "integrations": "https://tinyzkp.com/integrations",
+    "integrations_metadata": "https://tinyzkp.com/integrations.json",
+    "fit": "https://tinyzkp.com/fit",
+    "fit_metadata": "https://tinyzkp.com/fit.json",
+    "evaluation": "https://tinyzkp.com/evaluation",
+    "evaluation_metadata": "https://tinyzkp.com/evaluation.json",
+    "roi": "https://tinyzkp.com/roi",
+    "roi_metadata": "https://tinyzkp.com/roi.json",
+    "template_catalog": "https://tinyzkp.com/templates",
+    "template_metadata": "https://tinyzkp.com/templates.json",
+    "changelog": "https://tinyzkp.com/changelog",
+    "changelog_metadata": "https://tinyzkp.com/changelog.json",
+    "calculator": "https://tinyzkp.com/calculator",
+    "calculator_metadata": "https://tinyzkp.com/calculator.json",
+    "compute": "https://tinyzkp.com/compute",
+    "enterprise": "https://tinyzkp.com/enterprise",
+    "enterprise_metadata": "https://tinyzkp.com/enterprise.json",
+    "agent_guide": "https://tinyzkp.com/agents",
+    "agent_platforms": "https://tinyzkp.com/agent-platforms",
+    "platform_rollout": "https://tinyzkp.com/platform-rollout",
+    "platform_rollout_metadata": "https://tinyzkp.com/platform-rollout.json",
+    "agent_policy": "https://tinyzkp.com/agent-policy",
+    "agent_policy_metadata": "https://tinyzkp.com/agent-policy.json",
+    "use_cases": "https://tinyzkp.com/use-cases",
+    "compare": "https://tinyzkp.com/compare",
+    "receipt_schema": "https://tinyzkp.com/schemas/tinyzkp-receipt.schema.json",
+    "agent_receipt_schema": "https://tinyzkp.com/schemas/agent-receipt.schema.json",
+    "pricing_metadata": "https://tinyzkp.com/pricing.json",
+    "pilot_program": "https://tinyzkp.com/pilot",
+    "trust_metadata": "https://tinyzkp.com/trust.json",
+    "security_review": "https://tinyzkp.com/security-review",
+    "status": "https://tinyzkp.com/status"
+  },
+  "contact": {
+    "support": "logan@tinyzkp.com",
+    "security": "logan@tinyzkp.com",
+    "sales": "logan@tinyzkp.com"
+  }
+}

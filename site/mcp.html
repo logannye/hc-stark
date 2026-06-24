@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP MCP Server — Proof Tools for Claude, Cursor, and Agents</title>
+<meta name="description" content="Install the TinyZKP MCP server so Claude, Cursor, and agent runtimes can generate, fetch, and verify proof receipts as native tools.">
+<meta property="og:title" content="TinyZKP MCP Server">
+<meta property="og:description" content="Proof tools for Claude, Cursor, and agent runtimes. Add verifiable receipts to state transitions from inside your agent workflow.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/mcp">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP MCP Server">
+<meta name="twitter:description" content="Proof tools for Claude, Cursor, and agent runtimes. Add verifiable receipts to state transitions from inside your agent workflow.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/mcp">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="alternate" type="application/json" href="https://tinyzkp.com/mcp.json">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+main{padding:118px 0 76px}.eyebrow{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}h1{font-size:clamp(34px,5vw,58px);line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);max-width:900px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:780px}.lede a{text-decoration:underline;text-underline-offset:3px}.band{border-top:1px solid var(--border);padding-top:34px;margin-top:42px}.band h2{color:var(--text-bright);font-size:26px;line-height:1.22;margin-bottom:14px;letter-spacing:-.02em}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px}.box h3{color:var(--text-bright);font-size:18px;margin-bottom:10px}.box p,.box li{color:var(--muted);font-size:14px;line-height:1.7}.box ul{padding-left:20px}.code{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;overflow:auto;margin:18px 0;position:relative}.code pre{font-family:var(--mono);font-size:12.5px;color:var(--text);line-height:1.75;white-space:pre}.copy{position:absolute;top:10px;right:10px;border:1px solid var(--border-light);background:var(--bg);color:var(--muted);border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer}.tools{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:18px}.tools span{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--muted);font-family:var(--mono);font-size:11px}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:700;padding:12px 22px;border-radius:8px;text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}@media(max-width:900px){.grid,.tools{grid-template-columns:1fr}.code{padding-top:42px}}
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "TinyZKP MCP Server — Proof Tools for Claude, Cursor, and Agents",
+  "url": "https://tinyzkp.com/mcp",
+  "description": "Install the TinyZKP MCP server so Claude, Cursor, and agent runtimes can generate, fetch, and verify proof receipts as native tools.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
+</head>
+<body>
+<nav><div class="container"><a href="/" class="logo"><span>Tiny</span>ZKP</a><button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button><div class="links"><a href="/agents">Agents</a><a href="/receipts">Receipts</a><a href="/try">Try</a><a href="/docs">Docs</a><a href="/signup" class="nav-cta">Get API Key</a></div></div></nav>
+<main><div class="container">
+  <div class="eyebrow">Native proof tools</div>
+  <h1>Install TinyZKP as an MCP server.</h1>
+  <p class="lede">Give Claude, Cursor, and agent runtimes native tools for generating, polling, fetching, and verifying proof receipts. The fastest route to distribution is to make proofs callable inside the workflows developers already use.</p>
+  <div class="cta-row"><a class="cta" href="/signup?source=mcp_hero&platform=mcp&use_case=AI-agent%20state%20receipts" data-track="mcp_signup_click" data-source="mcp_hero">Get API key</a><a class="cta secondary" href="/agent-policy">Agent policy</a><a class="cta secondary" href="/recipes">Copy recipes</a><a class="cta secondary" href="/agents">Agent use cases</a><a class="cta secondary" href="/mcp.json">MCP metadata</a></div>
+
+  <section class="band grid">
+    <div>
+      <h2>Claude Code install</h2>
+      <div class="code"><button class="copy" onclick="copyBlock(this)">Copy</button><pre>claude mcp add --transport http \
+  tinyzkp https://mcp.tinyzkp.com</pre></div>
+      <p class="lede" style="font-size:14px">Use a TinyZKP API key for proving. Verification remains free; the public verifier requires no API key.</p>
+    </div>
+    <div>
+      <h2>Local stdio config</h2>
+      <div class="code"><button class="copy" onclick="copyBlock(this)">Copy</button><pre>{
+  "mcpServers": {
+    "tinyzkp": {
+      "command": "hc-mcp-stdio",
+      "args": ["--api-key", "tzk_..."]
+    }
+  }
+}</pre></div>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Tools exposed to the agent</h2>
+    <div class="tools"><span>list_templates</span><span>describe_template</span><span>prove_template</span><span>poll_job</span><span>get_proof</span><span>get_proof_summary</span><span>verify_proof</span><span>list_workloads</span><span>prove_workload</span><span>get_capabilities</span></div>
+    <p class="lede" style="font-size:14px;margin-top:18px">Machine-readable discovery is available at <a href="/mcp.json">/mcp.json</a> and <a href="/.well-known/mcp/server-card.json">/.well-known/mcp/server-card.json</a> for agent catalogs, MCP installers, and automated integration review.</p>
+  </section>
+
+  <section class="band grid">
+    <article class="box"><h3>Recommended agent policy</h3><ul><li>Call TinyZKP after high-value state mutations.</li><li>Return the receipt URL with the agent output.</li><li>Store receipt IDs beside workflow checkpoints.</li><li>Never put secrets or raw customer data into transparent receipt parameters.</li></ul><p><a href="/agent-policy">Open full policy</a></p></article>
+    <article class="box"><h3>What to build first</h3><ul><li>Receipt every reconciliation checkpoint.</li><li>Receipt every tool-call batch that affects money or records.</li><li>Receipt long audit-log aggregates with Compute.</li><li>Use hosted verification for current v5 receipts until local WASM support is upgraded.</li></ul></article>
+  </section>
+</div></main>
+<footer><div class="container"><div class="left">&copy; 2026 TinyZKP</div><div class="right"><a href="/agents">Agents</a><a href="/agent-policy">Agent Policy</a><a href="/receipts">Receipts</a><a href="/docs">Docs</a><a href="/security-review">Security Review</a><a href="/privacy">Privacy</a><a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a></div></div></footer>
+<script>
+function copyBlock(btn){var pre=btn.parentElement.querySelector('pre');navigator.clipboard.writeText(pre.textContent).then(function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy'},1600)})}
+</script>
+</body>
+</html>

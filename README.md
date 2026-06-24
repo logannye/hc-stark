@@ -55,12 +55,12 @@ curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
   -H "Authorization: Bearer tzk_..." \
   -H "Content-Type: application/json" \
   -d '{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'
-# → {"job_id":"<job_id>","status":"proving"}
+# -> {"job_id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
 curl https://api.tinyzkp.com/prove/<job_id> -H "Authorization: Bearer tzk_..."
-# → {"status":"completed","proof":{"version":4,"bytes":"0x6a8f..."}}
+# -> {"status":"succeeded","proof":{"version":5,"bytes":[106,143,59,44,...]}}
 ```
 
-Verification is always free. SDKs ship for Python (`pip install tinyzkp`), TypeScript (`npm install tinyzkp`), and Rust. There's also a [browser-side WASM verifier](https://www.npmjs.com/package/@tinyzkp/verify) so end users verify offline in 5ms.
+Verification is always free. The hosted API requires auth to prevent abuse; the public verifier and compatible first-party WASM verifier can verify without exposing an API key to the recipient. SDKs ship for Python (`pip install tinyzkp`), TypeScript (`npm install tinyzkp`), and Rust.
 
 ---
 
@@ -167,7 +167,7 @@ npm install tinyzkp
 import init, { verify } from '@tinyzkp/verify';
 
 await init();
-const result = verify({ version: 4, bytes: proofBytes });
+const result = verify({ version: 5, bytes: proofBytes });
 console.log(result.ok); // true — verified client-side
 ```
 
@@ -360,6 +360,32 @@ Rotate a compromised key instantly:
 curl -X POST https://tinyzkp.com/api/rotate-key \
   -H "Authorization: Bearer tzk_YOUR_CURRENT_KEY"
 ```
+
+---
+
+## Public website and distribution assets
+
+The Cloudflare Pages site lives in [`site/`](./site). It is intentionally more than a marketing page: it includes buyer-routing pages, trust/pricing/evaluation content, integration guides for agent surfaces, and machine-readable assets for automated buyers and agent catalogs.
+
+Key public contracts:
+
+- [`site/llms.txt`](./site/llms.txt) and [`site/discovery.json`](./site/discovery.json) for crawler/agent discovery.
+- [`site/openapi.json`](./site/openapi.json), [`site/mcp.json`](./site/mcp.json), and [`site/integrations.json`](./site/integrations.json) for API/MCP/integration metadata.
+- [`site/templates.json`](./site/templates.json), [`site/limits.json`](./site/limits.json), and [`site/pricing.json`](./site/pricing.json) for product boundaries, quotas, and pricing surfaces.
+- [`site/schemas/`](./site/schemas/) for receipt and agent-output JSON schemas.
+- [`site/vendor/tinyzkp-verify/`](./site/vendor/tinyzkp-verify/) for the first-party browser verifier bundle used by the public verifier path.
+
+Before publishing, run:
+
+```bash
+git diff --check
+python3 scripts/ci/site_route_check.py
+python3 scripts/ci/site_deploy_check.py
+node scripts/ci/site_worker_dispatch_test.mjs
+pytest billing/tests/test_pricing_parity.py billing/tests/test_site_pricing_parity.py
+```
+
+Do not commit real `tzk_...`, `sk_live_...`, `whsec_...`, or `INTERNAL_SECRET` values. Public examples must use placeholders such as `tzk_...`, `tzk_YOUR_KEY`, or documented fake test fixtures only.
 
 ---
 

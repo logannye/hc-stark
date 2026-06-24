@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/tinyzkp-limits.schema.json",
+  "title": "TinyZKP Limits and Capabilities Metadata",
+  "type": "object",
+  "required": [
+    "name",
+    "url",
+    "generated_at",
+    "summary",
+    "product_boundary",
+    "anonymous_playground",
+    "self_serve_plans",
+    "compute",
+    "capability_matrix",
+    "unsupported_without_review",
+    "escalation_triggers",
+    "links"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "name": { "type": "string", "minLength": 1 },
+    "url": { "type": "string", "format": "uri" },
+    "generated_at": { "type": "string" },
+    "summary": { "type": "string", "minLength": 1 },
+    "product_boundary": {
+      "type": "object",
+      "required": ["live_default_product", "primary_template", "claim", "verification", "billable_event", "privacy_note", "audit_note"],
+      "properties": {
+        "live_default_product": { "type": "string" },
+        "primary_template": { "type": "string" },
+        "claim": { "type": "string" },
+        "verification": { "type": "string" },
+        "billable_event": { "type": "string" },
+        "privacy_note": { "type": "string" },
+        "audit_note": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "anonymous_playground": {
+      "type": "object",
+      "required": ["page", "endpoint", "template_id", "rate_limit", "parameter_limits", "notes"],
+      "properties": {
+        "page": { "type": "string", "format": "uri" },
+        "endpoint": { "type": "string", "format": "uri" },
+        "template_id": { "type": "string" },
+        "rate_limit": {
+          "type": "object",
+          "required": ["max_proofs", "window_seconds", "scope"],
+          "properties": {
+            "max_proofs": { "type": "integer", "minimum": 0 },
+            "window_seconds": { "type": "integer", "minimum": 0 },
+            "scope": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "parameter_limits": {
+          "type": "object",
+          "required": ["initial", "deltas", "final"],
+          "properties": {
+            "initial": {
+              "type": "object",
+              "required": ["type", "minimum", "maximum"],
+              "properties": {
+                "type": { "type": "string" },
+                "minimum": { "type": "integer" },
+                "maximum": { "type": "integer" }
+              },
+              "additionalProperties": false
+            },
+            "deltas": {
+              "type": "object",
+              "required": ["type", "min_items", "max_items", "item_minimum", "item_maximum"],
+              "properties": {
+                "type": { "type": "string" },
+                "min_items": { "type": "integer" },
+                "max_items": { "type": "integer" },
+                "item_minimum": { "type": "integer" },
+                "item_maximum": { "type": "integer" }
+              },
+              "additionalProperties": false
+            },
+            "final": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "notes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "self_serve_plans": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "included_receipts_per_month", "prove_requests_per_minute", "concurrent_jobs", "monthly_spend_cap", "checkout_url", "best_for"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "included_receipts_per_month": { "type": "integer", "minimum": 0 },
+          "prove_requests_per_minute": { "type": "integer", "minimum": 0 },
+          "concurrent_jobs": { "type": "integer", "minimum": 0 },
+          "monthly_spend_cap": { "type": ["number", "null"] },
+          "checkout_url": { "type": "string", "format": "uri" },
+          "best_for": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "compute": {
+      "type": "object",
+      "required": ["price_per_million_trace_steps", "minimum_per_proof", "best_for", "review_when"],
+      "properties": {
+        "price_per_million_trace_steps": { "type": "number" },
+        "minimum_per_proof": { "type": "number" },
+        "best_for": { "type": "array", "items": { "type": "string" } },
+        "review_when": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "capability_matrix": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["surface", "status", "limit_or_boundary", "escalation"],
+        "properties": {
+          "surface": { "type": "string" },
+          "status": { "type": "string" },
+          "limit_or_boundary": { "type": "string" },
+          "escalation": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "unsupported_without_review": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "escalation_triggers": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "uri" }
+    }
+  },
+  "additionalProperties": false
+}

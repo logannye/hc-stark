@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP vs Blockchain Anchoring</title>
+<meta name="description" content="Compare TinyZKP proof receipts with blockchain anchoring. Anchors prove timestamped publication; TinyZKP receipts prove supported encoded state transitions.">
+<meta property="og:title" content="TinyZKP vs Blockchain Anchoring">
+<meta property="og:description" content="Use blockchain anchoring for public timestamping. Use TinyZKP when a verifier needs the transition rule checked without replaying your system.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/compare/blockchain-anchoring">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP vs Blockchain Anchoring">
+<meta name="twitter:description" content="Use blockchain anchoring for public timestamping. Use TinyZKP when a verifier needs the transition rule checked without replaying your system.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/compare/blockchain-anchoring">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/shared.css"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+main{padding:118px 0 76px}.eyebrow{font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}h1{font-size:clamp(34px,5vw,56px);line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);max-width:900px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:800px}.band{border-top:1px solid var(--border);padding-top:34px;margin-top:42px}.band h2{color:var(--text-bright);font-size:26px;line-height:1.22;margin-bottom:14px;letter-spacing:-.02em}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px}.box h3{color:var(--text-bright);font-size:18px;margin-bottom:10px}.box p,.box li{color:var(--muted);font-size:14px;line-height:1.7}.box ul{padding-left:20px}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin-top:22px}table{width:100%;border-collapse:collapse;min-width:760px}th,td{padding:14px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}td{color:var(--muted);font-size:14px}td strong{color:var(--text)}tbody tr:last-child td{border-bottom:none}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}@media(max-width:820px){.grid{grid-template-columns:1fr}.cta-row{display:grid;grid-template-columns:1fr}.cta{width:100%}}
+html,body{overflow-x:hidden;width:100%}h1,.lede,.box{overflow-wrap:break-word}.grid>*{min-width:0}.table-wrap{max-width:100%;min-width:0}.cta{white-space:normal;text-align:center}@media(max-width:560px){.container{max-width:100%;padding:0 20px}h1{font-size:32px;line-height:1.14;letter-spacing:0}}
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "TinyZKP vs Blockchain Anchoring",
+  "url": "https://tinyzkp.com/compare/blockchain-anchoring",
+  "description": "Compare TinyZKP proof receipts with blockchain anchoring. Anchors prove timestamped publication; TinyZKP receipts prove supported encoded state transitions.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
+</head>
+<body>
+<nav><div class="container"><a href="/" class="logo"><span>Tiny</span>ZKP</a><button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button><div class="links"><a href="/compare">Compare</a><a href="/receipts">Receipts</a><a href="/verify">Verify</a><a href="/pricing">Pricing</a><a href="/signup" class="nav-cta">Get API Key</a></div></div></nav>
+<main><div class="container">
+  <div class="eyebrow">Comparison</div>
+  <h1>TinyZKP receipts vs blockchain anchoring.</h1>
+  <p class="lede">Publishing a hash on-chain can prove a commitment existed at a time. It does not, by itself, prove that the committed state transition was valid. TinyZKP receipts answer the rule-checking question; anchoring can be added later when public timestamping or on-chain references matter.</p>
+  <div class="cta-row"><a class="cta" href="/try">Generate a receipt</a><a class="cta secondary" href="/compare/hash-chains">Compare hash chains</a></div>
+
+  <section class="band">
+    <h2>Different trust questions</h2>
+    <div class="table-wrap"><table><thead><tr><th>Question</th><th>Blockchain anchoring</th><th>TinyZKP receipt</th></tr></thead><tbody>
+      <tr><td><strong>Did this commitment exist by a time?</strong></td><td>Yes, depending on chain finality and transaction inclusion.</td><td>Not the main claim unless paired with an external timestamp.</td></tr>
+      <tr><td><strong>Was the transition valid?</strong></td><td>No. A bad transition can be anchored.</td><td>Yes, for the supported encoded statement and proof template.</td></tr>
+      <tr><td><strong>Does every verifier need chain access?</strong></td><td>Often yes, or an indexer/explorer.</td><td>No. Verify with TinyZKP verifier paths and receipt data.</td></tr>
+      <tr><td><strong>Best use</strong></td><td>Public timestamp, public commitment, ecosystem-specific references.</td><td>Agent/API/audit state transition evidence.</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="band grid">
+    <article class="box"><h3>Use anchoring when</h3><ul><li>You need public timestamping or chain-native references.</li><li>External parties already depend on that chain.</li><li>You are committing to a batch, dataset, or receipt index.</li></ul></article>
+    <article class="box"><h3>Use TinyZKP when</h3><ul><li>The verifier needs to know the transition rule was satisfied.</li><li>The artifact should attach to an API response or agent output.</li><li>You want free verification without requiring every recipient to inspect a chain.</li></ul></article>
+  </section>
+
+  <section class="band">
+    <h2>Best combined pattern</h2>
+    <p class="lede" style="font-size:15px">Mint TinyZKP receipts for state transitions first. If the business also needs public timestamping, anchor a receipt hash or batch root afterward. That keeps the proof system responsible for validity and the chain responsible for publication.</p>
+  </section>
+</div></main>
+<footer><div class="container"><div class="left">&copy; 2026 TinyZKP</div><div class="right"><a href="/compare">Compare</a><a href="/compare/zkvm-provers">zkVM Provers</a><a href="/compare/zktls">zkTLS</a><a href="/privacy">Privacy</a><a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a></div></div></footer>
+</body>
+</html>

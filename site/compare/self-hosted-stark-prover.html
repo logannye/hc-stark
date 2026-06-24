@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP vs Self-Hosted STARK Prover Infrastructure</title>
+<meta name="description" content="Compare TinyZKP's hosted O(√N)-memory STARK receipt service with operating a self-hosted STARK prover stack for audit, reconciliation, and long state-transition traces.">
+<meta property="og:title" content="TinyZKP vs Self-Hosted STARK Prover Infrastructure">
+<meta property="og:description" content="A practical build-vs-buy comparison for teams evaluating transparent STARK receipts, high-RAM prover infrastructure, and portable verification.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/compare/self-hosted-stark-prover">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP vs Self-Hosted STARK Prover Infrastructure">
+<meta name="twitter:description" content="A practical build-vs-buy comparison for teams evaluating transparent STARK receipts, high-RAM prover infrastructure, and portable verification.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/compare/self-hosted-stark-prover">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+main{padding:118px 0 76px}
+.eyebrow{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+h1{font-size:clamp(34px,5vw,56px);line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);max-width:860px;margin-bottom:18px}
+.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:780px}
+.band{border-top:1px solid var(--border);padding-top:34px;margin-top:42px}
+.band h2{color:var(--text-bright);font-size:26px;line-height:1.22;margin-bottom:14px;letter-spacing:-.02em}
+.band p{color:var(--muted);font-size:15px;line-height:1.75;max-width:820px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px}
+.box h3{color:var(--text-bright);font-size:18px;margin-bottom:10px}
+.box p,.box li{color:var(--muted);font-size:14px;line-height:1.7}
+.box ul{padding-left:20px}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin-top:22px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:14px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}
+th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}
+td{color:var(--muted)}
+td strong{color:var(--text)}
+tbody tr:last-child td{border-bottom:none}
+.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
+.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:700;padding:12px 22px;border-radius:8px;text-decoration:none}
+.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "TinyZKP vs Self-Hosted STARK Prover Infrastructure",
+  "url": "https://tinyzkp.com/compare/self-hosted-stark-prover",
+  "description": "Compare TinyZKP's hosted O(√N)-memory STARK receipt service with operating a self-hosted STARK prover stack for audit, reconciliation, and long state-transition traces.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
+</head>
+<body>
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/compute">Compute</a>
+    <a href="/try">Try</a>
+    <a href="/verify">Verify</a>
+    <a href="/docs">Docs</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+<div class="container">
+  <div class="eyebrow">Build vs buy</div>
+  <h1>TinyZKP vs operating your own STARK prover stack.</h1>
+  <p class="lede">If your buyer question is "why not self-host?", the answer is not only hosting cost. It is prover memory, queueing, monitoring, verifier distribution, proof-format compatibility, support, and the time it takes to turn proof research into a reliable product surface.</p>
+
+  <section class="band">
+    <h2>Where TinyZKP is the better fit</h2>
+    <div class="grid">
+      <article class="box">
+        <h3>Long state-transition traces</h3>
+        <p>TinyZKP's supported receipt path is designed around O(&radic;N) prover memory. That matters when conventional O(N) proving pushes you toward high-RAM instances, trace segmentation, and recursive aggregation.</p>
+      </article>
+      <article class="box">
+        <h3>Portable verification</h3>
+        <p>You get hosted verification, a public verifier page, a first-party WASM verifier path where compatible, SDKs, and MCP tooling without building a verifier distribution plan from scratch.</p>
+      </article>
+      <article class="box">
+        <h3>Small or bursty proof volume</h3>
+        <p>Self-hosting is hardest to justify when usage is uneven. TinyZKP lets you start on the free tier, then use monthly receipt tiers or Compute pricing when traces become large.</p>
+      </article>
+      <article class="box">
+        <h3>Fast commercial validation</h3>
+        <p>You can test whether customers, auditors, or agents value transferable receipts before hiring proof-system specialists or operating prover infrastructure.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Comparison</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Question</th><th>TinyZKP</th><th>Self-hosted prover</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Memory profile</strong></td><td>O(&radic;N) memory for supported state-transition workloads.</td><td>Often O(N) memory unless you engineer segmentation, recursion, or workload-specific compression.</td></tr>
+          <tr><td><strong>Time to first receipt</strong></td><td>Minutes with API key, browser playground, or MCP tool.</td><td>Days to months depending on proof system, verifier, deployment, and security review.</td></tr>
+          <tr><td><strong>Verification UX</strong></td><td>Public verifier, API verifier, SDKs, MCP, and first-party WASM path where compatible.</td><td>You own verifier packaging, compatibility, docs, and support for every verifier surface.</td></tr>
+          <tr><td><strong>Operational burden</strong></td><td>Managed queue, worker operations, billing, rate limits, status page, and support lane.</td><td>You run workers, queues, monitoring, incidents, upgrades, and capacity planning.</td></tr>
+          <tr><td><strong>Best when</strong></td><td>You need transparent state-transition receipts, portable verification, and lower prover-ops drag.</td><td>You need a custom proof system, complete infrastructure control, or a workload outside TinyZKP's live template scope.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band grid">
+    <article class="box">
+      <h3>Do not use TinyZKP when</h3>
+      <ul>
+        <li>You need a general zkVM or zkML service today, not a state-transition receipt path.</li>
+        <li>You need private-input claims for a workload that has not been explicitly documented with review status and a supported verifier path.</li>
+        <li>You need an on-chain verifier for a specific chain as a hard requirement.</li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>Use TinyZKP when</h3>
+      <ul>
+        <li>You need third parties to verify a transition without replaying your system.</li>
+        <li>Your long traces make high-RAM prover infrastructure the expensive part.</li>
+        <li>You want a narrow, honest production surface before investing in custom proof engineering.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="band">
+    <h2>Next step</h2>
+    <p>Generate a live proof if you are evaluating receipt UX. Use Compute if your core question is trace length and prover memory. Use the ROI worksheet if the buyer question is whether hosted receipts beat self-hosted prover operations.</p>
+    <div class="cta-row">
+      <a class="cta" href="/try" data-track="compare_try_click" data-source="self_hosted_compare">Generate a live proof</a>
+      <a class="cta secondary" href="/roi">Build ROI case</a>
+      <a class="cta secondary" href="/compute">Read Compute brief</a>
+      <a class="cta secondary" href="/contact">Talk to an engineer</a>
+    </div>
+  </section>
+</div>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/docs">Quickstart</a>
+    <a href="/compute">Compute</a>
+    <a href="/security-review">Security Review</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+</body>
+</html>

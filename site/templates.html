@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP Proof Templates &mdash; Live Receipt Catalog</title>
+<meta name="description" content="Browse TinyZKP proof templates, parameters, lifecycle status, receipt claims, pricing fit, and integration endpoints. The live self-serve template is accumulator_step.">
+<meta property="og:title" content="TinyZKP Proof Templates">
+<meta property="og:description" content="A clear catalog of TinyZKP live proof templates, parameters, limits, and design-review lanes.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:url" content="https://tinyzkp.com/templates">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP Proof Templates">
+<meta name="twitter:description" content="A clear catalog of TinyZKP live proof templates, parameters, limits, and design-review lanes.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/templates">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="alternate" type="application/json" href="https://tinyzkp.com/templates.json">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "TinyZKP Proof Templates",
+  "url": "https://tinyzkp.com/templates",
+  "description": "Catalog of TinyZKP proof receipt templates, lifecycle status, parameters, and review boundaries."
+}
+</script>
+<style>
+main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr);gap:40px;align-items:center}.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px}.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}h1{font-size:clamp(36px,5vw,62px);line-height:1.06;letter-spacing:-.035em;color:var(--text-bright);max-width:860px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:790px}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none;font-size:14px;letter-spacing:.01em;transition:transform .15s,box-shadow .15s}.cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px var(--accent-glow);text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}.cta.secondary:hover{border-color:var(--accent);box-shadow:none;color:var(--accent)}.panel{background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));border:1px solid var(--border-light);border-radius:18px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.32)}.panel h2{font-size:18px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:14px}.signal{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding:12px 0}.signal:last-child{border-bottom:none}.signal span{color:var(--muted);font-size:13px}.signal strong{font-family:var(--mono);font-size:13px;color:var(--accent);text-align:right}.band{border-top:1px solid var(--border);padding-top:36px;margin-top:48px}.band h2{font-size:clamp(25px,3.3vw,36px);line-height:1.16;color:var(--text-bright);letter-spacing:-.025em;margin-bottom:12px}.band>p{color:var(--muted);font-size:15px;line-height:1.75;max-width:840px;margin-bottom:20px}.band a,.box a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}.template-card{background:linear-gradient(180deg,rgba(46,232,212,.045),var(--surface));border:1px solid rgba(46,232,212,.22);border-radius:16px;padding:24px;display:grid;grid-template-columns:minmax(0,1.06fr) minmax(320px,.94fr);gap:22px;align-items:start}.tag-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.tag{display:inline-flex;align-items:center;min-height:24px;padding:3px 9px;border:1px solid var(--border-light);border-radius:999px;font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}.tag.live{color:var(--green);background:var(--green-dim);border-color:rgba(52,211,153,.22)}.tag.hot{color:var(--accent);background:var(--accent-dim);border-color:rgba(46,232,212,.22)}.template-card h3{font-size:26px;color:var(--text-bright);letter-spacing:-.02em;margin-bottom:8px}.template-card p,.template-card li{color:var(--muted);font-size:14px;line-height:1.72}.template-card ul{padding-left:18px}.code{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:auto}.code pre{font-family:var(--mono);font-size:12.5px;line-height:1.75;color:var(--text);white-space:pre}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0}.box h3{font-size:17px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:8px}.box p,.box li{color:var(--muted);font-size:13.5px;line-height:1.7}.box ul{padding-left:18px}.box li+li{margin-top:8px}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin-top:22px}table{width:100%;border-collapse:collapse;min-width:780px}th,td{padding:13px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}td{color:var(--muted);font-size:13.5px}tbody tr:last-child td{border-bottom:none}td strong{color:var(--text-bright)}.final{background:linear-gradient(180deg,rgba(16,26,48,.72),rgba(7,13,24,.72));border:1px solid var(--border-light);border-radius:16px;padding:28px;margin-top:50px;text-align:center}.final h2{color:var(--text-bright);font-size:28px;line-height:1.18;letter-spacing:-.02em;margin-bottom:10px}.final p{color:var(--muted);font-size:15px;line-height:1.75;max-width:760px;margin:0 auto}@media(max-width:980px){.hero,.template-card,.grid,.grid.two{grid-template-columns:1fr}.panel{max-width:620px}.signal strong{text-align:left}}@media(max-width:560px){main{padding-top:96px}.container{padding:0 20px}h1{font-size:34px;letter-spacing:-.02em}.lede{font-size:16px}.cta-row{display:grid;grid-template-columns:1fr}.cta{width:100%;padding-inline:16px;text-align:center}.panel,.template-card,.final{padding:20px}.signal{display:grid;grid-template-columns:1fr;gap:4px}.final h2{font-size:24px}}
+</style>
+</head>
+<body>
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/receipts">Receipts</a>
+    <a href="/integrations">Integrations</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/docs">Docs</a>
+    <a href="/pilot">Pilot</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+<div class="container">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Proof template catalog</div>
+      <h1>Know exactly what TinyZKP can prove before you build.</h1>
+      <p class="lede">TinyZKP templates define the public statement, accepted parameters, proof claim, lifecycle status, and verifier path for each receipt type. The self-serve catalog is deliberately narrow so buyers, agents, and auditors can trust the product boundary.</p>
+      <div class="cta-row">
+        <a class="cta" href="/signup?source=templates&use_case=Audit-log%20checkpoints&workflow=accumulator_step">Get API key</a>
+        <a class="cta secondary" href="/templates.json">Machine-readable catalog</a>
+        <a class="cta secondary" href="/examples">View examples</a>
+        <a class="cta secondary" href="/docs#quickstart">Use in API</a>
+      </div>
+    </div>
+    <aside class="panel" aria-label="TinyZKP proof template status">
+      <h2>Current template status</h2>
+      <div class="signal"><span>Live self-serve templates</span><strong>1</strong></div>
+      <div class="signal"><span>Default template</span><strong>accumulator_step</strong></div>
+      <div class="signal"><span>Private-input templates</span><strong>Review required</strong></div>
+      <div class="signal"><span>Custom state machines</span><strong>Pilot review</strong></div>
+      <div class="signal"><span>Verification</span><strong>Free</strong></div>
+    </aside>
+  </section>
+
+  <section class="band">
+    <h2>Live self-serve template</h2>
+    <p>This is the production template available through the public API, SDKs, CLI, MCP tools, browser demo, and pricing model today.</p>
+    <article class="template-card">
+      <div>
+        <div class="tag-row">
+          <span class="tag live">Live</span>
+          <span class="tag hot">Self-serve</span>
+          <span class="tag">State transition</span>
+          <span class="tag">Transparent</span>
+        </div>
+        <h3><code>accumulator_step</code></h3>
+        <p>Proves that a declared additive transition chain is internally consistent: the initial value plus every declared delta reaches the final value.</p>
+        <ul>
+          <li><strong>Claim:</strong> <code>initial + sum(deltas) = final</code> under the supported production proof format.</li>
+          <li><strong>Best for:</strong> agent checkpoints, ledger/reconciliation totals, audit accumulators, reserve/liability aggregate updates, and long state-transition traces.</li>
+          <li><strong>Not for:</strong> generic private-input privacy, arbitrary programs, business facts that were never encoded, or sub-second UI interactions.</li>
+          <li><strong>Billing:</strong> self-serve plans for recurring receipts; Compute for long traces.</li>
+        </ul>
+      </div>
+      <div class="code"><pre>curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
+  -H "Authorization: Bearer tzk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "params": {
+      "initial": 1000,
+      "final": 1045,
+      "deltas": [10, 20, 15]
+    }
+  }'</pre></div>
+    </article>
+  </section>
+
+  <section class="band">
+    <h2>Template contract</h2>
+    <p>The template contract is the part of TinyZKP a verifier can reason about. Keep these fields stable in your product, audit packet, or agent output.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>template_id</strong></td><td><code>accumulator_step</code></td><td>Yes</td><td>Identifies the proof template used to mint the receipt.</td></tr>
+          <tr><td><strong>initial</strong></td><td>integer</td><td>Yes</td><td>The declared starting accumulator value.</td></tr>
+          <tr><td><strong>final</strong></td><td>integer</td><td>Yes</td><td>The declared ending accumulator value.</td></tr>
+          <tr><td><strong>deltas</strong></td><td>integer array</td><td>Yes</td><td>Ordered transition increments applied between initial and final.</td></tr>
+          <tr><td><strong>proof</strong></td><td>receipt proof object</td><td>After job success</td><td>The proof object returned by <code>GET /prove/{job_id}</code> and accepted by the verifier.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Use the right route for work outside the catalog</h2>
+    <p>Most ZK demand starts as a custom predicate, privacy requirement, or long trace. TinyZKP should not sell those as live templates until the statement, verifier path, data boundary, and audit posture are clear.</p>
+    <div class="grid">
+      <article class="box"><h3>Custom state machines</h3><p>Use pilot review when the transition rule is not expressible as the live accumulator template.</p><p><a href="/pilot">Plan a pilot</a></p></article>
+      <article class="box"><h3>Private-input claims</h3><p>Do not put secrets into transparent parameters. Privacy or masking requires documented template-specific review.</p><p><a href="/trust">Read Trust Center</a></p></article>
+      <article class="box"><h3>Long traces</h3><p>Use Compute when the same state-transition pattern becomes large enough that prover memory and queue operations dominate cost.</p><p><a href="/compute">Read Compute brief</a></p></article>
+    </div>
+  </section>
+
+  <section class="band grid two">
+    <article class="box">
+      <h3>Machine-readable assets</h3>
+      <ul>
+        <li><a href="/templates.json">Template catalog</a></li>
+        <li><a href="/schemas/tinyzkp-templates.schema.json">Template catalog schema</a></li>
+        <li><a href="/examples.json">Example workflow metadata</a></li>
+        <li><a href="/schemas/tinyzkp-examples.schema.json">Example workflow schema</a></li>
+        <li><a href="/limits.json">Limits and capability metadata</a></li>
+        <li><a href="/schemas/tinyzkp-limits.schema.json">Limits schema</a></li>
+        <li><a href="/openapi.json">OpenAPI contract</a></li>
+        <li><a href="/schemas/tinyzkp-receipt.schema.json">Receipt schema</a></li>
+        <li><a href="/changelog.json">Changelog metadata</a></li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>Recommended next step</h3>
+      <p>If <code>accumulator_step</code> matches your workflow, start from a concrete example and generate a receipt. If it does not, write down the statement you want the verifier to check and use the pilot path.</p>
+      <p><a href="/examples">Browse examples</a> · <a href="/limits">Check limits</a> · <a href="/calculator">Estimate cost</a> · <a href="/integrations">Choose integration path</a></p>
+    </article>
+  </section>
+
+  <section class="final">
+    <h2>A template is the product promise.</h2>
+    <p>Buy TinyZKP when a live template proves the state change your recipient actually needs to verify. Use design review when the statement is custom, private, or commercially sensitive.</p>
+    <div class="cta-row" style="justify-content:center">
+      <a class="cta" href="/signup?source=templates&use_case=Audit-log%20checkpoints&workflow=accumulator_step">Get API key</a>
+      <a class="cta secondary" href="/examples">Browse examples</a>
+      <a class="cta secondary" href="/limits">Check limits</a>
+      <a class="cta secondary" href="/pilot">Plan a pilot</a>
+    </div>
+  </section>
+</div>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/templates">Templates</a>
+    <a href="/examples">Examples</a>
+    <a href="/receipts">Receipts</a>
+    <a href="/integrations">Integrations</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/changelog">Changelog</a>
+    <a href="/trust">Trust</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+<script defer src="/analytics.js"></script>
+</body>
+</html>

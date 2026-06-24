@@ -18,7 +18,9 @@ pub struct ProveTemplateParams {
         description = "Template parameters as JSON object. Call describe_template for the parameter schema."
     )]
     pub parameters: serde_json::Map<String, serde_json::Value>,
-    #[schemars(description = "Enable zero-knowledge mode. Default: use template recommendation.")]
+    #[schemars(
+        description = "Optional privacy/masking flag for templates that explicitly document support. Do not treat this as a generic private-input guarantee."
+    )]
     pub zk: Option<bool>,
 }
 

@@ -3,15 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#050a12">
 <title>Security &amp; Audit Status - TinyZKP</title>
 <meta name="description" content="TinyZKP security posture, proof-system scope, template lifecycle, audit status, and responsible-disclosure contact.">
 <meta property="og:title" content="Security &amp; Audit Status - TinyZKP">
-<meta property="og:description" content="What TinyZKP's live STARK receipt path claims today, what remains audit-gated, and how to report security issues.">
+<meta property="og:description" content="What TinyZKP's live STARK receipt path claims today, what remains review-gated, and how to report security issues.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/security">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Security &amp; Audit Status - TinyZKP">
+<meta name="twitter:description" content="What TinyZKP's live STARK receipt path claims today, what remains review-gated, and how to report security issues.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="canonical" href="https://tinyzkp.com/security">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&amp;family=IBM+Plex+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/shared.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -45,6 +53,21 @@ ul{max-width:780px;color:var(--muted);padding-left:20px}
 li{margin-bottom:8px}
 @media(max-width:900px){.grid{grid-template-columns:1fr}}
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Security & Audit Status - TinyZKP",
+  "url": "https://tinyzkp.com/security",
+  "description": "TinyZKP security posture, proof-system scope, template lifecycle, audit status, and responsible-disclosure contact.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 
@@ -70,7 +93,8 @@ li{margin-bottom:8px}
     <div class="container">
       <div class="eyebrow">Security status</div>
       <h1>Transparent receipt claims, explicit audit boundaries.</h1>
-      <p class="lede">TinyZKP's live public product is a transparent STARK state-transition receipt service. The verifier floor rejects legacy pre-v5 proofs, the default receipt is not marketed as input privacy, and templates stay hidden until their predicate is enforced and their audit state is appropriate for production exposure.</p>
+      <p class="lede">TinyZKP's live public product is a transparent STARK state-transition receipt service. The verifier floor rejects legacy pre-v5 proofs, the default receipt is not marketed as input privacy, and templates stay hidden until their predicate is enforced and their review status is appropriate for production exposure.</p>
+      <p class="lede" style="font-size:15px;margin-top:16px">For procurement questionnaires and buyer-facing review material, start with the <a href="/trust">Trust Center</a> or use the <a href="/security-review">Security Review Packet</a>.</p>
     </div>
   </section>
 

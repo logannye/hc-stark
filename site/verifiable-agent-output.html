@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>Verifiable Agent Output - TinyZKP</title>
+<meta name="description" content="Turn important AI agent outputs into verifiable artifacts with TinyZKP proof receipts, receipt URLs, and agent receipt envelopes.">
+<meta property="og:title" content="Verifiable Agent Output">
+<meta property="og:description" content="Agent prose is not enough for high-value state changes. Attach a TinyZKP proof receipt to outputs that mutate money, records, permissions, or workflow state.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:url" content="https://tinyzkp.com/verifiable-agent-output">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Verifiable Agent Output">
+<meta name="twitter:description" content="Agent prose is not enough for high-value state changes. Attach a TinyZKP proof receipt to outputs that mutate money, records, permissions, or workflow state.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/verifiable-agent-output">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","name":"Verifiable Agent Output","url":"https://tinyzkp.com/verifiable-agent-output","description":"TinyZKP page for agent builders adding proof receipts to outputs from high-value AI agent actions."}
+</script>
+<style>
+main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(320px,.96fr);gap:40px;align-items:center}.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:22px}.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}h1{font-size:clamp(36px,5vw,62px);line-height:1.06;letter-spacing:-.035em;color:var(--text-bright);max-width:880px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:790px}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none;font-size:14px;letter-spacing:.01em;transition:transform .15s,box-shadow .15s}.cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px var(--accent-glow);text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}.cta.secondary:hover{border-color:var(--accent);box-shadow:none;color:var(--accent)}.receipt{background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));border:1px solid var(--border-light);border-radius:18px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.32)}.receipt h2{font-size:18px;color:var(--text-bright);margin-bottom:14px}.code{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:auto}.code pre{font-family:var(--mono);font-size:12.5px;line-height:1.75;color:var(--text);white-space:pre}.band{border-top:1px solid var(--border);padding-top:36px;margin-top:48px}.band h2{font-size:clamp(25px,3.3vw,36px);line-height:1.16;color:var(--text-bright);letter-spacing:-.025em;margin-bottom:12px}.band>p{color:var(--muted);font-size:15px;line-height:1.75;max-width:830px;margin-bottom:20px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0}.box h3{font-size:17px;color:var(--text-bright);margin-bottom:8px}.box p,.box li{color:var(--muted);font-size:13.5px;line-height:1.7}.box ul{padding-left:18px}.kicker{font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}.final{background:linear-gradient(180deg,rgba(16,26,48,.72),rgba(7,13,24,.72));border:1px solid var(--border-light);border-radius:16px;padding:28px;margin-top:50px;text-align:center}.final h2{color:var(--text-bright);font-size:28px;line-height:1.18;letter-spacing:-.02em;margin-bottom:10px}.final p{color:var(--muted);font-size:15px;line-height:1.75;max-width:780px;margin:0 auto}.box a,.band a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}@media(max-width:980px){.hero,.grid,.grid.two{grid-template-columns:1fr}.receipt{max-width:620px}}@media(max-width:560px){main{padding-top:96px}.container{padding:0 20px}h1{font-size:34px;letter-spacing:-.02em}.lede{font-size:16px}.cta-row{display:grid;grid-template-columns:1fr}.cta{width:100%;padding-inline:16px;text-align:center}.final{padding:22px}.final h2{font-size:24px}}
+html,body{overflow-x:hidden;width:100%}.hero>*,.grid>*,.grid.two>*{min-width:0}h1,.lede,.box,.final{overflow-wrap:break-word}.receipt,.code{max-width:100%;min-width:0}.code pre{max-width:100%}@media(max-width:560px){.container{max-width:100%}h1{font-size:32px;line-height:1.14;letter-spacing:0}}
+</style>
+</head>
+<body>
+<nav><div class="container"><a href="/" class="logo"><span>Tiny</span>ZKP</a><button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button><div class="links"><a href="/agents">Agents</a><a href="/receipts">Receipts</a><a href="/recipes">Recipes</a><a href="/examples">Examples</a><a href="/signup" class="nav-cta">Get API Key</a></div></div></nav>
+<main><div class="container">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Verifiable agent output</div>
+      <h1>Agent prose should carry proof when the action matters.</h1>
+      <p class="lede">Natural-language agent output is easy to copy, truncate, hallucinate, or forward without context. TinyZKP turns important state-changing outputs into a structured result plus a proof receipt that humans, services, and other agents can verify.</p>
+      <div class="cta-row"><a class="cta" href="/try">Generate a receipt</a><a class="cta secondary" href="/schemas/agent-receipt.schema.json">Open schema</a><a class="cta secondary" href="/recipes">Copy recipes</a></div>
+    </div>
+    <aside class="receipt">
+      <h2>Agent receipt envelope</h2>
+      <div class="code"><pre>{
+  "agent_result": "checkpoint updated",
+  "action": "ledger_reconciliation",
+  "statement": {
+    "template": "accumulator_step",
+    "initial": 4200,
+    "final": 4387,
+    "deltas": [55, 80, 52]
+  },
+  "receipt_url": "https://tinyzkp.com/verify#proof=..."
+}</pre></div>
+    </aside>
+  </section>
+
+  <section class="band">
+    <h2>What changes when output becomes verifiable</h2>
+    <div class="grid">
+      <article class="box"><div class="kicker">Before</div><h3>Trust the transcript</h3><p>The recipient reads what the agent said, maybe inspects logs, and still has to trust the producer's runtime.</p></article>
+      <article class="box"><div class="kicker">Receipt</div><h3>Verify the transition</h3><p>The output includes a proof object or receipt URL. The verifier checks the encoded transition without replaying the workflow.</p></article>
+      <article class="box"><div class="kicker">After</div><h3>Store portable evidence</h3><p>The receipt can travel into support tickets, audit records, API responses, customer pages, and second-agent workflows.</p></article>
+    </div>
+  </section>
+
+  <section class="band grid two">
+    <article class="box"><h3>Receipt these outputs</h3><ul><li>Tool-call batches that change records, permissions, quotas, balances, or workflow status.</li><li>Reconciliation checkpoints and audit summaries.</li><li>Customer-visible state changes returned from an agent or API.</li><li>Long-running autonomous workflows where a supervisor needs evidence.</li></ul></article>
+    <article class="box"><h3>Do not receipt these by default</h3><ul><li>Pure text summaries with no state mutation.</li><li>Private details that would be exposed in transparent receipt parameters.</li><li>Claims whose real-world truth was not encoded into the statement.</li><li>Sub-second UI actions where a signature or log line is enough.</li></ul></article>
+  </section>
+
+  <section class="band">
+    <h2>Implementation pattern</h2>
+    <div class="code"><pre>1. Agent completes a high-value state-changing tool call.
+2. Agent or backend maps public state to a supported TinyZKP statement.
+3. TinyZKP mints a receipt through MCP or REST.
+4. Final answer includes the business result and receipt_url.
+5. Recipient verifies through the public verifier, API, or compatible WASM path.</pre></div>
+  </section>
+
+  <section class="final"><h2>The winning agent output is not just fluent. It is inspectable.</h2><p>Start with one output that currently requires screenshots, manual replay, or trust in a transcript. Add a receipt and make the verifier result part of the product surface.</p><div class="cta-row" style="justify-content:center"><a class="cta" href="/agent-policy">Adopt proof policy</a><a class="cta secondary" href="/examples">Browse examples</a></div></section>
+</div></main>
+<footer><div class="container"><div class="left">&copy; 2026 TinyZKP</div><div class="right"><a href="/verifiable-agent-output">Verifiable Output</a><a href="/agent-platforms">Agent Platforms</a><a href="/agent-audit-trails">Audit Trails</a><a href="/agent-policy">Agent Policy</a><a href="/privacy">Privacy</a><a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a></div></div></footer>
+<script defer src="/analytics.js"></script>
+</body>
+</html>

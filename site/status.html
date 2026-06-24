@@ -3,24 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
 <title>Status — TinyZKP</title>
 <meta name="description" content="Real-time status and recent uptime for the TinyZKP API.">
 <meta name="robots" content="index,follow">
 <meta property="og:title" content="TinyZKP Status — Real-time API health">
 <meta property="og:description" content="Live status for the TinyZKP proving API, MCP server, and marketing site. 30-day uptime history.">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com/status">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="TinyZKP Status">
 <meta name="twitter:description" content="Real-time API health for TinyZKP.">
 <meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="stylesheet" href="/shared.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://tinyzkp.com/status">
+<link rel="manifest" href="/site.webmanifest">
 <style>
 :root{
   --bg:#050a12;
@@ -144,6 +146,21 @@ footer .right a:hover{color:var(--muted)}
   footer .container{flex-direction:column;gap:12px;text-align:center}
 }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Status — TinyZKP",
+  "url": "https://tinyzkp.com/status",
+  "description": "Real-time status and recent uptime for the TinyZKP API.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 
@@ -154,7 +171,7 @@ footer .right a:hover{color:var(--muted)}
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/#pricing">Pricing</a>
+    <a href="/pricing">Pricing</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
@@ -232,6 +249,8 @@ footer .right a:hover{color:var(--muted)}
   <div class="right">
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/docs">Quickstart</a>
+    <a href="/changelog">Changelog</a>
+    <a href="/enterprise">Enterprise</a>
     <a href="/contact">Contact</a>
     <a href="/terms">Terms</a>
     <a href="/privacy">Privacy</a>

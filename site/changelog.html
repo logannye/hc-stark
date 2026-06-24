@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP Changelog &amp; Release Policy</title>
+<meta name="description" content="TinyZKP changelog, release policy, compatibility rules, and release identity endpoints for API, MCP, agent policy, verifier, pricing, schemas, and public metadata.">
+<meta property="og:title" content="TinyZKP Changelog & Release Policy">
+<meta property="og:description" content="Public release governance for TinyZKP proof receipts, API, MCP, verifier, pricing, schemas, and buyer-facing metadata.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:url" content="https://tinyzkp.com/changelog">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP Changelog &amp; Release Policy">
+<meta name="twitter:description" content="Public release governance for TinyZKP proof receipts, API, MCP, verifier, pricing, schemas, and buyer-facing metadata.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/changelog">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="alternate" type="application/json" href="https://tinyzkp.com/changelog.json">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "TinyZKP Changelog & Release Policy",
+  "url": "https://tinyzkp.com/changelog",
+  "description": "Public changelog and release policy for TinyZKP proof receipts, API, MCP, verifier, pricing, schemas, and metadata."
+}
+</script>
+<style>
+main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(320px,.96fr);gap:40px;align-items:center}.hero>*,.release-card>*,.grid>*,.grid.two>*{min-width:0}.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px}.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}h1{font-size:clamp(36px,5vw,62px);line-height:1.06;letter-spacing:-.035em;color:var(--text-bright);max-width:860px;margin-bottom:18px;overflow-wrap:break-word}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:790px;overflow-wrap:break-word}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none;font-size:14px;letter-spacing:.01em;text-align:center;white-space:normal;transition:transform .15s,box-shadow .15s}.cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px var(--accent-glow);text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}.cta.secondary:hover{border-color:var(--accent);box-shadow:none;color:var(--accent)}.panel{background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));border:1px solid var(--border-light);border-radius:18px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.32);max-width:100%;min-width:0}.panel h2{font-size:18px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:14px}.signal{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding:12px 0}.signal:last-child{border-bottom:none}.signal span{color:var(--muted);font-size:13px}.signal strong{font-family:var(--mono);font-size:12.5px;color:var(--accent);text-align:right;overflow-wrap:anywhere}.band{border-top:1px solid var(--border);padding-top:36px;margin-top:48px}.band h2{font-size:clamp(25px,3.3vw,36px);line-height:1.16;color:var(--text-bright);letter-spacing:-.025em;margin-bottom:12px}.band>p{color:var(--muted);font-size:15px;line-height:1.75;max-width:850px;margin-bottom:20px}.band a,.box a,.release-card a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}.release-card{background:linear-gradient(180deg,rgba(46,232,212,.045),var(--surface));border:1px solid rgba(46,232,212,.22);border-radius:16px;padding:24px;display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr);gap:24px;align-items:start;max-width:100%;min-width:0}.tag-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.tag{display:inline-flex;align-items:center;min-height:24px;padding:3px 9px;border:1px solid var(--border-light);border-radius:999px;font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}.tag.live{color:var(--green);background:var(--green-dim);border-color:rgba(52,211,153,.22)}.tag.policy{color:var(--accent);background:var(--accent-dim);border-color:rgba(46,232,212,.22)}.release-card h3{font-size:26px;color:var(--text-bright);letter-spacing:-.02em;margin-bottom:8px;overflow-wrap:break-word}.release-card p,.release-card li{color:var(--muted);font-size:14px;line-height:1.72;overflow-wrap:break-word}.release-card ul{padding-left:18px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0;max-width:100%;overflow-wrap:break-word}.box h3{font-size:17px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:8px}.box p,.box li{color:var(--muted);font-size:13.5px;line-height:1.7}.box ul{padding-left:18px}.box li+li{margin-top:8px}.code{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:auto;max-width:100%;min-width:0}.code pre{font-family:var(--mono);font-size:12.5px;line-height:1.75;color:var(--text);white-space:pre}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin-top:22px;max-width:100%;min-width:0}table{width:100%;border-collapse:collapse;min-width:820px}th,td{padding:13px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}td{color:var(--muted);font-size:13.5px}tbody tr:last-child td{border-bottom:none}td strong{color:var(--text-bright)}.final{background:linear-gradient(180deg,rgba(16,26,48,.72),rgba(7,13,24,.72));border:1px solid var(--border-light);border-radius:16px;padding:28px;margin-top:50px;text-align:center;max-width:100%;min-width:0;overflow-wrap:break-word}.final h2{color:var(--text-bright);font-size:28px;line-height:1.18;letter-spacing:-.02em;margin-bottom:10px}.final p{color:var(--muted);font-size:15px;line-height:1.75;max-width:770px;margin:0 auto}@media(max-width:980px){.hero,.release-card,.grid,.grid.two{grid-template-columns:minmax(0,1fr)}.panel{max-width:620px}.signal strong{text-align:left}}@media(max-width:560px){main{padding-top:96px}.container{padding:0 20px;max-width:100%}h1{font-size:31px;line-height:1.14;letter-spacing:0}.lede{font-size:16px}.cta-row{display:grid;grid-template-columns:minmax(0,1fr)}.cta{width:100%;padding-inline:14px;text-align:center}.panel,.release-card,.final{padding:20px}.signal{display:grid;grid-template-columns:minmax(0,1fr);gap:4px}.final h2{font-size:24px}}
+</style>
+</head>
+<body>
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/integrations">Integrations</a>
+    <a href="/templates">Templates</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/docs">Docs</a>
+    <a href="/trust">Trust</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+<div class="container">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Release governance</div>
+      <h1>Know what changed before you trust a proof workflow.</h1>
+<p class="lede">TinyZKP publishes release notes, compatibility rules, and machine-readable metadata for the surfaces that buyers and agents depend on: proof templates, API behavior, MCP tools, agent proof policy, verifier packages, evaluation guidance, pricing, schemas, and public trust assets.</p>
+      <div class="cta-row">
+        <a class="cta" href="/changelog.json">Machine-readable changelog</a>
+        <a class="cta secondary" href="/docs#versioning-deprecation">Release identity docs</a>
+        <a class="cta secondary" href="/docs#versioning-deprecation">Versioning docs</a>
+      </div>
+    </div>
+    <aside class="panel" aria-label="TinyZKP release identity">
+      <h2>Release identity</h2>
+      <div class="signal"><span>Website release</span><strong>/api/release</strong></div>
+      <div class="signal"><span>API release</span><strong>api.tinyzkp.com/version</strong></div>
+      <div class="signal"><span>MCP release</span><strong>mcp.tinyzkp.com/version</strong></div>
+      <div class="signal"><span>Policy status</span><strong>Public</strong></div>
+      <div class="signal"><span>Breaking changes</span><strong>Migration note required</strong></div>
+    </aside>
+  </section>
+
+  <section class="band">
+    <h2>Current public release</h2>
+    <p>This public release reconciles the website, buyer-facing metadata, and agent-discovery assets around one focused product boundary: transparent STARK proof receipts for supported state-transition templates.</p>
+    <article class="release-card">
+      <div>
+        <div class="tag-row">
+          <span class="tag live">Current</span>
+          <span class="tag policy">Public metadata</span>
+          <span class="tag">2026-06-24</span>
+        </div>
+        <h3>Proof receipts for agents, APIs, and state transitions</h3>
+        <p>The release makes the self-serve TinyZKP surface easier to evaluate, integrate, and govern. It prioritizes honest scope, machine-readable adoption paths, and commercial clarity for teams that need proof receipts inside automated workflows.</p>
+        <ul>
+          <li>Published buyer hubs for use cases, comparisons, integrations, proof templates, examples, limits, evaluation, pricing, calculator, pilot review, and Trust Center review.</li>
+          <li>Added GTM pages for agent platforms, verifiable agent output, and agent audit trails, plus comparison pages for zkVM provers, zkTLS, and blockchain anchoring.</li>
+          <li>Added commercial packaging for a $5,000 creditable production pilot, a dedicated platform-rollout package from $499/month minimum plus usage, and reserved-capacity review.</li>
+          <li>Added an ROI and business-case worksheet for finance/procurement review, avoided-cost modeling, TinyZKP spend, and pilot payback.</li>
+          <li>Added the Fit Finder for routing buyers and agents between Free, Developer, Pro, Scale, Compute, paid pilot, platform rollout, enterprise, and defer paths.</li>
+          <li>Added machine-readable metadata for MCP tools, MCP marketplace discovery, agent proof policy, integrations, templates, examples, limits, fit finder, evaluation, pricing, calculator guidance, trust review, OpenAPI, and schemas.</li>
+          <li>Clarified that the live self-serve product is a transparent STARK state-transition receipt, not a generic private-input ZK service by default.</li>
+          <li>Documented release identity endpoints so operators can detect deploy skew across website, API, MCP, SDK examples, and verifier behavior.</li>
+        </ul>
+      </div>
+      <div class="code"><pre>{
+  "product": "TinyZKP proof receipts",
+  "live_template": "accumulator_step",
+  "api_contract": "/openapi.json",
+  "agent_catalog": "/mcp.json",
+  "agent_policy": "/agent-policy.json",
+  "template_catalog": "/templates.json",
+  "examples": "/examples.json",
+  "limits": "/limits.json",
+  "fit": "/fit.json",
+  "evaluation": "/evaluation.json",
+  "pricing_contract": "/pricing.json",
+  "release_identity": "/api/release"
+}</pre></div>
+    </article>
+  </section>
+
+  <section class="band">
+    <h2>Compatibility policy</h2>
+    <p>These rules define how TinyZKP should change public surfaces that customer code, agents, verifiers, procurement review, and pricing workflows depend on.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Surface</th><th>Additive changes</th><th>Breaking or sensitive changes</th><th>Required public artifact</th></tr></thead>
+        <tbody>
+          <tr><td><strong>API and OpenAPI</strong></td><td>New optional fields, endpoints, examples, and response metadata.</td><td>Route removals, required-parameter changes, verifier acceptance changes, or proof-format floors.</td><td>Changelog entry, migration note, OpenAPI update, and version endpoint check.</td></tr>
+          <tr><td><strong>MCP tools</strong></td><td>New read-only tools, richer tool descriptions, optional response fields, and capability metadata.</td><td>Tool removal, auth changes, input-shape changes, or semantic changes to proof generation and verification.</td><td><code>/mcp.json</code>, server card, changelog note, and install guidance.</td></tr>
+          <tr><td><strong>Agent proof policy</strong></td><td>Clearer mint, skip, attach, verify, and escalation guidance for agent workflows.</td><td>Changed mint-or-skip rules, verification requirements, transparent-parameter guardrails, or escalation triggers.</td><td><code>/agent-policy.json</code>, MCP or receipt-schema update where applicable, and changelog note.</td></tr>
+          <tr><td><strong>Proof templates</strong></td><td>New gated templates, clearer parameters, examples, and pricing guidance.</td><td>Template retirement, changed public statement, changed accepted parameters, or changed verifier path.</td><td><code>/templates.json</code>, template lifecycle update, and migration guidance.</td></tr>
+          <tr><td><strong>Examples and sample workflows</strong></td><td>New sample statements, clearer proof boundaries, and better playground links.</td><td>Removed workflows, changed sample statement boundaries, changed playground parameters, or changed what an example claims to prove.</td><td><code>/examples.json</code>, template or receipt boundary update where applicable, and changelog note.</td></tr>
+          <tr><td><strong>Limits and capabilities</strong></td><td>Clearer quota summaries, demo caps, plan guidance, and escalation rules.</td><td>Plan throughput changes, anonymous demo cap changes, supported capability boundary changes, or changed escalation triggers.</td><td><code>/limits.json</code>, pricing or template update where applicable, and changelog note.</td></tr>
+          <tr><td><strong>Verifier and schemas</strong></td><td>New schema fields that clients can ignore and additional verifier examples.</td><td>Receipt schema floor, proof version rejection, WASM verifier lag, or hosted fallback requirement.</td><td>Schema update, verifier compatibility note, and docs entry.</td></tr>
+          <tr><td><strong>Pricing and calculator</strong></td><td>New guidance, examples, plan explanations, and buyer routing metadata.</td><td>Rate changes, plan cap changes, billing-event definition changes, or Compute formula changes.</td><td><code>/pricing.json</code>, <code>/calculator.json</code>, and changelog note.</td></tr>
+          <tr><td><strong>Evaluation and buyer review</strong></td><td>Clearer stakeholder guidance, ROI drivers, evidence checklists, and recommended buying paths.</td><td>Changed go/no-go guidance, product-fit criteria, stakeholder evidence requirements, or buying-path recommendations.</td><td><code>/evaluation.json</code>, Trust or pricing links where applicable, and changelog note.</td></tr>
+          <tr><td><strong>Trust and security</strong></td><td>Clearer scope, status links, review assets, and data-boundary guidance.</td><td>Audit-status changes, material incident disclosures, data-retention changes, or product-scope changes.</td><td>Trust Center update, security page update, and status or incident link where applicable.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Release notes</h2>
+    <p>The high-signal changes below are the ones buyers, agents, and implementers should inspect before adopting or expanding TinyZKP inside production workflows.</p>
+    <div class="grid">
+      <article class="box"><h3>Agent distribution</h3><p>MCP metadata, server-card discovery, agent proof policy, recipes, and agent receipt schemas make proof generation callable and governable from agent runtimes.</p><p><a href="/mcp">Open MCP</a> · <a href="/agent-policy">Open policy</a></p></article>
+      <article class="box"><h3>Platform GTM</h3><p>Agent platform, platform-rollout, verifiable output, and agent audit-trail pages give buyers a direct path from tool-calling agents to receipt-backed workflows.</p><p><a href="/platform-rollout">Open rollout package</a> · <a href="/agent-platforms">Open platform guide</a></p></article>
+      <article class="box"><h3>Buyer clarity</h3><p>Use-case and comparison hubs explain where proof receipts beat signed logs, hash chains, and self-hosted prover infrastructure, and where they should not be used.</p><p><a href="/compare">Open comparisons</a></p></article>
+      <article class="box"><h3>Proof boundary</h3><p>The template catalog and example gallery make the product promise inspectable: the live self-serve template is <code>accumulator_step</code>; custom or private-input claims require review.</p><p><a href="/examples">Open examples</a></p></article>
+      <article class="box"><h3>Operational limits</h3><p>The limits contract gives agents, buyers, and engineers one source for plan quotas, anonymous demo caps, live capabilities, and escalation triggers.</p><p><a href="/limits">Open limits</a></p></article>
+      <article class="box"><h3>Commercial routing</h3><p>The Fit Finder, evaluation kit, pricing metadata, and calculator route teams between Free, Developer, Pro, Scale, Compute, platform rollout, enterprise, and pilot review based on workflow, verifier, data boundary, volume, trace size, and procurement needs.</p><p><a href="/fit">Open Fit Finder</a> · <a href="/evaluation">Open evaluation</a></p></article>
+      <article class="box"><h3>ROI worksheet</h3><p>The ROI page gives finance and procurement a forwardable model for avoided replay, review labor, support work, prover operations, TinyZKP spend, and pilot payback.</p><p><a href="/roi">Open ROI</a> · <a href="/roi.json">JSON</a></p></article>
+      <article class="box"><h3>Paid pilot packaging</h3><p>Pricing and enterprise pages now separate self-serve checkout from the $5,000 production pilot, dedicated platform rollout, and reserved-capacity review paths.</p><p><a href="/pricing#commercial-packages">Open packages</a> · <a href="/platform-rollout">Open rollout</a></p></article>
+      <article class="box"><h3>Trust packet</h3><p>The Trust Center, security-review packet, privacy notes, and status page expose audit status, data handling, proof scope, and review links in one buyer-ready flow.</p><p><a href="/trust">Open Trust Center</a></p></article>
+      <article class="box"><h3>Release identity</h3><p>Website, API, and MCP release endpoints let operators check whether docs, examples, API behavior, and agent tooling are on compatible revisions during rollout. Use <code>GET https://tinyzkp.com/api/release</code> for the website release.</p><p><a href="/docs#versioning-deprecation">Read versioning docs</a></p></article>
+    </div>
+  </section>
+
+  <section class="band grid two">
+    <article class="box">
+      <h3>Machine-readable assets</h3>
+      <ul>
+        <li><a href="/changelog.json">Changelog metadata</a></li>
+        <li><a href="/schemas/tinyzkp-changelog.schema.json">Changelog schema</a></li>
+        <li><a href="/openapi.json">OpenAPI contract</a></li>
+        <li><a href="/mcp.json">MCP metadata</a></li>
+        <li><a href="/agent-policy.json">Agent policy metadata</a></li>
+        <li><a href="/schemas/tinyzkp-agent-policy.schema.json">Agent policy schema</a></li>
+        <li><a href="/templates.json">Template catalog</a></li>
+        <li><a href="/examples.json">Examples metadata</a></li>
+        <li><a href="/limits.json">Limits metadata</a></li>
+        <li><a href="/fit.json">Fit Finder metadata</a></li>
+        <li><a href="/evaluation.json">Evaluation metadata</a></li>
+        <li><a href="/pricing.json">Pricing metadata</a></li>
+        <li><a href="/trust.json">Trust metadata</a></li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>Operational checks</h3>
+      <ul>
+        <li>Compare <code>/api/release</code>, <code>api.tinyzkp.com/version</code>, and <code>mcp.tinyzkp.com/version</code> during coordinated deploys.</li>
+        <li>Pin receipt schemas, template IDs, and verifier package versions in production systems.</li>
+        <li>Read migration notes before accepting a new proof format or verifier compatibility floor.</li>
+        <li>Treat emergency security disables as the exception to the normal deprecation window.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="final">
+    <h2>Release governance is part of the product.</h2>
+    <p>A proof receipt only earns trust when the surrounding API, verifier, schema, template, and pricing contracts are visible enough for another system to depend on them.</p>
+    <div class="cta-row" style="justify-content:center">
+      <a class="cta" href="/changelog.json">Read JSON</a>
+      <a class="cta secondary" href="/trust">Review Trust Center</a>
+    </div>
+  </section>
+</div>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/changelog">Changelog</a>
+    <a href="/agent-policy">Agent Policy</a>
+    <a href="/docs">Docs</a>
+    <a href="/integrations">Integrations</a>
+    <a href="/templates">Templates</a>
+    <a href="/trust">Trust</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+<script defer src="/analytics.js"></script>
+</body>
+</html>

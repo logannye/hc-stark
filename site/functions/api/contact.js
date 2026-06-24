@@ -16,11 +16,22 @@ const VALID_CATEGORIES = new Set([
   "Feature Request",
   "Compute Inquiry",
   "Design Partner",
+  "Fit Assessment",
+  "Business Case",
+  "Paid Pilot",
+  "Platform Rollout",
   "Billing",
   "Enterprise",
 ]);
 
 const QUALIFICATION_FIELDS = [
+  "source",
+  "platform",
+  "plan",
+  "workflow",
+  "intent",
+  "current_path",
+  "referrer",
   "use_case",
   "trace_length",
   "proof_frequency",
@@ -90,7 +101,7 @@ export async function onRequestPost(context) {
     }
 
     const body = await context.request.json();
-    const { qualification, _honeypot } = body;
+    const { qualification, context: leadContext, _honeypot } = body;
     const name = cleanString(body.name, 200);
     const email = cleanString(body.email, 254).toLowerCase();
     const category = cleanString(body.category, 80);
@@ -123,7 +134,10 @@ export async function onRequestPost(context) {
     }
 
     const safeCategory = VALID_CATEGORIES.has(category) ? category : "General Inquiry";
-    const safeQualification = sanitizeQualification(qualification);
+    const safeQualification = sanitizeQualification({
+      ...(leadContext && typeof leadContext === "object" && !Array.isArray(leadContext) ? leadContext : {}),
+      ...(qualification && typeof qualification === "object" && !Array.isArray(qualification) ? qualification : {}),
+    });
 
     const WEBHOOK_URL = context.env.WEBHOOK_BASE_URL || "https://webhook.tinyzkp.com";
     const resp = await fetch(`${WEBHOOK_URL}/send-contact`, {

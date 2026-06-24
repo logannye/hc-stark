@@ -1,0 +1,4 @@
+Contact: mailto:logan@tinyzkp.com
+Policy: https://tinyzkp.com/security
+Preferred-Languages: en
+Canonical: https://tinyzkp.com/.well-known/security.txt

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/agent-receipt.schema.json",
+  "title": "TinyZKP Agent Receipt Envelope",
+  "description": "A recommended envelope for returning TinyZKP receipts from AI agent actions and tool calls.",
+  "type": "object",
+  "required": ["agent_result", "receipt"],
+  "additionalProperties": true,
+  "properties": {
+    "agent_result": {
+      "description": "The agent's human-readable or machine-readable action result."
+    },
+    "action": {
+      "type": "string",
+      "description": "A short label for the state-changing action or workflow step."
+    },
+    "tool_call_id": {
+      "type": "string",
+      "description": "Optional upstream tool-call identifier from the agent runtime."
+    },
+    "receipt": {
+      "$ref": "https://tinyzkp.com/schemas/tinyzkp-receipt.schema.json"
+    },
+    "receipt_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional shareable verification URL."
+    },
+    "policy": {
+      "type": "object",
+      "description": "Optional policy metadata describing why a receipt was required.",
+      "additionalProperties": true
+    }
+  }
+}

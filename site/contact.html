@@ -3,15 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#050a12">
 <title>Contact — TinyZKP</title>
 <meta name="description" content="Get in touch with the TinyZKP team. Questions, bug reports, feature requests, or billing inquiries.">
 <meta property="og:title" content="Contact — TinyZKP">
 <meta property="og:description" content="Get in touch with the TinyZKP team. Questions, bug reports, feature requests, or billing inquiries.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/contact">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Contact — TinyZKP">
+<meta name="twitter:description" content="Get in touch with the TinyZKP team. Questions, bug reports, feature requests, or billing inquiries.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="canonical" href="https://tinyzkp.com/contact">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/shared.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -70,6 +78,10 @@ main{flex:1}
   top:-200px;left:50%;transform:translateX(-50%);pointer-events:none;opacity:.3}
 .contact-wrap h1{font-size:1.75rem;font-weight:800;margin-bottom:8px;color:var(--text-bright);letter-spacing:-.02em}
 .contact-wrap .subtext{color:var(--muted);font-size:.9rem;line-height:1.6;margin-bottom:32px}
+.context-card{display:none;border:1px solid rgba(46,232,212,.18);background:rgba(46,232,212,.055);border-radius:12px;padding:14px 16px;margin:-14px 0 24px}
+.context-card span{display:block;font-family:var(--mono);font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.context-card strong{display:block;color:var(--text-bright);font-size:.92rem;margin-bottom:4px}
+.context-card p{color:var(--muted);font-size:.84rem;line-height:1.55}
 
 .form-group{margin-bottom:18px}
 .qual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:6px 0 18px}
@@ -129,6 +141,21 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
   footer .right{flex-wrap:wrap;justify-content:center}
 }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Contact — TinyZKP",
+  "url": "https://tinyzkp.com/contact",
+  "description": "Get in touch with the TinyZKP team. Questions, bug reports, feature requests, or billing inquiries.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 
@@ -139,12 +166,12 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/#pricing">Pricing</a>
+    <a href="/pricing">Pricing</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
     <a href="/account">Dashboard</a>
-    <a class="status-link" href="https://api.tinyzkp.com/healthz" target="_blank" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
+    <a class="status-link" href="/status" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
     <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
 </div>
@@ -154,6 +181,11 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
 <div class="contact-wrap">
   <h1>Contact TinyZKP</h1>
   <p class="subtext">Questions, bug reports, Compute inquiries, or design-partner conversations. For technical or commercial fit, the optional fields help us route the request without a long back-and-forth.</p>
+  <div class="context-card" id="contact-context" aria-live="polite">
+    <span>Routing context</span>
+    <strong id="context-title">Selected workflow</strong>
+    <p id="context-text">We will include this context with your request so the reply starts from the workflow that brought you here.</p>
+  </div>
 
   <section class="support-sla" aria-labelledby="support-expectations">
     <h2 id="support-expectations">Support expectations</h2>
@@ -183,6 +215,10 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
         <option value="Feature Request">Feature Request</option>
         <option value="Compute Inquiry">Compute Inquiry</option>
         <option value="Design Partner">Design Partner</option>
+        <option value="Fit Assessment">Fit Assessment</option>
+        <option value="Business Case">Business Case / ROI</option>
+        <option value="Paid Pilot">Paid Pilot</option>
+        <option value="Platform Rollout">Platform Rollout</option>
         <option value="Billing">Billing</option>
         <option value="Enterprise">Enterprise Inquiry</option>
       </select>
@@ -317,6 +353,90 @@ var btn = form.querySelector('.submit-btn');
 var successEl = document.getElementById('success');
 var errorEl = document.getElementById('error');
 
+function setSelectFromQuery(params, id) {
+  var value = params.get(id);
+  var el = document.getElementById(id);
+  if (!value || !el || !el.options) return;
+  for (var i = 0; i < el.options.length; i++) {
+    if (el.options[i].value === value) {
+      el.value = value;
+      return;
+    }
+  }
+}
+
+function cleanContextParam(params, name, fallbackName) {
+  var raw = params.get(name) || (fallbackName ? params.get(fallbackName) : '') || '';
+  return raw.replace(/[^\w .:/-]/g, '').trim().slice(0, 160);
+}
+
+function referrerPath() {
+  try {
+    if (!document.referrer) return '';
+    var url = new URL(document.referrer);
+    return url.origin === window.location.origin ? url.pathname : url.origin;
+  } catch (_) {
+    return '';
+  }
+}
+
+var leadContext = {
+  source: '',
+  platform: '',
+  plan: '',
+  workflow: '',
+  intent: '',
+  current_path: window.location.pathname,
+  referrer: referrerPath()
+};
+
+try {
+  var contactParams = new URLSearchParams(window.location.search);
+  setSelectFromQuery(contactParams, 'category');
+  setSelectFromQuery(contactParams, 'use_case');
+  setSelectFromQuery(contactParams, 'trace_length');
+  setSelectFromQuery(contactParams, 'proof_frequency');
+  setSelectFromQuery(contactParams, 'verification_environment');
+  setSelectFromQuery(contactParams, 'privacy_requirement');
+  setSelectFromQuery(contactParams, 'latency_requirement');
+  setSelectFromQuery(contactParams, 'current_alternative');
+  setSelectFromQuery(contactParams, 'budget_owner');
+  leadContext.source = cleanContextParam(contactParams, 'source', 'utm_source');
+  leadContext.platform = cleanContextParam(contactParams, 'platform');
+  leadContext.plan = cleanContextParam(contactParams, 'plan');
+  leadContext.workflow = cleanContextParam(contactParams, 'workflow');
+  leadContext.intent = cleanContextParam(contactParams, 'intent');
+  var requestedName = contactParams.get('name');
+  if (requestedName && form.name && !form.name.value) form.name.value = requestedName.trim().slice(0, 200);
+  var requestedEmail = contactParams.get('email');
+  if (requestedEmail && form.email && !form.email.value) form.email.value = requestedEmail.trim().slice(0, 254);
+  var prefillMessage = contactParams.get('message');
+  if (prefillMessage && form.message && !form.message.value) {
+    form.message.value = prefillMessage.slice(0, 5000);
+  }
+  var contextEl = document.getElementById('contact-context');
+  if (contextEl && (leadContext.source || leadContext.platform || leadContext.plan || leadContext.workflow || leadContext.intent)) {
+    var sourceLabels = {
+      integration_claude_code: 'Claude Code MCP',
+      integration_cursor: 'Cursor MCP',
+      integration_openai_agents: 'OpenAI-powered agent workflow',
+      integrations_hero: 'Integration catalog',
+      integrations_final: 'Integration catalog',
+      mcp_hero: 'MCP server',
+      templates: 'Proof template catalog'
+    };
+    document.getElementById('context-title').textContent = sourceLabels[leadContext.source] || leadContext.platform || leadContext.source || 'Selected workflow';
+    var details = [];
+    if (leadContext.workflow) details.push(leadContext.workflow);
+    if (leadContext.plan) details.push('plan: ' + leadContext.plan);
+    if (leadContext.intent) details.push(leadContext.intent.replace(/_/g, ' '));
+    document.getElementById('context-text').textContent = details.length
+      ? 'We will include this context with your request: ' + details.join(' / ') + '.'
+      : 'We will include this route with your request so the reply starts from the workflow that brought you here.';
+    contextEl.style.display = 'block';
+  }
+} catch (_) {}
+
 form.addEventListener('submit', function(e) {
   e.preventDefault();
   errorEl.style.display = 'none';
@@ -336,8 +456,16 @@ form.addEventListener('submit', function(e) {
       privacy_requirement: form.privacy_requirement.value,
       latency_requirement: form.latency_requirement.value,
       current_alternative: form.current_alternative.value,
-      budget_owner: form.budget_owner.value
+      budget_owner: form.budget_owner.value,
+      source: leadContext.source,
+      platform: leadContext.platform,
+      plan: leadContext.plan,
+      workflow: leadContext.workflow,
+      intent: leadContext.intent,
+      current_path: leadContext.current_path,
+      referrer: leadContext.referrer
     },
+    context: leadContext,
     _honeypot: form._honeypot.value
   };
 
@@ -354,10 +482,10 @@ form.addEventListener('submit', function(e) {
     }
     form.style.display = 'none';
     successEl.style.display = 'block';
-    if(window.tinyzkpTrack) window.tinyzkpTrack('contact_submitted',{source:'contact_page',plan:form.category.value});
+    if(window.tinyzkpTrack) window.tinyzkpTrack('contact_submitted',{source:leadContext.source || 'contact_page',plan:form.category.value});
   })
   .catch(function(err) {
-    if(window.tinyzkpTrack) window.tinyzkpTrack('contact_failed',{source:'contact_page'});
+    if(window.tinyzkpTrack) window.tinyzkpTrack('contact_failed',{source:leadContext.source || 'contact_page'});
     errorEl.textContent = err.message;
     errorEl.style.display = 'block';
     btn.textContent = 'Send Message';

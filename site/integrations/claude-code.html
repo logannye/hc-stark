@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP for Claude Code MCP - Proof Receipts for Agent Actions</title>
+<meta name="description" content="Install TinyZKP in Claude Code through MCP so agent workflows can generate, attach, and verify proof receipts for important state transitions.">
+<meta property="og:title" content="TinyZKP for Claude Code MCP">
+<meta property="og:description" content="Add proof receipts to Claude Code agent workflows with TinyZKP's MCP server.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:url" content="https://tinyzkp.com/integrations/claude-code">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP for Claude Code MCP">
+<meta name="twitter:description" content="Add proof receipts to Claude Code agent workflows with TinyZKP's MCP server.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/integrations/claude-code">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "name": "TinyZKP for Claude Code MCP",
+  "url": "https://tinyzkp.com/integrations/claude-code",
+  "description": "How to use TinyZKP proof receipts from Claude Code through MCP.",
+  "publisher": {"@type":"Organization","name":"TinyZKP","url":"https://tinyzkp.com"}
+}
+</script>
+<style>
+main{padding:112px 0 76px}.eyebrow{font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}h1{font-size:clamp(34px,5vw,58px);line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);max-width:920px;margin-bottom:18px}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:820px}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}.band{border-top:1px solid var(--border);padding-top:34px;margin-top:44px}.band h2{font-size:clamp(24px,3vw,34px);line-height:1.18;color:var(--text-bright);letter-spacing:-.02em;margin-bottom:12px}.band p{color:var(--muted);font-size:15px;line-height:1.75;max-width:840px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:20px}.grid>*{min-width:0}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:0}.box h3{color:var(--text-bright);font-size:18px;margin-bottom:8px}.box p,.box li{color:var(--muted);font-size:13.5px;line-height:1.7}.box ul{padding-left:18px}.code{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:18px;overflow:auto;margin-top:16px}.code pre{font-family:var(--mono);font-size:12.5px;line-height:1.8;color:var(--text);white-space:pre}.note{border:1px solid var(--border-light);background:var(--surface);border-radius:12px;padding:18px;margin-top:18px;color:var(--muted);font-size:14px;line-height:1.7}.box a,.note a,.band p a{text-decoration:underline;text-underline-offset:4px}@media(max-width:900px){.grid,.grid.two{grid-template-columns:1fr}.cta-row{display:grid;grid-template-columns:1fr}.cta{width:100%}}
+</style>
+</head>
+<body>
+<nav><div class="container"><a href="/" class="logo"><span>Tiny</span>ZKP</a><button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button><div class="links"><a href="/mcp">MCP</a><a href="/integrations">Integrations</a><a href="/agent-policy">Policy</a><a href="/pricing">Pricing</a><a href="/signup" class="nav-cta">Get API Key</a></div></div></nav>
+<main><div class="container">
+  <div class="eyebrow">Claude Code MCP integration</div>
+  <h1>Give Claude Code proof tools for state-changing agent work.</h1>
+  <p class="lede">TinyZKP exposes proof receipts as MCP tools so Claude Code can generate, poll, fetch, summarize, and verify receipts during agent workflows. Use it when an agent changes records, balances, quotas, workflow state, or other durable state that another person or service should verify.</p>
+  <div class="cta-row"><a class="cta" href="/signup?source=integration_claude_code&platform=claude_code&use_case=AI-agent%20state%20receipts&workflow=Claude%20Code%20MCP" data-track="claude_code_signup_click" data-source="integration_claude_code">Get API key</a><a class="cta secondary" href="/mcp">Open MCP guide</a><a class="cta secondary" href="/agent-policy">Adopt policy</a><a class="cta secondary" href="/recipes">Copy recipes</a></div>
+
+  <section class="band grid two">
+    <div>
+      <h2>Remote HTTP MCP install</h2>
+      <p>Claude Code supports remote HTTP MCP servers. Add TinyZKP as a named server, then use an API key for proof generation where your MCP client supports authenticated calls. Verification remains free.</p>
+      <div class="code"><pre>claude mcp add --transport http \
+  tinyzkp https://mcp.tinyzkp.com</pre></div>
+      <p class="note">Reference: Anthropic documents the basic HTTP syntax as <code>claude mcp add --transport http &lt;name&gt; &lt;url&gt;</code>. If your environment needs explicit headers, use the local stdio bridge below or your team's approved MCP client configuration.</p>
+    </div>
+    <div>
+      <h2>Local stdio bridge</h2>
+      <p>Use the stdio bridge when you want the TinyZKP API key to stay in local agent configuration instead of remote client headers.</p>
+      <div class="code"><pre>{
+  "mcpServers": {
+    "tinyzkp": {
+      "command": "hc-mcp-stdio",
+      "args": ["--api-key", "tzk_..."]
+    }
+  }
+}</pre></div>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Best first Claude Code workflows</h2>
+    <div class="grid">
+      <article class="box"><h3>Migration checkpoints</h3><p>Receipt a state count before and after a data migration so reviewers can verify the encoded transition.</p></article>
+      <article class="box"><h3>Agent-run reconciliations</h3><p>Attach a receipt when Claude Code runs scripts that update balances, counters, quota state, or generated audit summaries.</p></article>
+      <article class="box"><h3>Release evidence</h3><p>Store proof job IDs beside deployment or backfill checkpoints when the output will be reviewed later.</p></article>
+    </div>
+  </section>
+
+  <section class="band grid two">
+    <article class="box"><h3>Policy prompt</h3><ul><li>Mint a receipt after high-value state mutations.</li><li>Return the receipt URL with the final answer.</li><li>Verify external receipts before trusting them.</li><li>Never put secrets, raw customer data, or API keys into transparent receipt parameters.</li></ul></article>
+    <article class="box"><h3>Proof boundary</h3><ul><li>Receipts prove the encoded transition, not every off-chain event.</li><li>The default product is transparent state-transition receipts.</li><li>Private-input use requires a documented template, review status, and verifier path.</li><li>Use pilot review for custom state machines.</li></ul></article>
+  </section>
+
+  <section class="band"><h2>Go from install to rollout</h2><p>Start on Free or Developer for one workflow. Move to Pro when receipts become customer-visible or auditor-visible. Use the $5,000 pilot if the proof statement, verifier placement, or support path needs review before launch.</p><div class="cta-row"><a class="cta" href="/fit">Find the right route</a><a class="cta secondary" href="/pilot">Plan a pilot</a><a class="cta secondary" href="/trust">Review trust center</a></div></section>
+</div></main>
+<footer><div class="container"><div class="left">&copy; 2026 TinyZKP</div><div class="right"><a href="/integrations">Integrations</a><a href="/mcp">MCP</a><a href="/agent-policy">Agent Policy</a><a href="/trust">Trust</a><a href="/privacy">Privacy</a><a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a></div></div></footer>
+<script defer src="/analytics.js"></script>
+</body>
+</html>

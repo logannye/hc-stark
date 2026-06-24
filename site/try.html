@@ -3,22 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
 <title>Try TinyZKP — Generate &amp; Verify a State-Transition Receipt</title>
 <meta name="description" content="Generate a real TinyZKP state-transition receipt and verify it in 60 seconds. No signup, no API key, no cryptography knowledge required.">
 <meta name="robots" content="index,follow">
 <meta property="og:title" content="Try TinyZKP — Mint a state-transition receipt">
 <meta property="og:description" content="Real state-transition proof generation, no signup. Enter a start value and deltas, hit prove, hit verify, see the result.">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com/try">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Try TinyZKP">
 <meta name="twitter:description" content="Mint a verifiable state-transition receipt in 60 seconds. No signup.">
 <meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="canonical" href="https://tinyzkp.com/try">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/shared.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -116,10 +118,13 @@ main{flex:1;padding:120px 0 60px}
 .status-line{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:10px;letter-spacing:.02em}
 .status-line.ok{color:var(--green)}
 .status-line.bad{color:var(--red)}
+.proof-actions{display:none;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.proof-actions.ready{display:grid}
+.proof-actions .btn{font-size:12px;padding:10px 14px}
 
 .cta-strip{background:linear-gradient(135deg,rgba(46,232,212,.06) 0%,var(--surface) 65%);
   border:1px solid var(--accent);border-radius:14px;padding:24px 26px;margin-top:34px;text-align:center}
-.cta-strip h3{font-size:17px;color:var(--text-bright);font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+.cta-strip h2{font-size:17px;color:var(--text-bright);font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
 .cta-strip p{color:var(--muted);font-size:13.5px;margin-bottom:14px;line-height:1.6}
 .cta-strip .btn{width:auto;display:inline-flex;padding:10px 24px}
 
@@ -138,6 +143,21 @@ footer .right a:hover{color:var(--muted)}
   footer .container{flex-direction:column;gap:12px;text-align:center}
 }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Try TinyZKP — Generate & Verify a State-Transition Receipt",
+  "url": "https://tinyzkp.com/try",
+  "description": "Generate a real TinyZKP state-transition receipt and verify it in 60 seconds. No signup, no API key, no cryptography knowledge required.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 
@@ -148,7 +168,7 @@ footer .right a:hover{color:var(--muted)}
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/#pricing">Pricing</a>
+    <a href="/pricing">Pricing</a>
     <a href="/verify">Verify</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
@@ -171,7 +191,7 @@ footer .right a:hover{color:var(--muted)}
     <!-- Step 1: Generate -->
     <div class="card active" id="card-prove">
       <div class="card-header"><span class="card-num">1</span><span class="card-title">Generate the proof</span></div>
-      <p class="card-sub">Prove that starting from an initial value and applying a sequence of deltas reaches the final value. The receipt is transferable — anyone verifies it offline in ~5 ms, with no access to your system and nothing to re-run.</p>
+      <p class="card-sub">Prove that starting from an initial value and applying a sequence of deltas reaches the final value. The receipt is transferable — anyone verifies it without access to your system and nothing to re-run.</p>
 
       <div class="row">
         <div><label for="i-initial">initial (0..1000)</label><input id="i-initial" type="number" min="0" max="1000" value="0" oninput="updateFinal()"></div>
@@ -186,12 +206,18 @@ footer .right a:hover{color:var(--muted)}
       <button class="btn" id="btn-prove" onclick="onProve()">Generate proof</button>
       <div class="status-line" id="status-prove">&nbsp;</div>
       <div class="out empty" id="out-prove" style="margin-top:12px">Proof bytes will appear here.</div>
+      <div class="proof-actions" id="proof-actions">
+        <button class="btn secondary" onclick="copyProofJson()">Copy proof JSON</button>
+        <button class="btn secondary" onclick="openVerifier()">Open verifier</button>
+        <button class="btn secondary" onclick="copyCurlEquivalent()">Copy curl request</button>
+        <button class="btn secondary" onclick="copyShareLink()">Copy share link</button>
+      </div>
     </div>
 
     <!-- Step 2: Verify -->
     <div class="card" id="card-verify">
       <div class="card-header"><span class="card-num">2</span><span class="card-title">Verify the proof</span></div>
-      <p class="card-sub">The verifier confirms the receipt without re-running the transition chain. Verification is always free; the client-side WASM verifier runs in milliseconds.</p>
+      <p class="card-sub">The verifier confirms the receipt without re-running the transition chain. Verification is always free; the public verifier tries first-party WASM before hosted fallback.</p>
 
       <button class="btn secondary" id="btn-verify" onclick="onVerify()" disabled>Verify proof</button>
       <button class="btn secondary" id="btn-share" onclick="copyShareLink()" disabled style="margin-top:10px">Copy share link</button>
@@ -201,7 +227,7 @@ footer .right a:hover{color:var(--muted)}
   </div>
 
   <div class="cta-strip">
-    <h3>Want to integrate this into your agent?</h3>
+    <h2>Want to integrate this into your agent?</h2>
     <p>Free tier &middot; 100 proofs/month &middot; no credit card. One-line MCP install for Claude Code, Claude Desktop, and Cursor.</p>
     <a class="btn" href="/signup">Get a free API key</a>
   </div>
@@ -227,6 +253,7 @@ footer .right a:hover{color:var(--muted)}
 <script>
 var lastProof = null;
 var lastShareLink = null;
+var lastParams = null;
 
 function b64UrlEncode(text) {
   var bytes = new TextEncoder().encode(text);
@@ -239,6 +266,10 @@ function b64UrlEncode(text) {
 
 function buildShareLink(proof) {
   return window.location.origin + '/verify#proof=' + b64UrlEncode(JSON.stringify(proof));
+}
+
+function computedFinal(initial, deltas) {
+  return deltas.reduce(function(a, d){ return a + d; }, initial);
 }
 
 function setStatus(elId, text, kind){
@@ -280,6 +311,23 @@ function parseDeltas(s){
   });
 }
 
+function applyPrefillFromUrl(){
+  var params = new URLSearchParams(window.location.search);
+  if (!params.has('initial') && !params.has('deltas')) return;
+  var initial = params.get('initial');
+  var deltas = params.get('deltas');
+  if (initial !== null && /^\d+$/.test(initial)) {
+    document.getElementById('i-initial').value = initial;
+  }
+  if (deltas !== null && /^[0-9,\s]+$/.test(deltas)) {
+    document.getElementById('i-deltas').value = deltas;
+  }
+  var example = params.get('example');
+  if (example && window.tinyzkpTrack) {
+    window.tinyzkpTrack('playground_example_prefilled', { example: example.slice(0, 80) });
+  }
+}
+
 function updateFinal(){
   var initial = Number(document.getElementById('i-initial').value);
   var deltasRaw = document.getElementById('i-deltas').value;
@@ -310,6 +358,8 @@ async function onProve(){
     if (deltas[i] < 0 || deltas[i] > 1000) { setStatus('status-prove', 'each delta must be in [0, 1000]', 'bad'); return; }
   }
 
+  lastParams = {initial: initial, final: computedFinal(initial, deltas), deltas: deltas};
+  document.getElementById('proof-actions').classList.remove('ready');
   btn.disabled = true;
   var s = document.createElement('span'); s.className = 'spinner';
   while (btn.firstChild) btn.removeChild(btn.firstChild);
@@ -323,7 +373,7 @@ async function onProve(){
     var resp = await fetch('/api/demo-prove', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({initial: initial, deltas: deltas}),
+      body: JSON.stringify({params: lastParams}),
     });
     var data = await resp.json();
     if (!resp.ok) {
@@ -362,8 +412,11 @@ async function onProve(){
         }
         var frag = document.createDocumentFragment();
         frag.appendChild(makeColoredLine('  status: ', 'succeeded', 'ok'));
+        frag.appendChild(makeColoredLine('  template: ', 'accumulator_step', 'accent'));
+        frag.appendChild(makeColoredLine('  statement: ', initial + ' + [' + deltas.join(', ') + '] = ' + lastParams.final, ''));
         frag.appendChild(makeColoredLine('  job_id: ', jobId, 'accent'));
         frag.appendChild(makeColoredLine('  version: ', String(poll.proof.version), 'accent'));
+        frag.appendChild(makeColoredLine('  trace inputs: ', deltas.length + ' deltas', ''));
         frag.appendChild(makeColoredLine('  bytes:   ', preview + '... (truncated)', ''));
         frag.appendChild(makeColoredLine('  elapsed: ', elapsed + ' ms', 'accent'));
         setOutput('out-prove', frag);
@@ -373,6 +426,7 @@ async function onProve(){
         lastShareLink = buildShareLink(lastProof);
         document.getElementById('btn-verify').disabled = false;
         document.getElementById('btn-share').disabled = false;
+        document.getElementById('proof-actions').classList.add('ready');
         document.getElementById('card-verify').classList.add('active');
         btn.disabled = false;
         while (btn.firstChild) btn.removeChild(btn.firstChild);
@@ -437,7 +491,7 @@ async function onVerify(){
     }
     if (data.round_trip_ms != null) {
       frag.appendChild(makeColoredLine('  round-trip:    ', data.round_trip_ms + ' ms (server-side verify + network)', 'accent'));
-      frag.appendChild(makeColoredLine('                ', '(the /verify page runs the WASM verifier client-side)', 'muted'));
+      frag.appendChild(makeColoredLine('                ', '(the /verify page tries WASM first, then hosted fallback if needed)', 'muted'));
     }
     if (lastShareLink) {
       frag.appendChild(makeColoredLine('  share link:    ', lastShareLink, 'accent'));
@@ -470,6 +524,42 @@ async function copyShareLink(){
   }
 }
 
+async function copyProofJson(){
+  if (!lastProof) return;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(lastProof, null, 2));
+    setStatus('status-prove', 'Proof JSON copied', 'ok');
+    if(window.tinyzkpTrack) window.tinyzkpTrack('playground_proof_copied',{source:'try_page'});
+  } catch(e) {
+    setStatus('status-prove', 'Copy failed; proof JSON is visible above', 'bad');
+  }
+}
+
+function openVerifier(){
+  if (!lastShareLink && lastProof) lastShareLink = buildShareLink(lastProof);
+  if (lastShareLink) window.location.href = lastShareLink;
+}
+
+async function copyCurlEquivalent(){
+  if (!lastParams) return;
+  var lineContinuation = ' ' + String.fromCharCode(92);
+  var curl = [
+    'curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step' + lineContinuation,
+    '  -H "Authorization: Bearer tzk_..."' + lineContinuation,
+    '  -H "Content-Type: application/json"' + lineContinuation,
+    "  -d '" + JSON.stringify({params:lastParams}) + "'"
+  ].join('\n');
+  try {
+    await navigator.clipboard.writeText(curl);
+    setStatus('status-prove', 'Production curl request copied', 'ok');
+    if(window.tinyzkpTrack) window.tinyzkpTrack('playground_curl_copied',{source:'try_page'});
+  } catch(e) {
+    setOutput('out-prove', curl);
+    setStatus('status-prove', 'Copy failed; curl request is visible above', 'bad');
+  }
+}
+
+applyPrefillFromUrl();
 updateFinal();
 
 document.querySelectorAll('nav .links a').forEach(function(a){

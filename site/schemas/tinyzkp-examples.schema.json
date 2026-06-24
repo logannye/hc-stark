@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/tinyzkp-examples.schema.json",
+  "title": "TinyZKP Example Receipt Workflows",
+  "type": "object",
+  "required": ["name", "url", "generated_at", "summary", "boundary", "examples", "evaluation_use", "links"],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "name": { "type": "string", "minLength": 1 },
+    "url": { "type": "string", "format": "uri" },
+    "generated_at": { "type": "string" },
+    "summary": { "type": "string", "minLength": 1 },
+    "boundary": {
+      "type": "object",
+      "required": ["live_template", "claim", "static_examples_include_proof_bytes", "customer_case_studies", "guidance"],
+      "properties": {
+        "live_template": { "type": "string" },
+        "claim": { "type": "string" },
+        "static_examples_include_proof_bytes": { "type": "boolean" },
+        "customer_case_studies": { "type": "boolean" },
+        "guidance": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "examples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "audience", "workflow", "statement", "proves", "does_not_prove", "try_url", "related"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "audience": { "type": "string" },
+          "workflow": { "type": "string" },
+          "statement": {
+            "type": "object",
+            "required": ["template_id", "initial", "deltas", "final"],
+            "properties": {
+              "template_id": { "type": "string" },
+              "initial": { "type": "integer" },
+              "deltas": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "integer" }
+              },
+              "final": { "type": "integer" }
+            },
+            "additionalProperties": false
+          },
+          "proves": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "does_not_prove": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "try_url": { "type": "string", "format": "uri" },
+          "related": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "format": "uri" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "evaluation_use": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "uri" }
+    }
+  },
+  "additionalProperties": false
+}

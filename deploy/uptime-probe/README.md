@@ -13,7 +13,7 @@ Third-party, externally hosted, free tier, pages by SMS/email/Slack. ~5 minutes:
 1. Create these **HTTP(s)** monitors:
    - `https://api.tinyzkp.com/healthz` — expect HTTP **200**, keyword/string check optional.
    - `https://api.tinyzkp.com/templates` — expect HTTP **200** and keyword `"lifecycle"`.
-   - `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json` — expect HTTP **200** and keyword `accumulator_step available now`.
+   - `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json` — expect HTTP **200** and keyword `Live self-serve template: accumulator_step`.
    - `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json` — expect HTTP **200** and keyword `prove_template`.
    - `https://tinyzkp.com/research` — expect HTTP **200** and keyword `One company, one thesis`.
    - `https://tinyzkp.com/security` — expect HTTP **200** and keyword `Responsible disclosure`.

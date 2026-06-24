@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050a12">
+<title>TinyZKP Limits &amp; Capabilities &mdash; Quotas, Boundaries, and Review Paths</title>
+<meta name="description" content="Canonical TinyZKP product limits: plan quotas, anonymous playground caps, supported receipt capabilities, proof boundaries, and escalation triggers for buyers and agents.">
+<meta property="og:title" content="TinyZKP Limits and Capabilities">
+<meta property="og:description" content="Plan limits, demo caps, supported proof receipt boundaries, and review paths for TinyZKP integrations.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TinyZKP">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:url" content="https://tinyzkp.com/limits">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TinyZKP Limits and Capabilities">
+<meta name="twitter:description" content="Plan limits, demo caps, supported proof receipt boundaries, and review paths for TinyZKP integrations.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<link rel="canonical" href="https://tinyzkp.com/limits">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="alternate" type="application/json" href="https://tinyzkp.com/limits.json">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "name": "TinyZKP Limits and Capabilities",
+  "url": "https://tinyzkp.com/limits",
+  "description": "Canonical limits, quotas, and capability boundaries for TinyZKP proof receipts."
+}
+</script>
+<style>
+main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.92fr);gap:40px;align-items:center}.hero>*,.grid>*,.grid.two>*{min-width:0}.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px}.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}h1{font-size:clamp(35px,5vw,61px);line-height:1.07;letter-spacing:0;color:var(--text-bright);max-width:900px;margin-bottom:18px;overflow-wrap:break-word}.lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:820px;overflow-wrap:break-word}.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none;font-size:14px;letter-spacing:.01em;text-align:center;white-space:normal;transition:transform .15s,box-shadow .15s}.cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px var(--accent-glow);text-decoration:none}.cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}.cta.secondary:hover{border-color:var(--accent);box-shadow:none;color:var(--accent)}.panel,.box,.limit-card,.final{background:var(--surface);border:1px solid var(--border);border-radius:8px}.panel{padding:24px;background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));border-color:var(--border-light);box-shadow:0 24px 70px rgba(0,0,0,.32)}.panel h2{font-size:18px;color:var(--text-bright);letter-spacing:0;margin-bottom:14px}.signal{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding:12px 0}.signal:last-child{border-bottom:none}.signal span{color:var(--muted);font-size:13px}.signal strong{font-family:var(--mono);font-size:12.5px;color:var(--accent);text-align:right;overflow-wrap:anywhere}.band{border-top:1px solid var(--border);padding-top:36px;margin-top:48px}.band h2{font-size:clamp(25px,3.3vw,36px);line-height:1.16;color:var(--text-bright);letter-spacing:0;margin-bottom:12px}.band>p{color:var(--muted);font-size:15px;line-height:1.75;max-width:900px;margin-bottom:20px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.box,.limit-card{padding:20px;overflow-wrap:break-word}.box h3,.limit-card h3{font-size:17px;color:var(--text-bright);letter-spacing:0;margin-bottom:8px}.box p,.box li,.limit-card p,.limit-card li{color:var(--muted);font-size:13.5px;line-height:1.72}.box ul,.limit-card ul{padding-left:18px}.box li a{display:inline-block;padding:4px 0}.tag{display:inline-flex;align-items:center;min-height:24px;padding:3px 9px;border:1px solid var(--border-light);border-radius:999px;font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:12px}.tag.live{color:var(--green);background:var(--green-dim);border-color:rgba(52,211,153,.22)}.tag.warn{color:var(--amber);background:var(--amber-dim);border-color:rgba(251,191,36,.22)}.tag.hot{color:var(--accent);background:var(--accent-dim);border-color:rgba(46,232,212,.22)}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-top:20px}table{width:100%;border-collapse:collapse;min-width:760px}th,td{padding:14px;border-bottom:1px solid var(--border);text-align:left;font-size:13.5px;line-height:1.55;vertical-align:top}th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);background:rgba(255,255,255,.02)}td{color:var(--muted)}td strong{color:var(--text-bright)}td code,.code{font-family:var(--mono);color:var(--accent)}.plans{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:22px}.limit-card{background:linear-gradient(180deg,rgba(46,232,212,.035),var(--surface));border-color:rgba(46,232,212,.16)}.metric{font-family:var(--mono);font-size:26px;color:var(--accent);font-weight:800;margin:8px 0 2px}.unit{font-size:12px;color:var(--dim);min-height:34px}.final{padding:28px;margin-top:50px;text-align:center;background:linear-gradient(180deg,rgba(16,26,48,.72),rgba(7,13,24,.72));border-color:var(--border-light);overflow-wrap:break-word}.final h2{color:var(--text-bright);font-size:28px;line-height:1.18;letter-spacing:0;margin-bottom:10px}.final p{color:var(--muted);font-size:15px;line-height:1.75;max-width:790px;margin:0 auto}.band a,.box a,.limit-card a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}@media(max-width:1120px){.plans{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:980px){.hero,.grid,.grid.two{grid-template-columns:minmax(0,1fr)}.panel{max-width:620px}.signal strong{text-align:left}}@media(max-width:560px){main{padding-top:96px}.container{padding:0 20px;max-width:100%}h1{font-size:31px;line-height:1.14}.lede{font-size:16px}.cta-row{display:grid;grid-template-columns:minmax(0,1fr)}.cta{width:100%;padding-inline:14px}.panel,.box,.limit-card,.final{padding:20px}.plans{grid-template-columns:minmax(0,1fr)}.signal{display:grid;gap:4px}.table-wrap{margin-left:-4px;margin-right:-4px}.final h2{font-size:24px}}
+</style>
+</head>
+<body>
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/pricing">Pricing</a>
+    <a href="/templates">Templates</a>
+    <a href="/trust">Trust</a>
+    <a href="/docs">Docs</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+<div class="container">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Limits and capabilities</div>
+      <h1>Know the production boundary before you build.</h1>
+      <p class="lede">TinyZKP should be easy to evaluate because the limits are explicit: what the anonymous demo can do, what each plan includes, which proof receipt is live, and when a workflow needs pilot or enterprise review.</p>
+      <div class="cta-row">
+        <a class="cta" href="/limits.json">Limits JSON</a>
+        <a class="cta secondary" href="/pricing">Review pricing</a>
+        <a class="cta secondary" href="/pilot">Escalate a workflow</a>
+      </div>
+    </div>
+    <aside class="panel" aria-label="TinyZKP capability summary">
+      <h2>Current boundary</h2>
+      <div class="signal"><span>Live self-serve template</span><strong>accumulator_step</strong></div>
+      <div class="signal"><span>Anonymous demo</span><strong>5 proofs / IP / hour</strong></div>
+      <div class="signal"><span>Free plan</span><strong>100 receipts / month</strong></div>
+      <div class="signal"><span>Verification</span><strong>Free</strong></div>
+      <div class="signal"><span>Custom statements</span><strong>Review first</strong></div>
+    </aside>
+  </section>
+
+  <section class="band">
+    <h2>Product boundary</h2>
+    <p>The default public product is a transparent STARK receipt for supported state transitions. The live self-serve template proves the additive statement <code>initial + sum(deltas) = final</code>; it does not automatically prove business facts, private-input privacy, or arbitrary program execution.</p>
+    <div class="grid">
+      <article class="box"><span class="tag live">Available</span><h3>Hosted proof receipts</h3><p>Submit a supported template job, poll for the proof, and attach the receipt to an API response, agent output, audit record, or checkpoint.</p></article>
+      <article class="box"><span class="tag live">Free</span><h3>Verification</h3><p>Verifier calls and failed verifier checks are not proof-generation charges. Use browser, API, SDK, CLI, MCP, or local WASM where compatible.</p></article>
+      <article class="box"><span class="tag warn">Boundary</span><h3>Private or custom claims</h3><p>Private-input proofs, custom predicates, restricted verification, and unsupported state machines need design review before production claims.</p></article>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Anonymous playground limits</h2>
+    <p>The playground exists to make examples tangible. It is intentionally narrow and rate-limited so the public demo stays available.</p>
+    <div class="grid">
+      <article class="limit-card"><h3>Rate limit</h3><div class="metric">5</div><div class="unit">proofs per IP per hour</div><p>Use the playground for demos, examples, sales conversations, and quick evaluation.</p></article>
+      <article class="limit-card"><h3>Inputs</h3><div class="metric">0..1000</div><div class="unit">initial and each delta</div><p>Deltas must be 1 to 10 integers. The final value is computed server-side.</p></article>
+      <article class="limit-card"><h3>Production route</h3><div class="metric">API key</div><div class="unit">account limits and spend controls</div><p>Use Free or paid plans when a workflow depends on proof generation.</p></article>
+    </div>
+  </section>
+
+  <section class="band" id="plans">
+    <h2>Plan limits</h2>
+    <p>These limits come from the public pricing contract. Paid self-serve plans add throughput, concurrency, discounts, and monthly spend caps while keeping verification free.</p>
+    <div class="plans">
+      <article class="limit-card"><h3>Free</h3><div class="metric">100</div><div class="unit">receipts/month</div><p>10 requests/minute, 1 concurrent job, no credit card.</p></article>
+      <article class="limit-card"><h3>Developer</h3><div class="metric">100</div><div class="unit">requests/minute</div><p>4 concurrent jobs and a $500 monthly spend cap.</p></article>
+      <article class="limit-card"><h3>Pro</h3><div class="metric">300</div><div class="unit">requests/minute</div><p>8 concurrent jobs, 25% discount, and a $2,500 monthly spend cap.</p></article>
+      <article class="limit-card"><h3>Scale</h3><div class="metric">500</div><div class="unit">requests/minute</div><p>16 concurrent jobs, 40% discount, and a $10,000 monthly spend cap.</p></article>
+      <article class="limit-card"><h3>Compute</h3><div class="metric">$0.50</div><div class="unit">per million trace steps</div><p>8 concurrent jobs by default. Use review for reserved capacity or unusual latency needs.</p></article>
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>Capability matrix</h2>
+    <p>Use this table when routing an integration, procurement review, or agent policy.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Surface</th><th>Status</th><th>Limit or boundary</th><th>Escalation path</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Live template</strong></td><td>Available</td><td>Self-serve production exposure is limited to <code>accumulator_step</code>.</td><td>Use pilot review for custom predicates or unsupported state machines.</td></tr>
+          <tr><td><strong>Verification</strong></td><td>Available</td><td>Free verification. Local WASM depends on proof-format compatibility; hosted fallback supports current production receipts.</td><td>Use design review for on-chain or restricted-runtime verification.</td></tr>
+          <tr><td><strong>MCP</strong></td><td>Available</td><td>Anonymous capabilities are limited; authenticated calls map to account limits.</td><td>Use paid plans or enterprise review for production agent workloads.</td></tr>
+          <tr><td><strong>Pricing</strong></td><td>Available</td><td>Developer, Pro, and Scale include monthly spend caps; Compute is usage-based by trace step.</td><td>Use enterprise review for reserved capacity, invoice billing, or custom commitments.</td></tr>
+          <tr><td><strong>Security review</strong></td><td>Available</td><td>Trust Center, security packet, status page, OpenAPI, schemas, and release policy are public.</td><td>Use procurement review for contractual terms, retention requirements, or support targets.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band grid two">
+    <article class="box">
+      <h3>Escalate before production when</h3>
+      <ul>
+        <li>The verifier must check a statement other than the live additive transition.</li>
+        <li>Private inputs, masking, or customer secrets are involved.</li>
+        <li>Concurrency, spend, queue priority, or latency needs a commitment.</li>
+        <li>The receipt is customer-, auditor-, counterparty-, or regulator-visible.</li>
+        <li>Verification must run on-chain, air-gapped, or inside a restricted runtime.</li>
+      </ul>
+    </article>
+    <article class="box">
+      <h3>Machine-readable assets</h3>
+      <ul>
+        <li><a href="/limits.json">Limits metadata</a></li>
+        <li><a href="/schemas/tinyzkp-limits.schema.json">Limits schema</a></li>
+        <li><a href="/pricing.json">Pricing metadata</a></li>
+        <li><a href="/templates.json">Template catalog</a></li>
+        <li><a href="/openapi.json">OpenAPI contract</a></li>
+        <li><a href="/trust.json">Trust metadata</a></li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="final">
+    <h2>Use the smallest surface that honestly supports the workflow.</h2>
+    <p>Start self-serve when the live template, plan limits, and public parameters fit. Escalate when the statement, data boundary, capacity, or verifier environment changes the product promise.</p>
+    <div class="cta-row" style="justify-content:center">
+      <a class="cta" href="/signup">Get API key</a>
+      <a class="cta secondary" href="/evaluation">Open evaluation kit</a>
+      <a class="cta secondary" href="/enterprise">Review enterprise</a>
+    </div>
+  </section>
+</div>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/limits">Limits</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/templates">Templates</a>
+    <a href="/evaluation">Evaluation</a>
+    <a href="/trust">Trust</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+</div>
+</footer>
+<script defer src="/analytics.js"></script>
+</body>
+</html>

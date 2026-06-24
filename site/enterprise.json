@@ -1,0 +1,140 @@
+{
+  "$schema": "https://tinyzkp.com/schemas/tinyzkp-enterprise.schema.json",
+  "name": "TinyZKP Enterprise",
+  "url": "https://tinyzkp.com/enterprise",
+  "generated_at": "2026-06-24",
+  "summary": "Reserved-capacity and procurement review path for teams putting TinyZKP proof receipts into production workflows.",
+  "offer": {
+    "primary": "Reserved proof receipt infrastructure without owning prover operations.",
+    "entrypoint": "One scoped proof-receipt pilot or one existing self-serve workflow that needs procurement, support, limits, or reserved capacity.",
+    "commercial_model": "$5,000 production pilot for one scoped workflow; sales-assisted platform rollout from $499/month minimum plus usage after review; custom reserved capacity after workflow fit, expected volume, trace size, verifier path, and support expectations are known."
+  },
+  "best_fit": [
+    "Customer-visible proof receipts attached to API mutations or SaaS workflows",
+    "Agent control planes that need receipts for high-value tool-call batches",
+    "Agent platforms, IDEs, workflow engines, and marketplaces that want proof receipts as a native policy surface",
+    "Finance, audit, reserve, liability, or reconciliation checkpoints",
+    "Long supported state-transition traces where Compute is preferable to self-hosted high-RAM prover operations",
+    "Procurement-heavy teams that need trust, security, data-handling, and support review before rollout"
+  ],
+  "review_first": [
+    "Private-input zero-knowledge requirements",
+    "Custom predicates or unsupported state machines",
+    "Contractual support targets or reserved workers",
+    "Special data-retention, legal, invoice, or security-review requirements",
+    "On-chain or restricted-runtime verifier requirements"
+  ],
+  "enterprise_review_topics": [
+    {
+      "area": "capacity",
+      "topics": ["reserved workers", "concurrency", "rate limits", "queue priority", "trace-size mix"]
+    },
+    {
+      "area": "support",
+      "topics": ["response targets", "escalation route", "incident contacts", "launch-week coverage"]
+    },
+    {
+      "area": "security",
+      "topics": ["trust boundary", "data handling", "verifier behavior", "audit status", "release policy"]
+    },
+    {
+      "area": "commercials",
+      "topics": ["invoice billing", "monthly commit", "spend cap", "Compute estimate", "renewal trigger"]
+    },
+    {
+      "area": "design",
+      "topics": ["proof statement", "template lifecycle", "custom state-machine scope", "privacy boundary", "verifier path"]
+    }
+  ],
+  "commercial_packages": [
+    {
+      "id": "production_pilot",
+      "name": "Production Pilot",
+      "commercial_model": "$5,000 one-time scoped pilot, credited toward an annual or reserved-capacity agreement if converted within 60 days.",
+      "best_for": "One high-value workflow that needs a real receipt and verifier result before rollout."
+    },
+    {
+      "id": "platform_rollout",
+      "name": "Platform Rollout",
+      "commercial_model": "From $499/month committed minimum plus usage after pilot or design review.",
+      "best_for": "Agent platforms, workflow engines, IDEs, and marketplaces exposing proof receipts as a native capability."
+    },
+    {
+      "id": "reserved_capacity",
+      "name": "Reserved Capacity",
+      "commercial_model": "Custom terms based on reserved workers, trace mix, support targets, and procurement needs.",
+      "best_for": "Customer-visible, auditor-visible, or operationally critical proof receipt workloads."
+    }
+  ],
+  "rollout": [
+    {
+      "phase": "0-14 days",
+      "goal": "Run one scoped pilot with success metrics, verifier path, data boundary, and cost estimate."
+    },
+    {
+      "phase": "15-30 days",
+      "goal": "Attach receipts to one production-like workflow and route security/procurement review through the public packet."
+    },
+    {
+      "phase": "31-60 days",
+      "goal": "Set reserved capacity, support targets, and commercial terms if the receipt becomes customer- or auditor-visible."
+    },
+    {
+      "phase": "after launch",
+      "goal": "Expand to adjacent workflows only after receipt verification and incident ownership are operationally clear."
+    }
+  ],
+  "not_claimed_by_default": [
+    "Generic private-input zero knowledge",
+    "Arbitrary zkVM availability",
+    "Finished zkML service",
+    "On-chain verifier support for every chain",
+    "Truth claims that are not encoded into the proven statement",
+    "Production support commitment before commercial terms are agreed"
+  ],
+  "qualification_inputs": [
+    "Workflow owner, verifier, and business decision the receipt supports",
+    "Expected monthly proof volume, trace-size range, and peak concurrency",
+    "Whether a $5,000 production pilot, platform rollout, or reserved-capacity path is the intended commercial route",
+    "Whether the receipt is internal, auditor-visible, customer-visible, or agent-supervisor visible",
+    "Security, privacy, legal, retention, invoice, and support requirements"
+  ],
+  "procurement_assets": {
+    "evaluation": "https://tinyzkp.com/evaluation",
+    "evaluation_metadata": "https://tinyzkp.com/evaluation.json",
+    "trust_center": "https://tinyzkp.com/trust",
+    "security_review": "https://tinyzkp.com/security-review",
+    "security_status": "https://tinyzkp.com/security",
+    "status_page": "https://tinyzkp.com/status",
+    "release_policy": "https://tinyzkp.com/changelog",
+    "openapi": "https://tinyzkp.com/openapi.json",
+    "templates": "https://tinyzkp.com/templates.json",
+    "pricing": "https://tinyzkp.com/pricing.json",
+    "limits": "https://tinyzkp.com/limits.json",
+    "privacy": "https://tinyzkp.com/privacy",
+    "terms": "https://tinyzkp.com/terms"
+  },
+  "links": {
+    "enterprise": "https://tinyzkp.com/enterprise",
+    "enterprise_metadata": "https://tinyzkp.com/enterprise.json",
+    "enterprise_schema": "https://tinyzkp.com/schemas/tinyzkp-enterprise.schema.json",
+    "evaluation": "https://tinyzkp.com/evaluation",
+    "evaluation_metadata": "https://tinyzkp.com/evaluation.json",
+    "roi": "https://tinyzkp.com/roi",
+    "roi_metadata": "https://tinyzkp.com/roi.json",
+    "contact_enterprise": "https://tinyzkp.com/contact?category=Enterprise",
+    "paid_pilot": "https://tinyzkp.com/pilot",
+    "platform_rollout": "https://tinyzkp.com/platform-rollout",
+    "platform_rollout_metadata": "https://tinyzkp.com/platform-rollout.json",
+    "agent_platforms": "https://tinyzkp.com/agent-platforms",
+    "pilot_program": "https://tinyzkp.com/pilot",
+    "pricing": "https://tinyzkp.com/pricing",
+    "limits": "https://tinyzkp.com/limits",
+    "limits_metadata": "https://tinyzkp.com/limits.json",
+    "calculator": "https://tinyzkp.com/calculator",
+    "compute": "https://tinyzkp.com/compute",
+    "trust_center": "https://tinyzkp.com/trust",
+    "security_review": "https://tinyzkp.com/security-review",
+    "template_catalog": "https://tinyzkp.com/templates"
+  }
+}

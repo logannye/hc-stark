@@ -3,15 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#050a12">
 <title>Documentation — TinyZKP</title>
 <meta name="description" content="TinyZKP documentation. Learn how to generate and verify state-transition STARK receipts with our API.">
 <meta property="og:title" content="Documentation — TinyZKP">
 <meta property="og:description" content="Learn how to generate and verify state-transition STARK receipts with the TinyZKP API.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tinyzkp.com/docs">
+<meta property="og:site_name" content="TinyZKP">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Documentation — TinyZKP">
+<meta name="twitter:description" content="Learn how to generate and verify state-transition STARK receipts with the TinyZKP API.">
+<meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
+<meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
+<meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="canonical" href="https://tinyzkp.com/docs">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="alternate" type="application/vnd.oai.openapi+json" href="https://tinyzkp.com/openapi.json">
 <link rel="stylesheet" href="/shared.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -92,6 +101,7 @@ nav .links a:hover{color:var(--text);text-decoration:none}
 .docs-main p{color:var(--muted);margin-bottom:16px;font-size:15px}
 .docs-main ul,.docs-main ol{color:var(--muted);font-size:15px;margin-bottom:16px;padding-left:24px}
 .docs-main li{margin-bottom:6px}
+.docs-main p a,.docs-main li a,.docs-main td a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
 .docs-main li code,.docs-main p code{background:var(--surface);border:1px solid var(--border);padding:2px 7px;border-radius:5px;
   font-family:var(--mono);font-size:12.5px;color:var(--accent)}
 
@@ -192,6 +202,21 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
   footer .right{flex-wrap:wrap;justify-content:center}
 }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Documentation — TinyZKP",
+  "url": "https://tinyzkp.com/docs",
+  "description": "TinyZKP documentation. Learn how to generate and verify state-transition STARK receipts with our API.",
+  "publisher": {
+    "@type": "Organization",
+    "name": "TinyZKP",
+    "url": "https://tinyzkp.com"
+  },
+  "inLanguage": "en"
+}
+</script>
 </head>
 <body>
 
@@ -202,13 +227,13 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/#pricing">Pricing</a>
+    <a href="/pricing">Pricing</a>
     <a href="/verify">Verify</a>
     <a href="/docs">Quickstart</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/contact">Contact</a>
     <a href="/account">Dashboard</a>
-    <a class="status-link" href="https://api.tinyzkp.com/healthz" target="_blank" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
+    <a class="status-link" href="/status" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
     <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
 </div>
@@ -228,10 +253,10 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <a href="#template-examples" style="padding-left:28px;font-size:12.5px">Template Examples</a>
     <a href="#compatibility">SDK Compatibility</a>
     <a href="#versioning-deprecation" style="padding-left:28px;font-size:12.5px">Versioning &amp; Deprecation</a>
-    <a href="#plans">Plan Tiers</a>
+    <a href="#plans">Plans &amp; Limits</a>
     <a href="#pricing">Pricing</a>
     <a href="#parameters">Parameters</a>
-    <a href="#zk-mode">Zero-Knowledge Mode</a>
+    <a href="#zk-mode">Transparent vs Privacy Mode</a>
     <a href="#estimate">Cost Estimation</a>
     <a href="#batch">Batch Proving</a>
     <a href="#inspect">Proof Inspection</a>
@@ -247,6 +272,7 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
 
     <h1>Documentation</h1>
     <p class="docs-intro">Generate, verify, inspect, and operate TinyZKP state-transition receipts across the hosted API, SDKs, browser verifier, and MCP server.</p>
+    <p style="color:var(--muted);font-size:14px;line-height:1.7;margin:10px 0 28px">Machine-readable contracts: <a href="/openapi.json">TinyZKP OpenAPI</a> for agents and API clients, <a href="/templates.json">template metadata</a> for proof-statement discovery, <a href="/examples.json">examples metadata</a> for sample receipt workflows, <a href="/agent-policy.json">agent policy metadata</a> for proof-receipt decision rules, <a href="/limits.json">limits metadata</a> for quotas and capability boundaries, <a href="/integrations.json">integration metadata</a> for adoption planning, <a href="/mcp.json">MCP metadata</a> for agent catalogs, <a href="/evaluation.json">evaluation metadata</a> for business-case review, <a href="/pricing.json">pricing metadata</a>, <a href="/calculator.json">calculator metadata</a>, and <a href="/changelog.json">changelog metadata</a> for automated buyer review, plus the canonical live server spec at <a href="https://api.tinyzkp.com/api-doc/openapi.json" target="_blank">api.tinyzkp.com/api-doc/openapi.json</a>.</p>
 
     <h2 id="quickstart">Quickstart</h2>
     <p>Get from zero to a verified state-transition receipt in four steps. No cryptography knowledge required.</p>
@@ -263,7 +289,7 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       <span class="step-num">2</span>
       <div>
         <h3>Submit a proof</h3>
-        <p>Use a proof template to prove a chain of state transitions. This example proves that starting from 1000 and applying the deltas [10, 20, 15] reaches 1045.</p>
+        <p>Use a <a href="/templates">live proof template</a> to prove a chain of state transitions. This example proves that starting from 1000 and applying the deltas [10, 20, 15] reaches 1045.</p>
         <div class="code-block">
           <span class="code-label">curl</span>
 <pre>curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
@@ -292,7 +318,7 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
         <p><strong>Response when done:</strong></p>
         <div class="code-block">
 <pre><span class="comment">// proof.bytes is a JSON array of unsigned bytes (Vec&lt;u8&gt;), not a hex string.</span>
-{"status":"succeeded","proof":{"version":4,"bytes":[106,143,59,44,...]}}</pre>
+{"status":"succeeded","proof":{"version":5,"bytes":[106,143,59,44,...]}}</pre>
         </div>
         <p>Status values are one of <code>"pending"</code>, <code>"running"</code>, <code>"succeeded"</code>, or <code>"failed"</code>. Keep polling while it&rsquo;s <code>pending</code> or <code>running</code>; when it&rsquo;s <code>succeeded</code>, copy the entire <code>proof</code> object. On <code>failed</code> the response includes an <code>error</code> string.</p>
       </div>
@@ -302,13 +328,13 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       <span class="step-num">4</span>
       <div>
         <h3>Verify the proof</h3>
-        <p>Pass the <code>proof</code> object from step 3 to the verify endpoint. Set <code>allow_legacy_v2</code> to <code>true</code> if your proof is a v2 (it&rsquo;s required &mdash; the field has no default). Verification is always <strong style="color:var(--green)">free &mdash; no charge</strong>. Auth is required only to prevent abuse.</p>
+        <p>Pass the <code>proof</code> object from step 3 to the verify endpoint. Verification is always <strong style="color:var(--green)">free &mdash; no charge</strong>. Auth is required only to prevent abuse.</p>
         <div class="code-block">
           <span class="code-label">curl</span>
 <pre>curl -X POST https://api.tinyzkp.com/verify \
   -H "Authorization: Bearer tzk_..." \
   -H "Content-Type: application/json" \
-  -d '{"proof":{"version":4,"bytes":[106,143,59,44,...]},"allow_legacy_v2":true}'</pre>
+  -d '{"proof":{"version":5,"bytes":[106,143,59,44,...]}}'</pre>
         </div>
         <p><strong>Response:</strong></p>
         <div class="code-block">
@@ -339,17 +365,17 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
         <thead><tr><th>Bad fit</th><th>Use instead</th><th>Reason</th></tr></thead>
         <tbody>
           <tr><td>No third-party verification requirement</td><td>Signed logs, checksums, or database audit trails</td><td>If every verifier already trusts your service, a proof adds cost without changing the trust model.</td></tr>
-          <tr><td>Input privacy is the main requirement today</td><td>Contact TinyZKP for a design-partner review</td><td>The default hosted receipt is transparent. Do not treat it as input-private unless the exact template and masking configuration are documented and audit-cleared.</td></tr>
+          <tr><td>Input privacy is the main requirement today</td><td>Contact TinyZKP for a design-partner review</td><td>The default hosted receipt is transparent. Do not treat it as input-private unless the exact template, masking configuration, review status, and verifier path are explicitly documented.</td></tr>
           <tr><td>Sub-second, high-frequency proving on every user action</td><td>Batch receipts, periodic checkpoints, or conventional signatures</td><td>Proof generation is measured in seconds for normal hosted flows; verification is fast, but proving is not a UI-thread primitive.</td></tr>
-          <tr><td>Unsupported custom program semantics</td><td>Use a live template or start a design-partner track</td><td>Self-serve production exposure is limited to live templates. Preview and audit-gated work stays out of the public catalog.</td></tr>
+          <tr><td>Unsupported custom program semantics</td><td>Use a live template or start a design-partner track</td><td>Self-serve production exposure is limited to live templates. Preview and review-gated work stays out of the public catalog.</td></tr>
           <tr><td>Smart-contract verifier deployment is mandatory</td><td>Plan a dedicated integration review</td><td>The default production path targets hosted proving plus API/WASM verification, not a universal on-chain verifier for every chain.</td></tr>
           <tr><td>You want the legacy KZG prototype as a service</td><td>Use <code>hc-stark</code> / TinyZKP production APIs</td><td><code>space-efficient-zero-knowledge-proofs</code> is research lineage, not the hosted TinyZKP engine or trust boundary.</td></tr>
         </tbody>
       </table>
     </div>
 
-    <h2 id="wasm">Client-Side Verification</h2>
-    <p>Verify proofs entirely client-side with the <code>@tinyzkp/verify</code> WASM package. No server roundtrip, no API key required for verification.</p>
+    <h2 id="wasm">WASM-First Verification</h2>
+    <p>Verify compatible receipts locally with the <code>@tinyzkp/verify</code> WASM package. No API key is required for verification. The hosted <a href="/verify">public verifier</a> tries this WASM path first and falls back to TinyZKP's verifier endpoint when the local package is behind the current production proof format.</p>
 
     <div class="code-block">
       <span class="code-label">install</span>
@@ -363,9 +389,9 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
 
 <span class="keyword">await</span> <span class="func">init</span>();  <span class="comment">// load WASM binary (~785 KB)</span>
 
-<span class="keyword">const</span> result = <span class="func">verify</span>({ version: <span class="string">4</span>, bytes: proofBytes });
+<span class="keyword">const</span> result = <span class="func">verify</span>({ version: <span class="string">5</span>, bytes: proofBytes });
 console.log(result.ok);     <span class="comment">// true</span>
-console.log(result.version); <span class="comment">// 4</span></pre>
+console.log(result.version); <span class="comment">// 5</span></pre>
     </div>
 
     <h3>Node.js</h3>
@@ -378,7 +404,7 @@ console.log(result.ok); <span class="comment">// true</span></pre>
     </div>
 
     <ul>
-      <li><strong>Offline verification</strong> &mdash; no network request, no API key needed</li>
+      <li><strong>Local verification path</strong> &mdash; no network request for receipt formats supported by the bundled WASM package</li>
       <li><strong>Edge-compatible</strong> &mdash; runs in Cloudflare Workers, Deno, Vercel Edge Functions</li>
       <li><strong>~785 KB</strong> WASM binary (gzips to ~300 KB)</li>
       <li>Returns <code>{ ok: bool, error?: string, version?: number }</code></li>
@@ -557,7 +583,7 @@ console.log(result.ok); <span class="comment">// true</span></pre>
     </div>
 
     <h2 id="templates">Proof Templates</h2>
-    <p>TinyZKP provides a live template for transparent state-transition receipts. Templates handle the cryptographic complexity &mdash; you provide the transition parameters. Use <code>POST /prove/template/:id</code> to prove, or browse templates with <code>GET /templates</code>. More proof types are in development and remain gated until deployed and audited.</p>
+    <p>TinyZKP provides a live template for transparent state-transition receipts. Templates handle the cryptographic complexity &mdash; you provide the transition parameters. Use <code>POST /prove/template/:id</code> to prove, or browse templates with <code>GET /templates</code>. More proof types are in development and remain gated until deployed, documented, and assigned explicit review status.</p>
 
     <div class="docs-table-wrap">
       <table>
@@ -576,13 +602,13 @@ console.log(result.ok); <span class="comment">// true</span></pre>
     </div>
 
     <h3 id="template-lifecycle">Template Lifecycle</h3>
-    <p>Template discovery includes a machine-readable <code>lifecycle</code> field. Public production listings expose only <code>live</code> templates by default; gated templates return the same unavailable/unknown response as an unsupported template unless the deployment explicitly opts into unaudited development mode.</p>
+    <p>Template discovery includes a machine-readable <code>lifecycle</code> field. Public production listings expose only <code>live</code> templates by default; gated templates return the same unavailable/unknown response as an unsupported template unless the deployment explicitly opts into development-only template exposure.</p>
     <div class="docs-table-wrap">
       <table>
         <thead><tr><th>Lifecycle</th><th>Meaning</th><th>Default production behavior</th></tr></thead>
         <tbody>
           <tr><td><code>live</code></td><td>The template is enforced by the proof system and approved for production exposure.</td><td>Listed and dispatchable.</td></tr>
-          <tr><td><code>audit_gated</code></td><td>The AIR enforces the predicate, but external audit coverage is not complete.</td><td>Hidden and refused unless <code>HC_ALLOW_UNAUDITED_TEMPLATES</code> is enabled.</td></tr>
+          <tr><td><code>audit_gated</code></td><td>The AIR enforces the predicate, but the template is still review-gated for production exposure.</td><td>Hidden and refused unless <code>HC_ALLOW_UNAUDITED_TEMPLATES</code> is enabled.</td></tr>
           <tr><td><code>preview</code></td><td>The template is structure-only, experimental, or tied to a preview backend.</td><td>Hidden and refused outside explicit development/design-partner contexts.</td></tr>
         </tbody>
       </table>
@@ -656,7 +682,7 @@ async fn main() -> Result&lt;(), tinyzkp::Error&gt; {
           <tr><td>Python SDK</td><td><code>pip install tinyzkp</code></td><td>Backend services, data pipelines, scripts</td><td>Wraps the HTTP API and returns the same job/proof/verification shapes as the public endpoints.</td></tr>
           <tr><td>TypeScript SDK</td><td><code>npm install tinyzkp</code></td><td>Node.js apps, edge workers, developer tooling</td><td>Dual ESM/CJS package. Keep API keys server-side; use the WASM verifier for browser-only verification.</td></tr>
           <tr><td>CLI</td><td><code>npx @tinyzkp/cli</code></td><td>Smoke tests, local workflows, CI examples</td><td>Useful for one-off proofs and scripted verification; shares hosted API compatibility with the SDKs.</td></tr>
-          <tr><td>WASM verifier</td><td><code>npm install @tinyzkp/verify</code></td><td>Offline client-side verification</td><td>No API key and no server roundtrip. Current documented examples use protocol v4 receipts; legacy v2 verification requires explicit opt-in on the server API.</td></tr>
+          <tr><td>WASM verifier</td><td><code>npm install @tinyzkp/verify</code></td><td>Local client-side verification where compatible</td><td>No API key. Current default examples use protocol v5 receipts; production verification rejects pre-v5 receipts, and the hosted verifier page can fall back when the browser package lags the current format.</td></tr>
           <tr><td>Rust crate</td><td><code>cargo add tinyzkp</code></td><td>Rust services and native tooling</td><td>Use for typed API integration and proof-object handling. The server remains the source of truth for accepted template lifecycle.</td></tr>
           <tr><td>MCP server</td><td><code>https://mcp.tinyzkp.com</code> or <code>hc-mcp-stdio</code></td><td>AI-agent proof generation and verification</td><td>The hosted anonymous lane is globally capped; optional Bearer auth maps to the same plan limits as the HTTP API.</td></tr>
         </tbody>
@@ -664,20 +690,20 @@ async fn main() -> Result&lt;(), tinyzkp::Error&gt; {
     </div>
     <ul>
       <li>New production proof formats should preserve verifier compatibility or ship with a migration note in the changelog and release policy.</li>
-      <li><code>allow_legacy_v2</code> exists only for explicit legacy verification. Do not rely on implicit v2 acceptance in new integrations.</li>
+      <li>Production verification rejects pre-v5 receipts. Regenerate old examples before integrating them into new systems.</li>
       <li>Examples on this page intentionally use one canonical <code>accumulator_step</code> flow so SDK behavior, CLI behavior, and hosted API behavior stay aligned.</li>
     </ul>
 
     <h3 id="versioning-deprecation">API Versioning &amp; Deprecation</h3>
-    <p>Production API and MCP releases expose release identity so operators can detect skew during a coordinated deploy. Use <code>GET https://api.tinyzkp.com/version</code>, <code>GET https://mcp.tinyzkp.com/version</code>, and <code>GET https://tinyzkp.com/api/release</code> when validating that docs, SDK examples, API behavior, and MCP tools are on the same revision.</p>
+    <p>Production API and MCP releases expose release identity so operators can detect skew during a coordinated deploy. Use <code>GET https://api.tinyzkp.com/version</code>, <code>GET https://mcp.tinyzkp.com/version</code>, and <code>GET https://tinyzkp.com/api/release</code> when validating that docs, SDK examples, API behavior, and MCP tools are on the same revision. The public <a href="/changelog">changelog and release policy</a> defines when TinyZKP must publish migration notes for API, MCP, verifier, schema, template, pricing, and trust-surface changes.</p>
     <ul>
       <li>New response fields are additive by default; clients should ignore fields they do not understand.</li>
       <li>Route removals, required-parameter changes, proof-format floors, and verifier acceptance changes require a changelog entry and migration guidance before public rollout unless the change is an emergency security disablement.</li>
       <li>Deprecated routes or fields receive at least one release cycle of warning where security permits. Proof-format deprecations also document the verifier package and compatibility floor.</li>
     </ul>
 
-    <h2 id="plans">Plan Tiers</h2>
-    <p>Rate limits, concurrency, and per-proof discounts vary by plan. All plans include free verification. Self-serve signup ships <strong>Free</strong>, <strong>Developer</strong>, <strong>Pro</strong>, <strong>Scale</strong>, and usage-based <strong>Compute</strong>. Use Compute for long traces where the economic alternative is high-RAM prover infrastructure.</p>
+    <h2 id="plans">Plans, Limits, and Spend Controls</h2>
+    <p>Rate limits, concurrency, and proof-rate discounts vary by plan. All plans include free verification. Self-serve signup ships <strong>Free</strong>, <strong>Developer</strong>, <strong>Pro</strong>, <strong>Scale</strong>, and usage-based <strong>Compute</strong>. Use Compute for long traces where the economic alternative is high-RAM prover infrastructure. The canonical buyer-facing limits and pricing contracts are <a href="/limits">/limits</a>, <a href="/pricing.json">/pricing.json</a>, and <a href="/calculator.json">/calculator.json</a>.</p>
 
     <div class="docs-table-wrap">
       <table>
@@ -694,8 +720,8 @@ async fn main() -> Result&lt;(), tinyzkp::Error&gt; {
             <td>$0</td>
           </tr>
           <tr>
-            <td><strong style="color:var(--text-bright)">Per-Proof Discount</strong></td>
-            <td>&mdash;</td>
+            <td><strong style="color:var(--text-bright)">Proof-rate policy</strong></td>
+            <td>100 included receipts</td>
             <td>Base rates</td>
             <td style="color:var(--accent)">25% off</td>
             <td style="color:var(--accent)">40% off</td>
@@ -726,12 +752,12 @@ async fn main() -> Result&lt;(), tinyzkp::Error&gt; {
             <td>8</td>
           </tr>
           <tr>
-            <td><strong style="color:var(--text-bright)">Monthly Spend Cap</strong></td>
-            <td>$5</td>
+            <td><strong style="color:var(--text-bright)">Paid Spend Cap</strong></td>
+            <td>$0 paid spend</td>
             <td>$500</td>
             <td>$2,500</td>
             <td>$10,000</td>
-            <td>$100,000</td>
+            <td>Capacity review</td>
           </tr>
           <tr>
             <td><strong style="color:var(--text-bright)">Max Prove Time</strong></td>
@@ -745,13 +771,13 @@ async fn main() -> Result&lt;(), tinyzkp::Error&gt; {
       </table>
     </div>
 
-    <h2 id="pricing">Per-Proof Pricing</h2>
-    <p>For regular state-transition receipt volume, pay per proof based on trace complexity. Pro and Scale receive automatic discounts. For long traces, use Compute: $0.50 per million trace steps with no monthly base and a $0.05 minimum.</p>
+    <h2 id="pricing">Proof Receipt Rate Bands</h2>
+    <p>For regular state-transition receipt volume, paid plans meter successful hosted proof jobs by trace complexity. Pro and Scale receive automatic discounts. For long traces, use Compute: $0.50 per million trace steps with no monthly base and a $0.05 minimum. Verification remains free.</p>
 
     <div class="docs-table-wrap">
       <table>
         <thead>
-          <tr><th>Trace Steps</th><th>Developer</th><th>Pro (-25%)</th><th>Scale (-40%)</th><th>Compute</th></tr>
+          <tr><th>Trace band</th><th>Developer</th><th>Pro (-25%)</th><th>Scale (-40%)</th><th>Compute</th></tr>
         </thead>
         <tbody>
           <tr><td><strong style="color:var(--text-bright)">&lt; 10K</strong></td><td>$0.05</td><td>$0.04</td><td>$0.03</td><td>$0.05 minimum</td></tr>
@@ -820,8 +846,8 @@ async fn main() -> Result&lt;(), tinyzkp::Error&gt; {
       </table>
     </div>
 
-    <h2 id="zk-mode">Zero-Knowledge Mode</h2>
-    <p>The default TinyZKP path is transparent state-transition attestation: the verifier can check that the encoded transition is valid, and the receipt should not be marketed as an input-privacy feature. Protocol v4 includes masking parameters for supported modes, but privacy-oriented flows should be treated as audit-gated until a specific template and configuration are documented for that purpose.</p>
+    <h2 id="zk-mode">Transparent vs Privacy Mode</h2>
+    <p>The default TinyZKP path is transparent state-transition attestation: the verifier can check that the encoded transition is valid, and the receipt should not be marketed as an input-privacy feature. Protocol v6 includes masking parameters for supported modes, but privacy-oriented flows should be treated as review-gated until a specific template and configuration are documented for that purpose.</p>
 
     <div class="code-block">
       <span class="code-label">curl</span>
@@ -836,13 +862,13 @@ async fn main() -> Result&lt;(), tinyzkp::Error&gt; {
 
     <ul>
       <li><code>zk_mask_degree: 0</code> (default) &mdash; transparent state-transition receipt</li>
-      <li><code>zk_mask_degree: 1</code> or higher &mdash; protocol v4 masking parameter for supported/audited flows</li>
+      <li><code>zk_mask_degree: 1</code> or higher &mdash; protocol v6 masking parameter for explicitly supported and documented flows</li>
       <li>When using templates, <code>"zk": true</code> may be accepted as a shorthand for <code>"zk_mask_degree": 1</code>, but do not rely on it for privacy unless that exact flow is documented as supported.</li>
       <li>Masking can change proof size and prover cost. Benchmark the exact use case before selling it as a default path.</li>
     </ul>
 
     <h2 id="estimate">Cost Estimation</h2>
-    <p>Estimate cost, proving time, and proof size <strong>before</strong> generating a proof. This endpoint is public &mdash; no authentication required.</p>
+    <p>Estimate trace length, base proof rate, proving time, and proof size <strong>before</strong> generating a proof. This endpoint is public &mdash; no authentication required. The response is an engineering estimate; plan discounts, included Free receipts, spend caps, and Compute recommendations are applied by the billing and calculator layers.</p>
 
     <div class="code-block">
       <span class="code-label">curl</span>
@@ -867,9 +893,9 @@ curl -X POST https://api.tinyzkp.com/estimate \
     </div>
 
     <ul>
-      <li><strong>No auth required</strong> &mdash; use this to preview costs without an API key.</li>
+      <li><strong>No auth required</strong> &mdash; use this to preview a base proof-rate estimate without an API key.</li>
       <li>You can also estimate by program length: <code>{"program_length": 500}</code>.</li>
-      <li>The <code>tier</code> field maps to the <a href="#pricing">pricing tiers</a> (Tiny, Standard, Large, Enterprise, XL).</li>
+      <li>The <code>tier</code> field is a legacy API rate-band label (<code>Tiny</code>, <code>Standard</code>, <code>Large</code>, <code>Enterprise</code>, or <code>XL</code>). It is not a storefront plan. Use <code>estimated_trace_length</code>, <a href="/pricing.json">pricing metadata</a>, and the <a href="/calculator">pricing calculator</a> for buyer-facing plan selection.</li>
     </ul>
 
     <h2 id="batch">Batch Proving</h2>
@@ -941,7 +967,7 @@ curl -X POST https://api.tinyzkp.com/estimate \
     "fri_commitment": ""
   },
   "commitment_scheme": "STARK",
-  "version": 4,
+  "version": 5,
   "verify_time_ms": 3
 }</pre>
     </div>
@@ -1063,12 +1089,12 @@ HC_MCP_HTTP_PORT=3001 cargo run -p hc-mcp --bin hc-mcp-http</pre>
       <table>
         <thead><tr><th>Term</th><th>What It Means</th></tr></thead>
         <tbody>
-          <tr><td><code>proof</code></td><td>A short piece of data that proves a computation was done correctly. Anyone can verify it quickly, offline, without re-running the computation.</td></tr>
+          <tr><td><code>proof</code></td><td>A short piece of data that proves a computation was done correctly. Anyone can verify it quickly, without re-running the computation.</td></tr>
           <tr><td><code>params</code></td><td>The public template inputs for the current self-serve receipt. For <code>accumulator_step</code>, these are <code>initial</code>, <code>final</code>, and <code>deltas</code>.</td></tr>
           <tr><td><code>trace</code></td><td>The step-by-step record of a computation. Each instruction the prover executes creates a row in the trace. A longer trace = more computation = higher cost.</td></tr>
-          <tr><td><code>trace_length</code></td><td>How many steps the computation has. This determines which <a href="#pricing">pricing tier</a> your proof falls into (e.g., &lt;10K steps = Tiny tier at $0.05).</td></tr>
+          <tr><td><code>trace_length</code></td><td>How many steps the computation has. This determines the proof-rate band and Compute estimate; buyer-facing plan selection still depends on volume, discounts, caps, and verifier visibility.</td></tr>
           <tr><td><code>template</code></td><td>A pre-built proof program for a common use case (e.g., state-transition / accumulator proofs). Templates handle all the complexity &mdash; you just provide parameters. More proof types are in development.</td></tr>
-          <tr><td><code>zk_mask_degree</code></td><td>Experimental protocol v4 masking parameter. Default (0) = transparent receipt. Use privacy language only for configurations that are explicitly supported and audited.</td></tr>
+          <tr><td><code>zk_mask_degree</code></td><td>Experimental protocol v6 masking parameter. Default (0) = transparent receipt. Use privacy language only for configurations that are explicitly supported, documented, and reviewed.</td></tr>
           <tr><td><code>block_size</code></td><td>Internal parameter controlling how the trace is divided into chunks. The API sets this automatically &mdash; you almost never need to change it.</td></tr>
           <tr><td><code>FRI</code></td><td>Fast Reed&ndash;Solomon Interactive Oracle Proof of Proximity. The core cryptographic protocol TinyZKP uses. You don&rsquo;t need to understand it to use the API.</td></tr>
           <tr><td><code>lde_blowup_factor</code></td><td>Controls how much the trace is expanded for error detection. Higher = stronger security but larger proofs. Default (2) is fine for most use cases.</td></tr>
@@ -1098,6 +1124,7 @@ HC_MCP_HTTP_PORT=3001 cargo run -p hc-mcp --bin hc-mcp-http</pre>
   <div class="right">
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
     <a href="/docs">Quickstart</a>
+    <a href="/changelog">Changelog</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
     <a href="/contact">Contact</a>

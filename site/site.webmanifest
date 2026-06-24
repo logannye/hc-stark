@@ -1,0 +1,52 @@
+{
+  "name": "TinyZKP",
+  "short_name": "TinyZKP",
+  "id": "https://tinyzkp.com/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050a12",
+  "theme_color": "#050a12",
+  "description": "Proof receipts for AI agents, APIs, backend workflows, and transparent state transitions.",
+  "categories": ["developer", "business", "productivity", "security"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Generate a receipt",
+      "short_name": "Try",
+      "description": "Mint a live state-transition receipt in the browser.",
+      "url": "/try"
+    },
+    {
+      "name": "Verify a receipt",
+      "short_name": "Verify",
+      "description": "Check a TinyZKP proof receipt.",
+      "url": "/verify"
+    },
+    {
+      "name": "Install MCP server",
+      "short_name": "MCP",
+      "description": "Add TinyZKP proof tools to Claude, Cursor, and agent runtimes.",
+      "url": "/mcp"
+    },
+    {
+      "name": "Choose a plan",
+      "short_name": "Pricing",
+      "description": "Compare Free, Developer, Pro, Scale, Compute, pilot, and enterprise routes.",
+      "url": "/pricing"
+    }
+  ]
+}
