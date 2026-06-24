@@ -160,8 +160,6 @@ impl JobIndex {
               updated_at_ms INTEGER NOT NULL,
               PRIMARY KEY (tenant_id, job_id)
             );
-            CREATE INDEX IF NOT EXISTS idx_prove_jobs_claim
-              ON prove_jobs (status_tag, lease_until_ms, updated_at_ms);
             "#,
         )
         .context("init jobs sqlite schema")?;
@@ -198,6 +196,14 @@ impl JobIndex {
                 let _ = conn.execute_batch(ddl);
             }
         }
+
+        conn.execute_batch(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_prove_jobs_claim
+              ON prove_jobs (status_tag, lease_until_ms, updated_at_ms);
+            "#,
+        )
+        .context("init jobs sqlite indexes")?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -909,6 +915,36 @@ mod tests {
         assert_eq!(total, 1);
         assert_eq!(jobs[0].job_id, "job_1");
         assert_eq!(store.count_global_by_status("succeeded").unwrap(), 1);
+    }
+
+    #[test]
+    fn sqlite_job_index_migrates_existing_table_before_creating_claim_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("jobs.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                r#"
+                CREATE TABLE prove_jobs (
+                  tenant_id TEXT NOT NULL,
+                  job_id TEXT NOT NULL,
+                  request_json BLOB NOT NULL,
+                  status_json BLOB NOT NULL,
+                  status_tag TEXT NOT NULL DEFAULT 'pending',
+                  updated_at_ms INTEGER NOT NULL,
+                  PRIMARY KEY (tenant_id, job_id)
+                );
+                "#,
+            )
+            .unwrap();
+        }
+
+        let index = JobIndex::open(path).unwrap();
+        let request = sample_request();
+        index
+            .upsert_request("tenant", "job_1", &request, &ProveJobStatus::Pending)
+            .unwrap();
+        assert!(index.claim_next("worker", 30_000).unwrap().is_some());
     }
 
     #[test]
