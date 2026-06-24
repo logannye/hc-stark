@@ -18,6 +18,7 @@ import * as createPortal       from "./functions/api/create-portal-session.js";
 import * as demoPoll           from "./functions/api/demo-poll.js";
 import * as demoProve          from "./functions/api/demo-prove.js";
 import * as demoVerify         from "./functions/api/demo-verify.js";
+import * as events             from "./functions/api/events.js";
 import * as rotateKey          from "./functions/api/rotate-key.js";
 import * as sendMagicLink      from "./functions/api/send-magic-link.js";
 import * as verifyMagicLink    from "./functions/api/verify-magic-link.js";
@@ -35,6 +36,7 @@ const ROUTES = {
   "/api/demo-poll":            demoPoll,
   "/api/demo-prove":           demoProve,
   "/api/demo-verify":          demoVerify,
+  "/api/events":               events,
   "/api/rotate-key":           rotateKey,
   "/api/send-magic-link":      sendMagicLink,
   "/api/verify-magic-link":    verifyMagicLink,
@@ -56,27 +58,97 @@ const METHOD_HANDLER = {
   OPTIONS: "onRequestOptions",
 };
 
+const SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Frame-Options": "DENY",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  "Cross-Origin-Opener-Policy": "same-origin",
+};
+
+const CANONICAL_HOST = "tinyzkp.com";
+const TYPO_HOSTS = new Set([
+  "www.tinyzkp.com",
+  "tny" + "zkp.com",
+  "www.tny" + "zkp.com",
+]);
+
+function envString(env, key) {
+  const value = env && typeof env[key] === "string" ? env[key].trim() : "";
+  return value || null;
+}
+
+function canonicalHostRedirect(url) {
+  const host = url.hostname.toLowerCase();
+  if (host === CANONICAL_HOST && url.protocol === "https:") return null;
+  if (host !== CANONICAL_HOST && !TYPO_HOSTS.has(host)) return null;
+
+  const target = new URL(url);
+  target.protocol = "https:";
+  target.hostname = CANONICAL_HOST;
+  target.port = "";
+  return new Response(null, {
+    status: 308,
+    headers: {
+      "Location": target.toString(),
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
+
+function releaseInfo(env) {
+  return {
+    service: "site",
+    package_version: "0.1.0",
+    release_sha: envString(env, "TINYZKP_RELEASE_SHA") || envString(env, "CF_PAGES_COMMIT_SHA"),
+    release_ref: envString(env, "TINYZKP_RELEASE_REF") || envString(env, "CF_PAGES_BRANCH"),
+    build_url: envString(env, "TINYZKP_RELEASE_BUILD_URL") || envString(env, "CF_PAGES_URL"),
+  };
+}
+
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    headers.set(name, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 async function fetchStaticAsset(request, env, url) {
   const direct = await env.ASSETS.fetch(request);
-  if (direct.status !== 404) return direct;
+  if (direct.status !== 404) return withSecurityHeaders(direct);
 
   // Cloudflare Pages usually resolves extensionless HTML paths, but Advanced
   // Mode workers can bypass that behavior. Keep canonical URLs like /verify
   // and /use-cases/verifiable-state-transition working by trying .html on
   // static, non-API paths that do not already contain an extension.
-  if (request.method !== "GET" && request.method !== "HEAD") return direct;
-  if (url.pathname === "/" || url.pathname.startsWith("/api/")) return direct;
+  if (request.method !== "GET" && request.method !== "HEAD") return withSecurityHeaders(direct);
+  if (url.pathname === "/" || url.pathname.startsWith("/api/")) return withSecurityHeaders(direct);
   const lastSegment = url.pathname.split("/").pop() || "";
-  if (lastSegment.includes(".")) return direct;
+  if (lastSegment.includes(".")) return withSecurityHeaders(direct);
 
   const htmlUrl = new URL(url);
   htmlUrl.pathname = `${url.pathname}.html`;
-  return env.ASSETS.fetch(new Request(htmlUrl, request));
+  return withSecurityHeaders(await env.ASSETS.fetch(new Request(htmlUrl, request)));
 }
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const canonicalRedirect = canonicalHostRedirect(url);
+    if (canonicalRedirect) return withSecurityHeaders(canonicalRedirect);
+
+    if (url.pathname === "/api/release" && request.method.toUpperCase() === "GET") {
+      return withSecurityHeaders(new Response(JSON.stringify(releaseInfo(env)), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    }
+
     const mod = ROUTES[url.pathname];
 
     if (mod) {
@@ -96,22 +168,22 @@ export default {
           data:     {},
         };
         try {
-          return await (fn || generic)(context);
+          return withSecurityHeaders(await (fn || generic)(context));
         } catch (e) {
           console.error(`[worker] handler error on ${url.pathname}:`, e);
-          return new Response(JSON.stringify({ error: "internal error" }), {
+          return withSecurityHeaders(new Response(JSON.stringify({ error: "internal error" }), {
             status: 500,
             headers: { "Content-Type": "application/json" },
-          });
+          }));
         }
       }
       // Route exists but no handler for this method.
-      return new Response(null, {
+      return withSecurityHeaders(new Response(null, {
         status: 405,
         headers: { "Allow": Object.entries(METHOD_HANDLER)
           .filter(([_, h]) => mod[h])
           .map(([m]) => m).join(", ") },
-      });
+      }));
     }
 
     // Not an /api/* route — fall through to static assets.

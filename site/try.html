@@ -223,6 +223,7 @@ footer .right a:hover{color:var(--muted)}
 </div>
 </footer>
 
+<script defer src="/analytics.js"></script>
 <script>
 var lastProof = null;
 var lastShareLink = null;
@@ -328,6 +329,7 @@ async function onProve(){
     if (!resp.ok) {
       setStatus('status-prove', data.error || 'Failed to submit', 'bad');
       setOutput('out-prove', JSON.stringify(data, null, 2));
+      if(window.tinyzkpTrack) window.tinyzkpTrack('playground_prove_failed',{template:'accumulator_step',status:String(resp.status)});
       btn.disabled = false;
       while (btn.firstChild) btn.removeChild(btn.firstChild);
       btn.appendChild(document.createTextNode('Generate proof'));
@@ -366,6 +368,7 @@ async function onProve(){
         frag.appendChild(makeColoredLine('  elapsed: ', elapsed + ' ms', 'accent'));
         setOutput('out-prove', frag);
         setStatus('status-prove', 'Proof completed in ' + elapsed + ' ms', 'ok');
+        if(window.tinyzkpTrack) window.tinyzkpTrack('playground_prove_succeeded',{template:'accumulator_step',elapsed_ms:elapsed});
         lastProof = poll.proof;
         lastShareLink = buildShareLink(lastProof);
         document.getElementById('btn-verify').disabled = false;
@@ -379,6 +382,7 @@ async function onProve(){
       if (poll.status === 'failed') {
         setStatus('status-prove', 'Proof failed: ' + (poll.error || 'unknown'), 'bad');
         setOutput('out-prove', JSON.stringify(poll, null, 2));
+        if(window.tinyzkpTrack) window.tinyzkpTrack('playground_prove_failed',{template:'accumulator_step',reason:'job_failed'});
         btn.disabled = false;
         while (btn.firstChild) btn.removeChild(btn.firstChild);
         btn.appendChild(document.createTextNode('Generate proof'));
@@ -386,11 +390,13 @@ async function onProve(){
       }
     }
     setStatus('status-prove', 'Timed out waiting for proof (>30s). Try again.', 'bad');
+    if(window.tinyzkpTrack) window.tinyzkpTrack('playground_prove_failed',{template:'accumulator_step',reason:'timeout'});
     btn.disabled = false;
     while (btn.firstChild) btn.removeChild(btn.firstChild);
     btn.appendChild(document.createTextNode('Generate proof'));
   } catch (e) {
     setStatus('status-prove', 'Network error: ' + e.message, 'bad');
+    if(window.tinyzkpTrack) window.tinyzkpTrack('playground_prove_failed',{template:'accumulator_step',reason:'network'});
     btn.disabled = false;
     while (btn.firstChild) btn.removeChild(btn.firstChild);
     btn.appendChild(document.createTextNode('Generate proof'));
@@ -417,6 +423,7 @@ async function onVerify(){
     if (!resp.ok) {
       setStatus('status-verify', data.error || 'Verify failed', 'bad');
       setOutput('out-verify', JSON.stringify(data, null, 2));
+      if(window.tinyzkpTrack) window.tinyzkpTrack('playground_verify_failed',{status:String(resp.status)});
       btn.disabled = false;
       while (btn.firstChild) btn.removeChild(btn.firstChild);
       btn.appendChild(document.createTextNode('Verify proof'));
@@ -441,8 +448,10 @@ async function onVerify(){
     setOutput('out-verify', frag);
     setStatus('status-verify', (data.ok || data.valid) ? 'Valid proof' : 'Invalid proof',
                               (data.ok || data.valid) ? 'ok' : 'bad');
+    if(window.tinyzkpTrack) window.tinyzkpTrack((data.ok || data.valid) ? 'playground_verify_succeeded' : 'playground_verify_failed',{status:(data.ok || data.valid) ? 'valid' : 'invalid'});
   } catch (e) {
     setStatus('status-verify', 'Network error: ' + e.message, 'bad');
+    if(window.tinyzkpTrack) window.tinyzkpTrack('playground_verify_failed',{reason:'network'});
   }
   btn.disabled = false;
   while (btn.firstChild) btn.removeChild(btn.firstChild);
@@ -455,6 +464,7 @@ async function copyShareLink(){
   try {
     await navigator.clipboard.writeText(lastShareLink);
     setStatus('status-verify', 'Share link copied', 'ok');
+    if(window.tinyzkpTrack) window.tinyzkpTrack('playground_share_copied',{source:'try_page'});
   } catch(e) {
     setStatus('status-verify', 'Share link: ' + lastShareLink, 'ok');
   }

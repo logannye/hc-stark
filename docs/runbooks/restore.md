@@ -101,14 +101,14 @@ Or check manually:
 curl -sf https://api.tinyzkp.com/readyz && echo "OK"
 
 # Authenticated request with a known API key (replace <KEY>)
-curl -sf -H "Authorization: Bearer <KEY>" https://api.tinyzkp.com/v1/ping && echo "Auth OK"
+curl -sf -H "Authorization: Bearer <KEY>" https://api.tinyzkp.com/usage | jq .total_proofs
 ```
 
 Confirm tenant and usage data look correct:
 
 ```bash
 sqlite3 /opt/hc-stark/data/tenant_store.sqlite "SELECT count(*) FROM tenants;"
-sqlite3 /opt/hc-stark/data/usage.sqlite        "SELECT count(*) FROM usage_events;"
+sqlite3 /opt/hc-stark/data/usage.sqlite        "SELECT count(*) FROM usage_log;"
 ```
 
 ---

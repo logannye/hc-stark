@@ -1,11 +1,12 @@
 #!/bin/bash
 # ── TinyZKP Production Health Audit ───────────────────────────────
 # Runs daily via launchd. Tests every production endpoint across all
-# three services (API, website, billing webhook) and sends a macOS
+# production services (API, MCP, website, billing webhook) and sends a macOS
 # notification + optional Slack/Discord webhook on any failures.
 #
 # Usage: ./api_health_audit.sh
 # Env:   TINYZKP_AUDIT_API_KEY  (optional — enables prove/verify/usage tests)
+#        TINYZKP_AUDIT_MCP_E2E  (optional — set to 1 for MCP prove/verify E2E)
 #        TINYZKP_AUDIT_WEBHOOK  (optional — Slack/Discord webhook URL)
 
 set -euo pipefail
@@ -14,7 +15,9 @@ set -euo pipefail
 API="https://api.tinyzkp.com"
 SITE="https://tinyzkp.com"
 WEBHOOK_SVC="https://webhook.tinyzkp.com"
+MCP="https://mcp.tinyzkp.com"
 API_KEY="${TINYZKP_AUDIT_API_KEY:-}"
+MCP_E2E="${TINYZKP_AUDIT_MCP_E2E:-}"
 LOG_DIR="$HOME/hc-stark/logs/audit"
 LOG_FILE="$LOG_DIR/api_audit_$(date +%Y-%m-%d).log"
 WEBHOOK="${TINYZKP_AUDIT_WEBHOOK:-}"
@@ -140,6 +143,90 @@ test_url() {
     sleep 0.5
 }
 
+# test_url_contains URL EXPECTED_STATUS MARKER LABEL
+test_url_contains() {
+    local url="$1"
+    local expected="${2:-200}"
+    local marker="$3"
+    local label="$4"
+    TOTAL=$((TOTAL + 1))
+
+    local raw code response attempt
+    for attempt in 1 2; do
+        raw=$(curl -s -L -w "\n%{http_code}" --max-time 30 "$url" 2>/dev/null) || raw=$'\n000'
+        code=$(echo "$raw" | tail -n1)
+        response=$(echo "$raw" | sed '$d')
+        [ "$code" != "000" ] && break
+        [ "$attempt" -eq 1 ] && sleep 2
+    done
+
+    if [ "$code" != "$expected" ]; then
+        log "  FAIL  $code  $label content marker (expected $expected)"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  $code $url content marker '$marker' (expected $expected)"
+    elif printf '%s' "$response" | grep -Fq "$marker"; then
+        log "  PASS  $code  $label content marker"
+        PASS=$((PASS + 1))
+    else
+        log "  FAIL  $code  $label missing content marker '$marker'"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  $code $url missing content marker '$marker'"
+    fi
+    sleep 0.5
+}
+
+mcp_initialize() {
+    local headers_file
+    headers_file="$(mktemp)"
+    local init_body code session
+    init_body='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"tinyzkp-audit","version":"0.1.0"}}}'
+    code=$(curl -s -D "$headers_file" -o "$RESP_FILE" -w "%{http_code}" --max-time 15 \
+        -X POST -H "Content-Type: application/json" \
+        -H "Accept: application/json, text/event-stream" \
+        -d "$init_body" "$MCP/mcp" 2>/dev/null) || code="000"
+    session=$(grep -i '^mcp-session-id:' "$headers_file" | head -n1 | awk '{print $2}' | tr -d '\r')
+    rm -f "$headers_file"
+    printf '%s\n%s' "$code" "$session"
+}
+
+mcp_post() {
+    local session="$1"
+    local body="$2"
+    local timeout="${3:-20}"
+    curl -s -o "$RESP_FILE" -w "%{http_code}" --max-time "$timeout" \
+        -X POST -H "Content-Type: application/json" \
+        -H "Accept: application/json, text/event-stream" \
+        -H "Mcp-Session-Id: $session" \
+        -d "$body" "$MCP/mcp" 2>/dev/null || printf '000'
+}
+
+mcp_result_text() {
+    python3 - "$RESP_FILE" <<'PY'
+import json, sys
+path = sys.argv[1]
+last = None
+with open(path, "r", encoding="utf-8", errors="replace") as f:
+    for line in f:
+        if not line.startswith("data:"):
+            continue
+        data = line[len("data:"):].strip()
+        if not data or not data.startswith("{"):
+            continue
+        try:
+            last = json.loads(data)
+        except json.JSONDecodeError:
+            pass
+if not last:
+    sys.exit(1)
+result = last.get("result", {})
+content = result.get("content") or []
+if content and isinstance(content[0], dict) and "text" in content[0]:
+    print(content[0]["text"])
+else:
+    print(json.dumps(result))
+PY
+}
+
 # ── Begin Audit ───────────────────────────────────────────────────
 log "============================================"
 log "  TinyZKP Production Health Audit"
@@ -147,6 +234,7 @@ log "  $(date '+%Y-%m-%d %H:%M')"
 log "  API:     $API"
 log "  Site:    $SITE"
 log "  Webhook: $WEBHOOK_SVC"
+log "  MCP:     $MCP"
 if [ -n "$API_KEY" ]; then
     log "  API Key: set (${API_KEY:0:8}...)"
 else
@@ -743,13 +831,157 @@ test_cf_function GET  /api/demo-poll           "demo poll proxy"
 test_cf_function POST /api/demo-verify         "demo verify proxy"
 
 # ══════════════════════════════════════════════════════════════════
-# 9. WEBSITE — All Pages (11 tests)
+# 9. MCP HTTP TRANSPORT — Handshake + discovery (+ optional proof E2E)
+# ══════════════════════════════════════════════════════════════════
+log ""
+log "── MCP HTTP Transport ──"
+
+TOTAL=$((TOTAL + 1))
+mcp_init="$(mcp_initialize)"
+mcp_code="$(printf '%s\n' "$mcp_init" | sed -n '1p')"
+mcp_session="$(printf '%s\n' "$mcp_init" | sed -n '2p')"
+mcp_init_resp="$(cat "$RESP_FILE")"
+if [ "$mcp_code" = "200" ] && [ -n "$mcp_session" ] && echo "$mcp_init_resp" | grep -q '"serverInfo"'; then
+    log "  PASS  $mcp_code  POST $MCP/mcp initialize (session issued)"
+    PASS=$((PASS + 1))
+else
+    log "  FAIL  $mcp_code  POST $MCP/mcp initialize (missing session/serverInfo)"
+    FAIL=$((FAIL + 1))
+    FAILURES="$FAILURES\n  $mcp_code POST $MCP/mcp initialize (missing session/serverInfo)"
+fi
+sleep 0.5
+
+if [ -n "$mcp_session" ]; then
+    TOTAL=$((TOTAL + 1))
+    init_notify_code=$(mcp_post "$mcp_session" '{"jsonrpc":"2.0","method":"notifications/initialized"}' 10)
+    if [ "$init_notify_code" = "202" ]; then
+        log "  PASS  $init_notify_code  POST $MCP/mcp notifications/initialized"
+        PASS=$((PASS + 1))
+    else
+        log "  FAIL  $init_notify_code  POST $MCP/mcp notifications/initialized (expected 202)"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  $init_notify_code POST $MCP/mcp notifications/initialized (expected 202)"
+    fi
+    sleep 0.5
+
+    TOTAL=$((TOTAL + 1))
+    tools_code=$(mcp_post "$mcp_session" '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' 20)
+    tools_resp=$(cat "$RESP_FILE")
+    if [ "$tools_code" = "200" ] && echo "$tools_resp" | grep -q '"name":"list_templates"' && echo "$tools_resp" | grep -q '"name":"verify_proof"'; then
+        log "  PASS  $tools_code  POST $MCP/mcp tools/list (template + verify tools present)"
+        PASS=$((PASS + 1))
+    else
+        log "  FAIL  $tools_code  POST $MCP/mcp tools/list (missing expected tools)"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  $tools_code POST $MCP/mcp tools/list (missing list_templates/verify_proof)"
+    fi
+    sleep 0.5
+
+    TOTAL=$((TOTAL + 1))
+    list_templates_code=$(mcp_post "$mcp_session" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_templates","arguments":{}}}' 20)
+    list_templates_text=$(mcp_result_text 2>/dev/null || echo "")
+    if [ "$list_templates_code" = "200" ] && echo "$list_templates_text" | grep -q '"id":"accumulator_step"' && echo "$list_templates_text" | grep -q '"lifecycle":"live"'; then
+        log "  PASS  $list_templates_code  MCP list_templates (accumulator_step lifecycle=live)"
+        PASS=$((PASS + 1))
+    else
+        log "  FAIL  $list_templates_code  MCP list_templates (expected accumulator_step lifecycle=live)"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  $list_templates_code MCP list_templates missing accumulator_step lifecycle=live"
+    fi
+    sleep 0.5
+
+    if [ "$MCP_E2E" = "1" ]; then
+        log "  INFO  TINYZKP_AUDIT_MCP_E2E=1 — running MCP prove/poll/get/verify lifecycle"
+
+        TOTAL=$((TOTAL + 1))
+        mcp_prove_body='{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"prove_template","arguments":{"template_id":"accumulator_step","parameters":{"initial":0,"final":36,"deltas":[1,2,3,4,5,6,7,8]},"zk":false}}}'
+        mcp_prove_code=$(mcp_post "$mcp_session" "$mcp_prove_body" 60)
+        mcp_prove_text=$(mcp_result_text 2>/dev/null || echo "")
+        mcp_job_id=$(echo "$mcp_prove_text" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
+        if [ "$mcp_prove_code" = "200" ] && [ -n "$mcp_job_id" ]; then
+            log "  PASS  $mcp_prove_code  MCP prove_template submitted job $mcp_job_id"
+            PASS=$((PASS + 1))
+        else
+            log "  FAIL  $mcp_prove_code  MCP prove_template (no job_id)"
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  $mcp_prove_code MCP prove_template did not return job_id"
+        fi
+
+        if [ -n "$mcp_job_id" ]; then
+            mcp_poll_elapsed=0
+            mcp_poll_timeout=90
+            mcp_status="pending"
+            while [ "$mcp_poll_elapsed" -lt "$mcp_poll_timeout" ]; do
+                sleep 5
+                mcp_poll_elapsed=$((mcp_poll_elapsed + 5))
+                poll_body="{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"poll_job\",\"arguments\":{\"job_id\":\"$mcp_job_id\"}}}"
+                mcp_poll_code=$(mcp_post "$mcp_session" "$poll_body" 20)
+                mcp_poll_text=$(mcp_result_text 2>/dev/null || echo "")
+                mcp_status=$(echo "$mcp_poll_text" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null || echo "")
+                if [ "$mcp_status" = "succeeded" ] || [ "$mcp_status" = "failed" ]; then
+                    break
+                fi
+            done
+
+            TOTAL=$((TOTAL + 1))
+            if [ "$mcp_status" = "succeeded" ]; then
+                log "  PASS  $mcp_poll_code  MCP poll_job (status=succeeded, ${mcp_poll_elapsed}s)"
+                PASS=$((PASS + 1))
+            else
+                log "  FAIL  $mcp_poll_code  MCP poll_job (status=$mcp_status after ${mcp_poll_elapsed}s)"
+                FAIL=$((FAIL + 1))
+                FAILURES="$FAILURES\n  $mcp_poll_code MCP poll_job status=$mcp_status"
+            fi
+
+            TOTAL=$((TOTAL + 1))
+            proof_body="{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"get_proof\",\"arguments\":{\"job_id\":\"$mcp_job_id\"}}}"
+            mcp_proof_code=$(mcp_post "$mcp_session" "$proof_body" 30)
+            mcp_proof_text=$(mcp_result_text 2>/dev/null || echo "")
+            mcp_proof_b64=$(echo "$mcp_proof_text" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('proof_b64',''))" 2>/dev/null || echo "")
+            if [ "$mcp_proof_code" = "200" ] && [ -n "$mcp_proof_b64" ]; then
+                log "  PASS  $mcp_proof_code  MCP get_proof (proof_b64 returned)"
+                PASS=$((PASS + 1))
+            else
+                log "  FAIL  $mcp_proof_code  MCP get_proof (missing proof_b64)"
+                FAIL=$((FAIL + 1))
+                FAILURES="$FAILURES\n  $mcp_proof_code MCP get_proof missing proof_b64"
+            fi
+
+            TOTAL=$((TOTAL + 1))
+            verify_body="{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"verify_proof\",\"arguments\":{\"proof_b64\":\"$mcp_proof_b64\"}}}"
+            mcp_verify_code=$(mcp_post "$mcp_session" "$verify_body" 30)
+            mcp_verify_text=$(mcp_result_text 2>/dev/null || echo "")
+            mcp_valid=$(echo "$mcp_verify_text" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if d.get('valid') is True else '')" 2>/dev/null || echo "")
+            if [ "$mcp_verify_code" = "200" ] && [ -n "$mcp_valid" ]; then
+                log "  PASS  $mcp_verify_code  MCP verify_proof (valid=true)"
+                PASS=$((PASS + 1))
+            else
+                log "  FAIL  $mcp_verify_code  MCP verify_proof (expected valid=true)"
+                FAIL=$((FAIL + 1))
+                FAILURES="$FAILURES\n  $mcp_verify_code MCP verify_proof expected valid=true"
+            fi
+        fi
+    else
+        log "  SKIP  MCP prove/poll/get/verify lifecycle (set TINYZKP_AUDIT_MCP_E2E=1 to enable)"
+    fi
+else
+    log "  SKIP  MCP tools/list + list_templates — no session from initialize"
+    TOTAL=$((TOTAL + 3))
+    FAIL=$((FAIL + 3))
+    FAILURES="$FAILURES\n  --- MCP initialize returned no session; skipped tools/list/list_templates"
+fi
+
+# ══════════════════════════════════════════════════════════════════
+# 10. WEBSITE — Pages + content markers (13 status tests + markers)
 # ══════════════════════════════════════════════════════════════════
 log ""
 log "── Website Pages ──"
-for path in / /docs /signup /welcome /contact /terms /privacy /account /compute /try /status; do
+for path in / /docs /signup /welcome /contact /terms /privacy /account /compute /try /status /research /security; do
     test_url "$SITE$path"
 done
+test_url_contains "$SITE/research" 200 "One company, one thesis: space-efficient proving." "GET /research"
+test_url_contains "$SITE/security" 200 "Responsible disclosure" "GET /security"
+test_url_contains "$SITE/docs"     200 "Template Lifecycle" "GET /docs"
 
 # ══════════════════════════════════════════════════════════════════
 # Summary

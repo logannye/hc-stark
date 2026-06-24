@@ -36,13 +36,21 @@ fi
 
 # ---- Python (for billing scripts) ----
 if ! command -v python3 &>/dev/null; then
-  apt-get install -y -qq python3 python3-pip
+  apt-get install -y -qq python3 python3-pip python3-venv
+elif ! python3 -m venv --help >/dev/null 2>&1; then
+  apt-get install -y -qq python3-venv
 fi
-pip3 install --quiet stripe flask gunicorn 2>/dev/null || true
 
 # ---- Directory structure ----
 echo "Setting up /opt/hc-stark..."
 mkdir -p /opt/hc-stark/{data,site}
+
+# ---- Host billing Python runtime ----
+if [ -x /opt/hc-stark/deploy/hetzner/install_billing_runtime.sh ]; then
+  /opt/hc-stark/deploy/hetzner/install_billing_runtime.sh
+else
+  echo "NOTICE: /opt/hc-stark/deploy/hetzner/install_billing_runtime.sh not found yet; run it after copying the repo."
+fi
 
 # ---- Firewall ----
 if command -v ufw &>/dev/null; then
@@ -84,7 +92,7 @@ systemctl daemon-reload
 systemctl enable hc-stark.service
 
 # ---- Billing cron ----
-CRON_LINE="0 * * * * root cd /opt/hc-stark && python3 billing/sync_usage.py >> /var/log/hc-billing.log 2>&1"
+CRON_LINE="0 * * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python billing/sync_usage.py >> /var/log/hc-billing.log 2>&1"
 CRON_FILE="/etc/cron.d/hc-billing"
 echo "$CRON_LINE" > "$CRON_FILE"
 chmod 644 "$CRON_FILE"
@@ -125,7 +133,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/hc-stark/billing
-ExecStart=/usr/bin/python3 -m gunicorn -w 2 -b 127.0.0.1:5001 provision_tenant:app
+ExecStart=/opt/hc-stark/.venv/bin/gunicorn -w 2 -b 127.0.0.1:5001 provision_tenant:app
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=/opt/hc-stark/.env

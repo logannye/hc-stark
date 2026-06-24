@@ -2,16 +2,25 @@
 
 Provides idempotent tenant creation, suspension, activation, and key rotation.
 All writes use implicit transactions via `with conn:`.
+
+When HC_TENANT_PG_URL (or HC_SERVER_AUTH_PG_URL) is set, writes are also
+mirrored into the shared Postgres tenant/auth schema used by API and MCP auth.
+The SQLite store remains primary unless the operator explicitly changes the
+read paths; HC_TENANT_PG_REQUIRED=1 makes mirror failures fail the caller.
 """
 
 import json
+import logging
 import os
 import sqlite3
 import time
+from pathlib import Path
 from typing import Optional
 
 
 DB_PATH = os.environ.get("HC_TENANT_STORE_PATH", "/opt/hc-stark/data/tenant_store.sqlite")
+PG_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "crates" / "hc-server" / "sql" / "tenant_auth_pg.sql"
+_PG_SCHEMA_READY = False
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenants (
@@ -68,6 +77,44 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_one_free_tenant_per_email
 """
 
 
+def _pg_url() -> str:
+    return os.environ.get("HC_TENANT_PG_URL") or os.environ.get("HC_SERVER_AUTH_PG_URL") or ""
+
+
+def _pg_required() -> bool:
+    return os.environ.get("HC_TENANT_PG_REQUIRED", "").lower() in {"1", "true", "yes"}
+
+
+def _open_pg(url: str):
+    try:
+        import psycopg
+    except ImportError as exc:
+        raise RuntimeError("psycopg is required for HC_TENANT_PG_URL mirroring") from exc
+    return psycopg.connect(url)
+
+
+def _ensure_pg_schema(pg) -> None:
+    global _PG_SCHEMA_READY
+    if _PG_SCHEMA_READY:
+        return
+    pg.execute(PG_SCHEMA_PATH.read_text())
+    _PG_SCHEMA_READY = True
+
+
+def _with_pg_mirror(description: str, callback) -> None:
+    url = _pg_url()
+    if not url:
+        return
+    try:
+        with _open_pg(url) as pg:
+            _ensure_pg_schema(pg)
+            callback(pg)
+    except Exception as exc:
+        if _pg_required():
+            raise
+        logging.warning("tenant_store: Postgres mirror failed during %s: %s", description, exc)
+
+
 def open_db(path: Optional[str] = None) -> sqlite3.Connection:
     """Open (and initialize) the tenant store database.
 
@@ -114,6 +161,8 @@ def create_tenant(
 ) -> None:
     """Insert a new tenant. Raises IntegrityError on duplicate tenant_id."""
     now = _now_ms()
+    api_key_hash = _hash_key(api_key)
+    api_key_prefix = api_key[:8]
     with conn:
         conn.execute(
             """INSERT INTO tenants
@@ -122,11 +171,36 @@ def create_tenant(
                 status, plan, created_at_ms, updated_at_ms)
                VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
             (
-                tenant_id, email, _hash_key(api_key), api_key[:8],
+                tenant_id, email, api_key_hash, api_key_prefix,
                 stripe_customer_id, stripe_subscription_id, stripe_subscription_item_id,
                 plan, now, now,
             ),
         )
+    _with_pg_mirror(
+        "create_tenant",
+        lambda pg: pg.execute(
+            """INSERT INTO tenants
+               (tenant_id, email, api_key_hash, api_key_prefix,
+                stripe_customer_id, stripe_subscription_id, stripe_subscription_item_id,
+                status, plan, created_at_ms, updated_at_ms)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', %s, %s, %s)
+               ON CONFLICT (tenant_id) DO UPDATE SET
+                 email = EXCLUDED.email,
+                 api_key_hash = EXCLUDED.api_key_hash,
+                 api_key_prefix = EXCLUDED.api_key_prefix,
+                 stripe_customer_id = EXCLUDED.stripe_customer_id,
+                 stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+                 stripe_subscription_item_id = EXCLUDED.stripe_subscription_item_id,
+                 status = EXCLUDED.status,
+                 plan = EXCLUDED.plan,
+                 updated_at_ms = EXCLUDED.updated_at_ms""",
+            (
+                tenant_id, email, api_key_hash, api_key_prefix,
+                stripe_customer_id, stripe_subscription_id, stripe_subscription_item_id,
+                plan, now, now,
+            ),
+        ),
+    )
 
 
 def get_tenant(conn: sqlite3.Connection, tenant_id: str) -> Optional[sqlite3.Row]:
@@ -145,11 +219,19 @@ def get_by_subscription_id(conn: sqlite3.Connection, subscription_id: str) -> Op
 
 def set_status(conn: sqlite3.Connection, tenant_id: str, status: str) -> None:
     """Update tenant status (active | suspended | cancelled)."""
+    now = _now_ms()
     with conn:
         conn.execute(
             "UPDATE tenants SET status = ?, updated_at_ms = ? WHERE tenant_id = ?",
-            (status, _now_ms(), tenant_id),
+            (status, now, tenant_id),
         )
+    _with_pg_mirror(
+        "set_status",
+        lambda pg: pg.execute(
+            "UPDATE tenants SET status = %s, updated_at_ms = %s WHERE tenant_id = %s",
+            (status, now, tenant_id),
+        ),
+    )
 
 
 def suspend_tenant(conn: sqlite3.Connection, tenant_id: str) -> None:
@@ -163,20 +245,38 @@ def activate_tenant(conn: sqlite3.Connection, tenant_id: str) -> None:
 
 def set_plan(conn: sqlite3.Connection, tenant_id: str, plan: str) -> None:
     """Update tenant plan (free | standard | pro)."""
+    now = _now_ms()
     with conn:
         conn.execute(
             "UPDATE tenants SET plan = ?, updated_at_ms = ? WHERE tenant_id = ?",
-            (plan, _now_ms(), tenant_id),
+            (plan, now, tenant_id),
         )
+    _with_pg_mirror(
+        "set_plan",
+        lambda pg: pg.execute(
+            "UPDATE tenants SET plan = %s, updated_at_ms = %s WHERE tenant_id = %s",
+            (plan, now, tenant_id),
+        ),
+    )
 
 
 def update_api_key(conn: sqlite3.Connection, tenant_id: str, new_api_key: str) -> None:
     """Rotate a tenant's API key."""
+    now = _now_ms()
+    api_key_hash = _hash_key(new_api_key)
+    api_key_prefix = new_api_key[:8]
     with conn:
         conn.execute(
             "UPDATE tenants SET api_key_hash = ?, api_key_prefix = ?, updated_at_ms = ? WHERE tenant_id = ?",
-            (_hash_key(new_api_key), new_api_key[:8], _now_ms(), tenant_id),
+            (api_key_hash, api_key_prefix, now, tenant_id),
         )
+    _with_pg_mirror(
+        "update_api_key",
+        lambda pg: pg.execute(
+            "UPDATE tenants SET api_key_hash = %s, api_key_prefix = %s, updated_at_ms = %s WHERE tenant_id = %s",
+            (api_key_hash, api_key_prefix, now, tenant_id),
+        ),
+    )
 
 
 def delete_tenant(conn: sqlite3.Connection, tenant_id: str) -> int:
@@ -189,7 +289,17 @@ def delete_tenant(conn: sqlite3.Connection, tenant_id: str) -> int:
         conn.execute("DELETE FROM magic_links WHERE tenant_id = ?", (tenant_id,))
         conn.execute("DELETE FROM sessions WHERE tenant_id = ?", (tenant_id,))
         cur = conn.execute("DELETE FROM tenants WHERE tenant_id = ?", (tenant_id,))
-        return cur.rowcount
+        deleted = cur.rowcount
+    if deleted:
+        _with_pg_mirror(
+            "delete_tenant",
+            lambda pg: (
+                pg.execute("DELETE FROM magic_links WHERE tenant_id = %s", (tenant_id,)),
+                pg.execute("DELETE FROM sessions WHERE tenant_id = %s", (tenant_id,)),
+                pg.execute("DELETE FROM tenants WHERE tenant_id = %s", (tenant_id,)),
+            ),
+        )
+    return deleted
 
 
 def list_tenants(conn: sqlite3.Connection, status: Optional[str] = None) -> list:
@@ -211,11 +321,19 @@ def is_event_processed(conn: sqlite3.Connection, event_id: str) -> bool:
 
 def mark_event_processed(conn: sqlite3.Connection, event_id: str) -> None:
     """Record that a Stripe event has been processed."""
+    now = _now_ms()
     with conn:
         conn.execute(
             "INSERT OR IGNORE INTO processed_events (event_id, processed_at_ms) VALUES (?, ?)",
-            (event_id, _now_ms()),
+            (event_id, now),
         )
+    _with_pg_mirror(
+        "mark_event_processed",
+        lambda pg: pg.execute(
+            "INSERT INTO processed_events (event_id, processed_at_ms) VALUES (%s, %s) ON CONFLICT (event_id) DO NOTHING",
+            (event_id, now),
+        ),
+    )
 
 
 def get_by_email(conn: sqlite3.Connection, email: str) -> Optional[sqlite3.Row]:
@@ -228,13 +346,31 @@ def get_by_email(conn: sqlite3.Connection, email: str) -> Optional[sqlite3.Row]:
 def create_magic_link(conn: sqlite3.Connection, token_hash: str, tenant_id: str, ttl_ms: int = 900_000) -> None:
     """Store a magic link token hash with a 15-minute TTL."""
     now = _now_ms()
+    expires_at_ms = now + ttl_ms
     with conn:
         # GC expired tokens on every insert.
         conn.execute("DELETE FROM magic_links WHERE expires_at_ms < ?", (now,))
         conn.execute(
             "INSERT INTO magic_links (token_hash, tenant_id, created_at_ms, expires_at_ms, used) VALUES (?, ?, ?, ?, 0)",
-            (token_hash, tenant_id, now, now + ttl_ms),
+            (token_hash, tenant_id, now, expires_at_ms),
         )
+    _with_pg_mirror(
+        "create_magic_link",
+        lambda pg: (
+            pg.execute("DELETE FROM magic_links WHERE expires_at_ms < %s", (now,)),
+            pg.execute(
+                """INSERT INTO magic_links
+                   (token_hash, tenant_id, created_at_ms, expires_at_ms, used)
+                   VALUES (%s, %s, %s, %s, false)
+                   ON CONFLICT (token_hash) DO UPDATE SET
+                     tenant_id = EXCLUDED.tenant_id,
+                     created_at_ms = EXCLUDED.created_at_ms,
+                     expires_at_ms = EXCLUDED.expires_at_ms,
+                     used = EXCLUDED.used""",
+                (token_hash, tenant_id, now, expires_at_ms),
+            ),
+        ),
+    )
 
 
 def verify_magic_link(conn: sqlite3.Connection, token_hash: str) -> Optional[str]:
@@ -248,18 +384,38 @@ def verify_magic_link(conn: sqlite3.Connection, token_hash: str) -> Optional[str
         return None
     with conn:
         conn.execute("UPDATE magic_links SET used = 1 WHERE token_hash = ?", (token_hash,))
+    _with_pg_mirror(
+        "verify_magic_link",
+        lambda pg: pg.execute("UPDATE magic_links SET used = true WHERE token_hash = %s", (token_hash,)),
+    )
     return row["tenant_id"]
 
 
 def create_session(conn: sqlite3.Connection, token_hash: str, tenant_id: str, ttl_ms: int = 86_400_000) -> None:
     """Store a session token hash (default 24h TTL). GCs expired rows."""
     now = _now_ms()
+    expires_at_ms = now + ttl_ms
     with conn:
         conn.execute("DELETE FROM sessions WHERE expires_at_ms < ?", (now,))
         conn.execute(
             "INSERT OR REPLACE INTO sessions (token_hash, tenant_id, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?)",
-            (token_hash, tenant_id, now, now + ttl_ms),
+            (token_hash, tenant_id, now, expires_at_ms),
         )
+    _with_pg_mirror(
+        "create_session",
+        lambda pg: (
+            pg.execute("DELETE FROM sessions WHERE expires_at_ms < %s", (now,)),
+            pg.execute(
+                """INSERT INTO sessions (token_hash, tenant_id, created_at_ms, expires_at_ms)
+                   VALUES (%s, %s, %s, %s)
+                   ON CONFLICT (token_hash) DO UPDATE SET
+                     tenant_id = EXCLUDED.tenant_id,
+                     created_at_ms = EXCLUDED.created_at_ms,
+                     expires_at_ms = EXCLUDED.expires_at_ms""",
+                (token_hash, tenant_id, now, expires_at_ms),
+            ),
+        ),
+    )
 
 
 def validate_session(conn: sqlite3.Connection, token_hash: str) -> Optional[str]:
@@ -277,11 +433,19 @@ def validate_session(conn: sqlite3.Connection, token_hash: str) -> Optional[str]
 def delete_session(conn: sqlite3.Connection, token_hash: str) -> None:
     with conn:
         conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
+    _with_pg_mirror(
+        "delete_session",
+        lambda pg: pg.execute("DELETE FROM sessions WHERE token_hash = %s", (token_hash,)),
+    )
 
 
 def delete_sessions_for_tenant(conn: sqlite3.Connection, tenant_id: str) -> None:
     with conn:
         conn.execute("DELETE FROM sessions WHERE tenant_id = ?", (tenant_id,))
+    _with_pg_mirror(
+        "delete_sessions_for_tenant",
+        lambda pg: pg.execute("DELETE FROM sessions WHERE tenant_id = %s", (tenant_id,)),
+    )
 
 
 def migrate_from_tenant_map(conn: sqlite3.Connection, tenant_map_path: str, api_keys_path: str) -> int:

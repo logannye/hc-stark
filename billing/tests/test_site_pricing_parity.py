@@ -28,6 +28,7 @@ PAGES = [
 COPY_LINT_FILES = [
     REPO_ROOT / "README.md",
     REPO_ROOT / "BUSINESS_GUIDE.md",
+    REPO_ROOT / "billing" / "STRIPE_PRODUCT_IDS.md",
     REPO_ROOT / "deploy" / "server-card.json",
     REPO_ROOT / "clients" / "cli" / "README.md",
     REPO_ROOT / "clients" / "cli" / "package.json",
@@ -64,6 +65,10 @@ FORBIDDEN_COPY_PATTERNS = [
     ("unaudited data_integrity", re.compile(r"\bdata_integrity\b", re.IGNORECASE)),
     ("unaudited computation_attestation", re.compile(r"\bcomputation_attestation\b", re.IGNORECASE)),
     ("unaudited soundness-bit claim", re.compile(r"\b\d+\s*bits?\s+of\s+(?:soundness|security)\b", re.IGNORECASE)),
+    (
+        "annual self-serve checkout claim",
+        re.compile(r"\bAnnual billing:\s*20% off any paid plan\b|\bThe active storefront requires these prices\b", re.IGNORECASE),
+    ),
 ]
 
 

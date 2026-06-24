@@ -3,6 +3,7 @@ use std::{
     fs,
     net::SocketAddr,
     path::{Path as FsPath, PathBuf},
+    process::Stdio,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -32,18 +33,20 @@ use prometheus::{
     Registry, TextEncoder,
 };
 use tokio::{
+    io::AsyncWriteExt,
     task::JoinHandle,
     time::{timeout, Duration},
 };
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
 pub mod auth;
 pub mod job_index;
+pub mod shared_rate_limit;
 pub mod usage_log;
 pub mod workloads;
 
@@ -69,9 +72,37 @@ pub struct AppState {
     /// process-table exhaustion under spike load. Acquired before the
     /// `Command::spawn()` call, released when the child exits.
     worker_spawn_inflight: Arc<tokio::sync::Semaphore>,
-    job_index: Option<Arc<job_index::JobIndex>>,
-    usage_log: Option<Arc<usage_log::UsageLog>>,
+    job_index: Option<Arc<dyn job_index::JobStore>>,
+    usage_recorder: Option<Arc<dyn usage_log::UsageRecorder>>,
+    usage_reader: Option<Arc<dyn usage_log::UsageReader>>,
+    shared_rate_limiter: Option<Arc<shared_rate_limit::SharedRateLimiter>>,
     rate_limits: Arc<Mutex<HashMap<String, TenantRateLimits>>>,
+}
+
+#[derive(serde::Serialize, utoipa::ToSchema)]
+struct ReleaseInfo {
+    service: &'static str,
+    package_version: &'static str,
+    release_sha: Option<String>,
+    release_ref: Option<String>,
+    build_url: Option<String>,
+}
+
+fn nonempty_env(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn api_release_info() -> ReleaseInfo {
+    ReleaseInfo {
+        service: "api",
+        package_version: env!("CARGO_PKG_VERSION"),
+        release_sha: nonempty_env("HC_RELEASE_SHA"),
+        release_ref: nonempty_env("HC_RELEASE_REF"),
+        build_url: nonempty_env("HC_RELEASE_BUILD_URL"),
+    }
 }
 
 struct JobState {
@@ -298,17 +329,93 @@ struct ServerConfig {
     max_verify_inflight: usize,
     verify_timeout_ms: u64,
     retention_secs: u64,
-    job_index_sqlite: bool,
+    job_index_source: JobIndexSource,
     max_prove_rpm: u32,
     max_verify_rpm: u32,
     max_block_size: usize,
     min_query_count: usize,
     max_rate_limit_entries: usize,
+    pg_url: Option<String>,
+    pg_tls_mode: usage_log::PgTlsMode,
+    usage_read_source: UsageReadSource,
+    rate_limit_pg_url: Option<String>,
+    rate_limit_pg_tls_mode: usage_log::PgTlsMode,
+    job_index_pg_url: Option<String>,
+    job_index_pg_tls_mode: usage_log::PgTlsMode,
+    prove_dispatch_mode: ProveDispatchMode,
     /// Global cap on concurrent hc-worker subprocess spawns. Bounds the
     /// fork+exec rate + open-FD count so a request burst can't push the
     /// kernel into EMFILE territory. Default 32 (override via
     /// HC_SERVER_MAX_WORKER_SPAWN); 0 disables the cap entirely.
     max_worker_spawn: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum UsageReadSource {
+    Sqlite,
+    Postgres,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum JobIndexSource {
+    Disabled,
+    Sqlite,
+    Postgres,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProveDispatchMode {
+    Local,
+    Shared,
+}
+
+impl ProveDispatchMode {
+    fn from_env() -> anyhow::Result<Self> {
+        let raw = std::env::var("HC_SERVER_PROVE_DISPATCH")
+            .unwrap_or_else(|_| "local".to_string())
+            .trim()
+            .to_ascii_lowercase();
+        match raw.as_str() {
+            "" | "local" => Ok(Self::Local),
+            "shared" | "queue" | "queued" => Ok(Self::Shared),
+            _ => anyhow::bail!("HC_SERVER_PROVE_DISPATCH must be 'local' or 'shared', got '{raw}'"),
+        }
+    }
+}
+
+impl JobIndexSource {
+    fn from_raw(raw: &str) -> anyhow::Result<Self> {
+        let raw = raw.trim().to_ascii_lowercase();
+        match raw.as_str() {
+            "" | "sqlite" => Ok(Self::Sqlite),
+            "postgres" | "pg" => Ok(Self::Postgres),
+            "disabled" | "none" | "off" => Ok(Self::Disabled),
+            _ => anyhow::bail!(
+                "HC_SERVER_JOB_INDEX_SOURCE must be 'sqlite', 'postgres', or 'disabled', got '{raw}'"
+            ),
+        }
+    }
+}
+
+impl UsageReadSource {
+    fn from_env() -> anyhow::Result<Self> {
+        let raw = std::env::var("HC_SERVER_USAGE_READ_FROM")
+            .unwrap_or_else(|_| "sqlite".to_string())
+            .trim()
+            .to_ascii_lowercase();
+        Self::from_raw(&raw)
+    }
+
+    fn from_raw(raw: &str) -> anyhow::Result<Self> {
+        let raw = raw.trim().to_ascii_lowercase();
+        match raw.as_str() {
+            "" | "sqlite" => Ok(Self::Sqlite),
+            "postgres" | "pg" => Ok(Self::Postgres),
+            _ => anyhow::bail!(
+                "HC_SERVER_USAGE_READ_FROM must be 'sqlite' or 'postgres', got '{raw}'"
+            ),
+        }
+    }
 }
 
 impl ServerConfig {
@@ -347,13 +454,20 @@ impl ServerConfig {
             .ok()
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
-        let job_index_sqlite = if job_index_disabled {
-            false
+        let job_index_source = if job_index_disabled {
+            JobIndexSource::Disabled
+        } else if let Ok(raw) = std::env::var("HC_SERVER_JOB_INDEX_SOURCE") {
+            JobIndexSource::from_raw(&raw)?
         } else {
-            std::env::var("HC_SERVER_JOB_INDEX_SQLITE")
+            let sqlite_enabled = std::env::var("HC_SERVER_JOB_INDEX_SQLITE")
                 .ok()
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(true)
+                .unwrap_or(true);
+            if sqlite_enabled {
+                JobIndexSource::Sqlite
+            } else {
+                JobIndexSource::Disabled
+            }
         };
         let rate_limit_disabled = std::env::var("HC_SERVER_RATE_LIMIT_DISABLED")
             .ok()
@@ -387,6 +501,46 @@ impl ServerConfig {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(32);
+        let pg_url = std::env::var("HC_SERVER_PG_URL")
+            .ok()
+            .filter(|v| !v.trim().is_empty());
+        let pg_tls_mode = pg_url
+            .as_deref()
+            .map(usage_log::PgTlsMode::from_env_and_url)
+            .unwrap_or(usage_log::PgTlsMode::Disable);
+        let usage_read_source = UsageReadSource::from_env()?;
+        let rate_limit_pg_url = std::env::var("HC_RATE_LIMIT_PG_URL")
+            .ok()
+            .filter(|v| !v.trim().is_empty());
+        let rate_limit_pg_tls_mode = rate_limit_pg_url
+            .as_deref()
+            .map(|url| {
+                std::env::var("HC_RATE_LIMIT_PG_TLS")
+                    .ok()
+                    .map(|raw| usage_log::PgTlsMode::from_raw_env_and_url(Some(&raw), url))
+                    .unwrap_or_else(|| usage_log::PgTlsMode::from_raw_env_and_url(None, url))
+            })
+            .unwrap_or(usage_log::PgTlsMode::Disable);
+        let job_index_pg_url = std::env::var("HC_JOB_INDEX_PG_URL")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| {
+                if job_index_source == JobIndexSource::Postgres {
+                    pg_url.clone()
+                } else {
+                    None
+                }
+            });
+        let job_index_pg_tls_mode = job_index_pg_url
+            .as_deref()
+            .map(|url| {
+                std::env::var("HC_JOB_INDEX_PG_TLS")
+                    .ok()
+                    .map(|raw| usage_log::PgTlsMode::from_raw_env_and_url(Some(&raw), url))
+                    .unwrap_or_else(|| usage_log::PgTlsMode::from_raw_env_and_url(None, url))
+            })
+            .unwrap_or(usage_log::PgTlsMode::Disable);
+        let prove_dispatch_mode = ProveDispatchMode::from_env()?;
         Ok(Self {
             data_dir: PathBuf::from(data_dir),
             max_inflight_jobs,
@@ -396,12 +550,20 @@ impl ServerConfig {
             max_verify_inflight,
             verify_timeout_ms,
             retention_secs,
-            job_index_sqlite,
+            job_index_source,
             max_prove_rpm,
             max_verify_rpm,
             max_block_size,
             min_query_count,
             max_rate_limit_entries: 10_000,
+            pg_url,
+            pg_tls_mode,
+            usage_read_source,
+            rate_limit_pg_url,
+            rate_limit_pg_tls_mode,
+            job_index_pg_url,
+            job_index_pg_tls_mode,
+            prove_dispatch_mode,
             max_worker_spawn,
         })
     }
@@ -419,9 +581,19 @@ struct FixedWindow {
     count: u32,
 }
 
+#[derive(Clone, Copy, Debug)]
 enum RateEndpoint {
     Prove,
     Verify,
+}
+
+impl RateEndpoint {
+    fn as_shared_key(self) -> &'static str {
+        match self {
+            Self::Prove => "prove",
+            Self::Verify => "verify",
+        }
+    }
 }
 
 fn check_rate_limit(state: &AppState, tenant_id: &str, plan: &str, endpoint: RateEndpoint) -> bool {
@@ -444,6 +616,20 @@ fn check_rate_limit(state: &AppState, tenant_id: &str, plan: &str, endpoint: Rat
     };
     if limit == 0 {
         return true;
+    }
+    if let Some(ref limiter) = state.shared_rate_limiter {
+        match limiter.check_and_increment(tenant_id, endpoint.as_shared_key(), limit) {
+            Ok(ok) => return ok,
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    tenant_id,
+                    endpoint = endpoint.as_shared_key(),
+                    "shared postgres rate limiter failed; denying request"
+                );
+                return false;
+            }
+        }
     }
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -508,6 +694,20 @@ fn remaining_rate_quota(
     if limit == 0 {
         return u32::MAX;
     }
+    if let Some(ref limiter) = state.shared_rate_limiter {
+        return match limiter.remaining(tenant_id, endpoint.as_shared_key(), limit) {
+            Ok(remaining) => remaining,
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    tenant_id,
+                    endpoint = endpoint.as_shared_key(),
+                    "shared postgres rate limiter remaining query failed; denying batch"
+                );
+                0
+            }
+        };
+    }
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -530,7 +730,7 @@ fn remaining_rate_quota(
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(healthz, metrics, verify, prove_submit, prove_get, prove_batch, proof_calldata, aggregate, usage, templates_list, template_detail, prove_template, prove_inspect, estimate),
+    paths(healthz, version, metrics, verify, prove_submit, prove_get, prove_batch, proof_calldata, aggregate, usage, templates_list, template_detail, prove_template, prove_inspect, estimate),
     components(schemas(
         VerifyRequest,
         hc_sdk::types::VerifyResult,
@@ -542,6 +742,7 @@ fn remaining_rate_quota(
         TemplateSummary,
         TemplateListResponse,
         TemplateProveRequest,
+        ReleaseInfo,
         EstimateRequest,
         EstimateResponse,
         EstimateRange,
@@ -562,10 +763,18 @@ pub async fn run() -> anyhow::Result<()> {
 
     let cfg = ServerConfig::from_env()?;
 
-    // Refuse to start if the hc-worker binary is missing or non-executable.
-    // Catches packaging/deploy bugs at boot rather than on the first prove
-    // request. See validate_worker_binary() for the resolution order.
-    validate_worker_binary()?;
+    match cfg.prove_dispatch_mode {
+        ProveDispatchMode::Local => {
+            // Refuse to start if the hc-worker binary is missing or non-executable.
+            // Catches packaging/deploy bugs at boot rather than on the first prove
+            // request. See validate_worker_binary() for the resolution order.
+            validate_worker_binary()?;
+        }
+        ProveDispatchMode::Shared if cfg.job_index_source == JobIndexSource::Disabled => {
+            anyhow::bail!("HC_SERVER_PROVE_DISPATCH=shared requires a job index");
+        }
+        ProveDispatchMode::Shared => {}
+    }
 
     let mut auth = AuthConfig::from_env()?;
 
@@ -582,22 +791,54 @@ pub async fn run() -> anyhow::Result<()> {
 
     // Optional DB-backed fallback. Closes the freshly-provisioned-key
     // window between the webhook committing a tenant row and the file
-    // hot-reload (60s) picking it up. Off by default; set
-    // HC_SERVER_AUTH_DB_PATH to enable.
-    if let Ok(db_path) = std::env::var("HC_SERVER_AUTH_DB_PATH") {
-        let db_path = PathBuf::from(db_path);
-        match auth::DbAuthSource::open(&db_path) {
-            Ok(src) => {
-                info!(
-                    path = %db_path.display(),
-                    "auth DB fallback enabled (tenant_store)"
-                );
-                auth = auth.with_db_source(src);
+    // hot-reload (60s) picking it up. Also supports the Postgres tenant
+    // auth cutover so API and MCP can share tenant state instead of
+    // relying on host-local api_keys.txt.
+    if let Ok(pg_url) = std::env::var("HC_SERVER_AUTH_PG_URL") {
+        let pg_url = pg_url.trim().to_string();
+        if !pg_url.is_empty() {
+            let tls_mode = std::env::var("HC_SERVER_AUTH_PG_TLS")
+                .ok()
+                .map(|raw| usage_log::PgTlsMode::from_raw_env_and_url(Some(&raw), &pg_url))
+                .unwrap_or_else(|| usage_log::PgTlsMode::from_raw_env_and_url(None, &pg_url));
+            match auth::DbAuthSource::connect_postgres(&pg_url, tls_mode) {
+                Ok(src) => {
+                    info!(
+                        tls = ?tls_mode,
+                        "Postgres auth DB fallback enabled (tenants)"
+                    );
+                    auth = auth.with_db_source(src);
+                }
+                Err(e) => {
+                    anyhow::bail!("HC_SERVER_AUTH_PG_URL set but Postgres auth source could not be opened: {e}");
+                }
             }
-            Err(e) => {
-                anyhow::bail!(
-                    "HC_SERVER_AUTH_DB_PATH set but tenant_store could not be opened: {e}"
-                );
+        }
+    }
+    if let Ok(db_path) = std::env::var("HC_SERVER_AUTH_DB_PATH") {
+        if !db_path.trim().is_empty() {
+            if std::env::var("HC_SERVER_AUTH_PG_URL")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .is_some()
+            {
+                warn!("HC_SERVER_AUTH_DB_PATH ignored because HC_SERVER_AUTH_PG_URL is configured");
+            } else {
+                let db_path = PathBuf::from(db_path);
+                match auth::DbAuthSource::open(&db_path) {
+                    Ok(src) => {
+                        info!(
+                            path = %db_path.display(),
+                            "auth DB fallback enabled (tenant_store)"
+                        );
+                        auth = auth.with_db_source(src);
+                    }
+                    Err(e) => {
+                        anyhow::bail!(
+                            "HC_SERVER_AUTH_DB_PATH set but tenant_store could not be opened: {e}"
+                        );
+                    }
+                }
             }
         }
     }
@@ -606,18 +847,80 @@ pub async fn run() -> anyhow::Result<()> {
 
     fs::create_dir_all(cfg.data_dir.join("jobs"))?;
 
-    let job_index = if cfg.job_index_sqlite {
-        Some(Arc::new(job_index::JobIndex::open(
+    let job_index: Option<Arc<dyn job_index::JobStore>> = match cfg.job_index_source {
+        JobIndexSource::Sqlite => Some(Arc::new(job_index::JobIndex::open(
             cfg.data_dir.join("jobs.sqlite"),
+        )?)),
+        JobIndexSource::Postgres => {
+            let Some(url) = cfg.job_index_pg_url.as_deref() else {
+                anyhow::bail!(
+                    "HC_SERVER_JOB_INDEX_SOURCE=postgres requires HC_JOB_INDEX_PG_URL or HC_SERVER_PG_URL"
+                );
+            };
+            let index = job_index::PgJobIndex::connect(url, cfg.job_index_pg_tls_mode)?;
+            info!(
+                tls = ?cfg.job_index_pg_tls_mode,
+                "Postgres job index enabled"
+            );
+            Some(Arc::new(index))
+        }
+        JobIndexSource::Disabled => None,
+    };
+
+    let usage_log = if cfg.job_index_source != JobIndexSource::Disabled {
+        Some(Arc::new(usage_log::UsageLog::open(
+            cfg.data_dir.join("usage.sqlite"),
         )?))
     } else {
         None
     };
-
-    let usage_log = if cfg.job_index_sqlite {
-        Some(Arc::new(usage_log::UsageLog::open(
-            cfg.data_dir.join("usage.sqlite"),
+    let pg_usage = if let Some(pg_url) = cfg.pg_url.as_deref() {
+        Some(Arc::new(usage_log::PgUsageRecorder::connect(
+            pg_url,
+            cfg.pg_tls_mode,
         )?))
+    } else {
+        None
+    };
+    let usage_recorder: Option<Arc<dyn usage_log::UsageRecorder>> =
+        match (usage_log.clone(), pg_usage.clone()) {
+            (Some(sqlite), Some(pg)) => {
+                info!(
+                    tls = ?cfg.pg_tls_mode,
+                    read_source = ?cfg.usage_read_source,
+                    "Postgres usage dual-write enabled"
+                );
+                Some(Arc::new(usage_log::DualWriter::new(sqlite, pg)))
+            }
+            (Some(sqlite), None) => Some(sqlite),
+            (None, Some(_)) => {
+                anyhow::bail!(
+                    "HC_SERVER_PG_URL requires SQLite usage tracking enabled for Phase 1 dual-write"
+                );
+            }
+            (None, None) => None,
+        };
+    let usage_reader: Option<Arc<dyn usage_log::UsageReader>> = match cfg.usage_read_source {
+        UsageReadSource::Sqlite => usage_log
+            .clone()
+            .map(|reader| reader as Arc<dyn usage_log::UsageReader>),
+        UsageReadSource::Postgres => {
+            let Some(pg) = pg_usage.clone() else {
+                anyhow::bail!("HC_SERVER_USAGE_READ_FROM=postgres requires HC_SERVER_PG_URL");
+            };
+            info!("Postgres usage read source enabled for /usage and monthly caps");
+            Some(pg)
+        }
+    };
+    let shared_rate_limiter = if let Some(url) = cfg.rate_limit_pg_url.as_deref() {
+        let limiter =
+            shared_rate_limit::SharedRateLimiter::connect(url, cfg.rate_limit_pg_tls_mode)
+                .context("initialize shared postgres rate limiter")?;
+        info!(
+            tls = ?cfg.rate_limit_pg_tls_mode,
+            "Postgres shared rate limiter enabled"
+        );
+        Some(Arc::new(limiter))
     } else {
         None
     };
@@ -638,7 +941,9 @@ pub async fn run() -> anyhow::Result<()> {
         auth,
         auth_guard: AuthGuard::new(),
         job_index,
-        usage_log,
+        usage_recorder,
+        usage_reader,
+        shared_rate_limiter,
         rate_limits: Arc::new(Mutex::new(HashMap::new())),
     };
 
@@ -823,6 +1128,7 @@ pub fn build_app(state: AppState) -> Router {
     let max_body = state.cfg.max_body_bytes;
     Router::new()
         .route("/healthz", get(healthz))
+        .route("/version", get(version))
         .route("/readyz", get(readyz))
         .route("/metrics", get(metrics))
         .route("/verify", post(verify))
@@ -860,12 +1166,20 @@ pub fn test_state(temp_dir: PathBuf) -> AppState {
         max_verify_inflight: 8,
         verify_timeout_ms: 30_000,
         retention_secs: 24 * 3600,
-        job_index_sqlite: false,
+        job_index_source: JobIndexSource::Disabled,
         max_prove_rpm: 0,
         max_verify_rpm: 0,
         max_block_size: usize::MAX,
         min_query_count: 1,
         max_rate_limit_entries: 10_000,
+        pg_url: None,
+        pg_tls_mode: usage_log::PgTlsMode::Disable,
+        usage_read_source: UsageReadSource::Sqlite,
+        rate_limit_pg_url: None,
+        rate_limit_pg_tls_mode: usage_log::PgTlsMode::Disable,
+        job_index_pg_url: None,
+        job_index_pg_tls_mode: usage_log::PgTlsMode::Disable,
+        prove_dispatch_mode: ProveDispatchMode::Local,
         max_worker_spawn: 16,
     };
     let auth = Arc::new(std::sync::RwLock::new(AuthConfig::default()));
@@ -879,9 +1193,19 @@ pub fn test_state(temp_dir: PathBuf) -> AppState {
         auth,
         auth_guard: AuthGuard::new(),
         job_index: None,
-        usage_log: None,
+        usage_recorder: None,
+        usage_reader: None,
+        shared_rate_limiter: None,
         rate_limits: Arc::new(Mutex::new(HashMap::new())),
     }
+}
+
+pub fn test_state_shared_dispatch(temp_dir: PathBuf) -> AppState {
+    let mut state = test_state(temp_dir.clone());
+    state.cfg.prove_dispatch_mode = ProveDispatchMode::Shared;
+    let index = job_index::JobIndex::open(temp_dir.join("jobs.sqlite")).expect("open jobs index");
+    state.job_index = Some(Arc::new(index));
+    state
 }
 
 pub fn test_state_with_server_caps(
@@ -944,6 +1268,11 @@ async fn shutdown_signal() {
 #[utoipa::path(get, path = "/healthz", responses((status = 200, description = "ok")))]
 async fn healthz() -> impl IntoResponse {
     StatusCode::OK
+}
+
+#[utoipa::path(get, path = "/version", responses((status = 200, body = ReleaseInfo)))]
+async fn version() -> Json<ReleaseInfo> {
+    Json(api_release_info())
 }
 
 #[utoipa::path(get, path = "/readyz", responses((status = 200, description = "ready")))]
@@ -1047,7 +1376,7 @@ async fn verify(
     }
     state.metrics.verify_requests.inc();
     let tenant_id_for_verify = tenant.tenant_id.clone();
-    let usage_log_for_verify = state.usage_log.clone();
+    let usage_recorder_for_verify = state.usage_recorder.clone();
     let permit = match state.verify_inflight.clone().try_acquire_owned() {
         Ok(p) => p,
         Err(_) => {
@@ -1093,7 +1422,7 @@ async fn verify(
     match result {
         Ok(joined) => match joined {
             Ok(v) => {
-                if let Some(ref usage) = usage_log_for_verify {
+                if let Some(ref usage) = usage_recorder_for_verify {
                     let _ = usage.record_verify(&tenant_id_for_verify, verify_elapsed_ms);
                 }
                 Json(v).into_response()
@@ -1332,7 +1661,7 @@ fn spawn_prove_worker(
                     .prove_completed
                     .with_label_values(&[&tenant_id2])
                     .inc();
-                if let Some(ref usage) = state2.usage_log {
+                if let Some(ref usage) = state2.usage_recorder {
                     // Use the server-computed trace_length (program_len.max(1)
                     // .next_power_of_two() * block_size) that was calculated
                     // at submission time, rather than parsing it from the proof
@@ -1368,7 +1697,7 @@ fn spawn_prove_worker(
                     .prove_failed
                     .with_label_values(&[&tenant_id2])
                     .inc();
-                if let Some(ref usage) = state2.usage_log {
+                if let Some(ref usage) = state2.usage_recorder {
                     let _ = usage.record_failure(
                         &tenant_id2,
                         &job_id.to_string(),
@@ -1431,7 +1760,7 @@ async fn prove_submit(
     let max_inflight = plan_limits.max_inflight.min(state.cfg.max_inflight_jobs);
 
     // Usage cap enforcement.
-    if let Some(ref usage) = state.usage_log {
+    if let Some(ref usage) = state.usage_reader {
         if let Ok(cost) = usage.monthly_cost_cents(&tenant_id, &tenant_plan) {
             if cost >= plan_limits.monthly_cap_cents {
                 state.metrics.usage_cap_rejections.inc();
@@ -1502,6 +1831,29 @@ async fn prove_submit(
     // would produce (G12 under-bill fix).
     let program_len = req.program.as_ref().map(|p| p.len()).unwrap_or(1);
     let computed_trace_length = program_len.max(1).next_power_of_two() * req.block_size.max(1);
+    let metadata = job_index::JobMetadata {
+        tenant_plan: Some(tenant_plan.clone()),
+        computed_trace_length: Some(computed_trace_length),
+    };
+
+    if state.cfg.prove_dispatch_mode == ProveDispatchMode::Shared {
+        let index = state
+            .job_index
+            .as_ref()
+            .ok_or_else(|| ApiError::internal("shared prove dispatch requires job index"))?;
+        index
+            .upsert_job(
+                &tenant_id,
+                &job_id.to_string(),
+                &req,
+                &ProveJobStatus::Pending,
+                &metadata,
+            )
+            .map_err(|err| ApiError::internal(err.to_string()))?;
+        return Ok(Json(ProveSubmitResponse {
+            job_id: job_id.to_string(),
+        }));
+    }
 
     let job_dir = state
         .cfg
@@ -1510,16 +1862,15 @@ async fn prove_submit(
         .join(&tenant_id)
         .join(job_id.to_string());
     fs::create_dir_all(&job_dir).map_err(|err| ApiError::internal(err.to_string()))?;
-    write_json_atomic(job_dir.join("request.json"), &req)
-        .map_err(|err| ApiError::internal(err.to_string()))?;
     write_json_atomic(job_dir.join("status.json"), &ProveJobStatus::Pending)
         .map_err(|err| ApiError::internal(err.to_string()))?;
     if let Some(index) = state.job_index.as_ref() {
-        let _ = index.upsert_request(
+        let _ = index.upsert_job(
             &tenant_id,
             &job_id.to_string(),
             &req,
             &ProveJobStatus::Pending,
+            &metadata,
         );
     }
 
@@ -1574,7 +1925,7 @@ fn count_job_dirs(dir: &std::path::Path) -> usize {
         .unwrap_or(0)
 }
 
-fn reconcile_stale_jobs(data_dir: &std::path::Path, job_index: Option<&job_index::JobIndex>) {
+fn reconcile_stale_jobs(data_dir: &std::path::Path, job_index: Option<&dyn job_index::JobStore>) {
     let jobs_dir = data_dir.join("jobs");
     let Ok(tenants) = fs::read_dir(&jobs_dir) else {
         return;
@@ -1729,6 +2080,11 @@ async fn prove_get(
             return Json(job.status.clone()).into_response();
         }
     }
+    if let Some(index) = state.job_index.as_ref() {
+        if let Ok(Some(status)) = index.get_status(&tenant.tenant_id, &parsed.to_string()) {
+            return Json(status).into_response();
+        }
+    }
     let job_dir = state
         .cfg
         .data_dir
@@ -1737,11 +2093,6 @@ async fn prove_get(
         .join(parsed.to_string());
     let status_path = job_dir.join("status.json");
     if !status_path.exists() {
-        if let Some(index) = state.job_index.as_ref() {
-            if let Ok(Some(status)) = index.get_status(&tenant.tenant_id, &parsed.to_string()) {
-                return Json(status).into_response();
-            }
-        }
         return (StatusCode::NOT_FOUND, "unknown job_id").into_response();
     }
     match fs::read(&status_path)
@@ -1749,14 +2100,7 @@ async fn prove_get(
         .and_then(|bytes| serde_json::from_slice::<ProveJobStatus>(&bytes).ok())
     {
         Some(status) => Json(status).into_response(),
-        None => {
-            if let Some(index) = state.job_index.as_ref() {
-                if let Ok(Some(status)) = index.get_status(&tenant.tenant_id, &parsed.to_string()) {
-                    return Json(status).into_response();
-                }
-            }
-            (StatusCode::INTERNAL_SERVER_ERROR, "failed to read status").into_response()
-        }
+        None => (StatusCode::INTERNAL_SERVER_ERROR, "failed to read status").into_response(),
     }
 }
 
@@ -1820,7 +2164,7 @@ async fn prove_batch(
     // (consistent with the existing cap-before-validate ordering).
     let plan_limits = PlanLimits::for_plan(&tenant.plan);
     let max_inflight = plan_limits.max_inflight.min(state.cfg.max_inflight_jobs);
-    if let Some(ref usage) = state.usage_log {
+    if let Some(ref usage) = state.usage_reader {
         if let Ok(base_cost) = usage.monthly_cost_cents(&tenant.tenant_id, &tenant.plan) {
             // Mirror the loop's server-side trace_length formula, overflow-safe
             // since this runs before per-request validation.
@@ -1906,6 +2250,28 @@ async fn prove_batch(
         // (G12 under-bill fix).
         let program_len = req.program.as_ref().map(|p| p.len()).unwrap_or(1);
         let computed_trace_length = program_len.max(1).next_power_of_two() * req.block_size.max(1);
+        let metadata = job_index::JobMetadata {
+            tenant_plan: Some(tenant.plan.clone()),
+            computed_trace_length: Some(computed_trace_length),
+        };
+
+        if state.cfg.prove_dispatch_mode == ProveDispatchMode::Shared {
+            let index = state
+                .job_index
+                .as_ref()
+                .ok_or_else(|| ApiError::internal("shared prove dispatch requires job index"))?;
+            index
+                .upsert_job(
+                    &tenant.tenant_id,
+                    &job_id.to_string(),
+                    &req,
+                    &ProveJobStatus::Pending,
+                    &metadata,
+                )
+                .map_err(|err| ApiError::internal(err.to_string()))?;
+            job_ids.push(job_id.to_string());
+            continue;
+        }
 
         let job_dir = state
             .cfg
@@ -1914,17 +2280,16 @@ async fn prove_batch(
             .join(&tenant.tenant_id)
             .join(job_id.to_string());
         fs::create_dir_all(&job_dir).map_err(|err| ApiError::internal(err.to_string()))?;
-        write_json_atomic(job_dir.join("request.json"), &req)
-            .map_err(|err| ApiError::internal(err.to_string()))?;
         write_json_atomic(job_dir.join("status.json"), &ProveJobStatus::Pending)
             .map_err(|err| ApiError::internal(err.to_string()))?;
 
         if let Some(index) = state.job_index.as_ref() {
-            let _ = index.upsert_request(
+            let _ = index.upsert_job(
                 &tenant.tenant_id,
                 &job_id.to_string(),
                 &req,
                 &ProveJobStatus::Pending,
+                &metadata,
             );
         }
 
@@ -1975,7 +2340,7 @@ async fn prove_batch(
 
 /// Load a completed proof for a tenant + job_id.
 ///
-/// Checks in-memory jobs first, falls back to disk.
+/// Checks in-memory jobs first, falls back to disk, then the shared job index.
 /// Returns 409 Conflict if the job exists but isn't succeeded, 404 if not found.
 fn load_completed_proof(
     state: &AppState,
@@ -1992,14 +2357,16 @@ fn load_completed_proof(
         None
     };
 
-    match status {
-        Some(ProveJobStatus::Succeeded { proof }) => Ok(proof),
-        Some(_) => Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "not_ready",
-            "proof is not yet available",
-        )),
+    match status.and_then(status_to_proof_result) {
+        Some(result) => result,
         None => {
+            if let Some(index) = state.job_index.as_ref() {
+                if let Ok(Some(status)) = index.get_status(tenant_id, &job_id.to_string()) {
+                    if let Some(result) = status_to_proof_result(status) {
+                        return result;
+                    }
+                }
+            }
             let job_dir = state
                 .cfg
                 .data_dir
@@ -2007,23 +2374,37 @@ fn load_completed_proof(
                 .join(tenant_id)
                 .join(job_id.to_string());
             let status_path = job_dir.join("status.json");
-            match fs::read(&status_path)
+            if let Some(result) = fs::read(&status_path)
                 .ok()
                 .and_then(|b| serde_json::from_slice::<ProveJobStatus>(&b).ok())
+                .and_then(status_to_proof_result)
             {
-                Some(ProveJobStatus::Succeeded { proof }) => Ok(proof),
-                Some(_) => Err(ApiError::new(
-                    StatusCode::CONFLICT,
-                    "not_ready",
-                    "proof is not yet available",
-                )),
-                None => Err(ApiError::new(
-                    StatusCode::NOT_FOUND,
-                    "not_found",
-                    "unknown job_id",
-                )),
+                return result;
             }
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "unknown job_id",
+            ))
         }
+    }
+}
+
+fn status_to_proof_result(
+    status: ProveJobStatus,
+) -> Option<Result<hc_sdk::types::ProofBytes, ApiError>> {
+    match status {
+        ProveJobStatus::Succeeded { proof } => Some(Ok(proof)),
+        ProveJobStatus::Pending | ProveJobStatus::Running => Some(Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "not_ready",
+            "proof is not yet available",
+        ))),
+        ProveJobStatus::Failed { .. } => Some(Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "failed",
+            "proof job failed",
+        ))),
     }
 }
 
@@ -2233,6 +2614,7 @@ async fn templates_list() -> Json<TemplateListResponse> {
                 hc_workloads::Enforcement::Enforced => "enforced".to_string(),
                 hc_workloads::Enforcement::StructureOnly => "structure_only".to_string(),
             },
+            lifecycle: t.lifecycle.as_str().to_string(),
         })
         .collect();
     let count = summaries.len();
@@ -2329,7 +2711,7 @@ async fn prove_template(
     let plan_limits = PlanLimits::for_plan(&tenant_plan);
     let max_inflight = plan_limits.max_inflight.min(state.cfg.max_inflight_jobs);
 
-    if let Some(ref usage) = state.usage_log {
+    if let Some(ref usage) = state.usage_reader {
         if let Ok(cost) = usage.monthly_cost_cents(&tenant_id, &tenant_plan) {
             if cost >= plan_limits.monthly_cap_cents {
                 state.metrics.usage_cap_rejections.inc();
@@ -2407,6 +2789,30 @@ async fn prove_template(
     validate_prove_params(&prove_req, &state.cfg)?;
 
     let job_id = Uuid::new_v4();
+    let metadata = job_index::JobMetadata {
+        tenant_plan: Some(tenant_plan.clone()),
+        computed_trace_length: Some(computed_trace_length),
+    };
+
+    if state.cfg.prove_dispatch_mode == ProveDispatchMode::Shared {
+        let index = state
+            .job_index
+            .as_ref()
+            .ok_or_else(|| ApiError::internal("shared prove dispatch requires job index"))?;
+        index
+            .upsert_job(
+                &tenant_id,
+                &job_id.to_string(),
+                &prove_req,
+                &ProveJobStatus::Pending,
+                &metadata,
+            )
+            .map_err(|err| ApiError::internal(err.to_string()))?;
+        return Ok(Json(ProveSubmitResponse {
+            job_id: job_id.to_string(),
+        }));
+    }
+
     let job_dir = state
         .cfg
         .data_dir
@@ -2414,16 +2820,15 @@ async fn prove_template(
         .join(&tenant_id)
         .join(job_id.to_string());
     fs::create_dir_all(&job_dir).map_err(|err| ApiError::internal(err.to_string()))?;
-    write_json_atomic(job_dir.join("request.json"), &prove_req)
-        .map_err(|err| ApiError::internal(err.to_string()))?;
     write_json_atomic(job_dir.join("status.json"), &ProveJobStatus::Pending)
         .map_err(|err| ApiError::internal(err.to_string()))?;
     if let Some(index) = state.job_index.as_ref() {
-        let _ = index.upsert_request(
+        let _ = index.upsert_job(
             &tenant_id,
             &job_id.to_string(),
             &prove_req,
             &ProveJobStatus::Pending,
+            &metadata,
         );
     }
 
@@ -2474,14 +2879,14 @@ async fn prove_template(
 /// and returns the job_id with status already Succeeded.
 ///
 /// Bills as one prove submission against the tenant. The envelope is
-/// persisted under `proof.json` keyed by `version: 100` so the existing
-/// `/prove/:job_id` polling path returns it unchanged. The unified
+/// persisted in the terminal `status.json` keyed by `version: 100` so the
+/// existing `/prove/:job_id` polling path returns it unchanged. The unified
 /// `/verify` endpoint does not yet decode zkml envelopes — verification of
 /// zkml proofs is a follow-on (see ROADMAP_EXTENSIONS.md, Phase 1.5).
 async fn dispatch_zkml_template(
     state: &AppState,
     tenant_id: &str,
-    _tenant_plan: &str,
+    tenant_plan: &str,
     template_id: String,
     req: TemplateProveRequest,
 ) -> Result<Json<ProveSubmitResponse>, ApiError> {
@@ -2503,7 +2908,6 @@ async fn dispatch_zkml_template(
         .join(job_id.to_string());
     fs::create_dir_all(&job_dir).map_err(|err| ApiError::internal(err.to_string()))?;
 
-    // Persist a request stub so polling consumers find a consistent record.
     let prove_req = ProveRequest {
         workload_id: None,
         template_id: Some(template_id.clone()),
@@ -2517,8 +2921,6 @@ async fn dispatch_zkml_template(
         lde_blowup_factor: 0,
         zk_mask_degree: None,
     };
-    write_json_atomic(job_dir.join("request.json"), &prove_req)
-        .map_err(|err| ApiError::internal(err.to_string()))?;
 
     // Wrap the envelope in a JSON descriptor so future verifiers can sniff
     // the kind. ProofBytes.version = 100 marks the zkml-envelope wire
@@ -2543,7 +2945,17 @@ async fn dispatch_zkml_template(
         .map_err(|err| ApiError::internal(err.to_string()))?;
 
     if let Some(index) = state.job_index.as_ref() {
-        let _ = index.upsert_request(tenant_id, &job_id.to_string(), &prove_req, &status);
+        let metadata = job_index::JobMetadata {
+            tenant_plan: Some(tenant_plan.to_string()),
+            computed_trace_length: None,
+        };
+        let _ = index.upsert_job(
+            tenant_id,
+            &job_id.to_string(),
+            &prove_req,
+            &status,
+            &metadata,
+        );
         let _ = index.update_status(tenant_id, &job_id.to_string(), &status);
     }
 
@@ -2583,7 +2995,7 @@ async fn dispatch_zkml_template(
 async fn dispatch_spartan_template(
     state: &AppState,
     tenant_id: &str,
-    _tenant_plan: &str,
+    tenant_plan: &str,
     template_id: String,
     req: TemplateProveRequest,
 ) -> Result<Json<ProveSubmitResponse>, ApiError> {
@@ -2619,8 +3031,6 @@ async fn dispatch_spartan_template(
         lde_blowup_factor: 0,
         zk_mask_degree: None,
     };
-    write_json_atomic(job_dir.join("request.json"), &prove_req)
-        .map_err(|err| ApiError::internal(err.to_string()))?;
 
     let spartan_descriptor = serde_json::json!({
         "kind": "spartan_r1cs_envelope",
@@ -2637,7 +3047,17 @@ async fn dispatch_spartan_template(
         .map_err(|err| ApiError::internal(err.to_string()))?;
 
     if let Some(index) = state.job_index.as_ref() {
-        let _ = index.upsert_request(tenant_id, &job_id.to_string(), &prove_req, &status);
+        let metadata = job_index::JobMetadata {
+            tenant_plan: Some(tenant_plan.to_string()),
+            computed_trace_length: None,
+        };
+        let _ = index.upsert_job(
+            tenant_id,
+            &job_id.to_string(),
+            &prove_req,
+            &status,
+            &metadata,
+        );
         let _ = index.update_status(tenant_id, &job_id.to_string(), &status);
     }
 
@@ -2872,37 +3292,63 @@ async fn prove_cancel(
         job_id: parsed,
     };
     let mut jobs = state.jobs.lock().expect("job lock");
-    let Some(job) = jobs.get_mut(&key) else {
-        return (StatusCode::NOT_FOUND, "unknown job_id").into_response();
-    };
-    match &job.status {
-        ProveJobStatus::Pending | ProveJobStatus::Running => {
-            job.cancel.cancel();
-            job.status = ProveJobStatus::Failed {
-                error: "cancelled by user".to_string(),
-            };
-            let status = job.status.clone();
-            drop(jobs);
-            state.metrics.jobs_inflight.dec();
-            // Update on disk + index.
-            let job_dir = state
-                .cfg
-                .data_dir
-                .join("jobs")
-                .join(&tenant.tenant_id)
-                .join(parsed.to_string());
-            let _ = write_json_atomic(job_dir.join("status.json"), &status);
-            if let Some(index) = state.job_index.as_ref() {
-                let _ = index.update_status(&tenant.tenant_id, &parsed.to_string(), &status);
+    if let Some(job) = jobs.get_mut(&key) {
+        match &job.status {
+            ProveJobStatus::Pending | ProveJobStatus::Running => {
+                job.cancel.cancel();
+                job.status = ProveJobStatus::Failed {
+                    error: "cancelled by user".to_string(),
+                };
+                let status = job.status.clone();
+                drop(jobs);
+                state.metrics.jobs_inflight.dec();
+                // Update on disk + index.
+                let job_dir = state
+                    .cfg
+                    .data_dir
+                    .join("jobs")
+                    .join(&tenant.tenant_id)
+                    .join(parsed.to_string());
+                let _ = write_json_atomic(job_dir.join("status.json"), &status);
+                if let Some(index) = state.job_index.as_ref() {
+                    let _ = index.update_status(&tenant.tenant_id, &parsed.to_string(), &status);
+                }
+                return Json(serde_json::json!({"status": "cancelled"})).into_response();
             }
-            Json(serde_json::json!({"status": "cancelled"})).into_response()
+            _ => {
+                return ApiError::new(
+                    StatusCode::CONFLICT,
+                    "conflict",
+                    "job is already in a terminal state",
+                )
+                .into_response();
+            }
         }
-        _ => ApiError::new(
-            StatusCode::CONFLICT,
-            "conflict",
-            "job is already in a terminal state",
-        )
-        .into_response(),
+    }
+    drop(jobs);
+
+    if let Some(index) = state.job_index.as_ref() {
+        match index.get_status(&tenant.tenant_id, &parsed.to_string()) {
+            Ok(Some(ProveJobStatus::Pending | ProveJobStatus::Running)) => {
+                let status = ProveJobStatus::Failed {
+                    error: "cancelled by user".to_string(),
+                };
+                match index.update_status(&tenant.tenant_id, &parsed.to_string(), &status) {
+                    Ok(()) => Json(serde_json::json!({"status": "cancelled"})).into_response(),
+                    Err(err) => ApiError::internal(err.to_string()).into_response(),
+                }
+            }
+            Ok(Some(_)) => ApiError::new(
+                StatusCode::CONFLICT,
+                "conflict",
+                "job is already in a terminal state",
+            )
+            .into_response(),
+            Ok(None) => (StatusCode::NOT_FOUND, "unknown job_id").into_response(),
+            Err(err) => ApiError::internal(err.to_string()).into_response(),
+        }
+    } else {
+        (StatusCode::NOT_FOUND, "unknown job_id").into_response()
     }
 }
 
@@ -2932,8 +3378,17 @@ async fn prove_delete(
                 job.status,
                 ProveJobStatus::Succeeded { .. } | ProveJobStatus::Failed { .. }
             )
+        } else if let Some(index) = state.job_index.as_ref() {
+            match index.get_status(&tenant.tenant_id, &parsed.to_string()) {
+                Ok(Some(status)) => matches!(
+                    status,
+                    ProveJobStatus::Succeeded { .. } | ProveJobStatus::Failed { .. }
+                ),
+                Ok(None) => true,
+                Err(_) => false,
+            }
         } else {
-            true // Not in memory — check disk
+            true
         }
     };
 
@@ -2997,7 +3452,7 @@ async fn usage(
         Ok(t) => t,
         Err(e) => return e.into_response(),
     };
-    let Some(ref usage_log) = state.usage_log else {
+    let Some(ref usage_reader) = state.usage_reader else {
         return ApiError::new(
             StatusCode::NOT_IMPLEMENTED,
             "not_implemented",
@@ -3048,7 +3503,7 @@ async fn usage(
     });
     let until = query.until.unwrap_or(now_ms);
 
-    match usage_log.query_usage(&tenant.tenant_id, &tenant.plan, since, until) {
+    match usage_reader.query_usage(&tenant.tenant_id, &tenant.plan, since, until) {
         Ok(summary) => Json(summary).into_response(),
         Err(err) => ApiError::internal(err.to_string()).into_response(),
     }
@@ -3125,7 +3580,7 @@ fn write_json_atomic<T: serde::Serialize>(
 }
 
 async fn prove_with_worker_process(
-    job_dir: &FsPath,
+    _job_dir: &FsPath,
     req: &ProveRequest,
     allow_custom_programs: bool,
     max: Duration,
@@ -3146,9 +3601,6 @@ async fn prove_with_worker_process(
         );
     }
 
-    let request_path = PathBuf::from(job_dir).join("request.json");
-    let out_path = PathBuf::from(job_dir).join("proof.json");
-
     // Acquire a worker-spawn permit before fork+exec. Bounds the
     // simultaneous subprocess count across all tenants so a request
     // burst can't push the kernel into EMFILE / process-table
@@ -3164,12 +3616,14 @@ async fn prove_with_worker_process(
     };
 
     let worker = worker_executable_path();
+    let request_json = serde_json::to_vec(req)?;
     let spawn_started = std::time::Instant::now();
     let spawn_result = tokio::process::Command::new(worker)
-        .arg("--request")
-        .arg(&request_path)
-        .arg("--out")
-        .arg(&out_path)
+        .arg("--stdio")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
         .env(
             "HC_SERVER_ALLOW_CUSTOM_PROGRAMS",
             if allow_custom_programs {
@@ -3184,33 +3638,44 @@ async fn prove_with_worker_process(
     }
     let mut child =
         spawn_result.map_err(|err| anyhow::anyhow!("failed to spawn hc-worker: {err}"))?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("hc-worker stdin unavailable"))?;
+    stdin.write_all(&request_json).await?;
+    stdin.shutdown().await?;
+    drop(stdin);
 
+    let wait_with_output = child.wait_with_output();
     let wait_fut = async {
         tokio::select! {
             _ = cancel.cancelled() => {
-                let _ = child.kill().await;
                 anyhow::bail!("prove cancelled");
             }
-            status = child.wait() => {
-                let status = status?;
-                if !status.success() {
-                    anyhow::bail!("hc-worker exited with status {status}");
-                }
-                Ok::<(), anyhow::Error>(())
-            }
+            output = wait_with_output => output.map_err(anyhow::Error::from),
         }
+        .and_then(|output| {
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!(
+                    "hc-worker exited with status {}: {}",
+                    output.status,
+                    stderr.trim()
+                );
+            }
+            Ok(output.stdout)
+        })
     };
 
-    timeout(max, wait_fut).await.map_err(|_| {
+    let proof_json = timeout(max, wait_fut).await.map_err(|_| {
         // Kill on timeout to actually reclaim CPU.
         // Note: ignore kill errors (process may have already exited).
         // Best-effort cancellation is still a big improvement over spawn_blocking.
         anyhow::anyhow!("prove timeout")
     })??;
 
-    let bytes = fs::read(&out_path).with_context(|| format!("read {}", out_path.display()))?;
     let proof: hc_sdk::types::ProofBytes =
-        serde_json::from_slice(&bytes).with_context(|| format!("parse {}", out_path.display()))?;
+        serde_json::from_slice(&proof_json).context("parse hc-worker stdout")?;
     Ok(proof)
 }
 
@@ -3765,6 +4230,125 @@ mod metrics_token_tests {
         // "Bearer tok" against configured "tok_longer" must be false.
         assert!(!metrics_token_ok(Some("Bearer tok"), "tok_longer"));
         assert!(!metrics_token_ok(Some("Bearer tok_longer"), "tok"));
+    }
+}
+
+#[cfg(test)]
+mod usage_read_source_tests {
+    use super::UsageReadSource;
+
+    #[test]
+    fn usage_read_source_accepts_only_explicit_sources() {
+        assert_eq!(
+            UsageReadSource::from_raw("").unwrap(),
+            UsageReadSource::Sqlite
+        );
+        assert_eq!(
+            UsageReadSource::from_raw("sqlite").unwrap(),
+            UsageReadSource::Sqlite
+        );
+        assert_eq!(
+            UsageReadSource::from_raw("postgres").unwrap(),
+            UsageReadSource::Postgres
+        );
+        assert_eq!(
+            UsageReadSource::from_raw("pg").unwrap(),
+            UsageReadSource::Postgres
+        );
+        assert!(UsageReadSource::from_raw("redis").is_err());
+    }
+}
+
+#[cfg(test)]
+mod job_store_fallback_tests {
+    use super::*;
+
+    #[test]
+    fn completed_proof_loads_from_job_index_when_local_artifact_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(tmp.path().to_path_buf());
+        let index = job_index::JobIndex::open(tmp.path().join("jobs.sqlite")).unwrap();
+        let job_id = Uuid::new_v4();
+        let request = ProveRequest {
+            workload_id: Some("accumulator".to_string()),
+            template_id: None,
+            template_params: None,
+            program: None,
+            initial_acc: 1,
+            final_acc: 2,
+            block_size: 16,
+            fri_final_poly_size: 4,
+            query_count: 80,
+            lde_blowup_factor: 2,
+            zk_mask_degree: None,
+        };
+        let proof = hc_sdk::types::ProofBytes {
+            version: 7,
+            bytes: vec![9, 8, 7],
+        };
+        let status = ProveJobStatus::Succeeded {
+            proof: proof.clone(),
+        };
+        index
+            .upsert_request("tenant", &job_id.to_string(), &request, &status)
+            .unwrap();
+        state.job_index = Some(Arc::new(index));
+
+        let loaded = match load_completed_proof(&state, "tenant", job_id) {
+            Ok(proof) => proof,
+            Err(err) => panic!("expected proof, got {}: {}", err.code, err.message),
+        };
+
+        assert_eq!(loaded.version, proof.version);
+        assert_eq!(loaded.bytes, proof.bytes);
+    }
+
+    #[tokio::test]
+    async fn cancel_updates_nonlocal_job_index_job() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(tmp.path().to_path_buf());
+        let index = Arc::new(job_index::JobIndex::open(tmp.path().join("jobs.sqlite")).unwrap());
+        let job_id = Uuid::new_v4();
+        let request = ProveRequest {
+            workload_id: Some("accumulator".to_string()),
+            template_id: None,
+            template_params: None,
+            program: None,
+            initial_acc: 1,
+            final_acc: 2,
+            block_size: 16,
+            fri_final_poly_size: 4,
+            query_count: 80,
+            lde_blowup_factor: 2,
+            zk_mask_degree: None,
+        };
+        index
+            .upsert_job(
+                "dev",
+                &job_id.to_string(),
+                &request,
+                &ProveJobStatus::Running,
+                &job_index::JobMetadata {
+                    tenant_plan: Some("developer".to_string()),
+                    computed_trace_length: Some(16),
+                },
+            )
+            .unwrap();
+        state.job_index = Some(index.clone());
+
+        let response = prove_cancel(
+            State(state),
+            axum::http::HeaderMap::new(),
+            Path(job_id.to_string()),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        match index.get_status("dev", &job_id.to_string()).unwrap() {
+            Some(ProveJobStatus::Failed { error }) => assert_eq!(error, "cancelled by user"),
+            other => panic!("expected cancelled failed status, got {other:?}"),
+        }
     }
 }
 

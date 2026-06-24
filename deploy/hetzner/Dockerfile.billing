@@ -1,5 +1,7 @@
 FROM python:3.12-slim
 WORKDIR /app/billing
+RUN mkdir -p /app/crates/hc-server/sql
+COPY crates/hc-server/sql/tenant_auth_pg.sql /app/crates/hc-server/sql/tenant_auth_pg.sql
 COPY billing/ ./
 RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 5001

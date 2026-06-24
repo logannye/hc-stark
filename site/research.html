@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research &amp; Lineage - TinyZKP</title>
+<meta name="description" content="How TinyZKP reconciles its early KZG/BN254 space-efficient proof research with the current hc-stark product engine and hosted STARK proving service.">
+<meta property="og:title" content="Research &amp; Lineage - TinyZKP">
+<meta property="og:description" content="TinyZKP's current product is hc-stark: transparent STARK receipts, no trusted setup, live API, SDKs, and MCP. The older KZG/BN254 repository remains research lineage.">
+<meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<link rel="canonical" href="https://tinyzkp.com/research">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&amp;family=IBM+Plex+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+main{padding-top:56px}
+.hero{padding:82px 0 54px;border-bottom:1px solid var(--border)}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:22px}
+.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
+h1{max-width:820px;font-size:clamp(34px,5vw,58px);line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);margin-bottom:20px}
+.lede{max-width:760px;color:var(--muted);font-size:18px;line-height:1.75}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:11px 18px;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:.01em;border:1px solid var(--border-light);color:var(--text);background:transparent}
+.btn:hover{text-decoration:none;border-color:var(--accent);background:var(--accent-dim)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.section{padding:64px 0;border-bottom:1px solid var(--border)}
+.section h2{font-size:28px;line-height:1.2;color:var(--text-bright);letter-spacing:-.02em;margin-bottom:14px}
+.section p{color:var(--muted);font-size:15.5px;line-height:1.75;max-width:780px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:24px}
+.card{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:22px}
+.card h3{font-size:17px;color:var(--text-bright);margin-bottom:10px}
+.card p{font-size:14px;margin-bottom:0}
+.tag{display:inline-flex;margin-bottom:14px;padding:5px 9px;border-radius:6px;border:1px solid var(--border-light);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:700}
+.tag.live{color:var(--green);background:var(--green-dim);border-color:rgba(52,211,153,.22)}
+.tag.legacy{color:var(--amber);background:var(--amber-dim);border-color:rgba(251,191,36,.22)}
+.comparison{overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin-top:24px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:14px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}
+th{background:var(--surface);color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}
+td{color:var(--muted)}
+tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--text)}
+.callout{border:1px solid rgba(46,232,212,.24);background:var(--accent-dim);border-radius:10px;padding:22px;margin-top:28px}
+.callout p{margin-bottom:0;color:var(--text)}
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:24px}
+.step{border:1px solid var(--border);border-radius:10px;padding:18px;background:rgba(12,20,36,.55)}
+.step .num{font-family:var(--mono);color:var(--accent);font-size:12px;font-weight:700;margin-bottom:8px}
+.step h3{font-size:15px;color:var(--text-bright);margin-bottom:8px}
+.step p{font-size:13.5px;margin-bottom:0}
+@media(max-width:900px){
+  .grid,.steps{grid-template-columns:1fr}
+  .hero{padding-top:64px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+<div class="container">
+  <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="links">
+    <a href="/try">Try</a>
+    <a href="/verify">Verify</a>
+    <a href="/docs">Docs</a>
+    <a href="/compute">Compute</a>
+    <a href="/research">Research</a>
+    <a href="/security">Security</a>
+    <a href="/signup" class="nav-cta">Get API Key</a>
+  </div>
+</div>
+</nav>
+
+<main>
+  <section class="hero">
+    <div class="container">
+      <div class="eyebrow">Research lineage</div>
+      <h1>One company, one thesis: space-efficient proving.</h1>
+      <p class="lede">TinyZKP grew out of research on reducing prover memory. The current commercial product is <strong>hc-stark</strong>: transparent STARK state-transition receipts with no trusted setup, a live API, offline verification, SDKs, and native MCP support. The older KZG/BN254 repository remains useful research history, but it is not the hosted production engine.</p>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/logannye/hc-stark" target="_blank" data-track="research_outbound_click" data-source="hero" data-plan="hc-stark">Current product repo</a>
+        <a class="btn" href="https://github.com/logannye/space-efficient-zero-knowledge-proofs" target="_blank" data-track="research_outbound_click" data-source="hero" data-plan="legacy-repo">Legacy research repo</a>
+        <a class="btn" href="https://arxiv.org/abs/2509.05326" target="_blank" data-track="research_outbound_click" data-source="hero" data-plan="paper">Research paper</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>How the two repositories fit together</h2>
+      <p>The repositories should be read as two generations of the same strategy, not as two competing products. The shared thesis is that proving systems become commercially useful when memory stops being the bottleneck. The implementation path changed because the business needs a trust story developers can understand quickly.</p>
+      <div class="grid">
+        <article class="card">
+          <span class="tag live">Current product</span>
+          <h3>hc-stark</h3>
+          <p>The canonical TinyZKP codebase. It powers the hosted service, MCP server, API clients, browser verifier, billing integration, website, and the current state-transition receipt product. Its public positioning is transparent STARK attestation: no trusted setup, hash-based verification, and offline receipt checking.</p>
+        </article>
+        <article class="card">
+          <span class="tag legacy">Research lineage</span>
+          <h3>space-efficient-zero-knowledge-proofs</h3>
+          <p>An earlier KZG/BN254 research prototype and paper companion. It is valuable as evidence that the memory-efficiency thesis predates the product, but its trusted-SRS pairing commitment path is not what TinyZKP sells or hosts today.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Why the product moved to STARKs</h2>
+      <p>The hosted business needs a simple security and procurement story. A KZG system can be technically useful, but it introduces a trusted setup, pairing-curve assumptions, and SRS custody questions. STARK receipts give TinyZKP a cleaner self-serve product story: transparent setup, portable verification, and proof objects that customers can check without trusting the hosted API.</p>
+      <div class="comparison">
+        <table>
+          <thead>
+            <tr>
+              <th>Question</th>
+              <th>Production answer</th>
+              <th>Legacy research answer</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Canonical repo</strong></td>
+              <td><a href="https://github.com/logannye/hc-stark" target="_blank">logannye/hc-stark</a></td>
+              <td><a href="https://github.com/logannye/space-efficient-zero-knowledge-proofs" target="_blank">logannye/space-efficient-zero-knowledge-proofs</a></td>
+            </tr>
+            <tr>
+              <td><strong>Proof family</strong></td>
+              <td>STARK-style state-transition receipts</td>
+              <td>KZG commitments over BN254</td>
+            </tr>
+            <tr>
+              <td><strong>Setup</strong></td>
+              <td>No trusted setup ceremony for the receipt path</td>
+              <td>Trusted SRS for non-dev KZG use</td>
+            </tr>
+            <tr>
+              <td><strong>Product status</strong></td>
+              <td>Live API, MCP, SDKs, browser verifier, billing, status page</td>
+              <td>Research prototype and paper companion</td>
+            </tr>
+            <tr>
+              <td><strong>Best use today</strong></td>
+              <td>Build, test, verify, integrate, and audit the TinyZKP service</td>
+              <td>Understand the earlier sublinear-space proving exploration</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <p><strong>Important scope note:</strong> TinyZKP's default public product is a transparent state-transition receipt. Do not read "ZKP" here as a blanket claim that every hosted proof hides private inputs. Privacy-oriented templates are treated as separate, audit-gated product work.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>What is live now, and what remains roadmap work</h2>
+      <p>The public product should stay narrow until deeper audits and template coverage are complete. A narrow, verifiable product is easier to buy than a broad proof-system promise.</p>
+      <div class="steps">
+        <article class="step">
+          <div class="num">LIVE</div>
+          <h3>State-transition receipts</h3>
+          <p>Self-serve proving and verification for the accumulator state-transition template, plus hosted and local verification paths.</p>
+        </article>
+        <article class="step">
+          <div class="num">GATED</div>
+          <h3>Privacy and specialized templates</h3>
+          <p>Range, privacy-oriented, and custom templates should remain explicitly gated until deployed, documented, and audited for their exact mode.</p>
+        </article>
+        <article class="step">
+          <div class="num">FUTURE</div>
+          <h3>Compute workloads</h3>
+          <p>zkVM, zkML, rollup, and large custom traces are strategically compelling, but they should graduate through early-access design partners.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+<div class="container">
+  <div class="left">&copy; 2026 TinyZKP</div>
+  <div class="right">
+    <a href="/docs">Quickstart</a>
+    <a href="/verify">Verify</a>
+    <a href="/compute">Compute</a>
+    <a href="/research">Research</a>
+    <a href="/security">Security</a>
+    <a href="/terms">Terms</a>
+    <a href="/privacy">Privacy</a>
+    <a href="https://github.com/logannye/hc-stark" target="_blank" data-track="research_outbound_click" data-source="footer" data-plan="hc-stark">GitHub</a>
+  </div>
+</div>
+</footer>
+
+<script defer src="/analytics.js"></script>
+</body>
+</html>

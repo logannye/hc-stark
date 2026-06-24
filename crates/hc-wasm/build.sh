@@ -49,4 +49,4 @@ cat > pkg/package.json <<'PKGJSON'
 PKGJSON
 
 echo "Build complete: pkg/"
-echo "  To publish: cd pkg && npm publish --access public"
+echo "  To publish: cd pkg && npm publish --provenance --access public"

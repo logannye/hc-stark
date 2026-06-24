@@ -41,7 +41,7 @@
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column;
-  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden;width:100%}
 body::before{content:'';position:fixed;inset:0;z-index:-2;
   background-image:radial-gradient(circle,var(--border) .5px,transparent .5px);
   background-size:32px 32px;opacity:.3;pointer-events:none}
@@ -66,11 +66,11 @@ nav .container{display:flex;align-items:center;justify-content:space-between;hei
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px}
 .hamburger svg{width:24px;height:24px;stroke:var(--text);stroke-width:2;fill:none}
 
-main{flex:1;padding-top:130px;padding-bottom:80px;display:flex;justify-content:center;position:relative}
+main{flex:1;padding-top:130px;padding-bottom:80px;display:flex;justify-content:center;position:relative;min-width:0;overflow-x:hidden}
 main::before{content:'';position:absolute;width:600px;height:600px;
   background:radial-gradient(circle,var(--accent-glow) 0%,transparent 65%);
   top:-200px;left:50%;transform:translateX(-50%);pointer-events:none;opacity:.4}
-.signup-card{max-width:480px;width:100%;padding:0 24px;position:relative}
+.signup-card{max-width:480px;width:100%;padding:0 24px;position:relative;min-width:0}
 .signup-card h1{font-size:1.75rem;font-weight:800;margin-bottom:8px;color:var(--text-bright);letter-spacing:-.02em}
 .signup-card .sub{color:var(--muted);font-size:.9rem;line-height:1.6;margin-bottom:32px}
 
@@ -126,6 +126,9 @@ footer .right a:hover{color:var(--muted)}
   .links.open{display:flex}
   .hamburger{display:block}
   .plan-toggle{grid-template-columns:1fr!important}
+  main{padding:100px 20px 64px}
+  main::before{width:320px;height:320px;top:-120px}
+  .signup-card{padding:0;max-width:100%}
 }
 </style>
 </head>
@@ -247,6 +250,7 @@ footer .right a:hover{color:var(--muted)}
 </div>
 </footer>
 
+<script defer src="/analytics.js"></script>
 <script>
 (function() {
   var params = new URLSearchParams(window.location.search);
@@ -298,6 +302,7 @@ footer .right a:hover{color:var(--muted)}
 
   window.selectPlan = function(plan) {
     currentPlan = plan;
+    if (window.tinyzkpTrack) window.tinyzkpTrack('signup_plan_selected',{plan:plan,cadence:currentCadence,source:'signup_page'});
     document.querySelectorAll('.plan-option').forEach(function(el) {
       el.classList.toggle('selected', el.dataset.plan === plan);
     });
@@ -361,14 +366,19 @@ footer .right a:hover{color:var(--muted)}
       })
       .then(function(data) {
         try { sessionStorage.setItem('tinyzkp_email', email); } catch(e) {}
+        if (window.tinyzkpTrack) window.tinyzkpTrack('signup_free_succeeded',{plan:'free'});
         if (data.dashboard_token) {
           window.location.href = '/account?token=' + data.dashboard_token;
         } else {
           window.location.href = '/welcome?plan=free';
         }
       })
-      .catch(function(err) { showError(err.message); setLoading(false); });
+      .catch(function(err) {
+        if (window.tinyzkpTrack) window.tinyzkpTrack('signup_free_failed',{plan:'free',reason:'request_failed'});
+        showError(err.message); setLoading(false);
+      });
     } else {
+      if (window.tinyzkpTrack) window.tinyzkpTrack('checkout_started',{plan:currentPlan,cadence:currentCadence});
       fetch('/api/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -385,7 +395,10 @@ footer .right a:hover{color:var(--muted)}
         if (data.url) window.location.href = data.url;
         else throw new Error('No checkout URL returned.');
       })
-      .catch(function(err) { showError(err.message); setLoading(false); });
+      .catch(function(err) {
+        if (window.tinyzkpTrack) window.tinyzkpTrack('checkout_failed',{plan:currentPlan,cadence:currentCadence,reason:'request_failed'});
+        showError(err.message); setLoading(false);
+      });
     }
   });
 })();

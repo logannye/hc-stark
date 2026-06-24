@@ -4,8 +4,14 @@ use axum::{
     http::{HeaderValue, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
+    routing::get,
+    Json,
 };
-use hc_server::auth::AuthConfig;
+use hc_server::{
+    auth::AuthConfig,
+    shared_rate_limit::{endpoint_name, SharedRateLimiter},
+    usage_log::PgTlsMode,
+};
 use rmcp::transport::streamable_http_server::{
     session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
 };
@@ -18,12 +24,9 @@ use tracing_subscriber::EnvFilter;
 
 /// Per-tenant fixed-window rate limit on the authenticated MCP path.
 ///
-/// Mirrors the `FixedWindow` shape from hc-server but lives in-process
-/// here — sharing live state across the two binaries would require a
-/// shared backing store (Redis, etc.) which is its own design problem.
-/// Until that lands, a tenant who hits limits on both surfaces shares
-/// no quota — which is acceptable since the API and MCP have different
-/// abuse profiles and per-surface caps are still meaningful.
+/// Mirrors the `FixedWindow` shape from hc-server. By default it is local to
+/// this process; when `HC_RATE_LIMIT_PG_URL` is configured, authenticated MCP
+/// calls use the same Postgres-backed tenant window as the HTTP API.
 #[derive(Clone, Debug, Default)]
 struct TenantWindow {
     window_start_ms: u64,
@@ -66,6 +69,36 @@ fn rpm_for_plan(plan: &str) -> u32 {
 /// incidents). 0 → use per-plan ladder. Unset → use per-plan ladder.
 const GLOBAL_RPM_OVERRIDE_DISABLED: u32 = 0;
 
+#[derive(serde::Serialize)]
+struct ReleaseInfo {
+    service: &'static str,
+    package_version: &'static str,
+    release_sha: Option<String>,
+    release_ref: Option<String>,
+    build_url: Option<String>,
+}
+
+fn nonempty_env(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn mcp_release_info() -> ReleaseInfo {
+    ReleaseInfo {
+        service: "mcp",
+        package_version: env!("CARGO_PKG_VERSION"),
+        release_sha: nonempty_env("HC_RELEASE_SHA"),
+        release_ref: nonempty_env("HC_RELEASE_REF"),
+        build_url: nonempty_env("HC_RELEASE_BUILD_URL"),
+    }
+}
+
+async fn version() -> Json<ReleaseInfo> {
+    Json(mcp_release_info())
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -78,12 +111,27 @@ fn now_ms() -> u64 {
 /// success — call exactly once per request that should consume quota.
 fn check_tenant_rate_limit(
     state: &Mutex<McpRateLimitState>,
+    shared: Option<&SharedRateLimiter>,
     tenant_id: &str,
     limit_per_minute: u32,
 ) -> bool {
     if limit_per_minute == 0 {
         // 0 disables the per-tenant gate entirely.
         return true;
+    }
+    if let Some(limiter) = shared {
+        return match limiter.check_and_increment(tenant_id, endpoint_name("mcp"), limit_per_minute)
+        {
+            Ok(ok) => ok,
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    tenant_id,
+                    "shared postgres MCP rate limiter failed; denying request"
+                );
+                false
+            }
+        };
     }
     let now = now_ms();
     let mut s = state.lock().expect("rate-limit lock");
@@ -211,10 +259,15 @@ async fn validate_auth(
     auth: Arc<AuthConfig>,
     require: bool,
     rate: Arc<Mutex<McpRateLimitState>>,
+    shared_rate: Option<Arc<SharedRateLimiter>>,
     global_rpm_override: u32,
     req: Request,
     next: Next,
 ) -> Response {
+    if req.uri().path() == "/version" {
+        return next.run(req).await;
+    }
+
     let header_present = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
@@ -241,7 +294,7 @@ async fn validate_auth(
             let limit = effective_rpm(&tenant.plan, global_rpm_override);
             // Per-tenant rate gate. Burns 1 unit of quota per request.
             // 429 mirrors the hc-server rate-limit response shape.
-            if !check_tenant_rate_limit(&rate, &tenant.tenant_id, limit) {
+            if !check_tenant_rate_limit(&rate, shared_rate.as_deref(), &tenant.tenant_id, limit) {
                 tracing::warn!(
                     tenant_id = %tenant.tenant_id,
                     plan = %tenant.plan,
@@ -301,6 +354,25 @@ async fn main() -> Result<()> {
             auth_cfg.merge(&file_auth);
         }
     }
+    if let Ok(pg_url) = std::env::var("HC_SERVER_AUTH_PG_URL") {
+        let pg_url = pg_url.trim().to_string();
+        if !pg_url.is_empty() {
+            let tls_mode = std::env::var("HC_SERVER_AUTH_PG_TLS")
+                .ok()
+                .map(|raw| {
+                    hc_server::usage_log::PgTlsMode::from_raw_env_and_url(Some(&raw), &pg_url)
+                })
+                .unwrap_or_else(|| {
+                    hc_server::usage_log::PgTlsMode::from_raw_env_and_url(None, &pg_url)
+                });
+            let src = hc_server::auth::DbAuthSource::connect_postgres(&pg_url, tls_mode)?;
+            auth_cfg = auth_cfg.with_db_source(src);
+            tracing::info!(
+                tls = ?tls_mode,
+                "mcp Postgres auth DB fallback enabled (tenants)"
+            );
+        }
+    }
     let auth = Arc::new(auth_cfg);
     let require_auth = std::env::var("HC_MCP_REQUIRE_AUTH")
         .ok()
@@ -331,6 +403,25 @@ async fn main() -> Result<()> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(GLOBAL_RPM_OVERRIDE_DISABLED);
     let rate_state = Arc::new(Mutex::new(McpRateLimitState::default()));
+    let shared_rate_limiter = match std::env::var("HC_RATE_LIMIT_PG_URL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+    {
+        Some(url) => {
+            let tls_mode = std::env::var("HC_RATE_LIMIT_PG_TLS")
+                .ok()
+                .map(|raw| PgTlsMode::from_raw_env_and_url(Some(&raw), &url))
+                .unwrap_or_else(|| PgTlsMode::from_raw_env_and_url(None, &url));
+            let limiter = SharedRateLimiter::connect(&url, tls_mode)
+                .map_err(|err| anyhow::anyhow!("initialize shared MCP rate limiter: {err}"))?;
+            tracing::info!(
+                tls = ?tls_mode,
+                "mcp shared postgres rate limiter enabled"
+            );
+            Some(Arc::new(limiter))
+        }
+        None => None,
+    };
     tracing::info!(
         global_rpm_override,
         "mcp per-tenant rate limit ready (0 = use per-plan ladder; non-zero = override)"
@@ -358,20 +449,31 @@ async fn main() -> Result<()> {
 
     let auth_for_layer = auth.clone();
     let rate_for_layer = rate_state.clone();
-    let router =
-        axum::Router::new()
-            .nest_service("/mcp", service)
-            // Order matters: auth runs first so an unauthorized request never
-            // reaches the MCP service. validate_origin still applies to all
-            // paths (browser-based clients).
-            .layer(middleware::from_fn(move |req, next| {
-                let auth = auth_for_layer.clone();
-                let rate = rate_for_layer.clone();
-                async move {
-                    validate_auth(auth, require_auth, rate, global_rpm_override, req, next).await
-                }
-            }))
-            .layer(middleware::from_fn(validate_origin));
+    let shared_rate_for_layer = shared_rate_limiter.clone();
+    let router = axum::Router::new()
+        .route("/version", get(version))
+        .nest_service("/mcp", service)
+        // Order matters: auth runs first so an unauthorized request never
+        // reaches the MCP service. validate_origin still applies to all
+        // paths (browser-based clients).
+        .layer(middleware::from_fn(move |req, next| {
+            let auth = auth_for_layer.clone();
+            let rate = rate_for_layer.clone();
+            let shared_rate = shared_rate_for_layer.clone();
+            async move {
+                validate_auth(
+                    auth,
+                    require_auth,
+                    rate,
+                    shared_rate,
+                    global_rpm_override,
+                    req,
+                    next,
+                )
+                .await
+            }
+        }))
+        .layer(middleware::from_fn(validate_origin));
 
     let addr = format!("{host}:{port}");
     let tcp_listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -434,7 +536,7 @@ mod tests {
             .layer(middleware::from_fn(move |req, next| {
                 let a = auth_layer.clone();
                 let r = rate_layer.clone();
-                async move { validate_auth(a, require, r, tenant_rpm, req, next).await }
+                async move { validate_auth(a, require, r, None, tenant_rpm, req, next).await }
             }));
 
         let mut req = AxumRequest::builder().method(Method::GET).uri("/test");
@@ -448,6 +550,35 @@ mod tests {
         let body_bytes = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
         let body = String::from_utf8(body_bytes.to_vec()).ok();
         (status, body, rate)
+    }
+
+    #[tokio::test]
+    async fn version_route_is_public_even_when_auth_is_required() {
+        let auth = Arc::new(AuthConfig::from_pairs(&[("acme", "tzk_test")]));
+        let rate = Arc::new(Mutex::new(McpRateLimitState::default()));
+        let app: axum::Router =
+            axum::Router::new()
+                .route("/version", get(version))
+                .layer(middleware::from_fn(move |req, next| {
+                    let a = auth.clone();
+                    let r = rate.clone();
+                    async move {
+                        validate_auth(a, true, r, None, GLOBAL_RPM_OVERRIDE_DISABLED, req, next)
+                            .await
+                    }
+                }));
+
+        let req = AxumRequest::builder()
+            .method(Method::GET)
+            .uri("/version")
+            .body(Body::empty())
+            .unwrap();
+        let resp = tower::ServiceExt::oneshot(app, req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(json["service"], "mcp");
+        assert_eq!(json["package_version"], env!("CARGO_PKG_VERSION"));
     }
 
     #[tokio::test]

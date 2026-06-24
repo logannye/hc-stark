@@ -132,18 +132,67 @@ def _send_magic_link_email(email: str, link: str) -> bool:
 
 
 CONTACT_RECIPIENT = "logan@galenhealth.org"
+CONTACT_QUALIFICATION_FIELDS = (
+    ("use_case", "Use case"),
+    ("trace_length", "Trace length"),
+    ("proof_frequency", "Proof frequency"),
+    ("verification_environment", "Verification"),
+    ("privacy_requirement", "Privacy need"),
+    ("latency_requirement", "Latency"),
+    ("current_alternative", "Current alternative"),
+    ("budget_owner", "Budget owner"),
+)
 
 
-def _send_contact_email(name: str, sender_email: str, category: str, message: str) -> bool:
+def _sanitize_contact_qualification(raw: object) -> dict[str, str]:
+    """Keep only low-cardinality qualification fields from the public form."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, _label in CONTACT_QUALIFICATION_FIELDS:
+        value = raw.get(key)
+        if not isinstance(value, str):
+            continue
+        clean = value.strip()[:160]
+        if clean:
+            out[key] = clean
+    return out
+
+
+def _contact_string(value: object, max_len: int) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip()[:max_len]
+
+
+def _format_contact_qualification(qualification: dict[str, str]) -> str:
+    if not qualification:
+        return "Project fit: not provided\n"
+    lines = ["Project fit:"]
+    for key, label in CONTACT_QUALIFICATION_FIELDS:
+        if key in qualification:
+            lines.append(f"  {label}: {qualification[key]}")
+    return "\n".join(lines) + "\n"
+
+
+def _send_contact_email(
+    name: str,
+    sender_email: str,
+    category: str,
+    message: str,
+    qualification: dict[str, str] | None = None,
+) -> bool:
     """Forward a contact-form submission to the support inbox. Returns True on success."""
     if not SMTP_HOST:
         print("SMTP not configured, skipping contact email", file=sys.stderr)
         return False
 
+    qualification = qualification or {}
     body = (
         f"Name: {name}\n"
         f"Email: {sender_email}\n"
         f"Category: {category}\n"
+        f"{_format_contact_qualification(qualification)}"
         f"\n"
         f"{message}\n"
     )
@@ -469,7 +518,7 @@ def provision_free():
         return flask.jsonify(error="unauthorized"), 403
 
     data = flask.request.get_json(silent=True) or {}
-    email = data.get("email", "").strip()
+    email = data.get("email", "").strip().lower()
 
     if not email or "@" not in email or len(email) > 254:
         return flask.jsonify(error="valid email required"), 400
@@ -643,22 +692,38 @@ def send_contact():
         return flask.jsonify(error="unauthorized"), 403
 
     data = flask.request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip()
-    email = (data.get("email") or "").strip().lower()
-    category = (data.get("category") or "General Inquiry").strip()
-    message = (data.get("message") or "").strip()
+    if (
+        isinstance(data.get("name"), str) and len(data["name"]) > 200
+        or isinstance(data.get("email"), str) and len(data["email"]) > 254
+        or isinstance(data.get("message"), str) and len(data["message"]) > 5000
+    ):
+        return flask.jsonify(error="invalid input"), 400
+
+    name = _contact_string(data.get("name"), 200)
+    email = _contact_string(data.get("email"), 254).lower()
+    category = _contact_string(data.get("category"), 80) or "General Inquiry"
+    message = _contact_string(data.get("message"), 5000)
+    qualification = _sanitize_contact_qualification(data.get("qualification"))
 
     if not name or not email or not message:
         return flask.jsonify(error="name, email, and message are required"), 400
     if "@" not in email or len(email) > 254 or len(name) > 200 or len(message) > 5000:
         return flask.jsonify(error="invalid input"), 400
 
-    valid_categories = {"General Inquiry", "Bug Report", "Feature Request", "Billing", "Enterprise"}
+    valid_categories = {
+        "General Inquiry",
+        "Bug Report",
+        "Feature Request",
+        "Compute Inquiry",
+        "Design Partner",
+        "Billing",
+        "Enterprise",
+    }
     safe_category = category if category in valid_categories else "General Inquiry"
 
     def _bg_send():
         try:
-            _send_contact_email(name, email, safe_category, message)
+            _send_contact_email(name, email, safe_category, message, qualification)
         except Exception as e:
             print(f"WARNING: Contact email failed from {email}: {e}", file=sys.stderr)
 
@@ -702,6 +767,7 @@ def verify_magic_link_route():
         email=tenant["email"],
         plan=tenant["plan"],
         api_key_prefix=tenant["api_key_prefix"],
+        status=tenant["status"],
     ), 200
 
 

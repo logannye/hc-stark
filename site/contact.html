@@ -8,6 +8,7 @@
 <meta property="og:title" content="Contact — TinyZKP">
 <meta property="og:description" content="Get in touch with the TinyZKP team. Questions, bug reports, feature requests, or billing inquiries.">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<link rel="canonical" href="https://tinyzkp.com/contact">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -33,7 +34,7 @@
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column;
-  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden;width:100%}
 body::before{content:'';position:fixed;inset:0;z-index:-2;
   background-image:radial-gradient(circle,var(--border) .5px,transparent .5px);
   background-size:32px 32px;opacity:.3;pointer-events:none}
@@ -63,7 +64,7 @@ nav .container{display:flex;align-items:center;justify-content:space-between;hei
 
 main{flex:1}
 
-.contact-wrap{max-width:520px;margin:0 auto;padding:130px 24px 80px;position:relative}
+.contact-wrap{width:100%;max-width:760px;margin:0 auto;padding:130px 24px 80px;position:relative;min-width:0}
 .contact-wrap::before{content:'';position:absolute;width:500px;height:500px;
   background:radial-gradient(circle,var(--accent-glow) 0%,transparent 65%);
   top:-200px;left:50%;transform:translateX(-50%);pointer-events:none;opacity:.3}
@@ -71,6 +72,10 @@ main{flex:1}
 .contact-wrap .subtext{color:var(--muted);font-size:.9rem;line-height:1.6;margin-bottom:32px}
 
 .form-group{margin-bottom:18px}
+.qual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:6px 0 18px}
+.qual-section{border:1px solid var(--border);border-radius:12px;padding:18px 18px 2px;margin:8px 0 22px;background:rgba(12,20,36,.45)}
+.qual-section legend{font-family:var(--mono);font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);padding:0 8px}
+.field-help{color:var(--dim);font-size:.82rem;line-height:1.5;margin:-4px 0 14px}
 .form-group label{display:block;font-size:.8rem;color:var(--dim);margin-bottom:7px;font-weight:600;
   letter-spacing:.04em;text-transform:uppercase;font-family:var(--mono)}
 .form-group input,.form-group select,.form-group textarea{
@@ -98,6 +103,13 @@ main{flex:1}
 .error-msg{margin-top:16px;padding:11px 16px;background:rgba(248,113,113,.06);
   border:1px solid rgba(248,113,113,.2);border-radius:10px;color:var(--red);font-size:.85rem;font-weight:500}
 
+.support-sla{margin-top:28px;border:1px solid var(--border);border-radius:12px;background:rgba(12,20,36,.45);padding:18px}
+.support-sla h2{font-size:1rem;color:var(--text-bright);margin-bottom:8px}
+.support-sla p{color:var(--muted);font-size:.88rem;line-height:1.65;margin-bottom:12px}
+.support-sla ul{padding-left:18px;color:var(--muted);font-size:.86rem;line-height:1.65}
+.support-sla li{margin-bottom:6px}
+.support-sla strong{color:var(--text)}
+
 footer{border-top:1px solid var(--border);padding:32px 0;margin-top:auto}
 footer .container{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
 footer .left{color:var(--dim);font-size:12.5px;font-weight:500}
@@ -110,7 +122,9 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}
   .links.open{display:flex}
   .hamburger{display:block}
-  .contact-wrap{padding-top:100px}
+  .contact-wrap{padding:100px 20px 64px;overflow-x:hidden}
+  .contact-wrap::before{width:320px;height:320px;top:-120px}
+  .qual-grid{grid-template-columns:1fr}
   footer .container{flex-direction:column;gap:12px;text-align:center}
   footer .right{flex-wrap:wrap;justify-content:center}
 }
@@ -138,8 +152,19 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
 
 <main>
 <div class="contact-wrap">
-  <h1>Contact Us</h1>
-  <p class="subtext">Questions, bug reports, or feedback &mdash; we'd love to hear from you. We typically respond within 24 hours.</p>
+  <h1>Contact TinyZKP</h1>
+  <p class="subtext">Questions, bug reports, Compute inquiries, or design-partner conversations. For technical or commercial fit, the optional fields help us route the request without a long back-and-forth.</p>
+
+  <section class="support-sla" aria-labelledby="support-expectations">
+    <h2 id="support-expectations">Support expectations</h2>
+    <p>Use this form for public support, billing, onboarding, and design-partner routing. Direct fallback email: <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a>.</p>
+    <ul>
+      <li><strong>Security or verifier correctness:</strong> acknowledge within 15 minutes for broad risk, or within 1 business day for narrow reports.</li>
+      <li><strong>Billing, signup, and account access:</strong> respond within 1 business day; reconcile Stripe, tenant state, and usage before closure.</li>
+      <li><strong>API, MCP, or proving outage:</strong> check <a href="/status">status</a> first; user-blocking incidents are triaged under the public response targets.</li>
+      <li><strong>Compute and enterprise inquiries:</strong> expect a design-fit response within 2 business days.</li>
+    </ul>
+  </section>
 
   <form id="contact-form">
     <div class="form-group">
@@ -156,10 +181,106 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
         <option value="General Inquiry">General Inquiry</option>
         <option value="Bug Report">Bug Report</option>
         <option value="Feature Request">Feature Request</option>
+        <option value="Compute Inquiry">Compute Inquiry</option>
+        <option value="Design Partner">Design Partner</option>
         <option value="Billing">Billing</option>
         <option value="Enterprise">Enterprise Inquiry</option>
       </select>
     </div>
+    <fieldset class="qual-section">
+      <legend>Project fit</legend>
+      <p class="field-help">Optional. Do not paste API keys, private inputs, proofs, or customer data.</p>
+      <div class="qual-grid">
+        <div class="form-group">
+          <label for="use_case">Use case</label>
+          <select id="use_case" name="use_case">
+            <option value="">Not sure yet</option>
+            <option value="AI-agent state receipts">AI-agent state receipts</option>
+            <option value="Audit-log checkpoints">Audit-log checkpoints</option>
+            <option value="Proof-of-reserves checkpoints">Proof-of-reserves checkpoints</option>
+            <option value="Long accumulator trace">Long accumulator trace</option>
+            <option value="Custom state machine">Custom state machine</option>
+            <option value="zkML / zkVM early access">zkML / zkVM early access</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="trace_length">Trace length</label>
+          <select id="trace_length" name="trace_length">
+            <option value="">Unknown</option>
+            <option value="<10K steps">&lt;10K steps</option>
+            <option value="10K-100K steps">10K&ndash;100K steps</option>
+            <option value="100K-1M steps">100K&ndash;1M steps</option>
+            <option value="1M-10M steps">1M&ndash;10M steps</option>
+            <option value="10M-100M steps">10M&ndash;100M steps</option>
+            <option value="100M+ steps">100M+ steps</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="proof_frequency">Proof frequency</label>
+          <select id="proof_frequency" name="proof_frequency">
+            <option value="">Unknown</option>
+            <option value="One-time evaluation">One-time evaluation</option>
+            <option value="Daily checkpoints">Daily checkpoints</option>
+            <option value="Hourly checkpoints">Hourly checkpoints</option>
+            <option value="Per user request">Per user request</option>
+            <option value="Batch/backfill">Batch/backfill</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="verification_environment">Verification</label>
+          <select id="verification_environment" name="verification_environment">
+            <option value="">Unknown</option>
+            <option value="Browser / WASM">Browser / WASM</option>
+            <option value="Backend service">Backend service</option>
+            <option value="AI agent / MCP">AI agent / MCP</option>
+            <option value="Smart contract">Smart contract</option>
+            <option value="Offline audit package">Offline audit package</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="privacy_requirement">Privacy need</label>
+          <select id="privacy_requirement" name="privacy_requirement">
+            <option value="">Unknown</option>
+            <option value="Transparent receipt is fine">Transparent receipt is fine</option>
+            <option value="Need private inputs">Need private inputs</option>
+            <option value="Need public attestation only">Need public attestation only</option>
+            <option value="Not sure">Not sure</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="latency_requirement">Latency</label>
+          <select id="latency_requirement" name="latency_requirement">
+            <option value="">Unknown</option>
+            <option value="<30 seconds">&lt;30 seconds</option>
+            <option value="Minutes are fine">Minutes are fine</option>
+            <option value="Batch/offline">Batch/offline</option>
+            <option value="Not sure">Not sure</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="current_alternative">Current alternative</label>
+          <select id="current_alternative" name="current_alternative">
+            <option value="">Unknown</option>
+            <option value="High-RAM prover infrastructure">High-RAM prover infrastructure</option>
+            <option value="Custom STARK/SNARK stack">Custom STARK/SNARK stack</option>
+            <option value="Signed logs only">Signed logs only</option>
+            <option value="Manual audit / no proof">Manual audit / no proof</option>
+            <option value="Other vendor">Other vendor</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="budget_owner">Budget owner</label>
+          <select id="budget_owner" name="budget_owner">
+            <option value="">Unknown</option>
+            <option value="Engineering">Engineering</option>
+            <option value="Security / audit">Security / audit</option>
+            <option value="Finance / compliance">Finance / compliance</option>
+            <option value="Founder / executive">Founder / executive</option>
+            <option value="No budget yet">No budget yet</option>
+          </select>
+        </div>
+      </div>
+    </fieldset>
     <div class="form-group">
       <label for="message">Message</label>
       <textarea id="message" name="message" rows="5" required placeholder="How can we help?"></textarea>
@@ -189,6 +310,7 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
 </div>
 </footer>
 
+<script defer src="/analytics.js"></script>
 <script>
 var form = document.getElementById('contact-form');
 var btn = form.querySelector('.submit-btn');
@@ -206,6 +328,16 @@ form.addEventListener('submit', function(e) {
     email: form.email.value,
     category: form.category.value,
     message: form.message.value,
+    qualification: {
+      use_case: form.use_case.value,
+      trace_length: form.trace_length.value,
+      proof_frequency: form.proof_frequency.value,
+      verification_environment: form.verification_environment.value,
+      privacy_requirement: form.privacy_requirement.value,
+      latency_requirement: form.latency_requirement.value,
+      current_alternative: form.current_alternative.value,
+      budget_owner: form.budget_owner.value
+    },
     _honeypot: form._honeypot.value
   };
 
@@ -222,8 +354,10 @@ form.addEventListener('submit', function(e) {
     }
     form.style.display = 'none';
     successEl.style.display = 'block';
+    if(window.tinyzkpTrack) window.tinyzkpTrack('contact_submitted',{source:'contact_page',plan:form.category.value});
   })
   .catch(function(err) {
+    if(window.tinyzkpTrack) window.tinyzkpTrack('contact_failed',{source:'contact_page'});
     errorEl.textContent = err.message;
     errorEl.style.display = 'block';
     btn.textContent = 'Send Message';

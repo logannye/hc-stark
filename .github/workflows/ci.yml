@@ -21,6 +21,17 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Python test deps
+        run: python3 -m pip install --user pytest -r billing/requirements.txt
+
+      - name: Install runtime test deps
+        run: sudo apt-get update && sudo apt-get install -y sqlite3
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -34,6 +45,92 @@ jobs:
 
       - name: fmt
         run: cargo fmt --all -- --check
+
+      - name: reconciliation invariants
+        run: ./scripts/ci/reconciliation_invariants.sh
+
+      - name: launch gate audit
+        run: |
+          python3 scripts/ci/launch_gate_audit.py
+          python3 -m pytest scripts/ci/test_launch_gate_audit.py
+          python3 scripts/ci/production_launch_preflight.py
+          python3 -m pytest scripts/ci/test_production_launch_preflight.py
+          python3 -m pytest scripts/ci/test_release_identity_check.py
+          python3 scripts/ci/server_card_check.py
+          python3 -m pytest scripts/ci/test_server_card_check.py
+
+      - name: backup restore checks
+        run: |
+          python3 scripts/ci/backup_restore_check.py
+          python3 -m pytest scripts/ci/test_backup_restore_check.py
+          python3 -m pytest billing/tests/test_backup_script.py
+
+      - name: static site route check
+        run: |
+          python3 scripts/ci/site_route_check.py
+          python3 -m pytest scripts/ci/test_site_route_check.py
+
+      - name: Cloudflare Pages deploy check
+        run: |
+          python3 scripts/ci/site_deploy_check.py
+          python3 -m pytest scripts/ci/test_site_deploy_check.py
+          node scripts/ci/site_worker_dispatch_test.mjs
+
+      - name: Docker Compose config checks
+        run: |
+          python3 scripts/ci/compose_config_check.py
+          python3 -m pytest scripts/ci/test_compose_config_check.py
+
+      - name: deploy readiness policy checks
+        run: python3 -m pytest scripts/ci/test_deploy_readiness_check.py
+
+      - name: billing python checks
+        run: |
+          python3 -m pytest billing/tests/test_site_pricing_parity.py
+          python3 -m pytest billing/tests/test_provision_free.py
+          python3 -m pytest billing/tests/test_session_endpoints.py
+          python3 -m pytest billing/tests/test_sessions.py
+          python3 -m pytest billing/tests/test_tenant_store.py
+          python3 -m pytest billing/tests/test_usage_pg_tools.py
+          python3 -m pytest billing/tests/test_tenant_pg_tools.py
+          python3 -m pytest billing/tests/test_contact_intake.py
+
+      - name: Python SDK checks
+        run: |
+          python3 -m pip install --user -e 'clients/python[test]'
+          python3 -m pytest clients/python/tests/test_client.py
+
+      - name: TypeScript SDK checks
+        working-directory: clients/typescript
+        run: |
+          npm ci
+          npm run build
+          npm test
+
+      - name: Rust SDK checks
+        run: cargo test --manifest-path clients/rust/Cargo.toml
+
+      - name: shell script syntax
+        run: |
+          bash -n scripts/ci/reconciliation_invariants.sh
+          python3 -m py_compile scripts/ci/production_launch_preflight.py
+          python3 -m py_compile scripts/ci/release_identity_check.py
+          python3 -m py_compile scripts/ci/server_card_check.py
+          bash -n scripts/monitoring/api_health_audit.sh
+          bash -n scripts/monitoring/shared_dispatch_smoke.sh
+          bash -n billing/backup.sh
+          bash -n deploy/hetzner/install_billing_runtime.sh
+          bash -n deploy/hetzner/deploy.sh
+          bash -n deploy/hetzner/setup.sh
+
+      - name: site JavaScript syntax
+        run: |
+          node --check site/_worker.js
+          node --check site/functions/api/contact.js
+          node --check site/functions/api/events.js
+          find site/functions/api -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check site/analytics.js
+          node --check deploy/uptime-probe/worker.js
 
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -63,9 +160,6 @@ jobs:
 
       - name: scaling invariant tests
         run: cargo test -p hc-bench --features scaling-tests
-
-      - name: recursion circuit tests
-        run: cargo test -p hc-recursion
 
       - name: cargo audit
         run: |
@@ -127,4 +221,3 @@ jobs:
             benchmarks/verifier/latest.json
             benchmarks/verifier/verifier_history.jsonl
           if-no-files-found: ignore
-

@@ -17,9 +17,9 @@ import { TinyZKP } from "tinyzkp";
 
 const client = new TinyZKP("https://api.tinyzkp.com", { apiKey: "tzk_..." });
 
-// Prove a secret is in range [0, 100] — without revealing it
-const jobId = await client.proveTemplate("range_proof", {
-  min: 0, max: 100, witness_steps: [42, 44],
+// Prove that 1000 + 10 + 20 + 15 = 1045.
+const jobId = await client.proveTemplate("accumulator_step", {
+  initial: 1000, final: 1045, deltas: [10, 20, 15],
 });
 
 // Wait for the proof (polls automatically, typically 1-5 seconds)
@@ -27,7 +27,7 @@ const proof = await client.waitForProof(jobId);
 
 // Verify it (always free)
 const result = await client.verify(proof);
-console.log(result.ok); // true — verified without learning the secret
+console.log(result.ok); // true
 ```
 
 CommonJS (works since v0.1.1):
@@ -39,9 +39,9 @@ const client = new TinyZKP("https://api.tinyzkp.com", { apiKey: "tzk_..." });
 
 `HcClient` is the original name; `TinyZKP` is exported as an alias and is preferred in new code.
 
-## What are `witness_steps`?
+## What does the live template prove?
 
-The `witness_steps` encode your secret value as internal computation steps. They are **never revealed** to the verifier — only the proof (which vouches for them) is shared.
+The live self-serve template is `accumulator_step`. It proves a transparent state transition: starting from `initial`, applying each value in `deltas` reaches `final`. Use it for balance updates, ledger reconciliation, audit-log checkpoints, and agent state receipts where the verifier needs a compact receipt.
 
 ## API
 
@@ -58,15 +58,12 @@ The `witness_steps` encode your secret value as internal computation steps. They
 
 ## Templates
 
-Six built-in templates — no cryptography knowledge needed:
+Production template discovery includes a `lifecycle` field. Public production listings expose live templates by default; audit-gated and preview templates are not part of the self-serve catalog unless a deployment explicitly enables them.
 
-| Template | Proves | Example |
-|----------|--------|---------|
-| `range_proof` | A secret is in [min, max] | Age verification, credit scores |
-| `hash_preimage` | You know a secret matching a hash | Password proofs |
-| `computation_attestation` | f(secret) = public output | ML inference proofs |
-| `accumulator_step` | Additive chain is correct | Balance updates |
-| `policy_compliance` | Actions within a limit | Budget enforcement |
-| `data_integrity` | Data sums to checksum | Audit trails |
+| Template | Lifecycle | Proves | Example |
+|----------|-----------|--------|---------|
+| `accumulator_step` | `live` | Additive chain is correct | Balance updates, state receipts |
+
+Use [tinyzkp.com/docs](https://tinyzkp.com/docs) for the current template catalog, fit guidance, and security notes. Default receipts are transparent; do not market them as input-private unless the exact flow is documented as supported and audit-cleared.
 
 Uses the Fetch API (Node 18+, Bun, Deno, browsers). Ships both ESM (`dist/esm/`) and CJS (`dist/cjs/`) builds since v0.1.1.

@@ -87,7 +87,7 @@ pub mod templates;
 pub mod unified;
 pub mod zkml_templates;
 
-pub use templates::Enforcement;
+pub use templates::{Enforcement, TemplateLifecycle};
 pub use unified::{
     allow_unaudited_templates, enforcement_for, is_dispatchable, is_live, list_all_templates,
     UnifiedTemplateInfo,

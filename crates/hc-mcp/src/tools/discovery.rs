@@ -19,6 +19,7 @@ impl HcMcpServer {
                     "tags": t.tags,
                     "cost": t.cost_category,
                     "backend": t.backend,
+                    "lifecycle": t.lifecycle.as_str(),
                 })
             })
             .collect();
@@ -43,6 +44,8 @@ impl HcMcpServer {
                         hc_workloads::Enforcement::Enforced => "enforced",
                         hc_workloads::Enforcement::StructureOnly => "structure_only",
                     },
+                    "audited": t.audited,
+                    "lifecycle": hc_workloads::TemplateLifecycle::from_axes(t.enforcement, t.audited).as_str(),
                 })
             })
             .collect();

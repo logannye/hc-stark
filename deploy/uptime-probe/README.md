@@ -10,12 +10,17 @@ The fix is one **external** probe that lives off the box and off the laptop. Pic
 
 Third-party, externally hosted, free tier, pages by SMS/email/Slack. ~5 minutes:
 
-1. Create two **HTTP(s)** monitors:
+1. Create these **HTTP(s)** monitors:
    - `https://api.tinyzkp.com/healthz` — expect HTTP **200**, keyword/string check optional.
-   - `https://mcp.tinyzkp.com/` — "host reachable" check (any HTTP response is fine; only a connection failure/timeout is "down").
+   - `https://api.tinyzkp.com/templates` — expect HTTP **200** and keyword `"lifecycle"`.
+   - `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json` — expect HTTP **200** and keyword `accumulator_step available now`.
+   - `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json` — expect HTTP **200** and keyword `prove_template`.
+   - `https://tinyzkp.com/research` — expect HTTP **200** and keyword `One company, one thesis`.
+   - `https://tinyzkp.com/security` — expect HTTP **200** and keyword `Responsible disclosure`.
+   - `https://tinyzkp.com/docs` — expect HTTP **200** and keyword `Template Lifecycle`.
 2. Interval **1–5 min**; alert after **2 consecutive failures** (filters transient blips).
 3. Add an **SMS or Slack** alert contact (not email-only — you want to be woken up).
-4. Optional: add `https://tinyzkp.com/` (the Cloudflare Pages marketing site) as a third monitor.
+4. Optional: add `https://tinyzkp.com/` (the Cloudflare Pages marketing site) as a homepage monitor.
 
 That's it — nothing to deploy.
 
@@ -36,7 +41,9 @@ Verify it works by hitting the deployed worker URL in a browser — it runs the 
 Notes:
 - Alerts go to a **webhook** (Slack/Discord/generic), deliberately not email — the prior MailChannels email path broke (PR #9).
 - Adjust the cadence in `wrangler.toml` (`crons`). `*/2 * * * *` = every 2 minutes (UTC).
-- The Worker probes the same two surfaces as Option A; extend `TARGETS` in `worker.js` to add more.
+- The Worker probes the same surfaces as Option A, including content markers
+  that catch fallback pages and stale schema deploys. Extend `TARGETS` in
+  `worker.js` to add more.
 
 ---
 

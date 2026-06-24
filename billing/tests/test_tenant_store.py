@@ -288,3 +288,77 @@ class TestOpenDbDuplicateFreeEmails:
             assert row["n"] == 2
         finally:
             conn.close()
+
+
+class _FakePg:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def execute(self, sql, params=None):
+        normalized = " ".join(str(sql).split())
+        self.calls.append((normalized, params))
+
+
+def _install_fake_pg(monkeypatch):
+    calls = []
+    tenant_store._PG_SCHEMA_READY = False
+    monkeypatch.setenv("HC_TENANT_PG_URL", "postgres://tenant-mirror")
+    monkeypatch.delenv("HC_SERVER_AUTH_PG_URL", raising=False)
+    monkeypatch.delenv("HC_TENANT_PG_REQUIRED", raising=False)
+    monkeypatch.setattr(tenant_store, "_open_pg", lambda _url: _FakePg(calls))
+    return calls
+
+
+class TestPostgresTenantMirror:
+    def test_create_tenant_mirrors_shared_auth_row(self, db, monkeypatch):
+        calls = _install_fake_pg(monkeypatch)
+
+        tenant_store.create_tenant(db, "t_pg", "pg@example.com", "tzk_secret", plan="free")
+
+        tenant_writes = [
+            (sql, params)
+            for sql, params in calls
+            if "INSERT INTO tenants" in sql and "ON CONFLICT (tenant_id)" in sql
+        ]
+        assert len(tenant_writes) == 1
+        assert tenant_writes[0][1][0] == "t_pg"
+        assert tenant_writes[0][1][1] == "pg@example.com"
+        assert tenant_writes[0][1][7] == "free"
+
+    def test_sessions_and_magic_links_mirror_lifecycle(self, db, monkeypatch):
+        calls = _install_fake_pg(monkeypatch)
+        tenant_store.create_tenant(db, "t_pg", "pg@example.com", "tzk_secret", plan="free")
+        calls.clear()
+
+        tenant_store.create_magic_link(db, "magic_hash", "t_pg")
+        assert tenant_store.verify_magic_link(db, "magic_hash") == "t_pg"
+        tenant_store.create_session(db, "session_hash", "t_pg")
+        tenant_store.delete_session(db, "session_hash")
+
+        sql = "\n".join(call[0] for call in calls)
+        assert "INSERT INTO magic_links" in sql
+        assert "UPDATE magic_links SET used = true" in sql
+        assert "INSERT INTO sessions" in sql
+        assert "DELETE FROM sessions WHERE token_hash" in sql
+
+    def test_mirror_fail_open_unless_required(self, db, monkeypatch):
+        monkeypatch.setenv("HC_TENANT_PG_URL", "postgres://tenant-mirror")
+        monkeypatch.delenv("HC_TENANT_PG_REQUIRED", raising=False)
+        monkeypatch.setattr(tenant_store, "_open_pg", lambda _url: (_ for _ in ()).throw(RuntimeError("pg down")))
+
+        tenant_store.create_tenant(db, "t_fail_open", "open@example.com", "tzk_open", plan="free")
+        assert tenant_store.get_tenant(db, "t_fail_open") is not None
+
+    def test_mirror_required_raises(self, db, monkeypatch):
+        monkeypatch.setenv("HC_TENANT_PG_URL", "postgres://tenant-mirror")
+        monkeypatch.setenv("HC_TENANT_PG_REQUIRED", "1")
+        monkeypatch.setattr(tenant_store, "_open_pg", lambda _url: (_ for _ in ()).throw(RuntimeError("pg down")))
+
+        with pytest.raises(RuntimeError, match="pg down"):
+            tenant_store.create_tenant(db, "t_fail_closed", "closed@example.com", "tzk_closed", plan="free")

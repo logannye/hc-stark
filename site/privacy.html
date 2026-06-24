@@ -8,6 +8,7 @@
 <meta property="og:title" content="Privacy Policy — TinyZKP">
 <meta property="og:description" content="TinyZKP privacy policy. How we collect, use, and protect your data.">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
+<link rel="canonical" href="https://tinyzkp.com/privacy">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -95,20 +96,22 @@ footer .right a:hover{color:var(--muted)}
 <div class="content">
 <a class="back" href="/">&larr; Back to TinyZKP</a>
 <h1>Privacy Policy</h1>
-<p>Last updated: March 2026</p>
+<p>Last updated: June 2026</p>
 
 <h2>1. What We Collect</h2>
 <ul>
-<li><strong>Account information</strong>: Email address provided during signup.</li>
+<li><strong>Account and contact information</strong>: Email address provided during signup, plus any name, message, and optional project-fit details you submit through the contact form.</li>
 <li><strong>Usage data</strong>: API requests (tenant ID, trace length, duration, timestamp). We do not store program contents or proof data after delivery.</li>
+<li><strong>Product analytics</strong>: Low-cardinality website events such as page views, docs copy-button clicks, signup/checkout starts, playground proof completion, and verifier success/failure status. These events do not include proof bytes, API keys, email addresses, or form contents.</li>
 <li><strong>Billing data</strong>: Processed by Stripe. We do not store credit card numbers.</li>
-<li><strong>Client-side verification</strong>: The <code>@tinyzkp/verify</code> WASM package runs entirely in your browser or runtime. No proof data, verification results, or telemetry are sent to TinyZKP servers during client-side verification.</li>
+<li><strong>Client-side verification</strong>: The <code>@tinyzkp/verify</code> WASM package runs entirely in your browser or runtime. Proof data is not sent to TinyZKP servers during client-side verification; the website may log a coarse success/failure analytics event if you use the hosted verifier page.</li>
 </ul>
 
 <h2>2. How We Use It</h2>
 <ul>
 <li>To provide and bill the Service.</li>
 <li>To monitor service health and prevent abuse.</li>
+<li>To understand product activation and improve documentation, pricing, and onboarding.</li>
 <li>To communicate about your account.</li>
 </ul>
 

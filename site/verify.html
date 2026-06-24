@@ -120,6 +120,7 @@ footer{padding:32px 0;border-top:1px solid var(--border);margin-top:48px}.foot{m
 </div>
 </footer>
 
+<script defer src="/analytics.js"></script>
 <script type="module">
 let wasmModulePromise = null;
 const input = document.getElementById('proof-input');
@@ -180,12 +181,15 @@ window.verifyNow = async function verifyNow() {
     const ok = !!(out && (out.ok || out.valid));
     if (ok) {
       setResult('<span class="ok">VALID</span>\\n<span class="muted">Verified locally in ' + elapsed + ' ms.</span>');
+      if (window.tinyzkpTrack) window.tinyzkpTrack('client_verify_succeeded',{duration_ms:Number(elapsed)});
     } else {
       const err = out && out.error ? out.error : 'Verifier rejected the proof.';
       setResult('<span class="bad">INVALID</span>\\n<span class="muted">' + escapeHtml(err) + '</span>');
+      if (window.tinyzkpTrack) window.tinyzkpTrack('client_verify_failed',{reason:'invalid'});
     }
   } catch (err) {
     setResult('<span class="bad">Could not verify</span>\\n<span class="muted">' + escapeHtml(err.message || String(err)) + '</span>');
+    if (window.tinyzkpTrack) window.tinyzkpTrack('client_verify_failed',{reason:'exception'});
   } finally {
     verifyBtn.disabled = false;
   }
@@ -198,6 +202,7 @@ window.makeShareLink = async function makeShareLink() {
     const link = location.origin + location.pathname + '#proof=' + b64UrlEncode(JSON.stringify(proof));
     await navigator.clipboard.writeText(link);
     setResult('<span class="ok">Share link copied.</span>\\n<span class="muted">' + escapeHtml(link) + '</span>');
+    if (window.tinyzkpTrack) window.tinyzkpTrack('client_verify_share_copied',{source:'verify_page'});
   } catch (err) {
     setResult('<span class="bad">Could not create share link</span>\\n<span class="muted">' + escapeHtml(err.message || String(err)) + '</span>');
   }

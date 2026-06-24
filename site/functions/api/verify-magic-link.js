@@ -60,10 +60,17 @@ export async function onRequestPost(context) {
       });
     }
 
-    // Set the httpOnly session cookie and return only safe metadata to the page
-    // (no session_token, no api_key).
+    // Set the httpOnly session cookie and return only safe metadata to the page.
+    // Keep this as an explicit allowlist so an upstream regression cannot leak
+    // session_token, api_key, Stripe IDs, or other server-only fields.
     const setCookie = `tz_session=${body.session_token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400`;
-    const { session_token, ...safe } = body;
+    const safe = {
+      tenant_id: body.tenant_id,
+      email: body.email,
+      plan: body.plan,
+      api_key_prefix: body.api_key_prefix,
+      status: body.status,
+    };
     return new Response(JSON.stringify(safe), {
       status: 200,
       headers: { ...jsonHeaders, "Set-Cookie": setCookie },

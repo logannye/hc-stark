@@ -11,6 +11,7 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com/compute">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://tinyzkp.com/compute">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -27,7 +28,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.65;
-  -webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column}
+  -webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden;width:100%}
 body::before{content:'';position:fixed;inset:0;z-index:-2;
   background-image:radial-gradient(circle,var(--border) .5px,transparent .5px);
   background-size:32px 32px;opacity:.3;pointer-events:none}
@@ -45,7 +46,7 @@ nav .container{max-width:1100px;margin:0 auto;padding:0 24px;display:flex;align-
 .nav-cta:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(46,232,212,.15)}
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px}
 .hamburger svg{width:24px;height:24px;stroke:var(--text);stroke-width:2;fill:none}
-.content{max-width:880px;margin:0 auto;padding:120px 24px 80px;flex:1}
+.content{width:100%;max-width:880px;margin:0 auto;padding:120px 24px 80px;flex:1;min-width:0}
 .eyebrow{display:inline-block;font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);
   background:var(--accent-dim);border:1px solid var(--accent-dim);padding:6px 14px;border-radius:999px;margin-bottom:18px;font-weight:600}
 h1{font-size:44px;line-height:1.12;letter-spacing:-.025em;color:var(--text-bright);font-weight:800;margin-bottom:18px}
@@ -94,8 +95,12 @@ footer .right a:hover{color:var(--muted)}
   .links{display:none;position:absolute;top:56px;left:0;right:0;background:var(--bg);border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}
   .links.open{display:flex}
   .hamburger{display:block}
+  nav .container{width:100%;max-width:100%;min-width:0}
+  .content{padding-left:20px;padding-right:20px;overflow-x:hidden}
   h1{font-size:32px}
   .lede{font-size:17px}
+  h3 span{display:block;margin-left:0!important;margin-top:6px}
+  table{display:block;overflow-x:auto;max-width:100%}
   .calc-grid{grid-template-columns:1fr}
 }
 </style>
@@ -130,8 +135,18 @@ footer .right a:hover{color:var(--muted)}
 <p class="lede">Most STARK systems need <strong>O(N) memory</strong> — linear in the trace length. Large traces push you toward 128&ndash;512 GB machines, segmentation, and recursive aggregation. TinyZKP needs only <strong>O(&radic;N)</strong>, so the commercial model can be simple: <strong>$0.50 per million trace steps</strong>, no monthly base fee, and no prover fleet to operate. Transparent (no trusted setup), post-quantum (hash-based).</p>
 
 <div class="cta-row">
-  <a class="cta" href="/signup?plan=compute">Start at $0.50 / M trace steps</a>
+  <a class="cta" href="/signup?plan=compute" data-track="compute_signup_click" data-plan="compute" data-source="compute_hero">Start at $0.50 / M trace steps</a>
   <a class="cta cta-secondary" href="https://github.com/logannye/hc-stark/blob/main/docs/whitepaper.md" target="_blank">Read the whitepaper →</a>
+</div>
+
+<div class="callout">
+<h3>What is live now on Compute</h3>
+<p><strong>Self-serve Compute is for long accumulator and state-transition traces.</strong> The production path uses TinyZKP's transparent STARK receipt model and the same offline-verifiable proof object as the rest of the hosted service. It is not the older KZG/BN254 research prototype, and it is not a blanket promise that zkVM, zkML, or rollup proving are generally available.</p>
+<ul>
+  <li><strong>Live:</strong> long state-transition receipts up to the published single-proof cap.</li>
+  <li><strong>Design-partner:</strong> custom state machines and very large traces that need sizing before production use.</li>
+  <li><strong>Roadmap:</strong> zkVM, zkML, and rollup batch proving as supported self-serve products.</li>
+</ul>
 </div>
 
 <h2>The structural advantage, in numbers</h2>
@@ -217,16 +232,16 @@ footer .right a:hover{color:var(--muted)}
 
 <ul>
   <li><strong>$0.50 per million trace steps.</strong> No monthly base fee. Pay for what you prove.</li>
-  <li><strong>Up to 100M-step traces per single proof.</strong> For long accumulator / state-transition traces; larger workloads → talk to us about Enterprise.</li>
-  <li><strong>Transparent, post-quantum (hash-based).</strong> Same ZK-STARK guarantees as the rest of the platform; no trusted setup.</li>
+  <li><strong>Up to 100M-step traces per single proof.</strong> For long accumulator / state-transition traces; larger workloads &rarr; talk to us about Enterprise.</li>
+  <li><strong>Transparent, post-quantum (hash-based).</strong> Same no-trusted-setup STARK receipt model as the rest of the platform.</li>
   <li><strong>100 RPM, 8 inflight jobs.</strong> Enough headroom for bursty large-trace proving without a reserved cluster.</li>
   <li><strong>60-minute max prove time per job.</strong> Anything longer almost always benefits from proof aggregation; we'll help you architect it.</li>
   <li><strong>Email support, 24-hour response SLA.</strong> Your job ID, our triage queue.</li>
 </ul>
 
 <div class="callout accent">
-<h3>The technical claim, defensible in one sentence</h3>
-<p style="margin-bottom:0;color:var(--text)">TinyZKP is a STARK proving service whose prover memory is bounded at O(&radic;N) for arbitrarily large computations — meaning a 100M-step trace fits on commodity hardware. Most STARK systems require O(N) memory — linear in computation size — forcing aggressive segmentation+recursion or simply capping trace size. The whitepaper proves it; the open-source backend ships it; the Compute tier is the usage-based access point.</p>
+<h3>The technical claim, stated carefully</h3>
+<p style="margin-bottom:0;color:var(--text)">TinyZKP is a STARK proving service designed around O(&radic;N) prover memory for supported state-transition workloads, which lets a 100M-step trace fit on commodity hardware. Most STARK systems require O(N) memory &mdash; linear in computation size &mdash; forcing aggressive segmentation+recursion or simply capping trace size. The whitepaper and benchmarks document the memory claim; the open-source backend ships the current receipt path; the Compute tier is the usage-based access point.</p>
 </div>
 
 <h2>Get started</h2>
@@ -234,7 +249,7 @@ footer .right a:hover{color:var(--muted)}
 <p>Compute is self-serve from <code>$0/mo + usage</code>. Sign up, paste your API key, and prove your first large state-transition trace without provisioning high-RAM hardware.</p>
 
 <div class="cta-row">
-  <a class="cta" href="/signup?plan=compute">Start usage-based</a>
+  <a class="cta" href="/signup?plan=compute" data-track="compute_signup_click" data-plan="compute" data-source="compute_final_cta">Start usage-based</a>
   <a class="cta cta-secondary" href="/contact">Talk to sales (Enterprise)</a>
 </div>
 
@@ -250,6 +265,8 @@ footer .right a:hover{color:var(--muted)}
     <a href="/#pricing">Pricing</a>
     <a href="/compute">Compute</a>
     <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
+    <a href="/research">Research</a>
+    <a href="/security">Security</a>
     <a href="/contact">Contact</a>
     <a href="/terms">Terms</a>
     <a href="/privacy">Privacy</a>
@@ -258,6 +275,7 @@ footer .right a:hover{color:var(--muted)}
 </div>
 </footer>
 
+<script defer src="/analytics.js"></script>
 <script>
 function fmt(n){return '$' + Math.round(n).toLocaleString()}
 function recalcCompute(){

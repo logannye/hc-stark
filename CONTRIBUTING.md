@@ -15,6 +15,9 @@ expectations.
   codebase warning-free.
 - **Testing:** `cargo test --workspace --all-targets` must pass locally.
 - **Docs:** `cargo doc --workspace --no-deps` should build without warnings.
+- **Release policy:** user-visible API, MCP, proof-format, SDK, billing, or
+  public-copy changes must follow `docs/governance/release_policy.md` and update
+  `CHANGELOG.md`.
 
 ## Coding Standards
 
@@ -51,7 +54,7 @@ expectations.
 
 - Update `docs/design_notes/*` whenever you introduce a new architecture concept
   or algorithmic trade-off.
-- Keep the `README` and `docs/whtiepaper.md` aligned with the code as we move
+- Keep the `README` and `docs/whitepaper.md` aligned with the code as we move
   from blueprint to production implementation.
 - Provide runnable snippets in documentation comments where feasible.
 
@@ -63,15 +66,19 @@ expectations.
   replay engine, FRI).
 - Security-sensitive changes must reference (and update when needed)
   `docs/design_notes/security_considerations.md`.
+- User-visible compatibility changes must include a `CHANGELOG.md` entry and,
+  when relevant, an update to the release policy or deployment runbook.
 
 ## Continuous Integration
 
 CI enforces the following pipeline for every push and pull request:
 
 1. `cargo fmt --all -- --check`
-2. `cargo clippy --workspace --all-targets -- -D warnings`
-3. `cargo test --workspace --all-targets`
-4. `cargo doc --workspace --no-deps`
+2. `./scripts/ci/reconciliation_invariants.sh`
+3. `python3 -m pytest billing/tests/test_site_pricing_parity.py`
+4. `cargo clippy --workspace --all-targets -- -D warnings`
+5. `cargo test --workspace --all-targets`
+6. `cargo doc --workspace --no-deps`
 
 Benchmarks live in `.github/workflows/benches.yml` and run nightly to avoid
 slowing down the main CI loop. Keep them deterministic and bounded so they can
@@ -92,4 +99,3 @@ run on GitHub-hosted runners.
 
 By following these guidelines we can deliver a world-class prover with clean,
 reviewable code and predictable production behavior. Happy hacking!
-

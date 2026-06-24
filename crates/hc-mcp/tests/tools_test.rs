@@ -33,9 +33,9 @@ async fn list_templates_returns_enforced_templates_by_default() {
     let result = s.list_templates_impl().await.unwrap();
     let val = extract_json(&result);
     let arr = val.as_array().unwrap();
-    // With the enforcement gate active (default), only Enforced templates are
-    // listed. The count will be less than the full catalog; just verify the
-    // result is non-empty and that the known Enforced template is present.
+    // With the lifecycle gate active (default), only live templates are listed.
+    // The count will be less than the full catalog; just verify the result is
+    // non-empty and that the known live template is present.
     assert!(
         !arr.is_empty(),
         "expected at least one template in the default listing, got 0"
@@ -45,10 +45,14 @@ async fn list_templates_returns_enforced_templates_by_default() {
     let has_acc = arr.iter().any(|t| t["id"] == "accumulator_step");
     assert!(has_acc, "accumulator_step template missing from listing");
 
-    // StructureOnly templates must NOT appear in the default listing
+    // Audit-gated and preview templates must NOT appear in the default listing.
     assert!(
         !arr.iter().any(|t| t["id"] == "range_proof"),
-        "range_proof (StructureOnly) must not appear in the default listing"
+        "range_proof (audit_gated) must not appear in the default listing"
+    );
+    assert!(
+        arr.iter().all(|t| t["lifecycle"] == "live"),
+        "default listing must expose only lifecycle=live templates: {arr:?}"
     );
 }
 
@@ -72,6 +76,7 @@ async fn describe_template_returns_schema() {
     let result = s.describe_template_impl(Parameters(params)).await.unwrap();
     let val = extract_json(&result);
     assert_eq!(val["id"], "accumulator_step");
+    assert_eq!(val["lifecycle"], "live");
     assert!(val["parameters"].as_array().unwrap().len() >= 3);
     assert!(val["example"].is_object());
 }

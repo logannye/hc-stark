@@ -115,8 +115,17 @@ main{flex:1;padding:120px 0 60px}
   font-size:11px;color:var(--text);white-space:nowrap;pointer-events:none;z-index:10}
 .uptime-meta{display:flex;justify-content:space-between;color:var(--dim);font-family:var(--mono);font-size:11.5px;margin-top:10px}
 
-.incidents{margin-top:48px}
+.commitments,.incidents{margin-top:48px}
+.commitments h2,
 .incidents h2{font-size:18px;font-weight:700;color:var(--text-bright);margin-bottom:6px;letter-spacing:-.01em}
+.commitments .sub{color:var(--muted);font-size:13.5px;margin-bottom:18px}
+.incident-table{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.incident-table table{width:100%;border-collapse:collapse}
+.incident-table th,.incident-table td{padding:13px 15px;border-bottom:1px solid var(--border);text-align:left;font-size:13px;vertical-align:top}
+.incident-table th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);background:rgba(16,26,48,.7)}
+.incident-table tr:last-child td{border-bottom:none}
+.incident-table td:first-child{color:var(--text-bright);font-weight:700}
+.support-note{margin-top:14px;color:var(--muted);font-size:13.5px}
 .incidents .empty{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;text-align:center;color:var(--muted);font-size:13.5px}
 .incidents .empty strong{color:var(--green);font-weight:700}
 
@@ -188,6 +197,27 @@ footer .right a:hover{color:var(--muted)}
     </div>
   </div>
 
+  <div class="commitments">
+    <h2>Incident categories and response targets</h2>
+    <p class="sub">TinyZKP classifies incidents by customer-visible surface so operators can quickly separate website, API, MCP, billing, and verifier issues.</p>
+    <div class="incident-table">
+      <table>
+        <thead>
+          <tr><th>Category</th><th>Examples</th><th>Target</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Website and signup</td><td>Marketing site, account dashboard, free signup, checkout, contact form</td><td>Investigate within 30 minutes for user-blocking failures</td></tr>
+          <tr><td>API proving</td><td>Template listing, prove submission, polling, proof download, worker saturation</td><td>Investigate within 15 minutes for broad outage or failed prove path</td></tr>
+          <tr><td>Verification</td><td>Hosted verifier, WASM verifier package, proof-format compatibility</td><td>Treat verifier correctness concerns as security incidents</td></tr>
+          <tr><td>MCP transport</td><td>Server card, tool discovery, anonymous lane, authenticated tool calls</td><td>Keep HTTP API available while isolating MCP-specific degradation</td></tr>
+          <tr><td>Billing and account</td><td>Stripe checkout, tenant provisioning, usage sync, magic-link recovery</td><td>Reconcile Stripe, tenant state, and usage rows before closure</td></tr>
+          <tr><td>Security disclosure</td><td>Protocol, verifier, account, hosted API, or supply-chain report</td><td>Acknowledge quickly and avoid public claims until scoped</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="support-note">For support, billing, or responsible-disclosure routing, use <a href="/contact#support-expectations">the contact form</a> and select the closest category. Direct fallback email: <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a>. Billing/account requests target 1 business day; Compute and enterprise inquiries target 2 business days.</p>
+  </div>
+
   <div class="incidents">
     <h2>Recent incidents</h2>
     <div class="empty"><strong>All systems nominal.</strong> No incidents recorded since the production sweep on 2026-04-26. Operators are paged by Alertmanager on (1) any 5xx rate &gt; 1% over 5 minutes, (2) prove-job p95 latency &gt; 30s, (3) SQLite lock-wait p95 &gt; 1s, (4) worker-spawn permit exhaustion &gt; 60s.</div>
@@ -211,20 +241,24 @@ footer .right a:hover{color:var(--muted)}
 </footer>
 
 <script>
-async function checkEndpoint(url, dotId, latencyId){
+async function checkEndpoint(url, dotId, latencyId, marker){
   var dot = document.getElementById(dotId);
   var lat = document.getElementById(latencyId);
   var t0 = performance.now();
   try {
     var r = await fetch(url, {method:'GET', cache:'no-store'});
     var elapsed = Math.round(performance.now() - t0);
-    if(r.ok){
+    var markerOk = true;
+    if(r.ok && marker){
+      markerOk = (await r.text()).indexOf(marker) !== -1;
+    }
+    if(r.ok && markerOk){
       dot.className = 'dot up';
       lat.textContent = elapsed + ' ms';
       return {ok:true, latency:elapsed};
     } else {
       dot.className = 'dot down';
-      lat.textContent = 'HTTP ' + r.status;
+      lat.textContent = r.ok ? 'stale response' : 'HTTP ' + r.status;
       return {ok:false, latency:elapsed};
     }
   } catch(e) {
@@ -242,7 +276,7 @@ async function refreshStatus(){
 
   var checks = await Promise.all([
     checkEndpoint('https://api.tinyzkp.com/healthz', 'dot-api', 'lat-api'),
-    checkEndpoint('https://mcp.tinyzkp.com/healthz', 'dot-mcp', 'lat-mcp').catch(function(){return {ok:false}}),
+    checkEndpoint('https://mcp.tinyzkp.com/.well-known/mcp/server-card.json', 'dot-mcp', 'lat-mcp', 'tinyzkp').catch(function(){return {ok:false}}),
     checkEndpoint('https://tinyzkp.com/favicon.svg', 'dot-www', 'lat-www')
   ]);
 

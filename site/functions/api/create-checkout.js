@@ -38,10 +38,9 @@ async function checkRateLimit(ip) {
   return true;
 }
 
-// Resolve the flat-fee price ID for (plan, cadence). Returns null if the
-// matching env secret isn't set OR the plan is purely usage-based; caller
-// falls back to metered-only billing so an incomplete deploy never breaks
-// a signup.
+// Resolve the flat-fee price ID for a paid plan. Returns null if the plan is
+// pure usage-based or if the required binding is absent; callers fail closed
+// rather than creating a partial paid subscription.
 //
 // Legacy plan slug "team" maps to "pro" so old intermediate-tier links keep
 // working through the rollout.
@@ -84,7 +83,7 @@ export async function onRequestPost(context) {
     }
 
     const body = await context.request.json();
-    const { email } = body;
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!email || !email.includes("@") || email.length > 254) {
       return new Response(JSON.stringify({ error: "valid email required" }), {
         status: 400,
@@ -94,7 +93,7 @@ export async function onRequestPost(context) {
 
     // Plan slug normalization. Legacy "team" still maps to "pro" for any
     // signup link minted before the self-serve Pro rollout.
-    const planRaw = body.plan;
+    const planRaw = typeof body.plan === "string" ? body.plan.trim().toLowerCase() : "";
     const validPlans = new Set(["developer", "pro", "compute", "team", "scale"]);
     let selectedPlan = validPlans.has(planRaw) ? planRaw : "developer";
     if (selectedPlan === "team") selectedPlan = "pro";
@@ -135,20 +134,20 @@ export async function onRequestPost(context) {
       lineItem += 1;
     } else {
       // Developer / Pro / Scale
-      if (STRIPE_PRICE_ID_METERED) {
-        params.append(`line_items[${lineItem}][price]`, STRIPE_PRICE_ID_METERED);
-        lineItem += 1;
-      }
       const flatPriceId = flatPriceFor(context.env, selectedPlan);
-      if (flatPriceId) {
-        params.append(`line_items[${lineItem}][price]`, flatPriceId);
-        params.append(`line_items[${lineItem}][quantity]`, "1");
-        lineItem += 1;
+      if (!STRIPE_PRICE_ID_METERED || !flatPriceId || !STRIPE_PRICE_ID_TRACE_STEP_METERED) {
+        return new Response(JSON.stringify({ error: `${selectedPlan} tier not yet available` }), {
+          status: 503,
+          headers: jsonHeaders,
+        });
       }
-      if (STRIPE_PRICE_ID_TRACE_STEP_METERED) {
-        params.append(`line_items[${lineItem}][price]`, STRIPE_PRICE_ID_TRACE_STEP_METERED);
-        lineItem += 1;
-      }
+      params.append(`line_items[${lineItem}][price]`, STRIPE_PRICE_ID_METERED);
+      lineItem += 1;
+      params.append(`line_items[${lineItem}][price]`, flatPriceId);
+      params.append(`line_items[${lineItem}][quantity]`, "1");
+      lineItem += 1;
+      params.append(`line_items[${lineItem}][price]`, STRIPE_PRICE_ID_TRACE_STEP_METERED);
+      lineItem += 1;
     }
 
     if (lineItem === 0) {

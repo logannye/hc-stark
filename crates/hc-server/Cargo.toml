@@ -20,6 +20,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 prometheus = "0.13"
 tokio-util = "0.7"
 rusqlite = { version = "0.31", features = ["bundled"] }
+postgres = "0.19"
+postgres-native-tls = "0.5"
+native-tls = "0.2"
 sha2 = "0.10"
 
 utoipa = { version = "5.2", features = ["axum_extras"] }
@@ -36,4 +39,3 @@ hc-vm = { path = "../hc-vm" }
 [dev-dependencies]
 tower = "0.5"
 tempfile = "3.10"
-

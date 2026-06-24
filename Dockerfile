@@ -19,6 +19,7 @@ RUN useradd -m -u 10001 hc
 WORKDIR /app
 COPY --from=builder /app/target/release/hc-server /app/hc-server
 COPY --from=builder /app/target/release/hc-worker /app/hc-worker
+COPY --from=builder /app/target/release/hc-job-worker /app/hc-job-worker
 COPY --from=builder /app/target/release/hc-mcp-http /app/hc-mcp-http
 USER hc
 

@@ -33,6 +33,7 @@ import argparse
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 import time
 import urllib.request
@@ -46,6 +47,9 @@ import tenant_store
 stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 
 USAGE_DB_PATH = os.environ.get("HC_USAGE_DB_PATH", "/opt/hc-stark/data/usage.sqlite")
+USAGE_SOURCE = os.environ.get("HC_USAGE_SOURCE", "sqlite").strip().lower() or "sqlite"
+PG_URL = os.environ.get("HC_SERVER_PG_URL")
+PSQL_BIN = os.environ.get("PSQL_BIN", "psql")
 ALERT_WEBHOOK_URL = os.environ.get("ALERT_WEBHOOK_URL")
 METER_EVENT_NAME = os.environ.get("STRIPE_METER_EVENT_NAME", "proof_usage")
 # Alert if any usage row stays unbilled longer than this. Must stay safely
@@ -134,14 +138,106 @@ def _send_alert(message: str, details: dict) -> None:
         _log({"action": "alert_failed", "error": str(e)})
 
 
+def _run_psql_query(pg_url: str, sql: str) -> str:
+    proc = subprocess.run(
+        [PSQL_BIN, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", pg_url, "-c", sql],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or "psql query failed")
+    return proc.stdout.strip()
+
+
+class UsageSource:
+    name = "unknown"
+
+    def fetch_unbilled(self) -> list[dict]:
+        raise NotImplementedError
+
+    def mark_billed(self, row_id: int) -> None:
+        raise NotImplementedError
+
+    def close(self) -> None:
+        pass
+
+
+class SqliteUsageSource(UsageSource):
+    name = "sqlite"
+
+    def __init__(self, path: str):
+        self.path = path
+        self.conn = sqlite3.connect(path)
+        self.conn.row_factory = sqlite3.Row
+        # The Rust hc-server holds writer locks on this same file. Wait up to
+        # 5s for contention rather than returning SQLITE_BUSY immediately —
+        # matches the Rust side (crates/hc-server/src/usage_log.rs).
+        self.conn.execute("PRAGMA busy_timeout = 5000")
+
+    def fetch_unbilled(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT id, tenant_id, job_id, trace_length, completed_at_ms "
+            "FROM usage_log WHERE billed = 0"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_billed(self, row_id: int) -> None:
+        self.conn.execute("UPDATE usage_log SET billed = 1 WHERE id = ?", (row_id,))
+        self.conn.commit()
+
+    def close(self) -> None:
+        self.conn.close()
+
+
+class PostgresUsageSource(UsageSource):
+    name = "postgres"
+
+    def __init__(self, pg_url: str):
+        self.pg_url = pg_url
+
+    def fetch_unbilled(self) -> list[dict]:
+        sql = """
+        SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json)::text
+        FROM (
+          SELECT id, tenant_id, job_id, trace_length, completed_at_ms
+          FROM usage_log
+          WHERE billed = 0
+          ORDER BY id
+        ) t;
+        """
+        raw = _run_psql_query(self.pg_url, sql)
+        return json.loads(raw or "[]")
+
+    def mark_billed(self, row_id: int) -> None:
+        row_id = int(row_id)
+        _run_psql_query(
+            self.pg_url,
+            f"UPDATE usage_log SET billed = 1 WHERE id = {row_id} AND billed = 0;",
+        )
+
+
+def open_usage_source() -> UsageSource | None:
+    if USAGE_SOURCE == "sqlite":
+        if not os.path.exists(USAGE_DB_PATH):
+            _log({"action": "skip", "reason": "no usage database", "usage_source": "sqlite"})
+            return None
+        return SqliteUsageSource(USAGE_DB_PATH)
+    if USAGE_SOURCE in {"postgres", "pg"}:
+        if not PG_URL:
+            raise SystemExit("HC_USAGE_SOURCE=postgres requires HC_SERVER_PG_URL")
+        return PostgresUsageSource(PG_URL)
+    raise SystemExit("HC_USAGE_SOURCE must be 'sqlite' or 'postgres'")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sync unbilled usage to Stripe via Meter Events")
     parser.add_argument("--dry-run", action="store_true", help="Print actions without touching Stripe")
     parser.add_argument("--report", action="store_true", help="Output unbilled summary as JSON")
     args = parser.parse_args()
 
-    if not os.path.exists(USAGE_DB_PATH):
-        _log({"action": "skip", "reason": "no usage database"})
+    usage_source = open_usage_source()
+    if usage_source is None:
         return
 
     # Load tenant data from tenant_store.
@@ -165,19 +261,10 @@ def main() -> None:
 
     if not tenant_map:
         _log({"action": "skip", "reason": "no tenants in store"})
+        usage_source.close()
         return
 
-    conn = sqlite3.connect(USAGE_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    # The Rust hc-server holds writer locks on this same file. Wait up to
-    # 5s for contention rather than returning SQLITE_BUSY immediately —
-    # matches the Rust side (crates/hc-server/src/usage_log.rs).
-    conn.execute("PRAGMA busy_timeout = 5000")
-
-    rows = conn.execute(
-        "SELECT id, tenant_id, job_id, trace_length, completed_at_ms "
-        "FROM usage_log WHERE billed = 0"
-    ).fetchall()
+    rows = usage_source.fetch_unbilled()
 
     # Freshness check: alert if any unbilled row predates Stripe's dedup window.
     # If a cron outage has let rows age past UNBILLED_ALERT_HOURS, we can no
@@ -201,7 +288,14 @@ def main() -> None:
             )
 
     if not rows:
-        _log({"action": "complete", "billed": 0, "skipped": 0, "errors": 0})
+        _log({
+            "action": "complete",
+            "usage_source": usage_source.name,
+            "billed": 0,
+            "skipped": 0,
+            "errors": 0,
+        })
+        usage_source.close()
         return
 
     if args.report:
@@ -219,7 +313,7 @@ def main() -> None:
             else:
                 summary[tid]["total_cents"] += int(value)
         print(json.dumps(summary, indent=2))
-        conn.close()
+        usage_source.close()
         return
 
     billed = 0
@@ -302,11 +396,11 @@ def main() -> None:
         # ~24h window). The freshness check at the top of this function will
         # alert if we drift outside that window.
         try:
-            conn.execute("UPDATE usage_log SET billed = 1 WHERE id = ?", (row["id"],))
-            conn.commit()
-        except sqlite3.Error as db_err:
+            usage_source.mark_billed(row["id"])
+        except Exception as db_err:
             _log({
                 "action": "post_meter_update_failed",
+                "usage_source": usage_source.name,
                 "tenant_id": tenant_id,
                 "row_id": row["id"],
                 "job_id": row["job_id"],
@@ -329,6 +423,7 @@ def main() -> None:
         billed += 1
         _log({
             "action": "billed",
+            "usage_source": usage_source.name,
             "tenant_id": tenant_id,
             "row_id": row["id"],
             "job_id": row["job_id"],
@@ -356,12 +451,13 @@ def main() -> None:
 
     _log({
         "action": "complete",
+        "usage_source": usage_source.name,
         "billed": billed,
         "skipped": skipped,
         "errors": errors,
     })
 
-    conn.close()
+    usage_source.close()
 
 
 if __name__ == "__main__":

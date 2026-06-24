@@ -8,12 +8,13 @@ umask 077   # backup artifacts (api_keys.txt, sqlite) must not be group/world-re
 
 # Source .env so HC_BACKUP_REMOTE is available when run from cron.
 # shellcheck source=/dev/null
-[ -f /opt/hc-stark/.env ] && . /opt/hc-stark/.env
+[ -f "${HC_BACKUP_ENV_FILE:-/opt/hc-stark/.env}" ] && . "${HC_BACKUP_ENV_FILE:-/opt/hc-stark/.env}"
 
-BACKUP_DIR="/opt/hc-stark/backups"
-DATA_DIR="/opt/hc-stark/data"
-DATE=$(date -u +%Y%m%d_%H%M%S)
-RETENTION_DAYS=30
+BACKUP_DIR="${HC_BACKUP_DIR:-/opt/hc-stark/backups}"
+DATA_DIR="${HC_BACKUP_DATA_DIR:-/opt/hc-stark/data}"
+DATE="${HC_BACKUP_DATE:-$(date -u +%Y%m%d_%H%M%S)}"
+REMOTE_DATE="${HC_BACKUP_REMOTE_DATE:-$(date -u +%Y-%m-%d)}"
+RETENTION_DAYS="${HC_BACKUP_RETENTION_DAYS:-30}"
 
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
@@ -49,7 +50,7 @@ fi
 #   3. Set HC_BACKUP_REMOTE="<remote>:<bucket>" in /opt/hc-stark/.env
 #      e.g. HC_BACKUP_REMOTE="b2:hc-stark-backups"
 if [ -n "${HC_BACKUP_REMOTE:-}" ] && command -v rclone >/dev/null 2>&1; then
-  if rclone copy "$BACKUP_DIR" "${HC_BACKUP_REMOTE%/}/$(date -u +%Y-%m-%d)" --max-age 25h; then
+  if rclone copy "$BACKUP_DIR" "${HC_BACKUP_REMOTE%/}/${REMOTE_DATE}" --max-age 25h; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Off-box backup pushed to ${HC_BACKUP_REMOTE}"
   else
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR: rclone off-box push FAILED" >&2
