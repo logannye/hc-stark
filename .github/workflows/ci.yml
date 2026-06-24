@@ -27,7 +27,7 @@ jobs:
           node-version: 20
 
       - name: Install Python test deps
-        run: python3 -m pip install --user pytest
+        run: python3 -m pip install --user pytest -r billing/requirements.txt
 
       - name: Install runtime test deps
         run: sudo apt-get update && sudo apt-get install -y sqlite3

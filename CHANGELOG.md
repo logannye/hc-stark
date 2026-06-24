@@ -141,6 +141,8 @@ legacy research repo, and TinyZKP.com.
 
 - CI now runs reconciliation invariants and pricing copy parity checks before
   heavier Rust jobs.
+- CI now installs the pinned billing runtime requirements before billing
+  endpoint tests, matching the production webhook environment.
 - CI now covers the Postgres usage-migration helper.
 - CI now covers the Postgres tenant/auth migration helper.
 - Daily production audit now catches Cloudflare fallback pages by validating

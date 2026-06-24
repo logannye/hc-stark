@@ -169,6 +169,7 @@ require_contains site/functions/api/verify-magic-link.js "explicit allowlist" "m
 require_contains site/functions/api/verify-magic-link.js "api_key" "magic-link verifier documents raw API-key exclusion"
 require_contains billing/provision_tenant.py "CONTACT_QUALIFICATION_FIELDS" "billing webhook renders qualification fields"
 require_contains .github/workflows/ci.yml "clients/python[test]" "CI installs Python SDK test dependencies"
+require_contains .github/workflows/ci.yml "billing/requirements.txt" "CI installs billing runtime test dependencies"
 require_contains .github/workflows/ci.yml "billing/tests/test_tenant_pg_tools.py" "CI covers tenant Postgres migration helper"
 require_contains .github/workflows/ci.yml "billing/tests/test_tenant_store.py" "CI covers tenant store Postgres mirror behavior"
 require_contains .github/workflows/ci.yml "billing/tests/test_provision_free.py" "CI covers free signup provisioning"
