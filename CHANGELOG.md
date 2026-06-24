@@ -175,6 +175,9 @@ legacy research repo, and TinyZKP.com.
 - CI now validates internal website routes, anchors, assets, Pages Function
   worker dispatch links, literal app-script routes, sitemap URLs, primary page
   headings, meta descriptions, titles, and canonical URLs before deploy.
+- CI now relies on the workspace test pass and bounded sanity suite for
+  recursion coverage instead of an unbounded duplicate standalone recursion
+  step.
 - `backup.sh` now has deterministic data-dir, timestamp, retention, and remote-date
   overrides for restore drills, and CI smoke-runs it against temporary SQLite
   databases to verify readable snapshots and restrictive permissions.

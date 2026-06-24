@@ -161,9 +161,6 @@ jobs:
       - name: scaling invariant tests
         run: cargo test -p hc-bench --features scaling-tests
 
-      - name: recursion circuit tests
-        run: cargo test -p hc-recursion
-
       - name: cargo audit
         run: |
           cargo install cargo-audit --locked
