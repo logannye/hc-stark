@@ -259,7 +259,7 @@ footer .right a:hover{color:var(--muted)}
 <div class="signup-shell">
   <section class="signup-copy" aria-labelledby="signup-title">
     <div class="eyebrow">Production activation</div>
-    <h1 id="signup-title">Choose the right path for your first proof-receipt workflow.</h1>
+    <h1 id="signup-title">Choose your first proof receipt path.</h1>
     <p class="lead">Start free when you want an API key now, use self-serve paid plans for known workflows, or route platform and enterprise rollouts into a scoped pilot before receipts become customer-visible infrastructure.</p>
 
     <div class="activation-steps" aria-label="TinyZKP activation path">
@@ -454,17 +454,46 @@ footer .right a:hover{color:var(--muted)}
   var errorEl = document.getElementById('error-msg');
   var emailInput = document.getElementById('email');
   var hintText = document.getElementById('hintText');
+  var attributionFields = ['source','medium','campaign','platform','use_case','workflow','intent','landing_path','referrer_host','first_seen_at'];
   function cleanContextParam(name, fallbackName) {
     var raw = params.get(name) || (fallbackName ? params.get(fallbackName) : '') || '';
-    return raw.replace(/[^\w .:/-]/g, '').trim().slice(0, 80);
+    return raw.replace(/[^\w .:/-]/g, '').trim().slice(0, 160);
   }
-  var signupContext = {
-    source: cleanContextParam('source', 'utm_source'),
-    platform: cleanContextParam('platform'),
-    use_case: cleanContextParam('use_case'),
-    workflow: cleanContextParam('workflow'),
-    intent: cleanContextParam('intent')
-  };
+  function readStoredAttribution() {
+    try { return JSON.parse(localStorage.getItem('tinyzkp_attribution') || '{}') || {}; }
+    catch(e) { return {}; }
+  }
+  function referrerHost() {
+    try {
+      if (!document.referrer) return '';
+      var ref = new URL(document.referrer);
+      if (ref.hostname === window.location.hostname) return '';
+      return ref.hostname.replace(/[^\w .:/-]/g, '').trim().slice(0, 160);
+    } catch(e) { return ''; }
+  }
+  function collectSignupContext() {
+    var stored = readStoredAttribution();
+    var context = {
+      source: cleanContextParam('source', 'utm_source') || stored.source || '',
+      medium: cleanContextParam('medium', 'utm_medium') || stored.medium || '',
+      campaign: cleanContextParam('campaign', 'utm_campaign') || stored.campaign || '',
+      platform: cleanContextParam('platform') || stored.platform || '',
+      use_case: cleanContextParam('use_case') || stored.use_case || '',
+      workflow: cleanContextParam('workflow') || stored.workflow || '',
+      intent: cleanContextParam('intent') || stored.intent || '',
+      landing_path: stored.landing_path || window.location.pathname,
+      referrer_host: stored.referrer_host || referrerHost(),
+      first_seen_at: stored.first_seen_at || new Date().toISOString()
+    };
+    var next = {};
+    attributionFields.forEach(function(field) {
+      if (stored[field]) next[field] = stored[field];
+      if (!next[field] && context[field]) next[field] = context[field];
+    });
+    try { localStorage.setItem('tinyzkp_attribution', JSON.stringify(next)); } catch(e) {}
+    return context;
+  }
+  var signupContext = collectSignupContext();
   var signupSource = signupContext.source;
   var sourceLabels = {
     integration_claude_code: 'Claude Code MCP',
@@ -586,7 +615,7 @@ footer .right a:hover{color:var(--muted)}
   function welcomeUrl(plan) {
     var url = new URL('/welcome', window.location.origin);
     url.searchParams.set('plan', plan);
-    Object.keys(signupContext).forEach(function(key) {
+    attributionFields.forEach(function(key) {
       if (signupContext[key]) url.searchParams.set(key, signupContext[key]);
     });
     return url.pathname + url.search;

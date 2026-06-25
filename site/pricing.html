@@ -93,6 +93,10 @@ h1{font-size:52px;line-height:1.06;letter-spacing:0;color:var(--text-bright);max
 .cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px var(--accent-glow);text-decoration:none}
 .cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}
 .cta.secondary:hover{border-color:var(--accent);box-shadow:none;color:var(--accent)}
+.hero-links{display:flex;gap:12px 18px;flex-wrap:wrap;margin-top:14px}
+.hero-links a{color:var(--muted);font-size:13px;font-weight:700;text-decoration:none}
+.hero-links a:hover{color:var(--accent)}
+.hero-links a::after{content:" \2192";font-family:var(--mono);font-size:11px;color:var(--accent)}
 .hero-panel{background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));border:1px solid var(--border-light);border-radius:18px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.32)}
 .hero-panel h2{font-size:18px;color:var(--text-bright);letter-spacing:0;margin-bottom:12px}
 .signal-grid{display:grid;gap:10px}
@@ -104,7 +108,7 @@ h1{font-size:52px;line-height:1.06;letter-spacing:0;color:var(--text-bright);max
 .band>p{color:var(--muted);font-size:15px;line-height:1.75;max-width:780px;margin-bottom:20px}
 .band>p a,.box p a,.note a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
 .plans{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:24px}
-.commercial-plans{grid-template-columns:repeat(3,minmax(0,1fr))}
+.commercial-plans{grid-template-columns:repeat(4,minmax(0,1fr))}
 .compute-plans{grid-template-columns:repeat(2,minmax(0,1fr));max-width:760px}
 .plan{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;min-width:0;position:relative;transition:border-color .2s,transform .2s}
 .plan:hover{border-color:var(--border-light);transform:translateY(-2px)}
@@ -159,6 +163,7 @@ footer .right a:hover{color:var(--muted)}
   .hamburger{display:block}
   main{padding-top:100px}
   h1{font-size:34px;letter-spacing:0}
+  .hero-links{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
   .plans{grid-template-columns:1fr}
   .hero-panel{padding:18px}
   .signal{display:block}
@@ -223,11 +228,12 @@ footer .right a:hover{color:var(--muted)}
       <div class="cta-row">
         <a class="cta" href="/signup" data-track="signup_plan_selected" data-plan="free" data-source="pricing_hero">Get Free API Key</a>
         <a class="cta secondary" href="/fit">Find Best Route</a>
-        <a class="cta secondary" href="/calculator">Estimate Cost</a>
-        <a class="cta secondary" href="/roi">Build ROI Case</a>
-        <a class="cta secondary" href="/limits">Review Limits</a>
-        <a class="cta secondary" href="/evaluation">Evaluate Fit</a>
-        <a class="cta secondary" href="/pilot">Plan a Pilot</a>
+      </div>
+      <div class="hero-links" aria-label="Pricing support links">
+        <a href="/calculator">Estimate cost</a>
+        <a href="/roi">Build ROI case</a>
+        <a href="/limits">Review limits</a>
+        <a href="/pilot">Plan a pilot</a>
       </div>
     </div>
     <aside class="hero-panel" aria-label="TinyZKP pricing summary">

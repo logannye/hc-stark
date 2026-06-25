@@ -326,3 +326,87 @@ nav.tz-nav .status-link{display:inline-flex!important;align-items:center!importa
   nav.tz-nav .links > a.status-link{justify-content:flex-start!important}
   nav.tz-nav .status-link{justify-content:flex-start!important}
 }
+
+/* ── High-impact UI polish layer ── */
+:root{
+  --surface-elevated:#111b31;
+  --surface-quiet:rgba(12,20,36,.62);
+  --line-soft:rgba(30,45,82,.62);
+  --muted-readable:#9aabc8;
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important}
+  .fade-in{opacity:1!important;transform:none!important}
+}
+
+body.nav-open{overflow:hidden!important}
+body.nav-open::after{content:'';position:fixed;inset:56px 0 0;z-index:80;background:rgba(3,8,15,.64);backdrop-filter:blur(4px);pointer-events:none}
+
+nav.tz-nav a[aria-current="page"],
+nav.tz-nav .nav-trigger[aria-current="page"]{color:var(--text-bright)!important;background:rgba(46,232,212,.075)!important}
+
+main p,main li,main td,main label,main .sub,main .lede{color:var(--muted-readable)}
+main .dim,main .muted,main small{color:var(--dim)}
+
+main .hero .cta-row{align-items:center!important;gap:10px 16px!important}
+main .hero .cta-row .cta:nth-child(n+3),
+main .hero .cta-row .btn:nth-child(n+3),
+main .hero .actions .btn:nth-child(n+3){min-height:32px!important;padding:4px 0!important;border:0!important;background:transparent!important;
+  color:var(--muted-readable)!important;box-shadow:none!important;text-transform:none!important;font-size:13px!important}
+main .hero .cta-row .cta:nth-child(n+3)::after,
+main .hero .actions .btn:nth-child(n+3)::after{content:' →';color:var(--accent);font-family:var(--mono);font-size:11px}
+main .hero .cta-row .cta:nth-child(n+3):hover,
+main .hero .actions .btn:nth-child(n+3):hover{color:var(--accent)!important;transform:none!important;background:transparent!important}
+
+main .box,main .card,main .info-card,main .panel,main .context-card,main .signup-card,main .path-card,
+main .step-card,main .endpoint-card,main .price-card,main .template-card,main .truth-card,main .controls,
+main .result,main .plan,main .mini,main .dash-card,main .overview-card,main .stat-card{background-color:var(--surface-quiet);
+  border-color:var(--line-soft)!important}
+main .hero-panel,main .proof-card,main .receipt-card,main .mcp-box,main .demo-box,main .agent-box,
+main .adoption-system,main .calc,main .signup-card{background:linear-gradient(180deg,rgba(17,27,49,.96),rgba(7,13,24,.96))!important}
+main .featured,main .highlight,main .active,main .primary{border-color:rgba(46,232,212,.48)!important}
+
+main .compare,main .comparison,main .docs-table-wrap,main .jobs-table-wrap{position:relative!important;border-color:var(--line-soft)!important;
+  box-shadow:inset -24px 0 28px -28px rgba(46,232,212,.32)}
+main .compare::after,main .comparison::after,main .docs-table-wrap::after,main .jobs-table-wrap::after{
+  content:'scroll';position:absolute;right:10px;top:8px;z-index:1;padding:2px 7px;border:1px solid var(--border-light);
+  border-radius:999px;background:rgba(5,10,18,.86);color:var(--dim);font:700 9px var(--mono);letter-spacing:.06em;text-transform:uppercase;
+  pointer-events:none;opacity:.74}
+
+@media(min-width:761px){
+  main .compare::after,main .comparison::after,main .docs-table-wrap::after,main .jobs-table-wrap::after{display:none!important}
+}
+
+main input[type="checkbox"]{appearance:none!important;width:18px!important;height:18px!important;border:1px solid var(--border-light)!important;
+  border-radius:5px!important;background:var(--surface)!important;display:inline-grid!important;place-content:center!important;
+  vertical-align:-3px!important}
+main input[type="checkbox"]::before{content:'';width:9px;height:9px;border-radius:3px;background:var(--accent);transform:scale(0);
+  transition:transform .12s ease}
+main input[type="checkbox"]:checked::before{transform:scale(1)}
+main input[type="checkbox"]:focus-visible{outline:2px solid var(--accent)!important;outline-offset:3px!important}
+
+@media(max-width:1120px){
+  nav.tz-nav .links{left:16px!important;right:16px!important;top:64px!important;border:1px solid var(--border-light)!important;
+    border-radius:12px!important;background:rgba(5,10,18,.985)!important;padding:14px 16px 16px!important;
+    z-index:120!important;max-height:calc(100vh - 88px)!important;box-shadow:0 28px 80px rgba(0,0,0,.56)!important}
+  nav.tz-nav .nav-trigger:focus-visible,nav.tz-nav .hamburger:focus-visible{outline-offset:2px!important}
+  nav.tz-nav .hamburger[aria-expanded="true"]{border:1px solid rgba(46,232,212,.55)!important;border-radius:8px!important;background:var(--accent-dim)!important}
+  nav.tz-nav .nav-menu{margin:2px 0 8px!important;padding:4px 0 6px 12px!important}
+  nav.tz-nav .nav-menu a{min-height:30px!important}
+}
+
+@media(max-width:760px){
+  main{padding-top:88px!important}
+  main .hero,main .signup-copy,main .try-hero{padding-top:0!important;margin-bottom:24px!important}
+  main h1,main .hero h1{font-size:30px!important;line-height:1.12!important}
+  main .lede,main .hero p,main .signup-copy .lead{font-size:14.5px!important;line-height:1.62!important}
+  main .hero .cta-row .cta:nth-child(n+4),main .hero .actions .btn:nth-child(n+4){display:none!important}
+  main .hero-panel{padding:18px!important}
+  main .card,main .box,main .plan,main .panel,main .signup-card{padding:18px!important}
+  .docs-layout .sidebar{position:sticky!important;top:56px!important;z-index:40!important;background:rgba(5,10,18,.98)!important;
+    border-bottom:1px solid var(--border-light)!important;box-shadow:0 12px 30px rgba(0,0,0,.28),inset -32px 0 30px -32px rgba(46,232,212,.42)!important;
+    scrollbar-width:none!important}
+  .docs-layout .sidebar::-webkit-scrollbar{display:none!important}
+  .docs-layout .sidebar a.active,.docs-layout .sidebar a[aria-current="true"]{background:rgba(46,232,212,.12)!important;color:var(--accent)!important}
+}

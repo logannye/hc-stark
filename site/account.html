@@ -96,13 +96,15 @@ main{flex:1;padding-top:80px;padding-bottom:80px;position:relative}
 /* ==============================
    STATE 1: Login Card
    ============================== */
-.login-view{display:flex;justify-content:center;padding-top:60px}
+.login-view{display:flex;justify-content:center;padding-top:38px}
 .login-view::before{content:'';position:absolute;width:600px;height:600px;
   background:radial-gradient(circle,var(--accent-glow) 0%,transparent 65%);
   top:-200px;left:50%;transform:translateX(-50%);pointer-events:none;opacity:.4}
-.login-card{max-width:440px;width:100%;padding:0 24px;position:relative}
-.login-card h1{font-size:1.75rem;font-weight:800;margin-bottom:8px;color:var(--text-bright);letter-spacing:0}
-.login-card .sub{color:var(--muted);font-size:.9rem;line-height:1.6;margin-bottom:32px}
+.login-card{max-width:460px;width:100%;padding:26px;position:relative;background:linear-gradient(180deg,rgba(17,27,49,.94),rgba(7,13,24,.94));border:1px solid var(--border-light);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.28)}
+.login-card h1{font-size:2rem;font-weight:800;margin-bottom:8px;color:var(--text-bright);letter-spacing:0}
+.login-card .sub{color:var(--muted);font-size:.94rem;line-height:1.6;margin-bottom:18px}
+.login-note{border:1px solid var(--border);background:rgba(5,10,18,.42);border-radius:10px;padding:12px 14px;color:var(--muted);font-size:.82rem;line-height:1.55;margin-bottom:22px}
+.login-note strong{display:block;color:var(--accent);font-family:var(--mono);font-size:.7rem;letter-spacing:.07em;text-transform:uppercase;margin-bottom:3px}
 .form-group{margin-bottom:16px}
 .form-group label{display:block;font-size:.8rem;color:var(--dim);margin-bottom:7px;font-weight:600;
   letter-spacing:.04em;text-transform:uppercase;font-family:var(--mono)}
@@ -317,6 +319,7 @@ footer .right a:hover{color:var(--muted)}
   footer .right{flex-wrap:wrap;justify-content:center}
 }
 @media(max-width:480px){
+  .login-card{padding:22px 18px}
   .login-view::before{width:320px;height:320px;top:-120px}
   .overview-bar{grid-template-columns:1fr 1fr}
   .stats-grid{grid-template-columns:1fr 1fr}
@@ -423,6 +426,10 @@ footer .right a:hover{color:var(--muted)}
     <div class="login-card">
       <h1>Your Dashboard</h1>
       <p class="sub">Enter your email to receive a login link.</p>
+      <div class="login-note">
+        <strong>Account access</strong>
+        One-time links protect API keys and usage data without storing a password in your browser.
+      </div>
 
       <form id="login-form">
         <div class="form-group">

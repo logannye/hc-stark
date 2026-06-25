@@ -218,7 +218,7 @@ nav .nav-cta:hover{background:var(--accent);transform:translateY(-1px);box-shado
 .success-banner .dismiss:hover{opacity:1}
 
 /* Hero */
-.hero{padding:108px 0 64px;position:relative;overflow:hidden}
+.hero{padding:82px 0 36px;position:relative;overflow:hidden}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(320px,.98fr);gap:48px;align-items:center}
 .hero-copy{text-align:left;position:relative;z-index:1}
 .hero-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:100px;
@@ -234,7 +234,7 @@ nav .nav-cta:hover{background:var(--accent);transform:translateY(-1px);box-shado
   background:linear-gradient(90deg,transparent,var(--border-light),transparent);opacity:.8;pointer-events:none}
 .hero::after{content:'';position:absolute;inset:auto 0 0 0;height:220px;
   background:linear-gradient(180deg,transparent,rgba(10,20,36,.62));pointer-events:none}
-.hero h1{font-size:50px;font-weight:800;line-height:1.08;letter-spacing:0;
+.hero h1{font-size:48px;font-weight:800;line-height:1.08;letter-spacing:0;
   background:linear-gradient(135deg,var(--accent) 0%,#69f5e8 40%,var(--accent2) 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;position:relative;
   text-wrap:balance}
@@ -252,6 +252,9 @@ nav .nav-cta:hover{background:var(--accent);transform:translateY(-1px);box-shado
 .cta:hover{transform:translateY(-2px);box-shadow:0 8px 32px var(--accent-glow);text-decoration:none}
 .cta-secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}
 .cta-secondary:hover{border-color:var(--accent);background:var(--accent-dim);box-shadow:none}
+.hero .hero-ctas .cta:nth-child(n+3){padding:6px 0;background:transparent!important;border:0!important;color:var(--muted)!important;box-shadow:none!important}
+.hero .hero-ctas .cta:nth-child(n+3)::after{content:" \2192";font-family:var(--mono);font-size:11px;color:var(--accent)}
+.hero .hero-ctas .cta:nth-child(n+3):hover{color:var(--accent)!important;transform:none}
 .hero .free{display:block;font-size:12.5px;color:var(--dim);margin-top:20px;font-weight:500;letter-spacing:.02em}
 .hero-proof{position:relative;z-index:1;background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));
   border:1px solid var(--border-light);border-radius:18px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.32)}
@@ -271,7 +274,7 @@ nav .nav-cta:hover{background:var(--accent);transform:translateY(-1px);box-shado
 .receipt-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
 .receipt-metric{background:rgba(5,10,18,.62);border:1px solid var(--border);border-radius:10px;padding:11px}
 .receipt-metric strong{display:block;color:var(--text-bright);font-size:15px}.receipt-metric span{color:var(--dim);font-size:11.5px}
-.trust-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:24px;max-width:720px}
+.trust-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px;max-width:720px}
 .trust-strip div{border-left:2px solid var(--accent);padding-left:12px;color:var(--muted);font-size:13px}
 .trust-strip strong{display:block;color:var(--text-bright);font-size:13.5px}
 .trust-strip a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
@@ -300,7 +303,7 @@ nav .nav-cta:hover{background:var(--accent);transform:translateY(-1px);box-shado
 .final-cta p{max-width:620px;margin:0 auto 22px;color:var(--muted);font-size:15px;line-height:1.7}
 
 /* Live demo */
-.demo-section{padding:36px 0 80px}
+.demo-section{padding:28px 0 80px}
 .demo-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;
   max-width:720px;margin:0 auto;overflow:hidden;position:relative;
   box-shadow:0 0 60px rgba(46,232,212,.03),0 1px 3px rgba(0,0,0,.3)}
@@ -366,6 +369,16 @@ section{padding:72px 0}
 .asset-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.asset-strip a{display:inline-flex;align-items:center;min-height:28px;
   border:1px solid var(--border-light);border-radius:999px;padding:4px 10px;color:var(--muted);font-size:12px;font-weight:700;text-decoration:none}
 .asset-strip a:hover{color:var(--accent);border-color:var(--accent)}
+
+/* Rhythm variations so long card sections do not collapse into one repeated pattern. */
+#audiences .audience-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+#audiences .info-card:first-child,#audiences .info-card:nth-child(2){grid-column:span 2}
+#audiences .info-card:first-child{background:linear-gradient(135deg,rgba(46,232,212,.06),var(--surface) 72%)}
+#use-cases .info-card{border-left:3px solid rgba(46,232,212,.35);padding-left:20px}
+#comparisons .usecase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+#comparisons .info-card{display:grid;grid-template-columns:104px 1fr;gap:8px 16px;align-items:start}
+#comparisons .info-card .kicker{grid-row:1 / span 3;margin:0;color:var(--dim)}
+#comparisons .info-card h3,#comparisons .info-card p{margin-bottom:0}
 
 /* How It Works */
 .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
@@ -518,8 +531,8 @@ footer .right a:hover{color:var(--muted)}
   .pricing-grid{grid-template-columns:1fr 1fr!important}
   .plan-table{margin:40px 16px 0;font-size:12px}
   .plan-table th,.plan-table td{padding:9px 12px}
-  .hero{padding-top:112px}
-  .hero-grid{grid-template-columns:1fr;gap:32px}
+  .hero{padding-top:88px;padding-bottom:30px}
+  .hero-grid{grid-template-columns:1fr;gap:18px}
   .hero-copy{text-align:center}
   nav .container{width:100vw;max-width:100vw;margin:0;padding:0 24px}
   .hero h1{font-size:30px;line-height:1.16;letter-spacing:0;max-width:342px;margin:0 auto;overflow-wrap:break-word;text-wrap:balance}
@@ -529,9 +542,9 @@ footer .right a:hover{color:var(--muted)}
   .hero-pill .pill-dot{display:none}
   .hero-pill .pill-item{white-space:normal}
   .hero-pill .pill-item:not(:first-of-type)::before{content:none}
-  .hero .sub{max-width:330px;margin-left:auto;margin-right:auto}
+  .hero .sub{max-width:342px;margin:16px auto 18px;line-height:1.58}
   .hero .free{max-width:320px;margin-left:auto;margin-right:auto;line-height:1.6}
-  .memory-note{max-width:320px!important}
+  .memory-note{max-width:342px!important;margin-bottom:18px!important}
   .memory-note strong,.memory-note .memory-context{display:block}
   .demo-box{max-width:100%}
   .demo-body{overflow-x:auto;max-width:100%}
@@ -540,18 +553,30 @@ footer .right a:hover{color:var(--muted)}
   .code-tabs button{flex:0 0 auto;padding:8px 14px}
   .code-block{max-width:100%;padding:20px 18px}
   .hero-ctas{flex-direction:column;align-items:center}
+  .hero .hero-ctas .cta:nth-child(n+3),.hero .free,.trust-strip{display:none!important}
   .trust-strip,.audience-grid,.usecase-grid,.truth-grid,.faq-grid{grid-template-columns:1fr}
-  .hero-proof{padding:18px}
-  .receipt-states{grid-template-columns:1fr;gap:10px}
-  .state-arrow{transform:rotate(90deg);justify-self:center}
-  .receipt-metrics{grid-template-columns:1fr}
+  #audiences .audience-grid,#comparisons .usecase-grid{grid-template-columns:1fr}
+  #audiences .info-card:first-child,#audiences .info-card:nth-child(2){grid-column:auto}
+  #comparisons .info-card{display:block}
+  #comparisons .info-card .kicker{margin-bottom:10px}
+  .hero-proof{width:100%;max-width:342px;margin:0 auto;padding:14px;border-radius:14px}
+  .hero-proof::before{font-size:10px;margin-bottom:10px}
+  .receipt-states{grid-template-columns:1fr auto 1fr;gap:8px;margin-bottom:10px}
+  .state-node{padding:10px;border-radius:10px}
+  .state-node .label{font-size:9px}
+  .state-node .value{font-size:21px}
+  .state-arrow{transform:none;justify-self:center;font-size:15px}
+  .delta-strip{gap:6px;margin-bottom:10px}
+  .delta-strip span{padding:4px 8px;font-size:10.5px}
+  .receipt-output{padding:12px;font-size:10.5px;line-height:1.65}
+  .receipt-metrics{display:none}
   .proof-badges{gap:10px}
 }
 @media(max-width:520px){
-  .hero h1{max-width:280px;font-size:29px}
-  .hero-pill{max-width:280px}
-  .hero .sub{max-width:280px;font-size:14px}
-  .memory-note{max-width:270px!important}
+  .hero h1{max-width:320px;font-size:29px}
+  .hero-pill{max-width:342px}
+  .hero .sub{max-width:342px;font-size:14px}
+  .memory-note{max-width:330px!important}
   .hero .free{max-width:280px}
 }
 </style>

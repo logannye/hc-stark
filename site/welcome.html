@@ -71,10 +71,10 @@ nav .container{max-width:1100px;display:flex;align-items:center;justify-content:
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px}
 .hamburger svg{width:24px;height:24px;stroke:var(--text);stroke-width:2;fill:none}
 
-main{flex:1;padding-top:100px;padding-bottom:80px;min-width:0}
+main{flex:1;padding-top:86px;padding-bottom:76px;min-width:0}
 
-.welcome-header{text-align:center;margin-bottom:48px}
-.welcome-header .check{width:64px;height:64px;border-radius:50%;background:var(--green-dim);
+.welcome-header{text-align:center;margin-bottom:34px}
+.welcome-header .check{width:58px;height:58px;border-radius:50%;background:var(--green-dim);
   border:1px solid rgba(52,211,153,.2);display:flex;align-items:center;justify-content:center;margin:0 auto 20px}
 .welcome-header .check svg{width:32px;height:32px;stroke:var(--green);fill:none;stroke-width:2.5}
 .welcome-header h1{font-size:28px;font-weight:800;margin-bottom:8px;color:var(--text-bright);letter-spacing:0}
@@ -84,7 +84,7 @@ main{flex:1;padding-top:100px;padding-bottom:80px;min-width:0}
 .activation-context span{display:block;font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
 .activation-context strong{display:block;color:var(--text-bright);font-size:16px;margin-bottom:6px}
 .activation-context p{color:var(--muted);font-size:13.5px;line-height:1.65}
-.path-picker{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:36px}
+.path-picker{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:30px}
 .path-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;text-decoration:none;color:var(--text);transition:border-color .2s,transform .15s,box-shadow .2s;display:block;min-width:0}
 .path-card:hover{border-color:var(--accent);transform:translateY(-1px);text-decoration:none}
 .path-card.primary{background:linear-gradient(135deg,rgba(46,232,212,.06) 0%,var(--surface) 65%);border-color:var(--accent)}
@@ -366,17 +366,31 @@ var params = new URLSearchParams(window.location.search);
 var email = params.get('email');
 var plan = (params.get('plan') || 'free').toLowerCase();
 var checkoutSuccess = params.get('checkout') === 'success';
+var attributionFields = ['source','medium','campaign','platform','use_case','workflow','intent','landing_path','referrer_host','first_seen_at'];
 function cleanContextParam(name, fallbackName) {
   var raw = params.get(name) || (fallbackName ? params.get(fallbackName) : '') || '';
-  return raw.replace(/[^\w .:/-]/g, '').trim().slice(0, 80);
+  return raw.replace(/[^\w .:/-]/g, '').trim().slice(0, 160);
 }
-var activationContext = {
-  source: cleanContextParam('source', 'utm_source'),
-  platform: cleanContextParam('platform'),
-  use_case: cleanContextParam('use_case'),
-  workflow: cleanContextParam('workflow'),
-  intent: cleanContextParam('intent')
-};
+function readStoredAttribution() {
+  try { return JSON.parse(localStorage.getItem('tinyzkp_attribution') || '{}') || {}; }
+  catch(e) { return {}; }
+}
+function collectActivationContext() {
+  var stored = readStoredAttribution();
+  return {
+    source: cleanContextParam('source', 'utm_source') || stored.source || '',
+    medium: cleanContextParam('medium', 'utm_medium') || stored.medium || '',
+    campaign: cleanContextParam('campaign', 'utm_campaign') || stored.campaign || '',
+    platform: cleanContextParam('platform') || stored.platform || '',
+    use_case: cleanContextParam('use_case') || stored.use_case || '',
+    workflow: cleanContextParam('workflow') || stored.workflow || '',
+    intent: cleanContextParam('intent') || stored.intent || '',
+    landing_path: cleanContextParam('landing_path') || stored.landing_path || '',
+    referrer_host: cleanContextParam('referrer_host') || stored.referrer_host || '',
+    first_seen_at: cleanContextParam('first_seen_at') || stored.first_seen_at || ''
+  };
+}
+var activationContext = collectActivationContext();
 if (!email) {
   try { email = sessionStorage.getItem('tinyzkp_email'); } catch(e) {}
 }

@@ -72,17 +72,18 @@ nav .container{display:flex;align-items:center;justify-content:space-between;hei
 
 main{flex:1}
 
-.contact-wrap{width:100%;max-width:760px;margin:0 auto;padding:130px 24px 80px;position:relative;min-width:0}
+.contact-wrap{width:100%;max-width:820px;margin:0 auto;padding:112px 24px 80px;position:relative;min-width:0}
 .contact-wrap::before{content:'';position:absolute;width:500px;height:500px;
   background:radial-gradient(circle,var(--accent-glow) 0%,transparent 65%);
   top:-200px;left:50%;transform:translateX(-50%);pointer-events:none;opacity:.3}
 .contact-wrap h1{font-size:1.75rem;font-weight:800;margin-bottom:8px;color:var(--text-bright);letter-spacing:0}
-.contact-wrap .subtext{color:var(--muted);font-size:.9rem;line-height:1.6;margin-bottom:32px}
+.contact-wrap .subtext{color:var(--muted);font-size:.95rem;line-height:1.65;margin-bottom:24px;max-width:680px}
 .context-card{display:none;border:1px solid rgba(46,232,212,.18);background:rgba(46,232,212,.055);border-radius:12px;padding:14px 16px;margin:-14px 0 24px}
 .context-card span{display:block;font-family:var(--mono);font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
 .context-card strong{display:block;color:var(--text-bright);font-size:.92rem;margin-bottom:4px}
 .context-card p{color:var(--muted);font-size:.84rem;line-height:1.55}
 
+form#contact-form{background:linear-gradient(180deg,rgba(17,27,49,.9),rgba(7,13,24,.92));border:1px solid var(--border-light);border-radius:16px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.24)}
 .form-group{margin-bottom:18px}
 .qual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:6px 0 18px}
 .qual-section{border:1px solid var(--border);border-radius:12px;padding:18px 18px 2px;margin:8px 0 22px;background:rgba(12,20,36,.45)}
@@ -115,7 +116,7 @@ main{flex:1}
 .error-msg{margin-top:16px;padding:11px 16px;background:rgba(248,113,113,.06);
   border:1px solid rgba(248,113,113,.2);border-radius:10px;color:var(--red);font-size:.85rem;font-weight:500}
 
-.support-sla{margin-top:28px;border:1px solid var(--border);border-radius:12px;background:rgba(12,20,36,.45);padding:18px}
+.support-sla{margin-top:22px;border:1px solid var(--border);border-radius:12px;background:rgba(12,20,36,.45);padding:18px}
 .support-sla h2{font-size:1rem;color:var(--text-bright);margin-bottom:8px}
 .support-sla p{color:var(--muted);font-size:.88rem;line-height:1.65;margin-bottom:12px}
 .support-sla ul{padding-left:18px;color:var(--muted);font-size:.86rem;line-height:1.65}
@@ -134,7 +135,8 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     border-bottom:1px solid var(--border);flex-direction:column;padding:16px 24px;gap:16px}
   .links.open{display:flex}
   .hamburger{display:block}
-  .contact-wrap{padding:100px 20px 64px;overflow-x:hidden}
+  .contact-wrap{padding:92px 20px 64px;overflow-x:hidden}
+  form#contact-form{padding:18px}
   .contact-wrap::before{width:320px;height:320px;top:-120px}
   .qual-grid{grid-template-columns:1fr}
   footer .container{flex-direction:column;gap:12px;text-align:center}
@@ -214,17 +216,6 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <strong id="context-title">Selected workflow</strong>
     <p id="context-text">We will include this context with your request so the reply starts from the workflow that brought you here.</p>
   </div>
-
-  <section class="support-sla" aria-labelledby="support-expectations">
-    <h2 id="support-expectations">Support expectations</h2>
-    <p>Use this form for public support, billing, onboarding, and design-partner routing. Direct fallback email: <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a>.</p>
-    <ul>
-      <li><strong>Security or verifier correctness:</strong> acknowledge within 15 minutes for broad risk, or within 1 business day for narrow reports.</li>
-      <li><strong>Billing, signup, and account access:</strong> respond within 1 business day; reconcile Stripe, tenant state, and usage before closure.</li>
-      <li><strong>API, MCP, or proving outage:</strong> check <a href="/status">status</a> first; user-blocking incidents are triaged under the public response targets.</li>
-      <li><strong>Compute and enterprise inquiries:</strong> expect a design-fit response within 2 business days.</li>
-    </ul>
-  </section>
 
   <form id="contact-form">
     <div class="form-group">
@@ -357,6 +348,16 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <p>Message sent! We'll get back to you soon.</p>
   </div>
   <div id="error" class="error-msg" style="display:none;"></div>
+  <section class="support-sla" aria-labelledby="support-expectations">
+    <h2 id="support-expectations">Support expectations</h2>
+    <p>Use this form for public support, billing, onboarding, and design-partner routing. Direct fallback email: <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a>.</p>
+    <ul>
+      <li><strong>Security or verifier correctness:</strong> acknowledge within 15 minutes for broad risk, or within 1 business day for narrow reports.</li>
+      <li><strong>Billing, signup, and account access:</strong> respond within 1 business day; reconcile Stripe, tenant state, and usage before closure.</li>
+      <li><strong>API, MCP, or proving outage:</strong> check <a href="/status">status</a> first; user-blocking incidents are triaged under the public response targets.</li>
+      <li><strong>Compute and enterprise inquiries:</strong> expect a design-fit response within 2 business days.</li>
+    </ul>
+  </section>
 </div>
 </main>
 
