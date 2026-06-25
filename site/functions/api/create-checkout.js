@@ -16,8 +16,19 @@
 
 const RATE_LIMIT_MAX = 10;         // max requests per window per IP
 const RATE_LIMIT_WINDOW_S = 300;   // 5-minute window
-const ATTRIBUTION_MAX_LEN = 80;
-const ATTRIBUTION_FIELDS = ["source", "platform", "use_case", "workflow", "intent"];
+const ATTRIBUTION_MAX_LEN = 160;
+const ATTRIBUTION_FIELDS = [
+  "source",
+  "medium",
+  "campaign",
+  "platform",
+  "use_case",
+  "workflow",
+  "intent",
+  "landing_path",
+  "referrer_host",
+  "first_seen_at",
+];
 
 async function checkRateLimit(ip) {
   const cache = caches.default;

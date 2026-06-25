@@ -225,8 +225,8 @@ footer .right a:hover{color:var(--muted)}
       <h1>Start free. Pay when receipts become part of production trust.</h1>
       <p class="lede">TinyZKP pricing is built around the buyer's real alternative: either mint portable proof receipts through an API, or operate prover infrastructure yourself. Use self-serve plans for steady receipt volume, Compute for long traces, and the $5,000 paid pilot when a serious workflow needs design review before rollout.</p>
       <div class="cta-row">
-        <a class="cta" href="/signup" data-track="signup_plan_selected" data-plan="free" data-source="pricing_hero">Get Free API Key</a>
-        <a class="cta secondary" href="/fit">Find Best Route</a>
+        <a class="cta" href="/signup?source=pricing_hero&medium=pricing_page&intent=free_signup" data-track="signup_plan_selected" data-plan="free" data-source="pricing_hero">Get Free API Key</a>
+        <a class="cta secondary" href="/fit?source=pricing_hero&medium=pricing_page&intent=find_route" data-track="pricing_fit_click" data-source="pricing_hero">Find Best Route</a>
       </div>
       <div class="hero-links" aria-label="Pricing support links">
         <a href="/calculator">Estimate cost</a>
@@ -262,7 +262,7 @@ footer .right a:hover{color:var(--muted)}
           <li>1 concurrent job</li>
           <li>No credit card</li>
         </ul>
-        <a class="cta secondary" href="/signup" data-track="signup_plan_selected" data-plan="free" data-source="pricing_plan">Start free</a>
+        <a class="cta secondary" href="/signup?source=pricing_plan&medium=pricing_page&intent=free_signup" data-track="signup_plan_selected" data-plan="free" data-source="pricing_plan">Start free</a>
       </article>
       <article class="plan">
         <div class="tier">Developer</div>
@@ -274,7 +274,7 @@ footer .right a:hover{color:var(--muted)}
           <li>4 concurrent jobs</li>
           <li>$500/month cap</li>
         </ul>
-        <a class="cta" href="/signup?plan=developer" data-track="signup_plan_selected" data-plan="developer" data-source="pricing_plan">Get Developer</a>
+        <a class="cta" href="/signup?plan=developer&source=pricing_plan&medium=pricing_page&intent=paid_checkout" data-track="signup_plan_selected" data-plan="developer" data-source="pricing_plan">Get Developer</a>
       </article>
       <article class="plan featured">
         <span class="badge">Recommended</span>
@@ -287,7 +287,7 @@ footer .right a:hover{color:var(--muted)}
           <li>300 requests/minute</li>
           <li>$2,500/month cap</li>
         </ul>
-        <a class="cta" href="/signup?plan=pro" data-track="signup_plan_selected" data-plan="pro" data-source="pricing_plan">Get Pro</a>
+        <a class="cta" href="/signup?plan=pro&source=pricing_plan&medium=pricing_page&intent=paid_checkout" data-track="signup_plan_selected" data-plan="pro" data-source="pricing_plan">Get Pro</a>
       </article>
       <article class="plan">
         <div class="tier">Scale</div>
@@ -299,7 +299,7 @@ footer .right a:hover{color:var(--muted)}
           <li>500 requests/minute</li>
           <li>$10,000/month cap</li>
         </ul>
-        <a class="cta" href="/signup?plan=scale" data-track="signup_plan_selected" data-plan="scale" data-source="pricing_plan">Get Scale</a>
+        <a class="cta" href="/signup?plan=scale&source=pricing_plan&medium=pricing_page&intent=paid_checkout" data-track="signup_plan_selected" data-plan="scale" data-source="pricing_plan">Get Scale</a>
       </article>
     </div>
   </section>
@@ -314,7 +314,7 @@ footer .right a:hover{color:var(--muted)}
         <div class="amount">$0.50</div>
         <div class="unit">per million trace steps</div>
         <p>No monthly base fee. $0.05 minimum per proof. Built for sporadic or heavy state-transition traces.</p>
-        <a class="cta" href="/signup?plan=compute" data-track="compute_signup_click" data-plan="compute" data-source="pricing_compute">Start Compute</a>
+        <a class="cta" href="/signup?plan=compute&source=pricing_compute&medium=pricing_page&intent=compute_signup" data-track="compute_signup_click" data-plan="compute" data-source="pricing_compute">Start Compute</a>
       </article>
       <article class="plan">
         <div class="tier">Enterprise</div>
@@ -328,7 +328,7 @@ footer .right a:hover{color:var(--muted)}
 
   <section class="band" id="commercial-packages">
     <h2>Commercial packages for serious production buyers</h2>
-    <p>Self-serve plans are the fastest path when the workflow already fits. Use these sales-assisted packages when the business decision depends on design review, platform distribution, procurement, or reserved capacity. These are not self-serve checkout SKUs.</p>
+    <p>Self-serve plans are the fastest path when the workflow already fits. Use these commercial packages when the business decision depends on design review, platform distribution, procurement, or reserved capacity. The production pilot can be funded through Stripe Checkout; platform and enterprise routes stay sales-assisted.</p>
     <div class="plans">
       <article class="plan featured">
         <span class="badge">Creditable</span>
@@ -341,7 +341,7 @@ footer .right a:hover{color:var(--muted)}
           <li>Receipt integration and verifier path</li>
           <li>Credited toward annual or reserved-capacity agreement if converted within 60 days</li>
         </ul>
-        <a class="cta" href="/contact?category=Paid%20Pilot&message=I%20want%20to%20scope%20a%20%245%2C000%20TinyZKP%20production%20pilot." data-track="paid_pilot_pricing_click" data-source="pricing_commercial">Scope paid pilot</a>
+        <a class="cta" href="/pilot?source=pricing_commercial&medium=pricing_page&intent=paid_pilot_checkout" data-track="paid_pilot_pricing_click" data-source="pricing_commercial">Start pilot checkout</a>
       </article>
       <article class="plan">
         <div class="tier">Platform Rollout</div>
@@ -448,10 +448,10 @@ footer .right a:hover{color:var(--muted)}
       <article class="box"><h3>Can I cap spend?</h3><p>Yes. Developer, Pro, and Scale include monthly spend caps. Enterprise buyers can negotiate reserved capacity and contractual usage limits. See the <a href="/limits">limits page</a> for the canonical quota summary.</p></article>
     </div>
     <div class="cta-row">
-      <a class="cta" href="/signup">Get Free API Key</a>
-      <a class="cta secondary" href="/fit">Find best route</a>
+      <a class="cta" href="/signup?source=pricing_final&medium=pricing_page&intent=free_signup" data-track="signup_plan_selected" data-plan="free" data-source="pricing_final">Get Free API Key</a>
+      <a class="cta secondary" href="/fit?source=pricing_final&medium=pricing_page&intent=find_route" data-track="pricing_fit_click" data-source="pricing_final">Find best route</a>
       <a class="cta secondary" href="/roi">Build ROI case</a>
-      <a class="cta secondary" href="/pilot">Plan a Pilot</a>
+      <a class="cta secondary" href="/pilot?source=pricing_final&medium=pricing_page&intent=paid_pilot_checkout" data-track="paid_pilot_pricing_click" data-source="pricing_final">Plan a Pilot</a>
       <a class="cta secondary" href="/docs#pricing">Read API Pricing Docs</a>
     </div>
   </section>

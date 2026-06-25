@@ -395,6 +395,14 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
       </table>
     </div>
 
+    <h2 id="when-not-to-use">When Not to Use TinyZKP</h2>
+    <p>TinyZKP is strongest when a buyer, agent, or auditor needs a compact receipt for a public state transition without replaying the producer system. It is not a general privacy layer, a replacement for data-access controls, or a guarantee that external inputs were collected honestly.</p>
+    <ul>
+      <li>Do not use the default public templates when you need hidden inputs or private witness claims.</li>
+      <li>Do not send secrets, API keys, customer data, regulated records, or raw credentials as template parameters.</li>
+      <li>Do not treat a valid receipt as business approval; it proves the encoded computation, not surrounding policy intent.</li>
+    </ul>
+
     <h2 id="wasm">WASM-First Verification</h2>
     <p>Verify compatible receipts locally with the <code>@tinyzkp/verify</code> WASM package. No API key is required for verification. The hosted <a href="/verify">public verifier</a> tries this WASM path first and falls back to TinyZKP's verifier endpoint when the local package is behind the current production proof format.</p>
 
@@ -1115,6 +1123,14 @@ HC_MCP_HTTP_PORT=3001 cargo run -p hc-mcp --bin hc-mcp-http</pre>
     <h2 id="research-lineage">Research Lineage</h2>
     <p>TinyZKP has two public repositories because the company evolved from an earlier KZG/BN254 research prototype into the current STARK product. The canonical production repo is <a href="https://github.com/logannye/hc-stark" target="_blank"><code>logannye/hc-stark</code></a>. The older <a href="https://github.com/logannye/space-efficient-zero-knowledge-proofs" target="_blank"><code>space-efficient-zero-knowledge-proofs</code></a> repo is research lineage and paper context, not the hosted TinyZKP engine.</p>
     <p>The practical distinction is simple: TinyZKP's hosted receipt path uses transparent STARK-style verification with no trusted setup ceremony. The older repo explores sublinear-space proving with KZG commitments over BN254 and therefore has a different trust and deployment model. See the <a href="/research">Research &amp; Lineage</a> page for the public reconciliation story.</p>
+
+    <h2 id="security-status">Security &amp; Audit Status</h2>
+    <p>The production receipt path is guarded by local CI, release provenance, package checks, route checks, MCP server-card checks, and public monitoring. External cryptography review remains required before expanding security claims beyond the documented live templates.</p>
+    <ul>
+      <li>Responsible disclosure: <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a>.</li>
+      <li>Trust boundaries and lifecycle definitions: <a href="/security">Security</a>.</li>
+      <li>Release process and compatibility rules: <a href="/changelog">changelog</a> and release policy.</li>
+    </ul>
 
     <h2 id="swagger">Interactive API Reference</h2>
     <p>Explore the full API interactively with our Swagger UI. Try endpoints directly from your browser.</p>

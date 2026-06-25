@@ -36,6 +36,7 @@ def test_validate_production_bindings_accepts_complete_set():
         "STRIPE_PRICE_ID_DEVELOPER": "price_developer",
         "STRIPE_PRICE_ID_PRO": "price_pro",
         "STRIPE_PRICE_ID_SCALE": "price_scale",
+        "STRIPE_PRICE_ID_PILOT": "price_pilot",
         "STRIPE_PRICE_ID_METERED": "price_metered",
         "TINYZKP_DEMO_API_KEY": "tzk_demo",
     }
@@ -52,6 +53,7 @@ def test_validate_production_bindings_requires_one_proof_meter_price():
         "STRIPE_PRICE_ID_DEVELOPER": "price_developer",
         "STRIPE_PRICE_ID_PRO": "price_pro",
         "STRIPE_PRICE_ID_SCALE": "price_scale",
+        "STRIPE_PRICE_ID_PILOT": "price_pilot",
         "TINYZKP_DEMO_API_KEY": "tzk_demo",
     }
     failures = []

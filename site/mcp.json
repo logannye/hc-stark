@@ -95,13 +95,13 @@
       "name": "get_proof",
       "kind": "retrieval",
       "auth_required": true,
-      "description": "Fetch the full proof receipt for a completed job."
+      "description": "Fetch proof_b64 plus a tracked verifier_url for a completed job, with receipt_url included when the proof fits the public share-link limit. Public receipt links use source=receipt_share and medium=mcp."
     },
     {
       "name": "get_proof_summary",
       "kind": "retrieval",
       "auth_required": true,
-      "description": "Fetch a compact, agent-friendly receipt summary for a completed job."
+      "description": "Fetch a compact, agent-friendly receipt summary with public inputs, proof boundary, attribution, and a verifier URL when the receipt fits the share-link limit."
     },
     {
       "name": "verify_proof",

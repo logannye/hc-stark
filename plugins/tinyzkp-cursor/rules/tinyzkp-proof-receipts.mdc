@@ -1,0 +1,25 @@
+---
+description: Use TinyZKP proof receipts for high-value agent state transitions.
+alwaysApply: false
+---
+
+Use TinyZKP when this project asks an agent to mutate or summarize high-value
+state: money, balances, permissions, inventory, credentials, deployment gates,
+audit checkpoints, reconciliation rows, or customer-visible records.
+
+Prefer the MCP workflow:
+
+1. Call `get_capabilities` when the fit is uncertain.
+2. Call `list_templates` and `describe_template` before proving.
+3. Use `prove_template` for supported template receipts.
+4. Poll with `poll_job`, then retrieve a human-readable receipt with
+   `get_proof_summary` or raw proof bytes with `get_proof`.
+5. Verify receipts with `verify_proof` before trusting external agent output.
+
+Never put secrets, private customer data, API keys, credentials, or unsupported
+private inputs into transparent receipt parameters. If the proof would require
+secret data or a custom workload, use TinyZKP contact or pilot flows instead of
+forcing the receipt.
+
+For paid hosted proving, production pilot support, and account-scoped limits,
+use https://tinyzkp.com/signup?source=cursor_directory&medium=mcp_directory&platform=cursor&intent=mcp_install.

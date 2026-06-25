@@ -1,0 +1,195 @@
+{
+  "generated_at": "2026-06-25",
+  "positioning": {
+    "one_liner": "Proof receipts for agent actions, API mutations, and state transitions.",
+    "proof_boundary": "Transparent STARK state-transition receipts for supported templates; verification is free.",
+    "data_boundary": "Do not put secrets, private customer data, API keys, or unsupported private inputs into transparent receipt parameters.",
+    "hosted_endpoint": "https://mcp.tinyzkp.com",
+    "free_signup": "https://tinyzkp.com/signup?source=mcp_distribution&medium=mcp_directory&platform=canonical&intent=mcp_install"
+  },
+  "canonical_assets": [
+    {
+      "id": "mcp_server_card",
+      "url": "https://mcp.tinyzkp.com/.well-known/mcp/server-card.json",
+      "required_markers": [
+        "accumulator_step available now",
+        "Optional Bearer token"
+      ]
+    },
+    {
+      "id": "site_mcp_metadata",
+      "url": "https://tinyzkp.com/mcp.json",
+      "required_markers": [
+        "proof receipts for automated work",
+        "https://mcp.tinyzkp.com"
+      ]
+    },
+    {
+      "id": "agent_offers",
+      "url": "https://tinyzkp.com/.well-known/tinyzkp-offers.json",
+      "required_markers": [
+        "source=agent_offer",
+        "human_confirmation_required"
+      ]
+    },
+    {
+      "id": "llms",
+      "url": "https://tinyzkp.com/llms.txt",
+      "required_markers": [
+        "Agent-readable offers",
+        "TinyZKP MCP metadata"
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "id": "smithery",
+      "name": "Smithery",
+      "status": "active",
+      "kind": "mcp_directory",
+      "source": "smithery_mcp",
+      "platform": "smithery",
+      "listing_url": "https://smithery.ai/servers/logan/tinyzkp-mcp",
+      "submission_url": "https://smithery.ai/new",
+      "signup_url": "https://tinyzkp.com/signup?source=smithery_mcp&medium=mcp_directory&platform=smithery&intent=mcp_install",
+      "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
+      "required_markers": [
+        "TinyZKP",
+        "mcp"
+      ]
+    },
+    {
+      "id": "official_mcp_registry",
+      "name": "Official MCP Registry",
+      "status": "active",
+      "kind": "mcp_registry",
+      "source": "official_mcp_registry",
+      "platform": "modelcontextprotocol",
+      "listing_url": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.logannye%2Ftinyzkp/versions/latest",
+      "submission_url": "https://modelcontextprotocol.io/registry/quickstart",
+      "signup_url": "https://tinyzkp.com/signup?source=official_mcp_registry&medium=mcp_directory&platform=modelcontextprotocol&intent=mcp_install",
+      "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
+      "required_markers": [
+        "io.github.logannye/tinyzkp",
+        "https://mcp.tinyzkp.com"
+      ]
+    },
+    {
+      "id": "mcp_so",
+      "name": "mcp.so",
+      "status": "submitted",
+      "kind": "mcp_directory",
+      "source": "mcp_so",
+      "platform": "mcp_so",
+      "listing_url": "https://github.com/chatmcp/mcpso/issues/2916",
+      "completed_at": "2026-06-25",
+      "submission_url": "https://mcp.so/submit",
+      "signup_url": "https://tinyzkp.com/signup?source=mcp_so&medium=mcp_directory&platform=mcp_so&intent=mcp_install",
+      "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
+      "required_markers": [
+        "TinyZKP",
+        "Proof Receipts"
+      ]
+    },
+    {
+      "id": "glama",
+      "name": "Glama MCP Registry",
+      "status": "submission_ready",
+      "kind": "mcp_directory",
+      "source": "glama_mcp",
+      "platform": "glama",
+      "listing_url": "",
+      "submission_url": "https://glama.ai/mcp",
+      "signup_url": "https://tinyzkp.com/signup?source=glama_mcp&medium=mcp_directory&platform=glama&intent=mcp_install",
+      "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
+      "required_markers": [
+        "TinyZKP",
+        "Proof Receipts"
+      ],
+      "notes": "Repo-level glama.json manifest is present; submit or wait for crawler review before marking active."
+    },
+    {
+      "id": "mcpservers_org",
+      "name": "mcpservers.org",
+      "status": "submitted",
+      "kind": "mcp_directory",
+      "source": "mcpservers_org",
+      "platform": "mcpservers_org",
+      "listing_url": "https://mcpservers.org/submit",
+      "completed_at": "2026-06-25",
+      "submission_url": "https://mcpservers.org",
+      "signup_url": "https://tinyzkp.com/signup?source=mcpservers_org&medium=mcp_directory&platform=mcpservers_org&intent=mcp_install",
+      "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
+      "required_markers": [
+        "TinyZKP",
+        "Proof Receipts"
+      ]
+    },
+    {
+      "id": "anthropic_connectors",
+      "name": "Anthropic Connectors Directory",
+      "status": "submission_ready",
+      "kind": "mcp_directory",
+      "source": "anthropic_connector",
+      "platform": "anthropic",
+      "listing_url": "",
+      "submission_url": "https://claude.com/docs/connectors/building/submission",
+      "signup_url": "https://tinyzkp.com/signup?source=anthropic_connector&medium=mcp_directory&platform=anthropic&intent=mcp_install",
+      "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
+      "required_markers": [
+        "TinyZKP",
+        "Proof Receipts"
+      ]
+    },
+    {
+      "id": "pulsemcp",
+      "name": "PulseMCP",
+      "status": "target",
+      "kind": "mcp_directory",
+      "source": "pulsemcp",
+      "platform": "pulsemcp",
+      "listing_url": "",
+      "submission_url": "https://www.pulsemcp.com",
+      "signup_url": "https://tinyzkp.com/signup?source=pulsemcp&medium=mcp_directory&platform=pulsemcp&intent=mcp_install",
+      "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
+      "required_markers": [
+        "TinyZKP",
+        "Proof Receipts"
+      ]
+    },
+    {
+      "id": "cursor_directory",
+      "name": "Cursor Directory",
+      "status": "submission_ready",
+      "kind": "agent_ide_directory",
+      "source": "cursor_directory",
+      "platform": "cursor",
+      "listing_url": "",
+      "submission_url": "https://cursor.directory/plugins/new",
+      "signup_url": "https://tinyzkp.com/signup?source=cursor_directory&medium=mcp_directory&platform=cursor&intent=mcp_install",
+      "install_command": "cursor --plugin-dir ./plugins/tinyzkp-cursor",
+      "required_markers": [
+        "TinyZKP",
+        "Proof Receipts"
+      ],
+      "notes": "cursor.directory follows the Open Plugins standard and accepts GitHub repo autodetection. Repo-local package is ready at plugins/tinyzkp-cursor with .plugin, .cursor-plugin, .mcp.json, and Cursor rule assets."
+    },
+    {
+      "id": "awesome_mcp_servers",
+      "name": "awesome-mcp-servers",
+      "status": "submitted",
+      "kind": "github_list",
+      "source": "awesome_mcp_servers",
+      "platform": "github",
+      "listing_url": "https://github.com/punkpeye/awesome-mcp-servers/pull/8733",
+      "completed_at": "2026-06-25",
+      "submission_url": "https://github.com/punkpeye/awesome-mcp-servers",
+      "signup_url": "https://tinyzkp.com/signup?source=awesome_mcp_servers&medium=mcp_directory&platform=github&intent=mcp_install",
+      "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
+      "required_markers": [
+        "TinyZKP",
+        "Proof Receipts"
+      ]
+    }
+  ]
+}

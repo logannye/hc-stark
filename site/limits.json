@@ -43,7 +43,7 @@
       "prove_requests_per_minute": 10,
       "concurrent_jobs": 1,
       "monthly_spend_cap": 0,
-      "checkout_url": "https://tinyzkp.com/signup",
+      "checkout_url": "https://tinyzkp.com/signup?source=limits_metadata&medium=metadata&intent=free_signup",
       "best_for": "Evaluation, demos, and first agent integrations."
     },
     {
@@ -53,7 +53,7 @@
       "prove_requests_per_minute": 100,
       "concurrent_jobs": 4,
       "monthly_spend_cap": 500,
-      "checkout_url": "https://tinyzkp.com/signup?plan=developer",
+      "checkout_url": "https://tinyzkp.com/signup?plan=developer&source=limits_metadata&medium=metadata&intent=paid_checkout",
       "best_for": "Production pilots where receipts are attached to one workflow."
     },
     {
@@ -63,7 +63,7 @@
       "prove_requests_per_minute": 300,
       "concurrent_jobs": 8,
       "monthly_spend_cap": 2500,
-      "checkout_url": "https://tinyzkp.com/signup?plan=pro",
+      "checkout_url": "https://tinyzkp.com/signup?plan=pro&source=limits_metadata&medium=metadata&intent=paid_checkout",
       "best_for": "Teams adding receipts to customer-visible automations."
     },
     {
@@ -73,7 +73,7 @@
       "prove_requests_per_minute": 500,
       "concurrent_jobs": 16,
       "monthly_spend_cap": 10000,
-      "checkout_url": "https://tinyzkp.com/signup?plan=scale",
+      "checkout_url": "https://tinyzkp.com/signup?plan=scale&source=limits_metadata&medium=metadata&intent=paid_checkout",
       "best_for": "Production services with many receipts and support needs."
     },
     {
@@ -83,7 +83,7 @@
       "prove_requests_per_minute": 100,
       "concurrent_jobs": 8,
       "monthly_spend_cap": null,
-      "checkout_url": "https://tinyzkp.com/signup?plan=compute",
+      "checkout_url": "https://tinyzkp.com/signup?plan=compute&source=limits_metadata&medium=metadata&intent=paid_checkout",
       "best_for": "Large supported state-transition traces, backfills, and audit packages priced by trace step."
     }
   ],

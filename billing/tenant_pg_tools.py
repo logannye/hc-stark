@@ -56,6 +56,16 @@ TENANTS_SPEC = TableSpec(
         "stripe_subscription_item_id",
         "status",
         "plan",
+        "attribution_source",
+        "attribution_medium",
+        "attribution_campaign",
+        "attribution_platform",
+        "attribution_use_case",
+        "attribution_workflow",
+        "attribution_intent",
+        "attribution_landing_path",
+        "attribution_referrer_host",
+        "attribution_first_seen_at",
         "created_at_ms",
         "updated_at_ms",
     ),
@@ -69,6 +79,16 @@ TENANTS_SPEC = TableSpec(
         "stripe_subscription_item_id",
         "status",
         "plan",
+        "attribution_source",
+        "attribution_medium",
+        "attribution_campaign",
+        "attribution_platform",
+        "attribution_use_case",
+        "attribution_workflow",
+        "attribution_intent",
+        "attribution_landing_path",
+        "attribution_referrer_host",
+        "attribution_first_seen_at",
         "updated_at_ms",
     ),
     summary_fields=(
@@ -238,8 +258,15 @@ def csv_for_table(path: str, spec: TableSpec) -> tuple[str, int]:
     try:
         if not table_exists(conn, spec.name):
             return "", 0
-        columns = ", ".join(spec.columns)
-        for row in conn.execute(f"SELECT {columns} FROM {spec.name} ORDER BY rowid"):
+        existing_columns = {
+            row["name"]
+            for row in conn.execute(f"PRAGMA table_info({spec.name})").fetchall()
+        }
+        select_columns = ", ".join(
+            col if col in existing_columns else f"NULL AS {col}"
+            for col in spec.columns
+        )
+        for row in conn.execute(f"SELECT {select_columns} FROM {spec.name} ORDER BY rowid"):
             writer.writerow([row[col] for col in spec.columns])
             count += 1
     finally:

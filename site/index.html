@@ -24,6 +24,8 @@
 <link rel="canonical" href="https://tinyzkp.com">
 <link rel="manifest" href="/site.webmanifest">
 <link rel="alternate" type="application/json" href="https://tinyzkp.com/discovery.json">
+<link rel="alternate" type="application/json" href="https://tinyzkp.com/.well-known/tinyzkp-offers.json">
+<link rel="alternate" type="application/json" href="https://tinyzkp.com/.well-known/tinyzkp-receipt-share.json">
 <link rel="alternate" type="text/plain" href="https://tinyzkp.com/llms.txt">
 <script type="application/ld+json">
 {
@@ -653,10 +655,10 @@ footer .right a:hover{color:var(--muted)}
         &mdash; a 100M-step receipt fits on commodity hardware instead of a high-RAM prover fleet.
       </p>
       <div class="hero-ctas">
-        <a class="cta" href="/mcp" data-track="hero_mcp_click" data-source="homepage_hero">Install MCP Server</a>
-        <a class="cta cta-secondary" href="/signup" data-track="signup_plan_selected" data-plan="free" data-source="homepage_hero">Get Free API Key</a>
-        <a class="cta cta-secondary" href="/try" data-track="hero_try_click" data-source="homepage_hero">Generate a Live Receipt</a>
-        <a class="cta cta-secondary" href="/fit" data-track="fit_finder_home_click" data-source="homepage_hero">Find Your Route</a>
+        <a class="cta" href="/mcp?source=homepage_hero&medium=site&intent=mcp_install" data-track="hero_mcp_click" data-source="homepage_hero">Install MCP Server</a>
+        <a class="cta cta-secondary" href="/signup?source=homepage_hero&medium=site&intent=free_signup" data-track="signup_plan_selected" data-plan="free" data-source="homepage_hero">Get Free API Key</a>
+        <a class="cta cta-secondary" href="/try?source=homepage_hero&medium=site&intent=try_receipt" data-track="hero_try_click" data-source="homepage_hero">Generate a Live Receipt</a>
+        <a class="cta cta-secondary" href="/fit?source=homepage_hero&medium=site&intent=find_route" data-track="fit_finder_home_click" data-source="homepage_hero">Find Your Route</a>
       </div>
       <span class="free">Free tier &middot; 100 proofs/month &middot; no credit card &middot; first proof in 60 seconds</span>
       <div class="trust-strip" aria-label="TinyZKP proof signals">
@@ -993,28 +995,28 @@ console.log(result.ok); <span class="comment">// true when the local verifier su
         <div class="amount" style="color:var(--green)">$0</div>
         <div class="unit">100 proofs/mo</div>
         <div class="desc">No credit card &middot; 10 RPM &middot; 1 inflight job &middot; community support</div>
-        <a class="cta cta-secondary" href="/signup" data-track="signup_plan_selected" data-plan="free" data-source="homepage_pricing" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Start free</a>
+        <a class="cta cta-secondary" href="/signup?source=homepage_pricing&medium=site&intent=free_signup" data-track="signup_plan_selected" data-plan="free" data-source="homepage_pricing" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Start free</a>
       </div>
       <div class="price-card fade-in">
         <div class="tier">Developer</div>
         <div class="amount">$19</div>
         <div class="unit">per month</div>
         <div class="desc">Usage-metered per proof &middot; $500/mo cap &middot; 100 RPM &middot; 4 inflight &middot; email 48h</div>
-        <a class="cta" href="/signup?plan=developer" data-track="signup_plan_selected" data-plan="developer" data-source="homepage_pricing" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Developer</a>
+        <a class="cta" href="/signup?plan=developer&source=homepage_pricing&medium=site&intent=paid_checkout" data-track="signup_plan_selected" data-plan="developer" data-source="homepage_pricing" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Developer</a>
       </div>
       <div class="price-card featured fade-in">
         <div class="tier">Pro</div>
         <div class="amount">$79</div>
         <div class="unit">per month</div>
         <div class="desc" style="color:var(--accent)">25% off per-proof rates &middot; 300 RPM &middot; 8 inflight &middot; $2.5K/mo cap &middot; 30 min jobs</div>
-        <a class="cta" href="/signup?plan=pro" data-track="signup_plan_selected" data-plan="pro" data-source="homepage_pricing" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Pro</a>
+        <a class="cta" href="/signup?plan=pro&source=homepage_pricing&medium=site&intent=paid_checkout" data-track="signup_plan_selected" data-plan="pro" data-source="homepage_pricing" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Pro</a>
       </div>
       <div class="price-card fade-in">
         <div class="tier">Scale</div>
         <div class="amount">$199</div>
         <div class="unit">per month</div>
         <div class="desc" style="color:var(--accent)">40% off per-proof rates &middot; 500 RPM &middot; 16 inflight &middot; $10K/mo cap &middot; email 24h</div>
-        <a class="cta" href="/signup?plan=scale" data-track="signup_plan_selected" data-plan="scale" data-source="homepage_pricing" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Scale</a>
+        <a class="cta" href="/signup?plan=scale&source=homepage_pricing&medium=site&intent=paid_checkout" data-track="signup_plan_selected" data-plan="scale" data-source="homepage_pricing" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Get Scale</a>
       </div>
     </div>
 
@@ -1031,14 +1033,14 @@ console.log(result.ok); <span class="comment">// true when the local verifier su
         <div class="amount">$0.50</div>
         <div class="unit">per million trace steps</div>
         <div class="desc" style="color:var(--accent)">No monthly base fee &middot; $0.05 minimum &middot; long accumulator/state-transition traces &middot; 100 RPM &middot; 8 inflight</div>
-        <a class="cta" href="/signup?plan=compute" data-track="compute_signup_click" data-plan="compute" data-source="homepage_compute" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Start usage-based</a>
+        <a class="cta" href="/signup?plan=compute&source=homepage_compute&medium=site&intent=compute_signup" data-track="compute_signup_click" data-plan="compute" data-source="homepage_compute" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Start usage-based</a>
       </div>
       <div class="price-card fade-in">
         <div class="tier">Enterprise</div>
         <div class="amount">Custom</div>
         <div class="unit">reserved capacity</div>
         <div class="desc">Reserved workers &middot; higher caps &middot; dedicated support &middot; design review &middot; contractual terms</div>
-        <a class="cta cta-secondary" href="/pilot" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Plan a pilot</a>
+        <a class="cta cta-secondary" href="/pilot?source=homepage_compute&medium=site&intent=paid_pilot" data-track="pilot_cta_click" data-source="homepage_compute" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Plan a pilot</a>
       </div>
     </div>
 
@@ -1067,7 +1069,7 @@ console.log(result.ok); <span class="comment">// true when the local verifier su
   <p class="verify-free" style="margin-top:36px">Verification is always free across every tier &middot; the <a href="/verify" style="color:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px">public verifier</a> tries first-party WASM before hosted fallback</p>
 
   <div style="text-align:center;margin-top:32px">
-    <a class="cta" href="/signup" data-track="signup_plan_selected" data-plan="free" data-source="homepage_final_cta" style="font-size:13px;padding:12px 28px">Get Free API Key</a>
+    <a class="cta" href="/signup?source=homepage_final_cta&medium=site&intent=free_signup" data-track="signup_plan_selected" data-plan="free" data-source="homepage_final_cta" style="font-size:13px;padding:12px 28px">Get Free API Key</a>
     <a class="cta cta-secondary" href="/compute" style="font-size:13px;padding:12px 28px;margin-left:12px">Compute Brief</a>
   </div>
 </div>
@@ -1141,8 +1143,8 @@ function showAudience(name) {
     <h2>Generate a receipt now, or size a serious workload.</h2>
     <p>The self-serve path is built for transparent state-transition receipts. Custom state machines, very large traces, zkVM, zkML, and rollup work should start as design-partner conversations.</p>
     <div class="hero-ctas" style="justify-content:center">
-      <a class="cta" href="/try" data-track="final_try_click" data-source="homepage_final_cta">Generate a Live Proof</a>
-      <a class="cta cta-secondary" href="/pilot" data-track="pilot_cta_click" data-source="homepage_final_cta">Plan a Pilot</a>
+      <a class="cta" href="/try?source=homepage_final_cta&medium=site&intent=try_receipt" data-track="final_try_click" data-source="homepage_final_cta">Generate a Live Proof</a>
+      <a class="cta cta-secondary" href="/pilot?source=homepage_final_cta&medium=site&intent=paid_pilot" data-track="pilot_cta_click" data-source="homepage_final_cta">Plan a Pilot</a>
     </div>
   </div>
 </div>

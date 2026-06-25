@@ -1,7 +1,7 @@
 {
   "name": "tinyzkp",
   "version": "0.1.1",
-  "description": "TypeScript client for the TinyZKP proving API — generate and verify ZK-STARK proofs",
+  "description": "TypeScript client for TinyZKP proof receipts — generate, poll, and verify STARK state transitions",
   "type": "module",
   "main": "./dist/cjs/client.js",
   "module": "./dist/esm/client.js",
@@ -31,11 +31,15 @@
     "zero-knowledge",
     "proof",
     "cryptography",
-    "tinyzkp"
+    "tinyzkp",
+    "receipt",
+    "verification",
+    "ai-agent",
+    "audit-log"
   ],
   "author": "TinyZKP <support@tinyzkp.com>",
   "license": "MIT",
-  "homepage": "https://tinyzkp.com",
+  "homepage": "https://tinyzkp.com?source=npm_tinyzkp&medium=package_registry&platform=npm&intent=learn",
   "bugs": {
     "url": "https://github.com/logannye/hc-stark/issues"
   },

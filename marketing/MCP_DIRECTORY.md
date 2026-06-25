@@ -61,11 +61,11 @@ TinyZKP is a hosted ZK-STARK service that exposes transparent state-transition a
 | Field | Value |
 |---|---|
 | **Transport protocol** | Streamable HTTP (`POST /mcp`) — the modern MCP transport. Stdio also available via `hc-mcp-stdio` binary for desktop clients, but the directory listing should point at the remote URL. |
-| **Authentication type** | None today. The endpoint is public and rate-limited via a server-side concurrency cap (`HC_MCP_MAX_INFLIGHT=2`). API-key Bearer enforcement and per-tenant quota are tracked as a follow-up — see §3. |
+| **Authentication type** | Optional Bearer token. Public discovery and verification work without auth; authenticated proving uses `Authorization: Bearer tzk_...` for account-scoped limits. |
 | **Read/write capabilities** | Reads: list/describe templates and workloads, poll job, get proof, verify proof. Writes (in the sense of consuming quota and creating server-side jobs): `prove_template`, `prove_workload`. No external mutation outside the user's own tenant. |
 | **Connection requirements** | Internet access to `mcp.tinyzkp.com` (port 443). API key in `TINYZKP_API_KEY` env var or `Authorization: Bearer tzk_…` header. |
 | **Origin validation** | The HTTP transport validates the `Origin` header against an allowlist that includes `https://claude.ai`, the Anthropic API, and TinyZKP's own domains. Configurable via `HC_MCP_ALLOWED_ORIGINS`. |
-| **Rate limiting** | Per-tenant quota enforced server-side. Free tier: 100 proofs/month. Higher tiers: see https://tinyzkp.com/#pricing. |
+| **Rate limiting** | Public lane is bounded by a server-side concurrency cap. Authenticated requests get per-plan rate limits and quotas. Free tier: 100 proofs/month. Higher tiers: see https://tinyzkp.com/pricing. |
 
 ### One-line install
 
@@ -77,13 +77,20 @@ claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 
 ## 3. Note on authentication (read this before reviewing)
 
-The Anthropic submission requirements list "OAuth 2.0 for authenticated services." The current TinyZKP MCP endpoint is **unauthenticated** — anyone with the URL can call any of the 10 tools, capped only by a server-side concurrency limit (`HC_MCP_MAX_INFLIGHT=2`).
+The endpoint supports an anonymous public lane for discovery, verification, and
+reviewer smoke tests. It also supports optional `Authorization: Bearer tzk_...`
+for account-scoped proving limits. This keeps first-run MCP evaluation
+frictionless while giving paid or production users quota, spend, and account
+controls.
 
-This is intentional for the launch:
+Signup CTA for listings:
 
-1. **No protected user resource exists yet on the MCP path.** The MCP server runs the prover in-process and does not touch the per-tenant quota database; every MCP call is treated as anonymous. There is nothing for an attacker to steal — only proving CPU, which is rate-limited at the server.
-2. **Free tier means there is no paywall to authenticate.** The 100-proofs/month quota lives on the JSON-HTTP API at `api.tinyzkp.com` (which *does* require Bearer keys). The reviewer can exercise every MCP tool without any credential.
-3. **Roadmap.** Per-tenant Bearer enforcement (forwarding the `Authorization` header and metering against the same store as the JSON API) is on the roadmap. We will ship it before any paid plan gates MCP access. If Anthropic considers unauthenticated access disqualifying, we will accelerate this work — please flag it in the first round of review and we'll turn it around in 1–2 weeks.
+```text
+https://tinyzkp.com/signup?source=anthropic_connector&medium=mcp_directory&platform=anthropic&intent=mcp_install
+```
+
+The bearer-key auth model is deliberate for a developer-tool service that does
+not delegate access to third-party user resources. Verification remains free.
 
 ---
 
@@ -129,7 +136,9 @@ No tool is marked `destructive` because none mutates anything outside the callin
 
 ## 6. Test account for the reviewer
 
-The MCP endpoint is currently public and unauthenticated, so **no test credential is required**. The reviewer can install in one line and exercise every tool with no key:
+The MCP endpoint has a public lane, so **no test credential is required** for
+directory review. The reviewer can install in one line and exercise discovery
+and verification with no key:
 
 ```
 claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com

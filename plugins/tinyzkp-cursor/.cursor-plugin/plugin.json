@@ -1,0 +1,25 @@
+{
+  "name": "tinyzkp",
+  "version": "0.1.0",
+  "description": "TinyZKP proof receipt tools and agent policy for Cursor.",
+  "author": {
+    "name": "TinyZKP",
+    "email": "support@tinyzkp.com",
+    "url": "https://tinyzkp.com"
+  },
+  "homepage": "https://tinyzkp.com/mcp?source=cursor_directory&medium=mcp_directory&platform=cursor&intent=mcp_install",
+  "repository": "https://github.com/logannye/hc-stark",
+  "license": "MIT",
+  "keywords": [
+    "tinyzkp",
+    "mcp",
+    "cursor",
+    "proof-receipts",
+    "stark",
+    "verification",
+    "ai-agent",
+    "audit"
+  ],
+  "rules": "./rules/",
+  "mcpServers": "./.mcp.json"
+}

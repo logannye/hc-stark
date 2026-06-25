@@ -14,6 +14,7 @@
 import * as contact            from "./functions/api/contact.js";
 import * as createCheckout     from "./functions/api/create-checkout.js";
 import * as createFreeAccount  from "./functions/api/create-free-account.js";
+import * as createPilotCheckout from "./functions/api/create-pilot-checkout.js";
 import * as createPortal       from "./functions/api/create-portal-session.js";
 import * as demoPoll           from "./functions/api/demo-poll.js";
 import * as demoProve          from "./functions/api/demo-prove.js";
@@ -33,6 +34,7 @@ const ROUTES = {
   "/api/contact":              contact,
   "/api/create-checkout":      createCheckout,
   "/api/create-free-account":  createFreeAccount,
+  "/api/create-pilot-checkout": createPilotCheckout,
   "/api/create-portal-session": createPortal,
   "/api/demo-poll":            demoPoll,
   "/api/demo-prove":           demoProve,

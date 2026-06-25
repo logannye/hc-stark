@@ -11,7 +11,12 @@ API Endpoint:   https://api.tinyzkp.com
 Documentation:  https://tinyzkp.com/docs
 API Reference:  https://api.tinyzkp.com/docs
 
-Quick start — prove a state transition:
+Activation path:
+  1. Create one proof receipt.
+  2. Verify it for free.
+  3. Share a verifier link with the person, service, or agent that should rely on it.
+
+Quick start - prove a state transition:
 
   curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
     -H "Authorization: Bearer {api_key}" \
@@ -24,12 +29,22 @@ Verify the proof (always free):
     -H "Authorization: Bearer {api_key}" \
     -d '{{"proof": YOUR_PROOF_OBJECT}}'
 
+Browser verifier:
+  https://tinyzkp.com/verify?source=welcome_email&medium=email&intent=verify_receipt
+
+MCP for agent workflows:
+  claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
+
+Agent policy:
+  https://tinyzkp.com/agent-policy?source=welcome_email&medium=email
+
 What you can do:
   - Prove accumulator_step receipts: starting at X, applying declared deltas reaches Y
   - Estimate state-transition proof cost: POST /estimate (no auth required)
   - Batch proving: POST /prove/batch (up to 100 jobs at once)
   - Shareable browser verification: https://tinyzkp.com/verify
   - Client-side verification: npm install @tinyzkp/verify (WASM, no server needed)
+  - Use the dashboard: https://tinyzkp.com/account
 
 Key rotation:
   If your key is compromised, rotate it immediately:
@@ -37,5 +52,6 @@ Key rotation:
     -H "Authorization: Bearer {api_key}"
 
 Keep your API key secret. Do not expose it in client-side code.
+Do not put secrets, private customer data, API keys, or raw credentials into transparent receipt parameters.
 
 — The TinyZKP Team

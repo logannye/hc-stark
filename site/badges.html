@@ -19,6 +19,7 @@
 <meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <link rel="canonical" href="https://tinyzkp.com/badges">
+<link rel="alternate" type="application/json" href="https://tinyzkp.com/.well-known/tinyzkp-badge.json" title="TinyZKP badge contract">
 <link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/shared.css?v=header-lock-ef7507b">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -99,7 +100,7 @@ main{padding:118px 0 76px}.eyebrow{font-family:var(--mono);font-size:12px;font-w
     <div class="box">
       <h2>Embed</h2>
       <p>Replace the link target with your receipt verification URL.</p>
-      <div class="code"><pre>&lt;a href="https://tinyzkp.com/verify#proof=..."&gt;
+      <div class="code"><pre>&lt;a href="https://tinyzkp.com/verify?source=verified_badge&amp;medium=embed&amp;intent=verify_receipt#proof=..." rel="noopener"&gt;
   &lt;img
     src="https://tinyzkp.com/badges/verified-by-tinyzkp.svg"
     width="202"

@@ -193,6 +193,25 @@ td strong{color:var(--text)}
 
   <section class="section">
     <div class="container">
+      <h2>What is live now, and what remains roadmap work</h2>
+      <p>The hosted TinyZKP product is the <strong>hc-stark</strong> service: transparent STARK state-transition receipts, API and MCP proving, browser verification, SDKs, pricing, billing, and operational runbooks. The older research repository remains public lineage for the memory-efficiency thesis, but it is not the hosted production engine.</p>
+      <div class="grid">
+        <article class="card">
+          <span class="tag live">Live</span>
+          <h3>Production receipt path</h3>
+          <p>Self-serve users can generate and verify supported <code>accumulator_step</code> receipts through the website, API, SDKs, CLI, MCP, and browser verifier.</p>
+        </article>
+        <article class="card">
+          <span class="tag preview">Roadmap</span>
+          <h3>Expanded proof statements</h3>
+          <p>Private-input, custom, on-chain, zkVM, and zkML claims require separately documented templates, explicit lifecycle status, and review before public production positioning.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
       <h2>Why the product moved to STARKs</h2>
       <p>The hosted business needs a simple security and procurement story. A KZG system can be technically useful, but it introduces a trusted setup, pairing-curve assumptions, and SRS custody questions. STARK receipts give TinyZKP a cleaner self-serve product story: transparent setup, portable verification, and proof objects that customers can check without trusting the hosted API.</p>
       <div class="comparison">

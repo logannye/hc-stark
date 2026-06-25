@@ -1,0 +1,2311 @@
+{
+  "generated_at": "2026-06-25T17:53:19+00:00",
+  "campaign": "yc_agent_outbound",
+  "source_urls": [
+    "https://www.ycombinator.com/companies/industry/ai",
+    "https://www.ycombinator.com/companies/industry/developer-tools",
+    "https://www.ycombinator.com/companies/industry/workflow-automation",
+    "https://www.ycombinator.com/companies/industry/ai-assistant"
+  ],
+  "source_counts": {
+    "https://www.ycombinator.com/companies/industry/ai": 50,
+    "https://www.ycombinator.com/companies/industry/developer-tools": 50,
+    "https://www.ycombinator.com/companies/industry/workflow-automation": 49,
+    "https://www.ycombinator.com/companies/industry/ai-assistant": 50
+  },
+  "criteria": {
+    "min_score": 8,
+    "limit": 50,
+    "signals": {
+      "agent": 5,
+      "agents": 5,
+      "autonomous": 4,
+      "workflow": 4,
+      "workflows": 4,
+      "automation": 4,
+      "automate": 4,
+      "tool": 2,
+      "tools": 2,
+      "api": 3,
+      "apis": 3,
+      "developer-tools": 3,
+      "devtools": 3,
+      "browser": 2,
+      "desktop": 2,
+      "erp": 4,
+      "manufacturing": 3,
+      "fintech": 3,
+      "finance": 3,
+      "payments": 3,
+      "compliance": 4,
+      "audit": 5,
+      "auditor": 5,
+      "reconciliation": 5,
+      "operations": 2,
+      "support": 2,
+      "security": 3,
+      "observability": 2,
+      "state": 3,
+      "critical": 3
+    },
+    "negative_keywords": [
+      "avatar",
+      "consumer social",
+      "dating",
+      "game",
+      "gaming",
+      "music",
+      "photo",
+      "video"
+    ]
+  },
+  "targets": [
+    {
+      "id": "yc_alter",
+      "company": "Alter",
+      "website": "https://alterauth.com",
+      "yc_url": "https://www.ycombinator.com/companies/alter",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "s2025",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "New York, NY, USA",
+      "tags": [
+        "security",
+        "aiops",
+        "ai",
+        "devsecops",
+        "developer-tools"
+      ],
+      "one_liner": "Secure access control and authorization platform for agent workflows",
+      "score": 45,
+      "signals": [
+        "agent",
+        "agents",
+        "audit",
+        "b2b_or_devtools",
+        "compliance",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "security",
+        "small_team",
+        "tool",
+        "tools",
+        "workflow",
+        "workflows"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Attach verifier-friendly receipts to compliance or audit checkpoints where signed logs alone do not prove the transition rule.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=alter",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=alter",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=alter",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=alter",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=alter"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Alter?",
+        "first_line": "I looked at Alter. Secure access control and authorization platform for agent workflows",
+        "hook": "Attach verifier-friendly receipts to compliance or audit checkpoints where signed logs alone do not prove the transition rule."
+      }
+    },
+    {
+      "id": "yc_korso",
+      "company": "Korso",
+      "website": "https://korsoai.com/",
+      "yc_url": "https://www.ycombinator.com/companies/korso",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai",
+      "batch": "p2026",
+      "team_size": 3,
+      "year_founded": 2026,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "manufacturing",
+        "saas",
+        "artificial-intelligence"
+      ],
+      "one_liner": "The Intelligence Layer for Manufacturing.",
+      "score": 43,
+      "signals": [
+        "agent",
+        "agents",
+        "audit",
+        "automation",
+        "critical",
+        "erp",
+        "manufacturing",
+        "operations",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools",
+        "workflows"
+      ],
+      "recommended_route": "paid_pilot",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt ERP and supplier workflow state changes so customers can verify what the agent did without replaying the producer system.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=korso",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=korso",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=korso",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=korso",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=korso"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Korso?",
+        "first_line": "I looked at Korso. The Intelligence Layer for Manufacturing.",
+        "hook": "Receipt ERP and supplier workflow state changes so customers can verify what the agent did without replaying the producer system."
+      }
+    },
+    {
+      "id": "yc_redouble-ai",
+      "company": "Redouble AI",
+      "website": "https://redouble.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/redouble-ai",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "s2024",
+      "team_size": 3,
+      "year_founded": 2024,
+      "location": "New York, NY, USA",
+      "tags": [
+        "generative-ai",
+        "b2b",
+        "enterprise",
+        "workflow-automation",
+        "artificial-intelligence"
+      ],
+      "one_liner": "Java-native multi-agentic AI operating system for enterprise",
+      "score": 42,
+      "signals": [
+        "agent",
+        "agents",
+        "automate",
+        "automation",
+        "autonomous",
+        "b2b_or_devtools",
+        "critical",
+        "recent_company",
+        "security",
+        "small_team",
+        "workflow",
+        "workflows"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=redouble-ai",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=redouble-ai",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=redouble-ai",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=redouble-ai",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=redouble-ai"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Redouble AI?",
+        "first_line": "I looked at Redouble AI. Java-native multi-agentic AI operating system for enterprise",
+        "hook": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript."
+      }
+    },
+    {
+      "id": "yc_cyberdesk",
+      "company": "Cyberdesk",
+      "website": "https://www.cyberdesk.io",
+      "yc_url": "https://www.ycombinator.com/companies/cyberdesk",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "s2025",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "workflow-automation",
+        "developer-tools",
+        "artificial-intelligence",
+        "enterprise-software",
+        "robotic-process-automation"
+      ],
+      "one_liner": "Self learning computer use agent for developers",
+      "score": 41,
+      "signals": [
+        "agent",
+        "agents",
+        "automate",
+        "automation",
+        "b2b_or_devtools",
+        "desktop",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools",
+        "workflow",
+        "workflows"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=cyberdesk",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=cyberdesk",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=cyberdesk",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=cyberdesk",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=cyberdesk"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Cyberdesk?",
+        "first_line": "I looked at Cyberdesk. Self learning computer use agent for developers",
+        "hook": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution."
+      }
+    },
+    {
+      "id": "yc_inkeep",
+      "company": "Inkeep",
+      "website": "https://inkeep.com",
+      "yc_url": "https://www.ycombinator.com/companies/inkeep",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "w2023",
+      "team_size": 18,
+      "year_founded": 2023,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "workflow-automation",
+        "no-code",
+        "developer-tools",
+        "customer-support",
+        "ai-assistant"
+      ],
+      "one_liner": "Build AI Agent teammates and automations in code or no-code",
+      "score": 38,
+      "signals": [
+        "agent",
+        "agents",
+        "apis",
+        "automate",
+        "automation",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "small_team",
+        "support",
+        "tools",
+        "workflow"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=inkeep",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=inkeep",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=inkeep",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=inkeep",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=inkeep"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Inkeep?",
+        "first_line": "I looked at Inkeep. Build AI Agent teammates and automations in code or no-code",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_archal",
+      "company": "Archal",
+      "website": "https://www.archal.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/archal",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai",
+      "batch": "s2026",
+      "team_size": 2,
+      "year_founded": 2026,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "ai",
+        "developer-tools",
+        "infrastructure",
+        "api"
+      ],
+      "one_liner": "The eval platform for autonomous software",
+      "score": 36,
+      "signals": [
+        "agent",
+        "agents",
+        "api",
+        "apis",
+        "autonomous",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "state",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=archal",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=archal",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=archal",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=archal",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=archal"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Archal?",
+        "first_line": "I looked at Archal. The eval platform for autonomous software",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_godhands",
+      "company": "GodHands",
+      "website": "https://godhands.dev",
+      "yc_url": "https://www.ycombinator.com/companies/godhands",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai",
+      "batch": "f2026",
+      "team_size": 2,
+      "year_founded": 2026,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "workflow-automation",
+        "robotic-process-automation",
+        "ai"
+      ],
+      "one_liner": "Deterministic Computer Use Infra for AI Agents",
+      "score": 35,
+      "signals": [
+        "agent",
+        "agents",
+        "api",
+        "automation",
+        "browser",
+        "desktop",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "workflow",
+        "workflows"
+      ],
+      "recommended_route": "self_serve_developer",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=godhands",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=godhands",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=godhands",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=godhands",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=godhands"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for GodHands?",
+        "first_line": "I looked at GodHands. Deterministic Computer Use Infra for AI Agents",
+        "hook": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution."
+      }
+    },
+    {
+      "id": "yc_tiny",
+      "company": "Tiny",
+      "website": "https://andtiny.com",
+      "yc_url": "https://www.ycombinator.com/companies/tiny",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "f2024",
+      "team_size": 3,
+      "year_founded": 2024,
+      "location": "Singapore",
+      "tags": [
+        "enterprise-software",
+        "manufacturing",
+        "saas",
+        "b2b",
+        "workflow-automation"
+      ],
+      "one_liner": "A new kind of ERP system for factories",
+      "score": 34,
+      "signals": [
+        "agents",
+        "automate",
+        "automation",
+        "b2b_or_devtools",
+        "erp",
+        "manufacturing",
+        "recent_company",
+        "small_team",
+        "workflow",
+        "workflows"
+      ],
+      "recommended_route": "paid_pilot",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt ERP and supplier workflow state changes so customers can verify what the agent did without replaying the producer system.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=tiny",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=tiny",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=tiny",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=tiny",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=tiny"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Tiny?",
+        "first_line": "I looked at Tiny. A new kind of ERP system for factories",
+        "hook": "Receipt ERP and supplier workflow state changes so customers can verify what the agent did without replaying the producer system."
+      }
+    },
+    {
+      "id": "yc_coasty",
+      "company": "Coasty",
+      "website": "http://coasty.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/coasty",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "s2026",
+      "team_size": 2,
+      "year_founded": 2026,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "aiops",
+        "workflow-automation",
+        "developer-tools"
+      ],
+      "one_liner": "Building the future of knowledge work, RPA and SOPs using computer use",
+      "score": 33,
+      "signals": [
+        "agent",
+        "agents",
+        "automation",
+        "b2b_or_devtools",
+        "desktop",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools",
+        "workflow"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=coasty",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=coasty",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=coasty",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=coasty",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=coasty"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Coasty?",
+        "first_line": "I looked at Coasty. Building the future of knowledge work, RPA and SOPs using computer use",
+        "hook": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution."
+      }
+    },
+    {
+      "id": "yc_corsair",
+      "company": "Corsair",
+      "website": "https://www.corsair.dev",
+      "yc_url": "https://www.ycombinator.com/companies/corsair",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "w2025",
+      "team_size": 2,
+      "year_founded": 2024,
+      "location": "New York, NY, USA",
+      "tags": [
+        "workflow-automation",
+        "open-source",
+        "developer-tools",
+        "b2b",
+        "personalization"
+      ],
+      "one_liner": "Integration Layer for AI Agents",
+      "score": 31,
+      "signals": [
+        "agent",
+        "agents",
+        "automation",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools",
+        "workflow"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=corsair",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=corsair",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=corsair",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=corsair",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=corsair"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Corsair?",
+        "first_line": "I looked at Corsair. Integration Layer for AI Agents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_skyvern",
+      "company": "Skyvern",
+      "website": "https://www.skyvern.com/",
+      "yc_url": "https://www.ycombinator.com/companies/skyvern",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "s2023",
+      "team_size": 10,
+      "year_founded": 2023,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "robotic-process-automation",
+        "workflow-automation",
+        "open-source",
+        "api",
+        "artificial-intelligence"
+      ],
+      "one_liner": "Open Source AI Agent to automate browser workflows via an API",
+      "score": 30,
+      "signals": [
+        "agent",
+        "api",
+        "automate",
+        "automation",
+        "browser",
+        "recent_company",
+        "small_team",
+        "workflow",
+        "workflows"
+      ],
+      "recommended_route": "self_serve_developer",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=skyvern",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=skyvern",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=skyvern",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=skyvern",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=skyvern"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Skyvern?",
+        "first_line": "I looked at Skyvern. Open Source AI Agent to automate browser workflows via an API",
+        "hook": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution."
+      }
+    },
+    {
+      "id": "yc_daridev",
+      "company": "dari.dev",
+      "website": "https://dari.dev",
+      "yc_url": "https://www.ycombinator.com/companies/daridev",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "f2025",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "b2b",
+        "developer-tools"
+      ],
+      "one_liner": "The Production Layer for AI Agents",
+      "score": 28,
+      "signals": [
+        "agents",
+        "api",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "state",
+        "tools",
+        "workflows"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=daridev",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=daridev",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=daridev",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=daridev",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=daridev"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for dari.dev?",
+        "first_line": "I looked at dari.dev. The Production Layer for AI Agents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_glue",
+      "company": "Glue",
+      "website": "https://buildwithglue.com",
+      "yc_url": "https://www.ycombinator.com/companies/glue",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "w2026",
+      "team_size": 2,
+      "year_founded": 2026,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "design-tools",
+        "developer-tools"
+      ],
+      "one_liner": "The Interface Design Canvas for AI agents",
+      "score": 28,
+      "signals": [
+        "agents",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tool",
+        "tools",
+        "workflow",
+        "workflows"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=glue",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=glue",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=glue",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=glue",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=glue"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Glue?",
+        "first_line": "I looked at Glue. The Interface Design Canvas for AI agents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_compyle",
+      "company": "Compyle",
+      "website": "https://compyle.ai",
+      "yc_url": "https://www.ycombinator.com/companies/compyle",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "f2025",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "ai",
+        "developer-tools",
+        "artificial-intelligence"
+      ],
+      "one_liner": "The coding agent that actually collaborates with you",
+      "score": 27,
+      "signals": [
+        "agent",
+        "agents",
+        "autonomous",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=compyle",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=compyle",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=compyle",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=compyle",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=compyle"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Compyle?",
+        "first_line": "I looked at Compyle. The coding agent that actually collaborates with you",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_the-context-company",
+      "company": "The Context Company",
+      "website": "https://thecontext.company",
+      "yc_url": "https://www.ycombinator.com/companies/the-context-company",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "f2025",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "monitoring",
+        "analytics",
+        "b2b",
+        "developer-tools",
+        "artificial-intelligence"
+      ],
+      "one_liner": "Monitor AI agents and understand user behavior",
+      "score": 27,
+      "signals": [
+        "agent",
+        "agents",
+        "b2b_or_devtools",
+        "developer-tools",
+        "observability",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tool",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=the-context-company",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=the-context-company",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=the-context-company",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=the-context-company",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=the-context-company"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for The Context Company?",
+        "first_line": "I looked at The Context Company. Monitor AI agents and understand user behavior",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_notte",
+      "company": "Notte",
+      "website": "https://www.notte.cc/",
+      "yc_url": "https://www.ycombinator.com/companies/notte",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "s2025",
+      "team_size": 5,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "automation",
+        "developer-tools",
+        "ai"
+      ],
+      "one_liner": "Reliable Web Agents for Enterprise",
+      "score": 27,
+      "signals": [
+        "agents",
+        "api",
+        "automation",
+        "b2b_or_devtools",
+        "browser",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=notte",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=notte",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=notte",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=notte",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=notte"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Notte?",
+        "first_line": "I looked at Notte. Reliable Web Agents for Enterprise",
+        "hook": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution."
+      }
+    },
+    {
+      "id": "yc_perspectives-health",
+      "company": "Perspectives Health",
+      "website": "https://perspectiveshealth.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/perspectives-health",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "s2025",
+      "team_size": 5,
+      "year_founded": 2024,
+      "location": "Chicago, IL, USA",
+      "tags": [
+        "mental-health",
+        "healthcare",
+        "healthcare-it",
+        "workflow-automation"
+      ],
+      "one_liner": "Automating away admin for behavioral health clinics",
+      "score": 27,
+      "signals": [
+        "agents",
+        "automate",
+        "automation",
+        "compliance",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "workflow"
+      ],
+      "recommended_route": "paid_pilot",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Attach verifier-friendly receipts to compliance or audit checkpoints where signed logs alone do not prove the transition rule.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=perspectives-health",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=perspectives-health",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=perspectives-health",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=perspectives-health",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=perspectives-health"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Perspectives Health?",
+        "first_line": "I looked at Perspectives Health. Automating away admin for behavioral health clinics",
+        "hook": "Attach verifier-friendly receipts to compliance or audit checkpoints where signed logs alone do not prove the transition rule."
+      }
+    },
+    {
+      "id": "yc_s2-dev",
+      "company": "s2.dev",
+      "website": "https://s2.dev",
+      "yc_url": "https://www.ycombinator.com/companies/s2-dev",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "f2025",
+      "team_size": 5,
+      "year_founded": 2024,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "databases",
+        "developer-tools",
+        "api",
+        "infrastructure"
+      ],
+      "one_liner": "API for unlimited, durable, real-time streams",
+      "score": 27,
+      "signals": [
+        "agents",
+        "api",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "support",
+        "tools",
+        "workflows"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=s2-dev",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=s2-dev",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=s2-dev",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=s2-dev",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=s2-dev"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for s2.dev?",
+        "first_line": "I looked at s2.dev. API for unlimited, durable, real-time streams",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_bubble-lab",
+      "company": "Bubble Lab",
+      "website": "https://bubblelab.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/bubble-lab",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "w2026",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "San Francisco",
+      "tags": [
+        "ai",
+        "workflow-automation",
+        "operations",
+        "automation"
+      ],
+      "one_liner": "Prompt once, automate forever.",
+      "score": 26,
+      "signals": [
+        "automate",
+        "automation",
+        "observability",
+        "operations",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "workflow",
+        "workflows"
+      ],
+      "recommended_route": "fit_finder",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=bubble-lab",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=bubble-lab",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=bubble-lab",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=bubble-lab",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=bubble-lab"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Bubble Lab?",
+        "first_line": "I looked at Bubble Lab. Prompt once, automate forever.",
+        "hook": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript."
+      }
+    },
+    {
+      "id": "yc_cerenovus",
+      "company": "Cerenovus",
+      "website": "https://www.cerenovus.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/cerenovus",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai",
+      "batch": "s2026",
+      "team_size": 3,
+      "year_founded": 2026,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "ai"
+      ],
+      "one_liner": "Aggregate company knowledge and make inferences",
+      "score": 26,
+      "signals": [
+        "agent",
+        "agents",
+        "operations",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tool",
+        "tools",
+        "workflows"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=cerenovus",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=cerenovus",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=cerenovus",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=cerenovus",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=cerenovus"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Cerenovus?",
+        "first_line": "I looked at Cerenovus. Aggregate company knowledge and make inferences",
+        "hook": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript."
+      }
+    },
+    {
+      "id": "yc_decisional-ai",
+      "company": "Decisional AI",
+      "website": "https://www.decisional.com/",
+      "yc_url": "https://www.ycombinator.com/companies/decisional-ai",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "s2024",
+      "team_size": 3,
+      "year_founded": 2024,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "b2b",
+        "automation",
+        "workflow-automation",
+        "operations",
+        "artificial-intelligence"
+      ],
+      "one_liner": "AI Coworkers for Business Automation",
+      "score": 26,
+      "signals": [
+        "agent",
+        "agents",
+        "automation",
+        "b2b_or_devtools",
+        "operations",
+        "recent_company",
+        "small_team",
+        "workflow"
+      ],
+      "recommended_route": "fit_finder",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=decisional-ai",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=decisional-ai",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=decisional-ai",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=decisional-ai",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=decisional-ai"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Decisional AI?",
+        "first_line": "I looked at Decisional AI. AI Coworkers for Business Automation",
+        "hook": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript."
+      }
+    },
+    {
+      "id": "yc_trelium",
+      "company": "Trelium",
+      "website": "https://www.trelium.com",
+      "yc_url": "https://www.ycombinator.com/companies/trelium",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "f2025",
+      "team_size": 6,
+      "year_founded": 2025,
+      "location": "San Francisco",
+      "tags": [
+        "ai",
+        "workflow-automation",
+        "b2b"
+      ],
+      "one_liner": "The Agent to Build Your Agents",
+      "score": 26,
+      "signals": [
+        "agent",
+        "agents",
+        "automation",
+        "b2b_or_devtools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "workflow"
+      ],
+      "recommended_route": "fit_finder",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=trelium",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=trelium",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=trelium",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=trelium",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=trelium"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Trelium?",
+        "first_line": "I looked at Trelium. The Agent to Build Your Agents",
+        "hook": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript."
+      }
+    },
+    {
+      "id": "yc_scout-4",
+      "company": "Scout",
+      "website": "https://scoutforschools.com/",
+      "yc_url": "https://www.ycombinator.com/companies/scout-4",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "w2025",
+      "team_size": 8,
+      "year_founded": 2024,
+      "location": "New York, NY, USA",
+      "tags": [
+        "artificial-intelligence",
+        "education",
+        "workflow-automation"
+      ],
+      "one_liner": "AI-powered student information system for K-12 schools",
+      "score": 26,
+      "signals": [
+        "automation",
+        "compliance",
+        "erp",
+        "operations",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools",
+        "workflow"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt ERP and supplier workflow state changes so customers can verify what the agent did without replaying the producer system.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=scout-4",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=scout-4",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=scout-4",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=scout-4",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=scout-4"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Scout?",
+        "first_line": "I looked at Scout. AI-powered student information system for K-12 schools",
+        "hook": "Receipt ERP and supplier workflow state changes so customers can verify what the agent did without replaying the producer system."
+      }
+    },
+    {
+      "id": "yc_dedalus-labs",
+      "company": "Dedalus Labs",
+      "website": "https://www.dedaluslabs.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/dedalus-labs",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "s2025",
+      "team_size": 10,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "artificial-intelligence",
+        "developer-tools",
+        "devops",
+        "workflow-automation"
+      ],
+      "one_liner": "Compute substrate for AI agents",
+      "score": 26,
+      "signals": [
+        "agents",
+        "automation",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools",
+        "workflow"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=dedalus-labs",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=dedalus-labs",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=dedalus-labs",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=dedalus-labs",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=dedalus-labs"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Dedalus Labs?",
+        "first_line": "I looked at Dedalus Labs. Compute substrate for AI agents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_endstack",
+      "company": "Endstack",
+      "website": "https://www.endstack.com",
+      "yc_url": "https://www.ycombinator.com/companies/endstack",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai-assistant",
+      "batch": "f2024",
+      "team_size": 2,
+      "year_founded": 2024,
+      "location": "Los Angeles, CA, USA",
+      "tags": [
+        "generative-ai",
+        "developer-tools",
+        "artificial-intelligence",
+        "ai-assistant"
+      ],
+      "one_liner": "Cloud desktop OS for humans and agents",
+      "score": 25,
+      "signals": [
+        "agent",
+        "agents",
+        "b2b_or_devtools",
+        "browser",
+        "desktop",
+        "developer-tools",
+        "recent_company",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=endstack",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=endstack",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=endstack",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=endstack",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=endstack"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Endstack?",
+        "first_line": "I looked at Endstack. Cloud desktop OS for humans and agents",
+        "hook": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution."
+      }
+    },
+    {
+      "id": "yc_uselemma",
+      "company": "Lemma",
+      "website": "https://www.uselemma.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/uselemma",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "f2025",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "b2b",
+        "developer-tools",
+        "artificial-intelligence",
+        "ai",
+        "infrastructure"
+      ],
+      "one_liner": "Production Monitoring for AI agents",
+      "score": 25,
+      "signals": [
+        "agent",
+        "agents",
+        "b2b_or_devtools",
+        "developer-tools",
+        "observability",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=uselemma",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=uselemma",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=uselemma",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=uselemma",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=uselemma"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Lemma?",
+        "first_line": "I looked at Lemma. Production Monitoring for AI agents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_parse-bot",
+      "company": "Parse",
+      "website": "https://parse.bot",
+      "yc_url": "https://www.ycombinator.com/companies/parse-bot",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "f2025",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "San Francisco",
+      "tags": [
+        "developer-tools",
+        "api",
+        "big-data"
+      ],
+      "one_liner": "Build an API to interact with any website.",
+      "score": 25,
+      "signals": [
+        "api",
+        "apis",
+        "automation",
+        "b2b_or_devtools",
+        "browser",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=parse-bot",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=parse-bot",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=parse-bot",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=parse-bot",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=parse-bot"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Parse?",
+        "first_line": "I looked at Parse. Build an API to interact with any website.",
+        "hook": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution."
+      }
+    },
+    {
+      "id": "yc_salus",
+      "company": "Salus",
+      "website": "https://www.usesalus.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/salus",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "w2026",
+      "team_size": 2,
+      "year_founded": 2026,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "api",
+        "b2b",
+        "infrastructure",
+        "developer-tools",
+        "ai"
+      ],
+      "one_liner": "Guardrails to validate your agent's actions before they execute",
+      "score": 25,
+      "signals": [
+        "agent",
+        "api",
+        "b2b_or_devtools",
+        "developer-tools",
+        "observability",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "support",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=salus",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=salus",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=salus",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=salus",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=salus"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Salus?",
+        "first_line": "I looked at Salus. Guardrails to validate your agent's actions before they execute",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_vortexifyai",
+      "company": "VortexifyAI",
+      "website": "https://www.vortexify.ai",
+      "yc_url": "https://www.ycombinator.com/companies/vortexifyai",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai-assistant",
+      "batch": "f2024",
+      "team_size": 3,
+      "year_founded": 2024,
+      "location": "New York, NY, USA",
+      "tags": [
+        "iot",
+        "data-science",
+        "ai-assistant",
+        "supply-chain",
+        "ai"
+      ],
+      "one_liner": "Build AI applications and automations for supply chain operations",
+      "score": 25,
+      "signals": [
+        "agent",
+        "autonomous",
+        "compliance",
+        "operations",
+        "recent_company",
+        "small_team",
+        "tools",
+        "workflows"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Attach verifier-friendly receipts to compliance or audit checkpoints where signed logs alone do not prove the transition rule.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=vortexifyai",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=vortexifyai",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=vortexifyai",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=vortexifyai",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=vortexifyai"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for VortexifyAI?",
+        "first_line": "I looked at VortexifyAI. Build AI applications and automations for supply chain operations",
+        "hook": "Attach verifier-friendly receipts to compliance or audit checkpoints where signed logs alone do not prove the transition rule."
+      }
+    },
+    {
+      "id": "yc_sola",
+      "company": "Sola",
+      "website": "https://www.sola-solutions.com/",
+      "yc_url": "https://www.ycombinator.com/companies/sola",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "s2023",
+      "team_size": 5,
+      "year_founded": 2023,
+      "location": "New York City",
+      "tags": [
+        "robotic-process-automation",
+        "automation",
+        "workflow-automation",
+        "artificial-intelligence"
+      ],
+      "one_liner": "Copilot for Robotic Process Automation",
+      "score": 25,
+      "signals": [
+        "agents",
+        "automate",
+        "automation",
+        "browser",
+        "desktop",
+        "recent_company",
+        "small_team",
+        "workflow"
+      ],
+      "recommended_route": "fit_finder",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=sola",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=sola",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=sola",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=sola",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=sola"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Sola?",
+        "first_line": "I looked at Sola. Copilot for Robotic Process Automation",
+        "hook": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution."
+      }
+    },
+    {
+      "id": "yc_truffle",
+      "company": "Truffle",
+      "website": "https://usetruffle.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/truffle",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai",
+      "batch": "s2026",
+      "team_size": 2,
+      "year_founded": 2026,
+      "location": "New York City",
+      "tags": [
+        "saas",
+        "restaurant-tech",
+        "ai"
+      ],
+      "one_liner": "The autonomous back-of-house for restaurants.",
+      "score": 24,
+      "signals": [
+        "agents",
+        "autonomous",
+        "recent_company",
+        "recent_yc_batch",
+        "reconciliation",
+        "small_team",
+        "workflows"
+      ],
+      "recommended_route": "paid_pilot",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt balance, payment, or reconciliation transitions that need independent verification by customers, auditors, or downstream services.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=truffle",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=truffle",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=truffle",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=truffle",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=truffle"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Truffle?",
+        "first_line": "I looked at Truffle. The autonomous back-of-house for restaurants.",
+        "hook": "Receipt balance, payment, or reconciliation transitions that need independent verification by customers, auditors, or downstream services."
+      }
+    },
+    {
+      "id": "yc_keystroke",
+      "company": "Keystroke",
+      "website": "http://keystroke.ai",
+      "yc_url": "https://www.ycombinator.com/companies/keystroke",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "w2024",
+      "team_size": 4,
+      "year_founded": 2023,
+      "location": "Salt Lake City, UT, USA",
+      "tags": [
+        "generative-ai",
+        "artificial-intelligence",
+        "automation",
+        "workflow-automation",
+        "developer-tools"
+      ],
+      "one_liner": "n8n for coding agents",
+      "score": 24,
+      "signals": [
+        "agents",
+        "automation",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "small_team",
+        "tools",
+        "workflow"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=keystroke",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=keystroke",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=keystroke",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=keystroke",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=keystroke"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Keystroke?",
+        "first_line": "I looked at Keystroke. n8n for coding agents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_kernel",
+      "company": "KERNEL",
+      "website": "https://www.kernel.sh",
+      "yc_url": "https://www.ycombinator.com/companies/kernel",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "s2025",
+      "team_size": 6,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "developer-tools",
+        "cloud-computing",
+        "infrastructure",
+        "ai"
+      ],
+      "one_liner": "Crazy fast, open source infra for AI agents to use the Internet",
+      "score": 24,
+      "signals": [
+        "agents",
+        "b2b_or_devtools",
+        "browser",
+        "developer-tools",
+        "observability",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "support",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=kernel",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=kernel",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=kernel",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=kernel",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=kernel"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for KERNEL?",
+        "first_line": "I looked at KERNEL. Crazy fast, open source infra for AI agents to use the Internet",
+        "hook": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution."
+      }
+    },
+    {
+      "id": "yc_carma",
+      "company": "Carma",
+      "website": "https://www.joincarma.com/",
+      "yc_url": "https://www.ycombinator.com/companies/carma",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "w2024",
+      "team_size": 15,
+      "year_founded": 2024,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "b2b",
+        "automotive",
+        "compliance",
+        "workflow-automation",
+        "ai"
+      ],
+      "one_liner": "The AI Operating System For Modern Fleets.",
+      "score": 24,
+      "signals": [
+        "automation",
+        "b2b_or_devtools",
+        "compliance",
+        "operations",
+        "recent_company",
+        "small_team",
+        "workflow",
+        "workflows"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Attach verifier-friendly receipts to compliance or audit checkpoints where signed logs alone do not prove the transition rule.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=carma",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=carma",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=carma",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=carma",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=carma"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Carma?",
+        "first_line": "I looked at Carma. The AI Operating System For Modern Fleets.",
+        "hook": "Attach verifier-friendly receipts to compliance or audit checkpoints where signed logs alone do not prove the transition rule."
+      }
+    },
+    {
+      "id": "yc_machine0",
+      "company": "machine0",
+      "website": "https://machine0.io",
+      "yc_url": "https://www.ycombinator.com/companies/machine0",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "s2026",
+      "team_size": 1,
+      "year_founded": 2026,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "developer-tools",
+        "cloud-computing"
+      ],
+      "one_liner": "Persistent & powerful cloud VMs from your CLI",
+      "score": 23,
+      "signals": [
+        "agent",
+        "agents",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=machine0",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=machine0",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=machine0",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=machine0",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=machine0"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for machine0?",
+        "first_line": "I looked at machine0. Persistent & powerful cloud VMs from your CLI",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_brownie",
+      "company": "IncidentFox",
+      "website": "https://incidentfox.ai",
+      "yc_url": "https://www.ycombinator.com/companies/brownie",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "w2026",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "artificial-intelligence",
+        "developer-tools",
+        "aiops"
+      ],
+      "one_liner": "AI SRE agent that triages, coordinates, and fixes production incidents",
+      "score": 23,
+      "signals": [
+        "agent",
+        "agents",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=brownie",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=brownie",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=brownie",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=brownie",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=brownie"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for IncidentFox?",
+        "first_line": "I looked at IncidentFox. AI SRE agent that triages, coordinates, and fixes production incidents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_specific",
+      "company": "Specific",
+      "website": "https://specific.dev",
+      "yc_url": "https://www.ycombinator.com/companies/specific",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "f2025",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "Stockholm, Sweden",
+      "tags": [
+        "developer-tools",
+        "no-code",
+        "artificial-intelligence",
+        "devops"
+      ],
+      "one_liner": "AWS for coding agents",
+      "score": 23,
+      "signals": [
+        "agent",
+        "agents",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=specific",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=specific",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=specific",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=specific",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=specific"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Specific?",
+        "first_line": "I looked at Specific. AWS for coding agents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_truffle-ai",
+      "company": "Truffle AI",
+      "website": "https://www.trytruffle.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/truffle-ai",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai-assistant",
+      "batch": "w2025",
+      "team_size": 2,
+      "year_founded": 2024,
+      "location": "Bengaluru",
+      "tags": [
+        "generative-ai",
+        "ai-assistant",
+        "developer-tools",
+        "infrastructure",
+        "artificial-intelligence"
+      ],
+      "one_liner": "AWS for AI Agents",
+      "score": 23,
+      "signals": [
+        "agents",
+        "apis",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "support",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=truffle-ai",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=truffle-ai",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=truffle-ai",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=truffle-ai",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=truffle-ai"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Truffle AI?",
+        "first_line": "I looked at Truffle AI. AWS for AI Agents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_corelayer",
+      "company": "Corelayer",
+      "website": "https://www.corelayer.com",
+      "yc_url": "https://www.ycombinator.com/companies/corelayer",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "w2026",
+      "team_size": 3,
+      "year_founded": 2025,
+      "location": "San Francisco",
+      "tags": [
+        "developer-tools",
+        "enterprise-software",
+        "b2b",
+        "artificial-intelligence"
+      ],
+      "one_liner": "AI on-call engineer for data-heavy, regulated industries",
+      "score": 23,
+      "signals": [
+        "agents",
+        "b2b_or_devtools",
+        "developer-tools",
+        "finance",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "support",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=corelayer",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=corelayer",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=corelayer",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=corelayer",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=corelayer"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Corelayer?",
+        "first_line": "I looked at Corelayer. AI on-call engineer for data-heavy, regulated industries",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_linzumi",
+      "company": "Linzumi",
+      "website": "https://linzumi.com",
+      "yc_url": "https://www.ycombinator.com/companies/linzumi",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai",
+      "batch": "p2026",
+      "team_size": 3,
+      "year_founded": 2025,
+      "location": "San Francisco",
+      "tags": [
+        "artificial-intelligence",
+        "chat",
+        "developer-tools"
+      ],
+      "one_liner": "Team chat to command all your company's coding agents",
+      "score": 23,
+      "signals": [
+        "agent",
+        "agents",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=linzumi",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=linzumi",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=linzumi",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=linzumi",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=linzumi"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Linzumi?",
+        "first_line": "I looked at Linzumi. Team chat to command all your company's coding agents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_moss",
+      "company": "Moss",
+      "website": "https://moss.dev",
+      "yc_url": "https://www.ycombinator.com/companies/moss",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "f2025",
+      "team_size": 5,
+      "year_founded": 2024,
+      "location": "San Francisco",
+      "tags": [
+        "developer-tools",
+        "saas",
+        "artificial-intelligence"
+      ],
+      "one_liner": "Real-time semantic search for Conversational AI",
+      "score": 23,
+      "signals": [
+        "agent",
+        "agents",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=moss",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=moss",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=moss",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=moss",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=moss"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Moss?",
+        "first_line": "I looked at Moss. Real-time semantic search for Conversational AI",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_embedder",
+      "company": "Embedder",
+      "website": "https://www.embedder.com",
+      "yc_url": "https://www.ycombinator.com/companies/embedder",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "s2025",
+      "team_size": 6,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "hardware",
+        "b2b",
+        "developer-tools",
+        "artificial-intelligence"
+      ],
+      "one_liner": "AI Agents for Firmware",
+      "score": 23,
+      "signals": [
+        "agent",
+        "agents",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=embedder",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=embedder",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=embedder",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=embedder",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=embedder"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Embedder?",
+        "first_line": "I looked at Embedder. AI Agents for Firmware",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_random-labs",
+      "company": "Random Labs",
+      "website": "https://randomlabs.ai",
+      "yc_url": "https://www.ycombinator.com/companies/random-labs",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai-assistant",
+      "batch": "s2024",
+      "team_size": null,
+      "year_founded": 2024,
+      "location": "San Francisco",
+      "tags": [
+        "developer-tools",
+        "ai-assistant",
+        "open-source",
+        "ai"
+      ],
+      "one_liner": "Random labs is building long running autonomous coding agents.",
+      "score": 23,
+      "signals": [
+        "agent",
+        "agents",
+        "autonomous",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=random-labs",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=random-labs",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=random-labs",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=random-labs",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=random-labs"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Random Labs?",
+        "first_line": "I looked at Random Labs. Random labs is building long running autonomous coding agents.",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_meteor",
+      "company": "Meteor",
+      "website": "https://browse.dev",
+      "yc_url": "https://www.ycombinator.com/companies/meteor",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai-assistant",
+      "batch": "s2025",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "consumer",
+        "ai-assistant",
+        "artificial-intelligence"
+      ],
+      "one_liner": "An AI-Native Browser",
+      "score": 22,
+      "signals": [
+        "agent",
+        "agents",
+        "automate",
+        "browser",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team"
+      ],
+      "recommended_route": "fit_finder",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=meteor",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=meteor",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=meteor",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=meteor",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=meteor"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Meteor?",
+        "first_line": "I looked at Meteor. An AI-Native Browser",
+        "hook": "Receipt consequential browser/desktop agent actions so operators can inspect state changes after autonomous execution."
+      }
+    },
+    {
+      "id": "yc_rex-inc",
+      "company": "Rex",
+      "website": "https://www.rex.inc",
+      "yc_url": "https://www.ycombinator.com/companies/rex-inc",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai",
+      "batch": "s2026",
+      "team_size": 2,
+      "year_founded": 2026,
+      "location": "London",
+      "tags": [
+        "b2b",
+        "enterprise-software",
+        "ai"
+      ],
+      "one_liner": "AI Operations Partner for Enterprise Order to Cash",
+      "score": 22,
+      "signals": [
+        "agents",
+        "automation",
+        "b2b_or_devtools",
+        "finance",
+        "operations",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=rex-inc",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=rex-inc",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=rex-inc",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=rex-inc",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=rex-inc"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Rex?",
+        "first_line": "I looked at Rex. AI Operations Partner for Enterprise Order to Cash",
+        "hook": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript."
+      }
+    },
+    {
+      "id": "yc_tamlabs",
+      "company": "TamLabs",
+      "website": "https://tamlabs.ai",
+      "yc_url": "https://www.ycombinator.com/companies/tamlabs",
+      "source_url": "https://www.ycombinator.com/companies/industry/workflow-automation",
+      "batch": "w2025",
+      "team_size": 2,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "legal",
+        "finance",
+        "ai",
+        "enterprise",
+        "workflow-automation"
+      ],
+      "one_liner": "Agent Teams for Professionals",
+      "score": 22,
+      "signals": [
+        "agent",
+        "automation",
+        "finance",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "workflow"
+      ],
+      "recommended_route": "fit_finder",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=tamlabs",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=tamlabs",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=tamlabs",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=tamlabs",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=tamlabs"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for TamLabs?",
+        "first_line": "I looked at TamLabs. Agent Teams for Professionals",
+        "hook": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript."
+      }
+    },
+    {
+      "id": "yc_ontora",
+      "company": "Ontora",
+      "website": "https://ontora.com",
+      "yc_url": "https://www.ycombinator.com/companies/ontora",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai",
+      "batch": "p2026",
+      "team_size": 3,
+      "year_founded": 2026,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "enterprise",
+        "robotic-process-automation",
+        "ai"
+      ],
+      "one_liner": "AI agents that interviews every employee to hand context to AI tools.",
+      "score": 22,
+      "signals": [
+        "agent",
+        "agents",
+        "automation",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=ontora",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=ontora",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=ontora",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=ontora",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=ontora"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Ontora?",
+        "first_line": "I looked at Ontora. AI agents that interviews every employee to hand context to AI tools.",
+        "hook": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript."
+      }
+    },
+    {
+      "id": "yc_item",
+      "company": "item",
+      "website": "https://item.app",
+      "yc_url": "https://www.ycombinator.com/companies/item",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai-assistant",
+      "batch": "f2025",
+      "team_size": 6,
+      "year_founded": 2024,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "b2b",
+        "ai-assistant",
+        "automation"
+      ],
+      "one_liner": "The AI-Native CRM that works for you",
+      "score": 21,
+      "signals": [
+        "agents",
+        "automation",
+        "b2b_or_devtools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "support",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=item",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=item",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=item",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=item",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=item"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for item?",
+        "first_line": "I looked at item. The AI-Native CRM that works for you",
+        "hook": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript."
+      }
+    },
+    {
+      "id": "yc_agentmail",
+      "company": "AgentMail",
+      "website": "https://agentmail.to",
+      "yc_url": "https://www.ycombinator.com/companies/agentmail",
+      "source_url": "https://www.ycombinator.com/companies/industry/developer-tools",
+      "batch": "s2025",
+      "team_size": 10,
+      "year_founded": 2025,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "developer-tools",
+        "api",
+        "email"
+      ],
+      "one_liner": "Email Inboxes for AI Agents",
+      "score": 21,
+      "signals": [
+        "agents",
+        "api",
+        "b2b_or_devtools",
+        "developer-tools",
+        "recent_company",
+        "recent_yc_batch",
+        "small_team",
+        "tools"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=agentmail",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=agentmail",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=agentmail",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=agentmail",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=agentmail"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for AgentMail?",
+        "first_line": "I looked at AgentMail. Email Inboxes for AI Agents",
+        "hook": "Expose TinyZKP as a native proof-receipt tool for agent builders who already operate through developer workflows."
+      }
+    },
+    {
+      "id": "yc_tolmo",
+      "company": "Tolmo",
+      "website": "https://www.tolmo.com",
+      "yc_url": "https://www.ycombinator.com/companies/tolmo",
+      "source_url": "https://www.ycombinator.com/companies/industry/ai",
+      "batch": "p2026",
+      "team_size": 12,
+      "year_founded": 2026,
+      "location": "San Francisco, CA, USA",
+      "tags": [
+        "ai",
+        "devsecops",
+        "security"
+      ],
+      "one_liner": "Tolmo is the AI security platform that secures every layer of cloud\u2026",
+      "score": 21,
+      "signals": [
+        "agent",
+        "agents",
+        "observability",
+        "recent_company",
+        "recent_yc_batch",
+        "security",
+        "small_team"
+      ],
+      "recommended_route": "platform_rollout",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "fit_reason": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript.",
+      "tracked_urls": {
+        "learn": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=tolmo",
+        "fit": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=tolmo",
+        "calculator": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=tolmo",
+        "pilot": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=tolmo",
+        "signup": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=tolmo"
+      },
+      "email_draft": {
+        "subject": "verifiable receipts for Tolmo?",
+        "first_line": "I looked at Tolmo. Tolmo is the AI security platform that secures every layer of cloud\u2026",
+        "hook": "Add proof receipts to consequential agent actions so recipients can verify the state transition without trusting the agent transcript."
+      }
+    }
+  ]
+}

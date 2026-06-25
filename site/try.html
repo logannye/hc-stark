@@ -257,7 +257,7 @@ footer .right a:hover{color:var(--muted)}
   <div class="cta-strip">
     <h2>Want to integrate this into your agent?</h2>
     <p>Free tier &middot; 100 proofs/month &middot; no credit card. One-line MCP install for Claude Code, Claude Desktop, and Cursor.</p>
-    <a class="btn" href="/signup">Get a free API key</a>
+    <a class="btn" href="/signup?source=playground&medium=try_page&workflow=accumulator_step&intent=free_signup" data-track="signup_started" data-source="playground">Get a free API key</a>
   </div>
 
 </div>
@@ -315,6 +315,8 @@ footer .right a:hover{color:var(--muted)}
 var lastProof = null;
 var lastShareLink = null;
 var lastParams = null;
+var FIRST_VERIFY_SHARE_KEY = 'tinyzkp_first_verify_share_created';
+var MAX_SHARE_FRAGMENT_CHARS = 120000;
 
 function b64UrlEncode(text) {
   var bytes = new TextEncoder().encode(text);
@@ -326,7 +328,30 @@ function b64UrlEncode(text) {
 }
 
 function buildShareLink(proof) {
-  return window.location.origin + '/verify#proof=' + b64UrlEncode(JSON.stringify(proof));
+  var url = new URL('/verify', window.location.origin);
+  url.searchParams.set('source', 'receipt_share');
+  url.searchParams.set('medium', 'playground');
+  url.searchParams.set('workflow', 'accumulator_step');
+  url.searchParams.set('intent', 'verify_receipt');
+  var encoded = b64UrlEncode(JSON.stringify(proof));
+  if (encoded.length > MAX_SHARE_FRAGMENT_CHARS) {
+    throw new Error('Proof is too large for a safe share URL. Copy the proof JSON instead.');
+  }
+  url.hash = 'proof=' + encoded;
+  return url.toString();
+}
+
+function trackFirstVerifyShareCreated(source) {
+  if (!window.tinyzkpTrack) return;
+  var shouldTrack = true;
+  try {
+    shouldTrack = !localStorage.getItem(FIRST_VERIFY_SHARE_KEY);
+    if (shouldTrack) localStorage.setItem(FIRST_VERIFY_SHARE_KEY, new Date().toISOString());
+  } catch (_) {}
+  if (shouldTrack) window.tinyzkpTrack('first_verify_share_created', {
+    source: source || 'try_page',
+    workflow: 'accumulator_step'
+  });
 }
 
 function computedFinal(initial, deltas) {
@@ -484,9 +509,13 @@ async function onProve(){
         setStatus('status-prove', 'Proof completed in ' + elapsed + ' ms', 'ok');
         if(window.tinyzkpTrack) window.tinyzkpTrack('playground_prove_succeeded',{template:'accumulator_step',elapsed_ms:elapsed});
         lastProof = poll.proof;
-        lastShareLink = buildShareLink(lastProof);
+        try {
+          lastShareLink = buildShareLink(lastProof);
+        } catch (_) {
+          lastShareLink = null;
+        }
         document.getElementById('btn-verify').disabled = false;
-        document.getElementById('btn-share').disabled = false;
+        document.getElementById('btn-share').disabled = !lastShareLink;
         document.getElementById('proof-actions').classList.add('ready');
         document.getElementById('card-verify').classList.add('active');
         btn.disabled = false;
@@ -574,14 +603,15 @@ async function onVerify(){
 }
 
 async function copyShareLink(){
-  if (!lastShareLink && lastProof) lastShareLink = buildShareLink(lastProof);
-  if (!lastShareLink) return;
   try {
+    if (!lastShareLink && lastProof) lastShareLink = buildShareLink(lastProof);
+    if (!lastShareLink) throw new Error('Generate a proof first.');
     await navigator.clipboard.writeText(lastShareLink);
     setStatus('status-verify', 'Share link copied', 'ok');
     if(window.tinyzkpTrack) window.tinyzkpTrack('playground_share_copied',{source:'try_page'});
+    trackFirstVerifyShareCreated('try_page');
   } catch(e) {
-    setStatus('status-verify', 'Share link: ' + lastShareLink, 'ok');
+    setStatus('status-verify', 'Share link unavailable: ' + e.message, 'bad');
   }
 }
 
@@ -597,8 +627,14 @@ async function copyProofJson(){
 }
 
 function openVerifier(){
-  if (!lastShareLink && lastProof) lastShareLink = buildShareLink(lastProof);
-  if (lastShareLink) window.location.href = lastShareLink;
+  try {
+    if (!lastShareLink && lastProof) lastShareLink = buildShareLink(lastProof);
+    if (!lastShareLink) throw new Error('Generate a proof first.');
+    if(window.tinyzkpTrack) window.tinyzkpTrack('verifier_cta_clicked',{source:'try_page', target:'/verify'});
+    window.location.href = lastShareLink;
+  } catch(e) {
+    setStatus('status-verify', 'Verifier link unavailable: ' + e.message, 'bad');
+  }
 }
 
 async function copyCurlEquivalent(){

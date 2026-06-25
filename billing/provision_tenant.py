@@ -133,6 +133,13 @@ def _send_magic_link_email(email: str, link: str) -> bool:
 
 CONTACT_RECIPIENT = "logan@galenhealth.org"
 CONTACT_QUALIFICATION_FIELDS = (
+    ("source", "Source"),
+    ("medium", "Medium"),
+    ("campaign", "Campaign"),
+    ("platform", "Platform"),
+    ("plan", "Plan"),
+    ("workflow", "Workflow"),
+    ("intent", "Intent"),
     ("use_case", "Use case"),
     ("trace_length", "Trace length"),
     ("proof_frequency", "Proof frequency"),
@@ -142,6 +149,37 @@ CONTACT_QUALIFICATION_FIELDS = (
     ("current_alternative", "Current alternative"),
     ("budget_owner", "Budget owner"),
 )
+
+ATTRIBUTION_FIELDS = (
+    "source",
+    "medium",
+    "campaign",
+    "platform",
+    "use_case",
+    "workflow",
+    "intent",
+    "landing_path",
+    "referrer_host",
+    "first_seen_at",
+)
+
+_ATTRIBUTION_ALLOWED_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .:/_-")
+_ATTRIBUTION_MAX_LEN = 160
+
+
+def _sanitize_attribution(raw: object) -> dict[str, str]:
+    """Keep bounded, low-cardinality acquisition context on tenant records."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key in ATTRIBUTION_FIELDS:
+        value = raw.get(key)
+        if not isinstance(value, str):
+            continue
+        clean = "".join(ch for ch in value.strip() if ch in _ATTRIBUTION_ALLOWED_CHARS)
+        if clean:
+            out[key] = clean[:_ATTRIBUTION_MAX_LEN]
+    return out
 
 
 def _sanitize_contact_qualification(raw: object) -> dict[str, str]:
@@ -276,6 +314,71 @@ def _normalize_plan(raw: str | None, default: str = "developer") -> str:
     return plan if plan in _CANONICAL_PAID_PLANS else default
 
 
+def _pilot_payment_metadata(session: dict) -> dict[str, str]:
+    metadata = session.get("metadata") or {}
+    qualification = {
+        "plan": "production_pilot",
+        "source": metadata.get("source", ""),
+        "medium": metadata.get("medium", ""),
+        "campaign": metadata.get("campaign", ""),
+        "platform": metadata.get("platform", ""),
+        "workflow": metadata.get("workflow") or metadata.get("pilot_workflow", ""),
+        "intent": metadata.get("intent", "paid_pilot_checkout"),
+        "use_case": metadata.get("use_case", ""),
+    }
+    return _sanitize_contact_qualification(qualification)
+
+
+def _handle_pilot_payment_completed(
+    conn,
+    event_id: str,
+    session: dict,
+) -> tuple[str, int]:
+    """Handle one-time Production Pilot checkout without provisioning a tenant."""
+    metadata = session.get("metadata") or {}
+    email = (
+        session.get("customer_email")
+        or session.get("customer_details", {}).get("email")
+        or "unknown"
+    )
+    name = session.get("customer_details", {}).get("name") or "Pilot checkout buyer"
+    amount_total = session.get("amount_total")
+    amount_text = f"${amount_total / 100:,.2f}" if isinstance(amount_total, int) else "unknown amount"
+    checkout_url = session.get("url") or "not provided"
+    session_id = session.get("id", "unknown")
+    payment_intent = session.get("payment_intent", "not provided")
+    workflow = metadata.get("pilot_workflow") or metadata.get("workflow") or "not provided"
+    message = (
+        "Production Pilot payment completed through Stripe Checkout.\n\n"
+        f"Stripe session: {session_id}\n"
+        f"Payment intent: {payment_intent}\n"
+        f"Amount: {amount_text}\n"
+        f"Workflow: {workflow}\n"
+        f"Checkout URL: {checkout_url}\n\n"
+        "Next step: start kickoff, confirm proof statement boundary, verifier placement, "
+        "data-boundary expectations, and 14-day success criteria."
+    )
+
+    qualification = _pilot_payment_metadata(session)
+    tenant_store.mark_event_processed(conn, event_id)
+
+    def _bg_notify():
+        try:
+            _send_contact_email(
+                name=name,
+                sender_email=email,
+                category="Paid Pilot",
+                message=message,
+                qualification=qualification,
+            )
+        except Exception as e:
+            print(f"WARNING: Pilot payment notification failed for {email}: {e}", file=sys.stderr)
+
+    threading.Thread(target=_bg_notify, daemon=True).start()
+    print(f"Captured production pilot payment session={session_id} email={email}")
+    return "pilot payment captured", 200
+
+
 def _handle_checkout_completed(event: dict) -> tuple[str, int]:
     """Handle checkout.session.completed — provision new tenant."""
     conn = tenant_store.open_db()
@@ -291,6 +394,11 @@ def _handle_checkout_completed(event: dict) -> tuple[str, int]:
     email = session.get("customer_email") or session.get("customer_details", {}).get("email", "unknown")
 
     if not subscription_id:
+        metadata = session.get("metadata") or {}
+        if session.get("mode") == "payment" and metadata.get("plan") == "production_pilot":
+            result = _handle_pilot_payment_completed(conn, event_id, session)
+            conn.close()
+            return result
         conn.close()
         return "No subscription in session", 200
 
@@ -313,10 +421,13 @@ def _handle_checkout_completed(event: dict) -> tuple[str, int]:
     tenant_id = generate_tenant_id()
     api_key = generate_api_key()
 
-    # Extract plan from checkout session metadata (set by create-checkout.js).
+    # Extract plan and acquisition context from checkout session metadata
+    # (set by create-checkout.js).
     # Normalize storefront and legacy slugs instead of silently downgrading a
     # paying Pro/Scale/Compute customer to developer (BILL-01).
-    plan = _normalize_plan((session.get("metadata") or {}).get("plan"))
+    session_metadata = session.get("metadata") or {}
+    plan = _normalize_plan(session_metadata.get("plan"))
+    attribution = _sanitize_attribution(session_metadata)
 
     tenant_store.create_tenant(
         conn,
@@ -327,6 +438,7 @@ def _handle_checkout_completed(event: dict) -> tuple[str, int]:
         stripe_subscription_id=subscription_id,
         stripe_subscription_item_id=si_id,
         plan=plan,
+        attribution=attribution,
     )
     tenant_store.mark_event_processed(conn, event_id)
 
@@ -519,6 +631,7 @@ def provision_free():
 
     data = flask.request.get_json(silent=True) or {}
     email = data.get("email", "").strip().lower()
+    attribution = _sanitize_attribution(data)
 
     if not email or "@" not in email or len(email) > 254:
         return flask.jsonify(error="valid email required"), 400
@@ -541,6 +654,7 @@ def provision_free():
             email=email,
             api_key=api_key,
             plan="free",
+            attribution=attribution,
         )
     except Exception:
         conn.close()

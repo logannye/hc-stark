@@ -103,8 +103,8 @@ impl HcMcpServer {
                 "2. describe_template to get parameter schema and example",
                 "3. prove_template to submit a proof job",
                 "4. poll_job until status is 'succeeded'",
-                "5. get_proof to retrieve base64-encoded proof bytes",
-                "6. verify_proof to independently verify the proof",
+                "5. get_proof to retrieve proof_b64 plus a tracked verifier_url and, when size allows, a proof-embedded receipt_url",
+                "6. share the receipt_url/verifier_url or call verify_proof to independently verify the proof",
             ],
         });
         let json = Content::json(caps)

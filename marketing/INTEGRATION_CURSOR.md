@@ -1,12 +1,12 @@
-# Add ZK Proofs to Cursor in 30 Seconds (MCP Install)
+# Add Proof Receipts to Cursor in 30 Seconds (MCP Install)
 
 > Target: ~600 words. Publish to: TinyZKP blog, Cursor community Discord, dev.to, Medium
 
 ## Hook
 
-Cursor is brilliant at writing code. It's not great at *proving* the code did what you say it did. If you're building a tool, an agent, or a deploy bot inside Cursor that touches sensitive data, you eventually need a way to attach a verifiable receipt to its actions — for the user, for an auditor, for a compliance team.
+Cursor is brilliant at writing code. It's not great at *proving* the workflow did what you say it did. If you're building a tool, an agent, or a deploy bot inside Cursor that changes important state, you eventually need a way to attach a verifiable receipt to its actions — for the user, for an auditor, for a compliance team.
 
-This post adds TinyZKP's MCP server to Cursor. After ~30 seconds of setup, every Cursor agent on your machine can mint zero-knowledge proofs as a native tool call. Free tier, no credit card.
+This post adds TinyZKP's MCP server to Cursor. After ~30 seconds of setup, every Cursor agent on your machine can mint transparent STARK state-transition receipts as a native tool call. Free tier, no credit card.
 
 ## The 30-second install
 
@@ -23,7 +23,7 @@ Open `~/.cursor/mcp.json` (create it if it doesn't exist) and paste:
 }
 ```
 
-Get a free `tzk_...` key at https://tinyzkp.com/signup (no credit card, 100 proofs/month free forever).
+Get a free `tzk_...` key at https://tinyzkp.com/signup?source=cursor_community_post&medium=community&platform=cursor&intent=api_key (no credit card, 100 proofs/month).
 
 If you don't have `hc-mcp-stdio` on your `$PATH` yet:
 
@@ -43,10 +43,11 @@ Open a chat in any project and try:
 
 Cursor will:
 
-1. Call `prove` on the `accumulator_step` template
-2. Poll `prove_status` until done
-3. Call `verify` to confirm
-4. Hand you back a proof ID + a verifiable byte string
+1. Call `prove_template` on the `accumulator_step` template
+2. Poll `poll_job` until done
+3. Call `get_proof_summary` or `get_proof`
+4. Call `verify_proof` to confirm
+5. Hand you back a proof ID + a verifiable receipt
 
 The proof is a tamper-evident receipt your user can verify in their own browser.
 
@@ -54,13 +55,15 @@ The proof is a tamper-evident receipt your user can verify in their own browser.
 
 Cursor sees these as regular function calls. You can chain them in agent loops, embed them in `.cursorrules`, or just use them ad-hoc in chat:
 
-- `prove` — submit a proof
-- `verify` — check a proof (always free)
-- `prove_status` — poll a job
-- `list_jobs` — see jobs for your tenant
-- `healthz` — service status
-- `list_programs` / `describe_program` — registered workloads
-- `list_workloads` / `submit_workload` / `workload_status` — workload-style proving
+- `get_capabilities` — product boundary, workflow, and limits
+- `list_templates` — list live proof templates
+- `describe_template` — inspect schema and example parameters
+- `prove_template` — submit a template proof job
+- `poll_job` — check job status
+- `get_proof_summary` — get a receipt summary for humans and agents
+- `get_proof` — retrieve base64 proof bytes
+- `verify_proof` — check a proof (always free)
+- `list_workloads` / `prove_workload` — reviewed workload-style proving
 
 ## When to use which template
 
@@ -74,14 +77,14 @@ For the current list of available templates, call `list_templates` via MCP or th
 
 - **Free tier**: 100 proofs/month, no credit card.
 - **Developer ($19/month)**: 100 RPM, 4 concurrent jobs, $500 monthly cap. Per-proof rates from $0.05 (small) to $30 (10M+ steps).
-- **Verification**: always free. 10K free verify calls/month even on no-card plans.
+- **Verification**: always free for supported receipts.
 
 Most Cursor-side workloads (small accumulator / state-transition proofs) land squarely in the $0.05 tier. A typical developer pays $19–$25 per month all-in.
 
 ## Try it
 
-Free signup: https://tinyzkp.com/signup
+Free signup: https://tinyzkp.com/signup?source=cursor_community_post&medium=community&platform=cursor&intent=api_key
 GitHub: https://github.com/logannye/hc-stark
-Docs: https://tinyzkp.com/docs
+Docs: https://tinyzkp.com/docs?source=cursor_community_post&medium=community&platform=cursor&intent=docs
 
 The first proof is genuinely 30 seconds in. If you hit anything weird, the founder personally reads contact-form messages — reply rate is same-day.

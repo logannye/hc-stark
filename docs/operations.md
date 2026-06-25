@@ -149,7 +149,8 @@ python3 scripts/ci/production_launch_preflight.py --require-legacy
 For a production deploy rehearsal, run the aggregate preflight with the
 production env file and Cloudflare Pages binding file. This keeps local repo
 evidence, deploy-readiness policy, Pages configuration, Compose rendering,
-backup/restore drift, and the launch-gate audit under one operator command:
+backup/restore drift, package distribution surfaces, and the launch-gate audit
+under one operator command:
 
 ```sh
 python3 scripts/ci/production_launch_preflight.py \
@@ -165,6 +166,11 @@ After API/MCP and Pages deploys finish, add `--live` before announcing the
 release. Add `--authenticated-smoke` when `TINYZKP_SMOKE_API_KEY` or
 `TINYZKP_AUDIT_API_KEY` is available and the prove/verify path should be
 exercised end to end.
+
+Live mode starts by reading Cloudflare Pages production secret names through
+`wrangler pages secret list --project-name tinyzkp`; it fails before public
+smoke tests if any required binding is missing, including
+`STRIPE_PRICE_ID_PILOT` for the paid Production Pilot checkout path.
 
 For coordinated API, MCP, and website releases, pin the expected deployed
 commit and require all three surfaces to report it before announcing:
@@ -204,6 +210,7 @@ Run the site deploy preflight before every Pages deploy:
 python3 scripts/ci/site_deploy_check.py
 python3 scripts/ci/site_deploy_check.py --production --bindings-file /secure/tinyzkp-pages.env
 node scripts/ci/site_worker_dispatch_test.mjs
+node scripts/ci/test_analytics_attribution.mjs
 ```
 
 The static mode verifies `site/wrangler.toml`, the Advanced Mode `_worker.js`
@@ -213,8 +220,198 @@ are present: `INTERNAL_SECRET`, Stripe secret/price IDs, and
 `TINYZKP_DEMO_API_KEY`. The worker dispatch test imports the real `_worker.js`
 module with mocked Pages assets/cache APIs and verifies API dispatch, method
 405s, static asset passthrough, extensionless `.html` fallback, and baseline browser security headers on static and API responses.
+The analytics attribution test simulates browser CTA clicks and verifies that
+conversion links preserve first-touch source context while adding internal
+campaign/intent markers for signup, MCP, verifier, playground, pilot, rollout,
+and contact flows.
 
-### Billing cron (sync_usage.py)
+### GTM distribution monitor
+
+Run the offline GTM distribution monitor before changing MCP listings,
+machine-readable offer metadata, or agent-directory copy:
+
+```sh
+python3 scripts/marketing/render_mcp_submissions.py
+python3 scripts/marketing/render_mcp_submissions.py --check
+python3 -m pytest scripts/ci/test_mcp_submission_renderer.py
+python3 scripts/monitoring/gtm_distribution_monitor.py --offline
+python3 -m pytest scripts/ci/test_gtm_distribution_monitor.py
+```
+
+The renderer writes source-tagged submission drafts to
+`marketing/generated/mcp_submissions/` from
+`marketing/mcp_distribution_targets.json`; `--check` fails when generated drafts
+are stale. Offline monitor mode validates the target catalog, including
+source-tagged signup URLs for MCP directories and agent-IDE communities. After
+publishing or updating a live listing, run the online monitor without
+`--offline`; it checks canonical TinyZKP MCP/offer assets plus every `active`
+directory target with a `listing_url`.
+
+### GTM growth monitor
+
+Run the aggregate growth monitor for one revenue-facing view of distribution
+contracts, source-tagged CTAs, package surfaces, MCP submission drafts, launch
+assets, and local revenue attribution:
+
+```sh
+python3 scripts/monitoring/gtm_growth_monitor.py --offline
+```
+
+On the Hetzner host this runs daily from `/etc/cron.d/hc-billing` and writes
+to `/var/log/hc-gtm-growth.log`. Use `--live` after a deploy to add
+non-mutating public checks for the site, playground, verifier, signup page,
+well-known agent assets, API health, MCP version, and invalid-email signup /
+checkout endpoint behavior, plus PyPI, npm, and crates.io package registry
+availability. Use strict mode for production alerting once the self-serve
+funnel should be generating revenue:
+
+```sh
+python3 scripts/monitoring/gtm_growth_monitor.py \
+  --offline \
+  --tenant-db /opt/hc-stark/data/tenant_store.sqlite \
+  --usage-db /opt/hc-stark/data/usage.sqlite \
+  --strict-revenue \
+  --min-activated-accounts 1 \
+  --min-paid-accounts 1 \
+  --min-paid-proofs 1 \
+  --min-total-proofs 1
+```
+
+The JSON form is safe for dashboards and omits tenant email addresses:
+
+```sh
+python3 scripts/monitoring/gtm_growth_monitor.py --offline --json
+```
+
+### Receipt share contract gate
+
+Run the receipt-share contract check before changing `/try`, `/verify`,
+agent-readable metadata, or receipt-share CTAs:
+
+```sh
+python3 scripts/ci/receipt_share_contract_check.py
+python3 -m pytest scripts/ci/test_receipt_share_contract_check.py
+```
+
+This validates the public `#proof=` fragment contract, `source=receipt_share`
+attribution, share-link size ceiling, data-boundary language, analytics event
+allowlist, and discovery links from `llms.txt`, `robots.txt`, and
+`discovery.json`.
+
+### Badge embed contract gate
+
+Run the badge embed check before changing `/badges`, badge snippets in recipes,
+the badge SVG, `llms.txt`, `robots.txt`, `discovery.json`, or integration
+metadata:
+
+```sh
+python3 scripts/ci/badge_embed_check.py
+python3 -m pytest scripts/ci/test_badge_embed_check.py
+```
+
+This validates the public `/.well-known/tinyzkp-badge.json` contract,
+source-tagged verifier embed template, SVG dimensions, transparent-receipt
+data boundaries, and discovery links for agents and crawlers.
+
+### Manual distribution asset gate
+
+Run the manual distribution asset check before posting HN/X launch copy,
+sending founder outbound, or publishing integration tutorials:
+
+```sh
+python3 scripts/ci/manual_distribution_assets_check.py
+python3 -m pytest scripts/ci/test_manual_distribution_assets_check.py
+```
+
+This blocks stale MCP tool names, outdated pricing/verification claims, and
+bare TinyZKP conversion URLs that would lose source attribution.
+
+### OpenAI ChatGPT app prototype
+
+The ChatGPT app prototype uses the existing hosted MCP server plus a noindex
+widget resource:
+
+- App submission metadata: `marketing/openai_chatgpt_app_submission.json`
+- Prototype plan: `marketing/OPENAI_CHATGPT_APP_PROTOTYPE.md`
+- Widget: `site/apps/tinyzkp-receipt-widget.html`
+
+Before editing those assets or submitting for review, run:
+
+```sh
+python3 scripts/ci/openai_chatgpt_app_check.py
+python3 -m pytest scripts/ci/test_openai_chatgpt_app_check.py
+```
+
+The checker validates the streamable MCP endpoint, source-tagged ChatGPT signup
+URL, privacy/terms links, human-confirmation requirement, review test prompts,
+and MCP Apps bridge markers in the widget.
+
+### Package distribution gate
+
+Run the package distribution check before publishing SDK, CLI, WASM verifier,
+or MCP package/readme changes:
+
+```sh
+python3 scripts/ci/package_distribution_check.py
+python3 -m pytest scripts/ci/test_package_distribution_check.py
+```
+
+This validates that PyPI, npm, crates.io, CLI, WASM verifier, and MCP README
+surfaces preserve source-tagged signup, verifier, limits, and agent-offer
+links, and that package metadata keeps registry attribution markers.
+
+### SEO conversion gate
+
+Run the SEO conversion check before changing priority acquisition pages,
+comparison pages, integration pages, `llms.txt`, or the sitemap:
+
+```sh
+python3 scripts/ci/seo_conversion_check.py
+python3 -m pytest scripts/ci/test_seo_conversion_check.py
+```
+
+This validates that the priority SEO pages are present in both `sitemap.xml`
+and `llms.txt`, have basic crawlable metadata, and preserve at least one
+source-tagged, tracked CTA into the TinyZKP funnel.
+
+### GTM revenue report
+
+Use the GTM revenue report to inspect which channels are producing accounts,
+activated accounts, paid-plan accounts, active base MRR, estimated usage
+revenue, paid proofs, Compute trace-step volume, and time-to-first-proof:
+
+```sh
+python3 billing/gtm_revenue_report.py \
+  --tenant-db /opt/hc-stark/data/tenant_store.sqlite \
+  --usage-db /opt/hc-stark/data/usage.sqlite
+```
+
+The report groups by stored attribution source, medium, and platform. It does
+not print email addresses. Use `--json` when feeding the summary into a BI
+dashboard or scheduled internal digest.
+
+### Billing cron and lifecycle nudges
+
+The host cron `/etc/cron.d/hc-billing` runs three billing-adjacent jobs and
+one daily GTM monitor:
+
+- `billing/sync_usage.py` hourly to report billable usage to Stripe.
+- `billing/lifecycle_nudges.py` hourly to send idempotent activation and
+  upgrade nudges after signup, first proof, free-quota threshold events, and
+  14-day idle win-back windows.
+- `billing/checkout_recovery.py` hourly to inspect open Stripe Checkout
+  Sessions and send idempotent recovery links for paid checkouts that were
+  started but not completed, including both self-serve subscription Sessions and
+  one-time Production Pilot payment Sessions.
+- `scripts/monitoring/gtm_growth_monitor.py --offline` daily to log GTM
+  distribution health, source-tagged surfaces, revenue attribution, lifecycle
+  ledgers, and checkout recovery counts.
+
+Lifecycle nudges and checkout recovery use the same SMTP environment as the
+webhook. Each sent lifecycle nudge is recorded in
+`tenant_store.lifecycle_emails` by `(tenant_id, kind)`, and each checkout
+recovery is recorded in `tenant_store.checkout_recovery_emails` by Stripe
+Checkout Session ID, so cron retries do not resend the same email.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -327,6 +524,78 @@ For customer-visible outages, use
 [`docs/runbooks/incident_response.md`](runbooks/incident_response.md). The
 runbook defines SEV1/SEV2/SEV3 levels, incident categories, public update
 templates, billing safeguards, and rollback rules.
+
+### GTM Revenue Monitoring
+
+Start with the safe readiness runner. It validates that the local Stripe CLI
+profile is the TinyZKP account before it runs the read-only audit, summarizes
+Checkout Sessions, and optionally syncs aggregate evidence into the no-PII GTM
+pipeline ledger:
+
+```bash
+python3 billing/stripe_revenue_readiness.py \
+  --stripe-bin /opt/homebrew/bin/stripe \
+  --sync-pipeline
+```
+
+Use `--plan-only` to preview the full sequence without touching Stripe or local
+ledgers. Use `--setup-catalog pilot --push-cloudflare` or
+`--setup-catalog full --push-cloudflare` only when intentionally writing Stripe
+catalog objects from the verified TinyZKP account. If the TinyZKP account is a
+non-default Stripe CLI profile, pass `--stripe-project-name <profile>` so the
+account check, reads, sync, canary visibility checks, and setup scripts all use
+that profile.
+
+For diagnosis, the read-only revenue-ops audit can be run directly. It compares
+live Stripe billing meters, products/prices, Cloudflare Pages secret names, and
+the pilot checkout capability endpoint without printing secret values or Stripe
+IDs:
+
+```bash
+python3 billing/stripe_revenue_ops_audit.py \
+  --stripe-bin /opt/homebrew/bin/stripe
+```
+
+Use `--strict-catalog` only after the current Stripe catalog has been rebuilt
+with a write-capable profile; before then, warnings are expected when the live
+pilot route remains sellable through inline `price_data`.
+
+Use the local Stripe CLI profile to summarize Checkout Session starts and paid
+revenue without printing buyer PII:
+
+```bash
+python3 billing/stripe_checkout_monitor.py \
+  --stripe-bin /opt/homebrew/bin/stripe \
+  --lookback-hours 168
+```
+
+To include live Checkout state in the aggregate GTM monitor:
+
+```bash
+python3 scripts/monitoring/gtm_growth_monitor.py \
+  --offline \
+  --stripe-checkout \
+  --stripe-bin /opt/homebrew/bin/stripe
+```
+
+To sync aggregate Stripe checkout evidence into the no-PII pipeline ledger and
+rerender `marketing/generated/gtm_pipeline_ledger.*`:
+
+```bash
+python3 scripts/marketing/sync_stripe_checkout_pipeline.py \
+  --stripe-bin /opt/homebrew/bin/stripe \
+  --lookback-hours 168
+```
+
+The sync command never lowers previously recorded revenue when the current
+lookback has no paid pilot sessions. It stores aggregate counts and dashboard
+evidence only; do not commit customer emails, Stripe object IDs, or checkout
+URLs into the pipeline state.
+
+The standalone monitor supports `--min-paid-sessions` and
+`--min-pilot-paid-sessions` for alerting jobs. The aggregate monitor supports
+the matching `--stripe-checkout-min-paid-sessions` and
+`--stripe-checkout-min-pilot-paid-sessions` flags.
 
 ### Grafana
 

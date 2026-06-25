@@ -93,7 +93,7 @@ main{padding:112px 0 78px}.hero{display:grid;grid-template-columns:minmax(0,1fr)
       <div class="cta-row">
         <a class="cta" href="#calculator">Estimate workload</a>
         <a class="cta secondary" href="/pricing.json">Read pricing JSON</a>
-        <a class="cta secondary" href="/pilot">Plan a pilot</a>
+        <a class="cta secondary" href="/pilot?source=calculator&medium=calculator_page&intent=paid_pilot" data-track="calculator_pilot_click" data-source="calculator">Plan a pilot</a>
       </div>
     </div>
     <aside class="metric-panel" aria-label="Pricing calculator summary">
@@ -158,8 +158,8 @@ main{padding:112px 0 78px}.hero{display:grid;grid-template-columns:minmax(0,1fr)
         <div class="number"><span>Cap status</span><strong id="cap-status">Within cap</strong></div>
       </div>
       <div class="result-actions">
-        <a class="cta" id="primary-cta" href="/signup?plan=pro" data-track="calculator_recommendation_click" data-source="calculator">Get recommended plan</a>
-        <a class="cta secondary" href="/pricing">Compare pricing</a>
+        <a class="cta" id="primary-cta" href="/signup?plan=pro&source=calculator&medium=calculator_page&intent=recommended_plan" data-track="calculator_recommendation_click" data-source="calculator">Get recommended plan</a>
+        <a class="cta secondary" href="/pricing?source=calculator&medium=calculator_page&intent=compare_pricing" data-track="calculator_pricing_click" data-source="calculator">Compare pricing</a>
         <a class="cta secondary" href="/calculator.json">Machine-readable model</a>
       </div>
     </div>
@@ -194,9 +194,9 @@ main{padding:112px 0 78px}.hero{display:grid;grid-template-columns:minmax(0,1fr)
     <h2>Price the workflow where verification changes behavior.</h2>
     <p>If a receipt will be shown to a customer, auditor, marketplace, or agent supervisor, pick a plan that can carry that workflow reliably. If it is still only a demo, stay small and prove the path first.</p>
     <div class="cta-row" style="justify-content:center">
-      <a class="cta" id="final-cta" href="/signup?plan=pro" data-track="calculator_recommendation_click" data-source="calculator_final">Get recommended plan</a>
+      <a class="cta" id="final-cta" href="/signup?plan=pro&source=calculator_final&medium=calculator_page&intent=recommended_plan" data-track="calculator_recommendation_click" data-source="calculator_final">Get recommended plan</a>
       <a class="cta secondary" href="/roi">Build ROI case</a>
-      <a class="cta secondary" href="/pilot">Plan a pilot</a>
+      <a class="cta secondary" href="/pilot?source=calculator_final&medium=calculator_page&intent=paid_pilot" data-track="calculator_pilot_click" data-source="calculator_final">Plan a pilot</a>
     </div>
   </section>
 </div>
@@ -280,6 +280,13 @@ function volumeBucket(n) {
 function computeRate(band) {
   return Math.max(.05, MODEL.steps[band] / 1000000 * .50);
 }
+function attributedHref(href, source, intent) {
+  const url = new URL(href, window.location.origin);
+  url.searchParams.set('source', source);
+  url.searchParams.set('medium', 'calculator_page');
+  url.searchParams.set('intent', intent);
+  return url.pathname + url.search + url.hash;
+}
 function estimate(planId, volume, band, workflow) {
   if (planId === 'free') {
     const outsideEvaluation = workflow === 'long' || workflow === 'enterprise' || band === 'large' || band === 'xl';
@@ -348,10 +355,17 @@ function render() {
   document.getElementById('hero-effective').textContent = selected ? money(effective) : 'Custom';
   document.getElementById('hero-path').textContent = path;
   const href = choice === 'pilot' && workflow === 'platform'
-    ? '/platform-rollout'
-    : (choice === 'pilot' ? '/pilot' : MODEL.plans[choice].checkout);
+    ? attributedHref('/platform-rollout', 'calculator', 'platform_rollout')
+    : (choice === 'pilot'
+      ? attributedHref('/pilot', 'calculator', 'paid_pilot')
+      : attributedHref(MODEL.plans[choice].checkout, 'calculator', 'recommended_plan'));
+  const finalHref = choice === 'pilot' && workflow === 'platform'
+    ? attributedHref('/platform-rollout', 'calculator_final', 'platform_rollout')
+    : (choice === 'pilot'
+      ? attributedHref('/pilot', 'calculator_final', 'paid_pilot')
+      : attributedHref(MODEL.plans[choice].checkout, 'calculator_final', 'recommended_plan'));
   document.getElementById('primary-cta').href = href;
-  document.getElementById('final-cta').href = href;
+  document.getElementById('final-cta').href = finalHref;
   const pilotLabel = workflow === 'platform' ? 'Review platform rollout' : 'Plan a pilot';
   document.getElementById('primary-cta').textContent = choice === 'pilot' ? pilotLabel : 'Get ' + name;
   document.getElementById('final-cta').textContent = choice === 'pilot' ? pilotLabel : 'Get ' + name;

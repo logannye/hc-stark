@@ -1,7 +1,7 @@
 {
   "name": "@tinyzkp/cli",
   "version": "0.1.0",
-  "description": "Generate and verify TinyZKP state-transition receipts from your terminal. One command, no SDK setup.",
+  "description": "Generate and verify TinyZKP state-transition receipts from your terminal, scripts, and agent workflows.",
   "keywords": [
     "zk",
     "zero-knowledge",
@@ -15,7 +15,7 @@
   ],
   "author": "TinyZKP <support@tinyzkp.com>",
   "license": "MIT",
-  "homepage": "https://tinyzkp.com",
+  "homepage": "https://tinyzkp.com?source=npm_cli&medium=package_registry&platform=npm&intent=learn",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/logannye/hc-stark.git",

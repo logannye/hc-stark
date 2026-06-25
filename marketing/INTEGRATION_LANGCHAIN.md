@@ -39,7 +39,8 @@ zkp = TinyZKP("https://api.tinyzkp.com", api_key="tzk_...")
 async def prove_state_transition(args: dict) -> str:
     job_id = await zkp.prove_template("accumulator_step", params=args)
     proof  = await zkp.wait_for_proof(job_id)
-    return f"proof_id={job_id}, version={proof['version']}, bytes_kb={proof['size_kb']}"
+    result = await zkp.verify(proof)
+    return f"proof_id={job_id}, verified={result.ok}"
 
 tools = [Tool(name="prove_state_transition", func=prove_state_transition, description="Prove a committed value advanced from initial to final by an ordered set of public deltas. Args: {initial, final, deltas}.")]
 agent = initialize_agent(tools, ChatAnthropic(model="claude-sonnet-4-6"), agent=AgentType.OPENAI_FUNCTIONS)
@@ -97,4 +98,4 @@ npm install @tinyzkp/verify           # Browser / WASM verifier
 claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com  # MCP install
 ```
 
-Free signup at https://tinyzkp.com/signup. The first proof is genuinely 60 seconds in, and the 10-line integration above is the whole onboarding. Hit something weird? Email logan@tinyzkp.com — we read every message and reply within a couple of business days.
+Free signup at https://tinyzkp.com/signup?source=langchain_integration_post&medium=integration_content&platform=langchain&intent=api_key. The first proof is genuinely 60 seconds in, and the 10-line integration above is the whole onboarding. Hit something weird? Use https://tinyzkp.com/contact?source=langchain_integration_post&medium=integration_content&platform=langchain&intent=support — we read every message and reply within a couple of business days.

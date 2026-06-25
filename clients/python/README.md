@@ -2,6 +2,11 @@
 
 Python client for the [TinyZKP](https://tinyzkp.com) proving API — generate and verify ZK-STARK proofs.
 
+TinyZKP turns state transitions into receipt-sized STARK proofs that humans,
+services, and AI agents can verify later. Get a free API key at
+[tinyzkp.com/signup](https://tinyzkp.com/signup?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=api_key)
+with 100 proofs/month and no credit card.
+
 ## Install
 
 ```bash
@@ -54,3 +59,13 @@ Production template discovery includes a `lifecycle` field. Public production li
 | `accumulator_step` | `live` | Additive chain is correct | Balance updates, state receipts |
 
 Use [tinyzkp.com/docs](https://tinyzkp.com/docs) for the current template catalog, fit guidance, and security notes. Default receipts are transparent; do not market them as input-private unless the exact flow is documented as supported and audit-cleared.
+
+## Distribution Links
+
+- [Get a free API key](https://tinyzkp.com/signup?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=api_key)
+- [Verify a receipt in the browser](https://tinyzkp.com/verify?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=verify_receipt)
+- [Pricing and limits](https://tinyzkp.com/limits?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=limits)
+- [Agent-readable offers](https://tinyzkp.com/.well-known/tinyzkp-offers.json?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=agent_offer)
+
+Default receipts are transparent. Do not put secrets, raw customer data, or
+credentials into receipt parameters.

@@ -68,6 +68,7 @@ function checkoutEnv(overrides = {}) {
     STRIPE_PRICE_ID_DEVELOPER: "price_developer",
     STRIPE_PRICE_ID_PRO: "price_pro",
     STRIPE_PRICE_ID_SCALE: "price_scale",
+    STRIPE_PRICE_ID_PILOT: "price_pilot",
     ...overrides,
   };
 }
@@ -92,6 +93,40 @@ async function postCheckout(worker, body, envOverrides = {}, ip = "203.0.113.10"
         "cf-connecting-ip": ip,
       },
       body: JSON.stringify(body),
+    }),
+    env,
+    { waitUntil() {} },
+  );
+  return { response, env };
+}
+
+async function postPilotCheckout(worker, body, envOverrides = {}, ip = "203.0.113.11") {
+  const env = checkoutEnv(envOverrides);
+  const response = await worker.fetch(
+    new Request("https://tinyzkp.com/api/create-pilot-checkout", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Origin": "https://tinyzkp.com",
+        "cf-connecting-ip": ip,
+      },
+      body: JSON.stringify(body),
+    }),
+    env,
+    { waitUntil() {} },
+  );
+  return { response, env };
+}
+
+async function getPilotCheckoutCapability(worker, envOverrides = {}) {
+  const env = checkoutEnv(envOverrides);
+  const response = await worker.fetch(
+    new Request("https://tinyzkp.com/api/create-pilot-checkout", {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "Origin": "https://tinyzkp.com",
+      },
     }),
     env,
     { waitUntil() {} },
@@ -763,10 +798,15 @@ async function main() {
               email: " User@Example.com ",
               plan: " Developer ",
               source: "integration_cursor",
+              medium: "mcp_directory",
+              campaign: "q3_agent_distribution",
               platform: "cursor",
               use_case: "AI-agent state receipts",
               workflow: "Cursor MCP",
               intent: "developer_signup",
+              landing_path: "/integrations/cursor",
+              referrer_host: "smithery.ai",
+              first_seen_at: "2026-06-25T12:00:00.000Z",
             },
             {},
             "203.0.113.20",
@@ -784,27 +824,39 @@ async function main() {
           assert.equal(params.get("metadata[plan]"), "developer");
           assert.equal(params.get("metadata[cadence]"), "monthly");
           assert.equal(params.get("metadata[source]"), "integration_cursor");
+          assert.equal(params.get("metadata[medium]"), "mcp_directory");
+          assert.equal(params.get("metadata[campaign]"), "q3_agent_distribution");
           assert.equal(params.get("metadata[platform]"), "cursor");
           assert.equal(params.get("metadata[use_case]"), "AI-agent state receipts");
           assert.equal(params.get("metadata[workflow]"), "Cursor MCP");
           assert.equal(params.get("metadata[intent]"), "developer_signup");
+          assert.equal(params.get("metadata[landing_path]"), "/integrations/cursor");
+          assert.equal(params.get("metadata[referrer_host]"), "smithery.ai");
+          assert.equal(params.get("metadata[first_seen_at]"), "2026-06-25T12:00:00.000Z");
           assert.equal(params.get("subscription_data[metadata][plan]"), "developer");
           assert.equal(params.get("subscription_data[metadata][source]"), "integration_cursor");
+          assert.equal(params.get("subscription_data[metadata][referrer_host]"), "smithery.ai");
           const successUrl = new URL(params.get("success_url"));
           assert.equal(successUrl.origin + successUrl.pathname, "https://tinyzkp.com/welcome");
           assert.equal(successUrl.searchParams.get("checkout"), "success");
           assert.equal(successUrl.searchParams.get("plan"), "developer");
           assert.equal(successUrl.searchParams.get("cadence"), "monthly");
           assert.equal(successUrl.searchParams.get("source"), "integration_cursor");
+          assert.equal(successUrl.searchParams.get("medium"), "mcp_directory");
+          assert.equal(successUrl.searchParams.get("campaign"), "q3_agent_distribution");
           assert.equal(successUrl.searchParams.get("platform"), "cursor");
           assert.equal(successUrl.searchParams.get("use_case"), "AI-agent state receipts");
           assert.equal(successUrl.searchParams.get("workflow"), "Cursor MCP");
           assert.equal(successUrl.searchParams.get("intent"), "developer_signup");
+          assert.equal(successUrl.searchParams.get("landing_path"), "/integrations/cursor");
+          assert.equal(successUrl.searchParams.get("referrer_host"), "smithery.ai");
+          assert.equal(successUrl.searchParams.get("first_seen_at"), "2026-06-25T12:00:00.000Z");
           const cancelUrl = new URL(params.get("cancel_url"));
           assert.equal(cancelUrl.origin + cancelUrl.pathname, "https://tinyzkp.com/signup");
           assert.equal(cancelUrl.searchParams.get("cancelled"), "true");
           assert.equal(cancelUrl.searchParams.get("plan"), "developer");
           assert.equal(cancelUrl.searchParams.get("source"), "integration_cursor");
+          assert.equal(cancelUrl.searchParams.get("referrer_host"), "smithery.ai");
           assert.deepEqual(env.ASSETS.calls, []);
           assert.equal(calls.length, 1);
         },
@@ -896,6 +948,139 @@ async function main() {
     }
 
     {
+      const { response } = await getPilotCheckoutCapability(worker);
+      assert.equal(response.status, 200);
+      assert.deepEqual(await readJson(response), {
+        available: true,
+        plan: "production_pilot",
+        mode: "payment",
+        amount: 5000,
+        currency: "USD",
+        pricing_source: "stripe_price",
+        catalog_price_configured: true,
+        fallback_url: "https://tinyzkp.com/contact?category=Paid%20Pilot",
+      });
+    }
+
+    {
+      const { response } = await getPilotCheckoutCapability(worker, { STRIPE_PRICE_ID_PILOT: "" });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await readJson(response), {
+        available: true,
+        plan: "production_pilot",
+        mode: "payment",
+        amount: 5000,
+        currency: "USD",
+        pricing_source: "inline_price_data",
+        catalog_price_configured: false,
+        fallback_url: "https://tinyzkp.com/contact?category=Paid%20Pilot",
+      });
+    }
+
+    {
+      await withFetchMock(
+        async () => new Response(JSON.stringify({ url: "https://checkout.stripe.com/c/pilot" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+        async (calls) => {
+          const { response } = await postPilotCheckout(
+            worker,
+            {
+              email: " Pilot@Example.com ",
+              source: "agent_offer",
+              medium: "llm",
+              campaign: "paid_pilot",
+              platform: "openai_agents",
+              use_case: "AI-agent state receipts",
+              workflow: "agent_policy_rollout",
+              intent: "paid_pilot_checkout",
+              landing_path: "/pilot",
+              referrer_host: "chatgpt.com",
+              first_seen_at: "2026-06-25T12:00:00.000Z",
+              pilot_workflow: "Receipt every payout approval",
+            },
+            {},
+            "203.0.113.25",
+          );
+          assert.equal(response.status, 200);
+          assert.deepEqual(await readJson(response), { url: "https://checkout.stripe.com/c/pilot" });
+          const params = stripeParams(calls[0]);
+          assert.equal(params.get("mode"), "payment");
+          assert.equal(params.get("customer_email"), "pilot@example.com");
+          assert.equal(params.get("client_reference_id"), "pilot@example.com");
+          assert.equal(params.get("line_items[0][price]"), "price_pilot");
+          assert.equal(params.get("line_items[0][quantity]"), "1");
+          assert.equal(params.get("line_items[1][price]"), null);
+          assert.equal(params.get("metadata[plan]"), "production_pilot");
+          assert.equal(params.get("metadata[package]"), "production_pilot");
+          assert.equal(params.get("metadata[cadence]"), "one_time");
+          assert.equal(params.get("metadata[source]"), "agent_offer");
+          assert.equal(params.get("metadata[medium]"), "llm");
+          assert.equal(params.get("metadata[campaign]"), "paid_pilot");
+          assert.equal(params.get("metadata[platform]"), "openai_agents");
+          assert.equal(params.get("metadata[workflow]"), "agent_policy_rollout");
+          assert.equal(params.get("metadata[pilot_workflow]"), "Receipt every payout approval");
+          assert.equal(params.get("payment_intent_data[metadata][plan]"), "production_pilot");
+          assert.equal(params.get("payment_intent_data[metadata][source]"), "agent_offer");
+          const successUrl = new URL(params.get("success_url"));
+          assert.equal(successUrl.origin + successUrl.pathname, "https://tinyzkp.com/pilot");
+          assert.equal(successUrl.searchParams.get("checkout"), "pilot_success");
+          assert.equal(successUrl.searchParams.get("plan"), "production_pilot");
+          assert.equal(successUrl.searchParams.get("session_id"), "{CHECKOUT_SESSION_ID}");
+          assert.equal(successUrl.searchParams.get("source"), "agent_offer");
+          assert.equal(successUrl.searchParams.get("pilot_workflow"), "Receipt every payout approval");
+          const cancelUrl = new URL(params.get("cancel_url"));
+          assert.equal(cancelUrl.origin + cancelUrl.pathname, "https://tinyzkp.com/pilot");
+          assert.equal(cancelUrl.searchParams.get("checkout"), "pilot_cancelled");
+          assert.equal(cancelUrl.searchParams.get("plan"), "production_pilot");
+          assert.equal(calls.length, 1);
+        },
+      );
+    }
+
+    {
+      await withFetchMock(
+        async () => new Response(JSON.stringify({ url: "https://checkout.stripe.com/c/pilot-inline" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+        async (calls) => {
+          const { response } = await postPilotCheckout(
+            worker,
+            {
+              email: "pilot-inline@example.com",
+              source: "gtm_execution_ledger",
+              medium: "ops",
+              intent: "paid_pilot_checkout",
+            },
+            { STRIPE_PRICE_ID_PILOT: "" },
+            "203.0.113.26",
+          );
+          assert.equal(response.status, 200);
+          assert.deepEqual(await readJson(response), { url: "https://checkout.stripe.com/c/pilot-inline" });
+          const params = stripeParams(calls[0]);
+          assert.equal(params.get("mode"), "payment");
+          assert.equal(params.get("customer_email"), "pilot-inline@example.com");
+          assert.equal(params.get("line_items[0][price]"), null);
+          assert.equal(params.get("line_items[0][price_data][currency]"), "usd");
+          assert.equal(params.get("line_items[0][price_data][unit_amount]"), "500000");
+          assert.equal(params.get("line_items[0][price_data][product_data][name]"), "TinyZKP Production Pilot");
+          assert.equal(
+            params.get("line_items[0][price_data][product_data][description]"),
+            "14-day scoped TinyZKP proof-receipt workflow pilot, creditable toward annual, platform, or reserved-capacity agreement if converted within 60 days",
+          );
+          assert.equal(params.get("line_items[0][price_data][product_data][metadata][package]"), "production_pilot");
+          assert.equal(params.get("line_items[0][price_data][product_data][metadata][offer]"), "paid_pilot");
+          assert.equal(params.get("line_items[0][quantity]"), "1");
+          assert.equal(params.get("metadata[source]"), "gtm_execution_ledger");
+          assert.equal(params.get("payment_intent_data[metadata][intent]"), "paid_pilot_checkout");
+          assert.equal(calls.length, 1);
+        },
+      );
+    }
+
+    {
       await withFetchMock(
         async (input, init) => {
           assert.equal(String(input), "https://webhook.test/provision-free");
@@ -905,7 +1090,12 @@ async function main() {
             email: "free@example.com",
             plan: "free",
             source: "templates",
+            medium: "organic",
+            campaign: "receipt_share_loop",
             workflow: "accumulator_step",
+            landing_path: "/try",
+            referrer_host: "glama.ai",
+            first_seen_at: "2026-06-25T12:10:00.000Z",
           });
           return new Response(JSON.stringify({
             ok: true,
@@ -920,7 +1110,16 @@ async function main() {
         async (calls) => {
           const { response, env } = await postFreeSignup(
             worker,
-            { email: " Free@Example.com ", source: "templates", workflow: "accumulator_step" },
+            {
+              email: " Free@Example.com ",
+              source: "templates",
+              medium: "organic",
+              campaign: "receipt_share_loop",
+              workflow: "accumulator_step",
+              landing_path: "/try",
+              referrer_host: "glama.ai",
+              first_seen_at: "2026-06-25T12:10:00.000Z",
+            },
             {},
             "203.0.113.31",
           );

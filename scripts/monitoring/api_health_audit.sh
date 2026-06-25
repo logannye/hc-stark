@@ -495,7 +495,7 @@ checkout_email="audit+stripe-$(date +%s)@tinyzkp.com"
 checkout_resp=$(curl -s --max-time 20 \
     -X POST -H "Content-Type: application/json" \
     -H "Origin: https://tinyzkp.com" \
-    -d "{\"email\":\"$checkout_email\",\"plan\":\"developer\",\"cadence\":\"monthly\"}" \
+    -d "{\"email\":\"$checkout_email\",\"plan\":\"developer\",\"cadence\":\"monthly\",\"source\":\"api_health_audit\",\"medium\":\"monitoring\",\"intent\":\"checkout_canary\"}" \
     "$SITE/api/create-checkout" 2>/dev/null) || checkout_resp=""
 checkout_url=$(echo "$checkout_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('url',''))" 2>/dev/null || echo "")
 if [[ "$checkout_url" == https://checkout.stripe.com/* ]]; then
@@ -505,6 +505,32 @@ else
     log "  FAIL  ---  POST /api/create-checkout (no checkout.stripe.com URL in response: ${checkout_resp:0:120})"
     FAIL=$((FAIL + 1))
     FAILURES="$FAILURES\n  POST /api/create-checkout did not return a valid Stripe session URL"
+fi
+sleep 0.5
+
+pilot_capability_resp=$(curl -s --max-time 10 \
+    -H "Origin: https://tinyzkp.com" \
+    "$SITE/api/create-pilot-checkout" 2>/dev/null) || pilot_capability_resp=""
+pilot_capability_available=$(echo "$pilot_capability_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('available') is True else 'false')" 2>/dev/null || echo "false")
+if [[ "$pilot_capability_available" == "true" ]]; then
+    TOTAL=$((TOTAL + 1))
+    pilot_checkout_email="audit+pilot-$(date +%s)@tinyzkp.com"
+    pilot_checkout_resp=$(curl -s --max-time 20 \
+        -X POST -H "Content-Type: application/json" \
+        -H "Origin: https://tinyzkp.com" \
+        -d "{\"email\":\"$pilot_checkout_email\",\"pilot_workflow\":\"Production pilot checkout canary\",\"source\":\"api_health_audit\",\"medium\":\"monitoring\",\"intent\":\"paid_pilot_checkout_canary\"}" \
+        "$SITE/api/create-pilot-checkout" 2>/dev/null) || pilot_checkout_resp=""
+    pilot_checkout_url=$(echo "$pilot_checkout_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('url',''))" 2>/dev/null || echo "")
+    if [[ "$pilot_checkout_url" == https://checkout.stripe.com/* ]]; then
+        log "  PASS  200  POST /api/create-pilot-checkout (returned valid Stripe session URL)"
+        PASS=$((PASS + 1))
+    else
+        log "  FAIL  ---  POST /api/create-pilot-checkout (no checkout.stripe.com URL in response: ${pilot_checkout_resp:0:120})"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  POST /api/create-pilot-checkout did not return a valid Stripe session URL"
+    fi
+else
+    log "  WARN  ---  POST /api/create-pilot-checkout skipped (capability unavailable: STRIPE_SECRET_KEY not configured)"
 fi
 sleep 0.5
 
@@ -938,13 +964,16 @@ if [ -n "$mcp_session" ]; then
             mcp_proof_code=$(mcp_post "$mcp_session" "$proof_body" 30)
             mcp_proof_text=$(mcp_result_text 2>/dev/null || echo "")
             mcp_proof_b64=$(echo "$mcp_proof_text" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('proof_b64',''))" 2>/dev/null || echo "")
-            if [ "$mcp_proof_code" = "200" ] && [ -n "$mcp_proof_b64" ]; then
-                log "  PASS  $mcp_proof_code  MCP get_proof (proof_b64 returned)"
+            mcp_verifier_url=$(echo "$mcp_proof_text" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('verifier_url') or '')" 2>/dev/null || echo "")
+            mcp_receipt_url=$(echo "$mcp_proof_text" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('receipt_url') or '')" 2>/dev/null || echo "")
+            mcp_receipt_status=$(echo "$mcp_proof_text" | python3 -c "import sys,json; d=json.load(sys.stdin); print((d.get('receipt_share') or {}).get('status',''))" 2>/dev/null || echo "")
+            if [ "$mcp_proof_code" = "200" ] && [ -n "$mcp_proof_b64" ] && [[ "$mcp_verifier_url" == https://tinyzkp.com/verify\?source=receipt_share*medium=mcp* ]] && { [[ "$mcp_receipt_url" == https://tinyzkp.com/verify\?source=receipt_share*medium=mcp*"#proof="* ]] || [ "$mcp_receipt_status" = "proof_too_large" ]; }; then
+                log "  PASS  $mcp_proof_code  MCP get_proof (proof_b64 + tracked verifier URL returned)"
                 PASS=$((PASS + 1))
             else
-                log "  FAIL  $mcp_proof_code  MCP get_proof (missing proof_b64)"
+                log "  FAIL  $mcp_proof_code  MCP get_proof (missing proof_b64, tracked verifier_url, or receipt status)"
                 FAIL=$((FAIL + 1))
-                FAILURES="$FAILURES\n  $mcp_proof_code MCP get_proof missing proof_b64"
+                FAILURES="$FAILURES\n  $mcp_proof_code MCP get_proof missing proof_b64, tracked verifier_url, or receipt status"
             fi
 
             TOTAL=$((TOTAL + 1))

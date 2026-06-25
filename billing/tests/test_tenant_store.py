@@ -34,6 +34,19 @@ class TestCreateTenant:
             stripe_subscription_id="sub_456",
             stripe_subscription_item_id="si_789",
             plan="standard",
+            attribution={
+                "source": "smithery_mcp",
+                "medium": "mcp_directory",
+                "campaign": "q3_agent_distribution",
+                "platform": "claude_code",
+                "use_case": "Agent receipts",
+                "workflow": "Tool call receipt",
+                "intent": "developer_signup",
+                "landing_path": "/mcp",
+                "referrer_host": "smithery.ai",
+                "first_seen_at": "2026-06-25T12:00:00.000Z",
+                "unknown": "ignored",
+            },
         )
         t = tenant_store.get_tenant(db, "t_abc")
         assert t is not None
@@ -44,9 +57,48 @@ class TestCreateTenant:
         assert t["stripe_customer_id"] == "cus_123"
         assert t["stripe_subscription_id"] == "sub_456"
         assert t["stripe_subscription_item_id"] == "si_789"
+        assert t["attribution_source"] == "smithery_mcp"
+        assert t["attribution_medium"] == "mcp_directory"
+        assert t["attribution_campaign"] == "q3_agent_distribution"
+        assert t["attribution_platform"] == "claude_code"
+        assert t["attribution_use_case"] == "Agent receipts"
+        assert t["attribution_workflow"] == "Tool call receipt"
+        assert t["attribution_intent"] == "developer_signup"
+        assert t["attribution_landing_path"] == "/mcp"
+        assert t["attribution_referrer_host"] == "smithery.ai"
+        assert t["attribution_first_seen_at"] == "2026-06-25T12:00:00.000Z"
         # Key should be hashed, not stored in plaintext.
         assert t["api_key_hash"] != "tzk_testkey123"
         assert t["api_key_prefix"] == "tzk_test"
+
+    def test_open_db_adds_attribution_columns_to_existing_database(self, tmp_path):
+        db_path = str(tmp_path / "legacy.sqlite")
+        boot = sqlite3.connect(db_path)
+        boot.execute(
+            """CREATE TABLE tenants (
+              tenant_id TEXT PRIMARY KEY,
+              email TEXT NOT NULL,
+              api_key_hash TEXT NOT NULL,
+              api_key_prefix TEXT NOT NULL,
+              stripe_customer_id TEXT,
+              stripe_subscription_id TEXT UNIQUE,
+              stripe_subscription_item_id TEXT,
+              status TEXT NOT NULL DEFAULT 'active',
+              plan TEXT NOT NULL DEFAULT 'standard',
+              created_at_ms INTEGER NOT NULL,
+              updated_at_ms INTEGER NOT NULL
+            )"""
+        )
+        boot.commit()
+        boot.close()
+
+        conn = tenant_store.open_db(db_path)
+        try:
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(tenants)")}
+            assert "attribution_source" in columns
+            assert "attribution_first_seen_at" in columns
+        finally:
+            conn.close()
 
     def test_duplicate_tenant_id_raises(self, db):
         tenant_store.create_tenant(db, "t_1", "a@b.com", "key1")
@@ -319,7 +371,14 @@ class TestPostgresTenantMirror:
     def test_create_tenant_mirrors_shared_auth_row(self, db, monkeypatch):
         calls = _install_fake_pg(monkeypatch)
 
-        tenant_store.create_tenant(db, "t_pg", "pg@example.com", "tzk_secret", plan="free")
+        tenant_store.create_tenant(
+            db,
+            "t_pg",
+            "pg@example.com",
+            "tzk_secret",
+            plan="free",
+            attribution={"source": "smithery_mcp", "referrer_host": "smithery.ai"},
+        )
 
         tenant_writes = [
             (sql, params)
@@ -330,6 +389,9 @@ class TestPostgresTenantMirror:
         assert tenant_writes[0][1][0] == "t_pg"
         assert tenant_writes[0][1][1] == "pg@example.com"
         assert tenant_writes[0][1][7] == "free"
+        assert tenant_writes[0][1][8] == "smithery_mcp"
+        assert tenant_writes[0][1][16] == "smithery.ai"
+        assert len(tenant_writes[0][1]) == 20
 
     def test_sessions_and_magic_links_mirror_lifecycle(self, db, monkeypatch):
         calls = _install_fake_pg(monkeypatch)

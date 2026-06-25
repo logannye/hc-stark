@@ -8,4 +8,7 @@ Host: tinyzkp.com
 # Human-readable: https://tinyzkp.com
 # LLM-readable: https://tinyzkp.com/llms.txt
 # Machine-readable site index: https://tinyzkp.com/discovery.json
+# Agent-readable offers: https://tinyzkp.com/.well-known/tinyzkp-offers.json
+# Receipt-share contract: https://tinyzkp.com/.well-known/tinyzkp-receipt-share.json
+# Badge embed contract: https://tinyzkp.com/.well-known/tinyzkp-badge.json
 # MCP server card: https://tinyzkp.com/.well-known/mcp/server-card.json

@@ -92,9 +92,13 @@ systemctl daemon-reload
 systemctl enable hc-stark.service
 
 # ---- Billing cron ----
-CRON_LINE="0 * * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python billing/sync_usage.py >> /var/log/hc-billing.log 2>&1"
 CRON_FILE="/etc/cron.d/hc-billing"
-echo "$CRON_LINE" > "$CRON_FILE"
+cat > "$CRON_FILE" <<'CRON'
+0 * * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python billing/sync_usage.py >> /var/log/hc-billing.log 2>&1
+15 * * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python billing/lifecycle_nudges.py >> /var/log/hc-lifecycle.log 2>&1
+30 * * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python billing/checkout_recovery.py >> /var/log/hc-checkout-recovery.log 2>&1
+45 9 * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python scripts/monitoring/gtm_growth_monitor.py --offline >> /var/log/hc-gtm-growth.log 2>&1
+CRON
 chmod 644 "$CRON_FILE"
 
 # ---- Backup cron ----

@@ -28,16 +28,21 @@ TinyZKP provides proof receipts for AI agents, APIs, backend workflows, and stat
 - [Fit Finder](https://tinyzkp.com/fit): interactive and machine-readable route finder for choosing Free, Developer, Pro, Scale, Compute, paid pilot, platform rollout, enterprise, or defer.
 - [ROI and Business Case](https://tinyzkp.com/roi): finance-ready worksheet for estimating avoided manual review, support, prover operations, TinyZKP spend, and pilot payback.
 - [Pricing](https://tinyzkp.com/pricing): plan recommendations, per-proof rates, Compute economics, and buyer guidance.
-- [Paid Pilot](https://tinyzkp.com/pilot): $5,000 production pilot for one scoped proof-receipt workflow; creditable toward annual or reserved-capacity agreement if converted within 60 days.
+- [Paid Pilot](https://tinyzkp.com/pilot?source=llms_txt&medium=llm&intent=paid_pilot_checkout): $5,000 production pilot for one scoped proof-receipt workflow; a confirmed human buyer can fund it through Stripe Checkout, and the fee is creditable toward annual or reserved-capacity agreement if converted within 60 days.
 - [Enterprise](https://tinyzkp.com/enterprise): reserved-capacity, support, procurement, Compute planning, and custom state-machine review path.
 - [Pricing Calculator](https://tinyzkp.com/calculator): estimate proof receipt costs, compare self-serve plans with Compute, and choose a buying path.
 - [Limits and Capabilities](https://tinyzkp.com/limits): plan quotas, anonymous playground caps, supported receipt boundaries, and escalation triggers.
 - [Pilot Program](https://tinyzkp.com/pilot): structured design-partner path for one production receipt workflow, success metrics, verifier path, and commercial rollout decision.
+- [Offline Proof Verification](https://tinyzkp.com/use-cases/offline-proof-verification): verify TinyZKP receipts in a browser or with hosted fallback without trusting the producer API.
+- [Post-Quantum STARK Proving](https://tinyzkp.com/use-cases/post-quantum-stark-proving): transparent, hash-based STARK receipt positioning with no trusted setup.
 - [Docs](https://tinyzkp.com/docs): API, SDK, CLI, MCP, pricing, and proof-template documentation.
 - [Changelog](https://tinyzkp.com/changelog): release notes, compatibility policy, and release identity endpoints for API, MCP, verifier, schemas, pricing, and public metadata.
 - [Security Status](https://tinyzkp.com/security): current security posture and explicit product boundaries.
 - [OpenAPI](https://tinyzkp.com/openapi.json): machine-readable public API contract for agents and API clients.
 - [Discovery JSON](https://tinyzkp.com/discovery.json): canonical machine-readable summary of TinyZKP positioning, routes, pricing paths, trust boundaries, support paths, and metadata endpoints.
+- [Agent-readable offers](https://tinyzkp.com/.well-known/tinyzkp-offers.json): plan selection, source-tagged signup URLs, human-confirmation language, checkout safety, spend caps, and data-boundary rules for LLMs and agent buyers.
+- [Receipt share contract](https://tinyzkp.com/.well-known/tinyzkp-receipt-share.json): public verifier share-link format, attribution rules, fragment size limits, and receipt data-boundary guidance.
+- [Badge embed contract](https://tinyzkp.com/.well-known/tinyzkp-badge.json): Verified by TinyZKP badge asset, source-tagged verifier embed template, and transparent-receipt boundaries.
 
 ## Positioning
 
@@ -84,6 +89,12 @@ TinyZKP is best described as "proof receipts for automated work" or "verifiable 
 - [TinyZKP changelog schema](https://tinyzkp.com/schemas/tinyzkp-changelog.schema.json)
 - [TinyZKP pricing metadata](https://tinyzkp.com/pricing.json)
 - [TinyZKP pricing schema](https://tinyzkp.com/schemas/tinyzkp-pricing.schema.json)
+- [TinyZKP offer metadata](https://tinyzkp.com/.well-known/tinyzkp-offers.json)
+- [TinyZKP offer schema](https://tinyzkp.com/schemas/tinyzkp-offers.schema.json)
+- [TinyZKP receipt share contract](https://tinyzkp.com/.well-known/tinyzkp-receipt-share.json)
+- [TinyZKP receipt share schema](https://tinyzkp.com/schemas/tinyzkp-receipt-share.schema.json)
+- [TinyZKP badge contract](https://tinyzkp.com/.well-known/tinyzkp-badge.json)
+- [TinyZKP badge schema](https://tinyzkp.com/schemas/tinyzkp-badge.schema.json)
 - [TinyZKP platform rollout metadata](https://tinyzkp.com/platform-rollout.json)
 - [TinyZKP platform rollout schema](https://tinyzkp.com/schemas/tinyzkp-platform-rollout.schema.json)
 - [TinyZKP calculator metadata](https://tinyzkp.com/calculator.json)

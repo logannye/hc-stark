@@ -22,6 +22,23 @@ DB_PATH = os.environ.get("HC_TENANT_STORE_PATH", "/opt/hc-stark/data/tenant_stor
 PG_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "crates" / "hc-server" / "sql" / "tenant_auth_pg.sql"
 _PG_SCHEMA_READY = False
 
+TENANT_ATTRIBUTION_FIELDS = (
+    "source",
+    "medium",
+    "campaign",
+    "platform",
+    "use_case",
+    "workflow",
+    "intent",
+    "landing_path",
+    "referrer_host",
+    "first_seen_at",
+)
+
+TENANT_ATTRIBUTION_COLUMNS = tuple(f"attribution_{field}" for field in TENANT_ATTRIBUTION_FIELDS)
+_ATTRIBUTION_ALLOWED_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .:/_-")
+_ATTRIBUTION_MAX_LEN = 160
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenants (
   tenant_id TEXT PRIMARY KEY,
@@ -33,6 +50,16 @@ CREATE TABLE IF NOT EXISTS tenants (
   stripe_subscription_item_id TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   plan TEXT NOT NULL DEFAULT 'standard',
+  attribution_source TEXT,
+  attribution_medium TEXT,
+  attribution_campaign TEXT,
+  attribution_platform TEXT,
+  attribution_use_case TEXT,
+  attribution_workflow TEXT,
+  attribution_intent TEXT,
+  attribution_landing_path TEXT,
+  attribution_referrer_host TEXT,
+  attribution_first_seen_at TEXT,
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL
 );
@@ -58,6 +85,22 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at_ms INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions(tenant_id);
+
+CREATE TABLE IF NOT EXISTS lifecycle_emails (
+  tenant_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  sent_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, kind)
+);
+CREATE INDEX IF NOT EXISTS idx_lifecycle_emails_tenant ON lifecycle_emails(tenant_id);
+
+CREATE TABLE IF NOT EXISTS checkout_recovery_emails (
+  stripe_session_id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  plan TEXT,
+  sent_at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_checkout_recovery_emails_email ON checkout_recovery_emails(email);
 """
 
 
@@ -69,6 +112,20 @@ def _hash_key(api_key: str) -> str:
     """Hash an API key with SHA-256. Sufficient for API key storage."""
     import hashlib
     return hashlib.sha256(api_key.encode()).hexdigest()
+
+
+def _clean_attribution(attribution: Optional[dict[str, str]]) -> dict[str, str]:
+    if not isinstance(attribution, dict):
+        return {}
+    clean: dict[str, str] = {}
+    for field, column in zip(TENANT_ATTRIBUTION_FIELDS, TENANT_ATTRIBUTION_COLUMNS):
+        value = attribution.get(field)
+        if not isinstance(value, str):
+            continue
+        scrubbed = "".join(ch for ch in value.strip() if ch in _ATTRIBUTION_ALLOWED_CHARS)
+        if scrubbed:
+            clean[column] = scrubbed[:_ATTRIBUTION_MAX_LEN]
+    return clean
 
 
 _PARTIAL_INDEX_SQL = """
@@ -101,6 +158,16 @@ def _ensure_pg_schema(pg) -> None:
     _PG_SCHEMA_READY = True
 
 
+def _ensure_sqlite_tenant_columns(conn: sqlite3.Connection) -> None:
+    existing = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(tenants)").fetchall()
+    }
+    for column in TENANT_ATTRIBUTION_COLUMNS:
+        if column not in existing:
+            conn.execute(f"ALTER TABLE tenants ADD COLUMN {column} TEXT")
+
+
 def _with_pg_mirror(description: str, callback) -> None:
     url = _pg_url()
     if not url:
@@ -130,6 +197,7 @@ def open_db(path: Optional[str] = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(_SCHEMA)
+    _ensure_sqlite_tenant_columns(conn)
     try:
         conn.executescript(_PARTIAL_INDEX_SQL)
     except (sqlite3.OperationalError, sqlite3.IntegrityError) as exc:
@@ -158,22 +226,30 @@ def create_tenant(
     stripe_subscription_id: Optional[str] = None,
     stripe_subscription_item_id: Optional[str] = None,
     plan: str = "standard",
+    attribution: Optional[dict[str, str]] = None,
 ) -> None:
     """Insert a new tenant. Raises IntegrityError on duplicate tenant_id."""
     now = _now_ms()
     api_key_hash = _hash_key(api_key)
     api_key_prefix = api_key[:8]
+    clean_attribution = _clean_attribution(attribution)
+    attribution_values = [clean_attribution.get(column) for column in TENANT_ATTRIBUTION_COLUMNS]
     with conn:
         conn.execute(
             """INSERT INTO tenants
                (tenant_id, email, api_key_hash, api_key_prefix,
                 stripe_customer_id, stripe_subscription_id, stripe_subscription_item_id,
-                status, plan, created_at_ms, updated_at_ms)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
+                status, plan,
+                attribution_source, attribution_medium, attribution_campaign,
+                attribution_platform, attribution_use_case, attribution_workflow,
+                attribution_intent, attribution_landing_path, attribution_referrer_host,
+                attribution_first_seen_at,
+                created_at_ms, updated_at_ms)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 tenant_id, email, api_key_hash, api_key_prefix,
                 stripe_customer_id, stripe_subscription_id, stripe_subscription_item_id,
-                plan, now, now,
+                plan, *attribution_values, now, now,
             ),
         )
     _with_pg_mirror(
@@ -182,8 +258,13 @@ def create_tenant(
             """INSERT INTO tenants
                (tenant_id, email, api_key_hash, api_key_prefix,
                 stripe_customer_id, stripe_subscription_id, stripe_subscription_item_id,
-                status, plan, created_at_ms, updated_at_ms)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', %s, %s, %s)
+                status, plan,
+                attribution_source, attribution_medium, attribution_campaign,
+                attribution_platform, attribution_use_case, attribution_workflow,
+                attribution_intent, attribution_landing_path, attribution_referrer_host,
+                attribution_first_seen_at,
+                created_at_ms, updated_at_ms)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (tenant_id) DO UPDATE SET
                  email = EXCLUDED.email,
                  api_key_hash = EXCLUDED.api_key_hash,
@@ -193,11 +274,21 @@ def create_tenant(
                  stripe_subscription_item_id = EXCLUDED.stripe_subscription_item_id,
                  status = EXCLUDED.status,
                  plan = EXCLUDED.plan,
+                 attribution_source = EXCLUDED.attribution_source,
+                 attribution_medium = EXCLUDED.attribution_medium,
+                 attribution_campaign = EXCLUDED.attribution_campaign,
+                 attribution_platform = EXCLUDED.attribution_platform,
+                 attribution_use_case = EXCLUDED.attribution_use_case,
+                 attribution_workflow = EXCLUDED.attribution_workflow,
+                 attribution_intent = EXCLUDED.attribution_intent,
+                 attribution_landing_path = EXCLUDED.attribution_landing_path,
+                 attribution_referrer_host = EXCLUDED.attribution_referrer_host,
+                 attribution_first_seen_at = EXCLUDED.attribution_first_seen_at,
                  updated_at_ms = EXCLUDED.updated_at_ms""",
             (
                 tenant_id, email, api_key_hash, api_key_prefix,
                 stripe_customer_id, stripe_subscription_id, stripe_subscription_item_id,
-                plan, now, now,
+                plan, *attribution_values, now, now,
             ),
         ),
     )
@@ -288,6 +379,7 @@ def delete_tenant(conn: sqlite3.Connection, tenant_id: str) -> int:
     with conn:
         conn.execute("DELETE FROM magic_links WHERE tenant_id = ?", (tenant_id,))
         conn.execute("DELETE FROM sessions WHERE tenant_id = ?", (tenant_id,))
+        conn.execute("DELETE FROM lifecycle_emails WHERE tenant_id = ?", (tenant_id,))
         cur = conn.execute("DELETE FROM tenants WHERE tenant_id = ?", (tenant_id,))
         deleted = cur.rowcount
     if deleted:
@@ -446,6 +538,68 @@ def delete_sessions_for_tenant(conn: sqlite3.Connection, tenant_id: str) -> None
         "delete_sessions_for_tenant",
         lambda pg: pg.execute("DELETE FROM sessions WHERE tenant_id = %s", (tenant_id,)),
     )
+
+
+def is_lifecycle_email_sent(conn: sqlite3.Connection, tenant_id: str, kind: str) -> bool:
+    """Return True if a lifecycle email kind has already been sent to a tenant."""
+    row = conn.execute(
+        "SELECT 1 FROM lifecycle_emails WHERE tenant_id = ? AND kind = ?",
+        (tenant_id, kind),
+    ).fetchone()
+    return row is not None
+
+
+def mark_lifecycle_email_sent(
+    conn: sqlite3.Connection,
+    tenant_id: str,
+    kind: str,
+    sent_at_ms: Optional[int] = None,
+) -> None:
+    """Persist lifecycle-email delivery so retries do not send duplicates."""
+    sent_at = sent_at_ms if sent_at_ms is not None else _now_ms()
+    with conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO lifecycle_emails (tenant_id, kind, sent_at_ms) VALUES (?, ?, ?)",
+            (tenant_id, kind, sent_at),
+        )
+
+
+def is_checkout_recovery_sent(conn: sqlite3.Connection, stripe_session_id: str) -> bool:
+    """Return True if a checkout recovery was already sent for a Stripe session."""
+    row = conn.execute(
+        "SELECT 1 FROM checkout_recovery_emails WHERE stripe_session_id = ?",
+        (stripe_session_id,),
+    ).fetchone()
+    return row is not None
+
+
+def last_checkout_recovery_sent_at(conn: sqlite3.Connection, email: str) -> Optional[int]:
+    """Return the most recent checkout-recovery send time for an email."""
+    row = conn.execute(
+        "SELECT MAX(sent_at_ms) AS sent_at_ms FROM checkout_recovery_emails WHERE email = ?",
+        (email,),
+    ).fetchone()
+    if not row or row["sent_at_ms"] is None:
+        return None
+    return int(row["sent_at_ms"])
+
+
+def mark_checkout_recovery_sent(
+    conn: sqlite3.Connection,
+    stripe_session_id: str,
+    email: str,
+    plan: Optional[str] = None,
+    sent_at_ms: Optional[int] = None,
+) -> None:
+    """Persist checkout recovery delivery so retries do not send duplicates."""
+    sent_at = sent_at_ms if sent_at_ms is not None else _now_ms()
+    with conn:
+        conn.execute(
+            """INSERT OR IGNORE INTO checkout_recovery_emails
+               (stripe_session_id, email, plan, sent_at_ms)
+               VALUES (?, ?, ?, ?)""",
+            (stripe_session_id, email.strip().lower(), plan, sent_at),
+        )
 
 
 def migrate_from_tenant_map(conn: sqlite3.Connection, tenant_map_path: str, api_keys_path: str) -> int:

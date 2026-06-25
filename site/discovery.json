@@ -97,8 +97,8 @@
     },
     {
       "name": "Paid Pilot",
-      "url": "https://tinyzkp.com/pilot",
-      "best_for": "one scoped production receipt workflow before rollout"
+      "url": "https://tinyzkp.com/pilot?source=discovery&medium=metadata&intent=paid_pilot_checkout",
+      "best_for": "one scoped production receipt workflow before rollout; confirmed buyers can fund the $5,000 pilot through Stripe Checkout"
     },
     {
       "name": "Platform Rollout",
@@ -117,6 +117,9 @@
     "openapi": "https://tinyzkp.com/openapi.json",
     "mcp": "https://tinyzkp.com/mcp.json",
     "mcp_server_card": "https://tinyzkp.com/.well-known/mcp/server-card.json",
+    "offers": "https://tinyzkp.com/.well-known/tinyzkp-offers.json",
+    "receipt_share_contract": "https://tinyzkp.com/.well-known/tinyzkp-receipt-share.json",
+    "badge_contract": "https://tinyzkp.com/.well-known/tinyzkp-badge.json",
     "agent_policy": "https://tinyzkp.com/agent-policy.json",
     "pricing": "https://tinyzkp.com/pricing.json",
     "limits": "https://tinyzkp.com/limits.json",

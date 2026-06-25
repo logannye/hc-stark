@@ -1,0 +1,513 @@
+{
+  "generated_from": "marketing/generated/outbound_send_queue.json",
+  "source_campaign": "yc_agent_outbound",
+  "source_generated_at": "2026-06-25T17:53:19+00:00",
+  "privacy_rules": [
+    "Company-level public pages only.",
+    "Do not store personal email addresses, phone numbers, private CRM notes, or mailto links.",
+    "Use packets to accelerate manual founder/engineering contact research; do not automate cold email sending."
+  ],
+  "packets": [
+    {
+      "target_id": "yc_alter",
+      "company": "Alter",
+      "website": "https://alterauth.com",
+      "yc_url": "https://www.ycombinator.com/companies/alter",
+      "recommended_route": "platform_rollout",
+      "contact_role": "Founder, head of engineering, or workflow owner",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "company_research_status": "needs_manual_contact_path_review",
+      "homepage": {
+        "status": "ok",
+        "url": "https://alterauth.com",
+        "title": "Alter Vault | The Authorization Layer for AI Agents",
+        "description": "Secure OAuth credential management for AI agents. Connect, authorize, and audit every tool your agents use, with enterprise-grade security.",
+        "error": ""
+      },
+      "public_company_links": {
+        "contact": [],
+        "about": [],
+        "product": [
+          "https://alterauth.com/pricing"
+        ]
+      },
+      "manual_research_urls": [
+        {
+          "label": "YC profile",
+          "url": "https://www.ycombinator.com/companies/alter",
+          "purpose": "Confirm company fit, batch, description, and public founder context."
+        },
+        {
+          "label": "Company website",
+          "url": "https://alterauth.com",
+          "purpose": "Confirm current positioning and avoid stale outreach hooks."
+        },
+        {
+          "label": "Founder/engineering web search",
+          "url": "https://www.google.com/search?q=Alter+founder+CTO+engineering+lead+alterauth.com",
+          "purpose": "Manually identify exactly one founder, engineering lead, platform lead, or workflow owner."
+        },
+        {
+          "label": "LinkedIn people search",
+          "url": "https://www.linkedin.com/search/results/people/?keywords=Alter+founder+CTO+engineering+lead+alterauth.com",
+          "purpose": "Cross-check role/title before sending; do not export or store personal emails."
+        }
+      ],
+      "route_guidance": "Lead with the fit-finder CTA and frame TinyZKP as a native proof-receipt primitive for their agent platform.",
+      "primary_cta": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=alter",
+      "secondary_cta": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=alter",
+      "privacy_rule": "No personal emails, phone numbers, private CRM notes, or mailto links are stored in this packet."
+    },
+    {
+      "target_id": "yc_korso",
+      "company": "Korso",
+      "website": "https://korsoai.com/",
+      "yc_url": "https://www.ycombinator.com/companies/korso",
+      "recommended_route": "paid_pilot",
+      "contact_role": "Founder, head of engineering, or workflow owner",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "company_research_status": "needs_manual_contact_path_review",
+      "homepage": {
+        "status": "ok",
+        "url": "https://www.korsoai.com/",
+        "title": "Korso",
+        "description": "Korso",
+        "error": ""
+      },
+      "public_company_links": {
+        "contact": [],
+        "about": [],
+        "product": []
+      },
+      "manual_research_urls": [
+        {
+          "label": "YC profile",
+          "url": "https://www.ycombinator.com/companies/korso",
+          "purpose": "Confirm company fit, batch, description, and public founder context."
+        },
+        {
+          "label": "Company website",
+          "url": "https://korsoai.com/",
+          "purpose": "Confirm current positioning and avoid stale outreach hooks."
+        },
+        {
+          "label": "Founder/engineering web search",
+          "url": "https://www.google.com/search?q=Korso+founder+CTO+engineering+lead+korsoai.com",
+          "purpose": "Manually identify exactly one founder, engineering lead, platform lead, or workflow owner."
+        },
+        {
+          "label": "LinkedIn people search",
+          "url": "https://www.linkedin.com/search/results/people/?keywords=Korso+founder+CTO+engineering+lead+korsoai.com",
+          "purpose": "Cross-check role/title before sending; do not export or store personal emails."
+        }
+      ],
+      "route_guidance": "Lead with the paid pilot CTA after confirming the workflow is consequential and has a visible audit/customer-verification need.",
+      "primary_cta": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=korso",
+      "secondary_cta": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=korso",
+      "privacy_rule": "No personal emails, phone numbers, private CRM notes, or mailto links are stored in this packet."
+    },
+    {
+      "target_id": "yc_redouble-ai",
+      "company": "Redouble AI",
+      "website": "https://redouble.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/redouble-ai",
+      "recommended_route": "platform_rollout",
+      "contact_role": "Founder, platform lead, or agent product owner",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "company_research_status": "company_level_research_ready",
+      "homepage": {
+        "status": "ok",
+        "url": "https://redouble.ai/",
+        "title": "Redouble AI \u00b7 Java-Native Agentic Enterprise AI",
+        "description": "If your enterprise runs on Java, so should your agents. Built on the language, infrastructure, and security model your engineers already trust.",
+        "error": ""
+      },
+      "public_company_links": {
+        "contact": [],
+        "about": [
+          "https://redouble.ai/about"
+        ],
+        "product": [
+          "https://redouble.ai/platform"
+        ]
+      },
+      "manual_research_urls": [
+        {
+          "label": "YC profile",
+          "url": "https://www.ycombinator.com/companies/redouble-ai",
+          "purpose": "Confirm company fit, batch, description, and public founder context."
+        },
+        {
+          "label": "Company website",
+          "url": "https://redouble.ai/",
+          "purpose": "Confirm current positioning and avoid stale outreach hooks."
+        },
+        {
+          "label": "Founder/engineering web search",
+          "url": "https://www.google.com/search?q=Redouble+AI+founder+CTO+engineering+lead+redouble.ai",
+          "purpose": "Manually identify exactly one founder, engineering lead, platform lead, or workflow owner."
+        },
+        {
+          "label": "LinkedIn people search",
+          "url": "https://www.linkedin.com/search/results/people/?keywords=Redouble+AI+founder+CTO+engineering+lead+redouble.ai",
+          "purpose": "Cross-check role/title before sending; do not export or store personal emails."
+        }
+      ],
+      "route_guidance": "Lead with the fit-finder CTA and frame TinyZKP as a native proof-receipt primitive for their agent platform.",
+      "primary_cta": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=redouble-ai",
+      "secondary_cta": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=redouble-ai",
+      "privacy_rule": "No personal emails, phone numbers, private CRM notes, or mailto links are stored in this packet."
+    },
+    {
+      "target_id": "yc_cyberdesk",
+      "company": "Cyberdesk",
+      "website": "https://www.cyberdesk.io",
+      "yc_url": "https://www.ycombinator.com/companies/cyberdesk",
+      "recommended_route": "platform_rollout",
+      "contact_role": "Founder, platform lead, or agent product owner",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "company_research_status": "needs_manual_contact_path_review",
+      "homepage": {
+        "status": "ok",
+        "url": "https://www.cyberdesk.io",
+        "title": "Cyberdesk | The computer use agent for Windows",
+        "description": "Cyberdesk is the self learning computer use agent for Windows.",
+        "error": ""
+      },
+      "public_company_links": {
+        "contact": [],
+        "about": [],
+        "product": [
+          "https://www.cyberdesk.io/security"
+        ]
+      },
+      "manual_research_urls": [
+        {
+          "label": "YC profile",
+          "url": "https://www.ycombinator.com/companies/cyberdesk",
+          "purpose": "Confirm company fit, batch, description, and public founder context."
+        },
+        {
+          "label": "Company website",
+          "url": "https://www.cyberdesk.io",
+          "purpose": "Confirm current positioning and avoid stale outreach hooks."
+        },
+        {
+          "label": "Founder/engineering web search",
+          "url": "https://www.google.com/search?q=Cyberdesk+founder+CTO+engineering+lead+cyberdesk.io",
+          "purpose": "Manually identify exactly one founder, engineering lead, platform lead, or workflow owner."
+        },
+        {
+          "label": "LinkedIn people search",
+          "url": "https://www.linkedin.com/search/results/people/?keywords=Cyberdesk+founder+CTO+engineering+lead+cyberdesk.io",
+          "purpose": "Cross-check role/title before sending; do not export or store personal emails."
+        }
+      ],
+      "route_guidance": "Lead with the fit-finder CTA and frame TinyZKP as a native proof-receipt primitive for their agent platform.",
+      "primary_cta": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=cyberdesk",
+      "secondary_cta": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=cyberdesk",
+      "privacy_rule": "No personal emails, phone numbers, private CRM notes, or mailto links are stored in this packet."
+    },
+    {
+      "target_id": "yc_inkeep",
+      "company": "Inkeep",
+      "website": "https://inkeep.com",
+      "yc_url": "https://www.ycombinator.com/companies/inkeep",
+      "recommended_route": "platform_rollout",
+      "contact_role": "Founder, platform lead, or agent product owner",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "company_research_status": "company_level_research_ready",
+      "homepage": {
+        "status": "ok",
+        "url": "https://inkeep.com",
+        "title": "Inkeep - AI Agents for CX & Ops",
+        "description": "The only Agent Platform where engineering and business teams can ship Agents together. Build with a No-Code Visual Builder or Developer Agents SDK with full 2-way sync.",
+        "error": ""
+      },
+      "public_company_links": {
+        "contact": [
+          "https://inkeep.com/demo",
+          "https://inkeep.com/schedule-demo"
+        ],
+        "about": [],
+        "product": [
+          "https://inkeep.com/developers",
+          "https://inkeep.com/use-cases/support-leaders",
+          "https://inkeep.com/use-cases/documentation-leaders"
+        ]
+      },
+      "manual_research_urls": [
+        {
+          "label": "YC profile",
+          "url": "https://www.ycombinator.com/companies/inkeep",
+          "purpose": "Confirm company fit, batch, description, and public founder context."
+        },
+        {
+          "label": "Company website",
+          "url": "https://inkeep.com",
+          "purpose": "Confirm current positioning and avoid stale outreach hooks."
+        },
+        {
+          "label": "Founder/engineering web search",
+          "url": "https://www.google.com/search?q=Inkeep+founder+CTO+engineering+lead+inkeep.com",
+          "purpose": "Manually identify exactly one founder, engineering lead, platform lead, or workflow owner."
+        },
+        {
+          "label": "LinkedIn people search",
+          "url": "https://www.linkedin.com/search/results/people/?keywords=Inkeep+founder+CTO+engineering+lead+inkeep.com",
+          "purpose": "Cross-check role/title before sending; do not export or store personal emails."
+        }
+      ],
+      "route_guidance": "Lead with the fit-finder CTA and frame TinyZKP as a native proof-receipt primitive for their agent platform.",
+      "primary_cta": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=inkeep",
+      "secondary_cta": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=inkeep",
+      "privacy_rule": "No personal emails, phone numbers, private CRM notes, or mailto links are stored in this packet."
+    },
+    {
+      "target_id": "yc_archal",
+      "company": "Archal",
+      "website": "https://www.archal.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/archal",
+      "recommended_route": "platform_rollout",
+      "contact_role": "Founder, platform lead, or agent product owner",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "company_research_status": "needs_manual_contact_path_review",
+      "homepage": {
+        "status": "ok",
+        "url": "https://www.archal.ai/",
+        "title": "Archal | The eval platform for autonomous software",
+        "description": "Archal runs realistic scenarios against clones of the tools your agent uses, then leaves behind traces, criteria, and evidence your team can act on.",
+        "error": ""
+      },
+      "public_company_links": {
+        "contact": [],
+        "about": [],
+        "product": [
+          "https://www.archal.ai/pricing"
+        ]
+      },
+      "manual_research_urls": [
+        {
+          "label": "YC profile",
+          "url": "https://www.ycombinator.com/companies/archal",
+          "purpose": "Confirm company fit, batch, description, and public founder context."
+        },
+        {
+          "label": "Company website",
+          "url": "https://www.archal.ai/",
+          "purpose": "Confirm current positioning and avoid stale outreach hooks."
+        },
+        {
+          "label": "Founder/engineering web search",
+          "url": "https://www.google.com/search?q=Archal+founder+CTO+engineering+lead+archal.ai",
+          "purpose": "Manually identify exactly one founder, engineering lead, platform lead, or workflow owner."
+        },
+        {
+          "label": "LinkedIn people search",
+          "url": "https://www.linkedin.com/search/results/people/?keywords=Archal+founder+CTO+engineering+lead+archal.ai",
+          "purpose": "Cross-check role/title before sending; do not export or store personal emails."
+        }
+      ],
+      "route_guidance": "Lead with the fit-finder CTA and frame TinyZKP as a native proof-receipt primitive for their agent platform.",
+      "primary_cta": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=archal",
+      "secondary_cta": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=archal",
+      "privacy_rule": "No personal emails, phone numbers, private CRM notes, or mailto links are stored in this packet."
+    },
+    {
+      "target_id": "yc_godhands",
+      "company": "GodHands",
+      "website": "https://godhands.dev",
+      "yc_url": "https://www.ycombinator.com/companies/godhands",
+      "recommended_route": "self_serve_developer",
+      "contact_role": "Founder, developer-experience lead, or senior engineer",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "company_research_status": "needs_manual_contact_path_review",
+      "homepage": {
+        "status": "ok",
+        "url": "https://godhands.dev",
+        "title": "GodHands",
+        "description": "The High-Fidelity Infrastructure for Deterministic Desktop Automation. Built for OS-level precision and speed.",
+        "error": ""
+      },
+      "public_company_links": {
+        "contact": [],
+        "about": [],
+        "product": []
+      },
+      "manual_research_urls": [
+        {
+          "label": "YC profile",
+          "url": "https://www.ycombinator.com/companies/godhands",
+          "purpose": "Confirm company fit, batch, description, and public founder context."
+        },
+        {
+          "label": "Company website",
+          "url": "https://godhands.dev",
+          "purpose": "Confirm current positioning and avoid stale outreach hooks."
+        },
+        {
+          "label": "Founder/engineering web search",
+          "url": "https://www.google.com/search?q=GodHands+founder+CTO+engineering+lead+godhands.dev",
+          "purpose": "Manually identify exactly one founder, engineering lead, platform lead, or workflow owner."
+        },
+        {
+          "label": "LinkedIn people search",
+          "url": "https://www.linkedin.com/search/results/people/?keywords=GodHands+founder+CTO+engineering+lead+godhands.dev",
+          "purpose": "Cross-check role/title before sending; do not export or store personal emails."
+        }
+      ],
+      "route_guidance": "Lead with the free API-key CTA and ask for one developer-owned state transition to receipt.",
+      "primary_cta": "https://tinyzkp.com/signup?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=api_key&workflow=godhands",
+      "secondary_cta": "https://tinyzkp.com/?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=learn&workflow=godhands",
+      "privacy_rule": "No personal emails, phone numbers, private CRM notes, or mailto links are stored in this packet."
+    },
+    {
+      "target_id": "yc_tiny",
+      "company": "Tiny",
+      "website": "https://andtiny.com",
+      "yc_url": "https://www.ycombinator.com/companies/tiny",
+      "recommended_route": "paid_pilot",
+      "contact_role": "Founder, head of engineering, or workflow owner",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "company_research_status": "needs_manual_contact_path_review",
+      "homepage": {
+        "status": "ok",
+        "url": "https://andtiny.com",
+        "title": "Tiny",
+        "description": "",
+        "error": ""
+      },
+      "public_company_links": {
+        "contact": [],
+        "about": [],
+        "product": []
+      },
+      "manual_research_urls": [
+        {
+          "label": "YC profile",
+          "url": "https://www.ycombinator.com/companies/tiny",
+          "purpose": "Confirm company fit, batch, description, and public founder context."
+        },
+        {
+          "label": "Company website",
+          "url": "https://andtiny.com",
+          "purpose": "Confirm current positioning and avoid stale outreach hooks."
+        },
+        {
+          "label": "Founder/engineering web search",
+          "url": "https://www.google.com/search?q=Tiny+founder+CTO+engineering+lead+andtiny.com",
+          "purpose": "Manually identify exactly one founder, engineering lead, platform lead, or workflow owner."
+        },
+        {
+          "label": "LinkedIn people search",
+          "url": "https://www.linkedin.com/search/results/people/?keywords=Tiny+founder+CTO+engineering+lead+andtiny.com",
+          "purpose": "Cross-check role/title before sending; do not export or store personal emails."
+        }
+      ],
+      "route_guidance": "Lead with the paid pilot CTA after confirming the workflow is consequential and has a visible audit/customer-verification need.",
+      "primary_cta": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=tiny",
+      "secondary_cta": "https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=calculator&workflow=tiny",
+      "privacy_rule": "No personal emails, phone numbers, private CRM notes, or mailto links are stored in this packet."
+    },
+    {
+      "target_id": "yc_coasty",
+      "company": "Coasty",
+      "website": "https://coasty.ai/",
+      "yc_url": "https://www.ycombinator.com/companies/coasty",
+      "recommended_route": "platform_rollout",
+      "contact_role": "Founder, platform lead, or agent product owner",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "company_research_status": "needs_manual_contact_path_review",
+      "homepage": {
+        "status": "ok",
+        "url": "https://coasty.ai/",
+        "title": "Coasty - #1 Computer-Use AI Agent | Best for Desktop & Browser Automation",
+        "description": "Coasty is the #1 ranked computer-use AI agent (82% on OSWorld) and the best computer-use API of 2026 at $0.05 per /v1/predict, with 1,000+ native app integrations (Gmail, Slack, Salesforce, HubSpot, Linear, GitHub, Strip",
+        "error": ""
+      },
+      "public_company_links": {
+        "contact": [],
+        "about": [],
+        "product": [
+          "https://coasty.ai/use-cases",
+          "https://coasty.ai/pricing",
+          "https://coasty.ai/docs"
+        ]
+      },
+      "manual_research_urls": [
+        {
+          "label": "YC profile",
+          "url": "https://www.ycombinator.com/companies/coasty",
+          "purpose": "Confirm company fit, batch, description, and public founder context."
+        },
+        {
+          "label": "Company website",
+          "url": "https://coasty.ai/",
+          "purpose": "Confirm current positioning and avoid stale outreach hooks."
+        },
+        {
+          "label": "Founder/engineering web search",
+          "url": "https://www.google.com/search?q=Coasty+founder+CTO+engineering+lead+coasty.ai",
+          "purpose": "Manually identify exactly one founder, engineering lead, platform lead, or workflow owner."
+        },
+        {
+          "label": "LinkedIn people search",
+          "url": "https://www.linkedin.com/search/results/people/?keywords=Coasty+founder+CTO+engineering+lead+coasty.ai",
+          "purpose": "Cross-check role/title before sending; do not export or store personal emails."
+        }
+      ],
+      "route_guidance": "Lead with the fit-finder CTA and frame TinyZKP as a native proof-receipt primitive for their agent platform.",
+      "primary_cta": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=coasty",
+      "secondary_cta": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=coasty",
+      "privacy_rule": "No personal emails, phone numbers, private CRM notes, or mailto links are stored in this packet."
+    },
+    {
+      "target_id": "yc_corsair",
+      "company": "Corsair",
+      "website": "https://www.corsair.dev",
+      "yc_url": "https://www.ycombinator.com/companies/corsair",
+      "recommended_route": "platform_rollout",
+      "contact_role": "Founder, platform lead, or agent product owner",
+      "contact_research_status": "needs_manual_founder_or_engineering_contact",
+      "company_research_status": "needs_manual_contact_path_review",
+      "homepage": {
+        "status": "ok",
+        "url": "https://corsair.dev/",
+        "title": "Corsair \u2014 Open Source Integration Layer for AI Agents",
+        "description": "Corsair helps AI products add secure, multi-tenant integrations with OAuth, permissions, MCP, webhooks, and hosted or self-hosted execution.",
+        "error": ""
+      },
+      "public_company_links": {
+        "contact": [],
+        "about": [],
+        "product": []
+      },
+      "manual_research_urls": [
+        {
+          "label": "YC profile",
+          "url": "https://www.ycombinator.com/companies/corsair",
+          "purpose": "Confirm company fit, batch, description, and public founder context."
+        },
+        {
+          "label": "Company website",
+          "url": "https://www.corsair.dev",
+          "purpose": "Confirm current positioning and avoid stale outreach hooks."
+        },
+        {
+          "label": "Founder/engineering web search",
+          "url": "https://www.google.com/search?q=Corsair+founder+CTO+engineering+lead+corsair.dev",
+          "purpose": "Manually identify exactly one founder, engineering lead, platform lead, or workflow owner."
+        },
+        {
+          "label": "LinkedIn people search",
+          "url": "https://www.linkedin.com/search/results/people/?keywords=Corsair+founder+CTO+engineering+lead+corsair.dev",
+          "purpose": "Cross-check role/title before sending; do not export or store personal emails."
+        }
+      ],
+      "route_guidance": "Lead with the fit-finder CTA and frame TinyZKP as a native proof-receipt primitive for their agent platform.",
+      "primary_cta": "https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=corsair",
+      "secondary_cta": "https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=corsair",
+      "privacy_rule": "No personal emails, phone numbers, private CRM notes, or mailto links are stored in this packet."
+    }
+  ]
+}

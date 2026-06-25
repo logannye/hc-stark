@@ -227,9 +227,9 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
         </div>
         <div class="result-note" id="guardrail">Do not put secrets, private customer data, or API keys into transparent receipt parameters.</div>
         <div class="cta-row">
-          <a class="cta" id="primary-cta" href="/signup" data-track="fit_primary_click" data-source="fit_result">Get Free API Key</a>
+          <a class="cta" id="primary-cta" href="/signup?source=fit_result&medium=fit_finder&intent=free_signup" data-track="fit_primary_click" data-source="fit_result">Get Free API Key</a>
           <a class="cta secondary" id="secondary-cta" href="/evaluation" data-track="fit_secondary_click" data-source="fit_result">Open evaluation kit</a>
-          <a class="cta secondary" id="contact-cta" href="/contact?category=Fit%20Assessment" data-track="fit_contact_click" data-source="fit_result">Send summary</a>
+          <a class="cta secondary" id="contact-cta" href="/contact?category=Fit%20Assessment&source=fit_result&medium=fit_finder&intent=contact_summary" data-track="fit_contact_click" data-source="fit_result">Send summary</a>
         </div>
         <div class="summary"><pre id="summary-text"></pre></div>
         <div class="cta-row">
@@ -282,9 +282,9 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
     <h2>The right first route creates evidence a buyer can forward.</h2>
     <p>Turn the fit result into one receipt, one verifier result, one cost estimate, and one decision owner. That is enough to start free, upgrade, scope a pilot, or decide TinyZKP is not the right first tool.</p>
     <div class="cta-row" style="justify-content:center">
-      <a class="cta" href="#finder">Find my route</a>
+      <a class="cta" href="#finder" data-track="fit_finder_start_click" data-source="fit_final">Find my route</a>
       <a class="cta secondary" href="/fit.json">Open fit metadata</a>
-      <a class="cta secondary" href="/contact?category=Fit%20Assessment">Ask for routing help</a>
+      <a class="cta secondary" href="/contact?category=Fit%20Assessment&source=fit_final&medium=fit_finder&intent=contact_summary" data-track="fit_contact_click" data-source="fit_final">Ask for routing help</a>
     </div>
   </section>
 </div>
@@ -423,6 +423,22 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
   function v(id){return document.getElementById(id).value}
   function setText(id,text){document.getElementById(id).textContent=text}
   function optionLabel(group,value){return labels[group][value] || value}
+  function resultIntent(result){
+    if (result.id === 'pilot') return 'paid_pilot';
+    if (result.id === 'platform_rollout') return 'platform_rollout';
+    if (result.id === 'enterprise') return 'enterprise_review';
+    if (result.id === 'compute') return 'compute_signup';
+    if (result.id === 'defer') return 'compare_alternatives';
+    if (['developer', 'pro', 'scale'].indexOf(result.id) !== -1) return 'recommended_plan';
+    return 'free_signup';
+  }
+  function attributedHref(href, source, intent){
+    var url = new URL(href, window.location.origin);
+    url.searchParams.set('source', source);
+    url.searchParams.set('medium', 'fit_finder');
+    url.searchParams.set('intent', intent);
+    return url.pathname + url.search + url.hash;
+  }
 
   function chooseRoute(state){
     var reasons = [];
@@ -659,7 +675,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
       'Budget owner: ' + optionLabel('owner', state.owner),
       'Next artifact: ' + result.artifact,
       'Guardrail: ' + result.guardrail,
-      'Next URL: https://tinyzkp.com' + result.href
+      'Next URL: https://tinyzkp.com' + attributedHref(result.href, 'fit_result', resultIntent(result))
     ].join('\n');
   }
 
@@ -684,18 +700,18 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
     });
 
     var primary = document.getElementById('primary-cta');
-    primary.href = result.href;
+    primary.href = attributedHref(result.href, 'fit_result', resultIntent(result));
     primary.textContent = result.cta;
     primary.setAttribute('data-route', result.id);
 
     var secondary = document.getElementById('secondary-cta');
-    secondary.href = result.secondaryHref;
+    secondary.href = attributedHref(result.secondaryHref, 'fit_result', 'secondary_route');
     secondary.textContent = result.secondary;
     secondary.setAttribute('data-route', result.id);
 
     var summary = summaryFor(state,result);
     setText('summary-text', summary);
-    var contactUrl = '/contact?category=' + encodeURIComponent(result.category) + '&message=' + encodeURIComponent(summary);
+    var contactUrl = attributedHref('/contact?category=' + encodeURIComponent(result.category) + '&message=' + encodeURIComponent(summary), 'fit_result', 'contact_summary');
     document.getElementById('contact-cta').href = contactUrl;
 
     if (window.tinyzkpTrack) {

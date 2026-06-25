@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/tinyzkp-badge.schema.json",
+  "title": "TinyZKP Badge Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "canonical_url",
+    "status",
+    "name",
+    "badge_asset",
+    "docs_url",
+    "default_embed_html",
+    "allowed_media",
+    "link_policy",
+    "attribution",
+    "data_boundaries",
+    "related_assets"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "canonical_url": { "type": "string", "format": "uri" },
+    "status": { "type": "string", "enum": ["live", "draft", "deprecated"] },
+    "name": { "type": "string", "minLength": 1 },
+    "badge_asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "media_type", "width", "height", "alt"],
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "media_type": { "type": "string" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "alt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "docs_url": { "type": "string", "format": "uri" },
+    "default_embed_html": { "type": "string", "minLength": 1 },
+    "allowed_media": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "link_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_destination", "preferred_verifier_url", "do_not_link_directly_to_asset_only"],
+      "properties": {
+        "required_destination": { "type": "string" },
+        "preferred_verifier_url": { "type": "string" },
+        "do_not_link_directly_to_asset_only": { "type": "boolean" }
+      }
+    },
+    "attribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_source", "recommended_intent", "events", "conversion_ctas"],
+      "properties": {
+        "required_source": { "type": "string" },
+        "recommended_intent": { "type": "string" },
+        "events": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "conversion_ctas": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "format": "uri" },
+          "minProperties": 1
+        }
+      }
+    },
+    "data_boundaries": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "related_assets": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "uri" },
+      "minProperties": 1
+    }
+  }
+}

@@ -2,6 +2,11 @@
 
 Generate and verify [TinyZKP](https://tinyzkp.com) state-transition receipts from your terminal. One command, zero setup.
 
+Use the CLI when you want receipt generation in scripts, CI jobs, or local
+agent workflows. Get a free API key at
+[tinyzkp.com/signup](https://tinyzkp.com/signup?source=npm_cli&medium=package_registry&platform=npm&intent=cli_install)
+with 100 proofs/month and no credit card.
+
 ```bash
 npx @tinyzkp/cli templates
 npx @tinyzkp/cli prove accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}' --wait > proof.json
@@ -25,7 +30,7 @@ Requires Node.js 18+ (uses built-in `fetch`).
 
 ## Authentication
 
-Get a free API key at [tinyzkp.com/signup](https://tinyzkp.com/signup) — 100 proofs/month, no credit card. Then expose it via any of:
+Get a free API key at [tinyzkp.com/signup](https://tinyzkp.com/signup?source=npm_cli&medium=package_registry&platform=npm&intent=cli_install) — 100 proofs/month, no credit card. Then expose it via any of:
 
 ```bash
 # Option 1: environment variable
@@ -131,13 +136,23 @@ claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 
 See [tinyzkp.com/docs](https://tinyzkp.com/docs) for the MCP integration guide.
 
+## Distribution Links
+
+- [Get a free API key](https://tinyzkp.com/signup?source=npm_cli&medium=package_registry&platform=npm&intent=cli_install)
+- [Verify a receipt in the browser](https://tinyzkp.com/verify?source=npm_cli&medium=package_registry&platform=npm&intent=verify_receipt)
+- [Pricing and limits](https://tinyzkp.com/limits?source=npm_cli&medium=package_registry&platform=npm&intent=limits)
+- [Agent-readable offers](https://tinyzkp.com/.well-known/tinyzkp-offers.json?source=npm_cli&medium=package_registry&platform=npm&intent=agent_offer)
+
+Default receipts are transparent. Do not put secrets, raw customer data, or
+credentials into receipt parameters.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
 
 ## Links
 
-- [tinyzkp.com](https://tinyzkp.com) — homepage
-- [tinyzkp.com/try](https://tinyzkp.com/try) — browser playground (no signup)
-- [tinyzkp.com/docs](https://tinyzkp.com/docs) — full docs
+- [tinyzkp.com](https://tinyzkp.com?source=npm_cli&medium=package_registry&platform=npm&intent=learn) — homepage
+- [tinyzkp.com/try](https://tinyzkp.com/try?source=npm_cli&medium=package_registry&platform=npm&intent=try) — browser playground (no signup)
+- [tinyzkp.com/docs](https://tinyzkp.com/docs?source=npm_cli&medium=package_registry&platform=npm&intent=docs) — full docs
 - [github.com/logannye/hc-stark](https://github.com/logannye/hc-stark) — open source

@@ -56,6 +56,51 @@ jobs:
           python3 scripts/ci/production_launch_preflight.py
           python3 -m pytest scripts/ci/test_production_launch_preflight.py
           python3 -m pytest scripts/ci/test_release_identity_check.py
+          python3 scripts/ci/offer_metadata_check.py
+          python3 scripts/ci/receipt_share_contract_check.py
+          python3 -m pytest scripts/ci/test_receipt_share_contract_check.py
+          python3 scripts/ci/badge_embed_check.py
+          python3 -m pytest scripts/ci/test_badge_embed_check.py
+          python3 scripts/ci/openai_chatgpt_app_check.py
+          python3 -m pytest scripts/ci/test_openai_chatgpt_app_check.py
+          python3 scripts/monitoring/gtm_distribution_monitor.py --offline
+          python3 -m pytest scripts/ci/test_gtm_distribution_monitor.py
+          python3 scripts/monitoring/gtm_growth_monitor.py --offline
+          python3 -m pytest scripts/ci/test_gtm_growth_monitor.py
+          python3 scripts/marketing/render_gtm_execution_ledger.py --check
+          python3 scripts/ci/gtm_execution_ledger_check.py
+          python3 -m pytest scripts/ci/test_gtm_execution_ledger.py
+          python3 scripts/marketing/render_gtm_pipeline_ledger.py --check
+          python3 scripts/ci/gtm_pipeline_ledger_check.py
+          python3 -m pytest scripts/ci/test_gtm_pipeline_ledger.py
+          python3 scripts/ci/manual_distribution_assets_check.py
+          python3 -m pytest scripts/ci/test_manual_distribution_assets_check.py
+          python3 scripts/ci/outbound_targets_check.py
+          python3 -m pytest scripts/ci/test_outbound_target_pipeline.py
+          python3 scripts/marketing/render_outbound_send_queue.py --check
+          python3 scripts/ci/outbound_send_queue_check.py
+          python3 -m pytest scripts/ci/test_outbound_send_queue.py
+          python3 scripts/marketing/enrich_outbound_research.py --check
+          python3 scripts/ci/outbound_research_packets_check.py
+          python3 scripts/marketing/sync_outbound_research_pipeline.py --check
+          python3 -m pytest scripts/ci/test_outbound_research_packets.py
+          python3 scripts/marketing/render_mcp_submissions.py --check
+          python3 -m pytest scripts/ci/test_mcp_submission_renderer.py
+          python3 scripts/ci/cursor_plugin_check.py
+          python3 -m pytest scripts/ci/test_cursor_plugin_check.py
+          python3 scripts/marketing/indexnow_submit.py
+          python3 scripts/ci/package_distribution_check.py
+          python3 -m pytest scripts/ci/test_package_distribution_check.py
+          python3 scripts/ci/seo_conversion_check.py
+          python3 -m pytest scripts/ci/test_seo_conversion_check.py
+          python3 -m pytest billing/tests/test_gtm_revenue_report.py
+          python3 -m pytest billing/tests/test_stripe_account_context_check.py
+          python3 -m pytest billing/tests/test_stripe_revenue_readiness.py
+          python3 -m pytest billing/tests/test_stripe_checkout_monitor.py
+          python3 -m pytest scripts/ci/test_stripe_checkout_canary.py
+          python3 -m pytest billing/tests/test_stripe_revenue_ops_audit.py
+          python3 -m pytest billing/tests/test_stripe_catalog_write_preflight.py
+          python3 -m pytest scripts/ci/test_stripe_checkout_pipeline_sync.py
           python3 scripts/ci/server_card_check.py
           python3 -m pytest scripts/ci/test_server_card_check.py
 
@@ -69,6 +114,7 @@ jobs:
         run: |
           python3 scripts/ci/site_route_check.py
           python3 -m pytest scripts/ci/test_site_route_check.py
+          node scripts/ci/test_analytics_attribution.mjs
 
       - name: Cloudflare Pages deploy check
         run: |
@@ -94,6 +140,8 @@ jobs:
           python3 -m pytest billing/tests/test_usage_pg_tools.py
           python3 -m pytest billing/tests/test_tenant_pg_tools.py
           python3 -m pytest billing/tests/test_contact_intake.py
+          python3 -m pytest billing/tests/test_lifecycle_nudges.py
+          python3 -m pytest billing/tests/test_checkout_recovery.py
 
       - name: Python SDK checks
         run: |
@@ -115,10 +163,46 @@ jobs:
           bash -n scripts/ci/reconciliation_invariants.sh
           python3 -m py_compile scripts/ci/production_launch_preflight.py
           python3 -m py_compile scripts/ci/release_identity_check.py
+          python3 -m py_compile scripts/ci/cloudflare_pages_secret_check.py
+          python3 -m py_compile scripts/ci/offer_metadata_check.py
+          python3 -m py_compile scripts/ci/receipt_share_contract_check.py
+          python3 -m py_compile scripts/ci/badge_embed_check.py
+          python3 -m py_compile scripts/ci/openai_chatgpt_app_check.py
           python3 -m py_compile scripts/ci/server_card_check.py
+          python3 -m py_compile scripts/ci/package_distribution_check.py
+          python3 -m py_compile scripts/ci/seo_conversion_check.py
+          python3 -m py_compile scripts/ci/manual_distribution_assets_check.py
+          python3 -m py_compile scripts/ci/gtm_execution_ledger_check.py
+          python3 -m py_compile scripts/ci/gtm_pipeline_ledger_check.py
+          python3 -m py_compile scripts/ci/outbound_targets_check.py
+          python3 -m py_compile scripts/ci/outbound_send_queue_check.py
+          python3 -m py_compile scripts/ci/outbound_research_packets_check.py
+          python3 -m py_compile scripts/ci/cursor_plugin_check.py
+          python3 -m py_compile scripts/marketing/generate_outbound_targets.py
+          python3 -m py_compile scripts/marketing/render_outbound_send_queue.py
+          python3 -m py_compile scripts/marketing/enrich_outbound_research.py
+          python3 -m py_compile scripts/marketing/render_gtm_execution_ledger.py
+          python3 -m py_compile scripts/marketing/render_gtm_pipeline_ledger.py
+          python3 -m py_compile scripts/marketing/render_mcp_submissions.py
+          python3 -m py_compile scripts/marketing/indexnow_submit.py
+          python3 -m py_compile scripts/marketing/sync_stripe_checkout_pipeline.py
+          python3 -m py_compile scripts/marketing/sync_outbound_research_pipeline.py
+          python3 -m py_compile scripts/monitoring/gtm_distribution_monitor.py
+          python3 -m py_compile scripts/monitoring/gtm_growth_monitor.py
+          python3 -m py_compile scripts/monitoring/stripe_checkout_canary.py
           bash -n scripts/monitoring/api_health_audit.sh
           bash -n scripts/monitoring/shared_dispatch_smoke.sh
+          python3 -m py_compile billing/lifecycle_nudges.py
+          python3 -m py_compile billing/checkout_recovery.py
+          python3 -m py_compile billing/gtm_revenue_report.py
+          python3 -m py_compile billing/stripe_account_context_check.py
+          python3 -m py_compile billing/stripe_revenue_readiness.py
+          python3 -m py_compile billing/stripe_checkout_monitor.py
+          python3 -m py_compile billing/stripe_revenue_ops_audit.py
+          python3 -m py_compile billing/stripe_catalog_write_preflight.py
           bash -n billing/backup.sh
+          bash -n billing/setup_stripe_products.sh
+          bash -n billing/setup_pilot_price.sh
           bash -n deploy/hetzner/install_billing_runtime.sh
           bash -n deploy/hetzner/deploy.sh
           bash -n deploy/hetzner/setup.sh
@@ -126,6 +210,7 @@ jobs:
       - name: site JavaScript syntax
         run: |
           node --check site/_worker.js
+          node --check scripts/ci/test_analytics_attribution.mjs
           node --check site/functions/api/contact.js
           node --check site/functions/api/events.js
           find site/functions/api -name '*.js' -print0 | xargs -0 -n1 node --check

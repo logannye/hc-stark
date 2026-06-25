@@ -140,6 +140,10 @@ footer{padding:32px 0;border-top:1px solid var(--border);margin-top:48px}.foot{m
       <button class="secondary" onclick="makeShareLink()">Copy share link</button>
       <button class="secondary" onclick="clearProof()">Clear</button>
     </div>
+    <div class="actions verifier-ctas">
+      <a class="btn" href="/signup?source=receipt_share&medium=verifier&workflow=accumulator_step&intent=mint_receipt" data-track="verifier_cta_clicked" data-source="receipt_share">Mint your own receipt</a>
+      <a class="btn secondary" href="/mcp?source=receipt_share&medium=verifier&workflow=agent_receipts&intent=mcp_install" data-track="verifier_cta_clicked" data-source="receipt_share">Install MCP</a>
+    </div>
     <div class="result" id="result"><span class="muted">Waiting for a proof.</span></div>
     <p class="note">Local verification uses the bundled <code>@tinyzkp/verify</code> browser module from <code>/vendor/tinyzkp-verify/</code>. Hosted fallback sends the pasted proof bytes to TinyZKP's verification endpoint and is used when the browser verifier is older than the current production receipt format.</p>
   </div>
@@ -210,6 +214,8 @@ let wasmModulePromise = null;
 const input = document.getElementById('proof-input');
 const result = document.getElementById('result');
 const verifyBtn = document.getElementById('verify-btn');
+const FIRST_VERIFY_SHARE_KEY = 'tinyzkp_first_verify_share_created';
+const MAX_SHARE_FRAGMENT_CHARS = 120000;
 
 function b64UrlEncode(text) {
   const bytes = new TextEncoder().encode(text);
@@ -234,6 +240,33 @@ function normalizeProof(value) {
   if (typeof proof.version !== 'number') throw new Error('Missing numeric proof.version.');
   if (proof.bytes == null) throw new Error('Missing proof.bytes.');
   return proof;
+}
+
+function buildVerifierShareLink(proof) {
+  const url = new URL(location.pathname, location.origin);
+  url.searchParams.set('source', 'receipt_share');
+  url.searchParams.set('medium', 'verifier');
+  url.searchParams.set('workflow', 'accumulator_step');
+  url.searchParams.set('intent', 'verify_receipt');
+  const encoded = b64UrlEncode(JSON.stringify(proof));
+  if (encoded.length > MAX_SHARE_FRAGMENT_CHARS) {
+    throw new Error('Proof is too large for a safe share URL. Share the proof JSON instead.');
+  }
+  url.hash = 'proof=' + encoded;
+  return url.toString();
+}
+
+function trackFirstVerifyShareCreated(source) {
+  if (!window.tinyzkpTrack) return;
+  let shouldTrack = true;
+  try {
+    shouldTrack = !localStorage.getItem(FIRST_VERIFY_SHARE_KEY);
+    if (shouldTrack) localStorage.setItem(FIRST_VERIFY_SHARE_KEY, new Date().toISOString());
+  } catch (_) {}
+  if (shouldTrack) window.tinyzkpTrack('first_verify_share_created', {
+    source: source || 'verify_page',
+    workflow: 'accumulator_step'
+  });
 }
 
 async function loadVerifier() {
@@ -308,10 +341,11 @@ window.makeShareLink = async function makeShareLink() {
   try {
     const parsed = JSON.parse(input.value.trim());
     const proof = normalizeProof(parsed);
-    const link = location.origin + location.pathname + '#proof=' + b64UrlEncode(JSON.stringify(proof));
+    const link = buildVerifierShareLink(proof);
     await navigator.clipboard.writeText(link);
     setResult('<span class="ok">Share link copied.</span>\\n<span class="muted">' + escapeHtml(link) + '</span>');
     if (window.tinyzkpTrack) window.tinyzkpTrack('client_verify_share_copied',{source:'verify_page'});
+    trackFirstVerifyShareCreated('verify_page');
   } catch (err) {
     setResult('<span class="bad">Could not create share link</span>\\n<span class="muted">' + escapeHtml(err.message || String(err)) + '</span>');
   }
@@ -333,8 +367,15 @@ function loadFromHash() {
   const m = location.hash.match(/(?:^#|&)proof=([^&]+)/);
   if (!m) return;
   try {
+    if (m[1].length > MAX_SHARE_FRAGMENT_CHARS) {
+      throw new Error('Shared proof fragment is larger than the public verifier contract allows.');
+    }
     input.value = JSON.stringify(JSON.parse(b64UrlDecode(decodeURIComponent(m[1]))), null, 2);
     setResult('<span class="accent">Proof loaded from share link.</span>');
+    if (window.tinyzkpTrack) window.tinyzkpTrack('verifier_opened', {
+      source: 'receipt_share',
+      verifier: 'browser'
+    });
   } catch (err) {
     setResult('<span class="bad">Invalid share link.</span>\\n<span class="muted">' + escapeHtml(err.message || String(err)) + '</span>');
   }

@@ -18,7 +18,8 @@ access to your system and nothing to re-run.
 One API call, or one MCP install:
   $ claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 
-Free tier, no card. 🧵
+Free tier, no card:
+https://tinyzkp.com/signup?source=x_launch_thread&medium=social&platform=x&intent=api_key
 ```
 
 Attach: short screen recording (≤ 30 seconds) showing the *audited* path:
@@ -79,8 +80,8 @@ $0.50 per million trace steps on the usage meter.
 In development: zkVM & zkML — not available yet, and we won't pretend otherwise.
 
 Open source: github.com/logannye/hc-stark
-Try it, no signup: tinyzkp.com/try
-Free key:  tinyzkp.com/signup
+Try it, no signup: https://tinyzkp.com/try?source=x_launch_thread&medium=social&platform=x&intent=try_receipt
+Free key: https://tinyzkp.com/signup?source=x_launch_thread&medium=social&platform=x&intent=api_key
 ```
 
 ---

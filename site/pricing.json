@@ -4,7 +4,7 @@
   "url": "https://tinyzkp.com/pricing",
   "generated_at": "2026-06-24",
   "currency": "USD",
-  "summary": "Self-serve proof receipt plans bill a monthly base plus usage by trace band. Verification is free. Compute is usage-based for long supported traces at $0.50 per million trace steps with a $0.05 minimum. Serious production buyers can scope a $5,000 creditable pilot or sales-assisted platform rollout.",
+  "summary": "Self-serve proof receipt plans bill a monthly base plus usage by trace band. Verification is free. Compute is usage-based for long supported traces at $0.50 per million trace steps with a $0.05 minimum. Serious production buyers can fund a $5,000 creditable pilot through Stripe Checkout or scope a sales-assisted platform rollout.",
   "verification": {
     "price": 0,
     "unit": "verification",
@@ -20,7 +20,7 @@
       "concurrent_jobs": 1,
       "monthly_spend_cap": 0,
       "discount_percent": 0,
-      "checkout_url": "https://tinyzkp.com/signup",
+      "checkout_url": "https://tinyzkp.com/signup?source=pricing_json&medium=metadata&intent=free_signup",
       "best_for": "Evaluation, demos, and first agent integrations."
     },
     {
@@ -32,7 +32,7 @@
       "concurrent_jobs": 4,
       "monthly_spend_cap": 500,
       "discount_percent": 0,
-      "checkout_url": "https://tinyzkp.com/signup?plan=developer",
+      "checkout_url": "https://tinyzkp.com/signup?plan=developer&source=pricing_json&medium=metadata&intent=paid_checkout",
       "best_for": "Production pilots where receipts are attached to one workflow."
     },
     {
@@ -44,7 +44,7 @@
       "concurrent_jobs": 8,
       "monthly_spend_cap": 2500,
       "discount_percent": 25,
-      "checkout_url": "https://tinyzkp.com/signup?plan=pro",
+      "checkout_url": "https://tinyzkp.com/signup?plan=pro&source=pricing_json&medium=metadata&intent=paid_checkout",
       "best_for": "Teams adding receipts to customer-visible automations."
     },
     {
@@ -56,7 +56,7 @@
       "concurrent_jobs": 16,
       "monthly_spend_cap": 10000,
       "discount_percent": 40,
-      "checkout_url": "https://tinyzkp.com/signup?plan=scale",
+      "checkout_url": "https://tinyzkp.com/signup?plan=scale&source=pricing_json&medium=metadata&intent=paid_checkout",
       "best_for": "Production services with many receipts and support needs."
     },
     {
@@ -68,7 +68,7 @@
       "concurrent_jobs": 8,
       "monthly_spend_cap": null,
       "discount_percent": 0,
-      "checkout_url": "https://tinyzkp.com/signup?plan=compute",
+      "checkout_url": "https://tinyzkp.com/signup?plan=compute&source=pricing_json&medium=metadata&intent=paid_checkout",
       "best_for": "Large supported state-transition traces, backfills, and audit packages priced by trace step."
     }
   ],
@@ -129,7 +129,7 @@
       "name": "Production Pilot",
       "price": 5000,
       "unit": "14-day scoped pilot",
-      "checkout_url": "https://tinyzkp.com/contact?category=Paid%20Pilot",
+      "checkout_url": "https://tinyzkp.com/pilot?source=pricing_json&medium=metadata&intent=paid_pilot_checkout",
       "best_for": "Teams that need one receipt workflow proven with a real verifier before committing to rollout.",
       "notes": [
         "One workflow and statement-design review.",
@@ -142,7 +142,7 @@
       "name": "Platform Rollout",
       "price": "from 499/month minimum + usage",
       "unit": "sales-assisted rollout",
-      "checkout_url": "https://tinyzkp.com/platform-rollout",
+      "checkout_url": "https://tinyzkp.com/platform-rollout?source=pricing_json&medium=metadata&intent=platform_rollout",
       "best_for": "Agent platforms, workflow engines, and marketplaces that want proof receipts as a native policy surface.",
       "notes": [
         "MCP, REST, schemas, and agent policy rollout.",
@@ -155,7 +155,7 @@
       "name": "Reserved Capacity",
       "price": "custom",
       "unit": "contracted capacity",
-      "checkout_url": "https://tinyzkp.com/enterprise",
+      "checkout_url": "https://tinyzkp.com/enterprise?source=pricing_json&medium=metadata&intent=enterprise_review",
       "best_for": "Teams where receipts are customer-visible, auditor-visible, or operationally critical.",
       "notes": [
         "Reserved proving lanes or Compute planning.",

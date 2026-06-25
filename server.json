@@ -1,0 +1,33 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.logannye/tinyzkp",
+  "title": "TinyZKP",
+  "description": "Hosted MCP server for STARK proof receipts. Agents mint receipts and verify proofs for free.",
+  "websiteUrl": "https://tinyzkp.com?source=official_mcp_registry&medium=mcp_directory&platform=modelcontextprotocol&intent=mcp_install",
+  "repository": {
+    "url": "https://github.com/logannye/hc-stark",
+    "source": "github",
+    "subfolder": "crates/hc-mcp"
+  },
+  "version": "0.1.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.tinyzkp.com",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Optional Bearer API key. Use format: Bearer tzk_...; the public lane works without a key, and authenticated requests unlock account-scoped limits.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "source": "tinyzkp_gtm_distribution",
+      "conversionUrl": "https://tinyzkp.com/signup?source=official_mcp_registry&medium=mcp_directory&platform=modelcontextprotocol&intent=mcp_install"
+    }
+  }
+}

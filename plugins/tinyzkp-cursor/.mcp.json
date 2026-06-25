@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "tinyzkp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.tinyzkp.com/mcp"
+      ]
+    }
+  }
+}

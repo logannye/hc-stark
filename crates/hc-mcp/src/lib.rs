@@ -177,7 +177,7 @@ impl HcMcpServer {
     }
 
     #[rmcp::tool(
-        description = "Retrieve the base64-encoded proof bytes for a completed job. Pass the result to verify_proof for independent verification.",
+        description = "Retrieve proof_b64 plus a tracked public verifier_url for a completed job, with receipt_url included when the proof fits the public share-link limit. Open the URL for browser verification, or pass proof_b64 to verify_proof for independent verification.",
         annotations(
             title = "Get Proof Bytes",
             read_only_hint = true,
@@ -194,7 +194,7 @@ impl HcMcpServer {
     }
 
     #[rmcp::tool(
-        description = "Get a human-readable summary of what a proof job attests to, including template, public inputs, and status.",
+        description = "Get a human-readable summary of what a proof job attests to, including template, public inputs, status, and a shareable verifier URL when the proof fits the public receipt-share limit.",
         annotations(
             title = "Get Proof Summary",
             read_only_hint = true,

@@ -1,0 +1,43 @@
+{
+  "name": "TinyZKP",
+  "slug": "tinyzkp",
+  "status": "prototype_ready",
+  "description": "Proof receipts for agent actions, API mutations, and transparent state transitions.",
+  "company": "TinyZKP",
+  "homepage_url": "https://tinyzkp.com?source=openai_chatgpt_app&medium=chatgpt_app&platform=openai&intent=learn",
+  "privacy_policy_url": "https://tinyzkp.com/privacy",
+  "terms_url": "https://tinyzkp.com/terms",
+  "support_url": "https://tinyzkp.com/contact?source=openai_chatgpt_app&medium=chatgpt_app&platform=openai&intent=support",
+  "signup_url": "https://tinyzkp.com/signup?source=openai_chatgpt_app&medium=chatgpt_app&platform=openai&intent=mcp_install",
+  "mcp_server_url": "https://mcp.tinyzkp.com",
+  "streamable_http_endpoint": "https://mcp.tinyzkp.com/mcp",
+  "widget_url": "https://tinyzkp.com/apps/tinyzkp-receipt-widget.html",
+  "agent_offer_url": "https://tinyzkp.com/.well-known/tinyzkp-offers.json?source=openai_chatgpt_app&medium=chatgpt_app&platform=openai&intent=agent_offer",
+  "human_confirmation_required": true,
+  "data_boundary": "Default receipts are transparent. Do not put secrets, private customer data, API keys, or unsupported private inputs into receipt parameters.",
+  "proof_boundary": "Self-serve app scope is accumulator_step: prove that starting from initial, applying deltas reaches final.",
+  "tools": [
+    "list_templates",
+    "describe_template",
+    "prove_template",
+    "poll_job",
+    "get_proof",
+    "get_proof_summary",
+    "verify_proof"
+  ],
+  "test_prompts": [
+    "Use TinyZKP to list proof templates and explain which one is live.",
+    "Verify this TinyZKP proof receipt and tell me whether it is valid.",
+    "Mint a TinyZKP accumulator receipt for initial 1000, deltas 10, 20, 15, and final 1045.",
+    "What should I avoid putting into TinyZKP receipt parameters?",
+    "Which TinyZKP plan should I start with for an agent workflow that produces 200 receipts a month?"
+  ],
+  "official_docs_references": [
+    "https://developers.openai.com/apps-sdk",
+    "https://developers.openai.com/apps-sdk/quickstart",
+    "https://developers.openai.com/apps-sdk/build/mcp-server",
+    "https://developers.openai.com/apps-sdk/build/chatgpt-ui",
+    "https://developers.openai.com/apps-sdk/deploy/connect-chatgpt",
+    "https://developers.openai.com/apps-sdk/deploy/submission"
+  ]
+}

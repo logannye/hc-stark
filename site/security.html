@@ -142,6 +142,26 @@ li{margin-bottom:8px}
 
   <section class="section">
     <div class="container">
+      <h2>Template lifecycle and review status</h2>
+      <p>Template discovery uses three lifecycle values: <code>live</code>, <code>preview</code>, and <code>audit_gated</code>. Public production listings expose only templates that have been documented, tested, and assigned a supported lifecycle value.</p>
+      <div class="status-table">
+        <table>
+          <thead><tr><th>Lifecycle</th><th>Meaning</th><th>Production behavior</th></tr></thead>
+          <tbody>
+            <tr><td><code>live</code></td><td>Supported for public production use.</td><td>Visible in default API, SDK, CLI, MCP, and browser documentation.</td></tr>
+            <tr><td><code>preview</code></td><td>Documented for limited testing and integration planning.</td><td>May require explicit opt-in or account review before use.</td></tr>
+            <tr><td><code>audit_gated</code></td><td>Held for internal or design-partner review before public claims.</td><td>Not advertised as a self-serve production template.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <p><strong>Privacy boundary:</strong> Do not treat default TinyZKP receipts as input privacy. The current public receipt path proves transparent state transitions over public template parameters. Use privacy language only for configurations that are explicitly supported, documented, and reviewed.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
       <h2>Responsible disclosure</h2>
       <p>For suspected vulnerabilities in proof verification, API authentication, billing, tenant isolation, SDK packages, or the browser verifier, email <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a>. Include the affected surface, reproduction steps, proof bytes or request IDs where relevant, and whether the issue affects confidentiality, soundness, billing, or availability.</p>
       <ul>

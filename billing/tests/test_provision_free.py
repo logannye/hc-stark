@@ -48,7 +48,15 @@ class TestProvisionFreeDeduplication:
     def test_first_signup_succeeds(self, client):
         resp = client.post(
             "/provision-free",
-            json={"email": " Unique-Test@Example.com "},
+            json={
+                "email": " Unique-Test@Example.com ",
+                "source": "receipt_share",
+                "medium": "verify_page",
+                "campaign": "share_loop",
+                "landing_path": "/verify",
+                "referrer_host": "example.com",
+                "first_seen_at": "2026-06-25T12:00:00.000Z",
+            },
             headers=HEADERS,
         )
         assert resp.status_code == 200
@@ -59,6 +67,12 @@ class TestProvisionFreeDeduplication:
         tenant = tenant_store.get_by_email(conn, "unique-test@example.com")
         conn.close()
         assert tenant is not None
+        assert tenant["attribution_source"] == "receipt_share"
+        assert tenant["attribution_medium"] == "verify_page"
+        assert tenant["attribution_campaign"] == "share_loop"
+        assert tenant["attribution_landing_path"] == "/verify"
+        assert tenant["attribution_referrer_host"] == "example.com"
+        assert tenant["attribution_first_seen_at"] == "2026-06-25T12:00:00.000Z"
 
     def test_second_signup_same_email_returns_409(self, client, _set_secret):
         db_path = _set_secret

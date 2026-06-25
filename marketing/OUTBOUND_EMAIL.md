@@ -46,7 +46,7 @@ Free tier (100 proofs/mo, no card). 10-line LangChain integration if you're not 
 Claude. Would love your reaction — even a "no thanks" is useful.
 
 — Logan
-https://tinyzkp.com
+https://tinyzkp.com?source=founder_outbound&medium=email&platform=direct&intent=learn
 ```
 
 Attach: nothing. Embedded images and attachments tank deliverability.
@@ -57,7 +57,7 @@ You'll get four reply types. Handle each as follows:
 
 | Reply type | Frequency | Action |
 |---|---|---|
-| "Tell me more / what does it cost?" | ~5–8 / 50 | Send the cost calculator link + a 15-min Calendly. Don't write a deck. |
+| "Tell me more / what does it cost?" | ~5–8 / 50 | Send the cost calculator link (`https://tinyzkp.com/calculator?source=founder_outbound&medium=email&platform=direct&intent=calculator`) + a 15-min Calendly. Don't write a deck. |
 | "We thought about this but [reason]." | ~3–5 / 50 | Reply same-day with a counter-argument or honest acknowledgment. Often turns into a paid customer 6 weeks later. |
 | "We're already on [Sindri/Bonsai/etc.]." | ~2–3 / 50 | Ask what's working / not working. If they have a real complaint, address it. If they're happy, move on — don't try to displace. |
 | Silence | ~30–35 / 50 | Send ONE follow-up after 5 business days. Then drop them from the list. |

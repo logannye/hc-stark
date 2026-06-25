@@ -26,9 +26,10 @@ proof that a declared state transition happened as a native tool call:
 
     claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 
-After that, the agent has 10 TinyZKP tools (prove, verify, list_workloads, ...) the same
-way it has filesystem or git. Proofs go through state-transition / accumulator
-templates — no circuit writing.
+After that, the agent has TinyZKP tools like get_capabilities, list_templates,
+describe_template, prove_template, poll_job, get_proof_summary, get_proof, and
+verify_proof the same way it has filesystem or git. Proofs go through supported
+state-transition templates — no circuit writing.
 
 Under the hood, the prover runs in O(√T) memory instead of the usual O(T) by way of
 a height-compressed streaming architecture. That structural advantage is why we can
@@ -46,9 +47,9 @@ What it's NOT yet:
 - A zkML service
 - A privacy range-proof API
 
-Free tier: https://tinyzkp.com/signup
+Free tier: https://tinyzkp.com/signup?source=hn_launch&medium=community&platform=hacker_news&intent=api_key
 Source: https://github.com/logannye/hc-stark
-Docs: https://tinyzkp.com/docs
+Docs: https://tinyzkp.com/docs?source=hn_launch&medium=community&platform=hacker_news&intent=docs
 
 Happy to answer questions about the √T trick, the MCP integration, or the pricing
 math vs. self-hosting.

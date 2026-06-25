@@ -413,9 +413,18 @@ var btn = form.querySelector('.submit-btn');
 var successEl = document.getElementById('success');
 var errorEl = document.getElementById('error');
 
+function formField(name) {
+  return form.elements.namedItem(name) || document.getElementById(name);
+}
+
+function fieldValue(name) {
+  var el = formField(name);
+  return el && typeof el.value === 'string' ? el.value : '';
+}
+
 function setSelectFromQuery(params, id) {
   var value = params.get(id);
-  var el = document.getElementById(id);
+  var el = formField(id);
   if (!value || !el || !el.options) return;
   for (var i = 0; i < el.options.length; i++) {
     if (el.options[i].value === value) {
@@ -442,6 +451,8 @@ function referrerPath() {
 
 var leadContext = {
   source: '',
+  medium: '',
+  campaign: '',
   platform: '',
   plan: '',
   workflow: '',
@@ -462,17 +473,22 @@ try {
   setSelectFromQuery(contactParams, 'current_alternative');
   setSelectFromQuery(contactParams, 'budget_owner');
   leadContext.source = cleanContextParam(contactParams, 'source', 'utm_source');
+  leadContext.medium = cleanContextParam(contactParams, 'medium', 'utm_medium');
+  leadContext.campaign = cleanContextParam(contactParams, 'campaign', 'utm_campaign');
   leadContext.platform = cleanContextParam(contactParams, 'platform');
   leadContext.plan = cleanContextParam(contactParams, 'plan');
-  leadContext.workflow = cleanContextParam(contactParams, 'workflow');
+  leadContext.workflow = cleanContextParam(contactParams, 'workflow', 'pilot_workflow');
   leadContext.intent = cleanContextParam(contactParams, 'intent');
   var requestedName = contactParams.get('name');
-  if (requestedName && form.name && !form.name.value) form.name.value = requestedName.trim().slice(0, 200);
+  var nameField = formField('name');
+  if (requestedName && nameField && !nameField.value) nameField.value = requestedName.trim().slice(0, 200);
   var requestedEmail = contactParams.get('email');
-  if (requestedEmail && form.email && !form.email.value) form.email.value = requestedEmail.trim().slice(0, 254);
+  var emailField = formField('email');
+  if (requestedEmail && emailField && !emailField.value) emailField.value = requestedEmail.trim().slice(0, 254);
   var prefillMessage = contactParams.get('message');
-  if (prefillMessage && form.message && !form.message.value) {
-    form.message.value = prefillMessage.slice(0, 5000);
+  var messageField = formField('message');
+  if (prefillMessage && messageField && !messageField.value) {
+    messageField.value = prefillMessage.slice(0, 5000);
   }
   var contextEl = document.getElementById('contact-context');
   if (contextEl && (leadContext.source || leadContext.platform || leadContext.plan || leadContext.workflow || leadContext.intent)) {
@@ -483,12 +499,16 @@ try {
       integrations_hero: 'Integration catalog',
       integrations_final: 'Integration catalog',
       mcp_hero: 'MCP server',
+      pilot_checkout: 'Production pilot checkout fallback',
+      pilot_hero: 'Production pilot',
+      pilot_final: 'Production pilot',
       templates: 'Proof template catalog'
     };
     document.getElementById('context-title').textContent = sourceLabels[leadContext.source] || leadContext.platform || leadContext.source || 'Selected workflow';
     var details = [];
     if (leadContext.workflow) details.push(leadContext.workflow);
     if (leadContext.plan) details.push('plan: ' + leadContext.plan);
+    if (leadContext.medium) details.push('medium: ' + leadContext.medium);
     if (leadContext.intent) details.push(leadContext.intent.replace(/_/g, ' '));
     document.getElementById('context-text').textContent = details.length
       ? 'We will include this context with your request: ' + details.join(' / ') + '.'
@@ -504,20 +524,22 @@ form.addEventListener('submit', function(e) {
   btn.disabled = true;
 
   var data = {
-    name: form.name.value,
-    email: form.email.value,
-    category: form.category.value,
-    message: form.message.value,
+    name: fieldValue('name'),
+    email: fieldValue('email'),
+    category: fieldValue('category'),
+    message: fieldValue('message'),
     qualification: {
-      use_case: form.use_case.value,
-      trace_length: form.trace_length.value,
-      proof_frequency: form.proof_frequency.value,
-      verification_environment: form.verification_environment.value,
-      privacy_requirement: form.privacy_requirement.value,
-      latency_requirement: form.latency_requirement.value,
-      current_alternative: form.current_alternative.value,
-      budget_owner: form.budget_owner.value,
+      use_case: fieldValue('use_case'),
+      trace_length: fieldValue('trace_length'),
+      proof_frequency: fieldValue('proof_frequency'),
+      verification_environment: fieldValue('verification_environment'),
+      privacy_requirement: fieldValue('privacy_requirement'),
+      latency_requirement: fieldValue('latency_requirement'),
+      current_alternative: fieldValue('current_alternative'),
+      budget_owner: fieldValue('budget_owner'),
       source: leadContext.source,
+      medium: leadContext.medium,
+      campaign: leadContext.campaign,
       platform: leadContext.platform,
       plan: leadContext.plan,
       workflow: leadContext.workflow,
@@ -526,7 +548,7 @@ form.addEventListener('submit', function(e) {
       referrer: leadContext.referrer
     },
     context: leadContext,
-    _honeypot: form._honeypot.value
+    _honeypot: fieldValue('_honeypot')
   };
 
   fetch('/api/contact', {
@@ -542,10 +564,10 @@ form.addEventListener('submit', function(e) {
     }
     form.style.display = 'none';
     successEl.style.display = 'block';
-    if(window.tinyzkpTrack) window.tinyzkpTrack('contact_submitted',{source:leadContext.source || 'contact_page',plan:form.category.value});
+    if(window.tinyzkpTrack) window.tinyzkpTrack('contact_submitted',{source:leadContext.source || 'contact_page',medium:leadContext.medium || 'site',campaign:leadContext.campaign,category:fieldValue('category'),intent:leadContext.intent,workflow:leadContext.workflow});
   })
   .catch(function(err) {
-    if(window.tinyzkpTrack) window.tinyzkpTrack('contact_failed',{source:leadContext.source || 'contact_page'});
+    if(window.tinyzkpTrack) window.tinyzkpTrack('contact_failed',{source:leadContext.source || 'contact_page',medium:leadContext.medium || 'site',category:fieldValue('category'),intent:leadContext.intent});
     errorEl.textContent = err.message;
     errorEl.style.display = 'block';
     btn.textContent = 'Send Message';

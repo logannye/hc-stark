@@ -154,6 +154,7 @@
     "discovery_metadata": "https://tinyzkp.com/discovery.json",
     "receipt_schema": "https://tinyzkp.com/schemas/tinyzkp-receipt.schema.json",
     "agent_receipt_schema": "https://tinyzkp.com/schemas/agent-receipt.schema.json",
+    "badge_contract": "https://tinyzkp.com/.well-known/tinyzkp-badge.json",
     "recipes": "https://tinyzkp.com/recipes",
     "pilot_program": "https://tinyzkp.com/pilot"
   }

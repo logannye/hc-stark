@@ -2,7 +2,7 @@
 
 One-time setup steps for the self-serve billing model.
 
-> **Current storefront model:** Free, Developer **$19/mo**, Pro **$79/mo**, Scale **$199/mo**, and Compute usage billing at **$0.50 per million trace steps**. Self-serve checkout is monthly only until annual usage metering is wired deliberately. The legacy `team` slug is preserved only as an admin/backward-compatibility alias for Pro.
+> **Current storefront model:** Free, Developer **$19/mo**, Pro **$79/mo**, Scale **$199/mo**, Compute usage billing at **$0.50 per million trace steps**, and a one-time **$5,000 Production Pilot** checkout. Self-serve subscription checkout is monthly only until annual usage metering is wired deliberately. The legacy `team` slug is preserved only as an admin/backward-compatibility alias for Pro.
 
 ## 1. Create Products
 
@@ -48,6 +48,13 @@ In Stripe Dashboard -> Products, create the following products. Save every Price
 - **Description**: Optional manual contract price; not wired to current self-serve checkout because usage meters are monthly
 - **Price**: **$1,910.40/year recurring** (12 x $199 x 0.80)
 
+### Production Pilot
+- **Name**: TinyZKP Production Pilot
+- **Description**: 14-day scoped proof-receipt workflow pilot; creditable toward annual, platform, or reserved-capacity agreement if converted within 60 days
+- **Price**: **$5,000 one-time**
+- **Storefront binding**: optional `STRIPE_PRICE_ID_PILOT`; if absent, `/api/create-pilot-checkout` uses server-defined inline `price_data`
+- **Checkout mode**: `payment` via `/api/create-pilot-checkout`
+
 ## 2. Create Meters
 
 In Stripe Dashboard -> Billing -> Meters:
@@ -71,7 +78,7 @@ In Stripe Dashboard -> Developers -> Webhooks:
   - `checkout.session.completed` — provisions new tenant
   - `customer.subscription.updated` — handles plan changes
   - `customer.subscription.deleted` — suspends tenant
-  - `invoice.payment_failed` — suspends tenant on payment failure
+  - `invoice.payment_failed` — logs dunning events while Stripe Smart Retries continue
 
 Save the **Webhook Signing Secret** (starts with `whsec_`).
 
@@ -87,9 +94,71 @@ STRIPE_PRICE_ID_TRACE_STEP_METERED=price_...   # trace_step_usage meter price
 STRIPE_PRICE_ID_DEVELOPER=price_...            # $19/mo Developer
 STRIPE_PRICE_ID_PRO=price_...                  # $79/mo Pro
 STRIPE_PRICE_ID_SCALE=price_...                # $199/mo Scale
+STRIPE_PRICE_ID_PILOT=price_...                # Optional $5,000 one-time Production Pilot catalog price
 ```
 
 Annual flat-price IDs may exist for manual contracts, but do not add them to self-serve checkout until matching annual usage-meter prices and reporting are explicitly wired. Legacy fallback secret `STRIPE_PRICE_ID_TEAM` may remain temporarily during rollout; checkout maps `team` to Pro. Do not advertise Team as a storefront plan.
+
+The one-time pilot checkout route can create a Stripe Checkout Session with
+server-defined inline `price_data` as long as `STRIPE_SECRET_KEY` is configured.
+If you still want a reusable Stripe catalog Price for reporting or dashboard
+organization, use the narrow setup script instead of rebuilding the whole
+product catalog:
+
+```bash
+python3 billing/stripe_account_context_check.py \
+  --stripe-bin /opt/homebrew/bin/stripe
+
+python3 billing/stripe_catalog_write_preflight.py \
+  --stripe-bin /opt/homebrew/bin/stripe \
+  --live \
+  --scope pilot
+
+bash billing/setup_pilot_price.sh --stripe-cli --push-cloudflare
+# with an explicit local CLI path:
+bash billing/setup_pilot_price.sh --stripe-cli --stripe-bin /opt/homebrew/bin/stripe --push-cloudflare
+# or:
+STRIPE_API_KEY=sk_live_... bash billing/setup_pilot_price.sh --push-cloudflare
+```
+
+The script finds or creates the live `TinyZKP Production Pilot` product, finds
+or creates the one-time `$5,000` price, prints `STRIPE_PRICE_ID_PILOT=price_...`,
+and can push that value to the `tinyzkp` Cloudflare Pages project. The
+`--stripe-cli` path uses the authenticated local Stripe CLI live profile, which
+must match the TinyZKP Stripe account and have product/price write permission.
+This is optional for taking pilot payments because the route has an inline
+`price_data` fallback. The setup script runs the account-context check and the
+`pilot` write preflight automatically, and fails before trying to create catalog
+objects when the current profile is wrong or cannot write products or prices.
+
+To rebuild or complete the full current Stripe catalog from the authenticated
+local Stripe CLI profile, run:
+
+```bash
+python3 billing/stripe_account_context_check.py \
+  --stripe-bin /opt/homebrew/bin/stripe
+
+python3 billing/stripe_catalog_write_preflight.py \
+  --stripe-bin /opt/homebrew/bin/stripe \
+  --live \
+  --scope full
+
+bash billing/setup_stripe_products.sh --stripe-cli --push-cloudflare
+# or:
+STRIPE_API_KEY=sk_live_... bash billing/setup_stripe_products.sh --push-cloudflare
+```
+
+That full setup path finds or creates the live products, prices, and billing
+meters, rewrites `billing/STRIPE_PRODUCT_IDS.md`, writes the gitignored
+`billing/.stripe_ids.json`, and can push all generated price IDs to the
+`tinyzkp` Cloudflare Pages project. The Stripe profile or key must have live
+product, price, and billing-meter write permission. The full setup script runs
+the account-context check and the `full` write preflight automatically, and
+fails before Step 1 when the current CLI profile is not TinyZKP or the current
+key cannot reach product, price, or billing-meter create endpoints. Set
+`STRIPE_SKIP_ACCOUNT_CONTEXT_CHECK=1` only when the account was intentionally
+renamed and independently verified. Set `STRIPE_SKIP_WRITE_PREFLIGHT=1` only
+when deliberately testing the create path with a known-good write-capable key.
 
 ## 5. Checkout Flow
 
@@ -100,10 +169,119 @@ Customers sign up at `https://tinyzkp.com/signup` and select a plan:
 - **Pro**: Stripe Checkout with Pro flat price + `proof_usage`
 - **Scale**: Stripe Checkout with Scale flat price + `proof_usage`
 - **Compute**: Stripe Checkout with `trace_step_usage` only, no monthly base
+- **Production Pilot**: Stripe Checkout `mode=payment` with optional `STRIPE_PRICE_ID_PILOT` or server-defined inline `price_data`; webhook routes the paid pilot as a lead notification and does not provision a subscription tenant
 
 Developer / Pro / Scale subscriptions may also include the trace-step meter if the secret is configured, so long traces can be priced by the RAM-saving Compute economics instead of the regular per-proof ladder.
 
 The plan name and monthly billing cadence are passed in `metadata.plan` and `metadata.cadence` on the checkout session and subscription, so the webhook handler can extract them during tenant provisioning.
+
+Pilot checkout passes `metadata.plan=production_pilot`, attribution fields, and
+workflow context on both the Checkout Session and PaymentIntent. The webhook
+handles the one-time payment as a paid-pilot contact event rather than creating
+an API tenant.
+
+`billing/checkout_recovery.py` runs from host cron and lists open Stripe
+Checkout Sessions older than the recovery delay. It sends one plaintext recovery
+email per eligible subscription Checkout Session, and also follows up open
+`production_pilot` one-time payment Sessions. Subscription recovery skips
+addresses that already have a tenant; pilot recovery can still email existing
+account holders because the pilot is a separate paid consulting package.
+Sent recoveries are recorded in `tenant_store.checkout_recovery_emails` so
+retries are idempotent.
+
+`billing/stripe_checkout_monitor.py` is the read-only GTM revenue canary for
+Checkout Sessions. It uses the authenticated local Stripe CLI by default, keeps
+output aggregated, and omits buyer emails, customer IDs, session IDs, checkout
+URLs, and workflow free text. The audit, monitor, catalog write preflight, and
+pipeline sync all validate the local CLI `display_name` before trusting Stripe
+data:
+
+```bash
+python3 billing/stripe_account_context_check.py \
+  --stripe-bin /opt/homebrew/bin/stripe
+```
+
+As of 2026-06-25, this machine's default Stripe CLI profile reports
+`display_name = 'Galen Health'`, so TinyZKP revenue reads and catalog writes are
+not authoritative until the local CLI is switched to the TinyZKP Stripe account
+or `TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME` is set after an intentional account
+rename.
+
+Use the one-command readiness runner for the normal revenue loop:
+
+```bash
+python3 billing/stripe_revenue_readiness.py \
+  --stripe-bin /opt/homebrew/bin/stripe \
+  --sync-pipeline
+```
+
+It validates account context first, then runs the read-only audit, checkout
+monitor, and optional no-PII pipeline sync. Add `--plan-only` to preview the
+commands without touching Stripe or local ledgers. Add
+`--setup-catalog pilot --push-cloudflare` or
+`--setup-catalog full --push-cloudflare` only after the TinyZKP account context
+passes and you intentionally want catalog writes. If the TinyZKP account is
+stored under a non-default Stripe CLI profile, pass
+`--stripe-project-name <profile>` to the readiness runner and the individual
+Stripe CLI tools.
+
+Run the read-only audit with:
+
+```bash
+python3 billing/stripe_revenue_ops_audit.py \
+  --stripe-bin /opt/homebrew/bin/stripe
+```
+
+The revenue-ops audit checks live Stripe billing meters, products, prices,
+Cloudflare Pages secret names, and the pilot checkout capability endpoint. It
+exits zero when the route is sellable but catalog hygiene is incomplete; pass
+`--strict-catalog` after running a write-capable Stripe setup to make remaining
+catalog warnings fail the job.
+
+The write preflight is deliberately separate from the read-only audit. It sends
+invalid create requests through the Stripe CLI and expects Stripe validation
+errors. If it receives a permissions error, the current local CLI profile can
+read catalog state but cannot create the missing catalog objects:
+
+```bash
+python3 billing/stripe_catalog_write_preflight.py \
+  --stripe-bin /opt/homebrew/bin/stripe \
+  --live \
+  --scope full
+```
+
+```bash
+python3 billing/stripe_checkout_monitor.py \
+  --stripe-bin /opt/homebrew/bin/stripe \
+  --lookback-hours 168
+```
+
+For daily growth checks that should also include live Checkout state, run:
+
+```bash
+python3 scripts/monitoring/gtm_growth_monitor.py \
+  --offline \
+  --stripe-checkout \
+  --stripe-bin /opt/homebrew/bin/stripe
+```
+
+To update `marketing/gtm_pipeline_state.json` and rerender the no-PII pipeline
+ledger from aggregate Stripe evidence, run:
+
+```bash
+python3 scripts/marketing/sync_stripe_checkout_pipeline.py \
+  --stripe-bin /opt/homebrew/bin/stripe \
+  --lookback-hours 168
+```
+
+The sync command never lowers previously recorded revenue when a narrow
+lookback window has no paid pilot sessions. It records row-level payment
+evidence as the Stripe Dashboard payments page, not as customer emails, Stripe
+object IDs, or checkout URLs.
+
+Use `--min-paid-sessions` on the standalone monitor, or
+`--stripe-checkout-min-paid-sessions` on the aggregate growth monitor, only for
+alerting contexts where zero paid Checkout Sessions should fail the job.
 
 ## 6. Cloudflare Pages Secrets
 
@@ -115,6 +293,7 @@ Set via `wrangler pages secret put`:
 - `STRIPE_PRICE_ID_DEVELOPER`
 - `STRIPE_PRICE_ID_PRO`
 - `STRIPE_PRICE_ID_SCALE`
+- `STRIPE_PRICE_ID_PILOT`
 
 ## 7. Plan-Based Discount Logic
 

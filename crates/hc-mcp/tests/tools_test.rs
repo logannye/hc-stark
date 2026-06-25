@@ -166,6 +166,67 @@ async fn prove_template_accumulator_roundtrip() {
     let proof_b64 = proof_val["proof_b64"].as_str().unwrap();
     assert!(!proof_b64.is_empty());
     assert!(proof_val["size_bytes"].as_u64().unwrap() > 0);
+    assert_eq!(proof_val["public_verifier"], "https://tinyzkp.com/verify");
+    let verifier_url = proof_val["verifier_url"].as_str().unwrap();
+    assert!(
+        verifier_url.starts_with("https://tinyzkp.com/verify?"),
+        "verifier_url should target the public verifier: {verifier_url}"
+    );
+    assert!(
+        verifier_url.contains("source=receipt_share"),
+        "verifier_url should preserve receipt-share attribution: {verifier_url}"
+    );
+    assert!(
+        verifier_url.contains("medium=mcp"),
+        "verifier_url should identify the MCP distribution surface: {verifier_url}"
+    );
+    assert!(
+        verifier_url.contains("workflow=accumulator_step"),
+        "verifier_url should identify the proof workflow: {verifier_url}"
+    );
+    assert!(
+        verifier_url.contains("intent=verify_receipt"),
+        "verifier_url should identify verifier intent: {verifier_url}"
+    );
+    assert_eq!(proof_val["receipt_share"]["source"], "receipt_share");
+    assert_eq!(proof_val["receipt_share"]["medium"], "mcp");
+    assert_eq!(proof_val["receipt_share"]["encoding"], "base64url");
+    let encoded_chars = proof_val["receipt_share"]["encoded_chars"]
+        .as_u64()
+        .unwrap();
+    let max_encoded_chars = proof_val["receipt_share"]["max_encoded_chars"]
+        .as_u64()
+        .unwrap();
+    assert!(encoded_chars > 0);
+    assert_eq!(max_encoded_chars, 120_000);
+    match proof_val["receipt_share"]["status"].as_str().unwrap() {
+        "ready" => {
+            let receipt_url = proof_val["receipt_url"].as_str().unwrap();
+            assert!(
+                receipt_url.starts_with(verifier_url),
+                "receipt_url should extend verifier_url with a proof fragment"
+            );
+            assert!(
+                receipt_url.contains("#proof="),
+                "receipt_url should carry proof JSON in the URL fragment: {receipt_url}"
+            );
+        }
+        "proof_too_large" => {
+            assert!(proof_val["receipt_url"].is_null());
+            assert!(
+                proof_val["receipt_url_unavailable_reason"]
+                    .as_str()
+                    .unwrap()
+                    .contains("receipt-share URL size limit"),
+                "large proofs should explain why receipt_url is unavailable"
+            );
+            assert!(
+                encoded_chars > max_encoded_chars,
+                "proof_too_large should only be used above the public share-link limit"
+            );
+        }
+        status => panic!("unexpected receipt_share.status: {status}"),
+    }
 
     // Verify the proof
     let verify_params = hc_mcp::types::VerifyProofParams {
@@ -279,6 +340,18 @@ async fn get_proof_summary_for_completed_job() {
     assert!(
         text.contains("accumulator_step"),
         "summary should mention template"
+    );
+    assert!(
+        text.contains("Verifier URL: https://tinyzkp.com/verify?source=receipt_share&medium=mcp&workflow=accumulator_step&intent=verify_receipt"),
+        "summary should include a tracked verifier URL"
+    );
+    assert!(
+        text.contains("Receipt attribution: source=receipt_share, medium=mcp, workflow=accumulator_step, intent=verify_receipt"),
+        "summary should make receipt attribution machine-readable enough for agents"
+    );
+    assert!(
+        text.contains("the #proof URL fragment stays client-side"),
+        "summary should state the verifier URL data boundary"
     );
 }
 

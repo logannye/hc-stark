@@ -89,7 +89,7 @@ main{padding:120px 0 70px}.eyebrow{font-family:var(--mono);font-size:12px;font-w
   <div class="eyebrow">Use case</div>
   <h1>Let anyone verify a receipt without calling your API.</h1>
   <p class="lede">A TinyZKP receipt is useful because the verifier does not need to trust your server. Send the proof object to a counterparty, embed <code>@tinyzkp/verify</code>, or share a <a href="/verify">tinyzkp.com/verify</a> link.</p>
-  <a class="cta" href="/verify">Open verifier</a>
+  <a class="cta" href="/verify?source=offline_verification&medium=seo&intent=verify_receipt" data-track="offline_verification_verify_click" data-source="offline_verification">Open verifier</a>
   <section class="band grid">
     <div class="box"><h2>Buyer value</h2><p>Verification is the distribution loop. Every valid proof can travel outside your system and still be checked independently.</p></div>
     <div class="box"><h2>WASM first, hosted fallback</h2><p>The verifier checks proof bytes directly. Compatible receipts run locally in WASM; the hosted page falls back to TinyZKP's verifier when the browser package is behind the current production format.</p></div>
