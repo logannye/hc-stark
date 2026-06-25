@@ -60,7 +60,7 @@
         {"@type": "Offer", "name": "Developer", "price": "19",  "priceCurrency": "USD", "description": "$19/month — usage-metered per proof, $500/mo cap"},
         {"@type": "Offer", "name": "Pro",       "price": "79",  "priceCurrency": "USD", "description": "$79/month — 25% off per-proof rates, $2.5K/mo cap"},
         {"@type": "Offer", "name": "Scale",     "price": "199", "priceCurrency": "USD", "description": "$199/month — 40% off per-proof rates, $10K/mo cap"},
-        {"@type": "Offer", "name": "Compute",   "price": "0",   "priceCurrency": "USD", "description": "Usage-based: $0.50 per million trace steps. Large state-transition traces today; zkVM and zkML are early-access roadmap work."}
+        {"@type": "Offer", "name": "Compute",   "price": "0",   "priceCurrency": "USD", "description": "Usage-based: $0.50 per million trace steps for large state-transition traces."}
       ],
       "aggregateRating": null,
       "publisher": {"@id": "https://tinyzkp.com/#org"}
@@ -224,7 +224,7 @@ nav .nav-cta:hover{background:var(--accent);transform:translateY(-1px);box-shado
 .hero-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:100px;
   background:var(--accent-dim);border:1px solid rgba(46,232,212,.2);color:var(--accent);
   font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
-  margin-bottom:24px;position:relative;z-index:1;justify-content:flex-start;flex-wrap:wrap;text-align:left}
+  margin-bottom:24px;position:relative;z-index:1;justify-content:center;flex-wrap:nowrap;text-align:center}
 .hero-pill .pill-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);
   box-shadow:0 0 8px var(--accent-glow);animation:pill-pulse 2.4s ease-in-out infinite;flex:0 0 auto}
 .hero-pill .pill-item{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
@@ -538,9 +538,9 @@ footer .right a:hover{color:var(--muted)}
   .hero h1{font-size:30px;line-height:1.16;letter-spacing:0;max-width:342px;margin:0 auto;overflow-wrap:break-word;text-wrap:balance}
   .mobile-break{display:inline}
   .desktop-space{display:none}
-  .hero-pill{width:100%;max-width:342px;margin-left:auto;margin-right:auto;line-height:1.6;font-size:10.5px;box-sizing:border-box;padding:7px 12px;gap:5px 8px;border-radius:18px}
+  .hero-pill{width:max-content;max-width:100%;margin-left:auto;margin-right:auto;line-height:1.6;font-size:10px;box-sizing:border-box;padding:7px 10px;gap:5px 6px;border-radius:18px;flex-wrap:wrap}
   .hero-pill .pill-dot{display:none}
-  .hero-pill .pill-item{white-space:normal}
+  .hero-pill .pill-item{white-space:nowrap}
   .hero-pill .pill-item:not(:first-of-type)::before{content:none}
   .hero .sub{max-width:342px;margin:16px auto 18px;line-height:1.58}
   .hero .free{max-width:320px;margin-left:auto;margin-right:auto;line-height:1.6}
@@ -574,7 +574,7 @@ footer .right a:hover{color:var(--muted)}
 }
 @media(max-width:520px){
   .hero h1{max-width:320px;font-size:29px}
-  .hero-pill{max-width:342px}
+  .hero-pill{max-width:100%}
   .hero .sub{max-width:342px;font-size:14px}
   .memory-note{max-width:330px!important}
   .hero .free{max-width:280px}
@@ -644,7 +644,6 @@ footer .right a:hover{color:var(--muted)}
         <span class="pill-item">Transparent ZK-STARK</span>
         <span class="pill-item">No trusted setup</span>
         <span class="pill-item">Post-quantum</span>
-        <span class="pill-item">Native MCP</span>
       </div>
       <h1>Proof receipts for agent actions and state transitions.</h1>
       <p class="sub">TinyZKP gives AI agents, APIs, and backend workflows a verifiable receipt for important state changes. Attach a proof to the output so auditors, customers, counterparties, and other agents can check what changed without replaying your system.</p>
@@ -803,8 +802,8 @@ claude mcp add --transport http \
 <section id="scope">
 <div class="container">
   <div class="section-label">Proof Scope</div>
-  <h2 class="section-title">What a TinyZKP receipt proves, and what it does not</h2>
-  <p class="section-sub">Clear boundaries make this product easier to trust, buy, and integrate.</p>
+  <h2 class="section-title">What a TinyZKP receipt proves</h2>
+  <p class="section-sub">Clear receipt semantics make this product easier to trust, buy, and integrate.</p>
   <div class="truth-grid">
     <div class="truth-card fade-in">
       <h3>Production self-serve receipts prove</h3>
@@ -813,15 +812,6 @@ claude mcp add --transport http \
         <li>The public <code>accumulator_step</code> template moved from initial value to final value via the declared deltas.</li>
         <li>The proof bytes satisfy the current production verifier format.</li>
         <li>A recipient can verify the receipt without calling your system.</li>
-      </ul>
-    </div>
-    <div class="truth-card limit fade-in">
-      <h3>They do not automatically prove</h3>
-      <ul>
-        <li>Private-input zero knowledge for every workload.</li>
-        <li>The off-chain business truth of events that were never encoded into the statement.</li>
-        <li>General zkVM, zkML, rollup, or smart-contract verifier availability.</li>
-        <li>External cryptographer audit completion; the current audit boundary is public.</li>
       </ul>
     </div>
   </div>

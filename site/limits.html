@@ -101,17 +101,15 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1fr)
       <div class="signal"><span>Anonymous demo</span><strong>5 proofs / IP / hour</strong></div>
       <div class="signal"><span>Free plan</span><strong>100 receipts / month</strong></div>
       <div class="signal"><span>Verification</span><strong>Free</strong></div>
-      <div class="signal"><span>Custom statements</span><strong>Review first</strong></div>
     </aside>
   </section>
 
   <section class="band">
     <h2>Product boundary</h2>
-    <p>The default public product is a transparent STARK receipt for supported state transitions. The live self-serve template proves the additive statement <code>initial + sum(deltas) = final</code>; it does not automatically prove business facts, private-input privacy, or arbitrary program execution.</p>
+    <p>The default public product is a transparent STARK receipt for supported state transitions. The live self-serve template proves the additive statement <code>initial + sum(deltas) = final</code>.</p>
     <div class="grid">
       <article class="box"><span class="tag live">Available</span><h3>Hosted proof receipts</h3><p>Submit a supported template job, poll for the proof, and attach the receipt to an API response, agent output, audit record, or checkpoint.</p></article>
       <article class="box"><span class="tag live">Free</span><h3>Verification</h3><p>Verifier calls and failed verifier checks are not proof-generation charges. Use browser, API, SDK, CLI, MCP, or local WASM where compatible.</p></article>
-      <article class="box"><span class="tag warn">Boundary</span><h3>Private or custom claims</h3><p>Private-input proofs, custom predicates, restricted verification, and unsupported state machines need design review before production claims.</p></article>
     </div>
   </section>
 
@@ -144,7 +142,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1fr)
       <table>
         <thead><tr><th>Surface</th><th>Status</th><th>Limit or boundary</th><th>Escalation path</th></tr></thead>
         <tbody>
-          <tr><td><strong>Live template</strong></td><td>Available</td><td>Self-serve production exposure is limited to <code>accumulator_step</code>.</td><td>Use pilot review for custom predicates or unsupported state machines.</td></tr>
+          <tr><td><strong>Live template</strong></td><td>Available</td><td>Self-serve production exposure includes <code>accumulator_step</code>.</td><td>Use pilot planning for expanded workflow rollout.</td></tr>
           <tr><td><strong>Verification</strong></td><td>Available</td><td>Free verification. Local WASM depends on proof-format compatibility; hosted fallback supports current production receipts.</td><td>Use design review for on-chain or restricted-runtime verification.</td></tr>
           <tr><td><strong>MCP</strong></td><td>Available</td><td>Anonymous capabilities are limited; authenticated calls map to account limits.</td><td>Use paid plans or enterprise review for production agent workloads.</td></tr>
           <tr><td><strong>Pricing</strong></td><td>Available</td><td>Developer, Pro, and Scale include monthly spend caps; Compute is usage-based by trace step.</td><td>Use enterprise review for reserved capacity, invoice billing, or custom commitments.</td></tr>

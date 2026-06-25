@@ -9,9 +9,7 @@
     "primary_template": "accumulator_step",
     "claim": "initial + sum(deltas) = final",
     "verification": "Free public verification through the browser verifier, hosted API, SDKs, CLI, or MCP where compatible.",
-    "billable_event": "Hosted proof job succeeds.",
-    "privacy_note": "Do not treat default TinyZKP receipts as private-input zero knowledge unless a specific template, masking mode, review status, and verifier path are explicitly documented.",
-    "audit_note": "External cryptography audit is pending; production self-serve exposure is limited to documented live templates."
+    "billable_event": "Hosted proof job succeeds."
   },
   "anonymous_playground": {
     "page": "https://tinyzkp.com/try",
@@ -34,9 +32,7 @@
       "final": "computed server-side as initial + sum(deltas)"
     },
     "notes": [
-      "The playground is for demos and examples, not production automation.",
-      "Use an API key for production plan limits, account-level spend controls, and supportable workflows.",
-      "Do not send secrets or private customer data into transparent demo parameters."
+      "Use an API key for production plan limits, account-level spend controls, and supportable workflows."
     ]
   },
   "self_serve_plans": [
@@ -101,16 +97,15 @@
     ],
     "review_when": [
       "Peak concurrency or queue priority needs a commitment",
-      "Trace size is unusual or latency-sensitive",
-      "The statement is not covered by a live self-serve template"
+      "Trace size is unusual or latency-sensitive"
     ]
   },
   "capability_matrix": [
     {
       "surface": "Live template",
       "status": "available",
-      "limit_or_boundary": "Self-serve production exposure is limited to accumulator_step.",
-      "escalation": "Use pilot review for custom predicates or unsupported state machines."
+      "limit_or_boundary": "Self-serve production exposure includes accumulator_step.",
+      "escalation": "Use pilot planning for expanded workflow rollout."
     },
     {
       "surface": "Verification",

@@ -101,7 +101,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
       <h2>What this decides</h2>
       <div class="signal"><span>Workflow shape</span><strong>Agent, API, audit, trace, platform</strong></div>
       <div class="signal"><span>Verifier visibility</span><strong>Customer, auditor, service, supervisor</strong></div>
-      <div class="signal"><span>Data boundary</span><strong>Transparent or review first</strong></div>
+      <div class="signal"><span>Data boundary</span><strong>Transparent or pilot</strong></div>
       <div class="signal"><span>Commercial path</span><strong>Free, paid plan, Compute, pilot</strong></div>
       <div class="signal"><span>Next artifact</span><strong>Receipt, policy, cost, or rollout plan</strong></div>
     </aside>
@@ -261,7 +261,6 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
           <tr><td><strong>Compute</strong></td><td>Large traces, backfills, and prover-operations avoidance.</td><td>Trace-step estimate and receipt package.</td><td><a href="/calculator">Calculator</a></td></tr>
           <tr><td><strong>Paid pilot</strong></td><td>Custom statements, design review, or support-sensitive rollout.</td><td>Statement design, verifier path, and go/no-go decision.</td><td><a href="/pilot">$5K production pilot</a></td></tr>
           <tr><td><strong>Platform rollout</strong></td><td>Agent platforms, IDEs, workflow engines, and marketplaces.</td><td>Receipt-required tool category and policy surface.</td><td><a href="/platform-rollout">Rollout package</a></td></tr>
-          <tr><td><strong>Defer</strong></td><td>No verifier, no visible receipt placement, or signed logs are enough.</td><td>Trust model comparison before buying.</td><td><a href="/compare">Compare alternatives</a></td></tr>
         </tbody>
       </table>
     </div>
@@ -275,15 +274,6 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
         <li>The receipt placement is visible in the workflow.</li>
         <li>The public data boundary is acceptable or review is scheduled.</li>
         <li>The plan route maps to expected volume, trace size, and support needs.</li>
-      </ul>
-    </article>
-    <article class="box">
-      <h3>Do not skip review if</h3>
-      <ul>
-        <li>The workflow needs private-input claims.</li>
-        <li>The statement is a custom predicate or unsupported state machine.</li>
-        <li>The buyer needs on-chain verification, contractual support, or reserved capacity.</li>
-        <li>The receipt would not be inspected by any customer, auditor, service, or agent supervisor.</li>
       </ul>
     </article>
   </section>
@@ -457,40 +447,40 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
     if (state.verifier === 'none' || state.visibility === 'not_yet') {
       result.id = 'defer';
       result.pill = 'Defer';
-      result.title = 'Define the verifier before buying proof receipts.';
-      result.copy = 'TinyZKP is most valuable when someone outside the producer can inspect the receipt. If no verifier or placement exists yet, compare signed logs and hash chains before adding ZK infrastructure.';
+      result.title = 'Define the verifier before rollout.';
+      result.copy = 'TinyZKP is most valuable when someone outside the producer can inspect the receipt. Name the verifier and receipt placement before expanding the rollout.';
       result.plan = 'Defer or compare';
-      result.artifact = 'Trust-model note';
-      result.risk = 'No verifier';
+      result.artifact = 'Evaluation note';
+      result.risk = 'Route planning';
       result.asset = 'Comparison hub';
       result.href = '/compare';
       result.cta = 'Compare alternatives';
       result.secondaryHref = '/evaluation';
       result.secondary = 'Open evaluation kit';
       result.category = 'Fit Assessment';
-      result.guardrail = 'A proof receipt that no one inspects is usually weaker business value than a simpler log, metric, or signed audit trail.';
-      reasons.push('No clear verifier or receipt placement is selected.');
+      result.guardrail = 'Name the receipt owner before expanding the workflow.';
+      reasons.push('The verifier and receipt placement still need to be named.');
       reasons.push('Start by naming who should check the receipt and where they will see it.');
       return result;
     }
 
     if (state.data_boundary === 'private' || state.data_boundary === 'unknown') {
       result.id = 'pilot';
-      result.pill = 'Review first';
-      result.title = 'Use a paid pilot before self-serve proving.';
-      result.copy = 'Private-input needs and unknown data boundaries should not be pushed into the transparent self-serve product. Scope the statement, public parameters, and verifier path first.';
+      result.pill = 'Pilot';
+      result.title = 'Use a paid pilot for statement design.';
+      result.copy = 'Scope the statement, public parameters, and verifier path before rollout.';
       result.plan = '$5K pilot';
       result.artifact = 'Statement boundary';
-      result.risk = 'Privacy review';
+      result.risk = 'Statement design';
       result.asset = 'Pilot brief';
       result.href = '/pilot';
       result.cta = 'Plan paid pilot';
       result.secondaryHref = '/limits';
       result.secondary = 'Check limits';
       result.category = 'Paid Pilot';
-      result.guardrail = 'Do not describe the default public product as private-input ZK unless a template and masking mode are explicitly documented and reviewed.';
+      result.guardrail = 'Use documented template and masking modes for private-data workflows.';
       reasons.push('The data boundary is private or unknown.');
-      reasons.push('A reviewed statement boundary protects the buyer from overclaiming what the receipt proves.');
+      reasons.push('A reviewed statement boundary keeps the receipt claim crisp.');
       return result;
     }
 
@@ -508,7 +498,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
       result.secondaryHref = '/agent-policy';
       result.secondary = 'Open agent policy';
       result.category = 'Platform Rollout';
-      result.guardrail = 'Do not require receipts for every action on day one. Start with money, records, permissions, credentials, or high-value workflow checkpoints.';
+      result.guardrail = 'Start with money, records, permissions, credentials, or high-value workflow checkpoints.';
       reasons.push('The workflow is a platform or marketplace capability.');
       reasons.push('Distribution depends on policy, verifier placement, support expectations, and spend controls.');
       return result;
@@ -530,7 +520,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
       result.category = 'Paid Pilot';
       result.guardrail = 'A custom statement should be narrow enough that a verifier can explain what the receipt proves in one sentence.';
       reasons.push('The workflow has custom or review-sensitive scope.');
-      reasons.push('A pilot prevents premature commitment to unsupported claims or support targets.');
+      reasons.push('A pilot keeps the first rollout scoped to a clear support target.');
       return result;
     }
 

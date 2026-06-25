@@ -390,25 +390,9 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
         <thead><tr><th>Status</th><th>Meaning</th><th>Fix</th></tr></thead>
         <tbody>
           <tr><td><code>401</code></td><td>Missing or invalid API key</td><td>Check your <code>Authorization: Bearer tzk_...</code> header</td></tr>
-          <tr><td><code>409</code></td><td>Proof not ready yet</td><td>Poll <code>GET /prove/:job_id</code> until <code>status</code> is <code>"succeeded"</code></td></tr>
+          <tr><td><code>409</code></td><td>Proof still running</td><td>Poll <code>GET /prove/:job_id</code> until <code>status</code> is <code>"succeeded"</code></td></tr>
           <tr><td><code>429</code></td><td>Rate limit exceeded</td><td>Wait and retry. Free plan: 10 requests/min. <a href="#plans">See plan limits</a></td></tr>
           <tr><td><code>402</code></td><td>Monthly spending cap reached</td><td>Wait for next billing cycle or <a href="/contact">contact us</a> to upgrade</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h2 id="when-not-to-use">When Not to Use TinyZKP</h2>
-    <p>TinyZKP is best when a verifier needs a compact, independently checkable receipt for a state transition and the prover-side memory footprint matters. It is not the cheapest or safest answer for every integrity problem.</p>
-    <div class="docs-table-wrap">
-      <table>
-        <thead><tr><th>Bad fit</th><th>Use instead</th><th>Reason</th></tr></thead>
-        <tbody>
-          <tr><td>No third-party verification requirement</td><td>Signed logs, checksums, or database audit trails</td><td>If every verifier already trusts your service, a proof adds cost without changing the trust model.</td></tr>
-          <tr><td>Input privacy is the main requirement today</td><td>Contact TinyZKP for a design-partner review</td><td>The default hosted receipt is transparent. Do not treat it as input-private unless the exact template, masking configuration, review status, and verifier path are explicitly documented.</td></tr>
-          <tr><td>Sub-second, high-frequency proving on every user action</td><td>Batch receipts, periodic checkpoints, or conventional signatures</td><td>Proof generation is measured in seconds for normal hosted flows; verification is fast, but proving is not a UI-thread primitive.</td></tr>
-          <tr><td>Unsupported custom program semantics</td><td>Use a live template or start a design-partner track</td><td>Self-serve production exposure is limited to live templates. Preview and review-gated work stays out of the public catalog.</td></tr>
-          <tr><td>Smart-contract verifier deployment is mandatory</td><td>Plan a dedicated integration review</td><td>The default production path targets hosted proving plus API/WASM verification, not a universal on-chain verifier for every chain.</td></tr>
-          <tr><td>You want the legacy KZG prototype as a service</td><td>Use <code>hc-stark</code> / TinyZKP production APIs</td><td><code>space-efficient-zero-knowledge-proofs</code> is research lineage, not the hosted TinyZKP engine or trust boundary.</td></tr>
         </tbody>
       </table>
     </div>
@@ -641,14 +625,14 @@ console.log(result.ok); <span class="comment">// true</span></pre>
     </div>
 
     <h3 id="template-lifecycle">Template Lifecycle</h3>
-    <p>Template discovery includes a machine-readable <code>lifecycle</code> field. Public production listings expose only <code>live</code> templates by default; gated templates return the same unavailable/unknown response as an unsupported template unless the deployment explicitly opts into development-only template exposure.</p>
+    <p>Template discovery includes a machine-readable <code>lifecycle</code> field. The public API, SDKs, CLI, MCP server, and package docs use the same vocabulary so agents and developers can distinguish supported production receipts from gated work.</p>
     <div class="docs-table-wrap">
       <table>
-        <thead><tr><th>Lifecycle</th><th>Meaning</th><th>Default production behavior</th></tr></thead>
+        <thead><tr><th>Lifecycle</th><th>Meaning</th><th>Default public exposure</th></tr></thead>
         <tbody>
-          <tr><td><code>live</code></td><td>The template is enforced by the proof system and approved for production exposure.</td><td>Listed and dispatchable.</td></tr>
-          <tr><td><code>audit_gated</code></td><td>The AIR enforces the predicate, but the template is still review-gated for production exposure.</td><td>Hidden and refused unless <code>HC_ALLOW_UNAUDITED_TEMPLATES</code> is enabled.</td></tr>
-          <tr><td><code>preview</code></td><td>The template is structure-only, experimental, or tied to a preview backend.</td><td>Hidden and refused outside explicit development/design-partner contexts.</td></tr>
+          <tr><td><code>live</code></td><td>Supported for self-serve production use.</td><td>Visible in default template discovery and examples.</td></tr>
+          <tr><td><code>preview</code></td><td>Documented for planning or limited partner testing.</td><td>May require explicit opt-in or account review.</td></tr>
+          <tr><td><code>audit_gated</code></td><td>Held until review, docs, and operational boundaries are complete.</td><td>Not advertised as a public production template.</td></tr>
         </tbody>
       </table>
     </div>
@@ -831,6 +815,14 @@ async fn main() -> Result&lt;(), tinyzkp::Error&gt; {
 
     <h2 id="parameters">Parameters</h2>
 
+    <h3 id="zk-mode">Transparent vs Privacy Mode</h3>
+    <p>The current self-serve templates issue transparent STARK state-transition receipts. That means the template parameters needed to verify the statement are public. Experimental masking parameters such as <code>zk_mask_degree</code> are not a buyer-facing privacy claim unless the configuration is explicitly supported, documented, and reviewed.</p>
+    <ul>
+      <li>Use transparent receipts for public balances, counters, audit-log checkpoints, and reconciliations where verifiers need to inspect the statement.</li>
+      <li>Use the <a href="/contact">contact form</a> before claiming hidden-input privacy, regulated-data handling, or custom proof statements.</li>
+      <li>Default production verification accepts the documented receipt format and rejects legacy proof formats unless an explicit compatibility path is enabled.</li>
+    </ul>
+
     <h3>Security Parameters</h3>
     <p>These parameters control the cryptographic strength of your proof.</p>
     <div class="docs-table-wrap">
@@ -884,27 +876,6 @@ async fn main() -> Result&lt;(), tinyzkp::Error&gt; {
         </tbody>
       </table>
     </div>
-
-    <h2 id="zk-mode">Transparent vs Privacy Mode</h2>
-    <p>The default TinyZKP path is transparent state-transition attestation: the verifier can check that the encoded transition is valid, and the receipt should not be marketed as an input-privacy feature. Protocol v6 includes masking parameters for supported modes, but privacy-oriented flows should be treated as review-gated until a specific template and configuration are documented for that purpose.</p>
-
-    <div class="code-block">
-      <span class="code-label">curl</span>
-<pre>curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
-  -H "Authorization: Bearer tzk_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "params": {"initial": 1000, "final": 1045, "deltas": [10, 20, 15]},
-    <span class="key">"zk_mask_degree"</span>: <span class="string">1</span>
-  }'</pre>
-    </div>
-
-    <ul>
-      <li><code>zk_mask_degree: 0</code> (default) &mdash; transparent state-transition receipt</li>
-      <li><code>zk_mask_degree: 1</code> or higher &mdash; protocol v6 masking parameter for explicitly supported and documented flows</li>
-      <li>When using templates, <code>"zk": true</code> may be accepted as a shorthand for <code>"zk_mask_degree": 1</code>, but do not rely on it for privacy unless that exact flow is documented as supported.</li>
-      <li>Masking can change proof size and prover cost. Benchmark the exact use case before selling it as a default path.</li>
-    </ul>
 
     <h2 id="estimate">Cost Estimation</h2>
     <p>Estimate trace length, base proof rate, proving time, and proof size <strong>before</strong> generating a proof. This endpoint is public &mdash; no authentication required. The response is an engineering estimate; plan discounts, included Free receipts, spend caps, and Compute recommendations are applied by the billing and calculator layers.</p>
@@ -1147,9 +1118,6 @@ HC_MCP_HTTP_PORT=3001 cargo run -p hc-mcp --bin hc-mcp-http</pre>
     <h2 id="research-lineage">Research Lineage</h2>
     <p>TinyZKP has two public repositories because the company evolved from an earlier KZG/BN254 research prototype into the current STARK product. The canonical production repo is <a href="https://github.com/logannye/hc-stark" target="_blank"><code>logannye/hc-stark</code></a>. The older <a href="https://github.com/logannye/space-efficient-zero-knowledge-proofs" target="_blank"><code>space-efficient-zero-knowledge-proofs</code></a> repo is research lineage and paper context, not the hosted TinyZKP engine.</p>
     <p>The practical distinction is simple: TinyZKP's hosted receipt path uses transparent STARK-style verification with no trusted setup ceremony. The older repo explores sublinear-space proving with KZG commitments over BN254 and therefore has a different trust and deployment model. See the <a href="/research">Research &amp; Lineage</a> page for the public reconciliation story.</p>
-
-    <h2 id="security-status">Security &amp; Audit Status</h2>
-    <p>TinyZKP's soundness argument is public, conjectured under standard FRI/STARK assumptions, and pending external cryptographer audit. Default receipts are transparent, not input-private. See <a href="/security">Security &amp; Audit Status</a> for the current production scope, template lifecycle, and responsible-disclosure contact.</p>
 
     <h2 id="swagger">Interactive API Reference</h2>
     <p>Explore the full API interactively with our Swagger UI. Try endpoints directly from your browser.</p>

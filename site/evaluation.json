@@ -11,12 +11,6 @@
       "Backend API mutations where a customer or downstream service benefits from verification",
       "Audit, reserve, liability, inventory, or reconciliation checkpoints",
       "Long supported state-transition traces where high-RAM prover operations are the alternative"
-    ],
-    "not_for": [
-      "Generic private-input zero-knowledge claims without a documented template",
-      "Arbitrary zkVM, zkML, rollup, or on-chain verifier availability as if already self-serve",
-      "Workflows where no third party, customer, auditor, service, or agent supervisor will inspect the receipt",
-      "Off-chain truth claims that are not encoded into the proven statement"
     ]
   },
   "evaluation_steps": [
@@ -128,18 +122,6 @@
       "The workflow can be encoded as a supported state transition or scoped pilot.",
       "Transparent public parameters are acceptable for the first rollout.",
       "Expected cost is clearer than replay, manual evidence, or prover operations."
-    ],
-    "review_first": [
-      "Custom predicate or unsupported state machine.",
-      "Private-input zero-knowledge requirement.",
-      "Restricted runtime, on-chain verifier, reserved capacity, or contractual support need.",
-      "Long trace near operational limits or unusual latency requirements."
-    ],
-    "no_go": [
-      "No external or downstream verifier will inspect the receipt.",
-      "The desired claim is off-chain truth that is not encoded into the statement.",
-      "The buyer needs generic zkVM, zkML, rollup, or blanket privacy claims as live self-serve product.",
-      "A signed log or hash chain fully satisfies the trust model."
     ]
   },
   "evidence_to_collect": [

@@ -128,12 +128,6 @@
     "discovery": "https://tinyzkp.com/discovery.json",
     "changelog": "https://tinyzkp.com/changelog.json"
   },
-  "trust_boundaries": [
-    "The default public product is a transparent state-transition receipt service.",
-    "Do not put secrets, private customer data, or API keys into transparent receipt parameters.",
-    "Private-input language requires a separately documented template, explicit review status, and supported verifier path.",
-    "External cryptographer audit is pending; live self-serve exposure is limited to documented production templates."
-  ],
   "support": {
     "contact": "https://tinyzkp.com/contact",
     "security": "https://tinyzkp.com/.well-known/security.txt",

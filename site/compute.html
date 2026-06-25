@@ -208,11 +208,8 @@ footer .right a:hover{color:var(--muted)}
     <tr><td class="label">1M steps</td><td class="others">10–20 GB RAM</td><td class="tinyzkp">~30 MB</td></tr>
     <tr><td class="label">10M steps</td><td class="others">100+ GB RAM</td><td class="tinyzkp">~100 MB</td></tr>
     <tr><td class="label">100M steps</td><td class="others">Fleet sharding required</td><td class="tinyzkp">~300 MB</td></tr>
-    <tr><td class="label">1B steps <span style="color:var(--amber);font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em">projected</span></td><td class="others">Not feasible without segmentation + recursion</td><td class="tinyzkp">~1 GB *</td></tr>
   </tbody>
 </table>
-
-<p style="font-size:13px;color:var(--dim);margin-top:8px">* Architectural projection. The <strong>live single-proof cap is 100M steps</strong>; 1B-step proving is a roadmap target, not available today. What's provable on Compute today: long accumulator / state-transition traces. zkVM and zkML proving are early-access roadmap work, not default self-serve capabilities.</p>
 
 <p>The trade-off is honest: extra time for less memory. We pay roughly <code>&radic;N</code> more cycles to use <code>&radic;N</code> less RAM. For large computations, this trade-off is the only one that matters — RAM is the wall you hit first, and recovering memory unlocks workloads that conventional provers simply cannot run on commodity hardware.</p>
 
@@ -220,26 +217,6 @@ footer .right a:hover{color:var(--muted)}
 <h3>Measured, not just asymptotic</h3>
 <p>In a reproducible sweep, the streaming commitment's peak working set stays <strong>~0.04 MB</strong> as the trace grows to <strong>16.7M elements</strong>, while the conventional O(N) path climbs to <strong>513 MB</strong> — a &radic;N (≈4,096×) reduction at the <em>identical</em> Merkle root (~1.2× the time). That height-compression is what bounds the full prover's memory in the table above. Re-run it: <code>./scripts/bench/run_sqrt_sweep.sh</code> — numbers + method in <a href="https://github.com/logannye/hc-stark/blob/main/docs/benchmarks/sqrt_memory_scaling.md" target="_blank">docs/benchmarks/sqrt_memory_scaling.md</a>.</p>
 </div>
-
-<h2>Where the moat applies</h2>
-
-<h3>zkVM execution proofs <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(early access roadmap)</span></h3>
-
-<p>Long-running programs, many syscalls, complex state. RISC Zero, SP1, and similar systems handle this via <em>continuations</em> — splitting the trace into chunks and recursively aggregating. That works, but it adds:</p>
-<ul>
-  <li><strong>Memory pressure on each chunk's prover</strong> — still O(chunk size).</li>
-  <li><strong>Aggregation overhead</strong> — every chunk needs to be re-verified to be folded.</li>
-  <li><strong>Operational complexity</strong> — orchestrating the chunked prover fleet.</li>
-</ul>
-<p>The O(&radic;N) architecture is designed to run the whole trace in a single shot. Full zkVM support is not yet a default self-serve product; <a href="/contact">contact us</a> for early-access discussions.</p>
-
-<h3>zkML inference receipts <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(early access roadmap)</span></h3>
-
-<p>Proving a neural net forward-pass. Memory usage is dominated by the largest layer's intermediate activations. Conventional STARK provers need RAM proportional to the entire flattened computation graph. The O(&radic;N) architecture bounds memory to the largest <em>block</em>, not the largest layer or the dataset. zkML proof generation is early-access roadmap work; <a href="/contact">contact us</a> to discuss your use case.</p>
-
-<h3>Rollup batch attestation <span style="font-size:12px;font-weight:500;color:var(--amber);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;margin-left:8px">(early access roadmap)</span></h3>
-
-<p>Sequencers want to batch many transactions. Today, the batch size is bounded by RAM — beyond a few thousand transactions, you often need a recursive aggregator. TinyZKP's architecture is a fit for this shape, but custom rollup batch proving is not a default self-serve template yet. The self-serve Compute lane today is for long accumulator / state-transition traces.</p>
 
 <h2>Cost calculator</h2>
 

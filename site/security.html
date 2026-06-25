@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#050a12">
-<title>Security &amp; Audit Status - TinyZKP</title>
-<meta name="description" content="TinyZKP security posture, proof-system scope, template lifecycle, audit status, and responsible-disclosure contact.">
-<meta property="og:title" content="Security &amp; Audit Status - TinyZKP">
-<meta property="og:description" content="What TinyZKP's live STARK receipt path claims today, what remains review-gated, and how to report security issues.">
+<title>Security - TinyZKP</title>
+<meta name="description" content="TinyZKP security contact and production receipt scope.">
+<meta property="og:title" content="Security - TinyZKP">
+<meta property="og:description" content="TinyZKP security contact and production receipt scope.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tinyzkp.com/security">
 <meta property="og:site_name" content="TinyZKP">
 <meta property="og:image" content="https://tinyzkp.com/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Security &amp; Audit Status - TinyZKP">
-<meta name="twitter:description" content="What TinyZKP's live STARK receipt path claims today, what remains review-gated, and how to report security issues.">
+<meta name="twitter:title" content="Security - TinyZKP">
+<meta name="twitter:description" content="TinyZKP security contact and production receipt scope.">
 <meta name="twitter:image" content="https://tinyzkp.com/og-image.png">
 <meta name="twitter:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
 <meta property="og:image:alt" content="TinyZKP proof receipts for agents, APIs, and state transitions.">
@@ -119,9 +119,9 @@ li{margin-bottom:8px}
 <main>
   <section class="hero">
     <div class="container">
-      <div class="eyebrow">Security status</div>
-      <h1>Transparent receipt claims, explicit audit boundaries.</h1>
-      <p class="lede">TinyZKP's live public product is a transparent STARK state-transition receipt service. The verifier floor rejects legacy pre-v5 proofs, the default receipt is not marketed as input privacy, and templates stay hidden until their predicate is enforced and their review status is appropriate for production exposure.</p>
+      <div class="eyebrow">Security</div>
+      <h1>Production receipt scope and security contact.</h1>
+      <p class="lede">TinyZKP's live public product is a transparent STARK state-transition receipt service. Production receipts use the current verifier format and can be checked through the API, SDKs, CLI, MCP, or browser verifier.</p>
       <p class="lede" style="font-size:15px;margin-top:16px">For product boundaries, supported templates, and production limits, use the <a href="/limits">limits page</a>, <a href="/templates">template catalog</a>, or <a href="/contact">contact form</a>.</p>
     </div>
   </section>
@@ -129,59 +129,13 @@ li{margin-bottom:8px}
   <section class="section">
     <div class="container">
       <h2>Current production scope</h2>
-      <p>Template discovery uses three lifecycle values: <code>live</code>, <code>audit_gated</code>, and <code>preview</code>. Only <code>live</code> templates are listed and dispatchable in the default production deployment.</p>
+      <p>The production catalog exposes the live <code>accumulator_step</code> template for transparent state-transition receipts.</p>
       <div class="grid">
         <article class="card">
           <span class="tag live">Live</span>
           <h3>accumulator_step</h3>
           <p>Transparent state-transition receipts: starting from X, applying public deltas reaches Y. Verification can run through the API, SDKs, MCP, CLI, or browser verifier.</p>
         </article>
-        <article class="card">
-          <span class="tag gated">Audit gated</span>
-          <h3>General AIR templates</h3>
-          <p>Some templates may be implemented on the v7 general-AIR path, but remain hidden from default production listings until external audit coverage is complete.</p>
-        </article>
-        <article class="card">
-          <span class="tag preview">Preview</span>
-          <h3>zkML, Spartan, custom predicates</h3>
-          <p>Preview or structure-only workloads are not part of the self-serve production promise unless explicitly enabled for development or a private design-partner engagement.</p>
-        </article>
-      </div>
-      <div class="callout">
-        <p><strong>Do not treat default TinyZKP receipts as input privacy.</strong> The default self-serve receipt is transparent attestation. Privacy-oriented flows require a separately documented template, configuration, and audit status.</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="container">
-      <h2>Audit status</h2>
-      <div class="status-table">
-        <table>
-          <thead><tr><th>Area</th><th>Status</th><th>Public artifact</th></tr></thead>
-          <tbody>
-            <tr>
-              <td><strong>Threat model</strong></td>
-              <td>Published and maintained in the repo.</td>
-              <td><a href="https://github.com/logannye/hc-stark/blob/main/docs/security/threat_model.md" target="_blank">threat_model.md</a></td>
-            </tr>
-            <tr>
-              <td><strong>Soundness argument</strong></td>
-              <td>Conjectured under standard FRI/STARK assumptions; pending external cryptographer audit.</td>
-              <td><a href="https://github.com/logannye/hc-stark/blob/main/docs/security/soundness_proof.md" target="_blank">soundness_proof.md</a></td>
-            </tr>
-            <tr>
-              <td><strong>External cryptography audit</strong></td>
-              <td>Not complete yet. Customer-facing bit-strength claims should stay qualified until this is done.</td>
-              <td><a href="https://github.com/logannye/hc-stark/blob/main/docs/security/audit_checklist.md" target="_blank">audit_checklist.md</a></td>
-            </tr>
-            <tr>
-              <td><strong>Legacy KZG/BN254 repo</strong></td>
-              <td>Out of production scope. It is research lineage, not the hosted TinyZKP trust boundary.</td>
-              <td><a href="/research">Research lineage</a></td>
-            </tr>
-          </tbody>
-        </table>
       </div>
     </div>
   </section>

@@ -14,15 +14,7 @@
     "Agent control planes that need receipts for high-value tool-call batches",
     "Agent platforms, IDEs, workflow engines, and marketplaces that want proof receipts as a native policy surface",
     "Finance, audit, reserve, liability, or reconciliation checkpoints",
-    "Long supported state-transition traces where Compute is preferable to self-hosted high-RAM prover operations",
-    "Procurement-heavy teams that need trust, security, data-handling, and support review before rollout"
-  ],
-  "review_first": [
-    "Private-input zero-knowledge requirements",
-    "Custom predicates or unsupported state machines",
-    "Contractual support targets or reserved workers",
-    "Special data-retention, legal, invoice, or design review requirements",
-    "On-chain or restricted-runtime verifier requirements"
+    "Long supported state-transition traces where Compute is preferable to self-hosted high-RAM prover operations"
   ],
   "enterprise_review_topics": [
     {

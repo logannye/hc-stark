@@ -167,8 +167,7 @@
   "billing_rules": {
     "billable_event": "Hosted proof job succeeds.",
     "free_events": ["verification", "failed verifier checks"],
-    "default_public_product": "Transparent state-transition proof receipts.",
-    "private_input_note": "Do not treat the default product as private-input ZK unless a specific template, masking mode, review status, and verifier path are explicitly documented."
+    "default_public_product": "Transparent state-transition proof receipts."
   },
   "buyer_guidance": {
     "agent_builders": "Start Free or Developer. Receipt one high-value tool call and return the agent receipt envelope.",

@@ -38,14 +38,14 @@
       "Added commercial packaging for a $5,000 creditable production pilot, a dedicated platform-rollout package from $499/month minimum plus usage, and reserved-capacity review.",
       "Added ROI and business-case worksheet for finance/procurement review, avoided-cost modeling, and pilot payback.",
       "Added Fit Finder for routing buyers and agents between Free, Developer, Pro, Scale, Compute, paid pilot, platform rollout, enterprise, and defer paths.",
-      "Clarified that the live self-serve product is a transparent STARK state-transition receipt, not a generic private-input ZK service by default.",
+      "Clarified the live self-serve product as a transparent STARK state-transition receipt.",
       "Documented release identity endpoints for checking deploy skew across website, API, MCP, SDK examples, and verifier behavior.",
       "Added public release policy guidance for API, MCP, templates, examples, verifier, schemas, evaluation, pricing, calculator, and security surfaces."
     ],
     "compatibility_notes": [
       "New response fields are additive by default; clients should ignore fields they do not understand.",
       "Route removals, required-parameter changes, proof-format floors, and verifier acceptance changes require a migration note before public rollout unless the change is an emergency security disablement.",
-      "Template lifecycle changes must update /templates.json and should not present preview or review-gated templates as generally available.",
+      "Template lifecycle changes must update /templates.json.",
       "Pricing changes must update /pricing.json and /calculator.json before they are treated as buyer-facing source of truth.",
       "MCP tool changes must update /mcp.json and /.well-known/mcp/server-card.json when they affect discovery, installation, tool names, auth expectations, or response semantics."
     ]

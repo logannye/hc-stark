@@ -42,12 +42,6 @@
         "Audit trail accumulator where a compact receipt is better than replay",
         "Long supported state-transition trace priced by Compute"
       ],
-      "bad_fit": [
-        "Generic private-input zero knowledge",
-        "Unsupported custom program semantics",
-        "Real-world business facts not encoded into the statement",
-        "Sub-second proving on every UI click"
-      ],
       "example_request": {
         "template_id": "accumulator_step",
         "params": {
@@ -66,26 +60,6 @@
         "recurring_receipts": "Use Free, Developer, Pro, or Scale depending on volume and customer visibility.",
         "long_traces": "Use Compute when trace length makes high-RAM prover infrastructure the economic alternative."
       }
-    }
-  ],
-  "design_review_lanes": [
-    {
-      "id": "custom_state_machine",
-      "name": "Custom state machine",
-      "status": "review_required",
-      "guidance": "Use pilot review when the transition rule cannot be represented by accumulator_step."
-    },
-    {
-      "id": "private_input_or_masking",
-      "name": "Private input or masking requirement",
-      "status": "review_required",
-      "guidance": "Do not treat the default transparent receipt as a private-input ZK feature. Review the exact template and masking mode before production claims."
-    },
-    {
-      "id": "long_trace_compute",
-      "name": "Long supported state-transition trace",
-      "status": "available_with_compute",
-      "guidance": "Use Compute when the template shape is supported but trace length makes hosted proof generation preferable to self-hosted high-RAM workers."
     }
   ],
   "links": {

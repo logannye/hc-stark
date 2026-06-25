@@ -228,13 +228,6 @@
       "best_for": "Contractual support, reserved capacity, procurement, or production-critical receipt lanes.",
       "next_artifact": "Procurement and rollout plan.",
       "url": "https://tinyzkp.com/enterprise"
-    },
-    {
-      "id": "defer",
-      "name": "Defer or Compare",
-      "best_for": "Workflows with no clear verifier, no visible receipt placement, or enough coverage from signed logs.",
-      "next_artifact": "Trust-model comparison.",
-      "url": "https://tinyzkp.com/compare"
     }
   ],
   "evidence_packet": [
@@ -246,13 +239,6 @@
     "Expected monthly volume and trace-size band.",
     "Recommended plan or pilot path.",
     "Security, pricing, ROI, or platform-review assets needed by the budget owner."
-  ],
-  "guardrails": [
-    "Do not put secrets, private customer data, or API keys into transparent receipt parameters.",
-    "Do not describe the default public product as private-input zero knowledge unless a documented template and masking mode are reviewed.",
-    "Do not require receipts for every agent or platform action on day one; start with high-value action categories.",
-    "Do not buy proof receipts before naming the verifier and receipt placement.",
-    "Use signed logs, hash chains, or existing audit trails when no independent verifier needs a STARK receipt."
   ],
   "links": {
     "page": "https://tinyzkp.com/fit",
