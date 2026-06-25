@@ -276,7 +276,6 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
   <aside class="sidebar" id="sidebar">
     <h4>Documentation</h4>
     <a href="#quickstart" class="active">Quickstart</a>
-    <a href="#when-not-to-use">When Not to Use</a>
     <a href="#wasm">Client-Side Verification</a>
     <a href="#auth">Authentication</a>
     <a href="#endpoints">API Endpoints</a>
@@ -296,7 +295,6 @@ footer .right a:hover{color:var(--muted);text-decoration:none}
     <a href="#local-dev">Local Development</a>
     <a href="#glossary">Glossary</a>
     <a href="#research-lineage">Research Lineage</a>
-    <a href="#security-status">Security Status</a>
     <a href="#swagger">API Reference</a>
   </aside>
 
@@ -625,14 +623,13 @@ console.log(result.ok); <span class="comment">// true</span></pre>
     </div>
 
     <h3 id="template-lifecycle">Template Lifecycle</h3>
-    <p>Template discovery includes a machine-readable <code>lifecycle</code> field. The public API, SDKs, CLI, MCP server, and package docs use the same vocabulary so agents and developers can distinguish supported production receipts from gated work.</p>
+    <p>Template discovery includes a machine-readable <code>lifecycle</code> field. The public API, SDKs, CLI, MCP server, and package docs use the same vocabulary so agents and developers can read supported production status consistently.</p>
     <div class="docs-table-wrap">
       <table>
         <thead><tr><th>Lifecycle</th><th>Meaning</th><th>Default public exposure</th></tr></thead>
         <tbody>
           <tr><td><code>live</code></td><td>Supported for self-serve production use.</td><td>Visible in default template discovery and examples.</td></tr>
           <tr><td><code>preview</code></td><td>Documented for planning or limited partner testing.</td><td>May require explicit opt-in or account review.</td></tr>
-          <tr><td><code>audit_gated</code></td><td>Held until review, docs, and operational boundaries are complete.</td><td>Not advertised as a public production template.</td></tr>
         </tbody>
       </table>
     </div>

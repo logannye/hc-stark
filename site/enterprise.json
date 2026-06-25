@@ -27,7 +27,7 @@
     },
     {
       "area": "security",
-      "topics": ["trust boundary", "data handling", "verifier behavior", "audit status", "release policy"]
+      "topics": ["trust boundary", "data handling", "verifier behavior", "security contact", "release policy"]
     },
     {
       "area": "commercials",

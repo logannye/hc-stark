@@ -76,7 +76,7 @@ GATES: tuple[Gate, ...] = (
         "Product repo positioning",
         (
             Evidence("README.md", ("Get an API key", "accumulator_step", "transparent STARK", "HC_SERVER_PROVE_DISPATCH")),
-            Evidence("site/docs.html", ("Research Lineage", "When Not to Use TinyZKP", "Security &amp; Audit Status")),
+            Evidence("site/docs.html", ("Research Lineage", "WASM-First Verification", "SDK &amp; Verifier Compatibility")),
             Evidence("clients/python/README.md", ("accumulator_step", "lifecycle")),
             Evidence("clients/typescript/README.md", ("accumulator_step", "lifecycle")),
             Evidence("clients/rust/src/lib.rs", ("accumulator_step", "pub lifecycle: String")),
@@ -125,7 +125,7 @@ GATES: tuple[Gate, ...] = (
         "Phase 5",
         "Security, audit, and trust",
         (
-            Evidence("site/security.html", ("Responsible disclosure", "Template discovery uses three lifecycle values", "Do not treat default TinyZKP receipts as input privacy")),
+            Evidence("site/security.html", ("Responsible disclosure", "Current production scope", "accumulator_step")),
             Evidence("docs/security/threat_model.md", ("Threat Model",)),
             Evidence("docs/security/auditor_guide.md", ("Auditor",)),
             Evidence("docs/security/soundness_proof.md", ("accumulator_step",)),
