@@ -23,6 +23,7 @@ import * as rotateKey          from "./functions/api/rotate-key.js";
 import * as sendMagicLink      from "./functions/api/send-magic-link.js";
 import * as verifyMagicLink    from "./functions/api/verify-magic-link.js";
 import * as sessionResolve     from "./functions/api/session-resolve.js";
+import * as statusProbe        from "./functions/api/status-probe.js";
 import * as revealKey          from "./functions/api/reveal-key.js";
 import * as logout             from "./functions/api/logout.js";
 import * as usage              from "./functions/api/usage.js";
@@ -41,6 +42,7 @@ const ROUTES = {
   "/api/send-magic-link":      sendMagicLink,
   "/api/verify-magic-link":    verifyMagicLink,
   "/api/session-resolve":      sessionResolve,
+  "/api/status-probe":         statusProbe,
   "/api/reveal-key":           revealKey,
   "/api/logout":               logout,
   "/api/usage":                usage,

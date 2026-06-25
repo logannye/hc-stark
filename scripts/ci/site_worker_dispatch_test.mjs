@@ -271,6 +271,64 @@ async function main() {
     }
 
     {
+      const assets = makeAssetsMock(async () => new Response("missing", { status: 404 }));
+      await withFetchMock(async (input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url === "https://api.tinyzkp.com/healthz") {
+          return new Response("", { status: 200 });
+        }
+        throw new Error(`unexpected status probe fetch ${url}`);
+      }, async () => {
+        const response = await worker.fetch(
+          new Request("https://tinyzkp.com/api/status-probe?target=api", { method: "GET" }),
+          { ASSETS: assets },
+          { waitUntil() {} },
+        );
+        assert.equal(response.status, 200);
+        const data = await readJson(response);
+        assert.equal(data.ok, true);
+        assert.equal(data.target, "api");
+        assert.equal(data.status, 200);
+        assert.equal(typeof data.latency_ms, "number");
+      });
+      assert.deepEqual(assets.calls, []);
+    }
+
+    {
+      const assets = makeAssetsMock(async () => new Response("missing", { status: 404 }));
+      await withFetchMock(async (input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url === "https://mcp.tinyzkp.com/.well-known/mcp/server-card.json") {
+          return new Response('{"name":"tinyzkp"}', { status: 200 });
+        }
+        throw new Error(`unexpected status probe fetch ${url}`);
+      }, async () => {
+        const response = await worker.fetch(
+          new Request("https://tinyzkp.com/api/status-probe?target=mcp", { method: "GET" }),
+          { ASSETS: assets },
+          { waitUntil() {} },
+        );
+        assert.equal(response.status, 200);
+        const data = await readJson(response);
+        assert.equal(data.ok, true);
+        assert.equal(data.marker_ok, true);
+      });
+      assert.deepEqual(assets.calls, []);
+    }
+
+    {
+      const assets = makeAssetsMock(async () => new Response("missing", { status: 404 }));
+      const response = await worker.fetch(
+        new Request("https://tinyzkp.com/api/status-probe?target=https://example.com", { method: "GET" }),
+        { ASSETS: assets },
+        { waitUntil() {} },
+      );
+      assert.equal(response.status, 400);
+      assert.deepEqual(await readJson(response), { ok: false, error: "unknown target" });
+      assert.deepEqual(assets.calls, []);
+    }
+
+    {
       // extensionless HTML fallback must serve static pages without hiding API dispatch bugs.
       const assets = makeAssetsMock(async (request) => {
         const pathname = new URL(request.url).pathname;

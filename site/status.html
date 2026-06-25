@@ -322,25 +322,28 @@ footer .right a:hover{color:var(--muted)}
 </footer>
 
 <script>
-async function checkEndpoint(url, dotId, latencyId, marker){
+var STATUS_PROBES = {
+  api: {probe: '/api/status-probe?target=api', publicUrl: 'https://api.tinyzkp.com/healthz'},
+  mcp: {probe: '/api/status-probe?target=mcp', publicUrl: 'https://mcp.tinyzkp.com/.well-known/mcp/server-card.json'},
+  site: {probe: '/api/status-probe?target=site', publicUrl: 'https://tinyzkp.com/favicon.svg'}
+};
+
+async function checkEndpoint(probeName, dotId, latencyId){
   var dot = document.getElementById(dotId);
   var lat = document.getElementById(latencyId);
-  var t0 = performance.now();
+  var probe = STATUS_PROBES[probeName];
   try {
-    var r = await fetch(url, {method:'GET', cache:'no-store'});
-    var elapsed = Math.round(performance.now() - t0);
-    var markerOk = true;
-    if(r.ok && marker){
-      markerOk = (await r.text()).indexOf(marker) !== -1;
-    }
-    if(r.ok && markerOk){
+    var r = await fetch(probe.probe, {method:'GET', cache:'no-store'});
+    var data = await r.json();
+    var elapsed = Number.isFinite(data.latency_ms) ? data.latency_ms : null;
+    if(r.ok && data.ok){
       dot.className = 'dot up';
-      lat.textContent = elapsed + ' ms';
+      lat.textContent = elapsed !== null ? elapsed + ' ms' : 'ok';
       return {ok:true, latency:elapsed};
     } else {
       dot.className = 'dot down';
-      lat.textContent = r.ok ? 'stale response' : 'HTTP ' + r.status;
-      return {ok:false, latency:elapsed};
+      lat.textContent = data && data.status ? 'HTTP ' + data.status : 'unreachable';
+      return {ok:false, latency:elapsed || null};
     }
   } catch(e) {
     dot.className = 'dot down';
@@ -356,9 +359,9 @@ async function refreshStatus(){
   text.textContent = 'Checking…';
 
   var checks = await Promise.all([
-    checkEndpoint('https://api.tinyzkp.com/healthz', 'dot-api', 'lat-api'),
-    checkEndpoint('https://mcp.tinyzkp.com/.well-known/mcp/server-card.json', 'dot-mcp', 'lat-mcp', 'tinyzkp').catch(function(){return {ok:false}}),
-    checkEndpoint('https://tinyzkp.com/favicon.svg', 'dot-www', 'lat-www')
+    checkEndpoint('api', 'dot-api', 'lat-api'),
+    checkEndpoint('mcp', 'dot-mcp', 'lat-mcp'),
+    checkEndpoint('site', 'dot-www', 'lat-www')
   ]);
 
   var up = checks.filter(function(x){return x && x.ok}).length;
