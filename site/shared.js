@@ -10,7 +10,7 @@
   document.documentElement.classList.add('js');
 
   ready(function(){
-    var mobileMedia = window.matchMedia('(max-width: 900px)');
+    var mobileMedia = window.matchMedia('(max-width: 1120px)');
 
     document.querySelectorAll('nav.tz-nav').forEach(function(nav){
       var links = nav.querySelector('.links');

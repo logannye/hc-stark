@@ -104,7 +104,7 @@ nav .container{display:flex;align-items:center;justify-content:space-between;hei
 nav.tz-nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(5,10,18,.9);
   backdrop-filter:blur(18px);border-bottom:1px solid rgba(30,45,82,.86)}
 nav.tz-nav .container{max-width:1180px;height:56px;display:flex;align-items:center;justify-content:space-between}
-nav.tz-nav .links{display:flex;align-items:center;gap:8px}
+nav.tz-nav .links{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:nowrap}
 nav.tz-nav .links a,
 nav.tz-nav .nav-trigger{color:var(--muted);font-size:13px;font-weight:650;letter-spacing:0;border-radius:6px;
   transition:color .18s,background .18s,border-color .18s,transform .18s}
@@ -118,13 +118,13 @@ nav.tz-nav .nav-trigger{appearance:none;background:transparent;border:0;font-fam
 nav.tz-nav .nav-trigger::after{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;
   border-bottom:1.5px solid currentColor;transform:rotate(45deg) translateY(-1px);opacity:.72}
 nav.tz-nav .nav-group{position:relative}
-nav.tz-nav .nav-menu{position:absolute;top:calc(100% + 12px);left:0;width:282px;padding:8px;
+nav.tz-nav .nav-menu{display:none;position:absolute;top:calc(100% + 12px);left:0;width:282px;padding:8px;
   background:rgba(8,13,24,.985);border:1px solid var(--border-light);border-radius:8px;
   box-shadow:0 18px 52px rgba(0,0,0,.34);opacity:0;visibility:hidden;pointer-events:none;
   transform:translateY(6px);transition:opacity .16s ease,transform .16s ease,visibility .16s ease}
 nav.tz-nav .nav-menu::before{content:'';position:absolute;left:0;right:0;top:-12px;height:12px}
 nav.tz-nav .nav-group:hover .nav-menu,
-nav.tz-nav .nav-group:focus-within .nav-menu{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0)}
+nav.tz-nav .nav-group:focus-within .nav-menu{display:block;opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0)}
 nav.tz-nav .nav-menu a{display:grid;gap:2px;padding:10px 11px;color:var(--text);border-radius:6px;font-size:13px;
   line-height:1.25;letter-spacing:0}
 nav.tz-nav .nav-menu a:hover{background:rgba(46,232,212,.08);color:var(--accent)}
@@ -137,6 +137,33 @@ nav.tz-nav .nav-cta:hover{background:var(--accent-bright);transform:translateY(-
 nav.tz-nav .status-link{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);
   box-shadow:0 0 8px rgba(52,211,153,.52)}
+
+@media(min-width:1121px){
+  nav.tz-nav .hamburger{display:none!important}
+  nav.tz-nav .links{display:flex!important}
+}
+
+@media(max-width:1120px){
+  nav.tz-nav .hamburger{display:block}
+  nav.tz-nav .links{display:none;position:absolute;top:56px;left:0;right:0;background:var(--bg);
+    border-bottom:1px solid var(--border);flex-direction:column;align-items:stretch;padding:14px 24px 18px;gap:6px;
+    max-height:calc(100vh - 56px);overflow:auto;box-shadow:0 24px 42px rgba(0,0,0,.38)}
+  nav.tz-nav .links.open{display:flex}
+  nav.tz-nav .links > a:not(.nav-cta),
+  nav.tz-nav .nav-link,
+  nav.tz-nav .nav-trigger{width:100%;min-height:38px;padding:10px 0;justify-content:space-between;color:var(--text)}
+  nav.tz-nav .nav-group{width:100%}
+  nav.tz-nav .nav-menu{display:none;position:static;width:100%;padding:0 0 8px 12px;background:transparent;border:0;
+    border-left:1px solid var(--border);border-radius:0;box-shadow:none;opacity:1;visibility:visible;pointer-events:auto;transform:none}
+  nav.tz-nav .nav-group.open .nav-menu{display:block}
+  nav.tz-nav .nav-group.open .nav-trigger::after{transform:rotate(225deg) translate(-1px,-1px)}
+  nav.tz-nav .nav-menu::before{display:none}
+  nav.tz-nav .nav-menu a{padding:7px 0;color:var(--muted);background:transparent}
+  nav.tz-nav .nav-menu a:hover{background:transparent;color:var(--accent)}
+  nav.tz-nav .nav-menu a span{display:none}
+  nav.tz-nav .nav-cta{width:100%;margin-top:4px}
+  nav.tz-nav .status-link.nav-link{justify-content:flex-start!important}
+}
 
 footer.tz-footer{margin-top:auto;border-top:1px solid rgba(30,45,82,.86);padding:40px 0;background:rgba(3,8,15,.38)}
 footer.tz-footer .container{max-width:1180px;display:grid;grid-template-columns:minmax(220px,1.2fr) repeat(4,minmax(120px,1fr));
