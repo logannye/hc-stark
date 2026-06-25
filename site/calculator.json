@@ -127,6 +127,6 @@
     "integrations": "https://tinyzkp.com/integrations",
     "changelog": "https://tinyzkp.com/changelog",
     "changelog_metadata": "https://tinyzkp.com/changelog.json",
-    "trust_center": "https://tinyzkp.com/trust"
+    "security_status": "https://tinyzkp.com/security"
   }
 }

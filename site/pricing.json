@@ -159,7 +159,7 @@
       "best_for": "Teams where receipts are customer-visible, auditor-visible, or operationally critical.",
       "notes": [
         "Reserved proving lanes or Compute planning.",
-        "Procurement and security review packet.",
+        "Procurement and rollout plan.",
         "Support commitments and escalation route."
       ]
     }
@@ -178,7 +178,7 @@
     "evaluation": "Use the TinyZKP evaluation kit to decide whether one receipt workflow has a real verifier, economic driver, and go/no-go path before buying.",
     "fit_finder": "Use the Fit Finder when the buyer or agent needs a conservative first-route recommendation from workflow type, verifier, receipt placement, data boundary, trace size, volume, procurement, and current alternative.",
     "roi": "Use the ROI worksheet when finance or procurement needs avoided-cost evidence for manual review, support, prover operations, TinyZKP spend, and pilot payback.",
-    "enterprise": "Use the TinyZKP enterprise path for reserved capacity, procurement packets, security review, support commitments, and custom state-machine review."
+    "enterprise": "Use the TinyZKP enterprise path for reserved capacity, support commitments, and custom state-machine review."
   },
   "links": {
     "pricing_page": "https://tinyzkp.com/pricing",
@@ -211,7 +211,7 @@
     "pilot_program": "https://tinyzkp.com/pilot",
     "compute": "https://tinyzkp.com/compute",
     "contact": "https://tinyzkp.com/contact",
-    "trust_center": "https://tinyzkp.com/trust",
-    "security_review": "https://tinyzkp.com/security-review"
+    "security_status": "https://tinyzkp.com/security",
+    "security_review": "https://tinyzkp.com/security"
   }
 }

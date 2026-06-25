@@ -21,7 +21,7 @@
     "Private-input zero-knowledge requirements",
     "Custom predicates or unsupported state machines",
     "Contractual support targets or reserved workers",
-    "Special data-retention, legal, invoice, or security-review requirements",
+    "Special data-retention, legal, invoice, or design review requirements",
     "On-chain or restricted-runtime verifier requirements"
   ],
   "enterprise_review_topics": [
@@ -102,8 +102,8 @@
   "procurement_assets": {
     "evaluation": "https://tinyzkp.com/evaluation",
     "evaluation_metadata": "https://tinyzkp.com/evaluation.json",
-    "trust_center": "https://tinyzkp.com/trust",
-    "security_review": "https://tinyzkp.com/security-review",
+    "security_status": "https://tinyzkp.com/security",
+    "security_review": "https://tinyzkp.com/security",
     "security_status": "https://tinyzkp.com/security",
     "status_page": "https://tinyzkp.com/status",
     "release_policy": "https://tinyzkp.com/changelog",
@@ -133,8 +133,8 @@
     "limits_metadata": "https://tinyzkp.com/limits.json",
     "calculator": "https://tinyzkp.com/calculator",
     "compute": "https://tinyzkp.com/compute",
-    "trust_center": "https://tinyzkp.com/trust",
-    "security_review": "https://tinyzkp.com/security-review",
+    "security_status": "https://tinyzkp.com/security",
+    "security_review": "https://tinyzkp.com/security",
     "template_catalog": "https://tinyzkp.com/templates"
   }
 }

@@ -617,9 +617,8 @@ footer .right a:hover{color:var(--muted)}
         <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
         <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
         <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
-        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/evaluation">Evaluation<span>Workflow fit and rollout decision guide.</span></a>
         <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
-        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
         <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
       </div>
     </div>
@@ -661,10 +660,10 @@ footer .right a:hover{color:var(--muted)}
         <a class="cta cta-secondary" href="/fit" data-track="fit_finder_home_click" data-source="homepage_hero">Find Your Route</a>
       </div>
       <span class="free">Free tier &middot; 100 proofs/month &middot; no credit card &middot; first proof in 60 seconds</span>
-      <div class="trust-strip" aria-label="TinyZKP trust signals">
+      <div class="trust-strip" aria-label="TinyZKP proof signals">
         <div><strong>Live API</strong>Proofs generated against production endpoints.</div>
         <div><strong>First-party verifier</strong>Browser verification served from tinyzkp.com.</div>
-        <div><strong>Trust center</strong><a href="/trust">Buyer review</a> material is public.</div>
+        <div><strong>Public schemas</strong><a href="/docs">Docs</a> and API contracts are available.</div>
         <div><strong>Open source</strong>Backend, SDKs, and verifier code are available.</div>
       </div>
     </div>
@@ -826,7 +825,7 @@ claude mcp add --transport http \
       </ul>
     </div>
   </div>
-  <p style="text-align:center;margin-top:22px;color:var(--dim);font-size:13px">Not sure where to start? Use the <a href="/fit" style="text-decoration:underline;text-underline-offset:4px">Fit Finder</a>. For a business-case decision, start with the <a href="/evaluation" style="text-decoration:underline;text-underline-offset:4px">Evaluation Kit</a>. For procurement and security review, use the <a href="/trust" style="text-decoration:underline;text-underline-offset:4px">Trust Center</a>, the <a href="/security-review" style="text-decoration:underline;text-underline-offset:4px">Security Review Packet</a>, the <a href="/pilot" style="text-decoration:underline;text-underline-offset:4px">Pilot Program</a>, or the <a href="/platform-rollout" style="text-decoration:underline;text-underline-offset:4px">Platform Rollout package</a>.</p>
+  <p style="text-align:center;margin-top:22px;color:var(--dim);font-size:13px">Not sure where to start? Use the <a href="/fit" style="text-decoration:underline;text-underline-offset:4px">Fit Finder</a>. For a business-case decision, start with the <a href="/evaluation" style="text-decoration:underline;text-underline-offset:4px">Evaluation Kit</a>. For rollout planning, use the <a href="/pilot" style="text-decoration:underline;text-underline-offset:4px">Pilot Program</a> or the <a href="/platform-rollout" style="text-decoration:underline;text-underline-offset:4px">Platform Rollout package</a>.</p>
 </div>
 </section>
 
@@ -869,19 +868,19 @@ claude mcp add --transport http \
 <div class="container">
   <div class="section-label">Distribution Assets</div>
   <h2 class="section-title">Make receipts easy to adopt, embed, and share</h2>
-  <p class="section-sub">A proof primitive spreads when every participant gets the right artifact: agent tools, API contracts, user-facing verification, and buyer-review material.</p>
+  <p class="section-sub">A proof primitive spreads when every participant gets the right artifact: agent tools, API contracts, user-facing verification, and clear rollout material.</p>
   <div class="adoption-system fade-in">
     <div class="adoption-rail" aria-label="TinyZKP adoption route">
       <div class="route-step"><strong>01</strong><div><h3>Expose the proof action</h3><p>Use MCP for agents or REST/OpenAPI for backend systems.</p></div></div>
       <div class="route-step"><strong>02</strong><div><h3>Attach a portable receipt</h3><p>Return receipt JSON or a verification link with the state-changing result.</p></div></div>
       <div class="route-step"><strong>03</strong><div><h3>Let recipients verify</h3><p>Use the browser verifier, first-party WASM package, or hosted verification fallback.</p></div></div>
-      <div class="route-step"><strong>04</strong><div><h3>Support review and buying</h3><p>Give security, finance, and procurement a clear trust packet and pricing path.</p></div></div>
+      <div class="route-step"><strong>04</strong><div><h3>Support rollout and buying</h3><p>Give product, finance, and operations a clear route, budget, and pricing path.</p></div></div>
     </div>
     <div class="adoption-cards">
       <article class="adoption-card"><div class="kicker">Build</div><h3>Contracts agents can read</h3><p>OpenAPI, schemas, templates, and MCP metadata make TinyZKP easy for agent runtimes and SDK generators to consume.</p><div class="asset-strip"><a href="/openapi.json">OpenAPI</a><a href="/templates">Templates</a><a href="/integrations">Integrations</a></div></article>
       <article class="adoption-card"><div class="kicker">Ship</div><h3>Copy-paste integration paths</h3><p>Recipes, examples, and badges turn receipt generation into a visible product capability instead of hidden infrastructure.</p><div class="asset-strip"><a href="/recipes">Recipes</a><a href="/examples">Examples</a><a href="/badges">Badges</a></div></article>
       <article class="adoption-card"><div class="kicker">Buy</div><h3>Clear routes for real teams</h3><p>Fit Finder, Evaluation, ROI, and Calculator pages convert technical interest into a plan, budget, and go/no-go decision.</p><div class="asset-strip"><a href="/fit">Fit Finder</a><a href="/evaluation">Evaluation</a><a href="/roi">ROI</a><a href="/calculator">Calculator</a></div></article>
-      <article class="adoption-card"><div class="kicker">Trust</div><h3>Boundaries before production</h3><p>Limits, Security Review, Trust Center, and Changelog pages make current capabilities and audit boundaries explicit.</p><div class="asset-strip"><a href="/limits">Limits</a><a href="/security-review">Security</a><a href="/trust">Trust</a><a href="/changelog">Changelog</a></div></article>
+      <article class="adoption-card"><div class="kicker">Boundaries</div><h3>Scope before production</h3><p>Limits, examples, and changelog pages make current capabilities and release boundaries explicit.</p><div class="asset-strip"><a href="/limits">Limits</a><a href="/examples">Examples</a><a href="/changelog">Changelog</a></div></article>
     </div>
   </div>
 </div>
@@ -1048,7 +1047,7 @@ console.log(result.ok); <span class="comment">// true when the local verifier su
         <div class="tier">Enterprise</div>
         <div class="amount">Custom</div>
         <div class="unit">reserved capacity</div>
-        <div class="desc">Reserved workers &middot; higher caps &middot; dedicated support &middot; security review &middot; contractual terms</div>
+        <div class="desc">Reserved workers &middot; higher caps &middot; dedicated support &middot; design review &middot; contractual terms</div>
         <a class="cta cta-secondary" href="/pilot" style="margin-top:18px;display:block;text-align:center;font-size:12px;padding:10px 20px">Plan a pilot</a>
       </div>
     </div>
@@ -1206,8 +1205,6 @@ function showAudience(name) {
   </div>
   <div class="footer-col">
     <h2>Company</h2>
-    <a href="/trust">Trust center</a>
-    <a href="/security-review">Security review</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
     <a href="/status">Status</a>

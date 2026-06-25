@@ -105,7 +105,7 @@
     "platform_rollout": "https://tinyzkp.com/platform-rollout",
     "platform_rollout_metadata": "https://tinyzkp.com/platform-rollout.json",
     "pilot_program": "https://tinyzkp.com/pilot",
-    "trust_center": "https://tinyzkp.com/trust",
+    "security_status": "https://tinyzkp.com/security",
     "receipt_schema": "https://tinyzkp.com/schemas/tinyzkp-receipt.schema.json"
   }
 }

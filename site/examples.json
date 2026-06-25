@@ -49,7 +49,7 @@
     {
       "id": "audit-checkpoint",
       "title": "Audit-log checkpoint",
-      "audience": "Audit and compliance teams",
+      "audience": "Audit and operations teams",
       "workflow": "An audit trail rolls many public event weights into a compact checkpoint that a reviewer can verify later.",
       "statement": { "template_id": "accumulator_step", "initial": 800, "deltas": [11, 17, 19, 23], "final": 870 },
       "proves": [
@@ -78,7 +78,7 @@
         "Private-input proof-of-solvency."
       ],
       "try_url": "https://tinyzkp.com/try?initial=500&deltas=60,40,20&example=reserve-update",
-      "related": ["https://tinyzkp.com/use-cases/proof-of-reserves-attestation", "https://tinyzkp.com/trust"]
+      "related": ["https://tinyzkp.com/use-cases/proof-of-reserves-attestation", "https://tinyzkp.com/security"]
     },
     {
       "id": "inventory-reconciliation",
@@ -139,6 +139,6 @@
     "pricing": "https://tinyzkp.com/pricing",
     "calculator": "https://tinyzkp.com/calculator",
     "pilot_program": "https://tinyzkp.com/pilot",
-    "trust_center": "https://tinyzkp.com/trust"
+    "security_status": "https://tinyzkp.com/security"
   }
 }

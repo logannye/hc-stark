@@ -70,9 +70,8 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
         <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
         <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
         <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
-        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/evaluation">Evaluation<span>Workflow fit and rollout decision guide.</span></a>
         <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
-        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
         <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
       </div>
     </div>
@@ -140,9 +139,9 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
         <tbody>
           <tr><td><strong>Product owner</strong></td><td>Whether a receipt changes trust, sales, support, audit, or customer experience.</td><td><a href="/fit">Fit Finder</a>, <a href="/use-cases">use cases</a>, <a href="/examples">examples</a>, and <a href="/receipts">receipt guide</a>.</td><td>The route, receipt placement, and buyer-visible artifact are clear.</td></tr>
           <tr><td><strong>Engineer</strong></td><td>How to generate, attach, poll, and verify receipts without rebuilding the workflow.</td><td><a href="/integrations">Integrations</a>, <a href="/agent-policy">agent policy</a>, <a href="/recipes">recipes</a>, and <a href="/openapi.json">OpenAPI</a>.</td><td>One receipt is generated and stored beside a workflow output.</td></tr>
-          <tr><td><strong>Security</strong></td><td>What data enters TinyZKP, what is public, and what is not claimed by default.</td><td><a href="/trust">Trust Center</a> and <a href="/security-review">security packet</a>.</td><td>No secrets or private customer data enter transparent parameters.</td></tr>
+          <tr><td><strong>Product boundary</strong></td><td>What data enters TinyZKP, what is public, and what is not claimed by default.</td><td><a href="/limits">Limits</a>, <a href="/templates">templates</a>, and <a href="/security">security status</a>.</td><td>No secrets or private customer data enter transparent parameters.</td></tr>
           <tr><td><strong>Finance</strong></td><td>Whether receipt cost is lower than replay, audit exports, support work, or prover operations.</td><td><a href="/roi">ROI worksheet</a>, <a href="/calculator">calculator</a>, and <a href="/pricing.json">pricing metadata</a>.</td><td>Expected spend, avoided cost, cap behavior, and Compute fit are documented.</td></tr>
-          <tr><td><strong>Procurement</strong></td><td>Whether the vendor path, support path, release policy, and review assets are clear.</td><td><a href="/enterprise">Enterprise</a>, <a href="/changelog">changelog</a>, and <a href="/trust.json">trust metadata</a>.</td><td>Review packet covers security, privacy, pricing, and support expectations.</td></tr>
+          <tr><td><strong>Rollout owner</strong></td><td>Whether the vendor path, support path, release policy, and rollout assets are clear.</td><td><a href="/enterprise">Enterprise</a>, <a href="/changelog">changelog</a>, and <a href="/pricing.json">pricing metadata</a>.</td><td>Rollout path covers pricing, support expectations, and product limits.</td></tr>
         </tbody>
       </table>
     </div>
@@ -186,7 +185,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
       <div class="asset"><strong>Agent policy</strong><span>Mint, attach, verify, skip, and escalation rule for any agent-controlled workflow.</span><a href="/agent-policy">Open policy</a></div>
       <div class="asset"><strong>Cost estimate</strong><span>Monthly volume, trace-size band, plan recommendation, spend cap, or Compute estimate.</span><a href="/calculator">Estimate cost</a></div>
       <div class="asset"><strong>Limit check</strong><span>Plan throughput, concurrency, anonymous demo caps, and escalation triggers for production readiness.</span><a href="/limits">Check limits</a></div>
-      <div class="asset"><strong>Security packet</strong><span>Data boundary, trust posture, release policy, schemas, OpenAPI, and support route.</span><a href="/trust">Open trust center</a></div>
+      <div class="asset"><strong>Product boundary</strong><span>Data boundary, release policy, schemas, OpenAPI, and support route.</span><a href="/limits">Check limits</a></div>
       <div class="asset"><strong>Route recommendation</strong><span>Fit Finder summary showing workflow, verifier, placement, data boundary, volume, and next route.</span><a href="/fit">Find route</a></div>
       <div class="asset"><strong>Rollout path</strong><span>Start free, upgrade self-serve, run a 14-day pilot, or request reserved capacity.</span><a href="/pilot">Plan pilot</a></div>
     </div>
@@ -203,7 +202,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
           <tr><td><strong>One production pilot</strong></td><td><a href="/signup?plan=developer">Developer</a></td><td>Use a paid key once a real backend or agent workflow depends on proof generation.</td></tr>
           <tr><td><strong>Customer-visible receipts</strong></td><td><a href="/signup?plan=pro">Pro</a> or <a href="/signup?plan=scale">Scale</a></td><td>Use discounts, throughput, and spending caps when receipts become part of the product surface.</td></tr>
           <tr><td><strong>Long trace or backfill</strong></td><td><a href="/signup?plan=compute">Compute</a></td><td>Price by trace steps when the alternative is high-RAM prover infrastructure or custom queue operations.</td></tr>
-          <tr><td><strong>Custom statement, procurement, or reserved capacity</strong></td><td><a href="/pilot">Pilot</a> then <a href="/enterprise">Enterprise</a></td><td>Define proof scope, verifier path, security review, support expectations, and commercial terms before rollout.</td></tr>
+          <tr><td><strong>Custom statement, reserved capacity, or support-sensitive rollout</strong></td><td><a href="/pilot">Pilot</a> then <a href="/enterprise">Enterprise</a></td><td>Define proof scope, verifier path, support expectations, and commercial terms before rollout.</td></tr>
         </tbody>
       </table>
     </div>
@@ -277,8 +276,6 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
   </div>
   <div class="footer-col">
     <h2>Company</h2>
-    <a href="/trust">Trust center</a>
-    <a href="/security-review">Security review</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
     <a href="/status">Status</a>

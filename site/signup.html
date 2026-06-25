@@ -238,9 +238,8 @@ footer .right a:hover{color:var(--muted)}
         <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
         <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
         <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
-        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/evaluation">Evaluation<span>Workflow fit and rollout decision guide.</span></a>
         <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
-        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
         <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
       </div>
     </div>
@@ -271,9 +270,9 @@ footer .right a:hover{color:var(--muted)}
     <div class="value-grid">
       <div class="value-card"><strong>No card for Free</strong><span>100 proof receipts/month for evaluation and demos.</span></div>
       <div class="value-card"><strong>Verify for $0</strong><span>Receipt verification is free across all plans.</span></div>
-      <div class="value-card"><strong>Platform-ready</strong><span>MCP, OpenAPI, schemas, Trust Center, and pilot paths are public.</span></div>
+      <div class="value-card"><strong>Platform-ready</strong><span>MCP, OpenAPI, schemas, examples, and pilot paths are public.</span></div>
     </div>
-    <p class="review-line">Not sure which path fits? Use the <a href="/fit">Fit Finder</a>. Need procurement or native platform rollout first? Start with the <a href="/trust">Trust Center</a>, <a href="/pilot">paid pilot</a>, or <a href="/platform-rollout">platform rollout package</a>.</p>
+    <p class="review-line">Not sure which path fits? Use the <a href="/fit">Fit Finder</a>. Need a native platform rollout first? Start with the <a href="/pilot">paid pilot</a> or <a href="/platform-rollout">platform rollout package</a>.</p>
   </section>
 
   <section class="signup-card" aria-labelledby="signup-form-title">
@@ -423,8 +422,6 @@ footer .right a:hover{color:var(--muted)}
   </div>
   <div class="footer-col">
     <h2>Company</h2>
-    <a href="/trust">Trust center</a>
-    <a href="/security-review">Security review</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
     <a href="/status">Status</a>
@@ -502,7 +499,14 @@ footer .right a:hover{color:var(--muted)}
     integrations_hero: 'Integration catalog',
     integrations_final: 'Integration catalog',
     mcp_hero: 'MCP server',
-    templates: 'Proof template catalog'
+    templates: 'Proof template catalog',
+    pypi_tinyzkp: 'Python SDK',
+    npm_tinyzkp: 'TypeScript SDK',
+    npm_cli: 'TinyZKP CLI',
+    crates_tinyzkp: 'Rust SDK',
+    npm_wasm_verifier: 'WASM verifier',
+    github_mcp_readme: 'MCP README',
+    receipt_share: 'Shared receipt'
   };
   var intentEl = document.getElementById('signup-intent');
   if (intentEl && (signupContext.source || signupContext.platform || signupContext.use_case || signupContext.workflow || signupContext.intent)) {

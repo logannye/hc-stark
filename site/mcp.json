@@ -184,8 +184,8 @@
     "agent_receipt_schema": "https://tinyzkp.com/schemas/agent-receipt.schema.json",
     "pricing_metadata": "https://tinyzkp.com/pricing.json",
     "pilot_program": "https://tinyzkp.com/pilot",
-    "trust_metadata": "https://tinyzkp.com/trust.json",
-    "security_review": "https://tinyzkp.com/security-review",
+    "discovery_metadata": "https://tinyzkp.com/discovery.json",
+    "security_review": "https://tinyzkp.com/security",
     "status": "https://tinyzkp.com/status"
   },
   "contact": {

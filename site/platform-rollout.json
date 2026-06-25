@@ -54,7 +54,7 @@
   "distribution_hooks": [
     "Receipt-required policy for durable state-changing agent actions",
     "Receipt URL shown beside agent output, logs, workflow checkpoints, or customer dashboards",
-    "Agent marketplace category requirement for payments, records, permissions, quotas, and compliance state",
+    "Agent marketplace category requirement for payments, records, permissions, quotas, and operational state",
     "Free verification for customers, auditors, counterparties, and downstream agents",
     "Machine-readable receipt envelopes for agent-to-agent handoffs"
   ],

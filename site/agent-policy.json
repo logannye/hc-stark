@@ -7,7 +7,7 @@
   "positioning": {
     "primary_use": "Proof receipts for high-value agent actions and state transitions",
     "best_for": [
-      "Agents that mutate money, records, permissions, inventory, compliance state, or customer-visible status",
+      "Agents that mutate money, records, permissions, inventory, customer-visible state, or customer-visible status",
       "Agent supervisors that need independent verification of workflow checkpoints",
       "Backend tool calls where a downstream service should verify a state transition without replay",
       "Audit and reconciliation agents that publish periodic receipt-bearing checkpoints"
@@ -22,7 +22,7 @@
   "default_policy": {
     "mint_receipt_when": [
       "An agent action changes durable external state.",
-      "A tool-call batch affects money, balances, quotas, inventory, records, permissions, or compliance state.",
+      "A tool-call batch affects money, balances, quotas, inventory, records, permissions, or customer-visible state.",
       "A customer, auditor, downstream service, or supervisor agent will rely on the output.",
       "A checkpoint replaces replay, manual audit export, support evidence, or self-hosted prover operations."
     ],
@@ -106,7 +106,7 @@
     "examples": "https://tinyzkp.com/examples",
     "limits": "https://tinyzkp.com/limits",
     "templates": "https://tinyzkp.com/templates",
-    "trust": "https://tinyzkp.com/trust"
+    "security_status": "https://tinyzkp.com/security"
   },
   "links": {
     "agent_policy": "https://tinyzkp.com/agent-policy",
@@ -128,8 +128,8 @@
     "templates": "https://tinyzkp.com/templates",
     "templates_metadata": "https://tinyzkp.com/templates.json",
     "openapi": "https://tinyzkp.com/openapi.json",
-    "trust_center": "https://tinyzkp.com/trust",
-    "security_review": "https://tinyzkp.com/security-review",
+    "security_status": "https://tinyzkp.com/security",
+    "security_review": "https://tinyzkp.com/security",
     "pilot_program": "https://tinyzkp.com/pilot"
   }
 }

@@ -71,9 +71,8 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
         <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
         <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
         <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
-        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/evaluation">Evaluation<span>Workflow fit and rollout decision guide.</span></a>
         <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
-        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
         <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
       </div>
     </div>
@@ -104,7 +103,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
       <div class="signal"><span>Verifier visibility</span><strong>Customer, auditor, service, supervisor</strong></div>
       <div class="signal"><span>Data boundary</span><strong>Transparent or review first</strong></div>
       <div class="signal"><span>Commercial path</span><strong>Free, paid plan, Compute, pilot</strong></div>
-      <div class="signal"><span>Next artifact</span><strong>Receipt, policy, cost, or review packet</strong></div>
+      <div class="signal"><span>Next artifact</span><strong>Receipt, policy, cost, or rollout plan</strong></div>
     </aside>
   </section>
 
@@ -130,7 +129,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
             <label for="verifier">Verifier</label>
             <select id="verifier" name="verifier">
               <option value="customer">Customer or external counterparty</option>
-              <option value="auditor">Auditor, compliance, or finance reviewer</option>
+              <option value="auditor">Auditor or finance reviewer</option>
               <option value="downstream">Downstream service or API consumer</option>
               <option value="agent_supervisor">Agent supervisor or runtime</option>
               <option value="internal">Internal engineering or operations reviewer</option>
@@ -202,7 +201,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
             <select id="owner" name="owner">
               <option value="engineering">Engineering</option>
               <option value="product">Product or platform</option>
-              <option value="security">Security, audit, or compliance</option>
+              <option value="security">Security or audit</option>
               <option value="finance">Finance or operations</option>
               <option value="founder">Founder or executive</option>
               <option value="unknown">Unknown</option>
@@ -260,7 +259,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
           <tr><td><strong>Developer</strong></td><td>One production workflow with a known verifier.</td><td>Receipt attached to an API response, agent output, or checkpoint.</td><td><a href="/pricing">Pricing</a> and <a href="/limits">limits</a></td></tr>
           <tr><td><strong>Pro or Scale</strong></td><td>Recurring customer-visible receipt volume.</td><td>Receipt plus support, audit, or customer-facing placement.</td><td><a href="/roi">ROI worksheet</a></td></tr>
           <tr><td><strong>Compute</strong></td><td>Large traces, backfills, and prover-operations avoidance.</td><td>Trace-step estimate and receipt package.</td><td><a href="/calculator">Calculator</a></td></tr>
-          <tr><td><strong>Paid pilot</strong></td><td>Custom statements, security review, procurement, or support-sensitive rollout.</td><td>Statement design, verifier path, and go/no-go decision.</td><td><a href="/pilot">$5K production pilot</a></td></tr>
+          <tr><td><strong>Paid pilot</strong></td><td>Custom statements, design review, or support-sensitive rollout.</td><td>Statement design, verifier path, and go/no-go decision.</td><td><a href="/pilot">$5K production pilot</a></td></tr>
           <tr><td><strong>Platform rollout</strong></td><td>Agent platforms, IDEs, workflow engines, and marketplaces.</td><td>Receipt-required tool category and policy surface.</td><td><a href="/platform-rollout">Rollout package</a></td></tr>
           <tr><td><strong>Defer</strong></td><td>No verifier, no visible receipt placement, or signed logs are enough.</td><td>Trust model comparison before buying.</td><td><a href="/compare">Compare alternatives</a></td></tr>
         </tbody>
@@ -334,8 +333,6 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
   </div>
   <div class="footer-col">
     <h2>Company</h2>
-    <a href="/trust">Trust center</a>
-    <a href="/security-review">Security review</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
     <a href="/status">Status</a>
@@ -375,7 +372,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
     },
     verifier: {
       customer: 'Customer or external counterparty',
-      auditor: 'Auditor, compliance, or finance reviewer',
+      auditor: 'Auditor or finance reviewer',
       downstream: 'Downstream service or API consumer',
       agent_supervisor: 'Agent supervisor or runtime',
       internal: 'Internal engineering or operations reviewer',
@@ -426,7 +423,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
     owner: {
       engineering: 'Engineering',
       product: 'Product or platform',
-      security: 'Security, audit, or compliance',
+      security: 'Security or audit',
       finance: 'Finance or operations',
       founder: 'Founder or executive',
       unknown: 'Unknown'
@@ -480,16 +477,16 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
     if (state.data_boundary === 'private' || state.data_boundary === 'unknown') {
       result.id = 'pilot';
       result.pill = 'Review first';
-      result.title = 'Use a paid pilot or security review before self-serve proving.';
+      result.title = 'Use a paid pilot before self-serve proving.';
       result.copy = 'Private-input needs and unknown data boundaries should not be pushed into the transparent self-serve product. Scope the statement, public parameters, and verifier path first.';
       result.plan = '$5K pilot';
       result.artifact = 'Statement boundary';
       result.risk = 'Privacy review';
-      result.asset = 'Security packet';
+      result.asset = 'Pilot brief';
       result.href = '/pilot';
       result.cta = 'Plan paid pilot';
-      result.secondaryHref = '/security-review';
-      result.secondary = 'Open security review';
+      result.secondaryHref = '/limits';
+      result.secondary = 'Check limits';
       result.category = 'Paid Pilot';
       result.guardrail = 'Do not describe the default public product as private-input ZK unless a template and masking mode are explicitly documented and reviewed.';
       reasons.push('The data boundary is private or unknown.');
@@ -543,17 +540,17 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
       result.title = 'Use enterprise review for contractual support or reserved capacity.';
       result.copy = 'When support commitments, procurement, reserved capacity, or production-critical receipt lanes are part of the decision, route through enterprise review before rollout.';
       result.plan = 'Custom';
-      result.artifact = 'Review packet';
+      result.artifact = 'Rollout plan';
       result.risk = 'Operational dependency';
       result.asset = 'Enterprise packet';
       result.href = '/enterprise';
       result.cta = 'Review enterprise';
-      result.secondaryHref = '/trust';
-      result.secondary = 'Open Trust Center';
+      result.secondaryHref = '/limits';
+      result.secondary = 'Check limits';
       result.category = 'Enterprise';
       result.guardrail = 'Keep the first production dependency scoped to one verifier-visible workflow before committing to reserved capacity.';
       reasons.push('The buyer needs contractual support, reserved capacity, or procurement review.');
-      reasons.push('Enterprise review should include limits, status, release policy, pricing, and security assets.');
+      reasons.push('Enterprise review should include limits, status, release policy, pricing, and support expectations.');
       return result;
     }
 

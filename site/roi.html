@@ -129,9 +129,8 @@ td strong{color:var(--text-bright)}
         <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
         <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
         <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
-        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/evaluation">Evaluation<span>Workflow fit and rollout decision guide.</span></a>
         <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
-        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
         <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
       </div>
     </div>
@@ -229,10 +228,10 @@ td strong{color:var(--text-bright)}
         <thead><tr><th>Section</th><th>Question</th><th>Evidence to attach</th></tr></thead>
         <tbody>
           <tr><td><strong>Workflow</strong></td><td>Which state transition needs an independently verifiable receipt?</td><td>Example receipt, template ID, or pilot statement draft.</td></tr>
-          <tr><td><strong>Verifier</strong></td><td>Who checks the receipt and what decision changes when it verifies?</td><td>Receipt URL placement in product, API response, audit packet, or agent output.</td></tr>
+          <tr><td><strong>Verifier</strong></td><td>Who checks the receipt and what decision changes when it verifies?</td><td>Receipt URL placement in product, API response, audit record, or agent output.</td></tr>
           <tr><td><strong>Cost avoided</strong></td><td>Which review, replay, support, audit, infrastructure, or on-call work is reduced?</td><td>Hours/month, blended rate, self-hosting estimate, and support ticket examples.</td></tr>
           <tr><td><strong>TinyZKP route</strong></td><td>Is the path Free, Developer, Pro, Scale, Compute, paid pilot, platform rollout, or reserved capacity?</td><td>Pricing calculator output and buyer route from this worksheet.</td></tr>
-          <tr><td><strong>Risk boundary</strong></td><td>What does the receipt not prove, and what data must stay out of transparent parameters?</td><td>Trust Center, template boundary, security review packet, and release policy.</td></tr>
+          <tr><td><strong>Risk boundary</strong></td><td>What does the receipt not prove, and what data must stay out of transparent parameters?</td><td>Template boundary, limits, examples, and release policy.</td></tr>
         </tbody>
       </table>
     </div>
@@ -245,7 +244,7 @@ td strong{color:var(--text-bright)}
       <article class="box"><h3>Customer-facing API</h3><p>Receipts reduce customer evidence requests after mutations, reconciliations, or status changes. Business case: less support work and stronger enterprise sales proof.</p><p><a href="/recipes">Open API recipes</a></p></article>
       <article class="box"><h3>Finance and audit</h3><p>Receipts reduce repeated audit exports and replay requests for reserve, liability, inventory, or checkpoint transitions. Business case: fewer review cycles.</p><p><a href="/use-cases/proof-of-reserves-attestation">Read reserve use case</a></p></article>
       <article class="box"><h3>Long-trace Compute</h3><p>Compute replaces high-RAM prover workers, custom queues, segmentation, and operational ownership for supported long traces. Business case: avoid infrastructure before proof demand is steady.</p><p><a href="/compute">Read Compute brief</a></p></article>
-      <article class="box"><h3>Procurement-heavy sale</h3><p>Forwardable trust, pricing, schema, and release-policy assets shorten buyer review. Business case: fewer custom review cycles before pilot or enterprise rollout.</p><p><a href="/trust">Open Trust Center</a></p></article>
+      <article class="box"><h3>Complex rollout</h3><p>Forwardable pricing, schema, and release-policy assets shorten rollout planning. Business case: fewer custom review cycles before pilot or enterprise rollout.</p><p><a href="/evaluation">Open evaluation kit</a></p></article>
       <article class="box"><h3>Custom workflow</h3><p>The $5,000 pilot is profitable when it prevents unsupported proof claims, clarifies verifier value, and creates a clean rollout decision within 14 days.</p><p><a href="/pilot">Review paid pilot</a></p></article>
     </div>
   </section>
@@ -266,7 +265,7 @@ td strong{color:var(--text-bright)}
         <li>Claims the receipt does not encode.</li>
         <li>Generic private-input, zkVM, zkML, or on-chain verifier claims that are not live for the workflow.</li>
         <li>Every UI click or low-value event where no recipient will inspect proof.</li>
-        <li>Compliance outcomes that still require legal, audit, or policy review outside TinyZKP.</li>
+        <li>Business outcomes that still require legal, audit, or policy review outside TinyZKP.</li>
       </ul>
     </article>
   </section>
@@ -316,8 +315,6 @@ td strong{color:var(--text-bright)}
   </div>
   <div class="footer-col">
     <h2>Company</h2>
-    <a href="/trust">Trust center</a>
-    <a href="/security-review">Security review</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
     <a href="/status">Status</a>

@@ -27,8 +27,8 @@
     {
       "id": "commercial_trust_acceleration",
       "name": "Commercial trust acceleration",
-      "description": "Receipt-backed agent and API workflows can shorten sales, procurement, and trust review by giving buyers a portable evidence artifact.",
-      "evidence": "Customer-visible receipt placement, trust packet, and internal buying decision."
+      "description": "Receipt-backed agent and API workflows can shorten sales, procurement, and rollout planning by giving buyers a portable evidence artifact.",
+      "evidence": "Customer-visible receipt placement, receipt package, and internal buying decision."
     }
   ],
   "worksheet_inputs": [
@@ -113,7 +113,7 @@
     "pilot": "https://tinyzkp.com/pilot",
     "platform_rollout": "https://tinyzkp.com/platform-rollout",
     "enterprise": "https://tinyzkp.com/enterprise",
-    "trust": "https://tinyzkp.com/trust",
+    "security_status": "https://tinyzkp.com/security",
     "self_hosting_comparison": "https://tinyzkp.com/compare/self-hosted-stark-prover",
     "contact_business_case": "https://tinyzkp.com/contact?category=Business%20Case"
   }

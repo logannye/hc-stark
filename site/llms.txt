@@ -35,8 +35,7 @@ TinyZKP provides proof receipts for AI agents, APIs, backend workflows, and stat
 - [Pilot Program](https://tinyzkp.com/pilot): structured design-partner path for one production receipt workflow, success metrics, verifier path, and commercial rollout decision.
 - [Docs](https://tinyzkp.com/docs): API, SDK, CLI, MCP, pricing, and proof-template documentation.
 - [Changelog](https://tinyzkp.com/changelog): release notes, compatibility policy, and release identity endpoints for API, MCP, verifier, schemas, pricing, and public metadata.
-- [Trust Center](https://tinyzkp.com/trust): buyer review hub covering security posture, data handling, readiness guidance, and review assets.
-- [Security Review](https://tinyzkp.com/security-review): procurement and security review material.
+- [Security Status](https://tinyzkp.com/security): current security posture and explicit product boundaries.
 - [OpenAPI](https://tinyzkp.com/openapi.json): machine-readable public API contract for agents and API clients.
 - [Discovery JSON](https://tinyzkp.com/discovery.json): canonical machine-readable summary of TinyZKP positioning, routes, pricing paths, trust boundaries, support paths, and metadata endpoints.
 
@@ -91,8 +90,8 @@ TinyZKP is best described as "proof receipts for automated work" or "verifiable 
 - [TinyZKP calculator schema](https://tinyzkp.com/schemas/tinyzkp-calculator.schema.json)
 - [TinyZKP limits metadata](https://tinyzkp.com/limits.json)
 - [TinyZKP limits schema](https://tinyzkp.com/schemas/tinyzkp-limits.schema.json)
-- [TinyZKP trust metadata](https://tinyzkp.com/trust.json)
-- [TinyZKP trust schema](https://tinyzkp.com/schemas/tinyzkp-trust-center.schema.json)
+- [TinyZKP discovery metadata](https://tinyzkp.com/discovery.json)
+- [TinyZKP discovery schema](https://tinyzkp.com/schemas/tinyzkp-discovery.schema.json)
 - [Verified by TinyZKP badge](https://tinyzkp.com/badges/verified-by-tinyzkp.svg)
 
 ## Comparisons

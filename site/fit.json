@@ -121,7 +121,7 @@
       "id": "review_private_or_unknown_data",
       "when": "data_boundary is private or unknown",
       "route": "paid_pilot",
-      "reason": "Private-input or unknown data boundaries need statement and security review before self-serve proving."
+      "reason": "Private-input or unknown data boundaries need statement and design review before self-serve proving."
     },
     {
       "id": "platform_distribution",
@@ -211,7 +211,7 @@
     {
       "id": "paid_pilot",
       "name": "$5,000 Production Pilot",
-      "best_for": "Custom statements, security review, procurement, or support-sensitive rollout.",
+      "best_for": "Custom statements, design review, or support-sensitive rollout.",
       "next_artifact": "Statement design, verifier path, success metrics, and go/no-go decision.",
       "url": "https://tinyzkp.com/pilot"
     },
@@ -226,7 +226,7 @@
       "id": "enterprise",
       "name": "Enterprise",
       "best_for": "Contractual support, reserved capacity, procurement, or production-critical receipt lanes.",
-      "next_artifact": "Procurement and security review packet.",
+      "next_artifact": "Procurement and rollout plan.",
       "url": "https://tinyzkp.com/enterprise"
     },
     {
@@ -269,7 +269,7 @@
     "pilot": "https://tinyzkp.com/pilot",
     "platform_rollout": "https://tinyzkp.com/platform-rollout",
     "enterprise": "https://tinyzkp.com/enterprise",
-    "trust": "https://tinyzkp.com/trust",
+    "security_status": "https://tinyzkp.com/security",
     "agent_policy": "https://tinyzkp.com/agent-policy",
     "compare": "https://tinyzkp.com/compare",
     "contact": "https://tinyzkp.com/contact?category=Fit%20Assessment"

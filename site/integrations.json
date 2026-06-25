@@ -151,7 +151,7 @@
     "enterprise_metadata": "https://tinyzkp.com/enterprise.json",
     "agent_policy": "https://tinyzkp.com/agent-policy",
     "agent_policy_metadata": "https://tinyzkp.com/agent-policy.json",
-    "trust_metadata": "https://tinyzkp.com/trust.json",
+    "discovery_metadata": "https://tinyzkp.com/discovery.json",
     "receipt_schema": "https://tinyzkp.com/schemas/tinyzkp-receipt.schema.json",
     "agent_receipt_schema": "https://tinyzkp.com/schemas/agent-receipt.schema.json",
     "recipes": "https://tinyzkp.com/recipes",

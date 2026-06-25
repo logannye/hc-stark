@@ -97,9 +97,8 @@ tbody tr:last-child td{border-bottom:none}
         <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
         <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
         <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
-        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/evaluation">Evaluation<span>Workflow fit and rollout decision guide.</span></a>
         <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
-        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
         <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
       </div>
     </div>
@@ -145,7 +144,7 @@ tbody tr:last-child td{border-bottom:none}
         <thead><tr><th>Question</th><th>TinyZKP</th><th>Self-hosted prover</th></tr></thead>
         <tbody>
           <tr><td><strong>Memory profile</strong></td><td>O(&radic;N) memory for supported state-transition workloads.</td><td>Often O(N) memory unless you engineer segmentation, recursion, or workload-specific compression.</td></tr>
-          <tr><td><strong>Time to first receipt</strong></td><td>Minutes with API key, browser playground, or MCP tool.</td><td>Days to months depending on proof system, verifier, deployment, and security review.</td></tr>
+          <tr><td><strong>Time to first receipt</strong></td><td>Minutes with API key, browser playground, or MCP tool.</td><td>Days to months depending on proof system, verifier, deployment, and design review.</td></tr>
           <tr><td><strong>Verification UX</strong></td><td>Public verifier, API verifier, SDKs, MCP, and first-party WASM path where compatible.</td><td>You own verifier packaging, compatibility, docs, and support for every verifier surface.</td></tr>
           <tr><td><strong>Operational burden</strong></td><td>Managed queue, worker operations, billing, rate limits, status page, and support lane.</td><td>You run workers, queues, monitoring, incidents, upgrades, and capacity planning.</td></tr>
           <tr><td><strong>Best when</strong></td><td>You need transparent state-transition receipts, portable verification, and lower prover-ops drag.</td><td>You need a custom proof system, complete infrastructure control, or a workload outside TinyZKP's live template scope.</td></tr>
@@ -219,8 +218,6 @@ tbody tr:last-child td{border-bottom:none}
   </div>
   <div class="footer-col">
     <h2>Company</h2>
-    <a href="/trust">Trust center</a>
-    <a href="/security-review">Security review</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
     <a href="/status">Status</a>

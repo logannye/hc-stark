@@ -64,8 +64,8 @@
       "audience": "finance, procurement, and product owners"
     },
     {
-      "label": "Review trust center",
-      "url": "https://tinyzkp.com/trust",
+      "label": "Review security status",
+      "url": "https://tinyzkp.com/security",
       "audience": "security, procurement, and enterprise buyers"
     }
   ],
@@ -124,7 +124,8 @@
     "examples": "https://tinyzkp.com/examples.json",
     "fit_finder": "https://tinyzkp.com/fit.json",
     "roi": "https://tinyzkp.com/roi.json",
-    "trust": "https://tinyzkp.com/trust.json",
+    "security": "https://tinyzkp.com/security",
+    "discovery": "https://tinyzkp.com/discovery.json",
     "changelog": "https://tinyzkp.com/changelog.json"
   },
   "trust_boundaries": [

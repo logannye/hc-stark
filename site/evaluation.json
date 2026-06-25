@@ -60,7 +60,7 @@
     {
       "role": "Security",
       "cares_about": "What data enters TinyZKP, what is public, and what is not claimed by default.",
-      "assets": ["https://tinyzkp.com/trust", "https://tinyzkp.com/security-review"]
+      "assets": ["https://tinyzkp.com/security", "https://tinyzkp.com/security"]
     },
     {
       "role": "Finance",
@@ -70,7 +70,7 @@
     {
       "role": "Procurement",
       "cares_about": "Vendor review, support path, release policy, pricing, privacy, and security packet completeness.",
-      "assets": ["https://tinyzkp.com/enterprise", "https://tinyzkp.com/changelog", "https://tinyzkp.com/trust.json"]
+      "assets": ["https://tinyzkp.com/enterprise", "https://tinyzkp.com/changelog", "https://tinyzkp.com/discovery.json"]
     }
   ],
   "decision_criteria": [
@@ -119,7 +119,7 @@
     {
       "driver": "Procurement acceleration",
       "economic_reason": "Public trust, pricing, schemas, OpenAPI, changelog, and evaluation metadata reduce bespoke review cycles.",
-      "evidence": "Forwardable review packet links."
+      "evidence": "Forwardable rollout links."
     }
   ],
   "go_no_go_gates": {
@@ -213,9 +213,9 @@
     "pilot_program": "https://tinyzkp.com/pilot",
     "enterprise": "https://tinyzkp.com/enterprise",
     "enterprise_metadata": "https://tinyzkp.com/enterprise.json",
-    "trust_center": "https://tinyzkp.com/trust",
-    "trust_metadata": "https://tinyzkp.com/trust.json",
-    "security_review": "https://tinyzkp.com/security-review",
+    "security_status": "https://tinyzkp.com/security",
+    "discovery_metadata": "https://tinyzkp.com/discovery.json",
+    "security_review": "https://tinyzkp.com/security",
     "changelog": "https://tinyzkp.com/changelog",
     "changelog_metadata": "https://tinyzkp.com/changelog.json",
     "openapi": "https://tinyzkp.com/openapi.json",

@@ -70,9 +70,8 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
         <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
         <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
         <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
-        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/evaluation">Evaluation<span>Workflow fit and rollout decision guide.</span></a>
         <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
-        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
         <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
       </div>
     </div>
@@ -110,7 +109,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
     <h2>Default policy</h2>
     <p>Use this policy for agent control planes, tool-calling workflows, and supervisor agents that need a reliable rule for receipt generation.</p>
     <div class="grid">
-      <article class="policy-card"><span class="tag live">Mint</span><h3>State changed</h3><p>Mint a receipt when an action changes durable state: money, balances, records, permissions, inventory, compliance state, or customer-visible status.</p></article>
+      <article class="policy-card"><span class="tag live">Mint</span><h3>State changed</h3><p>Mint a receipt when an action changes durable state: money, balances, records, permissions, inventory, or customer-visible status.</p></article>
       <article class="policy-card"><span class="tag hot">Attach</span><h3>Receipt travels</h3><p>Return the receipt URL or object, template ID, plain-language statement, proof boundary, and verification path with the agent output.</p></article>
       <article class="policy-card"><span class="tag warn">Escalate</span><h3>Custom or private</h3><p>Use design review when the statement is not covered by the live template, involves private inputs, or requires restricted verification.</p></article>
     </div>
@@ -121,7 +120,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
       <h3>Mint a receipt when</h3>
       <ul>
         <li>An agent action changes durable external state.</li>
-        <li>A tool-call batch affects money, records, quotas, inventory, permissions, or compliance state.</li>
+        <li>A tool-call batch affects money, records, quotas, inventory, permissions, or customer-visible state.</li>
         <li>A customer, auditor, downstream service, or supervisor agent will rely on the output.</li>
         <li>A checkpoint replaces replay, audit exports, support evidence, or self-hosted prover operations.</li>
       </ul>
@@ -243,8 +242,6 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
   </div>
   <div class="footer-col">
     <h2>Company</h2>
-    <a href="/trust">Trust center</a>
-    <a href="/security-review">Security review</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
     <a href="/status">Status</a>

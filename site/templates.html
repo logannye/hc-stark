@@ -70,9 +70,8 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.05
         <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
         <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
         <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
-        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/evaluation">Evaluation<span>Workflow fit and rollout decision guide.</span></a>
         <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
-        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
         <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
       </div>
     </div>
@@ -142,7 +141,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.05
 
   <section class="band">
     <h2>Template contract</h2>
-    <p>The template contract is the part of TinyZKP a verifier can reason about. Keep these fields stable in your product, audit packet, or agent output.</p>
+    <p>The template contract is the part of TinyZKP a verifier can reason about. Keep these fields stable in your product, audit record, or agent output.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr></thead>
@@ -162,7 +161,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.05
     <p>Most ZK demand starts as a custom predicate, privacy requirement, or long trace. TinyZKP should not sell those as live templates until the statement, verifier path, data boundary, and audit posture are clear.</p>
     <div class="grid">
       <article class="box"><h3>Custom state machines</h3><p>Use pilot review when the transition rule is not expressible as the live accumulator template.</p><p><a href="/pilot">Plan a pilot</a></p></article>
-      <article class="box"><h3>Private-input claims</h3><p>Do not put secrets into transparent parameters. Privacy or masking requires documented template-specific review.</p><p><a href="/trust">Read Trust Center</a></p></article>
+      <article class="box"><h3>Private-input claims</h3><p>Do not put secrets into transparent parameters. Privacy or masking requires documented template-specific review.</p><p><a href="/pilot">Plan a pilot</a></p></article>
       <article class="box"><h3>Long traces</h3><p>Use Compute when the same state-transition pattern becomes large enough that prover memory and queue operations dominate cost.</p><p><a href="/compute">Read Compute brief</a></p></article>
     </div>
   </section>
@@ -235,8 +234,6 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.05
   </div>
   <div class="footer-col">
     <h2>Company</h2>
-    <a href="/trust">Trust center</a>
-    <a href="/security-review">Security review</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
     <a href="/status">Status</a>

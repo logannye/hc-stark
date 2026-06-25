@@ -3,7 +3,7 @@
   "name": "TinyZKP Changelog and Release Policy",
   "url": "https://tinyzkp.com/changelog",
   "generated_at": "2026-06-24",
-  "summary": "Public release notes, compatibility rules, and release identity metadata for TinyZKP proof receipts, API, MCP, verifier, pricing, evaluation, schemas, and public buyer-review assets.",
+  "summary": "Public release notes, compatibility rules, and release identity metadata for TinyZKP proof receipts, API, MCP, verifier, pricing, evaluation, schemas, and public product metadata.",
   "current_public_release": {
     "id": "public-metadata-2026-06-24",
     "date": "2026-06-24",
@@ -24,7 +24,7 @@
       "ROI business-case metadata",
       "pricing metadata",
       "calculator metadata",
-      "trust metadata",
+      "discovery metadata",
       "agent platform pages",
       "platform rollout offer",
       "comparison pages",
@@ -32,15 +32,15 @@
       "browser verifier guidance"
     ],
     "highlights": [
-      "Published buyer-facing hubs for use cases, comparisons, integrations, proof templates, examples, limits, evaluation, pricing, calculator, pilot review, and Trust Center review.",
-      "Added machine-readable metadata for MCP tools, MCP marketplace discovery, agent proof policy, integrations, templates, examples, limits, fit finder, evaluation, pricing, calculator guidance, trust review, OpenAPI, and schemas.",
+      "Published buyer-facing hubs for use cases, comparisons, integrations, proof templates, examples, limits, evaluation, pricing, calculator, and pilot review.",
+      "Added machine-readable metadata for MCP tools, MCP marketplace discovery, agent proof policy, integrations, templates, examples, limits, fit finder, evaluation, pricing, calculator guidance, OpenAPI, and schemas.",
       "Added GTM pages for agent platforms, verifiable agent output, and agent audit trails, plus comparison pages for zkVM provers, zkTLS, and blockchain anchoring.",
       "Added commercial packaging for a $5,000 creditable production pilot, a dedicated platform-rollout package from $499/month minimum plus usage, and reserved-capacity review.",
       "Added ROI and business-case worksheet for finance/procurement review, avoided-cost modeling, and pilot payback.",
       "Added Fit Finder for routing buyers and agents between Free, Developer, Pro, Scale, Compute, paid pilot, platform rollout, enterprise, and defer paths.",
       "Clarified that the live self-serve product is a transparent STARK state-transition receipt, not a generic private-input ZK service by default.",
       "Documented release identity endpoints for checking deploy skew across website, API, MCP, SDK examples, and verifier behavior.",
-      "Added public release policy guidance for API, MCP, templates, examples, verifier, schemas, evaluation, pricing, calculator, trust, and security-review surfaces."
+      "Added public release policy guidance for API, MCP, templates, examples, verifier, schemas, evaluation, pricing, calculator, and security surfaces."
     ],
     "compatibility_notes": [
       "New response fields are additive by default; clients should ignore fields they do not understand.",
@@ -188,7 +188,7 @@
       ]
     },
     {
-      "surface": "Evaluation and buyer review",
+      "surface": "Evaluation and rollout planning",
       "metadata": "https://tinyzkp.com/evaluation.json",
       "breaking_change_examples": [
         "Changed go/no-go guidance",
@@ -203,8 +203,8 @@
       ]
     },
     {
-      "surface": "Trust and security",
-      "metadata": "https://tinyzkp.com/trust.json",
+      "surface": "Security status",
+      "metadata": "https://tinyzkp.com/discovery.json",
       "breaking_change_examples": [
         "Audit-status change",
         "Material incident disclosure",
@@ -212,7 +212,7 @@
         "Product-scope change"
       ],
       "required_artifacts": [
-        "Trust Center update",
+        "Security status update",
         "Security page update",
         "Status or incident link where applicable"
       ]
@@ -230,8 +230,8 @@
     "changelog_metadata": "https://tinyzkp.com/changelog.json",
     "changelog_schema": "https://tinyzkp.com/schemas/tinyzkp-changelog.schema.json",
     "docs_versioning": "https://tinyzkp.com/docs#versioning-deprecation",
-    "trust_center": "https://tinyzkp.com/trust",
-    "security_review": "https://tinyzkp.com/security-review",
+    "security_status": "https://tinyzkp.com/security",
+    "security_review": "https://tinyzkp.com/security",
     "status": "https://tinyzkp.com/status",
     "openapi": "https://tinyzkp.com/openapi.json",
     "mcp_metadata": "https://tinyzkp.com/mcp.json",
@@ -257,7 +257,7 @@
     "pricing_metadata": "https://tinyzkp.com/pricing.json",
     "paid_pilot": "https://tinyzkp.com/pilot",
     "calculator_metadata": "https://tinyzkp.com/calculator.json",
-    "trust_metadata": "https://tinyzkp.com/trust.json",
+    "discovery_metadata": "https://tinyzkp.com/discovery.json",
     "enterprise": "https://tinyzkp.com/enterprise",
     "enterprise_metadata": "https://tinyzkp.com/enterprise.json",
     "compare_zkvm_provers": "https://tinyzkp.com/compare/zkvm-provers",

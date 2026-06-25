@@ -70,9 +70,8 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
         <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
         <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
         <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
-        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/evaluation">Evaluation<span>Workflow fit and rollout decision guide.</span></a>
         <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
-        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
         <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
       </div>
     </div>
@@ -119,12 +118,12 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
         <h3>Proof receipts for agents, APIs, and state transitions</h3>
         <p>The release makes the self-serve TinyZKP surface easier to evaluate, integrate, and govern. It prioritizes honest scope, machine-readable adoption paths, and commercial clarity for teams that need proof receipts inside automated workflows.</p>
         <ul>
-          <li>Published buyer hubs for use cases, comparisons, integrations, proof templates, examples, limits, evaluation, pricing, calculator, pilot review, and Trust Center review.</li>
+          <li>Published buyer hubs for use cases, comparisons, integrations, proof templates, examples, limits, evaluation, pricing, calculator, and pilot review.</li>
           <li>Added GTM pages for agent platforms, verifiable agent output, and agent audit trails, plus comparison pages for zkVM provers, zkTLS, and blockchain anchoring.</li>
           <li>Added commercial packaging for a $5,000 creditable production pilot, a dedicated platform-rollout package from $499/month minimum plus usage, and reserved-capacity review.</li>
           <li>Added an ROI and business-case worksheet for finance/procurement review, avoided-cost modeling, TinyZKP spend, and pilot payback.</li>
           <li>Added the Fit Finder for routing buyers and agents between Free, Developer, Pro, Scale, Compute, paid pilot, platform rollout, enterprise, and defer paths.</li>
-          <li>Added machine-readable metadata for MCP tools, MCP marketplace discovery, agent proof policy, integrations, templates, examples, limits, fit finder, evaluation, pricing, calculator guidance, trust review, OpenAPI, and schemas.</li>
+          <li>Added machine-readable metadata for MCP tools, MCP marketplace discovery, agent proof policy, integrations, templates, examples, limits, fit finder, evaluation, pricing, calculator guidance, OpenAPI, and schemas.</li>
           <li>Clarified that the live self-serve product is a transparent STARK state-transition receipt, not a generic private-input ZK service by default.</li>
           <li>Documented release identity endpoints so operators can detect deploy skew across website, API, MCP, SDK examples, and verifier behavior.</li>
         </ul>
@@ -161,8 +160,8 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
           <tr><td><strong>Limits and capabilities</strong></td><td>Clearer quota summaries, demo caps, plan guidance, and escalation rules.</td><td>Plan throughput changes, anonymous demo cap changes, supported capability boundary changes, or changed escalation triggers.</td><td><code>/limits.json</code>, pricing or template update where applicable, and changelog note.</td></tr>
           <tr><td><strong>Verifier and schemas</strong></td><td>New schema fields that clients can ignore and additional verifier examples.</td><td>Receipt schema floor, proof version rejection, WASM verifier lag, or hosted fallback requirement.</td><td>Schema update, verifier compatibility note, and docs entry.</td></tr>
           <tr><td><strong>Pricing and calculator</strong></td><td>New guidance, examples, plan explanations, and buyer routing metadata.</td><td>Rate changes, plan cap changes, billing-event definition changes, or Compute formula changes.</td><td><code>/pricing.json</code>, <code>/calculator.json</code>, and changelog note.</td></tr>
-          <tr><td><strong>Evaluation and buyer review</strong></td><td>Clearer stakeholder guidance, ROI drivers, evidence checklists, and recommended buying paths.</td><td>Changed go/no-go guidance, product-fit criteria, stakeholder evidence requirements, or buying-path recommendations.</td><td><code>/evaluation.json</code>, Trust or pricing links where applicable, and changelog note.</td></tr>
-          <tr><td><strong>Trust and security</strong></td><td>Clearer scope, status links, review assets, and data-boundary guidance.</td><td>Audit-status changes, material incident disclosures, data-retention changes, or product-scope changes.</td><td>Trust Center update, security page update, and status or incident link where applicable.</td></tr>
+          <tr><td><strong>Evaluation and rollout planning</strong></td><td>Clearer stakeholder guidance, ROI drivers, evidence checklists, and recommended buying paths.</td><td>Changed go/no-go guidance, product-fit criteria, stakeholder evidence requirements, or buying-path recommendations.</td><td><code>/evaluation.json</code>, pricing links where applicable, and changelog note.</td></tr>
+          <tr><td><strong>Security status</strong></td><td>Clearer scope, status links, and data-boundary guidance.</td><td>Material incident disclosures, data-retention changes, or product-scope changes.</td><td>Security page update, status, or incident link where applicable.</td></tr>
         </tbody>
       </table>
     </div>
@@ -180,7 +179,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
       <article class="box"><h3>Commercial routing</h3><p>The Fit Finder, evaluation kit, pricing metadata, and calculator route teams between Free, Developer, Pro, Scale, Compute, platform rollout, enterprise, and pilot review based on workflow, verifier, data boundary, volume, trace size, and procurement needs.</p><p><a href="/fit">Open Fit Finder</a> · <a href="/evaluation">Open evaluation</a></p></article>
       <article class="box"><h3>ROI worksheet</h3><p>The ROI page gives finance and procurement a forwardable model for avoided replay, review labor, support work, prover operations, TinyZKP spend, and pilot payback.</p><p><a href="/roi">Open ROI</a> · <a href="/roi.json">JSON</a></p></article>
       <article class="box"><h3>Paid pilot packaging</h3><p>Pricing and enterprise pages now separate self-serve checkout from the $5,000 production pilot, dedicated platform rollout, and reserved-capacity review paths.</p><p><a href="/pricing#commercial-packages">Open packages</a> · <a href="/platform-rollout">Open rollout</a></p></article>
-      <article class="box"><h3>Trust packet</h3><p>The Trust Center, security-review packet, privacy notes, and status page expose audit status, data handling, proof scope, and review links in one buyer-ready flow.</p><p><a href="/trust">Open Trust Center</a></p></article>
+      <article class="box"><h3>Security status</h3><p>The security page, privacy notes, status page, release policy, schemas, and API references expose data handling, proof scope, and operating boundaries.</p><p><a href="/security">Open security status</a></p></article>
       <article class="box"><h3>Release identity</h3><p>Website, API, and MCP release endpoints let operators check whether docs, examples, API behavior, and agent tooling are on compatible revisions during rollout. Use <code>GET https://tinyzkp.com/api/release</code> for the website release.</p><p><a href="/docs#versioning-deprecation">Read versioning docs</a></p></article>
     </div>
   </section>
@@ -201,7 +200,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
         <li><a href="/fit.json">Fit Finder metadata</a></li>
         <li><a href="/evaluation.json">Evaluation metadata</a></li>
         <li><a href="/pricing.json">Pricing metadata</a></li>
-        <li><a href="/trust.json">Trust metadata</a></li>
+        <li><a href="/discovery.json">Discovery metadata</a></li>
       </ul>
     </article>
     <article class="box">
@@ -220,7 +219,7 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
     <p>A proof receipt only earns trust when the surrounding API, verifier, schema, template, and pricing contracts are visible enough for another system to depend on them.</p>
     <div class="cta-row" style="justify-content:center">
       <a class="cta" href="/changelog.json">Read JSON</a>
-      <a class="cta secondary" href="/trust">Review Trust Center</a>
+      <a class="cta secondary" href="/security">Review security status</a>
     </div>
   </section>
 </div>
@@ -259,8 +258,6 @@ main{padding:112px 0 76px}.hero{display:grid;grid-template-columns:minmax(0,1.04
   </div>
   <div class="footer-col">
     <h2>Company</h2>
-    <a href="/trust">Trust center</a>
-    <a href="/security-review">Security review</a>
     <a href="/research">Research</a>
     <a href="/security">Security</a>
     <a href="/status">Status</a>
