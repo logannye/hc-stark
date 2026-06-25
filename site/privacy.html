@@ -155,7 +155,7 @@ footer .right a:hover{color:var(--muted)}
 <li><strong>Usage data</strong>: API requests (tenant ID, trace length, duration, timestamp). We do not store program contents or proof data after delivery.</li>
 <li><strong>Product analytics</strong>: Low-cardinality website events such as page views, docs copy-button clicks, signup/checkout starts, playground proof completion, and verifier success/failure status. These events do not include proof bytes, API keys, email addresses, or form contents.</li>
 <li><strong>Billing data</strong>: Processed by Stripe. We do not store credit card numbers.</li>
-<li><strong>Verification</strong>: The <code>@tinyzkp/verify</code> WASM package runs entirely in your browser or runtime when used directly. The hosted verifier page tries local WASM first but may send pasted proof bytes to TinyZKP's hosted verifier fallback when the local verifier package is behind the current production proof format. The website may log a coarse success/failure analytics event; analytics events do not include proof bytes.</li>
+<li><strong>Client-side verification</strong>: The <code>@tinyzkp/verify</code> WASM package runs entirely in your browser or runtime when used directly. The hosted verifier page tries local WASM first but may send pasted proof bytes to TinyZKP's hosted verifier fallback when the local verifier package is behind the current production proof format. The website may log a coarse success/failure analytics event; analytics events do not include proof bytes.</li>
 </ul>
 
 <h2>2. How We Use It</h2>
