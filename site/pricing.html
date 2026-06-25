@@ -74,7 +74,7 @@ a:hover{text-decoration:underline}
 .container{width:100%;max-width:1100px;margin:0 auto;padding:0 24px}
 nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(5,10,18,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
 nav .container{display:flex;align-items:center;justify-content:space-between;height:56px}
-.logo{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--text-bright);text-decoration:none;letter-spacing:-.02em}
+.logo{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--text-bright);text-decoration:none;letter-spacing:0}
 .logo span{color:var(--accent)}
 .links{display:flex;align-items:center;gap:22px}
 .links a{color:var(--muted);font-size:13px;font-weight:500;letter-spacing:.01em;text-decoration:none;transition:color .2s}
@@ -86,7 +86,7 @@ nav .container{display:flex;align-items:center;justify-content:space-between;hei
 main{padding:116px 0 78px}
 .eyebrow{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
 .hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr);gap:42px;align-items:center;margin-bottom:52px}
-h1{font-size:clamp(36px,5.2vw,62px);line-height:1.06;letter-spacing:-.035em;color:var(--text-bright);max-width:760px;margin-bottom:18px}
+h1{font-size:52px;line-height:1.06;letter-spacing:0;color:var(--text-bright);max-width:760px;margin-bottom:18px}
 .lede{font-size:18px;color:var(--muted);line-height:1.75;max-width:760px}
 .cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
 .cta{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--bg);font-weight:800;padding:12px 22px;border-radius:8px;text-decoration:none;font-size:14px;letter-spacing:.01em;transition:transform .15s,box-shadow .15s}
@@ -94,13 +94,13 @@ h1{font-size:clamp(36px,5.2vw,62px);line-height:1.06;letter-spacing:-.035em;colo
 .cta.secondary{background:transparent;border:1px solid var(--border-light);color:var(--text)}
 .cta.secondary:hover{border-color:var(--accent);box-shadow:none;color:var(--accent)}
 .hero-panel{background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));border:1px solid var(--border-light);border-radius:18px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.32)}
-.hero-panel h2{font-size:18px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:12px}
+.hero-panel h2{font-size:18px;color:var(--text-bright);letter-spacing:0;margin-bottom:12px}
 .signal-grid{display:grid;gap:10px}
 .signal{display:flex;justify-content:space-between;gap:18px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:13px 14px}
 .signal span{color:var(--muted);font-size:13px}
 .signal strong{font-family:var(--mono);color:var(--accent);font-size:13px;text-align:right}
 .band{border-top:1px solid var(--border);padding-top:36px;margin-top:44px}
-.band h2{font-size:clamp(24px,3vw,34px);line-height:1.16;color:var(--text-bright);letter-spacing:-.025em;margin-bottom:12px}
+.band h2{font-size:30px;line-height:1.16;color:var(--text-bright);letter-spacing:0;margin-bottom:12px}
 .band>p{color:var(--muted);font-size:15px;line-height:1.75;max-width:780px;margin-bottom:20px}
 .band>p a,.box p a,.note a{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
 .plans{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:24px}
@@ -111,7 +111,7 @@ h1{font-size:clamp(36px,5.2vw,62px);line-height:1.06;letter-spacing:-.035em;colo
 .plan.featured{border-color:var(--accent);background:linear-gradient(180deg,rgba(46,232,212,.04),var(--surface));box-shadow:0 0 40px rgba(46,232,212,.06)}
 .badge{display:inline-flex;align-items:center;font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--bg);background:var(--accent);border-radius:999px;padding:3px 9px;margin-bottom:12px}
 .tier{font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
-.amount{font-size:34px;font-weight:850;color:var(--text-bright);letter-spacing:-.03em}
+.amount{font-size:34px;font-weight:850;color:var(--text-bright);letter-spacing:0}
 .unit{color:var(--muted);font-size:13px;margin-bottom:12px}
 .plan p,.plan li{color:var(--muted);font-size:13.5px;line-height:1.65}
 .plan ul{padding-left:18px;margin:14px 0 18px}
@@ -125,7 +125,7 @@ td strong{color:var(--text-bright)}
 td.accent{color:var(--accent);font-weight:800;font-family:var(--mono)}
 .chooser{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:22px}
 .box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;min-width:0}
-.box h3{font-size:17px;color:var(--text-bright);margin-bottom:9px;letter-spacing:-.01em}
+.box h3{font-size:17px;color:var(--text-bright);margin-bottom:9px;letter-spacing:0}
 .box p,.box li{color:var(--muted);font-size:13.5px;line-height:1.65}
 .box ul{padding-left:18px}
 .calc{background:linear-gradient(180deg,var(--surface),var(--bg-warm));border:1px solid var(--border-light);border-radius:16px;padding:24px;margin-top:24px}
@@ -158,7 +158,7 @@ footer .right a:hover{color:var(--muted)}
   .links a{width:100%}
   .hamburger{display:block}
   main{padding-top:100px}
-  h1{font-size:34px;letter-spacing:-.02em}
+  h1{font-size:34px;letter-spacing:0}
   .plans{grid-template-columns:1fr}
   .hero-panel{padding:18px}
   .signal{display:block}
@@ -167,20 +167,47 @@ footer .right a:hover{color:var(--muted)}
 </style>
 </head>
 <body>
-<nav>
+<nav class="tz-nav" aria-label="Primary">
 <div class="container">
   <a href="/" class="logo"><span>Tiny</span>ZKP</a>
-  <button class="hamburger" onclick="this.parentElement.querySelector('.links').classList.toggle('open')" aria-label="Menu">
-    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  <button class="hamburger" type="button" aria-label="Menu" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/agents">Agents</a>
-    <a href="/mcp">MCP</a>
-    <a href="/receipts">Receipts</a>
-    <a href="/recipes">Recipes</a>
-    <a href="/pricing" style="color:var(--accent)">Pricing</a>
-    <a href="/compute">Compute</a>
-    <a href="/contact">Contact</a>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Product</button>
+      <div class="nav-menu" aria-label="Product">
+        <a href="/mcp">MCP server<span>Install proof tools directly into agent clients.</span></a>
+        <a href="/receipts">Proof receipts<span>Attest state changes without replay.</span></a>
+        <a href="/verify">Verifier<span>Check production receipts in the browser.</span></a>
+        <a href="/compute">Compute<span>Large traces and hosted proving capacity.</span></a>
+        <a href="/templates">Templates<span>Known receipt types and public schemas.</span></a>
+      </div>
+    </div>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Solutions</button>
+      <div class="nav-menu" aria-label="Solutions">
+        <a href="/agents">AI agents<span>Receipts for autonomous tool actions.</span></a>
+        <a href="/platform-rollout">Platforms<span>Embed proof receipts across workflows.</span></a>
+        <a href="/use-cases">Use cases<span>Find where verification changes buying behavior.</span></a>
+        <a href="/pilot">Pilot<span>Launch with a defined production route.</span></a>
+        <a href="/enterprise">Enterprise<span>Review, procurement, and rollout support.</span></a>
+      </div>
+    </div>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Resources</button>
+      <div class="nav-menu" aria-label="Resources">
+        <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
+        <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
+        <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
+        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
+        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
+        <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
+      </div>
+    </div>
+    <a class="nav-link" href="/pricing">Pricing</a>
+    <a class="status-link nav-link" href="/status"><span class="status-dot" aria-hidden="true"></span>Status</a>
     <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
 </div>
@@ -428,21 +455,51 @@ footer .right a:hover{color:var(--muted)}
 </div>
 </main>
 
-<footer>
+<footer class="tz-footer">
 <div class="container">
-  <div class="left">&copy; 2026 TinyZKP</div>
-  <div class="right">
-    <a href="/agents">Agents</a>
-    <a href="/mcp">MCP</a>
-    <a href="/receipts">Receipts</a>
-    <a href="/pricing">Pricing</a>
-    <a href="/calculator">Calculator</a>
-    <a href="/limits">Limits</a>
+  <div class="footer-brand">
+    <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+    <p>Proof receipts for agent actions, API mutations, and state transitions. Transparent STARKs, native MCP, and browser-verifiable receipts.</p>
+  </div>
+  <div class="footer-col">
+    <h2>Product</h2>
+    <a href="/mcp">MCP server</a>
+    <a href="/receipts">Proof receipts</a>
+    <a href="/verify">Verifier</a>
+    <a href="/compute">Compute</a>
+    <a href="/templates">Templates</a>
+  </div>
+  <div class="footer-col">
+    <h2>Solutions</h2>
+    <a href="/agents">AI agents</a>
+    <a href="/platform-rollout">Platforms</a>
+    <a href="/use-cases">Use cases</a>
+    <a href="/pilot">Pilot</a>
     <a href="/enterprise">Enterprise</a>
-    <a href="/changelog">Changelog</a>
-    <a href="/security-review">Security Review</a>
+  </div>
+  <div class="footer-col">
+    <h2>Resources</h2>
+    <a href="/docs">Docs</a>
+    <a href="/examples">Examples</a>
+    <a href="/recipes">Recipes</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/evaluation">Evaluation</a>
+    <a href="/roi">ROI</a>
+  </div>
+  <div class="footer-col">
+    <h2>Company</h2>
+    <a href="/trust">Trust center</a>
+    <a href="/security-review">Security review</a>
+    <a href="/research">Research</a>
+    <a href="/security">Security</a>
+    <a href="/status">Status</a>
+    <a href="/contact">Contact</a>
+    <a href="/terms">Terms</a>
     <a href="/privacy">Privacy</a>
-    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+  <div class="footer-meta">
+    <span>&copy; 2026 TinyZKP</span>
+    <span><a href="https://github.com/logannye/hc-stark" target="_blank" rel="noopener">GitHub</a> · <a href="https://api.tinyzkp.com/docs" target="_blank" rel="noopener">API Reference</a></span>
   </div>
 </div>
 </footer>
@@ -478,9 +535,7 @@ function recalcPricing() {
   document.getElementById('calc-note').textContent = subtotal > caps[plan] ? 'monthly cap reached' : notes[plan];
 }
 recalcPricing();
-document.querySelectorAll('nav .links a').forEach(function(a){
-  a.addEventListener('click',function(){document.querySelector('.links').classList.remove('open')});
-});
 </script>
+<script src="/shared.js" defer></script>
 </body>
 </html>

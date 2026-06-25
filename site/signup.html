@@ -62,7 +62,7 @@ a:focus-visible,button:focus-visible{outline-offset:3px}
 
 nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(5,10,18,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
 nav .container{display:flex;align-items:center;justify-content:space-between;height:56px}
-.logo{font-size:1.25rem;font-weight:700;text-decoration:none;color:var(--text-bright);font-family:var(--mono);letter-spacing:-.02em}
+.logo{font-size:1.25rem;font-weight:700;text-decoration:none;color:var(--text-bright);font-family:var(--mono);letter-spacing:0}
 .logo span{color:var(--accent)}
 .links{display:flex;align-items:center;gap:24px}
 .links a{color:var(--muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
@@ -80,7 +80,7 @@ main::before{content:'';position:absolute;width:600px;height:600px;
 .signup-copy{padding-top:20px;min-width:0}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(46,232,212,.22);background:var(--accent-dim);color:var(--accent);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:22px}
 .eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
-.signup-copy h1{font-size:clamp(36px,5vw,58px);font-weight:800;line-height:1.08;letter-spacing:-.03em;color:var(--text-bright);margin-bottom:18px;text-wrap:balance}
+.signup-copy h1{font-size:50px;font-weight:800;line-height:1.08;letter-spacing:0;color:var(--text-bright);margin-bottom:18px;text-wrap:balance}
 .signup-copy .lead{color:var(--muted);font-size:17px;line-height:1.75;max-width:620px;margin-bottom:24px}
 .activation-steps{display:grid;gap:10px;margin:28px 0}
 .activation-step{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;background:rgba(12,20,36,.56);border:1px solid var(--border);border-radius:12px;padding:14px}
@@ -94,7 +94,7 @@ main::before{content:'';position:absolute;width:600px;height:600px;
 .review-line{color:var(--dim);font-size:13px;line-height:1.7;margin-top:18px}
 .review-line a{text-decoration:underline;text-underline-offset:4px}
 .signup-card{width:100%;background:linear-gradient(180deg,rgba(16,26,48,.96),rgba(7,13,24,.96));border:1px solid var(--border-light);border-radius:18px;padding:26px;position:sticky;top:82px;min-width:0;box-shadow:0 24px 70px rgba(0,0,0,.26)}
-.signup-card h2{font-size:1.35rem;font-weight:800;margin-bottom:8px;color:var(--text-bright);letter-spacing:-.02em}
+.signup-card h2{font-size:1.35rem;font-weight:800;margin-bottom:8px;color:var(--text-bright);letter-spacing:0}
 .signup-card .sub{color:var(--muted);font-size:.9rem;line-height:1.65;margin-bottom:22px}
 .intent-card{display:none;background:rgba(46,232,212,.055);border:1px solid rgba(46,232,212,.18);border-radius:12px;padding:13px 14px;margin:-4px 0 18px}
 .intent-card span{display:block;font-family:var(--mono);font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
@@ -118,7 +118,7 @@ main::before{content:'';position:absolute;width:600px;height:600px;
 .selected-summary strong{display:block;color:var(--text-bright);font-size:14px;margin-bottom:5px}
 .selected-summary p{color:var(--muted);font-size:12.5px;line-height:1.6}
 .commercial-route{background:rgba(5,10,18,.54);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:18px}
-.commercial-route h3{font-size:14px;color:var(--text-bright);letter-spacing:-.01em;margin-bottom:4px}
+.commercial-route h3{font-size:14px;color:var(--text-bright);letter-spacing:0;margin-bottom:4px}
 .commercial-route p{color:var(--muted);font-size:12.5px;line-height:1.6}
 .route-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
 .route-card{display:block;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;text-decoration:none;min-width:0;transition:border-color .2s,transform .15s}
@@ -176,10 +176,15 @@ footer .right a:hover{color:var(--muted)}
   .signup-copy h1{font-size:34px;letter-spacing:0}
   .signup-copy .lead{font-size:15.5px}
   .value-grid{grid-template-columns:1fr}
-  .signup-card{position:relative;top:auto;padding:22px}
+  .signup-card{position:relative;top:auto;padding:22px;order:-1}
+  .plan-toggle{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .plan-option{padding:14px 12px}
+  .plan-option[data-plan="compute"]{grid-column:1 / -1}
+  .route-grid{grid-template-columns:1fr}
+}
+@media(max-width:360px){
   .plan-toggle{grid-template-columns:1fr}
   .plan-option[data-plan="compute"]{grid-column:auto}
-  .route-grid{grid-template-columns:1fr}
 }
 </style>
 <script type="application/ld+json">
@@ -200,20 +205,47 @@ footer .right a:hover{color:var(--muted)}
 </head>
 <body>
 
-<nav>
+<nav class="tz-nav" aria-label="Primary">
 <div class="container">
   <a href="/" class="logo"><span>Tiny</span>ZKP</a>
-  <button class="hamburger" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">
-    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  <button class="hamburger" type="button" aria-label="Menu" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/pricing">Pricing</a>
-    <a href="/verify">Verify</a>
-    <a href="/docs">Quickstart</a>
-    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
-    <a href="/contact">Contact</a>
-    <a href="/account">Dashboard</a>
-    <a class="status-link" href="/status" style="font-size:12px;display:flex;align-items:center"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(52,211,153,.5)"></span>Status</a>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Product</button>
+      <div class="nav-menu" aria-label="Product">
+        <a href="/mcp">MCP server<span>Install proof tools directly into agent clients.</span></a>
+        <a href="/receipts">Proof receipts<span>Attest state changes without replay.</span></a>
+        <a href="/verify">Verifier<span>Check production receipts in the browser.</span></a>
+        <a href="/compute">Compute<span>Large traces and hosted proving capacity.</span></a>
+        <a href="/templates">Templates<span>Known receipt types and public schemas.</span></a>
+      </div>
+    </div>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Solutions</button>
+      <div class="nav-menu" aria-label="Solutions">
+        <a href="/agents">AI agents<span>Receipts for autonomous tool actions.</span></a>
+        <a href="/platform-rollout">Platforms<span>Embed proof receipts across workflows.</span></a>
+        <a href="/use-cases">Use cases<span>Find where verification changes buying behavior.</span></a>
+        <a href="/pilot">Pilot<span>Launch with a defined production route.</span></a>
+        <a href="/enterprise">Enterprise<span>Review, procurement, and rollout support.</span></a>
+      </div>
+    </div>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Resources</button>
+      <div class="nav-menu" aria-label="Resources">
+        <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
+        <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
+        <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
+        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
+        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
+        <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
+      </div>
+    </div>
+    <a class="nav-link" href="/pricing">Pricing</a>
+    <a class="status-link nav-link" href="/status"><span class="status-dot" aria-hidden="true"></span>Status</a>
     <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
 </div>
@@ -287,6 +319,17 @@ footer .right a:hover{color:var(--muted)}
     </button>
   </div>
 
+  <form id="signup-form">
+    <div class="form-group">
+      <label for="email">Email address</label>
+      <input type="email" id="email" name="email" placeholder="you@example.com" required autocomplete="email">
+    </div>
+    <button type="submit" class="btn-submit free-btn" id="submit-btn">Get Free API Key</button>
+    <p class="hint" id="hintText">Your API key will be emailed instantly</p>
+    <p class="hint" style="margin-top:8px">Already signed up? <a href="/account" style="color:var(--accent)">Log in to your dashboard</a></p>
+    <div class="error-msg" id="error-msg"></div>
+  </form>
+
   <div class="selected-summary" aria-live="polite">
     <div class="label">Best first move</div>
     <strong id="summary-title">Generate one real receipt</strong>
@@ -343,30 +386,55 @@ footer .right a:hover{color:var(--muted)}
   </ul>
   <p style="text-align:center;font-size:12px;color:var(--dim);margin-top:14px">Need reserved capacity, platform rollout, or contractual terms? <a href="/enterprise" style="color:var(--accent)">Review enterprise</a>.</p>
 
-  <form id="signup-form">
-    <div class="form-group">
-      <label for="email">Email address</label>
-      <input type="email" id="email" name="email" placeholder="you@example.com" required autocomplete="email">
-    </div>
-    <button type="submit" class="btn-submit free-btn" id="submit-btn">Get Free API Key</button>
-    <p class="hint" id="hintText">Your API key will be emailed instantly</p>
-    <p class="hint" style="margin-top:8px">Already signed up? <a href="/account" style="color:var(--accent)">Log in to your dashboard</a></p>
-    <div class="error-msg" id="error-msg"></div>
-  </form>
 </section>
 </div>
 </main>
 
-<footer>
+<footer class="tz-footer">
 <div class="container">
-  <div class="left">&copy; 2026 TinyZKP</div>
-  <div class="right">
-    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
-    <a href="/docs">Quickstart</a>
+  <div class="footer-brand">
+    <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+    <p>Proof receipts for agent actions, API mutations, and state transitions. Transparent STARKs, native MCP, and browser-verifiable receipts.</p>
+  </div>
+  <div class="footer-col">
+    <h2>Product</h2>
+    <a href="/mcp">MCP server</a>
+    <a href="/receipts">Proof receipts</a>
+    <a href="/verify">Verifier</a>
+    <a href="/compute">Compute</a>
+    <a href="/templates">Templates</a>
+  </div>
+  <div class="footer-col">
+    <h2>Solutions</h2>
+    <a href="/agents">AI agents</a>
+    <a href="/platform-rollout">Platforms</a>
+    <a href="/use-cases">Use cases</a>
+    <a href="/pilot">Pilot</a>
+    <a href="/enterprise">Enterprise</a>
+  </div>
+  <div class="footer-col">
+    <h2>Resources</h2>
+    <a href="/docs">Docs</a>
+    <a href="/examples">Examples</a>
+    <a href="/recipes">Recipes</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/evaluation">Evaluation</a>
+    <a href="/roi">ROI</a>
+  </div>
+  <div class="footer-col">
+    <h2>Company</h2>
+    <a href="/trust">Trust center</a>
+    <a href="/security-review">Security review</a>
+    <a href="/research">Research</a>
+    <a href="/security">Security</a>
+    <a href="/status">Status</a>
     <a href="/contact">Contact</a>
     <a href="/terms">Terms</a>
     <a href="/privacy">Privacy</a>
-    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+  <div class="footer-meta">
+    <span>&copy; 2026 TinyZKP</span>
+    <span><a href="https://github.com/logannye/hc-stark" target="_blank" rel="noopener">GitHub</a> · <a href="https://api.tinyzkp.com/docs" target="_blank" rel="noopener">API Reference</a></span>
   </div>
 </div>
 </footer>
@@ -597,11 +665,8 @@ footer .right a:hover{color:var(--muted)}
     }
   });
 })();
-// Close mobile menu on link click
-document.querySelectorAll('nav .links a').forEach(function(a){
-  a.addEventListener('click',function(){document.querySelector('.links').classList.remove('open')});
-});
 </script>
 
+<script src="/shared.js" defer></script>
 </body>
 </html>

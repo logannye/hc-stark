@@ -51,7 +51,7 @@ a:hover{text-decoration:underline}
 nav{position:fixed;top:0;left:0;right:0;z-index:100;
   background:rgba(5,10,18,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
 nav .container{max-width:1100px;display:flex;align-items:center;justify-content:space-between;height:56px}
-nav .logo{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--text-bright);text-decoration:none;letter-spacing:-.02em}
+nav .logo{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--text-bright);text-decoration:none;letter-spacing:0}
 nav .logo span{color:var(--accent)}
 nav .links{display:flex;gap:24px;align-items:center}
 nav .links a{color:var(--muted);font-size:13px;font-weight:500;transition:color .2s;letter-spacing:.01em}
@@ -67,7 +67,7 @@ main{flex:1;padding:120px 0 60px}
 .try-hero .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:100px;
   background:var(--accent-dim);border:1px solid rgba(46,232,212,.2);color:var(--accent);
   font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:18px}
-.try-hero h1{font-size:clamp(28px,4vw,40px);font-weight:800;letter-spacing:-.02em;color:var(--text-bright);margin-bottom:12px;line-height:1.15}
+.try-hero h1{font-size:36px;font-weight:800;letter-spacing:0;color:var(--text-bright);margin-bottom:12px;line-height:1.15}
 .try-hero p{color:var(--muted);font-size:15px;max-width:560px;margin:0 auto;line-height:1.7}
 
 /* Step cards */
@@ -80,7 +80,7 @@ main{flex:1;padding:120px 0 60px}
 .card-num{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;
   background:var(--accent-dim);border:1px solid rgba(46,232,212,.25);color:var(--accent);
   border-radius:8px;font-family:var(--mono);font-weight:700;font-size:13px}
-.card-title{font-size:16px;font-weight:700;color:var(--text-bright);letter-spacing:-.01em}
+.card-title{font-size:16px;font-weight:700;color:var(--text-bright);letter-spacing:0}
 .card-sub{color:var(--muted);font-size:13.5px;margin-bottom:16px;line-height:1.6}
 
 /* Form */
@@ -124,7 +124,7 @@ main{flex:1;padding:120px 0 60px}
 
 .cta-strip{background:linear-gradient(135deg,rgba(46,232,212,.06) 0%,var(--surface) 65%);
   border:1px solid var(--accent);border-radius:14px;padding:24px 26px;margin-top:34px;text-align:center}
-.cta-strip h2{font-size:17px;color:var(--text-bright);font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+.cta-strip h2{font-size:17px;color:var(--text-bright);font-weight:700;margin-bottom:6px;letter-spacing:0}
 .cta-strip p{color:var(--muted);font-size:13.5px;margin-bottom:14px;line-height:1.6}
 .cta-strip .btn{width:auto;display:inline-flex;padding:10px 24px}
 
@@ -161,18 +161,47 @@ footer .right a:hover{color:var(--muted)}
 </head>
 <body>
 
-<nav>
+<nav class="tz-nav" aria-label="Primary">
 <div class="container">
   <a href="/" class="logo"><span>Tiny</span>ZKP</a>
-  <button class="hamburger" onclick="document.querySelector('.links').classList.toggle('open')" aria-label="Menu">
-    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  <button class="hamburger" type="button" aria-label="Menu" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
   <div class="links">
-    <a href="/pricing">Pricing</a>
-    <a href="/verify">Verify</a>
-    <a href="/docs">Quickstart</a>
-    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
-    <a href="/contact">Contact</a>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Product</button>
+      <div class="nav-menu" aria-label="Product">
+        <a href="/mcp">MCP server<span>Install proof tools directly into agent clients.</span></a>
+        <a href="/receipts">Proof receipts<span>Attest state changes without replay.</span></a>
+        <a href="/verify">Verifier<span>Check production receipts in the browser.</span></a>
+        <a href="/compute">Compute<span>Large traces and hosted proving capacity.</span></a>
+        <a href="/templates">Templates<span>Known receipt types and public schemas.</span></a>
+      </div>
+    </div>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Solutions</button>
+      <div class="nav-menu" aria-label="Solutions">
+        <a href="/agents">AI agents<span>Receipts for autonomous tool actions.</span></a>
+        <a href="/platform-rollout">Platforms<span>Embed proof receipts across workflows.</span></a>
+        <a href="/use-cases">Use cases<span>Find where verification changes buying behavior.</span></a>
+        <a href="/pilot">Pilot<span>Launch with a defined production route.</span></a>
+        <a href="/enterprise">Enterprise<span>Review, procurement, and rollout support.</span></a>
+      </div>
+    </div>
+    <div class="nav-group">
+      <button class="nav-trigger" type="button" aria-haspopup="true">Resources</button>
+      <div class="nav-menu" aria-label="Resources">
+        <a href="/docs">Docs<span>Quickstart, API reference, and MCP setup.</span></a>
+        <a href="/examples">Examples<span>Working receipt payloads and flows.</span></a>
+        <a href="/recipes">Recipes<span>Copy-paste integration patterns.</span></a>
+        <a href="/evaluation">Evaluation<span>Buyer review material and diligence.</span></a>
+        <a href="/roi">ROI<span>Model audit, compute, and trust costs.</span></a>
+        <a href="/trust">Trust center<span>Security, status, and review packet.</span></a>
+        <a href="/limits">Limits<span>Current boundaries and roadmap scope.</span></a>
+      </div>
+    </div>
+    <a class="nav-link" href="/pricing">Pricing</a>
+    <a class="status-link nav-link" href="/status"><span class="status-dot" aria-hidden="true"></span>Status</a>
     <a href="/signup" class="nav-cta">Get API Key</a>
   </div>
 </div>
@@ -235,16 +264,51 @@ footer .right a:hover{color:var(--muted)}
 </div>
 </main>
 
-<footer>
+<footer class="tz-footer">
 <div class="container">
-  <div class="left">&copy; 2026 TinyZKP</div>
-  <div class="right">
-    <a href="https://api.tinyzkp.com/docs" target="_blank">API Reference</a>
-    <a href="/docs">Quickstart</a>
+  <div class="footer-brand">
+    <a href="/" class="logo"><span>Tiny</span>ZKP</a>
+    <p>Proof receipts for agent actions, API mutations, and state transitions. Transparent STARKs, native MCP, and browser-verifiable receipts.</p>
+  </div>
+  <div class="footer-col">
+    <h2>Product</h2>
+    <a href="/mcp">MCP server</a>
+    <a href="/receipts">Proof receipts</a>
+    <a href="/verify">Verifier</a>
+    <a href="/compute">Compute</a>
+    <a href="/templates">Templates</a>
+  </div>
+  <div class="footer-col">
+    <h2>Solutions</h2>
+    <a href="/agents">AI agents</a>
+    <a href="/platform-rollout">Platforms</a>
+    <a href="/use-cases">Use cases</a>
+    <a href="/pilot">Pilot</a>
+    <a href="/enterprise">Enterprise</a>
+  </div>
+  <div class="footer-col">
+    <h2>Resources</h2>
+    <a href="/docs">Docs</a>
+    <a href="/examples">Examples</a>
+    <a href="/recipes">Recipes</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/evaluation">Evaluation</a>
+    <a href="/roi">ROI</a>
+  </div>
+  <div class="footer-col">
+    <h2>Company</h2>
+    <a href="/trust">Trust center</a>
+    <a href="/security-review">Security review</a>
+    <a href="/research">Research</a>
+    <a href="/security">Security</a>
+    <a href="/status">Status</a>
     <a href="/contact">Contact</a>
     <a href="/terms">Terms</a>
     <a href="/privacy">Privacy</a>
-    <a href="https://github.com/logannye/hc-stark" target="_blank">GitHub</a>
+  </div>
+  <div class="footer-meta">
+    <span>&copy; 2026 TinyZKP</span>
+    <span><a href="https://github.com/logannye/hc-stark" target="_blank" rel="noopener">GitHub</a> · <a href="https://api.tinyzkp.com/docs" target="_blank" rel="noopener">API Reference</a></span>
   </div>
 </div>
 </footer>
@@ -561,11 +625,8 @@ async function copyCurlEquivalent(){
 
 applyPrefillFromUrl();
 updateFinal();
-
-document.querySelectorAll('nav .links a').forEach(function(a){
-  a.addEventListener('click', function(){document.querySelector('.links').classList.remove('open')});
-});
 </script>
 
+<script src="/shared.js" defer></script>
 </body>
 </html>
