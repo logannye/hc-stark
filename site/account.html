@@ -852,12 +852,11 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   function resolveSession() {
     apiPost('/api/session-resolve')
     .then(function(res) {
-      if (res.status === 401) { return null; }
       if (!res.ok) throw new Error('Session check failed.');
       return res.json();
     })
     .then(function(data) {
-      if (!data) { showLoginView(); return; }
+      if (!data || data.authenticated === false) { showLoginView(); return; }
       session = {
         email:          data.email          || '',
         plan:           data.plan           || 'free',

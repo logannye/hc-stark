@@ -12,8 +12,8 @@ export async function onRequestPost(context) {
   try {
     const token = readSessionCookie(context.request);
     if (!token) {
-      return new Response(JSON.stringify({ error: "no session" }), {
-        status: 401, headers: jsonHeaders,
+      return new Response(JSON.stringify({ authenticated: false }), {
+        status: 200, headers: jsonHeaders,
       });
     }
 

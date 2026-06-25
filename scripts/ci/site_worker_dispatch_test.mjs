@@ -324,8 +324,33 @@ async function main() {
         { ASSETS: assets },
         { waitUntil() {} },
       );
-      assert.equal(response.status, 401);
-      assert.deepEqual(await readJson(response), { error: "no session" });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await readJson(response), { authenticated: false });
+      assert.deepEqual(assets.calls, []);
+    }
+
+    {
+      const assets = makeAssetsMock(async () => new Response("missing", { status: 404 }));
+      const log = console.log;
+      console.log = () => {};
+      try {
+        let response;
+        for (let i = 0; i < 61; i += 1) {
+          response = await worker.fetch(
+            new Request("https://tinyzkp.com/api/events", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "cf-connecting-ip": "203.0.113.199" },
+              body: JSON.stringify({ event: "page_view", path: "/docs", props: { page: "Docs" } }),
+            }),
+            { ASSETS: assets },
+            { waitUntil() {} },
+          );
+        }
+        assert.equal(response.status, 204);
+        assert.equal(await response.text(), "");
+      } finally {
+        console.log = log;
+      }
       assert.deepEqual(assets.calls, []);
     }
 
@@ -364,7 +389,6 @@ async function main() {
         "/api/create-portal-session",
         "/api/jobs",
         "/api/reveal-key",
-        "/api/session-resolve",
         "/api/usage",
       ];
       for (const route of sessionGatedRoutes) {

@@ -132,7 +132,13 @@ function sanitizeProps(raw) {
 export async function onRequestPost(context) {
   const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
   if (!(await checkRateLimit(ip))) {
-    return json(429, { error: "too many events" });
+    // Analytics must never create user-visible console noise or block product
+    // flows. When the privacy/rate budget is exhausted, drop the event
+    // quietly instead of returning a browser-visible 429.
+    return new Response(null, {
+      status: 204,
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
   const length = Number(context.request.headers.get("content-length") || 0);
