@@ -1,0 +1,21 @@
+{
+  "name": "@tinyzkp/verify",
+  "version": "0.1.1",
+  "description": "Client-side WASM verifier for TinyZKP STARK proof receipts",
+  "main": "tinyzkp-verify.js",
+  "types": "tinyzkp-verify.d.ts",
+  "files": [
+    "tinyzkp-verify_bg.wasm",
+    "tinyzkp-verify_bg.wasm.d.ts",
+    "tinyzkp-verify.js",
+    "tinyzkp-verify.d.ts",
+    "README.md"
+  ],
+  "keywords": ["zkp", "stark", "zero-knowledge", "wasm", "verifier", "tinyzkp", "receipt", "verification", "browser"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/logannye/hc-stark"
+  },
+  "homepage": "https://tinyzkp.com?source=npm_wasm_verifier&medium=package_registry&platform=npm&intent=learn"
+}

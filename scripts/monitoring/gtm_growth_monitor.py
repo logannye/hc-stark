@@ -53,6 +53,7 @@ class RevenueSummary:
     usage_db_exists: bool
     accounts: int = 0
     active_accounts: int = 0
+    monthly_active_accounts: int = 0
     activated_accounts: int = 0
     paid_accounts: int = 0
     free_accounts: int = 0
@@ -189,6 +190,7 @@ def load_revenue_summary(tenant_db: Path, usage_db: Path) -> RevenueSummary:
             "platform": group.platform,
             "accounts": group.accounts,
             "activated_accounts": group.activated_accounts,
+            "monthly_active_accounts": group.monthly_active_accounts,
             "paid_accounts": group.paid_accounts,
             "paid_proofs": group.paid_proofs,
             "total_proofs": group.total_proofs,
@@ -209,6 +211,7 @@ def load_revenue_summary(tenant_db: Path, usage_db: Path) -> RevenueSummary:
         usage_db_exists=usage_db.exists(),
         accounts=sum(group.accounts for group in groups),
         active_accounts=sum(group.active_accounts for group in groups),
+        monthly_active_accounts=sum(group.monthly_active_accounts for group in groups),
         activated_accounts=sum(group.activated_accounts for group in groups),
         paid_accounts=sum(group.paid_accounts for group in groups),
         free_accounts=sum(group.free_accounts for group in groups),
@@ -481,6 +484,7 @@ def _print_text(result: MonitorResult) -> None:
     print(
         "Revenue summary: "
         f"accounts={revenue.accounts}, active={revenue.active_accounts}, "
+        f"active_30d={revenue.monthly_active_accounts}, "
         f"activated={revenue.activated_accounts} ({_pct(revenue.activation_rate)}), "
         f"paid={revenue.paid_accounts} ({_pct(revenue.paid_rate)}), "
         f"proofs={revenue.total_proofs}, 30d_proofs={revenue.monthly_proofs}, "
@@ -496,6 +500,7 @@ def _print_text(result: MonitorResult) -> None:
                 "  - "
                 f"{source['source']} / {source['medium']} / {source['platform']}: "
                 f"accounts={source['accounts']}, activated={source['activated_accounts']}, "
+                f"active_30d={source['monthly_active_accounts']}, "
                 f"paid={source['paid_accounts']}, paid_proofs={source['paid_proofs']}, "
                 f"proofs={source['total_proofs']}, base_mrr=${source['estimated_base_mrr']}, "
                 f"usage_revenue=${source['estimated_usage_revenue_cents'] / 100:.2f}"

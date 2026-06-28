@@ -67,6 +67,7 @@ jobs:
           python3 -m pytest scripts/ci/test_gtm_distribution_monitor.py
           python3 scripts/monitoring/gtm_growth_monitor.py --offline
           python3 -m pytest scripts/ci/test_gtm_growth_monitor.py
+          python3 -m pytest scripts/ci/test_daily_growth_decision.py
           python3 scripts/marketing/render_gtm_execution_ledger.py --check
           python3 scripts/ci/gtm_execution_ledger_check.py
           python3 -m pytest scripts/ci/test_gtm_execution_ledger.py
@@ -189,6 +190,7 @@ jobs:
           python3 -m py_compile scripts/marketing/sync_outbound_research_pipeline.py
           python3 -m py_compile scripts/monitoring/gtm_distribution_monitor.py
           python3 -m py_compile scripts/monitoring/gtm_growth_monitor.py
+          python3 -m py_compile scripts/monitoring/daily_growth_decision.py
           python3 -m py_compile scripts/monitoring/stripe_checkout_canary.py
           bash -n scripts/monitoring/api_health_audit.sh
           bash -n scripts/monitoring/shared_dispatch_smoke.sh
