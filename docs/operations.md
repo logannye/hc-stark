@@ -283,6 +283,35 @@ The JSON form is safe for dashboards and omits tenant email addresses:
 python3 scripts/monitoring/gtm_growth_monitor.py --offline --json
 ```
 
+### Daily growth decision memo
+
+Run the daily decision layer after the GTM growth monitor to persist a
+non-repo snapshot, evaluate yesterday's experiment, and print today's selected
+growth experiment with an implementation policy:
+
+```sh
+python3 scripts/monitoring/daily_growth_decision.py \
+  --tenant-db /opt/hc-stark/data/tenant_store.sqlite \
+  --usage-db /opt/hc-stark/data/usage.sqlite
+```
+
+Snapshots are written to `/opt/hc-stark/data/growth_snapshots/YYYY-MM-DD.json`
+by default. They contain aggregate adoption, activation, paid-customer,
+revenue, source, and pipeline counts only; emails, Stripe object IDs, checkout
+URLs, and API-key-like values are redacted from JSON and Markdown output. Use
+`--stripe-checkout --stripe-project-name <profile>` only after
+`billing/stripe_account_context_check.py` verifies the active Stripe CLI
+profile belongs to TinyZKP.
+
+The Codex daily automation should run this command around 10:15
+America/Los_Angeles, after the 09:45 production GTM cron, and report the
+scorecard, what is working, whether yesterday's experiment worked, the main
+bottleneck, the selected experiment, implementation status, and any data gaps.
+It may implement small safe repo-local or public/no-PII experiments and run
+focused tests. It must report blockers instead of sending customer messages,
+using private contact data, spending money, changing Stripe/catalog state, or
+modifying production behavior without explicit approval.
+
 ### Receipt share contract gate
 
 Run the receipt-share contract check before changing `/try`, `/verify`,
@@ -392,8 +421,8 @@ dashboard or scheduled internal digest.
 
 ### Billing cron and lifecycle nudges
 
-The host cron `/etc/cron.d/hc-billing` runs three billing-adjacent jobs and
-one daily GTM monitor:
+The host cron `/etc/cron.d/hc-billing` runs three billing-adjacent jobs, one
+daily GTM monitor, and one daily growth decision memo:
 
 - `billing/sync_usage.py` hourly to report billable usage to Stripe.
 - `billing/lifecycle_nudges.py` hourly to send idempotent activation and
@@ -406,6 +435,9 @@ one daily GTM monitor:
 - `scripts/monitoring/gtm_growth_monitor.py --offline` daily to log GTM
   distribution health, source-tagged surfaces, revenue attribution, lifecycle
   ledgers, and checkout recovery counts.
+- `scripts/monitoring/daily_growth_decision.py` daily, after the GTM monitor,
+  to persist aggregate growth snapshots, evaluate the prior experiment, and
+  produce the next experiment plus implementation policy.
 
 Lifecycle nudges and checkout recovery use the same SMTP environment as the
 webhook. Each sent lifecycle nudge is recorded in

@@ -48,6 +48,7 @@ class SourceSummary:
     platform: str
     accounts: int = 0
     active_accounts: int = 0
+    monthly_active_accounts: int = 0
     activated_accounts: int = 0
     paid_accounts: int = 0
     free_accounts: int = 0
@@ -223,6 +224,8 @@ def summarize(
         group.accounts += 1
         if active:
             group.active_accounts += 1
+        if usage.monthly_proofs > 0:
+            group.monthly_active_accounts += 1
         if usage.total_proofs > 0:
             group.activated_accounts += 1
         if plan in FREE_PLANS:
@@ -292,6 +295,7 @@ def report_markdown(groups: list[SourceSummary], *, generated_ms: int | None = N
     total_accounts = sum(group.accounts for group in groups)
     total_paid = sum(group.paid_accounts for group in groups)
     total_activated = sum(group.activated_accounts for group in groups)
+    total_monthly_active = sum(group.monthly_active_accounts for group in groups)
     total_proofs = sum(group.total_proofs for group in groups)
     total_paid_proofs = sum(group.paid_proofs for group in groups)
     total_base_mrr = sum(group.estimated_base_mrr for group in groups)
@@ -304,6 +308,7 @@ def report_markdown(groups: list[SourceSummary], *, generated_ms: int | None = N
         "",
         f"- Accounts: {total_accounts}",
         f"- Activated accounts: {total_activated}",
+        f"- 30d active accounts: {total_monthly_active}",
         f"- Paid accounts: {total_paid}",
         f"- Total proofs: {total_proofs}",
         f"- Paid proofs: {total_paid_proofs}",
@@ -311,8 +316,8 @@ def report_markdown(groups: list[SourceSummary], *, generated_ms: int | None = N
         f"- Estimated usage revenue: {_fmt_money_cents(total_usage_revenue_cents)}",
         f"- Compute trace steps: {total_compute_trace_steps}",
         "",
-        "| Source | Medium | Platform | Accounts | Activated | Paid | Activation | Paid rate | Base MRR | Usage rev | Paid proofs | Proofs | 30d proofs | Trace steps | Compute steps | Avg first proof | First signup | Last signup |",
-        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
+        "| Source | Medium | Platform | Accounts | Activated | 30d active | Paid | Activation | Paid rate | Base MRR | Usage rev | Paid proofs | Proofs | 30d proofs | Trace steps | Compute steps | Avg first proof | First signup | Last signup |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
     ]
     for group in groups:
         rows.append(
@@ -324,6 +329,7 @@ def report_markdown(groups: list[SourceSummary], *, generated_ms: int | None = N
                     group.platform,
                     str(group.accounts),
                     str(group.activated_accounts),
+                    str(group.monthly_active_accounts),
                     str(group.paid_accounts),
                     _fmt_pct(group.activation_rate),
                     _fmt_pct(group.paid_rate),

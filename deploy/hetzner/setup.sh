@@ -98,6 +98,7 @@ cat > "$CRON_FILE" <<'CRON'
 15 * * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python billing/lifecycle_nudges.py >> /var/log/hc-lifecycle.log 2>&1
 30 * * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python billing/checkout_recovery.py >> /var/log/hc-checkout-recovery.log 2>&1
 45 9 * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python scripts/monitoring/gtm_growth_monitor.py --offline >> /var/log/hc-gtm-growth.log 2>&1
+15 10 * * * root cd /opt/hc-stark && /opt/hc-stark/.venv/bin/python scripts/monitoring/daily_growth_decision.py >> /var/log/hc-daily-growth-decision.log 2>&1
 CRON
 chmod 644 "$CRON_FILE"
 
