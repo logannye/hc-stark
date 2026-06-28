@@ -36,6 +36,7 @@ trap 'rm -f "$RESP_FILE" "$BODY_FILE"' EXIT
 
 PASS=0
 FAIL=0
+SKIP=0
 FAILURES=""
 TOTAL=0
 
@@ -316,6 +317,7 @@ test_api GET  "/prove" "" "401" > /dev/null
 # ══════════════════════════════════════════════════════════════════
 if [ -n "$API_KEY" ]; then
     AUTH_HDR="Authorization: Bearer $API_KEY"
+    AUDIT_KEY_CAPPED=""
 
     log ""
     log "── API: Authenticated — Usage & Listing ──"
@@ -328,10 +330,32 @@ if [ -n "$API_KEY" ]; then
     # List jobs — should return JSON (possibly empty list)
     test_api GET "/prove" "" "200" "15" "$AUTH_HDR" > /dev/null
 
-    # Authed batch happy path — single tiny job
-    test_api POST "/prove/batch" \
-        '{"requests":[{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}]}' \
-        "200" "60" "$AUTH_HDR" > /dev/null
+    # Authed batch happy path — single tiny job. If the persistent audit key has
+    # reached its monthly cap, record a quota skip rather than reporting the
+    # production endpoint as unhealthy.
+    batch_body='{"requests":[{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}]}'
+    printf '%s' "$batch_body" > "$BODY_FILE"
+    batch_raw=$(curl -s -w "\n%{http_code}" --max-time 60 \
+        -X POST -H "$AUTH_HDR" -H "Content-Type: application/json" \
+        --data @"$BODY_FILE" "$API/prove/batch" 2>/dev/null) || batch_raw=$'\n000'
+    batch_code=$(echo "$batch_raw" | tail -n1)
+    batch_resp=$(echo "$batch_raw" | sed '$d')
+    printf '%s' "$batch_resp" > "$RESP_FILE"
+    if [ "$batch_code" = "200" ]; then
+        TOTAL=$((TOTAL + 1))
+        log "  PASS  $batch_code  POST /prove/batch"
+        PASS=$((PASS + 1))
+    elif [ "$batch_code" = "402" ] && echo "$batch_resp" | grep -q '"usage_cap_reached"'; then
+        log "  SKIP  $batch_code  POST /prove/batch (audit key monthly cap reached)"
+        SKIP=$((SKIP + 1))
+        AUDIT_KEY_CAPPED="1"
+    else
+        TOTAL=$((TOTAL + 1))
+        log "  FAIL  $batch_code  POST /prove/batch  (expected 200)"
+        FAIL=$((FAIL + 1))
+        FAILURES="$FAILURES\n  $batch_code POST /prove/batch (expected 200)"
+    fi
+    sleep 0.5
 
     # Aggregate — exists and rejects empty body with structural error.
     # Accept 400 or 422; either confirms the route is mounted and auth passed.
@@ -352,129 +376,143 @@ if [ -n "$API_KEY" ]; then
     log ""
     log "── API: Authenticated — Prove + Verify ──"
 
-    # Submit a minimal proof using the built-in toy workload
-    test_api POST "/prove" \
-        '{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}' \
-        "200" "60" "$AUTH_HDR"
-    prove_resp=$(cat "$RESP_FILE")
-
-    JOB_ID=$(echo "$prove_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
-
-    if [ -n "$JOB_ID" ]; then
-        # Poll for job completion (up to 90s)
-        log "  INFO  Proof job submitted: $JOB_ID — polling..."
-        POLL_ELAPSED=0
-        POLL_TIMEOUT=90
-        JOB_STATUS="pending"
-        JOB_RESP=""
-
-        while [ "$POLL_ELAPSED" -lt "$POLL_TIMEOUT" ]; do
-            sleep 5
-            POLL_ELAPSED=$((POLL_ELAPSED + 5))
-            JOB_RESP=$(curl -s --max-time 10 -H "$AUTH_HDR" "$API/prove/$JOB_ID" 2>/dev/null || echo "")
-            JOB_STATUS=$(echo "$JOB_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null || echo "")
-            if [ "$JOB_STATUS" = "succeeded" ] || [ "$JOB_STATUS" = "failed" ]; then
-                break
-            fi
-        done
-
-        # Prove job result
-        TOTAL=$((TOTAL + 1))
-        if [ "$JOB_STATUS" = "succeeded" ]; then
-            log "  PASS  200  GET /prove/$JOB_ID (status=succeeded, ${POLL_ELAPSED}s)"
-            PASS=$((PASS + 1))
-        else
-            log "  FAIL  ---  GET /prove/$JOB_ID (status=$JOB_STATUS after ${POLL_ELAPSED}s)"
-            FAIL=$((FAIL + 1))
-            FAILURES="$FAILURES\n  --- prove job $JOB_ID status=$JOB_STATUS"
-        fi
-
-        # Inspect the proof
-        if [ "$JOB_STATUS" = "succeeded" ]; then
-            test_api GET "/prove/$JOB_ID/inspect" "" "200" "15" "$AUTH_HDR"
-            inspect_resp=$(cat "$RESP_FILE")
-            if ! echo "$inspect_resp" | grep -q '"trace_commitment_digest"'; then
-                log "  WARN  /prove/$JOB_ID/inspect missing trace_commitment_digest"
-            fi
-
-            # Verify the proof
-            PROOF_JSON=$(echo "$JOB_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d.get('proof',{})))" 2>/dev/null || echo "{}")
-            if [ "$PROOF_JSON" != "{}" ]; then
-                test_api POST "/verify" \
-                    "{\"proof\":$PROOF_JSON,\"allow_legacy_v2\":true}" \
-                    "200" "30" "$AUTH_HDR"
-                verify_resp=$(cat "$RESP_FILE")
-                if ! echo "$verify_resp" | grep -q '"ok":true'; then
-                    log "  WARN  /verify did not return ok:true"
-                fi
-            else
-                log "  SKIP  /verify — no proof payload in job response"
-                TOTAL=$((TOTAL + 1))
-            fi
-
-            # Calldata generation — the production prover emits sound v5/v7 proofs,
-            # for which EVM calldata is intentionally unavailable (no on-chain
-            # verifier has shipped for the sound proof system; the EVM path only
-            # handles the legacy pre-v5 format). The endpoint returns a documented
-            # 409, not a 200. Restore to 200 if/when a v5/v7 EVM verifier ships.
-            test_api GET "/proof/$JOB_ID/calldata" "" "409" "15" "$AUTH_HDR"
-        else
-            log "  SKIP  /inspect, /verify, /calldata — proof did not succeed"
-            TOTAL=$((TOTAL + 3))
-        fi
-
-        # Cleanup — delete the test job
-        curl -s -X DELETE -H "$AUTH_HDR" "$API/prove/$JOB_ID" --max-time 10 >/dev/null 2>&1 || true
+    if [ -n "$AUDIT_KEY_CAPPED" ]; then
+        log "  SKIP  /prove + poll/inspect/verify/calldata — audit key monthly cap reached"
+        SKIP=$((SKIP + 5))
     else
-        log "  WARN  prove returned no job_id — skipping verify chain"
-        TOTAL=$((TOTAL + 4))
-        FAIL=$((FAIL + 4))
-        FAILURES="$FAILURES\n  --- prove returned no job_id"
+        # Submit a minimal proof using the built-in toy workload
+        test_api POST "/prove" \
+            '{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}' \
+            "200" "60" "$AUTH_HDR"
+        prove_resp=$(cat "$RESP_FILE")
+
+        JOB_ID=$(echo "$prove_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
+
+        if [ -n "$JOB_ID" ]; then
+            # Poll for job completion (up to 90s)
+            log "  INFO  Proof job submitted: $JOB_ID — polling..."
+            POLL_ELAPSED=0
+            POLL_TIMEOUT=90
+            JOB_STATUS="pending"
+            JOB_RESP=""
+
+            while [ "$POLL_ELAPSED" -lt "$POLL_TIMEOUT" ]; do
+                sleep 5
+                POLL_ELAPSED=$((POLL_ELAPSED + 5))
+                JOB_RESP=$(curl -s --max-time 10 -H "$AUTH_HDR" "$API/prove/$JOB_ID" 2>/dev/null || echo "")
+                JOB_STATUS=$(echo "$JOB_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null || echo "")
+                if [ "$JOB_STATUS" = "succeeded" ] || [ "$JOB_STATUS" = "failed" ]; then
+                    break
+                fi
+            done
+
+            # Prove job result
+            TOTAL=$((TOTAL + 1))
+            if [ "$JOB_STATUS" = "succeeded" ]; then
+                log "  PASS  200  GET /prove/$JOB_ID (status=succeeded, ${POLL_ELAPSED}s)"
+                PASS=$((PASS + 1))
+            else
+                log "  FAIL  ---  GET /prove/$JOB_ID (status=$JOB_STATUS after ${POLL_ELAPSED}s)"
+                FAIL=$((FAIL + 1))
+                FAILURES="$FAILURES\n  --- prove job $JOB_ID status=$JOB_STATUS"
+            fi
+
+            # Inspect the proof
+            if [ "$JOB_STATUS" = "succeeded" ]; then
+                test_api GET "/prove/$JOB_ID/inspect" "" "200" "15" "$AUTH_HDR"
+                inspect_resp=$(cat "$RESP_FILE")
+                if ! echo "$inspect_resp" | grep -q '"trace_commitment_digest"'; then
+                    log "  WARN  /prove/$JOB_ID/inspect missing trace_commitment_digest"
+                fi
+
+                # Verify the proof
+                PROOF_JSON=$(echo "$JOB_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d.get('proof',{})))" 2>/dev/null || echo "{}")
+                if [ "$PROOF_JSON" != "{}" ]; then
+                    test_api POST "/verify" \
+                        "{\"proof\":$PROOF_JSON,\"allow_legacy_v2\":true}" \
+                        "200" "30" "$AUTH_HDR"
+                    verify_resp=$(cat "$RESP_FILE")
+                    if ! echo "$verify_resp" | grep -q '"ok":true'; then
+                        log "  WARN  /verify did not return ok:true"
+                    fi
+                else
+                    log "  SKIP  /verify — no proof payload in job response"
+                    SKIP=$((SKIP + 1))
+                fi
+
+                # Calldata generation — the production prover emits sound v5/v7 proofs,
+                # for which EVM calldata is intentionally unavailable (no on-chain
+                # verifier has shipped for the sound proof system; the EVM path only
+                # handles the legacy pre-v5 format). The endpoint returns a documented
+                # 409, not a 200. Restore to 200 if/when a v5/v7 EVM verifier ships.
+                test_api GET "/proof/$JOB_ID/calldata" "" "409" "15" "$AUTH_HDR"
+            else
+                log "  SKIP  /inspect, /verify, /calldata — proof did not succeed"
+                SKIP=$((SKIP + 3))
+            fi
+
+            # Cleanup — delete the test job
+            curl -s -X DELETE -H "$AUTH_HDR" "$API/prove/$JOB_ID" --max-time 10 >/dev/null 2>&1 || true
+        else
+            log "  FAIL  ---  POST /prove returned no job_id"
+            TOTAL=$((TOTAL + 1))
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  --- POST /prove returned no job_id"
+            log "  SKIP  /poll, /inspect, /verify, /calldata — no proof job"
+            SKIP=$((SKIP + 4))
+        fi
     fi
 
     log ""
     log "── API: Authenticated — Cancel + Template ──"
-    # Cancel flow: submit a job, immediately cancel. The toy workload
-    # finishes in <1s, so 409 ("already in a terminal state") is also a
-    # healthy result — both prove the route is mounted and auth passed.
-    test_api POST "/prove" \
-        '{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}' \
-        "200" "30" "$AUTH_HDR"
-    cancel_submit=$(cat "$RESP_FILE")
-    CANCEL_JOB=$(echo "$cancel_submit" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
-    if [ -n "$CANCEL_JOB" ]; then
-        TOTAL=$((TOTAL + 1))
-        cancel_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-            -X POST -H "$AUTH_HDR" \
-            "$API/prove/$CANCEL_JOB/cancel" 2>/dev/null) || cancel_code="000"
-        if [ "$cancel_code" = "200" ] || [ "$cancel_code" = "409" ]; then
-            log "  PASS  $cancel_code  POST /prove/$CANCEL_JOB/cancel (route live)"
-            PASS=$((PASS + 1))
-        else
-            log "  FAIL  $cancel_code  POST /prove/$CANCEL_JOB/cancel (expected 200|409)"
-            FAIL=$((FAIL + 1))
-            FAILURES="$FAILURES\n  $cancel_code POST /prove/$CANCEL_JOB/cancel (expected 200|409)"
-        fi
-        sleep 0.5
-        curl -s -X DELETE -H "$AUTH_HDR" "$API/prove/$CANCEL_JOB" --max-time 10 >/dev/null 2>&1 || true
+    if [ -n "$AUDIT_KEY_CAPPED" ]; then
+        log "  SKIP  /prove cancel flow + /prove/template — audit key monthly cap reached"
+        SKIP=$((SKIP + 3))
     else
-        log "  WARN  prove for cancel test returned no job_id"
-        TOTAL=$((TOTAL + 1))
-        FAIL=$((FAIL + 1))
-        FAILURES="$FAILURES\n  --- prove (cancel test) returned no job_id"
-    fi
+        # Cancel flow: submit a job, immediately cancel. The toy workload
+        # finishes in <1s, so 409 ("already in a terminal state") is also a
+        # healthy result — both prove the route is mounted and auth passed.
+        test_api POST "/prove" \
+            '{"workload_id":"toy_add_1_2","initial_acc":0,"final_acc":3,"block_size":8,"fri_final_poly_size":4}' \
+            "200" "30" "$AUTH_HDR"
+        cancel_submit=$(cat "$RESP_FILE")
+        CANCEL_JOB=$(echo "$cancel_submit" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
+        if [ -n "$CANCEL_JOB" ]; then
+            TOTAL=$((TOTAL + 1))
+            cancel_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+                -X POST -H "$AUTH_HDR" \
+                "$API/prove/$CANCEL_JOB/cancel" 2>/dev/null) || cancel_code="000"
+            if [ "$cancel_code" = "200" ] || [ "$cancel_code" = "409" ]; then
+                log "  PASS  $cancel_code  POST /prove/$CANCEL_JOB/cancel (route live)"
+                PASS=$((PASS + 1))
+            else
+                log "  FAIL  $cancel_code  POST /prove/$CANCEL_JOB/cancel (expected 200|409)"
+                FAIL=$((FAIL + 1))
+                FAILURES="$FAILURES\n  $cancel_code POST /prove/$CANCEL_JOB/cancel (expected 200|409)"
+            fi
+            sleep 0.5
+            curl -s -X DELETE -H "$AUTH_HDR" "$API/prove/$CANCEL_JOB" --max-time 10 >/dev/null 2>&1 || true
+        else
+            log "  FAIL  ---  POST /prove returned no job_id for cancel test"
+            TOTAL=$((TOTAL + 1))
+            FAIL=$((FAIL + 1))
+            FAILURES="$FAILURES\n  --- POST /prove returned no job_id for cancel test"
+            log "  SKIP  /prove/:job_id/cancel — no proof job"
+            SKIP=$((SKIP + 1))
+        fi
 
-    # Template proof — accumulator_step template using minimal valid params
-    # (range_proof was retired in the v5 cutover). Schema requires the
-    # parameters wrapped in a "params" object.
-    test_api POST "/prove/template/accumulator_step" \
-        '{"params":{"initial":0,"final":15,"deltas":[5,3,7]}}' \
-        "200" "60" "$AUTH_HDR"
-    template_resp=$(cat "$RESP_FILE")
-    TEMPLATE_JOB=$(echo "$template_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
-    if [ -n "$TEMPLATE_JOB" ]; then
-        # Best-effort cleanup; ignore failure.
-        curl -s -X DELETE -H "$AUTH_HDR" "$API/prove/$TEMPLATE_JOB" --max-time 10 >/dev/null 2>&1 || true
+        # Template proof — accumulator_step template using minimal valid params
+        # (range_proof was retired in the v5 cutover). Schema requires the
+        # parameters wrapped in a "params" object.
+        test_api POST "/prove/template/accumulator_step" \
+            '{"params":{"initial":0,"final":15,"deltas":[5,3,7]}}' \
+            "200" "60" "$AUTH_HDR"
+        template_resp=$(cat "$RESP_FILE")
+        TEMPLATE_JOB=$(echo "$template_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('job_id',''))" 2>/dev/null || echo "")
+        if [ -n "$TEMPLATE_JOB" ]; then
+            # Best-effort cleanup; ignore failure.
+            curl -s -X DELETE -H "$AUTH_HDR" "$API/prove/$TEMPLATE_JOB" --max-time 10 >/dev/null 2>&1 || true
+        fi
     fi
 else
     log ""
@@ -674,20 +712,25 @@ if [ -n "$INTERNAL_SECRET" ]; then
         fi
         sleep 0.5
 
-        # session-resolve negative path — no cookie should return 401.
+        # session-resolve anonymous path — no cookie is a login-state probe, not
+        # a gated data route. It should return authenticated:false with 200.
         TOTAL=$((TOTAL + 1))
-        sr_noauth_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+        sr_noauth_raw=$(curl -s -w "\n%{http_code}" --max-time 15 \
             -X POST -H "Content-Type: application/json" \
+            -H "Cookie:" \
             -H "Origin: https://tinyzkp.com" \
             -d '{}' \
-            "$SITE/api/session-resolve" 2>/dev/null) || sr_noauth_code="000"
-        if [ "$sr_noauth_code" = "401" ]; then
-            log "  PASS  401  POST /api/session-resolve (correctly rejects unauthenticated request)"
+            "$SITE/api/session-resolve" 2>/dev/null) || sr_noauth_raw=$'\n000'
+        sr_noauth_code=$(echo "$sr_noauth_raw" | tail -n1)
+        sr_noauth_resp=$(echo "$sr_noauth_raw" | sed '$d')
+        sr_anonymous=$(echo "$sr_noauth_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if d.get('authenticated') is False else '')" 2>/dev/null || echo "")
+        if [ "$sr_noauth_code" = "200" ] && [ -n "$sr_anonymous" ]; then
+            log "  PASS  200  POST /api/session-resolve (anonymous login-state probe)"
             PASS=$((PASS + 1))
         else
-            log "  FAIL  $sr_noauth_code  POST /api/session-resolve (expected 401 without cookie)"
+            log "  FAIL  $sr_noauth_code  POST /api/session-resolve (expected 200 authenticated:false without cookie)"
             FAIL=$((FAIL + 1))
-            FAILURES="$FAILURES\n  $sr_noauth_code POST /api/session-resolve without cookie (expected 401)"
+            FAILURES="$FAILURES\n  $sr_noauth_code POST /api/session-resolve without cookie (expected 200 authenticated:false)"
         fi
         sleep 0.5
 
@@ -1017,7 +1060,7 @@ test_url_contains "$SITE/docs"     200 "Template Lifecycle" "GET /docs"
 # ══════════════════════════════════════════════════════════════════
 log ""
 log "============================================"
-log "  RESULTS: $PASS/$TOTAL passed, $FAIL failed"
+log "  RESULTS: $PASS/$TOTAL passed, $FAIL failed, $SKIP skipped"
 log "============================================"
 
 if [ "$FAIL" -gt 0 ]; then
@@ -1041,7 +1084,12 @@ if [ "$FAIL" -gt 0 ]; then
 
     exit 1
 else
-    log "All endpoints healthy."
-    osascript -e "display notification \"All $TOTAL endpoints healthy\" with title \"TinyZKP Audit\" subtitle \"Daily check passed\"" 2>/dev/null || true
+    if [ "$SKIP" -gt 0 ]; then
+        log "All non-skipped endpoints healthy."
+        osascript -e "display notification \"All $TOTAL checked endpoints healthy; $SKIP skipped\" with title \"TinyZKP Audit\" subtitle \"Daily check passed\"" 2>/dev/null || true
+    else
+        log "All endpoints healthy."
+        osascript -e "display notification \"All $TOTAL endpoints healthy\" with title \"TinyZKP Audit\" subtitle \"Daily check passed\"" 2>/dev/null || true
+    fi
     exit 0
 fi
