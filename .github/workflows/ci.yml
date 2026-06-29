@@ -194,6 +194,8 @@ jobs:
           python3 -m py_compile scripts/monitoring/stripe_checkout_canary.py
           bash -n scripts/monitoring/api_health_audit.sh
           bash -n scripts/monitoring/shared_dispatch_smoke.sh
+          bash -n scripts/monitoring/host_cron_env.sh
+          bash -n scripts/monitoring/daily_growth_decision_cron.sh
           python3 -m py_compile billing/lifecycle_nudges.py
           python3 -m py_compile billing/checkout_recovery.py
           python3 -m py_compile billing/gtm_revenue_report.py

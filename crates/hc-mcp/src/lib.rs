@@ -35,6 +35,7 @@ impl McpConfig {
 pub struct HcMcpServer {
     pub config: McpConfig,
     pub executor: std::sync::Arc<ProveExecutor>,
+    #[allow(dead_code)]
     tool_router: ToolRouter<Self>,
 }
 
@@ -214,15 +215,10 @@ impl HcMcpServer {
 #[tool_handler]
 impl ServerHandler for HcMcpServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            protocol_version: ProtocolVersion::V_2025_03_26,
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            server_info: Implementation {
-                name: "hc-stark".to_string(),
-                version: env!("CARGO_PKG_VERSION").to_string(),
-                ..Default::default()
-            },
-            instructions: Some(
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_protocol_version(ProtocolVersion::V_2025_03_26)
+            .with_server_info(Implementation::new("hc-stark", env!("CARGO_PKG_VERSION")))
+            .with_instructions(
                 "TinyZKP proof-receipt service for supported transparent STARK state-transition workflows. \
                  Workflow: (1) get_capabilities or list_templates to discover live templates and limits, \
                  (2) describe_template to get the statement boundary and parameter schema, \
@@ -230,8 +226,6 @@ impl ServerHandler for HcMcpServer {
                  (4) poll_job until succeeded, \
                  (5) get_proof or get_proof_summary to attach the receipt to the agent output, \
                  (6) verify_proof before trusting external receipts. Do not put secrets or private customer data into transparent parameters."
-                    .to_string(),
-            ),
-        }
+            )
     }
 }

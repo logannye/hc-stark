@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import argparse
 import calendar
+import hashlib
 import json
 import os
+import re
 import smtplib
 import sqlite3
 import sys
@@ -40,6 +42,8 @@ KIND_ZERO_PROOF = "zero_proof_24h"
 KIND_FIRST_PROOF = "first_proof_share"
 KIND_FREE_QUOTA = "free_quota_80"
 KIND_IDLE_WINBACK = "idle_winback_14d"
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+STRIPE_ID_RE = re.compile(r"\b(?:cs|cus|pi|sub|price|prod|acct|sk|pk|rk|whsec)_(?:live|test)?_?[A-Za-z0-9]{8,}\b")
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,26 @@ def month_start_ms(value_ms: int) -> int:
 def log(entry: dict[str, object]) -> None:
     entry["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     print(json.dumps(entry, sort_keys=True), flush=True)
+
+
+def _stable_ref(value: str, prefix: str) -> str:
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+    return f"{prefix}_{digest}"
+
+
+def _redact_text(value: object) -> str:
+    text = str(value)
+    text = EMAIL_RE.sub("[redacted-email]", text)
+    return STRIPE_ID_RE.sub("[redacted-id]", text)
+
+
+def _nudge_log_fields(nudge: Nudge) -> dict[str, object]:
+    return {
+        "tenant_id": nudge.tenant_id,
+        "recipient_ref": _stable_ref(nudge.email, "email"),
+        "kind": nudge.kind,
+        **nudge.metadata,
+    }
 
 
 def _empty_counts() -> dict[str, dict[str, int]]:
@@ -225,7 +249,11 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
             server.send_message(msg)
         return True
     except Exception as exc:
-        print(f"WARNING: lifecycle email failed for {to_email}: {exc}", file=sys.stderr)
+        print(
+            "WARNING: lifecycle email failed "
+            f"for recipient_ref={_stable_ref(to_email.strip().lower(), 'email')}: {_redact_text(exc)}",
+            file=sys.stderr,
+        )
         return False
 
 
@@ -260,13 +288,7 @@ def run(
                     continue
                 if dry_run:
                     sent += 1
-                    log({
-                        "action": "would_send",
-                        "tenant_id": nudge.tenant_id,
-                        "email": nudge.email,
-                        "kind": nudge.kind,
-                        **nudge.metadata,
-                    })
+                    log({"action": "would_send", **_nudge_log_fields(nudge)})
                     continue
                 if send_email_fn(nudge.email, nudge.subject, nudge.body):
                     tenant_store.mark_lifecycle_email_sent(conn, nudge.tenant_id, nudge.kind, current_ms)

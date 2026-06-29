@@ -79,6 +79,43 @@ def test_zero_proof_dry_run_does_not_mark_sent(tmp_path, monkeypatch, capsys):
         conn.close()
 
 
+def test_lifecycle_dry_run_logs_recipient_ref_not_email(tmp_path, monkeypatch, capsys):
+    db_path = _tenant_db(tmp_path, monkeypatch)
+    _create_tenant(
+        db_path,
+        tenant_id="t_private",
+        created_at_ms=NOW_MS - lifecycle_nudges.ZERO_PROOF_DELAY_MS - 1,
+    )
+    usage_path = _usage_db(tmp_path, [])
+
+    result = lifecycle_nudges.run(dry_run=True, usage_db_path=usage_path, current_ms=NOW_MS)
+
+    output = capsys.readouterr().out
+    assert result == {"sent": 1, "skipped": 0, "failed": 0}
+    assert '"recipient_ref": "email_' in output
+    assert '"email":' not in output
+    assert "t_private@example.com" not in output
+
+
+def test_lifecycle_send_failure_warning_redacts_email(monkeypatch, capsys):
+    monkeypatch.setattr(lifecycle_nudges, "SMTP_HOST", "smtp.example.test")
+
+    class ExplodingSMTP:
+        def __init__(self, host, port):
+            raise RuntimeError("could not send to buyer@example.com with cs_live_sensitive123")
+
+    monkeypatch.setattr(lifecycle_nudges.smtplib, "SMTP", ExplodingSMTP)
+
+    assert lifecycle_nudges.send_email("buyer@example.com", "Subject", "Body") is False
+
+    error = capsys.readouterr().err
+    assert "buyer@example.com" not in error
+    assert "cs_live_sensitive123" not in error
+    assert "recipient_ref=email_" in error
+    assert "[redacted-email]" in error
+    assert "[redacted-id]" in error
+
+
 def test_sent_lifecycle_nudges_are_marked_and_not_repeated(tmp_path, monkeypatch):
     db_path = _tenant_db(tmp_path, monkeypatch)
     _create_tenant(

@@ -307,9 +307,13 @@ def _combined_paid(metrics: dict[str, Any]) -> int:
 
 
 def _repo_has_daily_growth_cron() -> bool:
-    cron_line = "scripts/monitoring/daily_growth_decision.py"
+    wrapper_path = ROOT / "scripts" / "monitoring" / "daily_growth_decision_cron.sh"
+    wrapper_marker = "scripts/monitoring/daily_growth_decision.py"
+    cron_marker = "scripts/monitoring/daily_growth_decision_cron.sh"
+    if not wrapper_path.exists() or wrapper_marker not in wrapper_path.read_text(encoding="utf-8"):
+        return False
     return all(
-        (ROOT / path).exists() and cron_line in (ROOT / path).read_text(encoding="utf-8")
+        (ROOT / path).exists() and cron_marker in (ROOT / path).read_text(encoding="utf-8")
         for path in ("deploy/hetzner/deploy.sh", "deploy/hetzner/setup.sh")
     )
 
@@ -434,8 +438,8 @@ def implementation_plan_for(candidate: dict[str, Any], gaps: list[str]) -> dict[
         if _repo_has_daily_growth_cron():
             status = "implemented_in_repo_pending_deploy"
             action = (
-                "Deploy or push the current repo changes so the production host cron runs daily_growth_decision.py "
-                "against /opt/hc-stark/data and writes non-repo snapshots."
+                "Deploy or push the current repo changes so the production host cron runs "
+                "daily_growth_decision_cron.sh against /opt/hc-stark/data and writes non-repo snapshots."
             )
         else:
             status = "agent_can_implement_repo_change"

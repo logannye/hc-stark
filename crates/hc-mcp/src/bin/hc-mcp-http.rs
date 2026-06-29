@@ -179,19 +179,46 @@ const DEFAULT_ALLOWED_ORIGINS: &[&str] = &[
 const ALLOWED_HOST_SUFFIXES: &[&str] =
     &[".anthropic.com", ".claude.ai", "anthropic.com", "claude.ai"];
 
+/// Exact-match Host allowlist for rmcp's Streamable HTTP DNS-rebinding guard.
+/// Operators may add hostnames or host:port authorities with
+/// HC_MCP_ALLOWED_HOSTS. Keep the public production hostname here so the
+/// default deployment stays fail-closed without breaking Caddy reverse proxying.
+const DEFAULT_ALLOWED_HOSTS: &[&str] = &[
+    "mcp.tinyzkp.com",
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "0.0.0.0",
+];
+
+fn comma_separated_env(name: &str) -> Vec<String> {
+    std::env::var(name)
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn allowed_hosts() -> Vec<String> {
+    let mut out: Vec<String> = DEFAULT_ALLOWED_HOSTS
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    out.extend(comma_separated_env("HC_MCP_ALLOWED_HOSTS"));
+    out
+}
+
 fn allowed_origins() -> Vec<String> {
     let mut out: Vec<String> = DEFAULT_ALLOWED_ORIGINS
         .iter()
         .map(|s| s.to_string())
         .collect();
-    if let Ok(extra) = std::env::var("HC_MCP_ALLOWED_ORIGINS") {
-        for o in extra.split(',') {
-            let o = o.trim();
-            if !o.is_empty() {
-                out.push(o.to_string());
-            }
-        }
-    }
+    out.extend(comma_separated_env("HC_MCP_ALLOWED_ORIGINS"));
     out
 }
 
@@ -429,13 +456,12 @@ async fn main() -> Result<()> {
 
     let ct = CancellationToken::new();
 
-    let config = StreamableHttpServerConfig {
-        stateful_mode: true,
-        json_response: false,
-        sse_keep_alive: Some(std::time::Duration::from_secs(30)),
-        cancellation_token: ct.child_token(),
-        ..Default::default()
-    };
+    let config = StreamableHttpServerConfig::default()
+        .with_stateful_mode(true)
+        .with_json_response(false)
+        .with_sse_keep_alive(Some(std::time::Duration::from_secs(30)))
+        .with_cancellation_token(ct.child_token())
+        .with_allowed_hosts(allowed_hosts());
 
     let service: StreamableHttpService<hc_mcp::HcMcpServer, LocalSessionManager> =
         StreamableHttpService::new(
