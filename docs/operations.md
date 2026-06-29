@@ -48,6 +48,7 @@
 | `HC_MCP_REQUIRE_AUTH` | `false` | If true, every MCP request must carry `Authorization: Bearer ...`; missing header → 401 |
 | `HC_MCP_TENANT_RPM` | `0` | Optional global RPM override for authenticated tenants. 0 (default) = use per-plan ladder (Free 10, Dev 100, Team 300, Scale 500) — same values as hc-server's `prove_rpm` |
 | `HC_MCP_MAX_INFLIGHT` | `2` | Concurrency cap on the anonymous (no-Bearer) lane |
+| `HC_MCP_ALLOWED_HOSTS` | `mcp.tinyzkp.com`, loopback hosts | Comma-separated extra hostnames or `host:port` authorities accepted by rmcp's Host-header DNS-rebinding guard |
 | `HC_MCP_ALLOWED_ORIGINS` | (none) | Comma-separated extra CORS origins on top of the default allowlist (`*.claude.ai`, `*.anthropic.com`, `tinyzkp.com`) |
 | `HC_SERVER_AUTH_PG_URL` | (none) | Optional shared Postgres tenant/auth source; should match the API server when enabled |
 | `HC_SERVER_AUTH_PG_TLS` | inferred from URL | Optional TLS override for the Postgres tenant/auth connection |
@@ -257,8 +258,10 @@ assets, and local revenue attribution:
 python3 scripts/monitoring/gtm_growth_monitor.py --offline
 ```
 
-On the Hetzner host this runs daily from `/etc/cron.d/hc-billing` and writes
-to `/var/log/hc-gtm-growth.log`. Use `--live` after a deploy to add
+On the Hetzner host this runs daily from `/etc/cron.d/hc-billing` through
+`scripts/monitoring/host_cron_env.sh`, so `/opt/hc-stark/.env` is loaded before
+the monitor reads production stores. It writes to `/var/log/hc-gtm-growth.log`.
+Use `--live` after a deploy to add
 non-mutating public checks for the site, playground, verifier, signup page,
 well-known agent assets, API health, MCP version, and invalid-email signup /
 checkout endpoint behavior, plus PyPI, npm, and crates.io package registry
@@ -294,6 +297,13 @@ python3 scripts/monitoring/daily_growth_decision.py \
   --tenant-db /opt/hc-stark/data/tenant_store.sqlite \
   --usage-db /opt/hc-stark/data/usage.sqlite
 ```
+
+Production cron runs `scripts/monitoring/daily_growth_decision_cron.sh`. The
+wrapper sources `/opt/hc-stark/.env`, writes the normal snapshot, and scans the
+memo plus latest snapshot for emails, Stripe object IDs, Checkout URLs, and
+API-key-like values. It includes live Stripe Checkout metrics only when
+`TINYZKP_GROWTH_STRIPE_PROJECT_NAME` or `TINYZKP_STRIPE_PROJECT_NAME` is set;
+verify that profile first with `billing/stripe_account_context_check.py`.
 
 Snapshots are written to `/opt/hc-stark/data/growth_snapshots/YYYY-MM-DD.json`
 by default. They contain aggregate adoption, activation, paid-customer,
@@ -422,7 +432,10 @@ dashboard or scheduled internal digest.
 ### Billing cron and lifecycle nudges
 
 The host cron `/etc/cron.d/hc-billing` runs three billing-adjacent jobs, one
-daily GTM monitor, and one daily growth decision memo:
+daily GTM monitor, and one daily growth decision memo. Billing and GTM Python
+jobs run through `scripts/monitoring/host_cron_env.sh`, which sources
+`/opt/hc-stark/.env`, changes to `/opt/hc-stark`, and then execs
+`/opt/hc-stark/.venv/bin/python`:
 
 - `billing/sync_usage.py` hourly to report billable usage to Stripe.
 - `billing/lifecycle_nudges.py` hourly to send idempotent activation and
@@ -435,15 +448,19 @@ daily GTM monitor, and one daily growth decision memo:
 - `scripts/monitoring/gtm_growth_monitor.py --offline` daily to log GTM
   distribution health, source-tagged surfaces, revenue attribution, lifecycle
   ledgers, and checkout recovery counts.
-- `scripts/monitoring/daily_growth_decision.py` daily, after the GTM monitor,
-  to persist aggregate growth snapshots, evaluate the prior experiment, and
-  produce the next experiment plus implementation policy.
+- `scripts/monitoring/daily_growth_decision_cron.sh` daily, after the GTM
+  monitor, to persist aggregate growth snapshots, evaluate the prior
+  experiment, produce the next experiment plus implementation policy, and fail
+  closed if output redaction fails.
 
 Lifecycle nudges and checkout recovery use the same SMTP environment as the
 webhook. Each sent lifecycle nudge is recorded in
 `tenant_store.lifecycle_emails` by `(tenant_id, kind)`, and each checkout
 recovery is recorded in `tenant_store.checkout_recovery_emails` by Stripe
 Checkout Session ID, so cron retries do not resend the same email.
+Lifecycle dry-run and failure logs use stable `recipient_ref` hashes instead of
+raw email addresses; checkout recovery logs also use stable recipient and
+session refs instead of Stripe object IDs or checkout URLs.
 
 | Variable | Default | Description |
 |----------|---------|-------------|

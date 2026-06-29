@@ -169,6 +169,22 @@ main{flex:1;padding-top:80px;padding-bottom:80px;position:relative}
 .dash-card:hover{border-color:var(--border-light)}
 .dash-card h3{font-size:15px;font-weight:700;color:var(--text-bright);margin-bottom:16px;letter-spacing:0}
 
+/* First-proof activation */
+.first-proof-panel{display:none;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;
+  background:linear-gradient(135deg,rgba(46,232,212,.1),rgba(96,165,250,.06));
+  border:1px solid rgba(46,232,212,.24);border-radius:14px;padding:20px;margin:-14px 0 32px}
+.first-proof-panel.visible{display:grid}
+.first-proof-panel .activation-kicker{font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--accent);margin-bottom:7px}
+.first-proof-panel h2{font-size:18px;font-weight:800;color:var(--text-bright);letter-spacing:0;margin-bottom:6px}
+.first-proof-panel p{font-size:13.5px;line-height:1.6;color:var(--muted);max-width:620px}
+.first-proof-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.first-proof-actions .btn-sm,.first-proof-actions a{min-height:36px;display:inline-flex;align-items:center;justify-content:center;
+  white-space:nowrap}
+.first-proof-actions a{background:var(--surface-2);border:1px solid var(--border);color:var(--muted);
+  padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:.02em}
+.first-proof-actions a:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
+
 /* API Key section */
 .key-display{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--border);
   border-radius:10px;padding:12px 16px;margin-bottom:14px;overflow:hidden}
@@ -311,6 +327,8 @@ footer .right a:hover{color:var(--muted)}
   .hamburger{display:block}
   .overview-bar{grid-template-columns:repeat(2,1fr)}
   .overview-bar .overview-card:last-child{grid-column:span 2}
+  .first-proof-panel{grid-template-columns:1fr;margin-top:-12px}
+  .first-proof-actions{justify-content:flex-start}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
   .plan-billing-grid{grid-template-columns:1fr}
   .date-range{flex-direction:column;align-items:stretch;gap:8px}
@@ -395,7 +413,7 @@ footer .right a:hover{color:var(--muted)}
     </div>
     <a class="nav-link" href="/pricing">Pricing</a>
     <a class="status-link nav-link" href="/status"><span class="status-dot" aria-hidden="true"></span>Status</a>
-    <a href="/signup" class="nav-cta">Get API Key</a>
+    <a href="/signup" class="nav-cta" id="nav-cta-btn">Get API Key</a>
   </div>
 </div>
 </nav>
@@ -482,6 +500,19 @@ footer .right a:hover{color:var(--muted)}
           <div class="oc-label">Status</div>
           <div class="oc-value"><div class="status-indicator"><span class="status-dot-lg"></span><span style="font-size:14px;font-weight:600">Active</span></div></div>
         </div>
+      </div>
+    </div>
+
+    <div class="first-proof-panel" id="first-proof-panel" aria-live="polite">
+      <div>
+        <div class="activation-kicker">Activation</div>
+        <h2>Start the first proof from this dashboard</h2>
+        <p>Reveal the key, copy the accumulator_step request, and watch the job appear in Recent Proof Jobs.</p>
+      </div>
+      <div class="first-proof-actions">
+        <button class="btn-sm" id="first-proof-reveal-key" type="button">Reveal key</button>
+        <button class="btn-sm" id="first-proof-copy-curl" type="button">Copy proof curl</button>
+        <a href="/docs#quickstart">Quickstart</a>
       </div>
     </div>
 
@@ -830,6 +861,27 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     });
   }
 
+  function proofCurlCommand() {
+    return 'curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \\\n' +
+      '  -H "Authorization: Bearer ' + revealedKey + '" \\\n' +
+      '  -H "Content-Type: application/json" \\\n' +
+      '  -d \'{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}\'';
+  }
+
+  function copyProofCurl(btn) {
+    if (!revealedKey) {
+      alert('Click "Reveal" to view your API key, then copy the proof curl.');
+      return;
+    }
+    copyTextFromValue(proofCurlCommand(), btn);
+  }
+
+  function updateFirstProofPanel(totalJobs) {
+    var panel = document.getElementById('first-proof-panel');
+    if (!panel) return;
+    panel.classList.toggle('visible', Number(totalJobs || 0) === 0);
+  }
+
   // ── Init ──
   var params = new URLSearchParams(window.location.search);
 
@@ -1080,6 +1132,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     })
     .then(function(data) {
       var jobs = Array.isArray(data) ? data : (data.jobs || data.data || []);
+      var totalJobs = typeof data.total === 'number' ? data.total : jobs.length;
       if (append) {
         allJobs = allJobs.concat(jobs);
       } else {
@@ -1087,6 +1140,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
         jobOffset = 0;
       }
       jobOffset = allJobs.length;
+      updateFirstProofPanel(totalJobs);
       renderJobs();
 
       document.getElementById('btn-load-more').style.display = jobs.length >= 50 ? 'block' : 'none';
@@ -1175,6 +1229,16 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   // Load more jobs
   document.getElementById('btn-load-more').addEventListener('click', function() {
     fetchJobs(true);
+  });
+
+  document.getElementById('first-proof-reveal-key').addEventListener('click', function() {
+    var keyText = document.getElementById('key-text');
+    if (!keyRevealed) document.getElementById('key-toggle').click();
+    keyText.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  document.getElementById('first-proof-copy-curl').addEventListener('click', function() {
+    copyProofCurl(this);
   });
 
   // Query usage
@@ -1348,19 +1412,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
 
   // Copy curl: uses revealed key if available, else prompts user to reveal.
   document.getElementById('curl-copy-btn').addEventListener('click', function() {
-    var btn = this;
-    if (!revealedKey) {
-      alert('Click "Reveal" to view your API key, then copy the curl snippet.');
-      return;
-    }
-    var cmd = 'curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \\\n' +
-      '  -H "Authorization: Bearer ' + revealedKey + '" \\\n' +
-      '  -H "Content-Type: application/json" \\\n' +
-      '  -d \'{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}\'';
-    navigator.clipboard.writeText(cmd).then(function() {
-      btn.textContent = 'Copied!';
-      setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
-    });
+    copyProofCurl(this);
   });
 
   // ── Logout ──

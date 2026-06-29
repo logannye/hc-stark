@@ -142,6 +142,8 @@ require_file marketing/generated/gtm_pipeline_ledger.md
 require_file site/indexnow-key.txt
 require_file scripts/monitoring/gtm_distribution_monitor.py
 require_file scripts/monitoring/gtm_growth_monitor.py
+require_file scripts/monitoring/host_cron_env.sh
+require_file scripts/monitoring/daily_growth_decision_cron.sh
 require_file scripts/monitoring/stripe_checkout_canary.py
 require_file scripts/marketing/generate_outbound_targets.py
 require_file scripts/marketing/render_outbound_send_queue.py
@@ -226,6 +228,8 @@ require_contains site/status.html "Billing and account" "status page includes bi
 require_contains site/privacy.html "Product analytics" "privacy policy documents product analytics"
 require_contains site/privacy.html "do not include proof bytes, API keys, email addresses, or form contents" "privacy policy bounds analytics collection"
 require_contains site/account.html "status:         data.status" "account dashboard preserves server-reported session status"
+require_contains site/account.html 'id="nav-cta-btn"' "account dashboard exposes nav CTA hook for signed-in state"
+require_contains site/account.html "first-proof-panel" "account dashboard includes zero-proof activation panel"
 require_contains site/account.html ".login-view::before{width:320px;height:320px;top:-120px}" "account mobile glow stays within viewport"
 require_contains site/_worker.js "SECURITY_HEADERS" "Pages worker applies baseline browser security headers"
 require_contains site/_worker.js "releaseInfo" "Pages worker exposes release identity for deploy skew checks"
@@ -234,6 +238,8 @@ require_contains site/_worker.js "TYPO_HOSTS" "Pages worker handles typo-domain 
 require_contains scripts/ci/site_worker_dispatch_test.mjs "assertSecurityHeaders" "Pages worker dispatch test validates browser security headers"
 require_contains scripts/ci/site_worker_dispatch_test.mjs "utm_source=old-card" "Pages worker dispatch test validates typo-domain redirect"
 require_contains crates/hc-mcp/src/bin/hc-mcp-http.rs "HC_RELEASE_SHA" "MCP HTTP server exposes release identity for deploy skew checks"
+require_contains crates/hc-mcp/src/bin/hc-mcp-http.rs "HC_MCP_ALLOWED_HOSTS" "MCP HTTP server supports explicit Host allowlist"
+require_contains crates/hc-mcp/src/bin/hc-mcp-http.rs "mcp.tinyzkp.com" "MCP HTTP server default Host allowlist includes production host"
 require_contains site/functions/api/events.js "ALLOWED_EVENTS" "analytics endpoint allowlists events"
 require_contains site/functions/api/events.js "ALLOWED_PROPS" "analytics endpoint allowlists properties"
 require_contains site/functions/api/events.js "redactSensitiveText" "analytics endpoint redacts sensitive string values"
@@ -398,6 +404,8 @@ require_contains .github/workflows/ci.yml "npm run build" "CI builds TypeScript 
 require_contains .github/workflows/ci.yml "cargo test --manifest-path clients/rust/Cargo.toml" "CI tests standalone Rust SDK"
 require_contains .github/workflows/ci.yml "node --check site/_worker.js" "CI syntax-checks site JavaScript"
 require_contains .github/workflows/ci.yml "scripts/monitoring/shared_dispatch_smoke.sh" "CI syntax-checks shared-dispatch smoke script"
+require_contains .github/workflows/ci.yml "bash -n scripts/monitoring/host_cron_env.sh" "CI syntax-checks host cron env wrapper"
+require_contains .github/workflows/ci.yml "bash -n scripts/monitoring/daily_growth_decision_cron.sh" "CI syntax-checks daily growth cron wrapper"
 require_contains .github/workflows/ci.yml "deploy/hetzner/install_billing_runtime.sh" "CI syntax-checks billing runtime installer"
 require_contains .github/workflows/ci.yml "scripts/ci/site_route_check.py" "CI checks static site routes"
 require_contains .github/workflows/ci.yml "scripts/ci/test_site_route_check.py" "CI tests static site route policy"
@@ -696,6 +704,8 @@ require_contains billing/tenant_store.py "lifecycle_emails" "tenant store record
 require_contains billing/tenant_store.py "checkout_recovery_emails" "tenant store records checkout recovery ledger"
 require_contains billing/lifecycle_nudges.py "KIND_FREE_QUOTA" "lifecycle nudges include free quota upgrade path"
 require_contains billing/lifecycle_nudges.py "KIND_IDLE_WINBACK" "lifecycle nudges include idle win-back path"
+require_contains billing/lifecycle_nudges.py "recipient_ref" "lifecycle nudge logs avoid raw buyer emails"
+require_contains billing/tests/test_lifecycle_nudges.py "test_lifecycle_dry_run_logs_recipient_ref_not_email" "lifecycle nudge tests cover dry-run email redaction"
 require_contains billing/checkout_recovery.py "stripe.checkout.Session.list" "checkout recovery scans Stripe Checkout Sessions"
 require_contains billing/checkout_recovery.py "PRODUCTION_PILOT_PLAN" "checkout recovery follows up paid pilot checkout"
 require_contains billing/checkout_recovery.py "log_recovery" "checkout recovery logs use sanitized recovery refs"
@@ -784,18 +794,23 @@ require_contains deploy/hetzner/deploy.sh "install_billing_runtime.sh" "Hetzner 
 require_contains deploy/hetzner/deploy.sh "--host-python \"\$REPO/.venv/bin/python\"" "Hetzner deploy readiness checks billing virtualenv"
 require_contains deploy/hetzner/deploy.sh "sync_host_billing_services" "Hetzner deploy syncs billing host service definitions"
 require_contains deploy/hetzner/deploy.sh "/opt/hc-stark/.venv/bin/gunicorn" "Hetzner deploy writes venv-backed billing webhook unit"
-require_contains deploy/hetzner/deploy.sh "/opt/hc-stark/.venv/bin/python billing/sync_usage.py" "Hetzner deploy writes venv-backed billing cron"
+require_contains deploy/hetzner/deploy.sh "scripts/monitoring/host_cron_env.sh billing/sync_usage.py" "Hetzner deploy writes env-loaded billing cron"
 require_contains deploy/hetzner/deploy.sh "billing/lifecycle_nudges.py" "Hetzner deploy writes lifecycle nudge cron"
 require_contains deploy/hetzner/deploy.sh "billing/checkout_recovery.py" "Hetzner deploy writes checkout recovery cron"
-require_contains deploy/hetzner/deploy.sh "scripts/monitoring/gtm_growth_monitor.py --offline" "Hetzner deploy writes daily GTM growth monitor cron"
+require_contains deploy/hetzner/deploy.sh "host_cron_env.sh scripts/monitoring/gtm_growth_monitor.py --offline" "Hetzner deploy writes env-loaded daily GTM growth monitor cron"
+require_contains deploy/hetzner/deploy.sh "daily_growth_decision_cron.sh" "Hetzner deploy writes daily growth decision cron wrapper"
 require_contains deploy/hetzner/setup.sh "/opt/hc-stark/.venv/bin/gunicorn" "Hetzner setup runs billing webhook from virtualenv"
-require_contains deploy/hetzner/setup.sh "/opt/hc-stark/.venv/bin/python billing/sync_usage.py" "Hetzner setup runs billing cron from virtualenv"
+require_contains deploy/hetzner/setup.sh "scripts/monitoring/host_cron_env.sh billing/sync_usage.py" "Hetzner setup runs env-loaded billing cron"
 require_contains deploy/hetzner/setup.sh "billing/lifecycle_nudges.py" "Hetzner setup runs lifecycle nudge cron"
-require_contains deploy/hetzner/setup.sh "scripts/monitoring/gtm_growth_monitor.py --offline" "Hetzner setup writes daily GTM growth monitor cron"
+require_contains deploy/hetzner/setup.sh "host_cron_env.sh scripts/monitoring/gtm_growth_monitor.py --offline" "Hetzner setup writes env-loaded daily GTM growth monitor cron"
+require_contains deploy/hetzner/setup.sh "daily_growth_decision_cron.sh" "Hetzner setup writes daily growth decision cron wrapper"
 require_contains deploy/hetzner/setup.sh "billing/checkout_recovery.py" "Hetzner setup runs checkout recovery cron"
 require_contains crates/hc-server/src/lib.rs "HC_RATE_LIMIT_PG_URL" "hc-server wires shared Postgres rate limiter"
 require_contains crates/hc-mcp/src/bin/hc-mcp-http.rs "HC_RATE_LIMIT_PG_URL" "MCP HTTP server wires shared Postgres rate limiter"
 require_contains crates/hc-mcp/src/bin/hc-mcp-http.rs "endpoint_name(\"mcp\")" "MCP authenticated lane shares prove quota window"
+require_contains crates/hc-mcp/Cargo.toml 'rmcp = { version = "1.5"' "MCP crate uses rmcp release with Host-header guard fix"
+require_contains .cargo/audit.toml "RUSTSEC-2026-0190" "cargo audit documents temporary anyhow advisory ignore"
+require_contains deny.toml "RUSTSEC-2026-0190" "cargo deny documents temporary anyhow advisory ignore"
 require_contains crates/hc-server/src/job_index.rs "pub struct PgJobIndex" "hc-server implements Postgres job index"
 require_contains crates/hc-server/src/job_index.rs "pub trait JobStore" "hc-server abstracts job index storage"
 require_contains crates/hc-server/src/job_index.rs "fn claim_next" "hc-server job store exposes worker claim primitive"

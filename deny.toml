@@ -8,11 +8,16 @@ version = 2
 # its follow-up window is technical debt — review during quarterly
 # dependency hygiene.
 ignore = [
-  # rand 0.10 unsound w/ custom log backend. False positive: pulled
-  # transitively via rmcp 0.17, neither rmcp nor hc-mcp uses
-  # rand::rng() with a custom logger. Follow-up: bump rmcp 0.17 -> 1.5
-  # (drops vulnerable rand entirely).
+  # rand 0.10 unsound w/ custom log backend. Pulled transitively by
+  # postgres/rmcp dependency paths; hc-* code does not use rand::rng()
+  # with a custom logger. Follow-up: remove after upstream postgres/rmcp
+  # dependency trees no longer include vulnerable rand.
   "RUSTSEC-2026-0097",
+  # anyhow downcast_mut unsoundness warning. We updated to latest
+  # anyhow 1.0.102, but the advisory remains flagged with no fixed
+  # release yet. Follow-up: remove this ignore as soon as cargo-audit
+  # no longer reports RUSTSEC-2026-0190 on the latest anyhow.
+  "RUSTSEC-2026-0190",
   # protobuf 2.x DoS (uncontrolled recursion). Transitively pulled via
   # prometheus 0.13.4 -> protobuf 2.28. Follow-up: replace
   # prometheus 0.13 with a release that uses protobuf 3.x, or migrate
