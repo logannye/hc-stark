@@ -92,7 +92,7 @@ def test_cli_main_stops_on_account_context_failure(monkeypatch, capsys):
         return preflight.stripe_account_context_check.AccountCheckResult(
             "FAIL",
             "account context",
-            "configured Stripe CLI display_name 'Galen Health' does not match expected 'TinyZKP'",
+            "configured Stripe CLI display_name 'Galen Health' does not match expected 'LN Holdings'",
         )
 
     def unexpected_preflight(**_kwargs):
@@ -104,4 +104,4 @@ def test_cli_main_stops_on_account_context_failure(monkeypatch, capsys):
     assert preflight.main(["--stripe-bin", "/opt/homebrew/bin/stripe", "--scope", "pilot"]) == 1
     output = capsys.readouterr().out
     assert "Galen Health" in output
-    assert "TinyZKP" in output
+    assert "LN Holdings" in output

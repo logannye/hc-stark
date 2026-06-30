@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-06-29",
+  "updated_at": "2026-06-30",
   "privacy_rules": [
     "Do not commit personal email addresses, phone numbers, private CRM notes, API keys, or customer secrets.",
     "Use evidence URLs, public listing URLs, task IDs, and aggregate outcomes instead of personal contact details.",
@@ -153,8 +153,8 @@
     },
     "outbound_send.01.alter": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-06-29",
-      "next_action_at": "2026-06-30",
+      "last_action_at": "2026-06-30",
+      "next_action_at": "2026-07-01",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -165,8 +165,8 @@
     },
     "outbound_send.02.korso": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-06-29",
-      "next_action_at": "2026-06-30",
+      "last_action_at": "2026-06-30",
+      "next_action_at": "2026-07-01",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -177,8 +177,8 @@
     },
     "outbound_send.03.redouble-ai": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-06-29",
-      "next_action_at": "2026-06-30",
+      "last_action_at": "2026-06-30",
+      "next_action_at": "2026-07-01",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -189,8 +189,8 @@
     },
     "outbound_send.04.cyberdesk": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-06-29",
-      "next_action_at": "2026-06-30",
+      "last_action_at": "2026-06-30",
+      "next_action_at": "2026-07-01",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -201,8 +201,8 @@
     },
     "outbound_send.05.inkeep": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-06-29",
-      "next_action_at": "2026-06-30",
+      "last_action_at": "2026-06-30",
+      "next_action_at": "2026-07-01",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -213,8 +213,8 @@
     },
     "outbound_send.06.archal": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-06-29",
-      "next_action_at": "2026-06-30",
+      "last_action_at": "2026-06-30",
+      "next_action_at": "2026-07-01",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -225,8 +225,8 @@
     },
     "outbound_send.07.godhands": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-06-29",
-      "next_action_at": "2026-06-30",
+      "last_action_at": "2026-06-30",
+      "next_action_at": "2026-07-01",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -237,8 +237,8 @@
     },
     "outbound_send.08.tiny": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-06-29",
-      "next_action_at": "2026-06-30",
+      "last_action_at": "2026-06-30",
+      "next_action_at": "2026-07-01",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -249,8 +249,8 @@
     },
     "outbound_send.09.coasty": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-06-29",
-      "next_action_at": "2026-06-30",
+      "last_action_at": "2026-06-30",
+      "next_action_at": "2026-07-01",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -261,8 +261,8 @@
     },
     "outbound_send.10.corsair": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-06-29",
-      "next_action_at": "2026-06-30",
+      "last_action_at": "2026-06-30",
+      "next_action_at": "2026-07-01",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",

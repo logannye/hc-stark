@@ -173,6 +173,8 @@ def _load_monitor_payload(args: argparse.Namespace) -> dict[str, Any]:
         monitor_argv.extend(["--stripe-bin", args.stripe_bin])
         if args.stripe_project_name:
             monitor_argv.extend(["--stripe-project-name", args.stripe_project_name])
+        monitor_argv.extend(["--stripe-account-source", args.stripe_account_source])
+        monitor_argv.extend(["--stripe-api-key-env", args.stripe_api_key_env])
         if args.stripe_checkout_test_mode:
             monitor_argv.append("--stripe-checkout-test-mode")
         monitor_argv.extend(["--stripe-checkout-limit", str(args.stripe_checkout_limit)])
@@ -875,13 +877,30 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stripe-checkout", action="store_true", help="Include live Stripe Checkout summary via the underlying monitor")
     parser.add_argument("--stripe-bin", default="stripe", help="Stripe CLI executable path")
     parser.add_argument("--stripe-project-name", default="", help="Optional Stripe CLI project profile name")
+    parser.add_argument(
+        "--stripe-account-source",
+        choices=("cli", "api"),
+        default=os.environ.get(
+            "TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE",
+            os.environ.get("TINYZKP_STRIPE_ACCOUNT_SOURCE", "cli"),
+        ),
+        help="Stripe checkout source: CLI profile or Stripe API key",
+    )
+    parser.add_argument(
+        "--stripe-api-key-env",
+        default=os.environ.get(
+            "TINYZKP_GROWTH_STRIPE_API_KEY_ENV",
+            os.environ.get("TINYZKP_STRIPE_API_KEY_ENV", "STRIPE_SECRET_KEY"),
+        ),
+        help="Environment variable containing the Stripe secret key for --stripe-account-source api",
+    )
     parser.add_argument("--stripe-checkout-test-mode", action="store_true", help="Use Stripe test mode for checkout summary")
     parser.add_argument("--stripe-checkout-limit", type=int, default=100, help="Checkout sessions per Stripe page")
     parser.add_argument("--stripe-checkout-max-pages", type=int, default=3, help="Maximum Stripe pages to read")
     parser.add_argument("--stripe-checkout-lookback-hours", type=float, default=168, help="Trailing checkout window")
     parser.add_argument(
         "--stripe-expected-display-name",
-        default=os.environ.get("TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME", "TinyZKP"),
+        default=os.environ.get("TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME", "LN Holdings"),
         help="Required substring in the active Stripe CLI display_name",
     )
     parser.add_argument("--stripe-skip-account-check", action="store_true", help="Skip Stripe account-context validation")

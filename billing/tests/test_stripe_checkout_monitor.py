@@ -196,12 +196,34 @@ def test_cli_loader_paginates_with_stripe_cli_and_redacts_errors():
     assert "[redacted-id]" in message
 
 
+def test_api_loader_paginates_with_stripe_api(monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_fake")
+    calls = []
+    payloads = [
+        {"has_more": True, "data": [_session(session_id="cs_page_1", email="first@example.com")]},
+        {"has_more": False, "data": [_session(session_id="cs_page_2", email="second@example.com")]},
+    ]
+
+    def fake_list(**kwargs):
+        calls.append(kwargs)
+        return payloads.pop(0)
+
+    monkeypatch.setattr(monitor.stripe.checkout.Session, "list", fake_list)
+
+    sessions = monitor.load_sessions_from_stripe_api(limit=1, max_pages=2, lookback_hours=24)
+
+    assert len(sessions) == 2
+    assert calls[0]["limit"] == 1
+    assert "created" in calls[0]
+    assert calls[1]["starting_after"] == "cs_page_1"
+
+
 def test_collect_checkout_summary_fails_before_loading_sessions_when_profile_mismatches(monkeypatch):
     def fake_check(**_kwargs):
         return monitor.stripe_account_context_check.AccountCheckResult(
             "FAIL",
             "account context",
-            "configured Stripe CLI display_name 'Galen Health' does not match expected 'TinyZKP'",
+            "configured Stripe CLI display_name 'Galen Health' does not match expected 'LN Holdings'",
         )
 
     def unexpected_loader(**_kwargs):
@@ -218,7 +240,30 @@ def test_collect_checkout_summary_fails_before_loading_sessions_when_profile_mis
         raise AssertionError("expected account-context failure")
 
     assert "Galen Health" in message
-    assert "TinyZKP" in message
+    assert "LN Holdings" in message
+
+
+def test_collect_checkout_summary_can_use_api_source(monkeypatch):
+    def fake_check(**kwargs):
+        assert kwargs["account_source"] == "api"
+        assert kwargs["stripe_api_key_env"] == "STRIPE_SECRET_KEY"
+        return monitor.stripe_account_context_check.AccountCheckResult(
+            "PASS",
+            "account context",
+            "Stripe API account display name 'LN Holdings' matches expected 'LN Holdings'",
+        )
+
+    def unexpected_cli_loader(**_kwargs):
+        raise AssertionError("CLI loader should not be used for API source")
+
+    monkeypatch.setattr(monitor.stripe_account_context_check, "run_check", fake_check)
+    monkeypatch.setattr(monitor, "load_sessions_from_stripe_cli", unexpected_cli_loader)
+    monkeypatch.setattr(monitor, "load_sessions_from_stripe_api", lambda **_kwargs: [_session()])
+
+    summary = monitor.collect_checkout_summary(account_source="api", stripe_api_key_env="STRIPE_SECRET_KEY")
+
+    assert summary.sessions == 1
+    assert summary.production_pilot_paid == 1
 
 
 def test_collect_checkout_summary_can_skip_account_check_for_fixture_runs(monkeypatch):

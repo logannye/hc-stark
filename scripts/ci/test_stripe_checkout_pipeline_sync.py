@@ -179,3 +179,41 @@ def test_summary_from_payload_excludes_monitoring_canary_revenue():
     assert summary["production_pilot_paid"] == 0
     assert summary["paid_amount_by_currency"] == {}
     assert summary["excluded_monitoring_sessions"] == 1
+
+
+def test_live_sync_passes_api_account_source_to_monitor(tmp_path, monkeypatch):
+    execution_path, state_path, _payload_path, generated = _write_inputs(tmp_path, _stripe_payload())
+    calls = []
+    summary = sync.summary_from_payload(_stripe_payload(), lookback_hours=168)
+
+    def fake_collect(**kwargs):
+        calls.append(kwargs)
+        return summary
+
+    monkeypatch.setattr(sync.stripe_checkout_monitor, "collect_checkout_summary", fake_collect)
+    monkeypatch.setattr(sync.stripe_checkout_monitor, "summary_to_dict", lambda value: value)
+
+    assert sync.main(
+        [
+            "--state",
+            str(state_path),
+            "--execution-ledger",
+            str(execution_path),
+            "--json-output",
+            str(generated / "gtm_pipeline_ledger.json"),
+            "--csv-output",
+            str(generated / "gtm_pipeline_ledger.csv"),
+            "--md-output",
+            str(generated / "gtm_pipeline_ledger.md"),
+            "--account-source",
+            "api",
+            "--stripe-api-key-env",
+            "STRIPE_SECRET_KEY",
+            "--dry-run",
+            "--json",
+        ]
+    ) == 0
+
+    assert calls
+    assert calls[0]["account_source"] == "api"
+    assert calls[0]["stripe_api_key_env"] == "STRIPE_SECRET_KEY"

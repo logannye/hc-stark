@@ -125,7 +125,8 @@ The script finds or creates the live `TinyZKP Production Pilot` product, finds
 or creates the one-time `$5,000` price, prints `STRIPE_PRICE_ID_PILOT=price_...`,
 and can push that value to the `tinyzkp` Cloudflare Pages project. The
 `--stripe-cli` path uses the authenticated local Stripe CLI live profile, which
-must match the TinyZKP Stripe account and have product/price write permission.
+must match the LN Holdings Stripe account used for TinyZKP and have
+product/price write permission.
 This is optional for taking pilot payments because the route has an inline
 `price_data` fallback. The setup script runs the account-context check and the
 `pilot` write preflight automatically, and fails before trying to create catalog
@@ -190,37 +191,48 @@ Sent recoveries are recorded in `tenant_store.checkout_recovery_emails` so
 retries are idempotent.
 
 `billing/stripe_checkout_monitor.py` is the read-only GTM revenue canary for
-Checkout Sessions. It uses the authenticated local Stripe CLI by default, keeps
-output aggregated, and omits buyer emails, customer IDs, session IDs, checkout
-URLs, and workflow free text. The audit, monitor, catalog write preflight, and
-pipeline sync all validate the local CLI `display_name` before trusting Stripe
-data:
+Checkout Sessions. It keeps output aggregated and omits buyer emails, customer
+IDs, session IDs, checkout URLs, and workflow free text. Production monitoring
+should validate the Stripe API key against the TinyZKP Stripe account before
+trusting Checkout data:
+
+```bash
+TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME="LN Holdings" \
+TINYZKP_STRIPE_ACCOUNT_SOURCE=api \
+TINYZKP_STRIPE_API_KEY_ENV=STRIPE_SECRET_KEY \
+python3 billing/stripe_account_context_check.py --account-source api
+```
+
+Operator catalog/setup commands can still use the local CLI profile, and those
+paths validate the local CLI `display_name` before trusting Stripe data:
 
 ```bash
 python3 billing/stripe_account_context_check.py \
   --stripe-bin /opt/homebrew/bin/stripe
 ```
 
-As of 2026-06-25, this machine's default Stripe CLI profile reports
-`display_name = 'Galen Health'`, so TinyZKP revenue reads and catalog writes are
-not authoritative until the local CLI is switched to the TinyZKP Stripe account
-or `TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME` is set after an intentional account
-rename.
+As of 2026-06-29, this machine's default Stripe CLI profile reports
+`display_name = 'Galen Health'`, so CLI catalog writes are not authoritative
+until the local CLI is switched to the `LN Holdings` Stripe account/profile used
+for TinyZKP. `TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME` defaults to `LN Holdings`;
+override it only after an intentional account rename.
 
 Use the one-command readiness runner for the normal revenue loop:
 
 ```bash
 python3 billing/stripe_revenue_readiness.py \
-  --stripe-bin /opt/homebrew/bin/stripe \
+  --account-source api \
+  --stripe-api-key-env STRIPE_SECRET_KEY \
   --sync-pipeline
 ```
 
-It validates account context first, then runs the read-only audit, checkout
-monitor, and optional no-PII pipeline sync. Add `--plan-only` to preview the
-commands without touching Stripe or local ledgers. Add
+It validates account context first, then runs the read-only checkout monitor and
+optional no-PII pipeline sync. In CLI mode, it also runs the read-only catalog
+audit. Add `--plan-only` to preview the commands without touching Stripe or
+local ledgers. Add
 `--setup-catalog pilot --push-cloudflare` or
-`--setup-catalog full --push-cloudflare` only after the TinyZKP account context
-passes and you intentionally want catalog writes. If the TinyZKP account is
+`--setup-catalog full --push-cloudflare` only after the `LN Holdings` account
+context passes and you intentionally want catalog writes. If that account is
 stored under a non-default Stripe CLI profile, pass
 `--stripe-project-name <profile>` to the readiness runner and the individual
 Stripe CLI tools.
@@ -252,7 +264,8 @@ python3 billing/stripe_catalog_write_preflight.py \
 
 ```bash
 python3 billing/stripe_checkout_monitor.py \
-  --stripe-bin /opt/homebrew/bin/stripe \
+  --account-source api \
+  --stripe-api-key-env STRIPE_SECRET_KEY \
   --lookback-hours 168
 ```
 
@@ -262,7 +275,8 @@ For daily growth checks that should also include live Checkout state, run:
 python3 scripts/monitoring/gtm_growth_monitor.py \
   --offline \
   --stripe-checkout \
-  --stripe-bin /opt/homebrew/bin/stripe
+  --stripe-account-source api \
+  --stripe-api-key-env STRIPE_SECRET_KEY
 ```
 
 To update `marketing/gtm_pipeline_state.json` and rerender the no-PII pipeline
@@ -270,7 +284,8 @@ ledger from aggregate Stripe evidence, run:
 
 ```bash
 python3 scripts/marketing/sync_stripe_checkout_pipeline.py \
-  --stripe-bin /opt/homebrew/bin/stripe \
+  --account-source api \
+  --stripe-api-key-env STRIPE_SECRET_KEY \
   --lookback-hours 168
 ```
 

@@ -44,6 +44,7 @@ SELF_SERVE_PLANS = {"developer", "pro", "scale", "compute"}
 PRODUCTION_PILOT_PLAN = "production_pilot"
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 STRIPE_ID_RE = re.compile(r"\b(?:cs|cus|pi|sub|price|prod)_[A-Za-z0-9_]{8,}\b")
+TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,14 @@ def now_ms() -> int:
 def log(entry: dict[str, object]) -> None:
     entry["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     print(json.dumps(entry, sort_keys=True), flush=True)
+
+
+def customer_emails_enabled() -> bool:
+    return os.environ.get("TINYZKP_CUSTOMER_EMAILS_ENABLED", "0").strip().lower() in TRUE_VALUES
+
+
+def effective_dry_run(cli_dry_run: bool) -> bool:
+    return bool(cli_dry_run or not customer_emails_enabled())
 
 
 def _stable_ref(value: str, prefix: str) -> str:
@@ -334,7 +343,15 @@ def main() -> None:
     parser.add_argument("--max-emails", type=int, default=50, help="Max recovery emails per run")
     parser.add_argument("--now-ms", type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
-    run(dry_run=args.dry_run, current_ms=args.now_ms, max_emails=args.max_emails)
+    dry_run = effective_dry_run(args.dry_run)
+    if dry_run and not args.dry_run:
+        log({
+            "action": "customer_email_disabled",
+            "script": "checkout_recovery",
+            "env": "TINYZKP_CUSTOMER_EMAILS_ENABLED",
+            "mode": "dry_run",
+        })
+    run(dry_run=dry_run, current_ms=args.now_ms, max_emails=args.max_emails)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that the active Stripe CLI profile is the expected TinyZKP account."""
+"""Verify that the active Stripe CLI profile is the expected TinyZKP Stripe account."""
 
 from __future__ import annotations
 
@@ -11,10 +11,14 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
+
+import stripe
 
 
-DEFAULT_EXPECTED_DISPLAY_NAME = "TinyZKP"
+DEFAULT_EXPECTED_DISPLAY_NAME = "LN Holdings"
+DEFAULT_ACCOUNT_SOURCE = os.environ.get("TINYZKP_STRIPE_ACCOUNT_SOURCE", "cli").strip().lower() or "cli"
+DEFAULT_API_KEY_ENV = os.environ.get("TINYZKP_STRIPE_API_KEY_ENV", "STRIPE_SECRET_KEY")
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "stripe" / "config.toml"
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 STRIPE_SECRET_RE = re.compile(r"\b(?:sk|rk|pk)_(?:live|test)_[^\s'\"}]+")
@@ -112,6 +116,32 @@ def display_name_matches(display_name: str, expected_display_name: str) -> bool:
     return bool(expected and actual and expected in actual)
 
 
+def _get(obj: Any, key: str, default: Any = None) -> Any:
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    getter = getattr(obj, "get", None)
+    if callable(getter):
+        return getter(key, default)
+    return getattr(obj, key, default)
+
+
+def _account_display_names(account: Any) -> list[str]:
+    settings = _get(account, "settings", {}) or {}
+    dashboard = _get(settings, "dashboard", {}) or {}
+    business_profile = _get(account, "business_profile", {}) or {}
+    candidates = [
+        _get(dashboard, "display_name", ""),
+        _get(business_profile, "name", ""),
+        _get(account, "display_name", ""),
+    ]
+    out: list[str] = []
+    for candidate in candidates:
+        value = str(candidate or "").strip()
+        if value and value not in out:
+            out.append(value)
+    return out
+
+
 def discover_profile(
     *,
     expected_display_name: str = DEFAULT_EXPECTED_DISPLAY_NAME,
@@ -152,6 +182,8 @@ def run_check(
     *,
     stripe_bin: str = "stripe",
     stripe_project_name: str = "",
+    account_source: str = DEFAULT_ACCOUNT_SOURCE,
+    stripe_api_key_env: str = DEFAULT_API_KEY_ENV,
     expected_display_name: str = DEFAULT_EXPECTED_DISPLAY_NAME,
     timeout: int = 30,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
@@ -159,6 +191,15 @@ def run_check(
     expected = expected_display_name.strip()
     if not expected:
         return AccountCheckResult("FAIL", "account context", "expected Stripe display name is empty")
+
+    source = (account_source or "cli").strip().lower()
+    if source == "api":
+        return run_api_check(
+            stripe_api_key_env=stripe_api_key_env,
+            expected_display_name=expected,
+        )
+    if source != "cli":
+        return AccountCheckResult("FAIL", "account context", f"unsupported Stripe account source '{redact(source)}'")
 
     command = [stripe_bin, "config", "--list", "--color", "off"]
     if stripe_project_name:
@@ -204,7 +245,7 @@ def run_check(
 
     detail = (
         f"configured Stripe CLI display_name '{context.display_name}' does not match expected '{expected}'; "
-        "switch to the TinyZKP Stripe profile with stripe login, or set "
+        "switch to the LN Holdings Stripe profile used for TinyZKP with stripe login, or set "
         "TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME only if the account was intentionally renamed"
     )
     if context.project_name:
@@ -218,10 +259,65 @@ def run_check(
     )
 
 
+def run_api_check(
+    *,
+    stripe_api_key_env: str = DEFAULT_API_KEY_ENV,
+    expected_display_name: str = DEFAULT_EXPECTED_DISPLAY_NAME,
+) -> AccountCheckResult:
+    expected = expected_display_name.strip()
+    if not expected:
+        return AccountCheckResult("FAIL", "account context", "expected Stripe display name is empty")
+    env_name = (stripe_api_key_env or DEFAULT_API_KEY_ENV).strip()
+    if not env_name:
+        return AccountCheckResult("FAIL", "account context", "Stripe API key env var name is empty")
+    api_key = os.environ.get(env_name, "").strip()
+    if not api_key:
+        return AccountCheckResult("FAIL", "account context", f"Stripe API key env var {env_name} is not set")
+
+    previous_key = getattr(stripe, "api_key", None)
+    try:
+        stripe.api_key = api_key
+        account = stripe.Account.retrieve()
+    except Exception as exc:
+        return AccountCheckResult("FAIL", "account context", redact(exc))
+    finally:
+        stripe.api_key = previous_key
+
+    display_names = _account_display_names(account)
+    matched = next((name for name in display_names if display_name_matches(name, expected)), "")
+    if matched:
+        return AccountCheckResult(
+            "PASS",
+            "account context",
+            f"Stripe API account display name '{matched}' matches expected '{expected}'",
+            display_name=matched,
+        )
+    available = ", ".join(display_names) if display_names else "none"
+    return AccountCheckResult(
+        "FAIL",
+        "account context",
+        (
+            f"Stripe API account display names [{redact(available)}] do not match expected '{expected}'; "
+            f"verify {env_name} belongs to the LN Holdings Stripe account used for TinyZKP"
+        ),
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stripe-bin", default="stripe", help="Stripe CLI executable path")
     parser.add_argument("--stripe-project-name", default="", help="Optional Stripe CLI project profile name")
+    parser.add_argument(
+        "--account-source",
+        choices=("cli", "api"),
+        default=os.environ.get("TINYZKP_STRIPE_ACCOUNT_SOURCE", DEFAULT_ACCOUNT_SOURCE),
+        help="Account validation source: CLI profile or Stripe API key",
+    )
+    parser.add_argument(
+        "--stripe-api-key-env",
+        default=os.environ.get("TINYZKP_STRIPE_API_KEY_ENV", DEFAULT_API_KEY_ENV),
+        help="Environment variable containing the Stripe secret key for --account-source api",
+    )
     parser.add_argument("--config-path", type=Path, default=DEFAULT_CONFIG_PATH, help="Stripe CLI config path for local profile discovery")
     parser.add_argument("--list-profiles", action="store_true", help="List local Stripe CLI profile names and display names without secrets")
     parser.add_argument("--discover-profile", action="store_true", help="Find the local Stripe CLI profile matching --expected-display-name")
@@ -236,7 +332,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def print_text(result: AccountCheckResult) -> None:
-    print(f"{result.status:<4} Stripe CLI: {result.name} - {result.detail}")
+    print(f"{result.status:<4} Stripe account: {result.name} - {result.detail}")
 
 
 def safe_profile_dict(profile: AccountContext) -> dict[str, str]:
@@ -268,6 +364,8 @@ def main(argv: list[str]) -> int:
     result = run_check(
         stripe_bin=args.stripe_bin,
         stripe_project_name=args.stripe_project_name,
+        account_source=args.account_source,
+        stripe_api_key_env=args.stripe_api_key_env,
         expected_display_name=args.expected_display_name,
         timeout=args.timeout,
     )

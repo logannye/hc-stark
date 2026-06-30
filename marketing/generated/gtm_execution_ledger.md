@@ -44,8 +44,8 @@ This ledger is the operator queue for revenue-critical work that still requires 
 - Secondary CTA: https://tinyzkp.com/pilot?source=gtm_execution_ledger&medium=ops&platform=direct&intent=paid_pilot_checkout
 - Source artifact: `billing/setup_stripe_products.sh`
 - Evidence command: `python3 billing/stripe_revenue_ops_audit.py --stripe-bin /opt/homebrew/bin/stripe --strict-catalog`
-- Next action: Switch the local Stripe CLI to the TinyZKP account, confirm billing/stripe_account_context_check.py passes, then run bash billing/setup_stripe_products.sh --stripe-cli --stripe-bin /opt/homebrew/bin/stripe --push-cloudflare with write-capable live access and rerun the strict revenue-ops audit.
-- Blocker: Requires the TinyZKP Stripe account plus write-capable live API key or CLI profile; the current local CLI profile reports display_name='Galen Health' and is not authoritative for TinyZKP catalog or revenue evidence.
+- Next action: Switch the local Stripe CLI to the LN Holdings account used for TinyZKP, confirm billing/stripe_account_context_check.py passes, then run bash billing/setup_stripe_products.sh --stripe-cli --stripe-bin /opt/homebrew/bin/stripe --push-cloudflare with write-capable live access and rerun the strict revenue-ops audit.
+- Blocker: Requires the LN Holdings Stripe account used for TinyZKP plus write-capable live API key or CLI profile; the current local CLI profile reports display_name='Galen Health' and is not authoritative for TinyZKP catalog or revenue evidence.
 
 ## MCP Directory Submissions
 

@@ -141,7 +141,7 @@ def test_run_audit_fails_before_stripe_queries_when_account_context_mismatches(m
         return audit.stripe_account_context_check.AccountCheckResult(
             "FAIL",
             "account context",
-            "configured Stripe CLI display_name 'Galen Health' does not match expected 'TinyZKP'",
+            "configured Stripe CLI display_name 'Galen Health' does not match expected 'LN Holdings'",
         )
 
     def unexpected_stripe_list(*_args, **_kwargs):
@@ -153,7 +153,7 @@ def test_run_audit_fails_before_stripe_queries_when_account_context_mismatches(m
     checks = audit.run_audit(
         argparse.Namespace(
             stripe_bin="/opt/homebrew/bin/stripe",
-            expected_stripe_display_name="TinyZKP",
+            expected_stripe_display_name="LN Holdings",
             skip_account_check=False,
             test=False,
             timeout=30,

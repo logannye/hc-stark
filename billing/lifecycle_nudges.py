@@ -44,6 +44,7 @@ KIND_FREE_QUOTA = "free_quota_80"
 KIND_IDLE_WINBACK = "idle_winback_14d"
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 STRIPE_ID_RE = re.compile(r"\b(?:cs|cus|pi|sub|price|prod|acct|sk|pk|rk|whsec)_(?:live|test)?_?[A-Za-z0-9]{8,}\b")
+TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,14 @@ def month_start_ms(value_ms: int) -> int:
 def log(entry: dict[str, object]) -> None:
     entry["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     print(json.dumps(entry, sort_keys=True), flush=True)
+
+
+def customer_emails_enabled() -> bool:
+    return os.environ.get("TINYZKP_CUSTOMER_EMAILS_ENABLED", "0").strip().lower() in TRUE_VALUES
+
+
+def effective_dry_run(cli_dry_run: bool) -> bool:
+    return bool(cli_dry_run or not customer_emails_enabled())
 
 
 def _stable_ref(value: str, prefix: str) -> str:
@@ -310,8 +319,16 @@ def main() -> None:
     parser.add_argument("--max-emails", type=int, default=100, help="Max emails to send per run")
     parser.add_argument("--now-ms", type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    dry_run = effective_dry_run(args.dry_run)
+    if dry_run and not args.dry_run:
+        log({
+            "action": "customer_email_disabled",
+            "script": "lifecycle_nudges",
+            "env": "TINYZKP_CUSTOMER_EMAILS_ENABLED",
+            "mode": "dry_run",
+        })
     run(
-        dry_run=args.dry_run,
+        dry_run=dry_run,
         usage_db_path=args.usage_db,
         current_ms=args.now_ms,
         max_emails=args.max_emails,

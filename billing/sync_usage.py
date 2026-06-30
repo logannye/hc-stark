@@ -77,6 +77,7 @@ DISCOUNT_FACTORS: dict[str, float] = {
     "scale": 0.60,
     "compute": 1.0,    # billed via trace_step_usage meter, not cents-per-proof tiers
 }
+FREE_UNBILLABLE_PLANS = {"free", "demo", "sandbox"}
 
 # Billing meter routing: maps plan → Stripe meter event_name.
 # Matches pricing.json billing_meters SSOT. sync_usage enforces this mapping.
@@ -266,27 +267,6 @@ def main() -> None:
 
     rows = usage_source.fetch_unbilled()
 
-    # Freshness check: alert if any unbilled row predates Stripe's dedup window.
-    # If a cron outage has let rows age past UNBILLED_ALERT_HOURS, we can no
-    # longer rely on semantic dedup against repeat MeterEvent.create calls.
-    if rows and not args.report and not args.dry_run:
-        threshold_ms = int(time.time() * 1000) - (UNBILLED_ALERT_HOURS * 3600 * 1000)
-        stale = [r for r in rows if r["completed_at_ms"] < threshold_ms]
-        if stale:
-            stale_summary = {
-                "stale_count": len(stale),
-                "oldest_age_hours": round(
-                    (int(time.time() * 1000) - min(r["completed_at_ms"] for r in stale)) / 3_600_000,
-                    2,
-                ),
-                "threshold_hours": UNBILLED_ALERT_HOURS,
-            }
-            _log({"action": "stale_unbilled", **stale_summary})
-            _send_alert(
-                "Unbilled usage rows older than dedup window — review before next run",
-                stale_summary,
-            )
-
     if not rows:
         _log({
             "action": "complete",
@@ -297,6 +277,45 @@ def main() -> None:
         })
         usage_source.close()
         return
+
+    # Freshness check: alert only for stale rows that are actually billable.
+    # Free/demo rows without Stripe customers are tracked separately below and
+    # should not page as revenue-at-risk.
+    if not args.report and not args.dry_run:
+        now_ms = int(time.time() * 1000)
+        threshold_ms = now_ms - (UNBILLED_ALERT_HOURS * 3600 * 1000)
+        stale_billable = [
+            r for r in rows
+            if r["completed_at_ms"] < threshold_ms
+            and tenant_map.get(r["tenant_id"], {}).get("stripe_customer_id")
+        ]
+        stale_unbillable_count = sum(
+            1
+            for r in rows
+            if r["completed_at_ms"] < threshold_ms
+            and not tenant_map.get(r["tenant_id"], {}).get("stripe_customer_id")
+        )
+        if stale_billable:
+            stale_summary = {
+                "stale_count": len(stale_billable),
+                "oldest_age_hours": round(
+                    (now_ms - min(r["completed_at_ms"] for r in stale_billable)) / 3_600_000,
+                    2,
+                ),
+                "threshold_hours": UNBILLED_ALERT_HOURS,
+                "unbillable_stale_count": stale_unbillable_count,
+            }
+            _log({"action": "stale_billable_unbilled", **stale_summary})
+            _send_alert(
+                "Billable usage rows older than dedup window — review before next run",
+                stale_summary,
+            )
+        elif stale_unbillable_count:
+            _log({
+                "action": "stale_unbillable",
+                "stale_count": stale_unbillable_count,
+                "threshold_hours": UNBILLED_ALERT_HOURS,
+            })
 
     if args.report:
         # Output unbilled summary as JSON.
@@ -331,7 +350,13 @@ def main() -> None:
             skipped += 1
             meter_name, value = meter_event_for_plan(plan, row["trace_length"])
             if tenant_id not in unbillable:
-                unbillable[tenant_id] = {"count": 0, "estimated_cents": 0, "estimated_steps": 0}
+                unbillable[tenant_id] = {
+                    "count": 0,
+                    "estimated_cents": 0,
+                    "estimated_steps": 0,
+                    "plan": plan,
+                    "alertable": plan not in FREE_UNBILLABLE_PLANS,
+                }
             unbillable[tenant_id]["count"] += 1
             # Route to the unit-appropriate field so the alert payload is
             # unambiguous: cents-based plans accumulate dollars, compute plans
@@ -440,14 +465,27 @@ def main() -> None:
                 "tenant_id": tenant_id,
                 "count": info["count"],
                 "estimated_cents": info["estimated_cents"],
+                "plan": info["plan"],
+                "alertable": info["alertable"],
             }
             if info["estimated_steps"]:
                 entry["estimated_steps"] = info["estimated_steps"]
             _log(entry)
-        _send_alert(
-            f"Unbillable usage detected for {len(unbillable)} tenant(s)",
-            unbillable,
-        )
+        alertable_unbillable = {
+            tenant_id: info
+            for tenant_id, info in unbillable.items()
+            if info.get("alertable")
+        }
+        if alertable_unbillable:
+            _send_alert(
+                f"Unbillable paid/unknown-plan usage detected for {len(alertable_unbillable)} tenant(s)",
+                alertable_unbillable,
+            )
+        elif unbillable:
+            _log({
+                "action": "unbillable_free_demo_only",
+                "tenant_count": len(unbillable),
+            })
 
     _log({
         "action": "complete",

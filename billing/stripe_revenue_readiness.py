@@ -17,7 +17,7 @@ import stripe_account_context_check
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_EXPECTED_DISPLAY_NAME = "TinyZKP"
+DEFAULT_EXPECTED_DISPLAY_NAME = "LN Holdings"
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 SECRET_RE = re.compile(r"\b(?:sk|rk|pk|whsec)_(?:live|test)?_?[^\s'\"}]+")
 STRIPE_ID_RE = re.compile(r"\b(?:acct|cs|cus|pi|sub|price|prod|mtr|req)_[A-Za-z0-9_*]{8,}\b")
@@ -49,10 +49,13 @@ def build_steps(args: argparse.Namespace, *, python: str = sys.executable) -> li
     expected = getattr(args, "expected_stripe_display_name", DEFAULT_EXPECTED_DISPLAY_NAME)
     stripe_bin = getattr(args, "stripe_bin", "stripe")
     stripe_project_name = getattr(args, "stripe_project_name", "")
+    account_source = getattr(args, "account_source", "cli")
+    stripe_api_key_env = getattr(args, "stripe_api_key_env", "STRIPE_SECRET_KEY")
     lookback = str(getattr(args, "lookback_hours", 168))
     timeout = str(getattr(args, "timeout", 30))
-    steps = [
-        ReadinessStep(
+    steps: list[ReadinessStep] = []
+    if account_source == "cli":
+        steps.append(ReadinessStep(
             "Stripe revenue ops audit",
             [
                 python,
@@ -66,7 +69,8 @@ def build_steps(args: argparse.Namespace, *, python: str = sys.executable) -> li
                 expected,
             ]
             + (["--strict-catalog"] if getattr(args, "strict_catalog", False) else []),
-        ),
+        ))
+    steps.extend([
         ReadinessStep(
             "Stripe checkout monitor",
             [
@@ -75,13 +79,17 @@ def build_steps(args: argparse.Namespace, *, python: str = sys.executable) -> li
                 "--stripe-bin",
                 stripe_bin,
                 *(["--stripe-project-name", stripe_project_name] if stripe_project_name else []),
+                "--account-source",
+                account_source,
+                "--stripe-api-key-env",
+                stripe_api_key_env,
                 "--lookback-hours",
                 lookback,
                 "--expected-stripe-display-name",
                 expected,
             ],
         ),
-    ]
+    ])
     if getattr(args, "sync_pipeline", False):
         steps.append(
             ReadinessStep(
@@ -92,6 +100,10 @@ def build_steps(args: argparse.Namespace, *, python: str = sys.executable) -> li
                     "--stripe-bin",
                     stripe_bin,
                     *(["--stripe-project-name", stripe_project_name] if stripe_project_name else []),
+                    "--account-source",
+                    account_source,
+                    "--stripe-api-key-env",
+                    stripe_api_key_env,
                     "--lookback-hours",
                     lookback,
                     "--expected-stripe-display-name",
@@ -191,6 +203,8 @@ def run_readiness(
     account = stripe_account_context_check.run_check(
         stripe_bin=getattr(args, "stripe_bin", "stripe"),
         stripe_project_name=stripe_project_name,
+        account_source=getattr(args, "account_source", "cli"),
+        stripe_api_key_env=getattr(args, "stripe_api_key_env", "STRIPE_SECRET_KEY"),
         expected_display_name=getattr(args, "expected_stripe_display_name", DEFAULT_EXPECTED_DISPLAY_NAME),
         timeout=getattr(args, "timeout", 30),
         runner=account_runner,
@@ -217,6 +231,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stripe-bin", default="stripe", help="Stripe CLI executable path")
     parser.add_argument("--stripe-project-name", default="", help="Optional Stripe CLI project profile name")
+    parser.add_argument(
+        "--account-source",
+        choices=("cli", "api"),
+        default=os.environ.get("TINYZKP_STRIPE_ACCOUNT_SOURCE", "cli"),
+        help="Account validation and checkout query source",
+    )
+    parser.add_argument(
+        "--stripe-api-key-env",
+        default=os.environ.get("TINYZKP_STRIPE_API_KEY_ENV", "STRIPE_SECRET_KEY"),
+        help="Environment variable containing the Stripe secret key for --account-source api",
+    )
     parser.add_argument("--auto-discover-profile", action="store_true", help="Find a local Stripe CLI profile whose display_name matches --expected-stripe-display-name")
     parser.add_argument(
         "--stripe-config-path",
