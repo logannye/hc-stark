@@ -314,9 +314,11 @@ def stripe_checkout_checks(
             max_pages=getattr(args, "stripe_checkout_max_pages", 3),
             lookback_hours=getattr(args, "stripe_checkout_lookback_hours", 168),
             include_monitoring=getattr(args, "stripe_checkout_include_monitoring_sessions", False),
-            expected_display_name=getattr(args, "stripe_expected_display_name", "TinyZKP"),
+            expected_display_name=getattr(args, "stripe_expected_display_name", "LN Holdings"),
             skip_account_check=getattr(args, "stripe_skip_account_check", False),
             timeout=getattr(args, "stripe_account_check_timeout", 30),
+            account_source=getattr(args, "stripe_account_source", "cli"),
+            stripe_api_key_env=getattr(args, "stripe_api_key_env", "STRIPE_SECRET_KEY"),
         )
         payload = summary_to_dict(summary)
     except Exception as exc:
@@ -573,9 +575,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--site-url", default="https://tinyzkp.com", help="TinyZKP site origin for live checks")
     parser.add_argument("--api-url", default="https://api.tinyzkp.com", help="TinyZKP API origin for live checks")
     parser.add_argument("--mcp-url", default="https://mcp.tinyzkp.com", help="TinyZKP MCP origin for live checks")
-    parser.add_argument("--stripe-checkout", action="store_true", help="Run live Stripe Checkout Session summary via local Stripe CLI")
+    parser.add_argument("--stripe-checkout", action="store_true", help="Run live Stripe Checkout Session summary")
     parser.add_argument("--stripe-bin", default="stripe", help="Stripe CLI executable path for --stripe-checkout")
     parser.add_argument("--stripe-project-name", default="", help="Optional Stripe CLI project profile name for --stripe-checkout")
+    parser.add_argument(
+        "--stripe-account-source",
+        choices=("cli", "api"),
+        default=os.environ.get(
+            "TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE",
+            os.environ.get("TINYZKP_STRIPE_ACCOUNT_SOURCE", "cli"),
+        ),
+        help="Stripe checkout source: CLI profile or Stripe API key",
+    )
+    parser.add_argument(
+        "--stripe-api-key-env",
+        default=os.environ.get(
+            "TINYZKP_GROWTH_STRIPE_API_KEY_ENV",
+            os.environ.get("TINYZKP_STRIPE_API_KEY_ENV", "STRIPE_SECRET_KEY"),
+        ),
+        help="Environment variable containing the Stripe secret key for --stripe-account-source api",
+    )
     parser.add_argument("--stripe-checkout-test-mode", action="store_true", help="Use Stripe test mode for --stripe-checkout")
     parser.add_argument("--stripe-checkout-limit", type=int, default=100, help="Checkout sessions per Stripe page")
     parser.add_argument("--stripe-checkout-max-pages", type=int, default=3, help="Maximum Stripe pages to read")
@@ -583,11 +602,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stripe-checkout-include-monitoring-sessions", action="store_true", help="Include source=api_health_audit canary sessions in Stripe Checkout revenue summaries")
     parser.add_argument(
         "--stripe-expected-display-name",
-        default=os.environ.get("TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME", "TinyZKP"),
-        help="Required substring in the active Stripe CLI display_name for --stripe-checkout",
+        default=os.environ.get("TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME", "LN Holdings"),
+        help="Required substring in the active Stripe account display_name for --stripe-checkout",
     )
-    parser.add_argument("--stripe-skip-account-check", action="store_true", help="Skip Stripe CLI display_name validation for --stripe-checkout")
-    parser.add_argument("--stripe-account-check-timeout", type=int, default=30, help="Stripe CLI account-context timeout in seconds")
+    parser.add_argument("--stripe-skip-account-check", action="store_true", help="Skip Stripe account display_name validation for --stripe-checkout")
+    parser.add_argument("--stripe-account-check-timeout", type=int, default=30, help="Stripe account-context timeout in seconds")
     parser.add_argument("--stripe-checkout-min-paid-sessions", type=int, help="Fail unless at least this many paid Checkout Sessions are observed")
     parser.add_argument("--stripe-checkout-min-pilot-paid-sessions", type=int, help="Fail unless at least this many paid Production Pilot Sessions are observed")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")

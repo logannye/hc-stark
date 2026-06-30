@@ -37,12 +37,14 @@ def args(**overrides):
         "stripe_checkout": False,
         "stripe_bin": "stripe",
         "stripe_project_name": "",
+        "stripe_account_source": "cli",
+        "stripe_api_key_env": "STRIPE_SECRET_KEY",
         "stripe_checkout_test_mode": False,
         "stripe_checkout_limit": 100,
         "stripe_checkout_max_pages": 3,
         "stripe_checkout_lookback_hours": 168,
         "stripe_checkout_include_monitoring_sessions": False,
-        "stripe_expected_display_name": "TinyZKP",
+        "stripe_expected_display_name": "LN Holdings",
         "stripe_skip_account_check": False,
         "stripe_account_check_timeout": 30,
         "stripe_checkout_min_paid_sessions": None,
@@ -241,6 +243,8 @@ def test_stripe_checkout_checks_summarize_paid_sessions_without_live_api():
     def fake_collector(**kwargs):
         assert kwargs["stripe_bin"] == "/opt/homebrew/bin/stripe"
         assert kwargs["stripe_project_name"] == "tinyzkp-prod"
+        assert kwargs["account_source"] == "api"
+        assert kwargs["stripe_api_key_env"] == "STRIPE_SECRET_KEY"
         assert kwargs["live"] is True
         assert kwargs["limit"] == 25
         assert kwargs["include_monitoring"] is False
@@ -258,6 +262,7 @@ def test_stripe_checkout_checks_summarize_paid_sessions_without_live_api():
         args(
             stripe_bin="/opt/homebrew/bin/stripe",
             stripe_project_name="tinyzkp-prod",
+            stripe_account_source="api",
             stripe_checkout_limit=25,
             stripe_checkout_min_paid_sessions=1,
             stripe_checkout_min_pilot_paid_sessions=1,

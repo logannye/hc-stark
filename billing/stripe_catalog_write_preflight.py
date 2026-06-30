@@ -188,7 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument(
         "--expected-stripe-display-name",
-        default=os.environ.get("TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME", "TinyZKP"),
+        default=os.environ.get("TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME", "LN Holdings"),
         help="Required substring in the active Stripe CLI display_name",
     )
     parser.add_argument("--skip-account-check", action="store_true", help="Skip Stripe CLI display_name validation")

@@ -13,6 +13,21 @@ import tenant_store
 NOW_MS = 1_782_403_200_000
 
 
+def test_customer_emails_default_to_dry_run(monkeypatch):
+    monkeypatch.delenv("TINYZKP_CUSTOMER_EMAILS_ENABLED", raising=False)
+
+    assert checkout_recovery.customer_emails_enabled() is False
+    assert checkout_recovery.effective_dry_run(False) is True
+
+
+def test_customer_emails_require_explicit_enable(monkeypatch):
+    monkeypatch.setenv("TINYZKP_CUSTOMER_EMAILS_ENABLED", "1")
+
+    assert checkout_recovery.customer_emails_enabled() is True
+    assert checkout_recovery.effective_dry_run(False) is False
+    assert checkout_recovery.effective_dry_run(True) is True
+
+
 def _tenant_db(tmp_path, monkeypatch):
     db_path = str(tmp_path / "tenant_store.sqlite")
     real_open = tenant_store.open_db

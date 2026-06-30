@@ -31,7 +31,7 @@ This no-PII ledger tracks GTM execution outcomes, pipeline value, and revenue ev
 | Task | Stage | Target | Weighted | Next action |
 |---|---|---|---:|---|
 | `revenue.pilot_checkout_launch` | `live_monitoring` | $5K Production Pilot checkout | $1,500 | Monitor pilot checkout starts, completed payments, and paid-pilot contact fallbacks; record revenue only after Stripe or invoice evidence exists. |
-| `revenue.stripe_catalog_hygiene` | `blocked_external_secret` | Current Stripe product and price catalog | $0 | Switch the local Stripe CLI to the TinyZKP account, confirm billing/stripe_account_context_check.py passes, then run bash billing/setup_stripe_products.sh --stripe-cli --stripe-bin /opt/homebrew/bin/stripe --push-cloudflare with write-capable live access and rerun the strict revenue-ops audit. |
+| `revenue.stripe_catalog_hygiene` | `blocked_external_secret` | Current Stripe product and price catalog | $0 | Switch the local Stripe CLI to the LN Holdings account used for TinyZKP, confirm billing/stripe_account_context_check.py passes, then run bash billing/setup_stripe_products.sh --stripe-cli --stripe-bin /opt/homebrew/bin/stripe --push-cloudflare with write-capable live access and rerun the strict revenue-ops audit. |
 | `mcp_submission.smithery` | `live_monitoring` | Smithery | $11 | Monitor accepted listing for current copy, endpoint health, and source-tagged CTA attribution. |
 | `mcp_submission.official_mcp_registry` | `live_monitoring` | Official MCP Registry | $11 | Monitor accepted listing for current copy, endpoint health, and source-tagged CTA attribution. |
 | `mcp_submission.mcp_so` | `submitted` | mcp.so | $18 | Follow up on mcp.so review, then update the evidence URL when the public listing is accepted. |

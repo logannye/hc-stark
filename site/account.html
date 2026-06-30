@@ -512,7 +512,7 @@ footer .right a:hover{color:var(--muted)}
       <div class="first-proof-actions">
         <button class="btn-sm" id="first-proof-reveal-key" type="button">Reveal key</button>
         <button class="btn-sm" id="first-proof-copy-curl" type="button">Copy proof curl</button>
-        <a href="/docs#quickstart">Quickstart</a>
+        <a href="/docs#quickstart" id="first-proof-quickstart">Quickstart</a>
       </div>
     </div>
 
@@ -734,6 +734,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   var jobOffset = 0;
   var usageRefreshTimer = null;
   var jobRefreshTimer = null;
+  var firstProofPanelTracked = false;
 
   // ── DOM refs ──
   var loginView = document.getElementById('login-view');
@@ -775,6 +776,11 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
 
   function hideError() {
     loginError.style.display = 'none';
+  }
+
+  function trackAccountEvent(event, props) {
+    if (typeof window.tinyzkpTrack !== 'function') return;
+    window.tinyzkpTrack(event, props || {});
   }
 
   // Return headers for same-origin /api/* calls.
@@ -868,18 +874,26 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
       '  -d \'{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}\'';
   }
 
-  function copyProofCurl(btn) {
+  function copyProofCurl(btn, source) {
+    var eventSource = source || 'account_dashboard';
     if (!revealedKey) {
+      trackAccountEvent('account_first_proof_curl_copy_blocked', { source: eventSource, reason: 'key_hidden' });
       alert('Click "Reveal" to view your API key, then copy the proof curl.');
       return;
     }
     copyTextFromValue(proofCurlCommand(), btn);
+    trackAccountEvent('account_first_proof_curl_copied', { source: eventSource });
   }
 
   function updateFirstProofPanel(totalJobs) {
     var panel = document.getElementById('first-proof-panel');
     if (!panel) return;
-    panel.classList.toggle('visible', Number(totalJobs || 0) === 0);
+    var show = Number(totalJobs || 0) === 0;
+    panel.classList.toggle('visible', show);
+    if (show && !firstProofPanelTracked) {
+      firstProofPanelTracked = true;
+      trackAccountEvent('account_first_proof_panel_seen', { source: 'account_dashboard', status: 'zero_jobs' });
+    }
   }
 
   // ── Init ──
@@ -1233,12 +1247,17 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
 
   document.getElementById('first-proof-reveal-key').addEventListener('click', function() {
     var keyText = document.getElementById('key-text');
+    trackAccountEvent('account_first_proof_reveal_click', { source: 'zero_proof_panel' });
     if (!keyRevealed) document.getElementById('key-toggle').click();
     keyText.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 
   document.getElementById('first-proof-copy-curl').addEventListener('click', function() {
-    copyProofCurl(this);
+    copyProofCurl(this, 'zero_proof_panel');
+  });
+
+  document.getElementById('first-proof-quickstart').addEventListener('click', function() {
+    trackAccountEvent('account_first_proof_quickstart_click', { source: 'zero_proof_panel', target: '/docs' });
   });
 
   // Query usage
@@ -1412,7 +1431,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
 
   // Copy curl: uses revealed key if available, else prompts user to reveal.
   document.getElementById('curl-copy-btn').addEventListener('click', function() {
-    copyProofCurl(this);
+    copyProofCurl(this, 'quick_reference');
   });
 
   // ── Logout ──
@@ -1437,6 +1456,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
 })();
 </script>
 
+<script defer src="/analytics.js"></script>
 <script src="/shared.js" defer></script>
 </body>
 </html>

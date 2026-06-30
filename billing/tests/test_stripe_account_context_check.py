@@ -30,12 +30,12 @@ display_name = 'Other Account'
 
 [tinyzkp-prod]
 account_id = 'acct_tinyzkp123456'
-display_name = 'TinyZKP LLC'
+display_name = 'LN Holdings'
 """
     )
 
     assert context.project_name == "tinyzkp-prod"
-    assert context.display_name == "TinyZKP LLC"
+    assert context.display_name == "LN Holdings"
     assert context.account_id == "acct_tinyzkp123456"
 
 
@@ -51,17 +51,17 @@ live_mode_api_key = 'sk_live_secretvalue'
 
 [tinyzkp-prod]
 account_id = 'acct_tinyzkp123456'
-display_name = 'TinyZKP Production'
+display_name = 'LN Holdings'
 """
     )
 
     assert [(profile.project_name, profile.display_name) for profile in profiles] == [
         ("default", "Galen Health"),
-        ("tinyzkp-prod", "TinyZKP Production"),
+        ("tinyzkp-prod", "LN Holdings"),
     ]
     assert account_check.safe_profile_dict(profiles[1]) == {
         "project_name": "tinyzkp-prod",
-        "display_name": "TinyZKP Production",
+        "display_name": "LN Holdings",
     }
 
 
@@ -74,17 +74,17 @@ display_name = 'Galen Health'
 account_id = 'acct_wrong123456'
 
 [tinyzkp-prod]
-display_name = 'TinyZKP Production'
+display_name = 'LN Holdings'
 account_id = 'acct_tinyzkp123456'
 """,
         encoding="utf-8",
     )
 
-    result = account_check.discover_profile(expected_display_name="TinyZKP", config_path=config)
+    result = account_check.discover_profile(expected_display_name="LN Holdings", config_path=config)
 
     assert result.status == "PASS"
     assert result.project_name == "tinyzkp-prod"
-    assert result.display_name == "TinyZKP Production"
+    assert result.display_name == "LN Holdings"
     assert "acct_tinyzkp123456" not in result.detail
 
 
@@ -99,7 +99,7 @@ account_id = 'acct_secret123456'
         encoding="utf-8",
     )
 
-    result = account_check.discover_profile(expected_display_name="TinyZKP", config_path=config)
+    result = account_check.discover_profile(expected_display_name="LN Holdings", config_path=config)
 
     assert result.status == "FAIL"
     assert "Galen Health" in result.detail
@@ -116,7 +116,7 @@ def test_run_check_passes_when_display_name_contains_expected_name():
 project-name = 'default'
 
 [default]
-display_name = 'TinyZKP Production'
+display_name = 'LN Holdings'
 account_id = 'acct_tinyzkp123456'
 """
         )
@@ -124,13 +124,13 @@ account_id = 'acct_tinyzkp123456'
     result = account_check.run_check(
         stripe_bin="/opt/homebrew/bin/stripe",
         stripe_project_name="tinyzkp-prod",
-        expected_display_name="TinyZKP",
+        expected_display_name="LN Holdings",
         runner=runner,
     )
 
     assert result.status == "PASS"
-    assert "TinyZKP Production" in result.detail
-    assert result.display_name == "TinyZKP Production"
+    assert "LN Holdings" in result.detail
+    assert result.display_name == "LN Holdings"
     assert calls[0][-2:] == ("--project-name", "tinyzkp-prod")
 
 
@@ -146,11 +146,11 @@ account_id = 'acct_secret123456'
 """
         )
 
-    result = account_check.run_check(expected_display_name="TinyZKP", runner=runner)
+    result = account_check.run_check(expected_display_name="LN Holdings", runner=runner)
 
     assert result.status == "FAIL"
     assert "Galen Health" in result.detail
-    assert "TinyZKP" in result.detail
+    assert "LN Holdings" in result.detail
     assert "acct_secret123456" not in result.detail
 
 
@@ -161,7 +161,7 @@ def test_run_check_redacts_cli_errors():
             returncode=1,
         )
 
-    result = account_check.run_check(expected_display_name="TinyZKP", runner=runner)
+    result = account_check.run_check(expected_display_name="LN Holdings", runner=runner)
 
     assert result.status == "FAIL"
     assert "buyer@example.com" not in result.detail
@@ -177,3 +177,55 @@ def test_empty_expected_display_name_fails_closed():
 
     assert result.status == "FAIL"
     assert "empty" in result.detail
+
+
+def test_run_check_api_passes_when_display_name_matches(monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_fake")
+    seen = {}
+
+    def fake_retrieve():
+        seen["api_key"] = account_check.stripe.api_key
+        return {
+            "settings": {"dashboard": {"display_name": "LN Holdings"}},
+            "business_profile": {"name": "TinyZKP"},
+            "id": "acct_secret123456",
+        }
+
+    monkeypatch.setattr(account_check.stripe.Account, "retrieve", fake_retrieve)
+
+    result = account_check.run_check(account_source="api", expected_display_name="LN Holdings")
+
+    assert result.status == "PASS"
+    assert result.display_name == "LN Holdings"
+    assert seen["api_key"] == "sk_test_fake"
+    assert "acct_secret123456" not in result.detail
+
+
+def test_run_check_api_fails_without_api_key_env(monkeypatch):
+    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+
+    result = account_check.run_check(account_source="api", stripe_api_key_env="STRIPE_SECRET_KEY")
+
+    assert result.status == "FAIL"
+    assert "STRIPE_SECRET_KEY" in result.detail
+    assert "not set" in result.detail
+
+
+def test_run_check_api_fails_on_wrong_account_without_ids(monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_fake")
+
+    def fake_retrieve():
+        return {
+            "settings": {"dashboard": {"display_name": "Galen Health"}},
+            "business_profile": {"name": "Galen Health"},
+            "id": "acct_secret123456",
+        }
+
+    monkeypatch.setattr(account_check.stripe.Account, "retrieve", fake_retrieve)
+
+    result = account_check.run_check(account_source="api", expected_display_name="LN Holdings")
+
+    assert result.status == "FAIL"
+    assert "Galen Health" in result.detail
+    assert "LN Holdings" in result.detail
+    assert "acct_secret123456" not in result.detail

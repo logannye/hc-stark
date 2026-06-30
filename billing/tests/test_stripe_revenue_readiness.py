@@ -19,9 +19,11 @@ def args(**overrides):
     defaults = {
         "stripe_bin": "/opt/homebrew/bin/stripe",
         "stripe_project_name": "",
+        "account_source": "cli",
+        "stripe_api_key_env": "STRIPE_SECRET_KEY",
         "auto_discover_profile": False,
         "stripe_config_path": readiness.stripe_account_context_check.DEFAULT_CONFIG_PATH,
-        "expected_stripe_display_name": "TinyZKP",
+        "expected_stripe_display_name": "LN Holdings",
         "lookback_hours": 168,
         "timeout": 30,
         "command_timeout": 120,
@@ -67,6 +69,20 @@ def test_plan_only_lists_readiness_steps_without_account_check():
     ]
 
 
+def test_api_plan_only_skips_cli_catalog_audit_for_read_only_growth_path():
+    results = readiness.run_readiness(
+        args(plan_only=True, account_source="api", sync_pipeline=True),
+        account_runner=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("account check should not run")),
+    )
+
+    assert [result.status for result in results] == ["PLAN", "PLAN"]
+    assert [result.name for result in results] == [
+        "Stripe checkout monitor",
+        "Stripe checkout pipeline sync",
+    ]
+    assert "--account-source api" in results[0].detail
+
+
 def test_auto_discover_profile_updates_planned_child_commands(tmp_path):
     config = tmp_path / "config.toml"
     config.write_text(
@@ -75,7 +91,7 @@ def test_auto_discover_profile_updates_planned_child_commands(tmp_path):
 display_name = 'Galen Health'
 
 [tinyzkp-prod]
-display_name = 'TinyZKP Production'
+display_name = 'LN Holdings'
 """,
         encoding="utf-8",
     )
@@ -151,7 +167,7 @@ def test_run_readiness_executes_audit_monitor_sync_and_full_setup_after_account_
 project-name = 'default'
 
 [default]
-display_name = 'TinyZKP Production'
+display_name = 'LN Holdings'
 account_id = 'acct_secret123456'
 """,
         )
@@ -192,7 +208,7 @@ def test_run_readiness_redacts_failed_step_output():
 project-name = 'default'
 
 [default]
-display_name = 'TinyZKP'
+display_name = 'LN Holdings'
 account_id = 'acct_secret123456'
 """,
         )

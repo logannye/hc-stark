@@ -191,6 +191,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stripe-bin", default="stripe", help="Stripe CLI executable path")
     parser.add_argument("--stripe-project-name", default="", help="Optional Stripe CLI project profile name")
+    parser.add_argument(
+        "--account-source",
+        choices=("cli", "api"),
+        default=os.environ.get(
+            "TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE",
+            os.environ.get("TINYZKP_STRIPE_ACCOUNT_SOURCE", "cli"),
+        ),
+        help="Stripe checkout source: CLI profile or Stripe API key",
+    )
+    parser.add_argument(
+        "--stripe-api-key-env",
+        default=os.environ.get(
+            "TINYZKP_GROWTH_STRIPE_API_KEY_ENV",
+            os.environ.get("TINYZKP_STRIPE_API_KEY_ENV", "STRIPE_SECRET_KEY"),
+        ),
+        help="Environment variable containing the Stripe secret key for --account-source api",
+    )
     parser.add_argument("--test", action="store_true", help="Use Stripe test mode instead of live mode")
     parser.add_argument("--limit", type=int, default=100, help="Checkout sessions per Stripe page")
     parser.add_argument("--max-pages", type=int, default=3, help="Maximum Stripe pages to read")
@@ -205,11 +222,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--synced-at", help="Override sync date; mainly for deterministic tests")
     parser.add_argument(
         "--expected-stripe-display-name",
-        default=os.environ.get("TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME", "TinyZKP"),
-        help="Required substring in the active Stripe CLI display_name",
+        default=os.environ.get("TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME", "LN Holdings"),
+        help="Required substring in the active Stripe account display_name",
     )
-    parser.add_argument("--skip-account-check", action="store_true", help="Skip Stripe CLI display_name validation")
-    parser.add_argument("--account-check-timeout", type=int, default=30, help="Stripe CLI account-context timeout in seconds")
+    parser.add_argument("--skip-account-check", action="store_true", help="Skip Stripe account display_name validation")
+    parser.add_argument("--account-check-timeout", type=int, default=30, help="Stripe account-context timeout in seconds")
     parser.add_argument("--dry-run", action="store_true", help="Print the updated pilot state entry without writing files")
     parser.add_argument("--json", action="store_true", help="Print machine-readable sync result")
     return parser
@@ -230,6 +247,8 @@ def main(argv: list[str]) -> int:
                 lookback_hours=args.lookback_hours,
                 include_monitoring=False,
                 expected_display_name=args.expected_stripe_display_name,
+                account_source=args.account_source,
+                stripe_api_key_env=args.stripe_api_key_env,
                 skip_account_check=args.skip_account_check,
                 timeout=args.account_check_timeout,
             )

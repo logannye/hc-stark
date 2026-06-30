@@ -297,3 +297,56 @@ class TestUnbillable:
         assert len(complete) == 1
         assert complete[0]["skipped"] == 1
         assert complete[0]["billed"] == 0
+
+    def test_stale_free_unbillable_usage_logs_without_alert(self, tmp_path, capsys):
+        ts_path = str(tmp_path / "ts_free.sqlite")
+        ts_conn = tenant_store.open_db(ts_path)
+        tenant_store.create_tenant(ts_conn, "t_free", "free@example.com", "key1", plan="free")
+        ts_conn.close()
+
+        usage_path = str(tmp_path / "usage_free.sqlite")
+        usage_conn = sqlite3.connect(usage_path)
+        usage_conn.execute("""
+            CREATE TABLE usage_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT, job_id TEXT UNIQUE, trace_length INTEGER,
+                completed_at_ms INTEGER NOT NULL, billed INTEGER DEFAULT 0
+            )
+        """)
+        usage_conn.execute(
+            "INSERT INTO usage_log (tenant_id, job_id, trace_length, completed_at_ms) VALUES (?, ?, ?, ?)",
+            ("t_free", "job_old_free", 1000, 1),
+        )
+        usage_conn.commit()
+        usage_conn.close()
+
+        alerts = []
+        sync_usage.USAGE_DB_PATH = usage_path
+        with patch("tenant_store.open_db", return_value=tenant_store.open_db(ts_path)):
+            with patch.object(sync_usage, "_send_alert", side_effect=lambda msg, details: alerts.append((msg, details))):
+                with patch("sys.argv", ["sync_usage.py"]):
+                    sync_usage.main()
+
+        output = capsys.readouterr().out
+        lines = [json.loads(l) for l in output.strip().split("\n") if l.strip()]
+        assert not alerts
+        assert any(line.get("action") == "stale_unbillable" for line in lines)
+        assert any(line.get("action") == "unbillable_free_demo_only" for line in lines)
+
+    def test_stale_billable_usage_alerts_separately(self, setup):
+        ts_path = setup["ts_path"]
+        usage_path = setup["usage_path"]
+        conn = sqlite3.connect(usage_path)
+        conn.execute("UPDATE usage_log SET completed_at_ms = 1")
+        conn.commit()
+        conn.close()
+
+        alerts = []
+        sync_usage.USAGE_DB_PATH = usage_path
+        with patch("tenant_store.open_db", return_value=tenant_store.open_db(ts_path)):
+            with patch("stripe.billing.MeterEvent.create", return_value=MagicMock(id="evt_x")):
+                with patch.object(sync_usage, "_send_alert", side_effect=lambda msg, details: alerts.append((msg, details))):
+                    with patch("sys.argv", ["sync_usage.py"]):
+                        sync_usage.main()
+
+        assert any("Billable usage rows older than dedup window" in msg for msg, _details in alerts)

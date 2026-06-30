@@ -2,8 +2,8 @@
 # Production cron wrapper for the daily TinyZKP growth decision memo.
 #
 # The base memo always runs from production tenant/usage stores. Stripe Checkout
-# metrics are included only when the host explicitly configures a TinyZKP Stripe
-# CLI profile, so cron cannot accidentally trust another account.
+# metrics are included only when the host explicitly configures either the
+# LN Holdings API-key validation path or a TinyZKP Stripe CLI profile.
 set -euo pipefail
 
 REPO="${TINYZKP_REPO:-/opt/hc-stark}"
@@ -28,17 +28,38 @@ args=(
 
 stripe_profile="${TINYZKP_GROWTH_STRIPE_PROJECT_NAME:-${TINYZKP_STRIPE_PROJECT_NAME:-}}"
 stripe_checkout="${TINYZKP_GROWTH_STRIPE_CHECKOUT:-}"
-if [ -n "$stripe_profile" ]; then
+stripe_account_source="${TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE:-${TINYZKP_STRIPE_ACCOUNT_SOURCE:-cli}}"
+stripe_api_key_env="${TINYZKP_GROWTH_STRIPE_API_KEY_ENV:-${TINYZKP_STRIPE_API_KEY_ENV:-STRIPE_SECRET_KEY}}"
+if [ "$stripe_checkout" = "1" ] || [ "$stripe_checkout" = "true" ]; then
+    if [ "$stripe_account_source" = "api" ]; then
+        args+=(
+            --stripe-checkout
+            --stripe-account-source api
+            --stripe-api-key-env "$stripe_api_key_env"
+            --stripe-expected-display-name "${TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME:-LN Holdings}"
+        )
+    elif [ -n "$stripe_profile" ]; then
+        args+=(
+            --stripe-checkout
+            --stripe-bin "${TINYZKP_STRIPE_BIN:-stripe}"
+            --stripe-project-name "$stripe_profile"
+            --stripe-account-source cli
+            --stripe-expected-display-name "${TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME:-LN Holdings}"
+        )
+    else
+        echo "ERROR: TINYZKP_GROWTH_STRIPE_CHECKOUT is enabled but no trusted Stripe account source is configured." >&2
+        echo "Set TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE=api with TINYZKP_GROWTH_STRIPE_API_KEY_ENV=STRIPE_SECRET_KEY after API account validation passes," >&2
+        echo "or set TINYZKP_GROWTH_STRIPE_PROJECT_NAME after billing/stripe_account_context_check.py verifies the LN Holdings CLI profile." >&2
+        exit 1
+    fi
+elif [ -n "$stripe_profile" ]; then
     args+=(
         --stripe-checkout
         --stripe-bin "${TINYZKP_STRIPE_BIN:-stripe}"
         --stripe-project-name "$stripe_profile"
-        --stripe-expected-display-name "${TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME:-TinyZKP}"
+        --stripe-account-source cli
+        --stripe-expected-display-name "${TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME:-LN Holdings}"
     )
-elif [ "$stripe_checkout" = "1" ] || [ "$stripe_checkout" = "true" ]; then
-    echo "ERROR: TINYZKP_GROWTH_STRIPE_CHECKOUT is enabled but no explicit TinyZKP Stripe project/profile is configured." >&2
-    echo "Set TINYZKP_GROWTH_STRIPE_PROJECT_NAME after billing/stripe_account_context_check.py verifies the profile." >&2
-    exit 1
 fi
 
 memo_file="$(mktemp -t tinyzkp-daily-growth.XXXXXX)"

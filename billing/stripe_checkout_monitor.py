@@ -14,10 +14,19 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+import stripe
 import stripe_account_context_check
 
 
 PRODUCTION_PILOT_PLAN = "production_pilot"
+DEFAULT_ACCOUNT_SOURCE = os.environ.get(
+    "TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE",
+    os.environ.get("TINYZKP_STRIPE_ACCOUNT_SOURCE", "cli"),
+).strip().lower() or "cli"
+DEFAULT_API_KEY_ENV = os.environ.get(
+    "TINYZKP_GROWTH_STRIPE_API_KEY_ENV",
+    os.environ.get("TINYZKP_STRIPE_API_KEY_ENV", "STRIPE_SECRET_KEY"),
+)
 SAFE_METADATA_KEYS = ("plan", "source", "medium", "platform", "intent")
 MONITORING_SOURCES = {"api_health_audit"}
 SECRET_RE = re.compile(r"\b(?:sk|rk|whsec|acct|cs|cus|pi|sub|price|prod)_[A-Za-z0-9_]{8,}\b")
@@ -295,6 +304,61 @@ def load_sessions_from_stripe_cli(
     return sessions
 
 
+def _stripe_obj_to_dict(value: Any) -> Any:
+    if isinstance(value, dict):
+        return value
+    to_dict_recursive = getattr(value, "to_dict_recursive", None)
+    if callable(to_dict_recursive):
+        return to_dict_recursive()
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        return to_dict()
+    return value
+
+
+def load_sessions_from_stripe_api(
+    *,
+    stripe_api_key_env: str = DEFAULT_API_KEY_ENV,
+    limit: int = 100,
+    max_pages: int = 3,
+    lookback_hours: float = 168,
+) -> list[Any]:
+    env_name = (stripe_api_key_env or DEFAULT_API_KEY_ENV).strip()
+    api_key = os.environ.get(env_name, "").strip()
+    if not api_key:
+        raise RuntimeError(f"Stripe API key env var {env_name} is not set")
+
+    sessions: list[Any] = []
+    starting_after: str | None = None
+    created_gte = int(time.time() - lookback_hours * 3600)
+    previous_key = getattr(stripe, "api_key", None)
+    try:
+        stripe.api_key = api_key
+        for _page in range(max_pages):
+            params: dict[str, Any] = {
+                "created": {"gte": created_gte},
+                "limit": limit,
+            }
+            if starting_after:
+                params["starting_after"] = starting_after
+            response = stripe.checkout.Session.list(**params)
+            data = _get(response, "data", []) or []
+            if not isinstance(data, list):
+                data = list(data)
+            sessions.extend(_stripe_obj_to_dict(session) for session in data)
+            if not _get(response, "has_more", False) or not data:
+                break
+            last_id = str(_get(data[-1], "id", "") or "")
+            if not last_id:
+                break
+            starting_after = last_id
+    except Exception as exc:
+        raise RuntimeError(f"Stripe API checkout session query failed: {redact(exc)}") from exc
+    finally:
+        stripe.api_key = previous_key
+    return sessions
+
+
 def summary_to_dict(summary: CheckoutSummary) -> dict[str, Any]:
     return {
         **asdict(summary),
@@ -370,28 +434,43 @@ def collect_checkout_summary(
     max_pages: int = 3,
     lookback_hours: float = 168,
     include_monitoring: bool = False,
-    expected_display_name: str = "TinyZKP",
+    expected_display_name: str = "LN Holdings",
     stripe_project_name: str = "",
+    account_source: str = DEFAULT_ACCOUNT_SOURCE,
+    stripe_api_key_env: str = DEFAULT_API_KEY_ENV,
     skip_account_check: bool = False,
     timeout: int = 30,
 ) -> CheckoutSummary:
+    source = (account_source or "cli").strip().lower()
     if not skip_account_check:
         account_result = stripe_account_context_check.run_check(
             stripe_bin=stripe_bin,
             stripe_project_name=stripe_project_name,
+            account_source=source,
+            stripe_api_key_env=stripe_api_key_env,
             expected_display_name=expected_display_name,
             timeout=timeout,
         )
         if account_result.status != "PASS":
-            raise RuntimeError(f"Stripe CLI account context failed: {account_result.detail}")
-    sessions = load_sessions_from_stripe_cli(
-        stripe_bin=stripe_bin,
-        live=live,
-        limit=limit,
-        max_pages=max_pages,
-        lookback_hours=lookback_hours,
-        stripe_project_name=stripe_project_name,
-    )
+            raise RuntimeError(f"Stripe account context failed: {account_result.detail}")
+    if source == "api":
+        sessions = load_sessions_from_stripe_api(
+            stripe_api_key_env=stripe_api_key_env,
+            limit=limit,
+            max_pages=max_pages,
+            lookback_hours=lookback_hours,
+        )
+    elif source == "cli":
+        sessions = load_sessions_from_stripe_cli(
+            stripe_bin=stripe_bin,
+            live=live,
+            limit=limit,
+            max_pages=max_pages,
+            lookback_hours=lookback_hours,
+            stripe_project_name=stripe_project_name,
+        )
+    else:
+        raise RuntimeError(f"Unsupported Stripe account source: {redact(source)}")
     return summarize_sessions(
         sessions,
         mode="live" if live else "test",
@@ -404,6 +483,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stripe-bin", default="stripe", help="Stripe CLI executable path")
     parser.add_argument("--stripe-project-name", default="", help="Optional Stripe CLI project profile name")
+    parser.add_argument(
+        "--account-source",
+        choices=("cli", "api"),
+        default=DEFAULT_ACCOUNT_SOURCE,
+        help="Stripe account/session source: CLI profile or Stripe API key",
+    )
+    parser.add_argument(
+        "--stripe-api-key-env",
+        default=DEFAULT_API_KEY_ENV,
+        help="Environment variable containing the Stripe secret key for --account-source api",
+    )
     parser.add_argument("--test", action="store_true", help="Use Stripe test mode instead of live mode")
     parser.add_argument("--limit", type=int, default=100, help="Checkout sessions per Stripe page")
     parser.add_argument("--max-pages", type=int, default=3, help="Maximum Stripe pages to read")
@@ -412,11 +502,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--include-monitoring-sessions", action="store_true", help="Include source=api_health_audit canary sessions in revenue summaries")
     parser.add_argument(
         "--expected-stripe-display-name",
-        default=os.environ.get("TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME", "TinyZKP"),
-        help="Required substring in the active Stripe CLI display_name",
+        default=os.environ.get("TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME", "LN Holdings"),
+        help="Required substring in the active Stripe account display_name",
     )
-    parser.add_argument("--skip-account-check", action="store_true", help="Skip Stripe CLI display_name validation")
-    parser.add_argument("--account-check-timeout", type=int, default=30, help="Stripe CLI account-context timeout in seconds")
+    parser.add_argument("--skip-account-check", action="store_true", help="Skip Stripe account display_name validation")
+    parser.add_argument("--account-check-timeout", type=int, default=30, help="Stripe account-context timeout in seconds")
     parser.add_argument("--json", action="store_true", help="Emit sanitized machine-readable JSON")
     parser.add_argument("--min-paid-sessions", type=int, help="Fail unless at least this many paid sessions are observed")
     parser.add_argument("--min-pilot-paid-sessions", type=int, help="Fail unless at least this many paid Production Pilot sessions are observed")
@@ -448,6 +538,8 @@ def main(argv: list[str]) -> int:
             summary = collect_checkout_summary(
                 stripe_bin=args.stripe_bin,
                 stripe_project_name=args.stripe_project_name,
+                account_source=args.account_source,
+                stripe_api_key_env=args.stripe_api_key_env,
                 live=not args.test,
                 limit=args.limit,
                 max_pages=args.max_pages,

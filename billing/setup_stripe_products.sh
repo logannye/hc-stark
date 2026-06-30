@@ -128,14 +128,14 @@ if [[ "$USE_STRIPE_CLI" -eq 1 && "${STRIPE_SKIP_ACCOUNT_CONTEXT_CHECK:-0}" != "1
   ACCOUNT_CONTEXT_CMD=(
     python3 "${REPO_ROOT}/billing/stripe_account_context_check.py"
     --stripe-bin "$STRIPE_BIN"
-    --expected-display-name "${TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME:-TinyZKP}"
+    --expected-display-name "${TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME:-LN Holdings}"
   )
   if [[ -n "$STRIPE_PROJECT_NAME" ]]; then
     ACCOUNT_CONTEXT_CMD+=(--stripe-project-name "$STRIPE_PROJECT_NAME")
   fi
   if ! "${ACCOUNT_CONTEXT_CMD[@]}"; then
     echo >&2
-    echo "ERROR: Stripe CLI profile is not the expected TinyZKP account. Switch profiles with stripe login before running catalog setup." >&2
+    echo "ERROR: Stripe CLI profile is not the expected LN Holdings account for TinyZKP. Switch profiles with stripe login before running catalog setup." >&2
     echo "Set STRIPE_SKIP_ACCOUNT_CONTEXT_CHECK=1 only if the account was intentionally renamed and independently verified." >&2
     exit 1
   fi

@@ -203,6 +203,18 @@ against temporary SQLite databases using `HC_BACKUP_DATA_DIR`, `HC_BACKUP_DIR`,
 `HC_BACKUP_DATE`, and `HC_BACKUP_REMOTE_DATE` overrides, then validates that the
 snapshots are readable and permissioned for restore.
 
+Production-grade recovery requires an off-box encrypted rclone remote. Configure
+the private Cloudflare R2 bucket `tinyzkp-prod-backups` through rclone crypt and
+set:
+
+```sh
+HC_BACKUP_REMOTE=tinyzkp-backups-crypt:prod-sqlite
+```
+
+After configuring credentials, run a production backup push and restore smoke.
+Do not describe the business as production-grade recoverable until the restore
+smoke succeeds.
+
 ### Cloudflare Pages deploy gate
 
 Run the site deploy preflight before every Pages deploy:
@@ -302,16 +314,33 @@ Production cron runs `scripts/monitoring/daily_growth_decision_cron.sh`. The
 wrapper sources `/opt/hc-stark/.env`, writes the normal snapshot, and scans the
 memo plus latest snapshot for emails, Stripe object IDs, Checkout URLs, and
 API-key-like values. It includes live Stripe Checkout metrics only when
-`TINYZKP_GROWTH_STRIPE_PROJECT_NAME` or `TINYZKP_STRIPE_PROJECT_NAME` is set;
-verify that profile first with `billing/stripe_account_context_check.py`.
+`TINYZKP_GROWTH_STRIPE_CHECKOUT=1` is set with a trusted account source. For
+production, prefer API-key validation:
+
+```bash
+TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME="LN Holdings" \
+TINYZKP_STRIPE_ACCOUNT_SOURCE=api \
+TINYZKP_STRIPE_API_KEY_ENV=STRIPE_SECRET_KEY \
+python3 billing/stripe_account_context_check.py --account-source api
+```
+
+Then configure the host with
+`TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE=api`,
+`TINYZKP_GROWTH_STRIPE_API_KEY_ENV=STRIPE_SECRET_KEY`, and
+`TINYZKP_GROWTH_STRIPE_CHECKOUT=1`. CLI profiles are still supported for
+operator/catalog setup via `TINYZKP_GROWTH_STRIPE_PROJECT_NAME` or
+`TINYZKP_STRIPE_PROJECT_NAME`, but verify that profile first with
+`billing/stripe_account_context_check.py`. The trusted Stripe account display
+name is `LN Holdings`, the legal Stripe account used for TinyZKP revenue
+automation.
 
 Snapshots are written to `/opt/hc-stark/data/growth_snapshots/YYYY-MM-DD.json`
 by default. They contain aggregate adoption, activation, paid-customer,
 revenue, source, and pipeline counts only; emails, Stripe object IDs, checkout
 URLs, and API-key-like values are redacted from JSON and Markdown output. Use
-`--stripe-checkout --stripe-project-name <profile>` only after
-`billing/stripe_account_context_check.py` verifies the active Stripe CLI
-profile belongs to TinyZKP.
+`--stripe-checkout --stripe-account-source api --stripe-api-key-env STRIPE_SECRET_KEY`
+only after `billing/stripe_account_context_check.py --account-source api`
+verifies the API key belongs to `LN Holdings`.
 
 The Codex daily automation should run this command around 10:15
 America/Los_Angeles, after the 09:45 production GTM cron, and report the
@@ -454,7 +483,9 @@ jobs run through `scripts/monitoring/host_cron_env.sh`, which sources
   closed if output redaction fails.
 
 Lifecycle nudges and checkout recovery use the same SMTP environment as the
-webhook. Each sent lifecycle nudge is recorded in
+webhook, but they default to dry-run/no-send. Set
+`TINYZKP_CUSTOMER_EMAILS_ENABLED=1` only after lifecycle/recovery copy review
+and SPF/DKIM/DMARC checks pass. Each sent lifecycle nudge is recorded in
 `tenant_store.lifecycle_emails` by `(tenant_id, kind)`, and each checkout
 recovery is recorded in `tenant_store.checkout_recovery_emails` by Stripe
 Checkout Session ID, so cron retries do not resend the same email.
@@ -465,6 +496,10 @@ session refs instead of Stripe object IDs or checkout URLs.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `STRIPE_SECRET_KEY` | required | Stripe API key |
+| `TINYZKP_CUSTOMER_EMAILS_ENABLED` | `0` | Customer lifecycle/recovery email kill switch. Anything other than an affirmative value keeps cron in dry-run/no-send mode |
+| `TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE` | `cli` | Stripe checkout source for daily growth cron: `api` validates `STRIPE_SECRET_KEY`; `cli` validates a named Stripe CLI profile |
+| `TINYZKP_GROWTH_STRIPE_API_KEY_ENV` | `STRIPE_SECRET_KEY` | Env var read when `TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE=api` |
+| `TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME` | `LN Holdings` | Required Stripe account display-name substring for revenue automation |
 | `HC_USAGE_SOURCE` | `sqlite` | Billing usage source: `sqlite` or `postgres`. `postgres` uses `HC_SERVER_PG_URL` and `psql` |
 | `HC_USAGE_DB_PATH` | `/opt/hc-stark/data/usage.sqlite` | SQLite usage log path |
 | `HC_SERVER_PG_URL` | required when `HC_USAGE_SOURCE=postgres` | Postgres connection string for billing reads and `billed=1` updates |
@@ -577,9 +612,9 @@ templates, billing safeguards, and rollback rules.
 ### GTM Revenue Monitoring
 
 Start with the safe readiness runner. It validates that the local Stripe CLI
-profile is the TinyZKP account before it runs the read-only audit, summarizes
-Checkout Sessions, and optionally syncs aggregate evidence into the no-PII GTM
-pipeline ledger:
+profile is the `LN Holdings` Stripe account used for TinyZKP before it runs the
+read-only audit, summarizes Checkout Sessions, and optionally syncs aggregate
+evidence into the no-PII GTM pipeline ledger:
 
 ```bash
 python3 billing/stripe_revenue_readiness.py \
@@ -590,7 +625,7 @@ python3 billing/stripe_revenue_readiness.py \
 Use `--plan-only` to preview the full sequence without touching Stripe or local
 ledgers. Use `--setup-catalog pilot --push-cloudflare` or
 `--setup-catalog full --push-cloudflare` only when intentionally writing Stripe
-catalog objects from the verified TinyZKP account. If the TinyZKP account is a
+catalog objects from the verified `LN Holdings` account. If that account is a
 non-default Stripe CLI profile, pass `--stripe-project-name <profile>` so the
 account check, reads, sync, canary visibility checks, and setup scripts all use
 that profile.
@@ -618,13 +653,24 @@ python3 billing/stripe_checkout_monitor.py \
   --lookback-hours 168
 ```
 
+For production hosts without Stripe CLI, use the read-only API path after
+account validation passes:
+
+```bash
+python3 billing/stripe_checkout_monitor.py \
+  --account-source api \
+  --stripe-api-key-env STRIPE_SECRET_KEY \
+  --lookback-hours 168
+```
+
 To include live Checkout state in the aggregate GTM monitor:
 
 ```bash
 python3 scripts/monitoring/gtm_growth_monitor.py \
   --offline \
   --stripe-checkout \
-  --stripe-bin /opt/homebrew/bin/stripe
+  --stripe-account-source api \
+  --stripe-api-key-env STRIPE_SECRET_KEY
 ```
 
 To sync aggregate Stripe checkout evidence into the no-PII pipeline ledger and
@@ -632,7 +678,8 @@ rerender `marketing/generated/gtm_pipeline_ledger.*`:
 
 ```bash
 python3 scripts/marketing/sync_stripe_checkout_pipeline.py \
-  --stripe-bin /opt/homebrew/bin/stripe \
+  --account-source api \
+  --stripe-api-key-env STRIPE_SECRET_KEY \
   --lookback-hours 168
 ```
 
