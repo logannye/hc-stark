@@ -9,6 +9,7 @@ set -euo pipefail
 REPO="${TINYZKP_REPO:-/opt/hc-stark}"
 PYTHON="${TINYZKP_PYTHON:-$REPO/.venv/bin/python}"
 SNAPSHOT_DIR="${TINYZKP_GROWTH_SNAPSHOT_DIR:-$REPO/data/growth_snapshots}"
+EXPERIMENT_LEDGER="${TINYZKP_GROWTH_EXPERIMENT_LEDGER:-$REPO/data/growth_experiment_ledger.json}"
 ENV_FILE="${TINYZKP_ENV_FILE:-$REPO/.env}"
 
 if [ -f "$ENV_FILE" ]; then
@@ -24,6 +25,7 @@ mkdir -p "$SNAPSHOT_DIR"
 args=(
     scripts/monitoring/daily_growth_decision.py
     --snapshot-dir "$SNAPSHOT_DIR"
+    --experiment-ledger "$EXPERIMENT_LEDGER"
 )
 
 stripe_profile="${TINYZKP_GROWTH_STRIPE_PROJECT_NAME:-${TINYZKP_STRIPE_PROJECT_NAME:-}}"
@@ -72,17 +74,18 @@ trap cleanup EXIT
 
 latest_snapshot="$(find "$SNAPSHOT_DIR" -maxdepth 1 -type f -name '*.json' -print 2>/dev/null | sort | tail -n 1 || true)"
 redaction_re='([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|https://checkout\.stripe\.com/|(^|[^A-Za-z0-9_])((cs|cus|acct|sk|pk|rk|whsec)_(live|test)?_?[A-Za-z0-9]{8,}))'
+scan_files=("$memo_file")
 
 if [ -n "$latest_snapshot" ]; then
-    if grep -E "$redaction_re" "$memo_file" "$latest_snapshot" >/dev/null; then
-        echo "ERROR: daily growth output redaction scan failed." >&2
-        exit 1
-    fi
-else
-    if grep -E "$redaction_re" "$memo_file" >/dev/null; then
-        echo "ERROR: daily growth memo redaction scan failed." >&2
-        exit 1
-    fi
+    scan_files+=("$latest_snapshot")
+fi
+if [ -f "$EXPERIMENT_LEDGER" ]; then
+    scan_files+=("$EXPERIMENT_LEDGER")
+fi
+
+if grep -E "$redaction_re" "${scan_files[@]}" >/dev/null; then
+    echo "ERROR: daily growth output redaction scan failed." >&2
+    exit 1
 fi
 
 echo "daily_growth_decision_redaction_scan=ok"

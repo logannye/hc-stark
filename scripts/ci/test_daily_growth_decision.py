@@ -56,6 +56,9 @@ def test_snapshot_handles_missing_prior_and_zero_denominators(tmp_path):
     assert snapshot["metrics"]["paid_rate"] == 0.0
     assert snapshot["metrics"]["new_accounts"] == 0
     assert snapshot["authority"] == "implement_safe_experiment_or_report_blocker"
+    assert snapshot["autonomy_policy"]["north_star"] == "paid_customers"
+    assert snapshot["funnel"]["next_missing_stage"] == "acquisition"
+    assert snapshot["safe_action_queue"][0]["permission"] == "allowed_without_approval"
     assert snapshot["deltas"]["day"]["accounts"] is None
     assert snapshot["deltas"]["seven_day"]["accounts"] is None
     assert snapshot["previous_experiment_evaluation"]["status"] == "no_prior_experiment"
@@ -111,6 +114,60 @@ def test_previous_experiment_evaluation_marks_activation_success():
 
     assert snapshot["previous_experiment_evaluation"]["status"] == "succeeded"
     assert snapshot["previous_experiment_evaluation"]["experiment_id"] == "activation_first_proof"
+
+
+def test_funnel_rollup_surfaces_activation_and_paid_dropoffs():
+    snapshot = decision.build_daily_snapshot(
+        monitor_payload(
+            accounts=11,
+            activated_accounts=2,
+            paid_accounts=0,
+            total_proofs=5,
+            top_sources=[
+                {
+                    "source": "unknown",
+                    "medium": "",
+                    "platform": "",
+                    "accounts": 11,
+                    "activated_accounts": 2,
+                    "paid_accounts": 0,
+                    "total_proofs": 5,
+                }
+            ],
+        ),
+        pipeline_state={"tasks": {}},
+        prior_snapshots=[],
+        snapshot_date=date(2026, 7, 1),
+        generated_at_ms=1_000,
+    )
+
+    assert snapshot["funnel"]["next_missing_stage"] == "activation_rate"
+    assert snapshot["funnel"]["dropoffs"]["accounts_without_successful_proof"] == 9
+    assert snapshot["funnel"]["dropoffs"]["activated_without_paid_evidence"] == 2
+    assert snapshot["funnel"]["rates"]["account_to_activation"] == 0.1818
+    assert "No MCP, SDK, CLI, or package source adoption" in " ".join(snapshot["funnel"]["instrumentation_gaps"])
+
+
+def test_safe_action_queue_marks_revenue_actions_as_approval_gated():
+    snapshot = decision.build_daily_snapshot(
+        monitor_payload(
+            accounts=10,
+            activated_accounts=8,
+            paid_accounts=0,
+            free_accounts=10,
+            total_proofs=22,
+        ),
+        pipeline_state={"tasks": {}},
+        prior_snapshots=[],
+        snapshot_date=date(2026, 7, 1),
+        generated_at_ms=1_000,
+    )
+
+    assert snapshot["selected_experiment"]["id"] == "pilot_paid_conversion"
+    queue = {item["id"]: item for item in snapshot["safe_action_queue"]}
+    assert queue["implement_selected_safe_experiment"]["permission"] == "allowed_without_approval"
+    assert queue["request_revenue_action_approval"]["permission"] == "requires_explicit_approval"
+    assert queue["do_not_claim_paid_traction"]["permission"] == "hard_guard"
 
 
 def test_growth_data_wiring_reports_repo_implementation_pending_deploy():
@@ -233,6 +290,32 @@ def test_report_redacts_pii_and_stripe_identifiers():
     assert "[redacted-id]" in rendered
 
 
+def test_experiment_ledger_redacts_and_replaces_same_day_entry(tmp_path):
+    snapshot = decision.build_daily_snapshot(
+        monitor_payload(accounts=1, activated_accounts=1, paid_accounts=0, total_proofs=1),
+        pipeline_state={"tasks": {}},
+        prior_snapshots=[],
+        snapshot_date=date(2026, 7, 1),
+        generated_at_ms=1_000,
+    )
+    snapshot["selected_experiment"]["action"] = (
+        "Follow up with buyer@example.com about cs_live_1234567890 at "
+        "https://checkout.stripe.com/c/pay/cs_live_1234567890"
+    )
+    ledger_path = tmp_path / "growth_experiment_ledger.json"
+
+    decision.write_experiment_ledger(ledger_path, snapshot)
+    decision.write_experiment_ledger(ledger_path, snapshot)
+    payload = json.loads(ledger_path.read_text(encoding="utf-8"))
+    rendered = json.dumps(payload)
+
+    assert len(payload["entries"]) == 1
+    assert payload["entries"][0]["experiment_id"] == snapshot["selected_experiment"]["id"]
+    assert "buyer@example.com" not in rendered
+    assert "cs_live_1234567890" not in rendered
+    assert "checkout.stripe.com" not in rendered
+
+
 def test_cli_ingests_monitor_json_and_writes_snapshot(tmp_path, capsys):
     monitor_json = tmp_path / "monitor.json"
     monitor_json.write_text(
@@ -257,3 +340,33 @@ def test_cli_ingests_monitor_json_and_writes_snapshot(tmp_path, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["snapshot"]["selected_experiment"]["id"] == "paid_expansion"
     assert Path(out["snapshot_path"]).exists()
+    assert Path(out["experiment_ledger_path"]).exists()
+
+
+def test_cli_no_write_snapshot_skips_experiment_ledger(tmp_path, capsys):
+    monitor_json = tmp_path / "monitor.json"
+    monitor_json.write_text(json.dumps(monitor_payload(accounts=1)), encoding="utf-8")
+    ledger_path = tmp_path / "ledger.json"
+
+    exit_code = decision.main(
+        [
+            "--from-monitor-json",
+            str(monitor_json),
+            "--snapshot-dir",
+            str(tmp_path / "snapshots"),
+            "--experiment-ledger",
+            str(ledger_path),
+            "--pipeline-state",
+            str(tmp_path / "missing-pipeline.json"),
+            "--date",
+            "2026-07-01",
+            "--no-write-snapshot",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["snapshot_path"] is None
+    assert out["experiment_ledger_path"] is None
+    assert not ledger_path.exists()
