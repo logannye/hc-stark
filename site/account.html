@@ -507,7 +507,7 @@ footer .right a:hover{color:var(--muted)}
       <div>
         <div class="activation-kicker">Activation</div>
         <h2>Start the first proof from this dashboard</h2>
-        <p>Reveal the key, copy the accumulator_step request, and watch the job appear in Recent Proof Jobs.</p>
+        <p>Copy the ready-to-run accumulator_step request; the dashboard reveals your key only when needed.</p>
       </div>
       <div class="first-proof-actions">
         <button class="btn-sm" id="first-proof-reveal-key" type="button">Reveal key</button>
@@ -867,6 +867,60 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     });
   }
 
+  function setKeyDisplay(apiKey) {
+    var textEl = document.getElementById('key-text');
+    var toggleBtn = document.getElementById('key-toggle');
+    var copyBtn = document.getElementById('key-copy');
+    var refAuth = document.getElementById('ref-auth');
+    var curlKey = document.getElementById('curl-key');
+
+    if (apiKey) {
+      revealedKey = apiKey;
+      keyRevealed = true;
+      textEl.textContent = apiKey;
+      toggleBtn.textContent = 'Hide';
+      copyBtn.style.display = 'inline-block';
+      if (refAuth) refAuth.textContent = 'Authorization: Bearer ' + apiKey;
+      if (curlKey) curlKey.textContent = apiKey;
+      return;
+    }
+
+    revealedKey = null;
+    keyRevealed = false;
+    var masked = maskPrefix(session ? session.api_key_prefix : '');
+    textEl.textContent = masked;
+    toggleBtn.textContent = 'Reveal';
+    copyBtn.style.display = 'none';
+    if (refAuth) refAuth.textContent = 'Authorization: Bearer ' + masked;
+    if (curlKey) curlKey.textContent = masked;
+  }
+
+  function revealKey() {
+    var toggleBtn = document.getElementById('key-toggle');
+    if (revealedKey) return Promise.resolve(revealedKey);
+
+    toggleBtn.disabled = true;
+    toggleBtn.textContent = 'Loading...';
+    return apiPost('/api/reveal-key')
+    .then(function(res) {
+      return res.json().then(function(data) {
+        if (!res.ok) throw new Error(data.error || 'Could not reveal key.');
+        return data;
+      });
+    })
+    .then(function(data) {
+      if (!data.api_key) throw new Error('Could not reveal key.');
+      setKeyDisplay(data.api_key);
+      toggleBtn.disabled = false;
+      return revealedKey;
+    })
+    .catch(function(err) {
+      toggleBtn.disabled = false;
+      setKeyDisplay(null);
+      throw err;
+    });
+  }
+
   function proofCurlCommand() {
     return 'curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \\\n' +
       '  -H "Authorization: Bearer ' + revealedKey + '" \\\n' +
@@ -874,15 +928,40 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
       '  -d \'{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}\'';
   }
 
-  function copyProofCurl(btn, source) {
+  function copyProofCurlWithKey(btn, eventSource, keyWasRevealed) {
+    copyTextFromValue(proofCurlCommand(), btn);
+    trackAccountEvent('account_first_proof_curl_copied', {
+      source: eventSource,
+      key_revealed_by_click: keyWasRevealed ? '1' : '0'
+    });
+  }
+
+  function copyProofCurl(btn, source, options) {
     var eventSource = source || 'account_dashboard';
     if (!revealedKey) {
+      if (options && options.autoReveal) {
+        var originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Revealing...';
+        revealKey()
+        .then(function() {
+          btn.disabled = false;
+          btn.textContent = originalText;
+          copyProofCurlWithKey(btn, eventSource, true);
+        })
+        .catch(function(err) {
+          btn.disabled = false;
+          btn.textContent = originalText;
+          trackAccountEvent('account_first_proof_curl_copy_blocked', { source: eventSource, reason: 'reveal_failed' });
+          alert(err.message);
+        });
+        return;
+      }
       trackAccountEvent('account_first_proof_curl_copy_blocked', { source: eventSource, reason: 'key_hidden' });
       alert('Click "Reveal" to view your API key, then copy the proof curl.');
       return;
     }
-    copyTextFromValue(proofCurlCommand(), btn);
-    trackAccountEvent('account_first_proof_curl_copied', { source: eventSource });
+    copyProofCurlWithKey(btn, eventSource, false);
   }
 
   function updateFirstProofPanel(totalJobs) {
@@ -1049,11 +1128,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
     planEl.className = 'plan-badge ' + plan;
 
     // API key: show masked prefix; raw key never held in session
-    revealedKey = null;
-    keyRevealed = false;
-    document.getElementById('key-text').textContent = maskPrefix(session.api_key_prefix);
-    document.getElementById('key-toggle').textContent = 'Reveal';
-    document.getElementById('key-copy').style.display = 'none';
+    setKeyDisplay(null);
 
     // Plan & billing
     document.getElementById('plan-name').textContent = plan.charAt(0).toUpperCase() + plan.slice(1);
@@ -1248,12 +1323,17 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   document.getElementById('first-proof-reveal-key').addEventListener('click', function() {
     var keyText = document.getElementById('key-text');
     trackAccountEvent('account_first_proof_reveal_click', { source: 'zero_proof_panel' });
-    if (!keyRevealed) document.getElementById('key-toggle').click();
-    keyText.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    revealKey()
+    .then(function() {
+      keyText.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    })
+    .catch(function(err) {
+      alert(err.message);
+    });
   });
 
   document.getElementById('first-proof-copy-curl').addEventListener('click', function() {
-    copyProofCurl(this, 'zero_proof_panel');
+    copyProofCurl(this, 'zero_proof_panel', { autoReveal: true });
   });
 
   document.getElementById('first-proof-quickstart').addEventListener('click', function() {
@@ -1266,41 +1346,17 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
   // Key toggle: Reveal fetches the key transiently via /api/reveal-key;
   // Hide clears the revealed value from the DOM.
   document.getElementById('key-toggle').addEventListener('click', function() {
-    var textEl = document.getElementById('key-text');
     var toggleBtn = document.getElementById('key-toggle');
-    var copyBtn = document.getElementById('key-copy');
 
     if (keyRevealed) {
       // Hide: clear the revealed key from DOM; do not keep it in memory.
-      revealedKey = null;
-      keyRevealed = false;
-      textEl.textContent = maskPrefix(session.api_key_prefix);
-      toggleBtn.textContent = 'Reveal';
-      copyBtn.style.display = 'none';
+      setKeyDisplay(null);
       return;
     }
 
     // Reveal: fetch from server, never from session.
-    toggleBtn.disabled = true;
-    toggleBtn.textContent = 'Loading…';
-    apiPost('/api/reveal-key')
-    .then(function(res) {
-      return res.json().then(function(data) {
-        if (!res.ok) throw new Error(data.error || 'Could not reveal key.');
-        return data;
-      });
-    })
-    .then(function(data) {
-      revealedKey = data.api_key || '';
-      keyRevealed = true;
-      textEl.textContent = revealedKey;
-      toggleBtn.disabled = false;
-      toggleBtn.textContent = 'Hide';
-      copyBtn.style.display = 'inline-block';
-    })
+    revealKey()
     .catch(function(err) {
-      toggleBtn.disabled = false;
-      toggleBtn.textContent = 'Reveal';
       alert(err.message);
     });
   });
@@ -1341,23 +1397,7 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
         session.api_key_prefix = data.api_key_prefix;
       }
       // Show the new key once as a transient reveal (same UX as Reveal button).
-      if (data.api_key) {
-        revealedKey = data.api_key;
-        keyRevealed = true;
-        document.getElementById('key-text').textContent = revealedKey;
-        document.getElementById('key-toggle').textContent = 'Hide';
-        document.getElementById('key-copy').style.display = 'inline-block';
-      } else {
-        revealedKey = null;
-        keyRevealed = false;
-        document.getElementById('key-text').textContent = maskPrefix(session.api_key_prefix);
-        document.getElementById('key-toggle').textContent = 'Reveal';
-        document.getElementById('key-copy').style.display = 'none';
-      }
-      // Update the quick-reference placeholder (still masked until Reveal).
-      var display = keyRevealed ? revealedKey : maskPrefix(session.api_key_prefix);
-      document.getElementById('ref-auth').textContent = 'Authorization: Bearer ' + display;
-      document.getElementById('curl-key').textContent = display;
+      setKeyDisplay(data.api_key || null);
 
       document.getElementById('confirm-overlay').classList.remove('visible');
       btn.disabled = false;

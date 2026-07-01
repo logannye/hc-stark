@@ -18,7 +18,11 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SNAPSHOT_DIR = Path(os.environ.get("TINYZKP_GROWTH_SNAPSHOT_DIR", "/opt/hc-stark/data/growth_snapshots"))
+DEFAULT_EXPERIMENT_LEDGER = Path(
+    os.environ.get("TINYZKP_GROWTH_EXPERIMENT_LEDGER", "/opt/hc-stark/data/growth_experiment_ledger.json")
+)
 DEFAULT_PIPELINE_STATE = ROOT / "marketing" / "gtm_pipeline_state.json"
+MAX_EXPERIMENT_LEDGER_ENTRIES = 180
 
 EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 SECRET_RE = re.compile(
@@ -61,6 +65,36 @@ STACK_SOURCE_TERMS = (
     "claude",
     "openai",
 )
+
+AUTONOMY_POLICY_VERSION = 1
+AUTONOMY_POLICY = {
+    "role": "daily_business_copilot",
+    "north_star": "paid_customers",
+    "allowed_without_approval": [
+        "read-only production health, revenue, and growth checks",
+        "write non-repo aggregate snapshots and experiment-ledger entries under /opt/hc-stark/data",
+        "make repo-local no-PII product, docs, instrumentation, and GTM artifact changes",
+        "run focused local tests and redaction scans",
+        "prepare commits, branches, and pull requests for safe daily experiments",
+        "use public/no-PII web or registry evidence for marketplace, package, and SEO follow-up",
+    ],
+    "requires_explicit_approval": [
+        "send customer or prospect messages",
+        "use private contact data",
+        "spend money or start paid campaigns",
+        "mutate Stripe catalog, prices, customers, subscriptions, payment sessions, or webhooks",
+        "change production environment variables or secrets",
+        "merge, deploy, or otherwise modify production behavior",
+        "run live checkout canaries that create sessions or live payments",
+        "flip Postgres, shared-worker, rate-limit, or billing read sources",
+    ],
+    "hard_guards": [
+        "exclude PII, Stripe object IDs, Checkout URLs, API keys, and proof bytes from snapshots and memos",
+        "exclude synthetic audit traffic from revenue and growth conclusions",
+        "treat Stripe revenue as trusted only after LN Holdings account validation passes",
+        "do not claim multi-host or scale-grade production posture until Postgres/shared-worker parity is observed",
+    ],
+}
 
 
 @dataclass(frozen=True)
@@ -497,6 +531,227 @@ def data_gaps(monitor_payload: dict[str, Any], pipeline_summary: dict[str, Any])
     return gaps
 
 
+def autonomy_policy() -> dict[str, Any]:
+    policy = dict(AUTONOMY_POLICY)
+    policy["version"] = AUTONOMY_POLICY_VERSION
+    return sanitize_obj(policy)
+
+
+def funnel_rollup(monitor_payload: dict[str, Any], metrics: dict[str, Any]) -> dict[str, Any]:
+    revenue = monitor_payload.get("revenue", {}) or {}
+    sources = (revenue.get("top_sources", []) or [])
+    known_source_accounts = sum(
+        _safe_int(source.get("accounts"))
+        for source in sources
+        if isinstance(source, dict) and str(source.get("source") or "").strip()
+    )
+    unknown_accounts = max(_safe_int(metrics.get("accounts")) - known_source_accounts, 0)
+    activated = _safe_int(metrics.get("activated_accounts"))
+    paid_evidence = _safe_int(metrics.get("paid_accounts")) + _safe_int(metrics.get("stripe_paid_sessions"))
+    accounts = _safe_int(metrics.get("accounts"))
+
+    if not revenue.get("tenant_db_exists") or not revenue.get("usage_db_exists"):
+        next_missing_stage = "measurement"
+        diagnostic = "Canonical tenant or usage stores are unavailable to this run."
+    elif accounts == 0:
+        next_missing_stage = "acquisition"
+        diagnostic = "No accounts are recorded, so distribution must produce the first measurable signup."
+    elif activated == 0:
+        next_missing_stage = "activation"
+        diagnostic = "Accounts exist, but no account has completed a successful proof."
+    elif _safe_float(metrics.get("adoption_rate")) < 0.35:
+        next_missing_stage = "activation_rate"
+        diagnostic = "Proof activation is below the daily decision threshold."
+    elif paid_evidence == 0:
+        next_missing_stage = "paid_conversion"
+        diagnostic = "Activated users exist, but no paid tenant or paid Stripe checkout session is recorded."
+    else:
+        next_missing_stage = "paid_expansion"
+        diagnostic = "Paid evidence exists; compound the best source and protect retention."
+
+    instrumentation_gaps: list[str] = []
+    if monitor_payload.get("stripe_checkout") is None:
+        instrumentation_gaps.append("Stripe checkout sessions were not included in this run.")
+    if accounts and unknown_accounts:
+        instrumentation_gaps.append(f"{unknown_accounts} account(s) have incomplete or unknown source attribution.")
+    if accounts and _safe_int(metrics.get("stack_accounts")) == 0:
+        instrumentation_gaps.append("No MCP, SDK, CLI, or package source adoption is visible in canonical account attribution.")
+
+    return sanitize_obj(
+        {
+            "canonical_sources": ["tenant_store", "usage_store", "stripe_checkout", "gtm_pipeline_state"],
+            "stages": [
+                {"stage": "accounts", "count": accounts, "source": "tenant_store"},
+                {"stage": "activated_accounts", "count": activated, "source": "usage_store"},
+                {"stage": "active_30d_accounts", "count": _safe_int(metrics.get("active_30d_accounts")), "source": "usage_store"},
+                {"stage": "paid_tenants", "count": _safe_int(metrics.get("paid_accounts")), "source": "tenant_store"},
+                {"stage": "stripe_paid_sessions", "count": _safe_int(metrics.get("stripe_paid_sessions")), "source": "stripe_checkout"},
+            ],
+            "rates": {
+                "account_to_activation": _safe_float(metrics.get("adoption_rate")),
+                "account_to_paid_tenant": _safe_float(metrics.get("paid_rate")),
+                "activation_to_paid_evidence": _rate(paid_evidence, activated),
+                "stack_source_activation": _safe_float(metrics.get("stack_adoption_rate")),
+            },
+            "dropoffs": {
+                "accounts_without_successful_proof": max(accounts - activated, 0),
+                "activated_without_paid_evidence": max(activated - paid_evidence, 0),
+                "unknown_source_accounts": unknown_accounts,
+            },
+            "next_missing_stage": next_missing_stage,
+            "diagnostic": diagnostic,
+            "instrumentation_gaps": instrumentation_gaps,
+        }
+    )
+
+
+def safe_action_queue(
+    selected: dict[str, Any],
+    implementation: dict[str, Any],
+    metrics: dict[str, Any],
+    pipeline_summary: dict[str, Any],
+    gaps: list[str],
+) -> list[dict[str, Any]]:
+    experiment_id = str(selected.get("id") or "")
+    queue: list[dict[str, Any]] = [
+        {
+            "id": "run_read_only_health_and_growth_checks",
+            "permission": "allowed_without_approval",
+            "scope": "read_only",
+            "action": "Run the daily growth memo, production health checks, and revenue context validation.",
+            "why": "Keeps the business loop grounded in real production status before making changes.",
+        },
+        {
+            "id": "implement_selected_safe_experiment",
+            "permission": "allowed_without_approval",
+            "scope": "repo_local_no_pii",
+            "action": str(implementation.get("action") or selected.get("action") or ""),
+            "why": str(selected.get("reason") or "The selected experiment has the highest daily score."),
+        },
+        {
+            "id": "run_focused_tests_and_redaction_scan",
+            "permission": "allowed_without_approval",
+            "scope": "local_validation",
+            "action": "Run focused tests for touched code plus redaction checks before reporting implementation status.",
+            "why": "Daily changes should remain shippable and safe for aggregate business reporting.",
+        },
+        {
+            "id": "prepare_pr_for_review",
+            "permission": "allowed_without_approval",
+            "scope": "github_pr",
+            "action": "Prepare a branch or PR for safe repo-local changes after tests pass.",
+            "why": "Creates an auditable path from daily experiment to production-ready change.",
+        },
+    ]
+
+    if experiment_id in {"pilot_paid_conversion", "paid_expansion"}:
+        queue.append(
+            {
+                "id": "request_revenue_action_approval",
+                "permission": "requires_explicit_approval",
+                "scope": "customer_or_stripe_action",
+                "action": "Ask the operator before sending lifecycle/recovery messages, using private contact data, or changing Stripe/catalog state.",
+                "why": "Revenue experiments often touch external authority even when the analysis is safe.",
+            }
+        )
+
+    if _safe_int(pipeline_summary.get("due_count")):
+        queue.append(
+            {
+                "id": "clear_public_no_pii_gtm_task",
+                "permission": "allowed_without_approval",
+                "scope": "public_no_pii_gtm",
+                "action": "Advance one due GTM task using only public evidence, checked-in artifacts, or a dated manual next action.",
+                "why": f"{_safe_int(pipeline_summary.get('due_count'))} GTM pipeline task(s) are due.",
+            }
+        )
+
+    if gaps:
+        queue.append(
+            {
+                "id": "report_measurement_blocker",
+                "permission": "allowed_without_approval",
+                "scope": "operator_report",
+                "action": "Report the exact data or instrumentation gap instead of fabricating a result.",
+                "why": "Growth actions should not outrun measurable funnel and revenue evidence.",
+            }
+        )
+
+    if _safe_int(metrics.get("paid_accounts")) == 0 and _safe_int(metrics.get("stripe_paid_sessions")) == 0:
+        queue.append(
+            {
+                "id": "do_not_claim_paid_traction",
+                "permission": "hard_guard",
+                "scope": "public_claims",
+                "action": "Do not claim paying-customer traction until tenant, usage, Stripe, or signed-pipeline evidence records it.",
+                "why": "Paid customers are the north-star metric and must stay evidence-backed.",
+            }
+        )
+
+    return sanitize_obj(queue)
+
+
+def experiment_ledger_entry(snapshot: dict[str, Any]) -> dict[str, Any]:
+    metrics = snapshot.get("metrics", {}) or {}
+    selected = snapshot.get("selected_experiment", {}) or {}
+    return sanitize_obj(
+        {
+            "date": snapshot.get("date"),
+            "generated_at_ms": snapshot.get("generated_at_ms"),
+            "experiment_id": selected.get("id"),
+            "title": selected.get("title"),
+            "hypothesis": selected.get("hypothesis"),
+            "target_segment": selected.get("target_segment"),
+            "action": selected.get("action"),
+            "success_metric": selected.get("success_metric"),
+            "measurement_window": selected.get("measurement_window"),
+            "stop_condition": selected.get("stop_condition"),
+            "implementation": snapshot.get("implementation", {}),
+            "previous_experiment_evaluation": snapshot.get("previous_experiment_evaluation", {}),
+            "scorecard": {
+                "accounts": _safe_int(metrics.get("accounts")),
+                "activated_accounts": _safe_int(metrics.get("activated_accounts")),
+                "adoption_rate": _safe_float(metrics.get("adoption_rate")),
+                "paid_accounts": _safe_int(metrics.get("paid_accounts")),
+                "stripe_paid_sessions": _safe_int(metrics.get("stripe_paid_sessions")),
+                "estimated_base_mrr": _safe_int(metrics.get("estimated_base_mrr")),
+                "stripe_paid_revenue_cents": _safe_int(metrics.get("stripe_paid_revenue_cents")),
+            },
+            "main_bottleneck": snapshot.get("main_bottleneck"),
+            "funnel_next_missing_stage": (snapshot.get("funnel", {}) or {}).get("next_missing_stage"),
+        }
+    )
+
+
+def load_experiment_ledger(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"schema_version": 1, "entries": []}
+    try:
+        payload = load_json(path)
+    except (OSError, json.JSONDecodeError):
+        return {"schema_version": 1, "entries": []}
+    entries = payload.get("entries", [])
+    if not isinstance(entries, list):
+        entries = []
+    return {"schema_version": _safe_int(payload.get("schema_version")) or 1, "entries": entries}
+
+
+def write_experiment_ledger(path: Path, snapshot: dict[str, Any]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ledger = load_experiment_ledger(path)
+    entry = experiment_ledger_entry(snapshot)
+    entry_date = str(entry.get("date") or "")
+    entries = [
+        existing for existing in ledger.get("entries", [])
+        if not isinstance(existing, dict) or str(existing.get("date") or "") != entry_date
+    ]
+    entries.append(entry)
+    entries = sorted(entries, key=lambda item: str(item.get("date") or ""))[-MAX_EXPERIMENT_LEDGER_ENTRIES:]
+    payload = sanitize_obj({"schema_version": 1, "entries": entries})
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
 def _candidate(
     candidate_id: str,
     title: str,
@@ -738,6 +993,7 @@ def build_daily_snapshot(
     prior_snapshots: list[dict[str, Any]] | None = None,
     snapshot_date: date | None = None,
     generated_at_ms: int | None = None,
+    experiment_ledger_path: Path | None = None,
 ) -> dict[str, Any]:
     snapshot_date = snapshot_date or _today_utc()
     generated_at_ms = generated_at_ms if generated_at_ms is not None else _now_ms()
@@ -752,6 +1008,8 @@ def build_daily_snapshot(
 
     previous_evaluation = evaluate_previous_experiment(prior_snapshots, metrics, gaps, pipeline_summary)
     implementation = implementation_plan_for(candidates[0], gaps)
+    funnel = funnel_rollup(monitor_payload, metrics)
+    action_queue = safe_action_queue(candidates[0], implementation, metrics, pipeline_summary, gaps)
 
     snapshot = {
         "schema_version": 1,
@@ -759,7 +1017,9 @@ def build_daily_snapshot(
         "generated_at_ms": generated_at_ms,
         "north_star": "paid_customers",
         "authority": "implement_safe_experiment_or_report_blocker",
+        "autonomy_policy": autonomy_policy(),
         "metrics": metrics,
+        "funnel": funnel,
         "deltas": {
             "day": _metric_delta(metrics, previous),
             "seven_day": _metric_delta(metrics, seven_day),
@@ -775,6 +1035,12 @@ def build_daily_snapshot(
         "experiment_candidates": candidates,
         "selected_experiment": candidates[0],
         "implementation": implementation,
+        "safe_action_queue": action_queue,
+        "experiment_ledger": {
+            "path": str(experiment_ledger_path) if experiment_ledger_path else "",
+            "write_policy": "non_repo_host_data_when_snapshots_are_written",
+            "entry_id": f"{snapshot_date.isoformat()}::{candidates[0].get('id', '')}",
+        },
     }
     return sanitize_obj(snapshot)
 
@@ -796,6 +1062,9 @@ def render_markdown(snapshot: dict[str, Any]) -> str:
     candidates = snapshot.get("experiment_candidates", [])
     rejected = [candidate for candidate in candidates if candidate.get("id") != selected.get("id")][:3]
     pipeline = snapshot.get("pipeline", {}) or {}
+    funnel = snapshot.get("funnel", {}) or {}
+    action_queue = snapshot.get("safe_action_queue", []) or []
+    autonomy = snapshot.get("autonomy_policy", {}) or {}
 
     rows = [
         f"# TinyZKP Daily Growth Decision - {snapshot['date']}",
@@ -809,6 +1078,13 @@ def render_markdown(snapshot: dict[str, Any]) -> str:
         f"- Estimated base MRR: ${metrics['estimated_base_mrr']}; usage revenue: {_money(metrics['estimated_usage_revenue_cents'])}",
         f"- Stripe paid sessions: {metrics['stripe_paid_sessions']}; Stripe paid revenue: {_money(metrics['stripe_paid_revenue_cents'])}",
         f"- Stack adoption proxy: {metrics['stack_accounts']} account(s), {metrics['stack_activated_accounts']} activated, {metrics['stack_paid_accounts']} paid",
+        "",
+        "## Funnel Diagnostics",
+        f"- Next missing stage: {funnel.get('next_missing_stage', 'unknown')}",
+        f"- Diagnostic: {funnel.get('diagnostic', '-')}",
+        f"- Accounts without successful proof: {(funnel.get('dropoffs', {}) or {}).get('accounts_without_successful_proof', 0)}",
+        f"- Activated without paid evidence: {(funnel.get('dropoffs', {}) or {}).get('activated_without_paid_evidence', 0)}",
+        f"- Unknown-source accounts: {(funnel.get('dropoffs', {}) or {}).get('unknown_source_accounts', 0)}",
         "",
         "## What Is Working",
     ]
@@ -839,6 +1115,23 @@ def render_markdown(snapshot: dict[str, Any]) -> str:
             f"- Verification: {implementation.get('verification', '-')}",
         ]
     )
+    if action_queue:
+        rows.append("")
+        rows.append("## Safe Action Queue")
+        rows.extend(
+            f"- {item.get('id', 'action')}: {item.get('permission', 'unknown')} - {item.get('action', '-')}"
+            for item in action_queue[:6]
+        )
+    if autonomy:
+        rows.extend(
+            [
+                "",
+                "## Autonomy Guardrails",
+                f"- Allowed without approval: {len(autonomy.get('allowed_without_approval', []) or [])} category(s)",
+                f"- Requires explicit approval: {len(autonomy.get('requires_explicit_approval', []) or [])} category(s)",
+                f"- Hard guards: {len(autonomy.get('hard_guards', []) or [])} rule(s)",
+            ]
+        )
     if rejected:
         rows.append("")
         rows.append("## Other Candidates Considered")
@@ -868,6 +1161,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tenant-db", default="/opt/hc-stark/data/tenant_store.sqlite", help="Path to tenant_store.sqlite")
     parser.add_argument("--usage-db", default="/opt/hc-stark/data/usage.sqlite", help="Path to usage.sqlite")
     parser.add_argument("--snapshot-dir", type=Path, default=DEFAULT_SNAPSHOT_DIR, help="Directory for daily JSON snapshots")
+    parser.add_argument(
+        "--experiment-ledger",
+        type=Path,
+        default=None,
+        help="Path to the non-repo experiment ledger; defaults beside --snapshot-dir",
+    )
+    parser.add_argument(
+        "--no-write-experiment-ledger",
+        action="store_true",
+        help="Do not update the experiment ledger even when writing a snapshot",
+    )
     parser.add_argument("--pipeline-state", type=Path, default=DEFAULT_PIPELINE_STATE, help="No-PII GTM pipeline state JSON")
     parser.add_argument("--date", help="Snapshot date in YYYY-MM-DD; defaults to current UTC date")
     parser.add_argument("--no-write-snapshot", action="store_true", help="Generate the memo without writing the snapshot JSON")
@@ -910,6 +1214,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
     snapshot_date = _parse_date(args.date)
+    experiment_ledger_path = args.experiment_ledger or (
+        DEFAULT_EXPERIMENT_LEDGER if args.snapshot_dir == DEFAULT_SNAPSHOT_DIR else args.snapshot_dir.parent / "growth_experiment_ledger.json"
+    )
     monitor_payload = _load_monitor_payload(args)
     try:
         pipeline_state = load_json(args.pipeline_state)
@@ -921,13 +1228,22 @@ def main(argv: list[str]) -> int:
         pipeline_state=pipeline_state,
         prior_snapshots=prior_snapshots,
         snapshot_date=snapshot_date,
+        experiment_ledger_path=experiment_ledger_path,
     )
     snapshot_path = None
+    experiment_ledger_written = None
     if not args.no_write_snapshot:
         snapshot_path = write_snapshot(args.snapshot_dir, snapshot)
+        if not args.no_write_experiment_ledger:
+            experiment_ledger_written = write_experiment_ledger(experiment_ledger_path, snapshot)
     memo = render_markdown(snapshot)
     if args.json:
-        payload = {"snapshot": snapshot, "memo": memo, "snapshot_path": str(snapshot_path) if snapshot_path else None}
+        payload = {
+            "snapshot": snapshot,
+            "memo": memo,
+            "snapshot_path": str(snapshot_path) if snapshot_path else None,
+            "experiment_ledger_path": str(experiment_ledger_written) if experiment_ledger_written else None,
+        }
         print(json.dumps(sanitize_obj(payload), indent=2, sort_keys=True))
     else:
         print(memo, end="")
