@@ -20,10 +20,27 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 cd "$REPO"
+TENANT_DB="${HC_TENANT_STORE_PATH:-$REPO/data/tenant_store.sqlite}"
+USAGE_DB="${HC_USAGE_DB_PATH:-$REPO/data/usage.sqlite}"
+
+require_growth_store() {
+    label="$1"
+    path="$2"
+    if [ ! -s "$path" ]; then
+        echo "ERROR: production growth data store missing or empty: $label ($path)" >&2
+        echo "Run scripts/monitoring/verify_growth_data_wiring.sh on the production host after deploy." >&2
+        exit 1
+    fi
+}
+
+require_growth_store "tenant store" "$TENANT_DB"
+require_growth_store "usage store" "$USAGE_DB"
 mkdir -p "$SNAPSHOT_DIR"
 
 args=(
     scripts/monitoring/daily_growth_decision.py
+    --tenant-db "$TENANT_DB"
+    --usage-db "$USAGE_DB"
     --snapshot-dir "$SNAPSHOT_DIR"
     --experiment-ledger "$EXPERIMENT_LEDGER"
 )

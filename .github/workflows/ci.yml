@@ -68,6 +68,8 @@ jobs:
           python3 scripts/monitoring/gtm_growth_monitor.py --offline
           python3 -m pytest scripts/ci/test_gtm_growth_monitor.py
           python3 -m pytest scripts/ci/test_daily_growth_decision.py
+          bash -n scripts/monitoring/verify_growth_data_wiring.sh
+          python3 -m pytest scripts/ci/test_growth_data_wiring_verify.py
           python3 scripts/marketing/render_gtm_execution_ledger.py --check
           python3 scripts/ci/gtm_execution_ledger_check.py
           python3 -m pytest scripts/ci/test_gtm_execution_ledger.py
@@ -196,6 +198,7 @@ jobs:
           bash -n scripts/monitoring/shared_dispatch_smoke.sh
           bash -n scripts/monitoring/host_cron_env.sh
           bash -n scripts/monitoring/daily_growth_decision_cron.sh
+          bash -n scripts/monitoring/verify_growth_data_wiring.sh
           python3 -m py_compile billing/lifecycle_nudges.py
           python3 -m py_compile billing/checkout_recovery.py
           python3 -m py_compile billing/gtm_revenue_report.py

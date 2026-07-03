@@ -37,6 +37,8 @@ if [ "${HC_SERVER_PROVE_DISPATCH:-}" = "shared" ] \
 fi
 
 sync_host_billing_services() {
+    mkdir -p /opt/hc-stark/data/growth_snapshots
+
     cat > /etc/cron.d/hc-billing <<'CRON'
 0 * * * * root cd /opt/hc-stark && bash scripts/monitoring/host_cron_env.sh billing/sync_usage.py >> /var/log/hc-billing.log 2>&1
 15 * * * * root cd /opt/hc-stark && bash scripts/monitoring/host_cron_env.sh billing/lifecycle_nudges.py >> /var/log/hc-lifecycle.log 2>&1

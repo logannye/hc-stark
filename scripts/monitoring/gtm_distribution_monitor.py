@@ -161,6 +161,8 @@ def validate_config(config: dict[str, Any]) -> list[Check]:
                 active_count += 1
                 if not target.get("listing_url"):
                     failures.append(f"active target {target_id} must define listing_url")
+            if "online_monitoring" in target and not isinstance(target.get("online_monitoring"), bool):
+                failures.append(f"target {target_id} online_monitoring must be a boolean when present")
             listing_url = target.get("listing_url")
             if listing_url:
                 error = _url_error(listing_url, label=f"target {target_id} listing_url")
@@ -230,6 +232,10 @@ def run_online_checks(config: dict[str, Any], *, timeout: float) -> list[Check]:
         listing_url = str(target.get("listing_url", "") or "")
         if target.get("status") not in ACTIVE_STATUSES:
             checks.append(_skip(name, f"status={target.get('status')}; no live listing required"))
+            continue
+        if target.get("online_monitoring") is False:
+            note = str(target.get("monitoring_note") or "online monitoring disabled")
+            checks.append(_skip(name, f"status=active; {note}"))
             continue
         if not listing_url:
             checks.append(_fail(name, "active target has no listing_url"))

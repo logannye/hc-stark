@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-25",
+  "generated_at": "2026-07-02",
   "positioning": {
     "one_liner": "Proof receipts for agent actions, API mutations, and state transitions.",
     "proof_boundary": "Transparent STARK state-transition receipts for supported templates; verification is free.",
@@ -94,36 +94,36 @@
     {
       "id": "glama",
       "name": "Glama MCP Registry",
-      "status": "submission_ready",
+      "status": "active",
       "kind": "mcp_directory",
       "source": "glama_mcp",
       "platform": "glama",
-      "listing_url": "",
+      "listing_url": "https://glama.ai/mcp/connectors/io.github.logannye/tinyzkp",
       "submission_url": "https://glama.ai/mcp",
       "signup_url": "https://tinyzkp.com/signup?source=glama_mcp&medium=mcp_directory&platform=glama&intent=mcp_install",
       "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
       "required_markers": [
         "TinyZKP",
-        "Proof Receipts"
+        "STARK proof receipts"
       ],
-      "notes": "Repo-level glama.json manifest is present; submit or wait for crawler review before marking active."
+      "notes": "Repo-level glama.json manifest is present. Public connector listing found on 2026-07-02 via Glama downstream MCP Registry ingestion. Glama currently reports connector health as Unhealthy; monitor endpoint health and claim listing from an operator Glama account if desired."
     },
     {
       "id": "mcpservers_org",
       "name": "mcpservers.org",
-      "status": "submitted",
+      "status": "active",
       "kind": "mcp_directory",
       "source": "mcpservers_org",
       "platform": "mcpservers_org",
-      "listing_url": "https://mcpservers.org/submit",
-      "completed_at": "2026-06-25",
+      "listing_url": "https://mcpservers.org/servers/logannye/hc-stark",
       "submission_url": "https://mcpservers.org",
       "signup_url": "https://tinyzkp.com/signup?source=mcpservers_org&medium=mcp_directory&platform=mcpservers_org&intent=mcp_install",
       "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
       "required_markers": [
-        "TinyZKP",
-        "Proof Receipts"
-      ]
+        "TinyZKP MCP Server",
+        "transparent STARK proof receipts"
+      ],
+      "notes": "Public listing found on 2026-07-02 after earlier pending submission id 3934."
     },
     {
       "id": "anthropic_connectors",
@@ -144,18 +144,21 @@
     {
       "id": "pulsemcp",
       "name": "PulseMCP",
-      "status": "target",
+      "status": "active",
       "kind": "mcp_directory",
       "source": "pulsemcp",
       "platform": "pulsemcp",
-      "listing_url": "",
+      "listing_url": "https://www.pulsemcp.com/servers/tinyzkp",
       "submission_url": "https://www.pulsemcp.com",
       "signup_url": "https://tinyzkp.com/signup?source=pulsemcp&medium=mcp_directory&platform=pulsemcp&intent=mcp_install",
       "install_command": "claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com",
       "required_markers": [
         "TinyZKP",
-        "Proof Receipts"
-      ]
+        "zero-knowledge proof generation"
+      ],
+      "online_monitoring": false,
+      "monitoring_note": "PulseMCP listing is public, but Cloudflare returns 403 to server-side health checks; verify via browser/search result until PulseMCP allows monitor fetches.",
+      "notes": "Public official server listing found on 2026-07-02 via PulseMCP downstream registry ingestion. Direct curl monitoring returns Cloudflare 403 from this host, so monitor is intentionally skipped."
     },
     {
       "id": "cursor_directory",

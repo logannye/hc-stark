@@ -311,9 +311,10 @@ python3 scripts/monitoring/daily_growth_decision.py \
 ```
 
 Production cron runs `scripts/monitoring/daily_growth_decision_cron.sh`. The
-wrapper sources `/opt/hc-stark/.env`, writes the normal snapshot, and scans the
-memo plus latest snapshot and experiment ledger for emails, Stripe object IDs,
-Checkout URLs, and API-key-like values. It includes live Stripe Checkout metrics only when
+wrapper sources `/opt/hc-stark/.env`, requires non-empty tenant and usage
+stores, writes the normal snapshot, and scans the memo plus latest snapshot and
+experiment ledger for emails, Stripe object IDs, Checkout URLs, and
+API-key-like values. It includes live Stripe Checkout metrics only when
 `TINYZKP_GROWTH_STRIPE_CHECKOUT=1` is set with a trusted account source. For
 production, prefer API-key validation:
 
@@ -348,6 +349,22 @@ deduplicates by date and stores the selected experiment, prior experiment
 evaluation, implementation policy, scorecard, and funnel stage that is blocking
 revenue. It is the durable handoff that lets the next day's memo decide whether
 to keep, revert, iterate, or escalate the prior day's action.
+
+After each production deploy, verify the data wiring on the host:
+
+```bash
+cd /opt/hc-stark
+bash scripts/monitoring/verify_growth_data_wiring.sh
+tail -50 /var/log/hc-daily-growth-decision.log
+```
+
+The verifier fails if `/opt/hc-stark/data/tenant_store.sqlite` or
+`/opt/hc-stark/data/usage.sqlite` is missing or empty, runs
+`gtm_growth_monitor.py` against those exact paths, syntax-checks the cron
+wrapper, runs the daily growth cron, confirms a snapshot exists under
+`/opt/hc-stark/data/growth_snapshots`, confirms
+`growth_experiment_ledger.json` exists, and expects
+`daily_growth_decision_redaction_scan=ok`.
 
 The memo includes a business-copilot autonomy policy and safe action queue.
 Allowed daily actions are read-only production checks, non-repo aggregate
@@ -516,6 +533,7 @@ session refs instead of Stripe object IDs or checkout URLs.
 | `TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE` | `cli` | Stripe checkout source for daily growth cron: `api` validates `STRIPE_SECRET_KEY`; `cli` validates a named Stripe CLI profile |
 | `TINYZKP_GROWTH_STRIPE_API_KEY_ENV` | `STRIPE_SECRET_KEY` | Env var read when `TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE=api` |
 | `TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME` | `LN Holdings` | Required Stripe account display-name substring for revenue automation |
+| `TINYZKP_GROWTH_SNAPSHOT_DIR` | `/opt/hc-stark/data/growth_snapshots` | Non-repo daily aggregate snapshot directory used by the growth decision cron |
 | `TINYZKP_GROWTH_EXPERIMENT_LEDGER` | `/opt/hc-stark/data/growth_experiment_ledger.json` | No-PII daily experiment ledger used to score prior actions and compound the business loop |
 | `HC_USAGE_SOURCE` | `sqlite` | Billing usage source: `sqlite` or `postgres`. `postgres` uses `HC_SERVER_PG_URL` and `psql` |
 | `HC_USAGE_DB_PATH` | `/opt/hc-stark/data/usage.sqlite` | SQLite usage log path |

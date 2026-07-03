@@ -1,9 +1,9 @@
 # TinyZKP MCP Submission: Glama MCP Registry
 
-Status: `submission_ready`
+Status: `active`
 Kind: `mcp_directory`
 Submission URL: https://glama.ai/mcp
-Current listing: Not published yet
+Current listing: https://glama.ai/mcp/connectors/io.github.logannye/tinyzkp
 
 ## Directory Fields
 
@@ -55,4 +55,4 @@ https://tinyzkp.com/signup?source=glama_mcp&medium=mcp_directory&platform=glama&
 
 ## Required Listing Markers
 
-TinyZKP, Proof Receipts
+TinyZKP, STARK proof receipts

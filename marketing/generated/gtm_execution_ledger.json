@@ -14,8 +14,8 @@
   ],
   "summary": {
     "total_tasks": 22,
-    "manual_required": 16,
-    "active_monitors": 2,
+    "manual_required": 14,
+    "active_monitors": 5,
     "outbound_manual_sends": 10
   },
   "tasks": [
@@ -118,7 +118,7 @@
       "task_id": "mcp_submission.glama",
       "channel": "mcp_distribution",
       "task_type": "directory_submission",
-      "status": "ready_for_manual_submission",
+      "status": "active_listing_monitor",
       "owner": "founder",
       "target": "Glama MCP Registry",
       "due_date": "",
@@ -128,16 +128,16 @@
       "submission_url": "https://glama.ai/mcp",
       "source_artifact": "marketing/generated/mcp_submissions/glama.md",
       "evidence_command": "python3 scripts/monitoring/gtm_distribution_monitor.py --offline",
-      "evidence_url": "",
+      "evidence_url": "https://glama.ai/mcp/connectors/io.github.logannye/tinyzkp",
       "completed_at": "",
-      "next_action": "Submit marketing/generated/mcp_submissions/glama.md through the target account or PR flow.",
-      "blocker": "Requires account access or a manual PR/submission flow."
+      "next_action": "Monitor accepted listing for current copy and source-tagged CTA.",
+      "blocker": ""
     },
     {
       "task_id": "mcp_submission.mcpservers_org",
       "channel": "mcp_distribution",
       "task_type": "directory_submission",
-      "status": "submitted",
+      "status": "active_listing_monitor",
       "owner": "founder",
       "target": "mcpservers.org",
       "due_date": "",
@@ -147,10 +147,10 @@
       "submission_url": "https://mcpservers.org",
       "source_artifact": "marketing/generated/mcp_submissions/mcpservers_org.md",
       "evidence_command": "python3 scripts/monitoring/gtm_distribution_monitor.py --offline",
-      "evidence_url": "https://mcpservers.org/submit",
-      "completed_at": "2026-06-25",
-      "next_action": "Follow up on mcpservers.org review, then update the public listing URL when accepted.",
-      "blocker": "Awaiting directory review or merge."
+      "evidence_url": "https://mcpservers.org/servers/logannye/hc-stark",
+      "completed_at": "",
+      "next_action": "Monitor accepted listing for current copy and source-tagged CTA.",
+      "blocker": ""
     },
     {
       "task_id": "mcp_submission.anthropic_connectors",
@@ -175,7 +175,7 @@
       "task_id": "mcp_submission.pulsemcp",
       "channel": "mcp_distribution",
       "task_type": "directory_submission",
-      "status": "manual_submission_required",
+      "status": "active_listing_monitor",
       "owner": "founder",
       "target": "PulseMCP",
       "due_date": "",
@@ -185,10 +185,10 @@
       "submission_url": "https://www.pulsemcp.com",
       "source_artifact": "marketing/generated/mcp_submissions/pulsemcp.md",
       "evidence_command": "python3 scripts/monitoring/gtm_distribution_monitor.py --offline",
-      "evidence_url": "",
+      "evidence_url": "https://www.pulsemcp.com/servers/tinyzkp",
       "completed_at": "",
-      "next_action": "Submit marketing/generated/mcp_submissions/pulsemcp.md through the target account or PR flow.",
-      "blocker": "Requires account access or a manual PR/submission flow."
+      "next_action": "Monitor accepted listing for current copy and source-tagged CTA.",
+      "blocker": ""
     },
     {
       "task_id": "mcp_submission.cursor_directory",

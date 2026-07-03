@@ -1,9 +1,9 @@
 # TinyZKP MCP Submission: PulseMCP
 
-Status: `target`
+Status: `active`
 Kind: `mcp_directory`
 Submission URL: https://www.pulsemcp.com
-Current listing: Not published yet
+Current listing: https://www.pulsemcp.com/servers/tinyzkp
 
 ## Directory Fields
 
@@ -55,4 +55,4 @@ https://tinyzkp.com/signup?source=pulsemcp&medium=mcp_directory&platform=pulsemc
 
 ## Required Listing Markers
 
-TinyZKP, Proof Receipts
+TinyZKP, zero-knowledge proof generation

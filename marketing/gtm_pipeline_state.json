@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-07-01",
+  "updated_at": "2026-07-03",
   "privacy_rules": [
     "Do not commit personal email addresses, phone numbers, private CRM notes, API keys, or customer secrets.",
     "Use evidence URLs, public listing URLs, task IDs, and aggregate outcomes instead of personal contact details.",
@@ -57,39 +57,39 @@
     },
     "mcp_submission.mcp_so": {
       "stage": "submitted",
-      "last_action_at": "2026-06-25",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-02",
+      "next_action_at": "2026-07-09",
       "evidence_url": "https://github.com/chatmcp/mcpso/issues/2916",
       "completed_at": "",
       "reply_type": "",
       "outcome": "",
       "actual_revenue_cents": 0,
       "loss_reason": "",
-      "notes": "Submitted TinyZKP through MCP.so GitHub issue #2916 after the site form required sign-in. GitHub issue remained open on 2026-06-25 and MCP.so search pages only echoed the TinyZKP query, with no accepted listing link found."
+      "notes": "Submitted TinyZKP through MCP.so GitHub issue #2916 after the site form required sign-in. Public check on 2026-07-02 found the GitHub issue still OPEN and https://mcp.so/server/tinyzkp still returning Project not found, so no accepted listing link is available yet."
     },
     "mcp_submission.glama": {
-      "stage": "ready_to_submit",
-      "last_action_at": "2026-06-25",
-      "next_action_at": "2026-06-26",
-      "evidence_url": "",
+      "stage": "live_monitoring",
+      "last_action_at": "2026-07-02",
+      "next_action_at": "",
+      "evidence_url": "https://glama.ai/mcp/connectors/io.github.logannye/tinyzkp",
       "completed_at": "",
       "reply_type": "",
       "outcome": "",
       "actual_revenue_cents": 0,
       "loss_reason": "",
-      "notes": "TinyZKP is live in the official MCP Registry, which Glama describes as an upstream source. Strict Glama query check on 2026-06-25 returned an empty MCP server result list for TinyZKP; Add Server redirects to sign-up."
+      "notes": "Public check on 2026-07-02 found a live Glama connector listing for TinyZKP via downstream registry ingestion. Glama reports connector Status=Unhealthy, so treat discovery as live but keep health/claiming as follow-up. No PII or private account data stored."
     },
     "mcp_submission.mcpservers_org": {
-      "stage": "submitted",
-      "last_action_at": "2026-06-25",
-      "next_action_at": "2026-07-02",
-      "evidence_url": "https://mcpservers.org/submit",
+      "stage": "live_monitoring",
+      "last_action_at": "2026-07-02",
+      "next_action_at": "",
+      "evidence_url": "https://mcpservers.org/servers/logannye/hc-stark",
       "completed_at": "",
       "reply_type": "",
       "outcome": "",
       "actual_revenue_cents": 0,
       "loss_reason": "",
-      "notes": "Programmatic free submission accepted as pending submission id 3934. Strict mcpservers.org TinyZKP query on 2026-06-25 did not find a public accepted listing yet."
+      "notes": "Public check on 2026-07-02 found the accepted mcpservers.org TinyZKP listing after earlier pending submission id 3934. No PII or private account data stored."
     },
     "mcp_submission.anthropic_connectors": {
       "stage": "ready_to_submit",
@@ -104,16 +104,16 @@
       "notes": ""
     },
     "mcp_submission.pulsemcp": {
-      "stage": "ready_to_submit",
-      "last_action_at": "2026-06-25",
-      "next_action_at": "2026-06-26",
-      "evidence_url": "",
+      "stage": "live_monitoring",
+      "last_action_at": "2026-07-02",
+      "next_action_at": "",
+      "evidence_url": "https://www.pulsemcp.com/servers/tinyzkp",
       "completed_at": "",
       "reply_type": "",
       "outcome": "",
       "actual_revenue_cents": 0,
       "loss_reason": "",
-      "notes": "TinyZKP is live in the official MCP Registry; PulseMCP public submit/search pages blocked headless submission. Strict PulseMCP search on 2026-06-25 only returned search pagination links, not a TinyZKP listing, so monitor downstream registry ingestion."
+      "notes": "Public check on 2026-07-02 found the official PulseMCP TinyZKP server listing. Direct server-side fetches from this host return Cloudflare 403, so marketing/mcp_distribution_targets.json disables online monitoring for this target and requires browser/search verification. No PII or private account data stored."
     },
     "mcp_submission.cursor_directory": {
       "stage": "ready_to_submit",
@@ -129,15 +129,15 @@
     },
     "mcp_submission.awesome_mcp_servers": {
       "stage": "submitted",
-      "last_action_at": "2026-06-25",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-02",
+      "next_action_at": "2026-07-09",
       "evidence_url": "https://github.com/punkpeye/awesome-mcp-servers/pull/8733",
       "completed_at": "",
       "reply_type": "",
       "outcome": "",
       "actual_revenue_cents": 0,
       "loss_reason": "",
-      "notes": "Submitted TinyZKP to the upstream awesome-mcp-servers Security section via PR #8733. PR remained open and mergeable on 2026-06-25."
+      "notes": "Submitted TinyZKP to the upstream awesome-mcp-servers Security section via PR #8733. Public check on 2026-07-02 found the PR still OPEN, not draft, and mergeStateStatus=CLEAN."
     },
     "agent_app.openai_chatgpt_app_submission": {
       "stage": "ready_to_submit",
@@ -153,8 +153,8 @@
     },
     "outbound_send.01.alter": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-07-01",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-03",
+      "next_action_at": "2026-07-06",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -165,8 +165,8 @@
     },
     "outbound_send.02.korso": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-07-01",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-03",
+      "next_action_at": "2026-07-06",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -177,8 +177,8 @@
     },
     "outbound_send.03.redouble-ai": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-07-01",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-03",
+      "next_action_at": "2026-07-06",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -189,8 +189,8 @@
     },
     "outbound_send.04.cyberdesk": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-07-01",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-03",
+      "next_action_at": "2026-07-06",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -201,8 +201,8 @@
     },
     "outbound_send.05.inkeep": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-07-01",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-03",
+      "next_action_at": "2026-07-06",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -213,8 +213,8 @@
     },
     "outbound_send.06.archal": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-07-01",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-03",
+      "next_action_at": "2026-07-06",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -225,8 +225,8 @@
     },
     "outbound_send.07.godhands": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-07-01",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-03",
+      "next_action_at": "2026-07-06",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -237,8 +237,8 @@
     },
     "outbound_send.08.tiny": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-07-01",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-03",
+      "next_action_at": "2026-07-06",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -249,8 +249,8 @@
     },
     "outbound_send.09.coasty": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-07-01",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-03",
+      "next_action_at": "2026-07-06",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",
@@ -261,8 +261,8 @@
     },
     "outbound_send.10.corsair": {
       "stage": "company_research_ready",
-      "last_action_at": "2026-07-01",
-      "next_action_at": "2026-07-02",
+      "last_action_at": "2026-07-03",
+      "next_action_at": "2026-07-06",
       "evidence_url": "",
       "completed_at": "",
       "reply_type": "",

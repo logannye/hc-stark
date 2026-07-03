@@ -13,7 +13,7 @@ This no-PII ledger tracks GTM execution outcomes, pipeline value, and revenue ev
 - Total records: 22
 - Open records: 22
 - Gross pipeline: $57,280
-- Weighted pipeline: $7,669
+- Weighted pipeline: $7,648
 - Actual revenue recorded: $0
 
 ## Stage Counts
@@ -22,9 +22,9 @@ This no-PII ledger tracks GTM execution outcomes, pipeline value, and revenue ev
 |---|---:|
 | `blocked_external_secret` | 1 |
 | `company_research_ready` | 10 |
-| `live_monitoring` | 3 |
-| `ready_to_submit` | 5 |
-| `submitted` | 3 |
+| `live_monitoring` | 6 |
+| `ready_to_submit` | 3 |
+| `submitted` | 2 |
 
 ## Pipeline Records
 
@@ -35,10 +35,10 @@ This no-PII ledger tracks GTM execution outcomes, pipeline value, and revenue ev
 | `mcp_submission.smithery` | `live_monitoring` | Smithery | $11 | Monitor accepted listing for current copy, endpoint health, and source-tagged CTA attribution. |
 | `mcp_submission.official_mcp_registry` | `live_monitoring` | Official MCP Registry | $11 | Monitor accepted listing for current copy, endpoint health, and source-tagged CTA attribution. |
 | `mcp_submission.mcp_so` | `submitted` | mcp.so | $18 | Follow up on mcp.so review, then update the evidence URL when the public listing is accepted. |
-| `mcp_submission.glama` | `ready_to_submit` | Glama MCP Registry | $18 | Submit marketing/generated/mcp_submissions/glama.md through the target account or PR flow. |
-| `mcp_submission.mcpservers_org` | `submitted` | mcpservers.org | $18 | Follow up on mcpservers.org review, then update the evidence URL when the public listing is accepted. |
+| `mcp_submission.glama` | `live_monitoring` | Glama MCP Registry | $11 | Monitor accepted listing for current copy, endpoint health, and source-tagged CTA attribution. |
+| `mcp_submission.mcpservers_org` | `live_monitoring` | mcpservers.org | $11 | Monitor accepted listing for current copy, endpoint health, and source-tagged CTA attribution. |
 | `mcp_submission.anthropic_connectors` | `ready_to_submit` | Anthropic Connectors Directory | $18 | Submit marketing/generated/mcp_submissions/anthropic_connectors.md through the target account or PR flow. |
-| `mcp_submission.pulsemcp` | `ready_to_submit` | PulseMCP | $18 | Submit marketing/generated/mcp_submissions/pulsemcp.md through the target account or PR flow. |
+| `mcp_submission.pulsemcp` | `live_monitoring` | PulseMCP | $11 | Monitor accepted listing for current copy, endpoint health, and source-tagged CTA attribution. |
 | `mcp_submission.cursor_directory` | `ready_to_submit` | Cursor Directory | $18 | Submit marketing/generated/mcp_submissions/cursor_directory.md through the target account or PR flow. |
 | `mcp_submission.awesome_mcp_servers` | `submitted` | awesome-mcp-servers | $18 | Follow up on awesome-mcp-servers review, then update the evidence URL when the public listing is accepted. |
 | `agent_app.openai_chatgpt_app_submission` | `ready_to_submit` | OpenAI ChatGPT app review | $18 | Submit the ChatGPT app prototype with widget URL, MCP endpoint, screenshots, and review prompts. |

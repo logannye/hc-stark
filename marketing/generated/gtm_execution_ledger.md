@@ -15,8 +15,8 @@ This ledger is the operator queue for revenue-critical work that still requires 
 ## Summary
 
 - Total tasks: 22
-- Manual/account-required tasks: 16
-- Active listing monitors: 2
+- Manual/account-required tasks: 14
+- Active listing monitors: 5
 - Founder outbound sends queued: 10
 
 ## Revenue Binding
@@ -88,7 +88,7 @@ This ledger is the operator queue for revenue-critical work that still requires 
 - Blocker: Awaiting directory review or merge.
 ### mcp_submission.glama — Glama MCP Registry
 
-- Status: `ready_for_manual_submission`
+- Status: `active_listing_monitor`
 - Owner: founder
 - Type: `directory_submission`
 - Primary CTA: https://tinyzkp.com/signup?source=glama_mcp&medium=mcp_directory&platform=glama&intent=mcp_install
@@ -96,11 +96,11 @@ This ledger is the operator queue for revenue-critical work that still requires 
 - Submission URL: https://glama.ai/mcp
 - Source artifact: `marketing/generated/mcp_submissions/glama.md`
 - Evidence command: `python3 scripts/monitoring/gtm_distribution_monitor.py --offline`
-- Next action: Submit marketing/generated/mcp_submissions/glama.md through the target account or PR flow.
-- Blocker: Requires account access or a manual PR/submission flow.
+- Evidence URL: https://glama.ai/mcp/connectors/io.github.logannye/tinyzkp
+- Next action: Monitor accepted listing for current copy and source-tagged CTA.
 ### mcp_submission.mcpservers_org — mcpservers.org
 
-- Status: `submitted`
+- Status: `active_listing_monitor`
 - Owner: founder
 - Type: `directory_submission`
 - Primary CTA: https://tinyzkp.com/signup?source=mcpservers_org&medium=mcp_directory&platform=mcpservers_org&intent=mcp_install
@@ -108,9 +108,8 @@ This ledger is the operator queue for revenue-critical work that still requires 
 - Submission URL: https://mcpservers.org
 - Source artifact: `marketing/generated/mcp_submissions/mcpservers_org.md`
 - Evidence command: `python3 scripts/monitoring/gtm_distribution_monitor.py --offline`
-- Evidence URL: https://mcpservers.org/submit
-- Next action: Follow up on mcpservers.org review, then update the public listing URL when accepted.
-- Blocker: Awaiting directory review or merge.
+- Evidence URL: https://mcpservers.org/servers/logannye/hc-stark
+- Next action: Monitor accepted listing for current copy and source-tagged CTA.
 ### mcp_submission.anthropic_connectors — Anthropic Connectors Directory
 
 - Status: `ready_for_manual_submission`
@@ -125,7 +124,7 @@ This ledger is the operator queue for revenue-critical work that still requires 
 - Blocker: Requires account access or a manual PR/submission flow.
 ### mcp_submission.pulsemcp — PulseMCP
 
-- Status: `manual_submission_required`
+- Status: `active_listing_monitor`
 - Owner: founder
 - Type: `directory_submission`
 - Primary CTA: https://tinyzkp.com/signup?source=pulsemcp&medium=mcp_directory&platform=pulsemcp&intent=mcp_install
@@ -133,8 +132,8 @@ This ledger is the operator queue for revenue-critical work that still requires 
 - Submission URL: https://www.pulsemcp.com
 - Source artifact: `marketing/generated/mcp_submissions/pulsemcp.md`
 - Evidence command: `python3 scripts/monitoring/gtm_distribution_monitor.py --offline`
-- Next action: Submit marketing/generated/mcp_submissions/pulsemcp.md through the target account or PR flow.
-- Blocker: Requires account access or a manual PR/submission flow.
+- Evidence URL: https://www.pulsemcp.com/servers/tinyzkp
+- Next action: Monitor accepted listing for current copy and source-tagged CTA.
 ### mcp_submission.cursor_directory — Cursor Directory
 
 - Status: `ready_for_manual_submission`

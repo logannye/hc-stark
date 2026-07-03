@@ -252,6 +252,12 @@ main{flex:1;padding-top:80px;padding-bottom:80px;position:relative}
 .btn-load-more:hover{border-color:var(--border-light);color:var(--text)}
 .empty-state{text-align:center;padding:40px 20px;color:var(--dim)}
 .empty-state p{font-size:14px;margin-bottom:12px;font-weight:500}
+.empty-state-actions{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+.empty-state-actions .btn-sm,.empty-state-actions a{min-height:36px;display:inline-flex;align-items:center;justify-content:center;
+  white-space:nowrap}
+.empty-state-actions a{background:var(--surface-2);border:1px solid var(--border);color:var(--muted);
+  padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:.02em}
+.empty-state-actions a:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
 
 /* Plan & Billing */
 .plan-billing-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
@@ -588,7 +594,10 @@ footer .right a:hover{color:var(--muted)}
         </div>
         <div class="empty-state" id="jobs-empty" style="display:none">
           <p>No proofs yet.</p>
-          <a href="/docs">Follow the quickstart to submit your first proof.</a>
+          <div class="empty-state-actions">
+            <button class="btn-sm" id="jobs-empty-copy-curl" type="button">Copy proof curl</button>
+            <a href="/docs#quickstart" id="jobs-empty-quickstart">Quickstart</a>
+          </div>
         </div>
       </div>
     </div>
@@ -1338,6 +1347,14 @@ curl <span class="curl-flag">-X POST</span> <span class="curl-string">https://ap
 
   document.getElementById('first-proof-quickstart').addEventListener('click', function() {
     trackAccountEvent('account_first_proof_quickstart_click', { source: 'zero_proof_panel', target: '/docs' });
+  });
+
+  document.getElementById('jobs-empty-copy-curl').addEventListener('click', function() {
+    copyProofCurl(this, 'jobs_empty_state', { autoReveal: true });
+  });
+
+  document.getElementById('jobs-empty-quickstart').addEventListener('click', function() {
+    trackAccountEvent('account_first_proof_quickstart_click', { source: 'jobs_empty_state', target: '/docs' });
   });
 
   // Query usage

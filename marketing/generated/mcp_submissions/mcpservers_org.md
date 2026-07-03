@@ -1,9 +1,9 @@
 # TinyZKP MCP Submission: mcpservers.org
 
-Status: `submitted`
+Status: `active`
 Kind: `mcp_directory`
 Submission URL: https://mcpservers.org
-Current listing: https://mcpservers.org/submit
+Current listing: https://mcpservers.org/servers/logannye/hc-stark
 
 ## Directory Fields
 
@@ -55,4 +55,4 @@ https://tinyzkp.com/signup?source=mcpservers_org&medium=mcp_directory&platform=m
 
 ## Required Listing Markers
 
-TinyZKP, Proof Receipts
+TinyZKP MCP Server, transparent STARK proof receipts

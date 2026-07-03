@@ -63,6 +63,31 @@ def test_online_checks_skip_non_active_targets():
     assert checks == [monitor.Check("SKIP", "directory target draft", "status=target; no live listing required")]
 
 
+def test_online_checks_skip_active_targets_with_disabled_monitoring():
+    config = {
+        "canonical_assets": [],
+        "targets": [
+            {
+                "id": "published_but_blocks_bots",
+                "status": "active",
+                "listing_url": "https://example.com/tinyzkp",
+                "online_monitoring": False,
+                "monitoring_note": "directory blocks automated fetches; verify manually",
+            }
+        ],
+    }
+
+    checks = monitor.run_online_checks(config, timeout=0.01)
+
+    assert checks == [
+        monitor.Check(
+            "SKIP",
+            "directory target published_but_blocks_bots",
+            "status=active; directory blocks automated fetches; verify manually",
+        )
+    ]
+
+
 def test_offline_cli_uses_static_checks_only(tmp_path, capsys):
     target_file = tmp_path / "targets.json"
     target_file.write_text(json.dumps(load_default_config()), encoding="utf-8")

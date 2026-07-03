@@ -79,6 +79,11 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
         Step("GTM distribution policy tests", (python, "-m", "pytest", "scripts/ci/test_gtm_distribution_monitor.py")),
         Step("GTM growth monitor", (python, "scripts/monitoring/gtm_growth_monitor.py", "--offline")),
         Step("GTM growth monitor policy tests", (python, "-m", "pytest", "scripts/ci/test_gtm_growth_monitor.py")),
+        Step("daily growth data wiring verifier syntax", ("bash", "-n", "scripts/monitoring/verify_growth_data_wiring.sh")),
+        Step(
+            "daily growth data wiring verifier tests",
+            (python, "-m", "pytest", "scripts/ci/test_growth_data_wiring_verify.py"),
+        ),
         Step("GTM execution ledger freshness check", (python, "scripts/marketing/render_gtm_execution_ledger.py", "--check")),
         Step("GTM execution ledger check", (python, "scripts/ci/gtm_execution_ledger_check.py")),
         Step(
