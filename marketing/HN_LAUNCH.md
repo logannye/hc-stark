@@ -5,7 +5,7 @@
 **Title (≤ 80 chars):**
 
 ```
-Show HN: Verifiable receipts for AI agent actions (free MCP server)
+Show HN: Verifiable receipts for agent state transitions (free MCP server)
 ```
 
 Alternate title to A/B if the first underperforms:
@@ -22,7 +22,8 @@ Show HN: TinyZKP — state-transition receipts as one API call
 TinyZKP is a hosted STARK receipt service. The angle that makes it different from
 general zkVM/prover-network products is that we focus on one narrow primitive today:
 state-transition receipts. Your Claude/Cursor/OpenAI agent can mint a tamper-evident
-proof that a declared state transition happened as a native tool call:
+receipt that a declared state-transition chain is internally consistent
+(start at X, apply these steps, reach Y) — as a native tool call:
 
     claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
 
@@ -30,6 +31,10 @@ After that, the agent has TinyZKP tools like get_capabilities, list_templates,
 describe_template, prove_template, poll_job, get_proof_summary, get_proof, and
 verify_proof the same way it has filesystem or git. Proofs go through supported
 state-transition templates — no circuit writing.
+
+A receipt attests that the declared numbers are internally consistent and
+tamper-evident — not that some external event "really happened." You choose
+what to encode, and verification needs no trust in us.
 
 Under the hood, the prover runs in O(√T) memory instead of the usual O(T) by way of
 a height-compressed streaming architecture. That structural advantage is why we can
@@ -57,6 +62,15 @@ math vs. self-hosting.
 
 **Notes for the day-of:**
 
+- Prepared answer for the inevitable "is it actually sound / audited?" — be
+  upfront; HN respects candor. It's a transparent STARK (hash-based,
+  post-quantum, no trusted setup on the receipt path); soundness is CONJECTURED
+  ~128-bit under the ethSTARK proximity-gap conjecture and enforced by a
+  verifier security floor (minimum blowup, query count, grinding); it has NOT
+  yet completed an external cryptography audit — say so plainly. Verification is
+  independent and open-source (`@tinyzkp/verify` runs client-side), so nobody
+  has to trust us to check a receipt. Don't overclaim soundness; let the
+  reproducibility + open verifier do the talking.
 - Be on HN actively for the first ~3 hours after submitting. Reply to every comment within 15 minutes during that window. Drop-off on first-page rank is brutal if author engagement stalls.
 - Pre-warm: do NOT ask anyone to upvote (against HN guidelines and detected algorithmically). It IS fine to share the link in your existing communities once it's submitted.
 - Best top-level reply pattern: "Good question. [direct answer]. We chose X over Y because [reason]. Happy to go deeper if useful."
