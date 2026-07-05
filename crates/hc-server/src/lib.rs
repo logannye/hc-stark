@@ -118,6 +118,12 @@ struct PlanLimits {
     max_inflight: usize,
     monthly_cap_cents: u64,
     max_prove_seconds: u64,
+    /// Optional enforced monthly successful-proof count quota. `Some(n)` caps
+    /// the plan at `n` proofs per calendar month (returns 402 on the n+1th);
+    /// `None` means no count quota (paid plans are cost/meter-bound instead).
+    /// Only the free plan sets this today — it makes the advertised
+    /// "100 proofs/month" a real enforced limit rather than a marketing figure.
+    monthly_proof_quota: Option<u64>,
 }
 
 impl PlanLimits {
@@ -129,6 +135,7 @@ impl PlanLimits {
                 max_inflight: 1,
                 monthly_cap_cents: 500,
                 max_prove_seconds: 300, // 5 min
+                monthly_proof_quota: Some(100),
             },
             "pro" | "team" => Self {
                 prove_rpm: 300,
@@ -136,6 +143,7 @@ impl PlanLimits {
                 max_inflight: 8,
                 monthly_cap_cents: 250_000,
                 max_prove_seconds: 1800, // 30 min
+                monthly_proof_quota: None,
             },
             "scale" => Self {
                 prove_rpm: 500,
@@ -143,6 +151,7 @@ impl PlanLimits {
                 max_inflight: 16,
                 monthly_cap_cents: 1_000_000,
                 max_prove_seconds: 3600, // 60 min
+                monthly_proof_quota: None,
             },
             "compute" => Self {
                 // Billed via trace_step_usage meter, not cents-per-proof tiers.
@@ -152,6 +161,7 @@ impl PlanLimits {
                 max_inflight: 8,
                 monthly_cap_cents: 10_000_000,
                 max_prove_seconds: 3600, // 60 min
+                monthly_proof_quota: None,
             },
             _ => Self {
                 // "developer" is the default; also covers legacy "standard"
@@ -160,6 +170,7 @@ impl PlanLimits {
                 max_inflight: 4,
                 monthly_cap_cents: 50_000,
                 max_prove_seconds: 600, // 10 min
+                monthly_proof_quota: None,
             },
         }
     }
@@ -1581,6 +1592,14 @@ fn batch_would_exceed_cap(
     projected > cap_cents
 }
 
+/// Whether a tenant who has already recorded `count` proofs this month is at or
+/// over its plan's monthly proof-count quota. `None` quota => never over (paid
+/// plans are cost/meter-bound, not count-bound). Pure so it is unit-testable
+/// independently of the usage store; the free tier is the only plan with a quota.
+fn over_proof_quota(count: u64, quota: Option<u64>) -> bool {
+    matches!(quota, Some(q) if count >= q)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_prove_worker(
     state: &AppState,
@@ -1769,6 +1788,22 @@ async fn prove_submit(
                     code: "usage_cap_reached",
                     message: "monthly usage cap reached".to_string(),
                 });
+            }
+        }
+        // Free-tier monthly proof-count quota: makes the advertised
+        // "100 proofs/month" a real enforced limit (independent of the $5 cap).
+        if let Some(quota) = plan_limits.monthly_proof_quota {
+            if let Ok(count) = usage.monthly_proof_count(&tenant_id, &tenant_plan) {
+                if over_proof_quota(count, Some(quota)) {
+                    state.metrics.usage_cap_rejections.inc();
+                    return Err(ApiError {
+                        status: StatusCode::PAYMENT_REQUIRED,
+                        code: "proof_quota_reached",
+                        message:
+                            "monthly free-tier proof quota reached (100 proofs/month); upgrade for more"
+                                .to_string(),
+                    });
+                }
             }
         }
     }
@@ -2192,6 +2227,22 @@ async fn prove_batch(
                     code: "usage_cap_reached",
                     message: "batch would exceed the monthly usage cap".to_string(),
                 });
+            }
+        }
+        // Free-tier monthly proof-count quota: project the whole batch up front
+        // (mirrors the cost-cap batch projection above) so a batch can't step
+        // the tenant past its 100-proof/month allowance.
+        if let Some(quota) = plan_limits.monthly_proof_quota {
+            if let Ok(count) = usage.monthly_proof_count(&tenant.tenant_id, &tenant.plan) {
+                if count.saturating_add(batch.requests.len() as u64) > quota {
+                    state.metrics.usage_cap_rejections.inc();
+                    return Err(ApiError {
+                        status: StatusCode::PAYMENT_REQUIRED,
+                        code: "proof_quota_reached",
+                        message: "batch would exceed the monthly free-tier proof quota (100 proofs/month)"
+                            .to_string(),
+                    });
+                }
             }
         }
     }
@@ -2720,6 +2771,19 @@ async fn prove_template(
                     "usage_cap_reached",
                     "monthly usage cap reached",
                 ));
+            }
+        }
+        // Free-tier monthly proof-count quota (see the single-prove path).
+        if let Some(quota) = plan_limits.monthly_proof_quota {
+            if let Ok(count) = usage.monthly_proof_count(&tenant_id, &tenant_plan) {
+                if over_proof_quota(count, Some(quota)) {
+                    state.metrics.usage_cap_rejections.inc();
+                    return Err(ApiError::new(
+                        StatusCode::PAYMENT_REQUIRED,
+                        "proof_quota_reached",
+                        "monthly free-tier proof quota reached (100 proofs/month); upgrade for more",
+                    ));
+                }
             }
         }
     }
@@ -3958,8 +4022,17 @@ mod pricing_parity_tests {
             let want_max_inflight = plan_data["max_inflight"].as_u64().unwrap() as usize;
             let want_monthly_cap = plan_data["monthly_cap_cents"].as_u64().unwrap();
             let want_max_secs = plan_data["max_prove_seconds"].as_u64().unwrap();
+            // Optional per-plan monthly proof-count quota (only the free plan
+            // sets it today; absent/null => no count quota).
+            let want_proof_quota = plan_data
+                .get("monthly_proof_quota")
+                .and_then(|v| v.as_u64());
 
             let limits = PlanLimits::for_plan(plan_name);
+            assert_eq!(
+                limits.monthly_proof_quota, want_proof_quota,
+                "plan {plan_name}: monthly_proof_quota drift"
+            );
             assert_eq!(
                 limits.prove_rpm, want_prove_rpm,
                 "plan {plan_name}: prove_rpm drift"
@@ -3981,6 +4054,30 @@ mod pricing_parity_tests {
                 "plan {plan_name}: max_prove_seconds drift"
             );
         }
+    }
+
+    #[test]
+    fn free_plan_has_100_proof_quota() {
+        // The advertised "100 proofs/month" free-tier promise is a real,
+        // enforced monthly count quota — not just the $5 spend cap.
+        assert_eq!(PlanLimits::for_plan("free").monthly_proof_quota, Some(100));
+        // Paid plans are cost/meter-bound, not count-bound.
+        assert_eq!(PlanLimits::for_plan("developer").monthly_proof_quota, None);
+        assert_eq!(PlanLimits::for_plan("pro").monthly_proof_quota, None);
+        assert_eq!(PlanLimits::for_plan("scale").monthly_proof_quota, None);
+        assert_eq!(PlanLimits::for_plan("compute").monthly_proof_quota, None);
+    }
+
+    #[test]
+    fn over_proof_quota_enforces_only_when_set() {
+        // Below the quota: allowed.
+        assert!(!over_proof_quota(99, Some(100)));
+        // At or above the quota: rejected (the 101st proof after 100).
+        assert!(over_proof_quota(100, Some(100)));
+        assert!(over_proof_quota(101, Some(100)));
+        // No quota configured: never rejected regardless of volume.
+        assert!(!over_proof_quota(10_000, None));
+        assert!(!over_proof_quota(0, None));
     }
 
     #[test]

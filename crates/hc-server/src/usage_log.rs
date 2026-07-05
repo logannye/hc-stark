@@ -96,6 +96,18 @@ pub trait UsageReader: Send + Sync {
     ) -> anyhow::Result<UsageSummary>;
 
     fn monthly_cost_cents(&self, tenant_id: &str, plan: &str) -> anyhow::Result<u64>;
+
+    /// Number of successful proofs recorded for `tenant_id` in the current
+    /// calendar month. Plan-independent (the `plan` argument is accepted only
+    /// for signature symmetry with [`Self::monthly_cost_cents`]). Expressed as
+    /// a default method over [`Self::query_usage`], so every backend
+    /// (SQLite, Postgres, wrappers) gets it for free.
+    fn monthly_proof_count(&self, tenant_id: &str, plan: &str) -> anyhow::Result<u64> {
+        let (month_start_ms, month_end_ms) = current_month_bounds_ms();
+        Ok(self
+            .query_usage(tenant_id, plan, month_start_ms, month_end_ms)?
+            .total_proofs)
+    }
 }
 
 /// SQLite usage log for billing.
@@ -836,6 +848,26 @@ mod tests {
         // Scale plan: round(5 * 0.60) = 3
         let cost = log.monthly_cost_cents("t_test", "scale").unwrap();
         assert_eq!(cost, 3);
+    }
+
+    #[test]
+    fn test_monthly_proof_count() {
+        let tmp = NamedTempFile::new().unwrap();
+        let log = UsageLog::open(tmp.path().to_path_buf()).unwrap();
+
+        // No proofs yet.
+        assert_eq!(log.monthly_proof_count("t_test", "free").unwrap(), 0);
+
+        log.record("t_test", "job1", 5000, None, 100).unwrap();
+        log.record("t_test", "job2", 5000, None, 100).unwrap();
+        log.record("t_test", "job3", 5000, None, 100).unwrap();
+
+        // Count is plan-independent and equals the number of recorded proofs.
+        assert_eq!(log.monthly_proof_count("t_test", "free").unwrap(), 3);
+        assert_eq!(log.monthly_proof_count("t_test", "developer").unwrap(), 3);
+
+        // A different tenant is isolated.
+        assert_eq!(log.monthly_proof_count("other", "free").unwrap(), 0);
     }
 
     #[test]
