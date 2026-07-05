@@ -91,7 +91,13 @@ def main(argv: list[str]) -> int:
     try:
         packets = load_json(args.packets)
         state = load_json(args.state)
-        synced, updated = sync_state(state, packets, action_date=args.date)
+        # Date-tolerant --check: reproduce the committed state's own action date
+        # so freshness ignores wall-clock drift (the check may run on CI's UTC
+        # day, not the day the state was last synced) while still catching real
+        # content drift (stage transitions, notes, task set). Write mode keeps
+        # stamping the actual action date (default today).
+        action_date = str(state.get("updated_at") or args.date) if args.check else args.date
+        synced, updated = sync_state(state, packets, action_date=action_date)
     except Exception as exc:
         print(f"FAIL outbound research pipeline sync - {exc}", file=sys.stderr)
         return 1
