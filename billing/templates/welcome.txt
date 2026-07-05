@@ -16,15 +16,30 @@ Activation path:
   2. Verify it for free.
   3. Share a verifier link with the person, service, or agent that should rely on it.
 
-Quick start - prove a state transition:
+Quick start - your first receipt (one command each):
 
+  export TINYZKP_API_KEY={api_key}
+
+  # Prove and wait for the finished receipt:
+  npx @tinyzkp/cli prove accumulator_step \
+    '{{"initial":1000,"final":1045,"deltas":[10,20,15]}}' --wait > proof.json
+
+  # Verify it (always free):
+  npx @tinyzkp/cli verify proof.json
+
+Prefer raw HTTP? It is three steps - prove, poll, then verify:
+
+  1. Prove (returns a job_id):
   curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
     -H "Authorization: Bearer {api_key}" \
     -H "Content-Type: application/json" \
     -d '{{"params":{{"initial":1000,"final":1045,"deltas":[10,20,15]}}}}'
 
-Verify the proof (always free):
+  2. Poll for the finished proof (usually ready in 1-3 seconds):
+  curl https://api.tinyzkp.com/prove/YOUR_JOB_ID \
+    -H "Authorization: Bearer {api_key}"
 
+  3. Verify the proof (always free):
   curl -X POST https://api.tinyzkp.com/verify \
     -H "Authorization: Bearer {api_key}" \
     -d '{{"proof": YOUR_PROOF_OBJECT}}'
