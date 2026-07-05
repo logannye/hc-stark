@@ -16,6 +16,7 @@
   "plans": {
     "free": {
       "discount": 1.0,
+      "monthly_proof_quota": 100,
       "prove_rpm": 10,
       "verify_rpm": 30,
       "max_inflight": 1,
