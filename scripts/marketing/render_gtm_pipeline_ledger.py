@@ -232,7 +232,14 @@ def render_pipeline(execution: dict[str, Any], state: dict[str, Any]) -> dict[st
         by_stage[record["stage"]] = by_stage.get(record["stage"], 0) + 1
         by_channel[record["channel"]] = by_channel.get(record["channel"], 0) + 1
     return {
-        "generated_at": today_iso(),
+        # Date-tolerant: stamp the committed state version this ledger reflects
+        # (state.updated_at), not wall-clock time. This keeps `--check` from
+        # going falsely stale when it runs on a different UTC day than the day
+        # the ledger was regenerated (CI runs UTC; the operator/cron may be in
+        # another timezone). Real content drift is still caught. Write mode is
+        # unchanged in practice: the daily cron syncs state first, which sets
+        # updated_at to that day, so the freshly written ledger is dated today.
+        "generated_at": str(state.get("updated_at") or today_iso()),
         "generated_from": [
             "marketing/generated/gtm_execution_ledger.json",
             "marketing/gtm_pipeline_state.json",
