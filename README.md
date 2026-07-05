@@ -1,4 +1,4 @@
-# TinyZKP — Verifiable Receipts for AI Agents
+# TinyZKP — Proof Receipts for Agents, APIs, and State Transitions
 
 [![npm: @tinyzkp/cli](https://img.shields.io/npm/v/%40tinyzkp%2Fcli?label=%40tinyzkp%2Fcli&color=2ee8d4)](https://www.npmjs.com/package/@tinyzkp/cli)
 [![npm: tinyzkp](https://img.shields.io/npm/v/tinyzkp?label=tinyzkp%20%28TS%20SDK%29&color=2ee8d4)](https://www.npmjs.com/package/tinyzkp)

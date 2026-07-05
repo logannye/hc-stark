@@ -136,6 +136,10 @@ jobs:
       - name: billing python checks
         run: |
           python3 -m pytest billing/tests/test_site_pricing_parity.py
+          python3 -m pytest billing/tests/test_pricing_parity.py
+          python3 -m pytest billing/tests/test_plan_normalization.py
+          python3 -m pytest billing/tests/test_sync_usage.py
+          python3 -m pytest billing/tests/test_dunning.py
           python3 -m pytest billing/tests/test_provision_free.py
           python3 -m pytest billing/tests/test_session_endpoints.py
           python3 -m pytest billing/tests/test_sessions.py

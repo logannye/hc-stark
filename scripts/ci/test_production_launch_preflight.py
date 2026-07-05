@@ -49,6 +49,8 @@ def test_local_preflight_builds_fast_static_gate_sequence():
         ("python", "-m", "pytest", "scripts/ci/test_gtm_distribution_monitor.py"),
         ("python", "scripts/monitoring/gtm_growth_monitor.py", "--offline"),
         ("python", "-m", "pytest", "scripts/ci/test_gtm_growth_monitor.py"),
+        ("bash", "-n", "scripts/monitoring/verify_growth_data_wiring.sh"),
+        ("python", "-m", "pytest", "scripts/ci/test_growth_data_wiring_verify.py"),
         ("python", "scripts/marketing/render_gtm_execution_ledger.py", "--check"),
         ("python", "scripts/ci/gtm_execution_ledger_check.py"),
         ("python", "-m", "pytest", "scripts/ci/test_gtm_execution_ledger.py"),

@@ -508,7 +508,7 @@
           "lifecycle": {
             "type": "string",
             "description": "Customer-facing lifecycle label.",
-            "enum": ["live", "preview"]
+            "enum": ["live", "audit_gated", "preview"]
           }
         }
       },
