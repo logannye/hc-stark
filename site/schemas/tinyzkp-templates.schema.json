@@ -20,7 +20,7 @@
         "properties": {
           "id": { "type": "string" },
           "name": { "type": "string" },
-          "lifecycle": { "type": "string", "enum": ["live", "preview", "retired"] },
+          "lifecycle": { "type": "string", "enum": ["live", "audit_gated", "preview"] },
           "availability": { "type": "string" },
           "backend": { "type": "string" },
           "enforcement": { "type": "string" },

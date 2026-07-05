@@ -162,6 +162,14 @@ li{margin-bottom:8px}
 
   <section class="section">
     <div class="container">
+      <h2>Cryptographic assurance and audit status</h2>
+      <p>Production receipts are <strong>transparent STARK proofs</strong>: hash-based and post-quantum, with <strong>no trusted setup</strong> on the receipt path. Any recipient can verify a receipt independently and offline through the browser verifier, SDKs, CLI, or MCP &mdash; verification never requires trusting TinyZKP.</p>
+      <p>Soundness is <strong>conjectured at approximately 128 bits</strong> under the ethSTARK proximity-gap conjecture and is enforced by a verifier security floor (minimum blowup, query count, and grinding). This is a <strong>conjectured</strong> bound, and the proof system has <strong>not yet completed an external cryptographic audit</strong>. Treat receipts as strong tamper-evidence for state transitions; do not rely on a single receipt as the sole control for a high-value decision until that external review is complete.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
       <h2>Responsible disclosure</h2>
       <p>For suspected vulnerabilities in proof verification, API authentication, billing, tenant isolation, SDK packages, or the browser verifier, email <a href="mailto:logan@tinyzkp.com">logan@tinyzkp.com</a>. Include the affected surface, reproduction steps, proof bytes or request IDs where relevant, and whether the issue affects confidentiality, soundness, billing, or availability.</p>
       <ul>
