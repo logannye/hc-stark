@@ -178,6 +178,68 @@ def test_checkout_completed_persists_paid_attribution(monkeypatch, tmp_path):
         conn.close()
 
 
+def test_get_by_email_prefers_paid_over_leftover_free(tmp_path):
+    # Regression: a customer who signs up free then pays ends up with two
+    # tenants for one email; magic-link login must resolve to the PAID one, not
+    # the older free row (which showed the wrong plan on the dashboard).
+    conn = tenant_store.open_db(str(tmp_path / "t.sqlite"))
+    try:
+        tenant_store.create_tenant(conn, "t_free_row", "dup@example.com", "tzk_free_row", plan="free")
+        tenant_store.create_tenant(
+            conn, "t_paid_row", "dup@example.com", "tzk_paid_row",
+            stripe_subscription_id="sub_paid", plan="developer",
+        )
+        row = tenant_store.get_by_email(conn, "dup@example.com")
+        assert row is not None
+        assert row["tenant_id"] == "t_paid_row"
+        assert row["plan"] == "developer"
+    finally:
+        conn.close()
+
+
+def test_checkout_completed_purges_leftover_free_tenant(monkeypatch, tmp_path):
+    # Root-cause fix for the free-then-pay duplicate-tenant bug: after a paid
+    # checkout, any pre-existing free tenant for that email is purged so login
+    # resolves to the new paid account.
+    db_path = str(tmp_path / "tenant_store.sqlite")
+    real_open = tenant_store.open_db
+    monkeypatch.setattr(tenant_store, "open_db", lambda path=None: real_open(db_path))
+    monkeypatch.setattr(provision_tenant.sync_keys, "regenerate", lambda *a, **kw: 0)
+    monkeypatch.setattr(
+        provision_tenant.stripe.Subscription,
+        "retrieve",
+        lambda _sid: {"items": {"data": [{"id": "si_up"}]}},
+    )
+    monkeypatch.setattr(provision_tenant, "generate_tenant_id", lambda: "t_upgraded_paid")
+    monkeypatch.setattr(provision_tenant, "generate_api_key", lambda: "tzk_upgraded_key")
+    monkeypatch.setattr(provision_tenant.threading, "Thread", _NoopThread)
+
+    seed = real_open(db_path)
+    tenant_store.create_tenant(seed, "t_leftover_free", "upgrader@example.com", "tzk_leftover_free", plan="free")
+    seed.close()
+
+    text, status = provision_tenant._handle_checkout_completed({
+        "id": "evt_upgrade",
+        "data": {"object": {
+            "subscription": "sub_up",
+            "customer": "cus_up",
+            "customer_email": "upgrader@example.com",
+            "metadata": {"plan": "developer"},
+        }},
+    })
+    assert status == 200
+
+    conn = real_open(db_path)
+    try:
+        assert tenant_store.get_tenant(conn, "t_leftover_free") is None  # stale free purged
+        row = tenant_store.get_by_email(conn, "upgrader@example.com")
+        assert row is not None
+        assert row["tenant_id"] == "t_upgraded_paid"
+        assert row["plan"] == "developer"
+    finally:
+        conn.close()
+
+
 def test_checkout_completed_routes_one_time_pilot_payment(monkeypatch, tmp_path):
     db_path = str(tmp_path / "tenant_store.sqlite")
     real_open = tenant_store.open_db

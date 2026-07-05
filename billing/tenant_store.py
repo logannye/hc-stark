@@ -429,10 +429,29 @@ def mark_event_processed(conn: sqlite3.Connection, event_id: str) -> None:
 
 
 def get_by_email(conn: sqlite3.Connection, email: str) -> Optional[sqlite3.Row]:
-    """Fetch a tenant by email address."""
+    """Fetch a tenant by email address.
+
+    When an email has more than one tenant (e.g. a leftover free tenant plus a
+    paid one after a checkout), prefer the paid / subscription-bearing tenant so
+    magic-link login resolves to the account the customer is actually paying for
+    — not a stale free row that would show the wrong plan on the dashboard.
+    """
     return conn.execute(
-        "SELECT * FROM tenants WHERE email = ?", (email,)
+        """SELECT * FROM tenants WHERE email = ?
+           ORDER BY (plan = 'free') ASC,
+                    (stripe_subscription_id IS NULL OR stripe_subscription_id = '') ASC,
+                    created_at_ms DESC
+           LIMIT 1""",
+        (email,),
     ).fetchone()
+
+
+def list_by_email(conn: sqlite3.Connection, email: str) -> list:
+    """All tenants sharing an email address, newest first."""
+    return conn.execute(
+        "SELECT * FROM tenants WHERE email = ? ORDER BY created_at_ms DESC",
+        (email,),
+    ).fetchall()
 
 
 def create_magic_link(conn: sqlite3.Connection, token_hash: str, tenant_id: str, ttl_ms: int = 900_000) -> None:

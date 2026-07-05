@@ -440,6 +440,20 @@ def _handle_checkout_completed(event: dict) -> tuple[str, int]:
         plan=plan,
         attribution=attribution,
     )
+
+    # Purge any leftover free tenant for this email so the customer's magic-link
+    # login resolves to their new paid account, not a stale free row. Only free,
+    # subscription-less tenants other than the one just created are removed
+    # (their unused free API key is retired with them). Root-cause fix for the
+    # free-then-pay duplicate-tenant bug.
+    for other in tenant_store.list_by_email(conn, email):
+        if (
+            other["tenant_id"] != tenant_id
+            and other["plan"] == "free"
+            and not other["stripe_subscription_id"]
+        ):
+            tenant_store.delete_tenant(conn, other["tenant_id"])
+
     tenant_store.mark_event_processed(conn, event_id)
 
     # Regenerate api_keys.txt with the new tenant.
