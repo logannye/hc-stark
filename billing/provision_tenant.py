@@ -17,6 +17,7 @@ import string
 import sys
 import threading
 import time
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Optional
@@ -54,31 +55,66 @@ def generate_tenant_id() -> str:
     return "t_" + secrets.token_hex(8)
 
 
+WELCOME_SUBJECT = "Your TinyZKP API key + your first proof"
+
+
+def _render_welcome_bodies(email: str, tenant_id: str, api_key: str) -> tuple[str, str]:
+    """Return (plain_text, html) welcome-email bodies.
+
+    The plain text renders welcome.txt via str.format(); the HTML renders
+    welcome.html via token replacement (its CSS braces make str.format()
+    unsafe). HTML is "" if the template is missing, in which case the email is
+    plain-text only.
+    """
+    template_path = TEMPLATES_DIR / "welcome.txt"
+    if template_path.exists():
+        text = template_path.read_text().format(
+            tenant_id=tenant_id, api_key=api_key, email=email,
+        )
+    else:
+        text = (
+            f"Welcome to TinyZKP!\n\n"
+            f"Your tenant ID: {tenant_id}\n"
+            f"Your API key: {api_key}\n\n"
+            f"API endpoint: https://api.tinyzkp.com\n"
+            f"Docs: https://api.tinyzkp.com/docs\n\n"
+            f"Keep your API key secret. You can rotate it at any time from your dashboard.\n"
+        )
+
+    html_path = TEMPLATES_DIR / "welcome.html"
+    html = ""
+    if html_path.exists():
+        html = (
+            html_path.read_text()
+            .replace("__TZK_API_KEY__", api_key)
+            .replace("__TZK_TENANT_ID__", tenant_id)
+            .replace("__TZK_EMAIL__", email)
+        )
+    return text, html
+
+
+def _build_welcome_message(email: str, tenant_id: str, api_key: str) -> MIMEMultipart:
+    """Build the multipart/alternative welcome email: a plain-text fallback plus
+    the designed HTML (email clients render the richest part they support)."""
+    text, html = _render_welcome_bodies(email, tenant_id, api_key)
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = WELCOME_SUBJECT
+    msg["From"] = SMTP_FROM
+    msg["To"] = email
+    # Plain text first, HTML last: clients pick the last part they can render.
+    msg.attach(MIMEText(text, "plain", "utf-8"))
+    if html:
+        msg.attach(MIMEText(html, "html", "utf-8"))
+    return msg
+
+
 def _send_welcome_email(email: str, tenant_id: str, api_key: str) -> bool:
     """Send welcome email with API key. Returns True on success."""
     if not SMTP_HOST:
         print("SMTP not configured, skipping email delivery", file=sys.stderr)
         return False
 
-    template_path = TEMPLATES_DIR / "welcome.txt"
-    if template_path.exists():
-        body = template_path.read_text().format(
-            tenant_id=tenant_id, api_key=api_key, email=email,
-        )
-    else:
-        body = (
-            f"Welcome to TinyZKP!\n\n"
-            f"Your tenant ID: {tenant_id}\n"
-            f"Your API key: {api_key}\n\n"
-            f"API endpoint: https://api.tinyzkp.com\n"
-            f"Docs: https://api.tinyzkp.com/docs\n\n"
-            f"Keep your API key secret. You can rotate it at any time by contacting support.\n"
-        )
-
-    msg = MIMEText(body)
-    msg["Subject"] = "Your TinyZKP API Key"
-    msg["From"] = SMTP_FROM
-    msg["To"] = email
+    msg = _build_welcome_message(email, tenant_id, api_key)
 
     try:
         if SMTP_PORT == 465:

@@ -240,6 +240,23 @@ def test_checkout_completed_purges_leftover_free_tenant(monkeypatch, tmp_path):
         conn.close()
 
 
+def test_build_welcome_message_is_multipart_html_and_plain_with_key():
+    # The confirmation email must ship a designed HTML part with a plain-text
+    # fallback, with the API key substituted into both.
+    msg = provision_tenant._build_welcome_message("buyer@example.com", "t_x9", "tzk_live_SECRETKEY123")
+    assert msg.is_multipart()
+    types = [p.get_content_type() for p in msg.get_payload()]
+    assert "text/plain" in types
+    assert "text/html" in types
+    bodies = {p.get_content_type(): p.get_payload(decode=True).decode("utf-8") for p in msg.get_payload()}
+    assert "tzk_live_SECRETKEY123" in bodies["text/plain"]
+    assert "tzk_live_SECRETKEY123" in bodies["text/html"]
+    assert "<table" in bodies["text/html"].lower()          # designed HTML, not plain text
+    assert "__TZK_API_KEY__" not in bodies["text/html"]      # token fully substituted
+    assert msg["Subject"] == "Your TinyZKP API key + your first proof"
+    assert msg["To"] == "buyer@example.com"
+
+
 def test_checkout_completed_routes_one_time_pilot_payment(monkeypatch, tmp_path):
     db_path = str(tmp_path / "tenant_store.sqlite")
     real_open = tenant_store.open_db
