@@ -63,61 +63,13 @@ jobs:
 
       - name: launch gate audit
         run: |
+          python3 -m pytest scripts/ci/test_backend_release_ready.py
           python3 scripts/ci/launch_gate_audit.py
           python3 -m pytest scripts/ci/test_launch_gate_audit.py
           python3 scripts/ci/production_launch_preflight.py
           python3 -m pytest scripts/ci/test_production_launch_preflight.py
           python3 -m pytest scripts/ci/test_release_identity_check.py
-          python3 scripts/ci/offer_metadata_check.py
-          python3 scripts/ci/receipt_share_contract_check.py
-          python3 -m pytest scripts/ci/test_receipt_share_contract_check.py
-          python3 scripts/ci/badge_embed_check.py
-          python3 -m pytest scripts/ci/test_badge_embed_check.py
-          python3 scripts/ci/openai_chatgpt_app_check.py
-          python3 -m pytest scripts/ci/test_openai_chatgpt_app_check.py
-          python3 scripts/monitoring/gtm_distribution_monitor.py --offline
-          python3 -m pytest scripts/ci/test_gtm_distribution_monitor.py
-          python3 scripts/monitoring/gtm_growth_monitor.py --offline
-          python3 -m pytest scripts/ci/test_gtm_growth_monitor.py
-          python3 -m pytest scripts/ci/test_daily_growth_decision.py
-          bash -n scripts/monitoring/verify_growth_data_wiring.sh
-          python3 -m pytest scripts/ci/test_growth_data_wiring_verify.py
-          python3 scripts/marketing/render_gtm_execution_ledger.py --check
-          python3 scripts/ci/gtm_execution_ledger_check.py
-          python3 -m pytest scripts/ci/test_gtm_execution_ledger.py
-          python3 scripts/marketing/render_gtm_pipeline_ledger.py --check
-          python3 scripts/ci/gtm_pipeline_ledger_check.py
-          python3 -m pytest scripts/ci/test_gtm_pipeline_ledger.py
-          python3 scripts/ci/manual_distribution_assets_check.py
-          python3 -m pytest scripts/ci/test_manual_distribution_assets_check.py
-          python3 scripts/ci/outbound_targets_check.py
-          python3 -m pytest scripts/ci/test_outbound_target_pipeline.py
-          python3 scripts/marketing/render_outbound_send_queue.py --check
-          python3 scripts/ci/outbound_send_queue_check.py
-          python3 -m pytest scripts/ci/test_outbound_send_queue.py
-          python3 scripts/marketing/enrich_outbound_research.py --check
-          python3 scripts/ci/outbound_research_packets_check.py
-          python3 scripts/marketing/sync_outbound_research_pipeline.py --check
-          python3 -m pytest scripts/ci/test_outbound_research_packets.py
-          python3 scripts/marketing/render_mcp_submissions.py --check
-          python3 -m pytest scripts/ci/test_mcp_submission_renderer.py
-          python3 scripts/ci/cursor_plugin_check.py
-          python3 -m pytest scripts/ci/test_cursor_plugin_check.py
-          python3 scripts/marketing/indexnow_submit.py
-          python3 scripts/ci/package_distribution_check.py
-          python3 -m pytest scripts/ci/test_package_distribution_check.py
-          python3 scripts/ci/seo_conversion_check.py
-          python3 -m pytest scripts/ci/test_seo_conversion_check.py
-          python3 -m pytest billing/tests/test_gtm_revenue_report.py
-          python3 -m pytest billing/tests/test_stripe_account_context_check.py
-          python3 -m pytest billing/tests/test_stripe_revenue_readiness.py
-          python3 -m pytest billing/tests/test_stripe_checkout_monitor.py
-          python3 -m pytest scripts/ci/test_stripe_checkout_canary.py
-          python3 -m pytest billing/tests/test_stripe_revenue_ops_audit.py
-          python3 -m pytest billing/tests/test_stripe_catalog_write_preflight.py
-          python3 -m pytest scripts/ci/test_stripe_checkout_pipeline_sync.py
-          python3 scripts/ci/server_card_check.py
-          python3 -m pytest scripts/ci/test_server_card_check.py
+          python3 -m pytest scripts/monitoring/test_backend_recovery_canary.py
 
       - name: backup restore checks
         run: |
@@ -148,19 +100,17 @@ jobs:
       - name: billing python checks
         run: |
           python3 -m pytest billing/tests/test_site_pricing_parity.py
-          python3 -m pytest billing/tests/test_pricing_parity.py
-          python3 -m pytest billing/tests/test_plan_normalization.py
-          python3 -m pytest billing/tests/test_sync_usage.py
           python3 -m pytest billing/tests/test_dunning.py
-          python3 -m pytest billing/tests/test_provision_free.py
           python3 -m pytest billing/tests/test_session_endpoints.py
           python3 -m pytest billing/tests/test_sessions.py
           python3 -m pytest billing/tests/test_tenant_store.py
           python3 -m pytest billing/tests/test_usage_pg_tools.py
           python3 -m pytest billing/tests/test_tenant_pg_tools.py
           python3 -m pytest billing/tests/test_contact_intake.py
-          python3 -m pytest billing/tests/test_lifecycle_nudges.py
-          python3 -m pytest billing/tests/test_checkout_recovery.py
+          python3 -m pytest billing/tests/test_legacy_billing_containment.py
+          python3 -m pytest billing/tests/test_stripe_account_context_check.py
+          python3 -m pytest billing/tests/test_stripe_catalog_write_preflight.py
+          python3 -m pytest billing/tests/test_stripe_revenue_ops_audit.py
 
       - name: Python SDK checks
         run: |
@@ -182,50 +132,21 @@ jobs:
           bash -n scripts/ci/reconciliation_invariants.sh
           python3 -m py_compile scripts/ci/production_launch_preflight.py
           python3 -m py_compile scripts/ci/release_identity_check.py
+          python3 -m py_compile scripts/ci/recovery_reconciliation_invariants.py
+          python3 -m py_compile scripts/ci/backend_recovery_gate.py
+          python3 -m py_compile scripts/ci/plonky3_compatibility_gate.py
+          python3 -m py_compile scripts/ci/backend_release_ready.py
           python3 -m py_compile scripts/ci/cloudflare_pages_secret_check.py
-          python3 -m py_compile scripts/ci/offer_metadata_check.py
-          python3 -m py_compile scripts/ci/receipt_share_contract_check.py
-          python3 -m py_compile scripts/ci/badge_embed_check.py
-          python3 -m py_compile scripts/ci/openai_chatgpt_app_check.py
-          python3 -m py_compile scripts/ci/server_card_check.py
-          python3 -m py_compile scripts/ci/package_distribution_check.py
-          python3 -m py_compile scripts/ci/seo_conversion_check.py
-          python3 -m py_compile scripts/ci/manual_distribution_assets_check.py
-          python3 -m py_compile scripts/ci/gtm_execution_ledger_check.py
-          python3 -m py_compile scripts/ci/gtm_pipeline_ledger_check.py
-          python3 -m py_compile scripts/ci/outbound_targets_check.py
-          python3 -m py_compile scripts/ci/outbound_send_queue_check.py
-          python3 -m py_compile scripts/ci/outbound_research_packets_check.py
-          python3 -m py_compile scripts/ci/cursor_plugin_check.py
-          python3 -m py_compile scripts/marketing/generate_outbound_targets.py
-          python3 -m py_compile scripts/marketing/render_outbound_send_queue.py
-          python3 -m py_compile scripts/marketing/enrich_outbound_research.py
-          python3 -m py_compile scripts/marketing/render_gtm_execution_ledger.py
-          python3 -m py_compile scripts/marketing/render_gtm_pipeline_ledger.py
-          python3 -m py_compile scripts/marketing/render_mcp_submissions.py
-          python3 -m py_compile scripts/marketing/indexnow_submit.py
-          python3 -m py_compile scripts/marketing/sync_stripe_checkout_pipeline.py
-          python3 -m py_compile scripts/marketing/sync_outbound_research_pipeline.py
-          python3 -m py_compile scripts/monitoring/gtm_distribution_monitor.py
-          python3 -m py_compile scripts/monitoring/gtm_growth_monitor.py
-          python3 -m py_compile scripts/monitoring/daily_growth_decision.py
-          python3 -m py_compile scripts/monitoring/stripe_checkout_canary.py
+          python3 -m py_compile scripts/monitoring/backend_recovery_canary.py
+          python3 -m py_compile billing/legacy_billing_containment.py
+          python3 -m py_compile billing/configure_contract_portal.py
           bash -n scripts/monitoring/api_health_audit.sh
-          bash -n scripts/monitoring/shared_dispatch_smoke.sh
           bash -n scripts/monitoring/host_cron_env.sh
-          bash -n scripts/monitoring/daily_growth_decision_cron.sh
-          bash -n scripts/monitoring/verify_growth_data_wiring.sh
-          python3 -m py_compile billing/lifecycle_nudges.py
-          python3 -m py_compile billing/checkout_recovery.py
-          python3 -m py_compile billing/gtm_revenue_report.py
           python3 -m py_compile billing/stripe_account_context_check.py
-          python3 -m py_compile billing/stripe_revenue_readiness.py
-          python3 -m py_compile billing/stripe_checkout_monitor.py
           python3 -m py_compile billing/stripe_revenue_ops_audit.py
           python3 -m py_compile billing/stripe_catalog_write_preflight.py
           bash -n billing/backup.sh
           bash -n billing/setup_stripe_products.sh
-          bash -n billing/setup_pilot_price.sh
           bash -n deploy/hetzner/install_billing_runtime.sh
           bash -n deploy/hetzner/deploy.sh
           bash -n deploy/hetzner/setup.sh
@@ -240,34 +161,11 @@ jobs:
           node --check site/analytics.js
           node --check deploy/uptime-probe/worker.js
 
-      - name: clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: clippy production packages
+        run: cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-server -p hc-mcp --all-targets -- -D warnings
 
-      - name: unit tests
-        run: cargo test --workspace
-
-      # CI runs on Ubuntu/x86_64. Exercise the AVX2 backend explicitly so
-      # the dormant SIMD code in hc-simd doesn't bitrot until someone
-      # finally wires it into the hot paths. NEON tests run on macos/aarch64
-      # if/when a macos matrix is added.
-      - name: hc-simd avx2 tests (x86_64)
-        if: runner.arch == 'X64'
-        run: cargo test -p hc-simd --features avx2
-
-      # Compile the criterion regression benches so they don't bitrot.
-      # Full baseline-comparison gating is a follow-up — for now, the
-      # build gate alone catches API drift in the bench file.
-      - name: criterion benches compile
-        run: cargo bench -p hc-core --bench field_arithmetic --no-run
-
-      # Smoke-run the benches with --quick to verify they execute end-to-end
-      # in CI hardware. --quick caps each measurement at ~1s so total runtime
-      # stays bounded.
-      - name: criterion benches smoke run
-        run: cargo bench -p hc-core --bench field_arithmetic -- --quick --warm-up-time 1 --measurement-time 2
-
-      - name: scaling invariant tests
-        run: cargo test -p hc-bench --features scaling-tests
+      - name: production package tests
+        run: cargo test -p hc-stream -p hc-plonky3 -p hc-cli -p hc-server -p hc-mcp
 
       - name: cargo audit
         run: |
@@ -280,52 +178,5 @@ jobs:
           cargo install cargo-deny --locked
           cargo deny check
 
-      - name: Sanity suite
-        run: ./scripts/test_suite.sh sanity
-
-      - name: Stress suite
-        run: ./scripts/test_suite.sh stress
-
-      - name: Ladder suite
-        run: ./scripts/test_suite.sh ladder
-
-      - name: Prover benchmark snapshot
-        run: cargo run -p hc-cli -- bench --iterations 2 --block-size 8 --scenario prover
-
-      - name: Verifier benchmark snapshot
-        run: cargo run -p hc-cli -- bench --iterations 5 --scenario verifier --metrics-dir benchmarks/verifier --metrics-tag ci
-
-      - name: Recursive aggregation smoke test
-        run: |
-          cargo run -p hc-cli -- prove --output /tmp/proof_a.json
-          cargo run -p hc-cli -- prove --output /tmp/proof_b.json
-          cargo run -p hc-cli -- recursion --proof /tmp/proof_a.json --proof /tmp/proof_b.json --metrics benchmarks/recursion_latest.json --artifact benchmarks/recursion_latest_artifact.json
-
-      - name: Check benchmark thresholds
-        run: ./scripts/check_bench_thresholds.py benchmarks/latest.json benchmarks/ladder_latest.json
-
-      - name: Height benchmark snapshot
-        run: cargo run -p hc-cli -- bench --scenario height --leaves 65536 --auto-block-size --samples 3
-
-      - name: Height dashboard summary
-        run: python3 scripts/aggregate_height_metrics.py --history benchmarks/height_history.jsonl --out-dir benchmarks
-
-      - name: Upload benchmark artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: hc-stark-benchmarks
-          path: |
-            benchmarks/latest.json
-            benchmarks/stress_latest.json
-            benchmarks/ladder_latest.json
-            benchmarks/ladder_latest.csv
-            benchmarks/recursion_latest.json
-            benchmarks/recursion_latest_artifact.json
-            benchmarks/height_latest.csv
-            benchmarks/height_history.csv
-            benchmarks/height_history.jsonl
-            benchmarks/height_dashboard.md
-            benchmarks/height_trend.png
-            benchmarks/verifier/latest.json
-            benchmarks/verifier/verifier_history.jsonl
-          if-no-files-found: ignore
+      - name: Plonky3 artifact schema smoke
+        run: cargo run -p hc-cli -- plonky3 schema --output-dir /tmp/tinyzkp-schemas

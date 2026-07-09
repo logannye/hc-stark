@@ -16,7 +16,6 @@ REPO="/opt/hc-stark"
 COMPOSE="docker compose -f docker-compose.yml -f deploy/hetzner/docker-compose.prod.yml"
 API_LOCAL="http://127.0.0.1:8080"
 WEBHOOK_LOCAL="http://127.0.0.1:5001"
-SHARED_DISPATCH=0
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "ERROR: must run as root (needs systemctl + docker)." >&2
@@ -24,27 +23,13 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 cd "$REPO"
 
-if [ "${HC_SERVER_PROVE_DISPATCH:-}" = "shared" ] \
-    || { [ -f "$REPO/.env" ] && grep -Eq '^HC_SERVER_PROVE_DISPATCH=["'\'']?shared["'\'']?$' "$REPO/.env"; }; then
-    SHARED_DISPATCH=1
-    case ",${COMPOSE_PROFILES:-}," in
-        *,shared-workers,*) ;;
-        *)
-            export COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}shared-workers"
-            echo "==> HC_SERVER_PROVE_DISPATCH=shared detected; enabling compose profile: $COMPOSE_PROFILES"
-            ;;
-    esac
-fi
-
 sync_host_billing_services() {
     mkdir -p /opt/hc-stark/data/growth_snapshots
 
     cat > /etc/cron.d/hc-billing <<'CRON'
-0 * * * * root cd /opt/hc-stark && bash scripts/monitoring/host_cron_env.sh billing/sync_usage.py >> /var/log/hc-billing.log 2>&1
-15 * * * * root cd /opt/hc-stark && bash scripts/monitoring/host_cron_env.sh billing/lifecycle_nudges.py >> /var/log/hc-lifecycle.log 2>&1
-30 * * * * root cd /opt/hc-stark && bash scripts/monitoring/host_cron_env.sh billing/checkout_recovery.py >> /var/log/hc-checkout-recovery.log 2>&1
-45 9 * * * root cd /opt/hc-stark && bash scripts/monitoring/host_cron_env.sh scripts/monitoring/gtm_growth_monitor.py --offline >> /var/log/hc-gtm-growth.log 2>&1
-15 10 * * * root cd /opt/hc-stark && bash scripts/monitoring/daily_growth_decision_cron.sh >> /var/log/hc-daily-growth-decision.log 2>&1
+# TinyZKP backend recovery: legacy usage meters, checkout recovery, lifecycle
+# nudges, and growth automation are intentionally disabled. Contract invoices
+# are operator-created through the reviewed Stripe Invoicing workflow.
 CRON
     chmod 644 /etc/cron.d/hc-billing
 
@@ -95,14 +80,16 @@ python3 scripts/ci/deploy_readiness_check.py \
 echo "==> [5/10] Build containerized tiers"
 $COMPOSE build
 
-echo "==> [6/10] Shared worker config preflight"
-if [ "$SHARED_DISPATCH" -eq 1 ]; then
-    $COMPOSE run --rm --no-deps hc-job-worker --check-config
+echo "==> [6/10] Confirm production image has no proving workers"
+if docker run --rm --entrypoint /bin/sh "$($COMPOSE images -q hc-server)" -c \
+    'test ! -e /app/hc-worker && test ! -e /app/hc-job-worker'; then
+    echo "    production image is capability-only"
 else
-    echo "    HC_SERVER_PROVE_DISPATCH is not shared — skip hc-job-worker preflight"
+    echo "    FAIL production image contains a legacy proving worker" >&2
+    exit 1
 fi
 
-echo "==> [7/10] Restart containerized tiers (hc-server, hc-mcp, prometheus, grafana, alertmanager)"
+echo "==> [7/10] Restart maintenance API/MCP and monitoring tiers"
 $COMPOSE up -d
 
 echo "==> [8/10] Sync Caddy reverse-proxy config (host systemd) if changed"

@@ -26,11 +26,6 @@ def test_validate_services_rejects_profile_worker_without_shared_profile():
     assert "local: unexpected services: hc-job-worker" in failures
 
 
-def test_shared_worker_scenario_requires_worker_service():
-    failures = compose.validate_services(compose.SCENARIOS[2], set(compose.BASE_SERVICES))
-    assert "production-shared-workers: missing services: hc-job-worker" in failures
-
-
 def test_check_scenario_runs_render_and_service_commands(monkeypatch):
     calls = []
 

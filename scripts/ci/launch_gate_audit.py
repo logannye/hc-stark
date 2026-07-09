@@ -286,6 +286,30 @@ def print_text(results: list[GateResult]) -> None:
             print(f"     deploy/observe: {result.deploy_action}")
 
 
+def audit_backend_recovery(root: pathlib.Path) -> list[GateResult] | None:
+    path = root / "release" / "backend-v1-gates.json"
+    if not path.is_file():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("status") != "blocked":
+        return None
+    results = []
+    for name, gate in payload["gates"].items():
+        passed = bool(gate.get("passed"))
+        evidence = str(gate.get("evidence", "")).strip()
+        details = [evidence] if evidence else ["release-blocking evidence not yet earned"]
+        results.append(
+            GateResult(
+                "Backend v1",
+                name.replace("_", " "),
+                "PASS" if passed else "SKIP",
+                details,
+                None,
+            )
+        )
+    return results
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=pathlib.Path, default=ROOT, help="Product repo root")
@@ -303,7 +327,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     args = parser.parse_args(argv)
 
-    results = audit_gates(args.root.resolve(), args.legacy_root.resolve() if args.legacy_root else None, args.require_legacy)
+    root = args.root.resolve()
+    results = audit_backend_recovery(root)
+    recovery_mode = results is not None
+    if results is None:
+        results = audit_gates(root, args.legacy_root.resolve() if args.legacy_root else None, args.require_legacy)
     failures = [result for result in results if result.status == "FAIL"]
 
     if args.json:
@@ -327,7 +355,9 @@ def main(argv: list[str]) -> int:
         passed = sum(1 for result in results if result.status == "PASS")
         skipped = sum(1 for result in results if result.status == "SKIP")
         print(f"\nLaunch gate audit: {passed} passed, {skipped} skipped, {len(failures)} failed")
-        if not failures:
+        if recovery_mode and not failures:
+            print("Backend v1 remains blocked; passed items are local evidence only and skipped items are mandatory release gates.")
+        elif not failures:
             print("Local launch-gate evidence is present. Production deploy/observation gates remain separate.")
 
     return 1 if failures else 0

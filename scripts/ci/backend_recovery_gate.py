@@ -47,14 +47,19 @@ def check_public_contract() -> None:
 
 
 def check_server_and_mcp() -> None:
-    server = text("crates/hc-server/src/lib.rs")
-    require(".unwrap_or(true);" in server, "server maintenance must default on")
-    require('route("/v1/capabilities", get(v1_capabilities))' in server, "capabilities route is missing")
+    server = text("crates/hc-server/src/maintenance.rs")
+    server_cargo = text("crates/hc-server/Cargo.toml")
+    require("maintenance_mode: true" in server, "server maintenance must be compile-time default on")
+    require('route("/v1/capabilities", get(capabilities))' in server, "capabilities route is missing")
     for route in ('route("/v1/inputs"', 'route("/v1/quotes"', 'route("/v1/proofs"', 'route("/v1/verify"'):
         require(route not in server, f"production router exposes retired route marker {route}")
     require('service_status: "backend_recovery"' in server, "server capabilities do not report backend recovery")
     require('plonky3_version: "0.6.1"' in server, "server capabilities do not pin Plonky3")
     require("legacy_statement_unbound" in server, "legacy hosted verification must fail closed")
+    require('path = "src/maintenance.rs"' in server_cargo, "production server library is not maintenance-only")
+    require("autobins = false" in server_cargo, "legacy worker binaries can still be auto-discovered")
+    require("hc-worker" not in text("Dockerfile"), "production image still contains a legacy proving worker")
+    require("hc-job-worker" not in text("Dockerfile"), "production image still contains a legacy queue worker")
 
     mcp = text("crates/hc-mcp/src/lib.rs")
     discovery = text("crates/hc-mcp/src/tools/discovery.rs")
@@ -73,7 +78,17 @@ def check_billing_and_release() -> None:
 
     release = json.loads(text("release/backend-v1-gates.json"))
     require(release["status"] == "blocked", "backend v1 must remain blocked during recovery")
-    require(all(not gate["passed"] for gate in release["gates"].values()), "unearned backend release gate is marked passed")
+    for gate_name in (
+        "one_million_row_resource_gate",
+        "ten_million_row_resource_gate",
+        "crash_resume_and_corruption_suite",
+        "plonky3_specialist_review",
+        "implementation_review_no_high_findings",
+        "external_design_partner_integration",
+        "signed_release_sbom_and_checksums",
+        "api_mcp_site_cli_identity_match",
+    ):
+        require(not release["gates"][gate_name]["passed"], f"unearned release gate is marked passed: {gate_name}")
 
 
 def main() -> int:

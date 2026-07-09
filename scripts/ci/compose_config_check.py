@@ -34,19 +34,6 @@ PROD_ENV = {
     "HC_METRICS_TOKEN": "dummy-metrics-token",
 }
 
-SHARED_WORKER_ENV = {
-    **PROD_ENV,
-    "COMPOSE_PROFILES": "shared-workers",
-    "HC_SERVER_PROVE_DISPATCH": "shared",
-    "HC_SERVER_PG_URL": "postgres://tinyzkp:dummy@db:5432/tinyzkp",
-    "HC_SERVER_USAGE_READ_FROM": "postgres",
-    "HC_USAGE_SOURCE": "postgres",
-    "HC_RATE_LIMIT_PG_URL": "postgres://tinyzkp:dummy@db:5432/tinyzkp",
-    "HC_SERVER_JOB_INDEX_SOURCE": "postgres",
-    "HC_JOB_INDEX_PG_URL": "postgres://tinyzkp:dummy@db:5432/tinyzkp",
-    "HC_JOB_WORKER_USAGE_PG_URL": "postgres://tinyzkp:dummy@db:5432/tinyzkp",
-}
-
 BASE_SERVICES = frozenset(
     {
         "hc-server",
@@ -54,7 +41,6 @@ BASE_SERVICES = frozenset(
         "prometheus",
         "grafana",
         "alertmanager",
-        "billing-cron",
     }
 )
 
@@ -72,12 +58,6 @@ SCENARIOS = (
         env=PROD_ENV,
         required_services=BASE_SERVICES,
         forbidden_services=frozenset({"hc-job-worker"}),
-    ),
-    ComposeScenario(
-        name="production-shared-workers",
-        files=("docker-compose.yml", "deploy/hetzner/docker-compose.prod.yml"),
-        env=SHARED_WORKER_ENV,
-        required_services=BASE_SERVICES | {"hc-job-worker"},
     ),
 )
 

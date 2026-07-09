@@ -92,14 +92,11 @@ UNIT
 systemctl daemon-reload
 systemctl enable hc-stark.service
 
-# ---- Billing cron ----
+# ---- Billing cron (disabled during backend recovery) ----
 CRON_FILE="/etc/cron.d/hc-billing"
 cat > "$CRON_FILE" <<'CRON'
-0 * * * * root cd /opt/hc-stark && bash scripts/monitoring/host_cron_env.sh billing/sync_usage.py >> /var/log/hc-billing.log 2>&1
-15 * * * * root cd /opt/hc-stark && bash scripts/monitoring/host_cron_env.sh billing/lifecycle_nudges.py >> /var/log/hc-lifecycle.log 2>&1
-30 * * * * root cd /opt/hc-stark && bash scripts/monitoring/host_cron_env.sh billing/checkout_recovery.py >> /var/log/hc-checkout-recovery.log 2>&1
-45 9 * * * root cd /opt/hc-stark && bash scripts/monitoring/host_cron_env.sh scripts/monitoring/gtm_growth_monitor.py --offline >> /var/log/hc-gtm-growth.log 2>&1
-15 10 * * * root cd /opt/hc-stark && bash scripts/monitoring/daily_growth_decision_cron.sh >> /var/log/hc-daily-growth-decision.log 2>&1
+# TinyZKP backend recovery: no usage meter, checkout recovery, lifecycle,
+# outbound, or growth-automation jobs may run.
 CRON
 chmod 644 "$CRON_FILE"
 
