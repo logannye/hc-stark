@@ -1,0 +1,30 @@
+[package]
+name = "hc-plonky3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Resource-bounded backend that emits official Plonky3 0.6.1 proofs"
+
+[dependencies]
+blake3.workspace = true
+hc-stream = { path = "../hc-stream" }
+p3-air.workspace = true
+p3-challenger.workspace = true
+p3-commit.workspace = true
+p3-dft.workspace = true
+p3-field.workspace = true
+p3-fri.workspace = true
+p3-goldilocks.workspace = true
+p3-matrix.workspace = true
+p3-merkle-tree.workspace = true
+p3-poseidon2-air.workspace = true
+p3-symmetric.workspace = true
+p3-uni-stark.workspace = true
+postcard = { version = "1", features = ["alloc"] }
+rand = "=0.10.2"
+serde = { version = "1", features = ["derive"] }
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

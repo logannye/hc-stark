@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "profile_id": "tinyzkp-p3-goldilocks-v1",
+  "release_status": "backend_recovery",
+  "upstream": {
+    "repository": "https://github.com/Plonky3/Plonky3",
+    "tag": "v0.6.1",
+    "reference_configuration": "keccak-air/examples/prove_goldilocks_poseidon2.rs"
+  },
+  "configuration": {
+    "field": "p3_goldilocks::Goldilocks",
+    "challenge_field": "BinomialExtensionField<Goldilocks,2>",
+    "merkle_and_transcript_permutation": "Poseidon2Goldilocks<8>",
+    "permutation_seed": 1,
+    "fri_parameters": "FriParameters::new_benchmark",
+    "proof_system": "p3_uni_stark",
+    "proof_serializer": "postcard",
+    "official_verifier_required": true
+  },
+  "pinned_crates": [
+    {"name":"p3-air","version":"0.6.1","checksum":"a3e18b22bf85451382098e54da526733c7f390f83d4141b3b8b93e98e805df55"},
+    {"name":"p3-challenger","version":"0.6.1","checksum":"272b2cfdcd3cf1affeab292aa7888ed7e4c156e0d5ffc19612c86553941db178"},
+    {"name":"p3-commit","version":"0.6.1","checksum":"13d28e529d508f538409306f1e34132d3eabed303bda5a3eb3c0ed3217b97a78"},
+    {"name":"p3-dft","version":"0.6.1","checksum":"1dc420990b39aa4cdb78ac248d5defe97f760c1056aeceb160dcf3e62baf4eb7"},
+    {"name":"p3-field","version":"0.6.1","checksum":"ab37408c6c964e7e18c2305a15e31bc784aa20eb82eb513b4850aaa13ee445d3"},
+    {"name":"p3-fri","version":"0.6.1","checksum":"32ea6753da59cef42a3f2beedad3e5911171dc02b70f4cc5aa6a22f066654932"},
+    {"name":"p3-goldilocks","version":"0.6.1","checksum":"cdf8c89d8e833f93c488bd207786cd2d525a9f93de7f00363bca5652c88110a4"},
+    {"name":"p3-matrix","version":"0.6.1","checksum":"a7c5e32dd61fa6341f8ce7abe2a97e9c3f8a93d9ea17bf4f675a2f6c987b658e"},
+    {"name":"p3-merkle-tree","version":"0.6.1","checksum":"72553183a32393dda348c1bcfb478657d35f6242e962c378644a9bc062b5798f"},
+    {"name":"p3-poseidon2-air","version":"0.6.1","checksum":"fb8761b9be7ce2130077c13967f9d14f7b7c6c0b37bf29d2c358f47b752cabcc"},
+    {"name":"p3-symmetric","version":"0.6.1","checksum":"284db1f284c4007eeb65cef4656426c93192af9bd9703b7f3afbf7faab274500"},
+    {"name":"p3-uni-stark","version":"0.6.1","checksum":"14e2195220ed01aa53e149836b3011c76fe347b54e5eb16beb8de8aac72fff3b"}
+  ],
+  "validated_workloads": ["fibonacci", "poseidon2_goldilocks"],
+  "known_limits": [
+    "The Plonky3 0.6.1 TwoAdicSubgroupDft trait owns its input RowMajorMatrix.",
+    "The block-readable entry point removes that input floor but is not yet consumed by upstream p3-uni-stark.",
+    "FriParameters::new_benchmark is frozen for compatibility testing, not represented as an audited production security claim.",
+    "Full-pipeline one-million-row and ten-million-row resource gates remain open."
+  ]
+}

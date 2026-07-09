@@ -9,6 +9,7 @@
     "crates/hc-fri",
     "crates/hc-hash",
     "crates/hc-height",
+    "crates/hc-plonky3",
     "crates/hc-stream",
      "crates/hc-prover",
      "crates/hc-recursion",
@@ -47,3 +48,15 @@
 rand = { version = "0.8", features = ["std"] }
 blake3 = "1.5"
 sha2 = "0.10"
+p3-air = "=0.6.1"
+p3-challenger = "=0.6.1"
+p3-commit = "=0.6.1"
+p3-dft = "=0.6.1"
+p3-field = "=0.6.1"
+p3-fri = "=0.6.1"
+p3-goldilocks = "=0.6.1"
+p3-matrix = "=0.6.1"
+p3-merkle-tree = "=0.6.1"
+p3-poseidon2-air = "=0.6.1"
+p3-symmetric = "=0.6.1"
+p3-uni-stark = "=0.6.1"

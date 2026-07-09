@@ -49,6 +49,12 @@ jobs:
       - name: Plonky3 backend recovery gate
         run: python3 scripts/ci/backend_recovery_gate.py
 
+      - name: Frozen Plonky3 compatibility profile
+        run: python3 scripts/ci/plonky3_compatibility_gate.py
+
+      - name: Plonky3 official verifier and DFT differential tests
+        run: cargo test -p hc-plonky3
+
       - name: reconciliation invariants
         run: ./scripts/ci/reconciliation_invariants.sh
 
