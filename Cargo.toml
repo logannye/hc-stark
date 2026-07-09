@@ -9,6 +9,7 @@
     "crates/hc-fri",
     "crates/hc-hash",
     "crates/hc-height",
+    "crates/hc-stream",
      "crates/hc-prover",
      "crates/hc-recursion",
      "crates/hc-replay",
