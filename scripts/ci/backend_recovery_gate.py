@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Fail closed if a recovery build exposes retired proving or billing claims."""
+
+from __future__ import annotations
+
+import json
+import pathlib
+import sys
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+FAILURES: list[str] = []
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        FAILURES.append(message)
+
+
+def text(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+def check_public_contract() -> None:
+    pricing = json.loads(text("site/pricing.json"))
+    require(pricing["service_status"] == "backend_recovery", "site pricing must report backend_recovery")
+    for field in ("hosted_proving_available", "hosted_verification_available", "account_creation_enabled", "checkout_enabled"):
+        require(pricing[field] is False, f"site pricing must keep {field}=false")
+    require(pricing["stripe_policy"]["api_version"] == "2026-02-25.clover", "Stripe API version must be pinned")
+
+    indexed = ["index.html", "engine.html", "benchmarks.html", "plonky3.html", "security.html", "docs.html", "pricing.html", "status.html"]
+    forbidden = ("proof.version", "Protocol v9", "StatementV1", "ReceiptV2", "$20K", "$36K", "$75K", "$5,000/month", "at least 70%")
+    for page in indexed:
+        body = text(f"site/{page}")
+        require("/status" in body and "/contact" in body, f"{page} must expose Status and Contact navigation")
+        for claim in forbidden:
+            require(claim not in body, f"{page} contains retired claim {claim!r}")
+
+    worker = text("site/_worker.js")
+    for route in ("/compute", "/receipts", "/try", "/signup", "/pilot", "/platform-rollout"):
+        require(route in worker, f"worker is missing retired-route handling for {route}")
+    for route in ("/api/create-checkout", "/api/create-free-account", "/api/create-pilot-checkout", "/api/demo-prove"):
+        require(route in worker, f"worker is missing maintenance denial for {route}")
+
+    openapi = json.loads(text("site/openapi.json"))
+    require(set(openapi["paths"]) == {"/healthz", "/version", "/v1/capabilities"}, "maintenance OpenAPI exposes unsupported paths")
+
+
+def check_server_and_mcp() -> None:
+    server = text("crates/hc-server/src/lib.rs")
+    require(".unwrap_or(true);" in server, "server maintenance must default on")
+    require('route("/v1/capabilities", get(v1_capabilities))' in server, "capabilities route is missing")
+    for route in ('route("/v1/inputs"', 'route("/v1/quotes"', 'route("/v1/proofs"', 'route("/v1/verify"'):
+        require(route not in server, f"production router exposes retired route marker {route}")
+    require('service_status: "backend_recovery"' in server, "server capabilities do not report backend recovery")
+    require('plonky3_version: "0.6.1"' in server, "server capabilities do not pin Plonky3")
+    require("legacy_statement_unbound" in server, "legacy hosted verification must fail closed")
+
+    mcp = text("crates/hc-mcp/src/lib.rs")
+    discovery = text("crates/hc-mcp/src/tools/discovery.rs")
+    require('PRODUCTION_TOOL_NAMES: &[&str] = &["get_capabilities"]' in mcp, "MCP production discovery is not capability-only")
+    require('"service_status": "backend_recovery"' in discovery, "MCP capabilities do not report backend recovery")
+    require('"proving": false' in discovery and '"verification": false' in discovery, "MCP execution features must be false")
+
+
+def check_billing_and_release() -> None:
+    require("CHECKOUT_ENABLED = false" in text("site/functions/api/create-checkout.js"), "self-serve checkout is not hard-disabled")
+    require("CHECKOUT_ENABLED = false" in text("site/functions/api/create-pilot-checkout.js"), "pilot checkout is not hard-disabled")
+    require("ACCOUNT_CREATION_ENABLED = false" in text("site/functions/api/create-free-account.js"), "account creation is not hard-disabled")
+    require("TINYZKP_ALLOW_LEGACY_BILLING_WRITE" in text("billing/setup_stripe_products.sh"), "legacy Stripe catalog writes are not fail-closed")
+    require("TINYZKP_ALLOW_LEGACY_METER_EVENTS" in text("billing/sync_usage.py"), "legacy meter events are not fail-closed")
+    require('os.environ.get("CONTACT_TO_EMAIL", "hello@tinyzkp.com")' in text("billing/provision_tenant.py"), "contact recipient is not environment-configured")
+
+    release = json.loads(text("release/backend-v1-gates.json"))
+    require(release["status"] == "blocked", "backend v1 must remain blocked during recovery")
+    require(all(not gate["passed"] for gate in release["gates"].values()), "unearned backend release gate is marked passed")
+
+
+def main() -> int:
+    check_public_contract()
+    check_server_and_mcp()
+    check_billing_and_release()
+    if FAILURES:
+        for failure in FAILURES:
+            print(f"FAIL: {failure}", file=sys.stderr)
+        return 1
+    print("TinyZKP backend recovery gate: PASS (maintenance mode, no production claim)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

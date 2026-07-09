@@ -5,7 +5,7 @@
 //
 // Secrets required (set via `wrangler pages secret put`):
 //   STRIPE_SECRET_KEY          — sk_live_... or sk_test_...
-//   STRIPE_PORTAL_CONFIG_ID    — bpc_... (optional, uses default if omitted)
+//   STRIPE_PORTAL_CONFIG_ID    — bpc_... (required; invoice/payment-method-only)
 //   INTERNAL_SECRET            — shared secret for webhook calls
 //   WEBHOOK_BASE_URL           — (optional) defaults to https://webhook.tinyzkp.com
 
@@ -67,7 +67,8 @@ export async function onRequestPost(context) {
     }
 
     const STRIPE_SECRET_KEY = context.env.STRIPE_SECRET_KEY;
-    if (!STRIPE_SECRET_KEY) {
+    const portalConfigurationId = context.env.STRIPE_PORTAL_CONFIG_ID;
+    if (!STRIPE_SECRET_KEY || !portalConfigurationId) {
       return new Response(JSON.stringify({ error: "server misconfigured" }), {
         status: 500, headers: jsonHeaders,
       });
@@ -76,10 +77,8 @@ export async function onRequestPost(context) {
     // Create a portal session using the server-resolved customer ID directly.
     const params = new URLSearchParams();
     params.append("customer", stripeCustomerId);
-    if (context.env.STRIPE_PORTAL_CONFIG_ID) {
-      params.append("configuration", context.env.STRIPE_PORTAL_CONFIG_ID);
-    }
-    params.append("return_url", "https://tinyzkp.com/account");
+    params.append("configuration", portalConfigurationId);
+    params.append("return_url", "https://tinyzkp.com/status");
 
     const portalResp = await fetch("https://api.stripe.com/v1/billing_portal/sessions", {
       method: "POST",

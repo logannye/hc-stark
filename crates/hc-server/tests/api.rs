@@ -63,6 +63,101 @@ async fn version_reports_api_release_identity() {
 }
 
 #[tokio::test]
+async fn maintenance_mode_blocks_proving_and_rejects_legacy_verification() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state = hc_server::test_state_maintenance(tmp.path().to_path_buf());
+    let app = hc_server::build_app(state);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/prove")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert!(String::from_utf8_lossy(&body).contains("protocol_upgrade"));
+
+    let request = VerifyRequest {
+        proof: ProofBytes {
+            version: 5,
+            bytes: vec![],
+        },
+        allow_legacy_v2: false,
+    };
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/verify")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&request).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert!(String::from_utf8_lossy(&body).contains("legacy_statement_unbound"));
+}
+
+#[tokio::test]
+async fn maintenance_capabilities_are_plonky3_first_and_release_bound() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state = hc_server::test_state_maintenance(tmp.path().to_path_buf());
+    let app = hc_server::build_app(state);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/capabilities")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let capabilities: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(capabilities["service_status"], "backend_recovery");
+    assert_eq!(capabilities["backend"], "plonky3");
+    assert_eq!(capabilities["plonky3_version"], "0.6.1");
+    assert_eq!(
+        capabilities["compatibility_profile"],
+        "tinyzkp-p3-goldilocks-v1"
+    );
+    assert_eq!(capabilities["proving_available"], false);
+    assert_eq!(capabilities["verification_available"], false);
+    assert_eq!(capabilities["release"]["service"], "api");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/quotes")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
 async fn prove_then_verify_roundtrip() {
     // Hold the env-var lock for the env mutation. Other tests that mutate
     // HC_SERVER_WORKER_PATH (e.g. worker_crash_lands_job_in_failed_state)

@@ -22,6 +22,12 @@
 
 set -euo pipefail
 
+if [[ "${TINYZKP_ALLOW_LEGACY_BILLING_WRITE:-0}" != "1" ]]; then
+  echo "ERROR: legacy Developer/Pro/Scale/Compute catalog writes are retired during the Plonky3 backend recovery." >&2
+  echo "This archived script is blocked by default. Do not re-enable it for a new catalog." >&2
+  exit 1
+fi
+
 # ── Pre-flight ─────────────────────────────────────────────────────────
 
 USE_STRIPE_CLI=0

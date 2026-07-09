@@ -167,7 +167,7 @@ def _send_magic_link_email(email: str, link: str) -> bool:
         return False
 
 
-CONTACT_RECIPIENT = "logan@galenhealth.org"
+CONTACT_RECIPIENT = os.environ.get("CONTACT_TO_EMAIL", "hello@tinyzkp.com")
 CONTACT_QUALIFICATION_FIELDS = (
     ("source", "Source"),
     ("medium", "Medium"),
@@ -184,6 +184,19 @@ CONTACT_QUALIFICATION_FIELDS = (
     ("latency_requirement", "Latency"),
     ("current_alternative", "Current alternative"),
     ("budget_owner", "Budget owner"),
+    ("company", "Company"),
+    ("repository", "Repository / stack reference"),
+    ("stack", "Proving stack"),
+    ("workload", "Workload"),
+    ("logical_rows", "Rows / work units"),
+    ("current_memory", "Current RSS / OOM"),
+    ("target_ram", "Target RAM"),
+    ("scratch", "Available scratch"),
+    ("verifier_target", "Verifier target"),
+    ("data_sensitivity", "Data sensitivity"),
+    ("technical_owner", "Technical owner"),
+    ("timeline", "Timeline"),
+    ("consent", "Retention consent"),
 )
 
 ATTRIBUTION_FIELDS = (
@@ -275,7 +288,6 @@ def _send_contact_email(
     msg["Subject"] = f"[TinyZKP {category}] from {name[:100]}"
     msg["From"] = SMTP_FROM
     msg["To"] = CONTACT_RECIPIENT
-    # Reply-To set to submitter so hitting Reply in the inbox responds to them, not the noreply box.
     msg["Reply-To"] = f"{name[:100]} <{sender_email[:254]}>"
 
     try:
@@ -290,8 +302,43 @@ def _send_contact_email(
             server.send_message(msg)
         print(f"Contact email forwarded for {sender_email}")
         return True
-    except Exception as e:
-        print(f"WARNING: Failed to forward contact email from {sender_email}: {e}", file=sys.stderr)
+    except Exception as exc:
+        print(f"WARNING: Failed to forward contact email from {sender_email}: {exc}", file=sys.stderr)
+        return False
+
+
+def _send_evaluation_ack(name: str, email: str) -> bool:
+    """Acknowledge a scoped evaluation application without promising acceptance."""
+    if not SMTP_HOST:
+        return False
+    body = (
+        f"Hi {name[:100]},\n\n"
+        "TinyZKP received your evaluation application. Do not send witnesses, "
+        "credentials, customer data, or proprietary inputs by email.\n\n"
+        "The review checks for one reproducible Plonky3 workload, a conventional "
+        "baseline, a measured RAM bottleneck, an official verifier target, and a "
+        "non-sensitive deterministic input generator.\n\n"
+        "Benchmark methodology: https://tinyzkp.com/benchmarks\n"
+        "Engine status: https://tinyzkp.com/status\n\n"
+        "Submitting the form does not create a contract or reserve capacity.\n"
+    )
+    msg = MIMEText(body)
+    msg["Subject"] = "TinyZKP evaluation application received"
+    msg["From"] = SMTP_FROM
+    msg["To"] = email
+    try:
+        if SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+        else:
+            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+            server.starttls()
+        with server:
+            if SMTP_USER and SMTP_PASSWORD:
+                server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception as exc:
+        print(f"WARNING: Failed to acknowledge evaluation application for {email}: {exc}", file=sys.stderr)
         return False
 
 
@@ -873,6 +920,8 @@ def send_contact():
         return flask.jsonify(error="name, email, and message are required"), 400
     if "@" not in email or len(email) > 254 or len(name) > 200 or len(message) > 5000:
         return flask.jsonify(error="invalid input"), 400
+    if category == "Design Partner" and qualification.get("consent") != "twelve_month_retention":
+        return flask.jsonify(error="retention consent is required"), 400
 
     valid_categories = {
         "General Inquiry",
@@ -888,6 +937,8 @@ def send_contact():
     def _bg_send():
         try:
             _send_contact_email(name, email, safe_category, message, qualification)
+            if safe_category == "Design Partner":
+                _send_evaluation_ack(name, email)
         except Exception as e:
             print(f"WARNING: Contact email failed from {email}: {e}", file=sys.stderr)
 

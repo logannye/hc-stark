@@ -1,216 +1,75 @@
 {
-  "$schema": "https://tinyzkp.com/schemas/tinyzkp-pricing.schema.json",
-  "name": "TinyZKP Pricing",
+  "schema_version": 3,
+  "name": "TinyZKP Commercial Offers",
   "url": "https://tinyzkp.com/pricing",
-  "generated_at": "2026-06-24",
+  "effective_date": "2026-07-09",
   "currency": "USD",
-  "summary": "Self-serve proof receipt plans bill a monthly base plus usage by trace band. Verification is free. Compute is usage-based for long supported traces at $0.50 per million trace steps with a $0.05 minimum. Serious production buyers can fund a $5,000 creditable pilot through Stripe Checkout or scope a sales-assisted platform rollout.",
-  "verification": {
-    "price": 0,
-    "unit": "verification",
-    "note": "Verifier calls and failed verifier checks are not proof-generation charges."
+  "service_status": "backend_recovery",
+  "hosted_proving_available": false,
+  "hosted_verification_available": false,
+  "account_creation_enabled": false,
+  "checkout_enabled": false,
+  "legacy_self_serve_prices_retired": ["free_receipt", "developer", "pro", "scale", "compute", "production_pilot"],
+  "open_source": {
+    "license": "MIT",
+    "includes": ["resource-bounded backend", "benchmark harness", "compatibility tooling", "local verification", "ecosystem adapters"],
+    "local_price": 0
   },
-  "plans": [
+  "offers": [
     {
-      "id": "free",
-      "name": "Free",
-      "base_monthly": 0,
-      "included_receipts_per_month": 100,
-      "prove_requests_per_minute": 10,
-      "concurrent_jobs": 1,
-      "monthly_spend_cap": 0,
-      "discount_percent": 0,
-      "checkout_url": "https://tinyzkp.com/signup?source=pricing_json&medium=metadata&intent=free_signup",
-      "best_for": "Evaluation, demos, and first agent integrations."
+      "id": "founding_evaluation",
+      "name": "Founding Memory-Bounded Evaluation",
+      "price": 25000,
+      "availability": "first_two_customers",
+      "billing": "50_percent_upfront_50_percent_on_delivery",
+      "duration": "3_weeks",
+      "engineering_day_cap": 15,
+      "contact_url": "https://tinyzkp.com/contact?intent=memory_bounded_evaluation"
     },
     {
-      "id": "developer",
-      "name": "Developer",
-      "base_monthly": 19,
-      "included_receipts_per_month": 0,
-      "prove_requests_per_minute": 100,
-      "concurrent_jobs": 4,
-      "monthly_spend_cap": 500,
-      "discount_percent": 0,
-      "checkout_url": "https://tinyzkp.com/signup?plan=developer&source=pricing_json&medium=metadata&intent=paid_checkout",
-      "best_for": "Production pilots where receipts are attached to one workflow."
+      "id": "standard_evaluation",
+      "name": "Memory-Bounded Prover Evaluation",
+      "price": 40000,
+      "billing": "50_percent_upfront_50_percent_on_delivery",
+      "duration": "3_weeks",
+      "engineering_day_cap": 15,
+      "contact_url": "https://tinyzkp.com/contact?intent=memory_bounded_evaluation"
     },
     {
-      "id": "pro",
-      "name": "Pro",
-      "base_monthly": 79,
-      "included_receipts_per_month": 0,
-      "prove_requests_per_minute": 300,
-      "concurrent_jobs": 8,
-      "monthly_spend_cap": 2500,
-      "discount_percent": 25,
-      "checkout_url": "https://tinyzkp.com/signup?plan=pro&source=pricing_json&medium=metadata&intent=paid_checkout",
-      "best_for": "Teams adding receipts to customer-visible automations."
+      "id": "tinyzkp_certified",
+      "name": "TinyZKP Certified",
+      "price": 60000,
+      "period": "year",
+      "billing": "annual_prepaid_send_invoice",
+      "included_support_hours_per_quarter": 10,
+      "supported_workloads": 1,
+      "contact_url": "https://tinyzkp.com/contact?intent=certified"
     },
     {
-      "id": "scale",
-      "name": "Scale",
-      "base_monthly": 199,
-      "included_receipts_per_month": 0,
-      "prove_requests_per_minute": 500,
-      "concurrent_jobs": 16,
-      "monthly_spend_cap": 10000,
-      "discount_percent": 40,
-      "checkout_url": "https://tinyzkp.com/signup?plan=scale&source=pricing_json&medium=metadata&intent=paid_checkout",
-      "best_for": "Production services with many receipts and support needs."
+      "id": "tinyzkp_fleet_oem",
+      "name": "TinyZKP Fleet / OEM",
+      "minimum_price": 125000,
+      "period": "year",
+      "billing": "annual_prepaid_send_invoice",
+      "custom_engineering_minimum_hourly_rate": 300,
+      "contact_url": "https://tinyzkp.com/contact?intent=fleet_oem"
     },
     {
-      "id": "compute",
-      "name": "Compute",
-      "base_monthly": 0,
-      "included_receipts_per_month": 0,
-      "prove_requests_per_minute": 100,
-      "concurrent_jobs": 8,
-      "monthly_spend_cap": null,
-      "discount_percent": 0,
-      "checkout_url": "https://tinyzkp.com/signup?plan=compute&source=pricing_json&medium=metadata&intent=paid_checkout",
-      "best_for": "Large supported state-transition traces, backfills, and audit packages priced by trace step."
+      "id": "reserved_hosted_capacity",
+      "name": "Reserved Hosted Capacity",
+      "minimum_price": 15000,
+      "period": "month",
+      "availability": "unavailable_until_review_demand_and_margin_gates",
+      "required_projected_gross_margin_percent": 80,
+      "contact_url": "https://tinyzkp.com/contact?intent=reserved_capacity"
     }
   ],
-  "proof_rate_bands": [
-    {
-      "id": "tiny",
-      "trace_steps": { "min": 0, "max_exclusive": 10000, "label": "<10K" },
-      "developer": 0.05,
-      "pro": 0.04,
-      "scale": 0.03,
-      "compute": { "formula": "max(0.05, trace_steps / 1000000 * 0.50)", "display": "$0.05 minimum" }
-    },
-    {
-      "id": "small",
-      "trace_steps": { "min": 10000, "max_exclusive": 100000, "label": "10K-100K" },
-      "developer": 0.50,
-      "pro": 0.38,
-      "scale": 0.30,
-      "compute": { "formula": "max(0.05, trace_steps / 1000000 * 0.50)", "display": "$0.50/M steps" }
-    },
-    {
-      "id": "medium",
-      "trace_steps": { "min": 100000, "max_exclusive": 1000000, "label": "100K-1M" },
-      "developer": 2.00,
-      "pro": 1.50,
-      "scale": 1.20,
-      "compute": { "formula": "max(0.05, trace_steps / 1000000 * 0.50)", "display": "$0.50/M steps" }
-    },
-    {
-      "id": "large",
-      "trace_steps": { "min": 1000000, "max_exclusive": 10000000, "label": "1M-10M" },
-      "developer": 8.00,
-      "pro": 6.00,
-      "scale": 4.80,
-      "compute": { "formula": "max(0.05, trace_steps / 1000000 * 0.50)", "display": "$0.50/M steps" }
-    },
-    {
-      "id": "xl",
-      "trace_steps": { "min": 10000000, "max_exclusive": null, "label": ">10M" },
-      "developer": 30.00,
-      "pro": 22.50,
-      "scale": 18.00,
-      "compute": { "formula": "max(0.05, trace_steps / 1000000 * 0.50)", "display": "$0.50/M steps" }
-    }
-  ],
-  "compute": {
-    "price_per_million_trace_steps": 0.50,
-    "minimum_per_proof": 0.05,
-    "base_monthly": 0,
-    "example_costs": [
-      { "trace_steps": 10000000, "estimated_cost": 5.00 },
-      { "trace_steps": 100000000, "estimated_cost": 50.00 }
-    ]
+  "stripe_policy": {
+    "api_version": "2026-02-25.clover",
+    "evaluations": "stripe_invoicing_milestones",
+    "annual_agreements": "billing_subscription_send_invoice",
+    "public_checkout": false,
+    "customer_portal_plan_changes": false
   },
-  "commercial_packages": [
-    {
-      "id": "production_pilot",
-      "name": "Production Pilot",
-      "price": 5000,
-      "unit": "14-day scoped pilot",
-      "checkout_url": "https://tinyzkp.com/pilot?source=pricing_json&medium=metadata&intent=paid_pilot_checkout",
-      "best_for": "Teams that need one receipt workflow proven with a real verifier before committing to rollout.",
-      "notes": [
-        "One workflow and statement-design review.",
-        "Receipt integration and verifier path.",
-        "Credited toward an annual or reserved-capacity agreement if converted within 60 days."
-      ]
-    },
-    {
-      "id": "platform_rollout",
-      "name": "Platform Rollout",
-      "price": "from 499/month minimum + usage",
-      "unit": "sales-assisted rollout",
-      "checkout_url": "https://tinyzkp.com/platform-rollout?source=pricing_json&medium=metadata&intent=platform_rollout",
-      "best_for": "Agent platforms, workflow engines, and marketplaces that want proof receipts as a native policy surface.",
-      "notes": [
-        "MCP, REST, schemas, and agent policy rollout.",
-        "Receipt-required tool categories for high-value actions.",
-        "Support and spend-control review before launch."
-      ]
-    },
-    {
-      "id": "reserved_capacity",
-      "name": "Reserved Capacity",
-      "price": "custom",
-      "unit": "contracted capacity",
-      "checkout_url": "https://tinyzkp.com/enterprise?source=pricing_json&medium=metadata&intent=enterprise_review",
-      "best_for": "Teams where receipts are customer-visible, auditor-visible, or operationally critical.",
-      "notes": [
-        "Reserved proving lanes or Compute planning.",
-        "Procurement and rollout plan.",
-        "Support commitments and escalation route."
-      ]
-    }
-  ],
-  "billing_rules": {
-    "billable_event": "Hosted proof job succeeds.",
-    "free_events": ["verification", "failed verifier checks"],
-    "default_public_product": "Transparent state-transition proof receipts."
-  },
-  "buyer_guidance": {
-    "agent_builders": "Start Free or Developer. Receipt one high-value tool call and return the agent receipt envelope.",
-    "agent_platforms": "Use the $5,000 production pilot when proof receipts should become a native platform feature, then move to a sales-assisted platform rollout if receipt policy becomes a product surface.",
-    "api_and_saas": "Start Developer, then move to Pro when receipts are customer-visible or attached to production mutations.",
-    "finance_and_audit": "Use Pro or Scale for recurring checkpoints. Use Compute for long backfills, reserve/liability traces, or one-off audit packages.",
-    "evaluation": "Use the TinyZKP evaluation kit to decide whether one receipt workflow has a real verifier, economic driver, and go/no-go path before buying.",
-    "fit_finder": "Use the Fit Finder when the buyer or agent needs a conservative first-route recommendation from workflow type, verifier, receipt placement, data boundary, trace size, volume, procurement, and current alternative.",
-    "roi": "Use the ROI worksheet when finance or procurement needs avoided-cost evidence for manual review, support, prover operations, TinyZKP spend, and pilot payback.",
-    "enterprise": "Use the TinyZKP enterprise path for reserved capacity, support commitments, and custom state-machine review."
-  },
-  "links": {
-    "pricing_page": "https://tinyzkp.com/pricing",
-    "fit": "https://tinyzkp.com/fit",
-    "fit_metadata": "https://tinyzkp.com/fit.json",
-    "evaluation": "https://tinyzkp.com/evaluation",
-    "evaluation_metadata": "https://tinyzkp.com/evaluation.json",
-    "roi": "https://tinyzkp.com/roi",
-    "roi_metadata": "https://tinyzkp.com/roi.json",
-    "enterprise": "https://tinyzkp.com/enterprise",
-    "enterprise_metadata": "https://tinyzkp.com/enterprise.json",
-    "calculator": "https://tinyzkp.com/calculator",
-    "calculator_metadata": "https://tinyzkp.com/calculator.json",
-    "limits": "https://tinyzkp.com/limits",
-    "limits_metadata": "https://tinyzkp.com/limits.json",
-    "signup": "https://tinyzkp.com/signup",
-    "use_cases": "https://tinyzkp.com/use-cases",
-    "compare": "https://tinyzkp.com/compare",
-    "examples": "https://tinyzkp.com/examples",
-    "examples_metadata": "https://tinyzkp.com/examples.json",
-    "integrations": "https://tinyzkp.com/integrations",
-    "integrations_metadata": "https://tinyzkp.com/integrations.json",
-    "agent_platforms": "https://tinyzkp.com/agent-platforms",
-    "platform_rollout": "https://tinyzkp.com/platform-rollout",
-    "platform_rollout_metadata": "https://tinyzkp.com/platform-rollout.json",
-    "template_catalog": "https://tinyzkp.com/templates",
-    "template_metadata": "https://tinyzkp.com/templates.json",
-    "changelog": "https://tinyzkp.com/changelog",
-    "changelog_metadata": "https://tinyzkp.com/changelog.json",
-    "pilot_program": "https://tinyzkp.com/pilot",
-    "compute": "https://tinyzkp.com/compute",
-    "contact": "https://tinyzkp.com/contact",
-    "security_status": "https://tinyzkp.com/security",
-    "security_review": "https://tinyzkp.com/security"
-  }
+  "commercial_modules": ["multi-tenant control plane", "SSO", "policy", "private deployment automation", "premium observability", "SLA tooling"]
 }

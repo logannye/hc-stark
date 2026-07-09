@@ -31,6 +31,52 @@ JS_ROUTE_RE = re.compile(
     r"|window\.location\.href\s*=\s*['\"]([^'\"]+)['\"]"
 )
 
+PUBLIC_HTML = {
+    "index.html",
+    "engine.html",
+    "benchmarks.html",
+    "plonky3.html",
+    "security.html",
+    "docs.html",
+    "pricing.html",
+    "status.html",
+    "contact.html",
+}
+LEGAL_HTML = {"privacy.html", "terms.html"}
+PERMANENTLY_REDIRECTED_ROUTES = {
+    "/account",
+    "/welcome",
+    "/compute",
+    "/receipts",
+    "/try",
+    "/verify",
+    "/signup",
+    "/pilot",
+    "/platform-rollout",
+    "/enterprise",
+    "/evaluation",
+    "/mcp",
+    "/changelog",
+}
+GONE_ROUTE_PREFIXES = {
+    "/agents",
+    "/agent-",
+    "/verifiable-agent-output",
+    "/roi",
+    "/calculator",
+    "/fit",
+    "/use-cases",
+    "/compare",
+    "/integrations",
+    "/apps",
+    "/badges",
+    "/examples",
+    "/limits",
+    "/recipes",
+    "/research",
+    "/templates",
+}
+
 
 @dataclass(frozen=True)
 class Link:
@@ -144,11 +190,29 @@ def json_ld_urls(value: object) -> list[str]:
     return urls
 
 
+def route_for_html(path: Path) -> str:
+    rel = path.relative_to(SITE).as_posix()
+    if rel == "index.html":
+        return "/"
+    if rel.endswith("/index.html"):
+        return f"/{rel[:-len('/index.html')]}"
+    return f"/{rel[:-len('.html')]}"
+
+
+def is_retired_html(path: Path) -> bool:
+    route = route_for_html(path)
+    return route in PERMANENTLY_REDIRECTED_ROUTES or any(
+        route.startswith(prefix) for prefix in GONE_ROUTE_PREFIXES
+    )
+
+
 def parse_html_files() -> tuple[list[Link], dict[Path, set[str]], dict[Path, PageMetadata]]:
     links: list[Link] = []
     anchors: dict[Path, set[str]] = {}
     page_metadata: dict[Path, PageMetadata] = {}
     for path in sorted(SITE.rglob("*.html")):
+        if is_retired_html(path):
+            continue
         parser = SiteLinkParser(path)
         parser.feed(path.read_text(encoding="utf-8"))
         links.extend(parser.links)
@@ -160,6 +224,8 @@ def parse_html_files() -> tuple[list[Link], dict[Path, set[str]], dict[Path, Pag
 def parse_literal_script_routes() -> list[Link]:
     links: list[Link] = []
     for path in sorted([*SITE.glob("*.html"), *SITE.glob("*.js")]):
+        if path.suffix == ".html" and is_retired_html(path):
+            continue
         text = path.read_text(encoding="utf-8")
         line_starts = [0]
         for match in re.finditer(r"\n", text):
@@ -359,6 +425,25 @@ def main() -> int:
     failures.extend(validate_robots_txt())
     sitemap_records, sitemap_failures = sitemap_url_records()
     failures.extend(sitemap_failures)
+
+    worker_text = WORKER.read_text(encoding="utf-8") if WORKER.is_file() else ""
+    html_paths = sorted(SITE.rglob("*.html"))
+    for path in html_paths:
+        rel = path.relative_to(SITE).as_posix()
+        route = route_for_html(path)
+        if rel in PUBLIC_HTML or rel in LEGAL_HTML:
+            if is_retired_html(path):
+                failures.append(f"{display_path(path)} is both public and retired")
+            continue
+        if not is_retired_html(path):
+            failures.append(f"{display_path(path)} is neither an allowed public page nor retired")
+            continue
+        if route in PERMANENTLY_REDIRECTED_ROUTES and f'["{route}",' not in worker_text:
+            failures.append(f"{display_path(path)} lacks its required worker redirect")
+        if route not in PERMANENTLY_REDIRECTED_ROUTES and not any(
+            f'"{prefix}"' in worker_text for prefix in GONE_ROUTE_PREFIXES if route.startswith(prefix)
+        ):
+            failures.append(f"{display_path(path)} lacks its required worker 410 policy")
     sitemap_canonical_urls = [record.canonical_url for record in sitemap_records]
     sitemap_canonical_set = set(sitemap_canonical_urls)
     if len(sitemap_canonical_urls) != len(sitemap_canonical_set):

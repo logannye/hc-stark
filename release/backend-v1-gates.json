@@ -1,0 +1,19 @@
+{
+  "release": "tinyzkp-plonky3-backend-v1",
+  "status": "blocked",
+  "gates": {
+    "clean_release_source": {"passed": false, "evidence": ""},
+    "plonky3_dependency_profile_pinned": {"passed": false, "evidence": ""},
+    "official_verifier_fibonacci": {"passed": false, "evidence": ""},
+    "official_verifier_poseidon2": {"passed": false, "evidence": ""},
+    "deterministic_cross_mode_proofs": {"passed": false, "evidence": ""},
+    "one_million_row_resource_gate": {"passed": false, "evidence": ""},
+    "ten_million_row_resource_gate": {"passed": false, "evidence": ""},
+    "crash_resume_and_corruption_suite": {"passed": false, "evidence": ""},
+    "plonky3_specialist_review": {"passed": false, "evidence": ""},
+    "implementation_review_no_high_findings": {"passed": false, "evidence": ""},
+    "external_design_partner_integration": {"passed": false, "evidence": ""},
+    "signed_release_sbom_and_checksums": {"passed": false, "evidence": ""},
+    "api_mcp_site_cli_identity_match": {"passed": false, "evidence": ""}
+  }
+}

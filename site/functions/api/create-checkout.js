@@ -16,6 +16,7 @@
 
 const RATE_LIMIT_MAX = 10;         // max requests per window per IP
 const RATE_LIMIT_WINDOW_S = 300;   // 5-minute window
+const CHECKOUT_ENABLED = false;    // v9 protocol-upgrade maintenance gate
 const ATTRIBUTION_MAX_LEN = 160;
 const ATTRIBUTION_FIELDS = [
   "source",
@@ -112,6 +113,14 @@ export async function onRequestPost(context) {
     "Access-Control-Allow-Headers": "Content-Type",
   };
   const jsonHeaders = { "Content-Type": "application/json", ...corsHeaders };
+
+  if (!CHECKOUT_ENABLED) {
+    return new Response(JSON.stringify({
+      error: "Hosted proving checkout is paused during the statement-bound v9 protocol upgrade.",
+      code: "protocol_upgrade",
+      status: "https://tinyzkp.com/status",
+    }), { status: 503, headers: jsonHeaders });
+  }
 
   try {
     // Rate limit by IP.

@@ -3,6 +3,7 @@
 
 const RATE_LIMIT_MAX = 3;
 const RATE_LIMIT_WINDOW_S = 600;
+const ACCOUNT_CREATION_ENABLED = false;
 const ATTRIBUTION_MAX_LEN = 160;
 const ATTRIBUTION_FIELDS = [
   "source",
@@ -56,6 +57,16 @@ function collectAttribution(body) {
 }
 
 export async function onRequestPost(context) {
+  if (!ACCOUNT_CREATION_ENABLED) {
+    return new Response(JSON.stringify({
+      code: "protocol_upgrade",
+      error: "Account creation is disabled while hosted proving is in maintenance mode.",
+      status: "https://tinyzkp.com/status",
+    }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   const origin = context.request.headers.get("Origin") || "";
   const allowedOrigin = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com"
     ? origin : "https://tinyzkp.com";

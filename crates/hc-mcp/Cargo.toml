@@ -6,16 +6,20 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
+[features]
+default = []
+legacy-research = ["dep:hc-sdk", "dep:hc-workloads", "dep:hc-vm", "dep:hc-air", "dep:hc-core", "dep:hc-prover", "dep:hc-verifier"]
+
 [dependencies]
 rmcp = { version = "1.5", features = ["server", "macros", "transport-io", "transport-streamable-http-server"] }
 schemars = "1.0"
-hc-sdk = { path = "../hc-sdk" }
-hc-workloads = { path = "../hc-workloads" }
-hc-vm = { path = "../hc-vm" }
-hc-air = { path = "../hc-air" }
-hc-core = { path = "../hc-core" }
-hc-prover = { path = "../hc-prover" }
-hc-verifier = { path = "../hc-verifier" }
+hc-sdk = { path = "../hc-sdk", optional = true }
+hc-workloads = { path = "../hc-workloads", optional = true }
+hc-vm = { path = "../hc-vm", optional = true }
+hc-air = { path = "../hc-air", optional = true }
+hc-core = { path = "../hc-core", optional = true }
+hc-prover = { path = "../hc-prover", optional = true }
+hc-verifier = { path = "../hc-verifier", optional = true }
 # Reuse the same Bearer/API-key auth backend as hc-server so a single
 # tenant.keys file (or HC_SERVER_API_KEYS env) governs both surfaces.
 hc-server = { path = "../hc-server" }

@@ -1,9 +1,7 @@
 // Cloudflare Pages Function — contact form intake.
 //
 // Forwards submissions to the billing-webhook service on Hetzner, which
-// holds the SMTP creds and delivers to logan@galenhealth.org. Mirrors
-// the send-magic-link.js pattern for consistency + single source of
-// truth on outbound email infrastructure.
+// holds SMTP credentials and uses an environment-configured TinyZKP mailbox.
 
 const RATE_LIMIT_MAX = 3;          // max contact submissions per window per IP
 const RATE_LIMIT_WINDOW_S = 600;   // 10-minute window
@@ -40,6 +38,19 @@ const QUALIFICATION_FIELDS = [
   "latency_requirement",
   "current_alternative",
   "budget_owner",
+  "company",
+  "repository",
+  "stack",
+  "workload",
+  "logical_rows",
+  "current_memory",
+  "target_ram",
+  "scratch",
+  "verifier_target",
+  "data_sensitivity",
+  "technical_owner",
+  "timeline",
+  "consent",
 ];
 
 async function checkRateLimit(ip) {

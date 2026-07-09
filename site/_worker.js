@@ -77,6 +77,50 @@ const TYPO_HOSTS = new Set([
   "www.tny" + "zkp.com",
 ]);
 
+const PERMANENT_REDIRECTS = new Map([
+  ["/account", "/status"],
+  ["/welcome", "/status"],
+  ["/compute", "/engine"],
+  ["/receipts", "/engine"],
+  ["/try", "/benchmarks"],
+  ["/verify", "/status"],
+  ["/signup", "/contact?intent=memory_bounded_evaluation"],
+  ["/pilot", "/pricing"],
+  ["/platform-rollout", "/pricing"],
+  ["/enterprise", "/pricing"],
+  ["/evaluation", "/pricing"],
+  ["/mcp", "/docs"],
+  ["/changelog", "/status"],
+]);
+
+const GONE_PREFIXES = [
+  "/agents",
+  "/agent-",
+  "/verifiable-agent-output",
+  "/roi",
+  "/calculator",
+  "/fit",
+  "/use-cases",
+  "/compare",
+  "/integrations",
+  "/apps",
+  "/badges",
+  "/examples",
+  "/limits",
+  "/recipes",
+  "/research",
+  "/templates",
+];
+
+const MAINTENANCE_DISABLED_API_ROUTES = new Set([
+  "/api/create-checkout",
+  "/api/create-free-account",
+  "/api/create-pilot-checkout",
+  "/api/demo-poll",
+  "/api/demo-prove",
+  "/api/demo-verify",
+]);
+
 function envString(env, key) {
   const value = env && typeof env[key] === "string" ? env[key].trim() : "";
   return value || null;
@@ -97,6 +141,40 @@ function canonicalHostRedirect(url) {
       "Location": target.toString(),
       "Cache-Control": "public, max-age=3600",
     },
+  });
+}
+
+function retiredSurfaceResponse(url) {
+  const redirect = PERMANENT_REDIRECTS.get(url.pathname);
+  if (redirect) {
+    return new Response(null, {
+      status: 308,
+      headers: {
+        "Location": new URL(redirect, "https://tinyzkp.com").toString(),
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
+  }
+
+  if (!GONE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) return null;
+  return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Retired surface — TinyZKP</title></head><body><main><h1>This surface has been retired.</h1><p>TinyZKP is focused on resource-bounded Plonky3 proving infrastructure.</p><p><a href="/engine">Review the engine</a> · <a href="/benchmarks">Run the benchmark</a></p></main></body></html>`, {
+    status: 410,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+      "X-Robots-Tag": "noindex, nofollow",
+    },
+  });
+}
+
+function protocolUpgradeResponse() {
+  return new Response(JSON.stringify({
+    code: "protocol_upgrade",
+    error: "Hosted proving, account creation, and paid checkout are disabled while the Plonky3 resource-bounded backend is under review.",
+    status: "https://tinyzkp.com/status",
+  }), {
+    status: 503,
+    headers: { "Content-Type": "application/json" },
   });
 }
 
@@ -146,11 +224,18 @@ export default {
     const canonicalRedirect = canonicalHostRedirect(url);
     if (canonicalRedirect) return withSecurityHeaders(canonicalRedirect);
 
+    const retiredSurface = retiredSurfaceResponse(url);
+    if (retiredSurface) return withSecurityHeaders(retiredSurface);
+
     if (url.pathname === "/api/release" && request.method.toUpperCase() === "GET") {
       return withSecurityHeaders(new Response(JSON.stringify(releaseInfo(env)), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }));
+    }
+
+    if (MAINTENANCE_DISABLED_API_ROUTES.has(url.pathname)) {
+      return withSecurityHeaders(protocolUpgradeResponse());
     }
 
     const mod = ROUTES[url.pathname];

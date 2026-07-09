@@ -12,6 +12,7 @@
 
 const RATE_LIMIT_MAX = 5;
 const RATE_LIMIT_WINDOW_S = 300;
+const CHECKOUT_ENABLED = false; // v9 protocol-upgrade maintenance gate
 const MAX_FIELD_CHARS = 160;
 const PILOT_PRODUCT_NAME = "TinyZKP Production Pilot";
 const PILOT_PRODUCT_DESCRIPTION = "14-day scoped TinyZKP proof-receipt workflow pilot, creditable toward annual, platform, or reserved-capacity agreement if converted within 60 days";
@@ -122,6 +123,14 @@ export async function onRequestPost(context) {
   const corsHeaders = corsHeadersFor(context.request);
   const jsonHeaders = { "Content-Type": "application/json", ...corsHeaders };
 
+  if (!CHECKOUT_ENABLED) {
+    return new Response(JSON.stringify({
+      error: "Production checkout is paused during the v9 protocol upgrade. Memory-bounded evaluation inquiries remain open through the contact form.",
+      code: "protocol_upgrade",
+      contact: "https://tinyzkp.com/contact?category=Memory-Bounded%20Prover%20Evaluation",
+    }), { status: 503, headers: jsonHeaders });
+  }
+
   try {
     const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
     if (!(await checkRateLimit(ip))) {
@@ -194,14 +203,14 @@ export async function onRequestPost(context) {
 export async function onRequestGet(context) {
   const corsHeaders = corsHeadersFor(context.request);
   return new Response(JSON.stringify({
-    available: pilotCheckoutAvailable(context.env),
-    plan: "production_pilot",
-    mode: "payment",
-    amount: 5000,
+    available: false,
+    plan: "memory_bounded_prover_evaluation",
+    mode: "contact",
+    amount: 20000,
     currency: "USD",
-    pricing_source: context.env.STRIPE_PRICE_ID_PILOT ? "stripe_price" : "inline_price_data",
-    catalog_price_configured: Boolean(context.env.STRIPE_PRICE_ID_PILOT),
-    fallback_url: "https://tinyzkp.com/contact?category=Paid%20Pilot",
+    pricing_source: "protocol_upgrade",
+    catalog_price_configured: false,
+    fallback_url: "https://tinyzkp.com/contact?category=Memory-Bounded%20Prover%20Evaluation",
   }), {
     status: 200,
     headers: { "Content-Type": "application/json", ...corsHeaders },

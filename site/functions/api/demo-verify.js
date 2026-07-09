@@ -10,6 +10,7 @@
 const RATE_LIMIT_MAX = 30;        // 30 verify requests per IP per window
 const RATE_LIMIT_WINDOW_S = 600;  // 10-minute window
 const UPSTREAM = "https://api.tinyzkp.com/verify";
+const DEMO_ENABLED = false;
 
 async function checkRateLimit(ip) {
   const cache = caches.default;
@@ -38,6 +39,12 @@ function corsHeaders(origin) {
 export async function onRequestPost(context) {
   const origin = context.request.headers.get("Origin") || "";
   const headers = { "Content-Type": "application/json", ...corsHeaders(origin) };
+  if (!DEMO_ENABLED) {
+    return new Response(JSON.stringify({
+      error: "Legacy hosted verification is paused until statement-bound v9 is available.",
+      code: "protocol_upgrade",
+    }), { status: 503, headers });
+  }
   try {
     const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
     if (!(await checkRateLimit(ip))) {

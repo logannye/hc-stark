@@ -8,18 +8,24 @@ Usage:
 import os
 import stripe
 
-stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
-PRICE_ID = os.environ["STRIPE_PRICE_ID"]
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+stripe.api_version = "2026-02-25.clover"
+PRICE_ID = os.environ.get("STRIPE_PRICE_ID")
 SUCCESS_URL = os.environ.get("CHECKOUT_SUCCESS_URL", "https://tinyzkp.com?checkout=success")
 CANCEL_URL = os.environ.get("CHECKOUT_CANCEL_URL", "https://tinyzkp.com?checkout=cancel")
 
 
 def main() -> None:
+    if (stripe.api_key or "").startswith("sk_live_"):
+        raise SystemExit("legacy self-serve Checkout is disabled during the Plonky3 backend recovery")
+    if not stripe.api_key or not PRICE_ID:
+        raise SystemExit("STRIPE_SECRET_KEY and STRIPE_PRICE_ID are required for test-mode checkout")
     session = stripe.checkout.Session.create(
         mode="subscription",
         line_items=[{"price": PRICE_ID, "quantity": 1}],
         success_url=SUCCESS_URL,
         cancel_url=CANCEL_URL,
+        idempotency_key=os.environ.get("TINYZKP_CHECKOUT_IDEMPOTENCY_KEY", "tinyzkp-test-checkout"),
     )
     print(f"Checkout URL: {session.url}")
 

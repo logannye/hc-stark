@@ -359,6 +359,9 @@ struct ServerConfig {
     /// kernel into EMFILE territory. Default 32 (override via
     /// HC_SERVER_MAX_WORKER_SPAWN); 0 disables the cap entirely.
     max_worker_spawn: usize,
+    /// Stop-the-line control for the Plonky3 backend recovery. Production
+    /// defaults to maintenance; offline regression tests opt out explicitly.
+    maintenance_mode: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -512,6 +515,10 @@ impl ServerConfig {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(32);
+        let maintenance_mode = std::env::var("HC_SERVER_MAINTENANCE_MODE")
+            .ok()
+            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+            .unwrap_or(true);
         let pg_url = std::env::var("HC_SERVER_PG_URL")
             .ok()
             .filter(|v| !v.trim().is_empty());
@@ -576,6 +583,7 @@ impl ServerConfig {
             job_index_pg_tls_mode,
             prove_dispatch_mode,
             max_worker_spawn,
+            maintenance_mode,
         })
     }
 }
@@ -1135,6 +1143,32 @@ async fn request_id_middleware(
     resp
 }
 
+fn is_maintenance_disabled_path(path: &str) -> bool {
+    path == "/estimate"
+        || path == "/aggregate"
+        || path == "/templates"
+        || path.starts_with("/templates/")
+        || path.starts_with("/prove")
+        || path.starts_with("/proof/")
+        || (path.starts_with("/v1/") && path != "/v1/capabilities")
+}
+
+async fn maintenance_surface_middleware(
+    State(state): State<AppState>,
+    request: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> Response {
+    if state.cfg.maintenance_mode && is_maintenance_disabled_path(request.uri().path()) {
+        return ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "protocol_upgrade",
+            "hosted proving and proof-job surfaces are disabled while TinyZKP builds and independently reviews its resource-bounded Plonky3 backend",
+        )
+        .into_response();
+    }
+    next.run(request).await
+}
+
 pub fn build_app(state: AppState) -> Router {
     let max_body = state.cfg.max_body_bytes;
     Router::new()
@@ -1156,7 +1190,12 @@ pub fn build_app(state: AppState) -> Router {
         .route("/estimate", post(estimate))
         .route("/aggregate", post(aggregate))
         .route("/usage", get(usage))
+        .route("/v1/capabilities", get(v1_capabilities))
         .merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", ApiDoc::openapi()))
+        .layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            maintenance_surface_middleware,
+        ))
         .layer(axum_middleware::from_fn(request_id_middleware))
         .layer(tower_http::timeout::TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
@@ -1192,6 +1231,7 @@ pub fn test_state(temp_dir: PathBuf) -> AppState {
         job_index_pg_tls_mode: usage_log::PgTlsMode::Disable,
         prove_dispatch_mode: ProveDispatchMode::Local,
         max_worker_spawn: 16,
+        maintenance_mode: false,
     };
     let auth = Arc::new(std::sync::RwLock::new(AuthConfig::default()));
     fs::create_dir_all(cfg.data_dir.join("jobs")).expect("create jobs dir");
@@ -1216,6 +1256,12 @@ pub fn test_state_shared_dispatch(temp_dir: PathBuf) -> AppState {
     state.cfg.prove_dispatch_mode = ProveDispatchMode::Shared;
     let index = job_index::JobIndex::open(temp_dir.join("jobs.sqlite")).expect("open jobs index");
     state.job_index = Some(Arc::new(index));
+    state
+}
+
+pub fn test_state_maintenance(temp_dir: PathBuf) -> AppState {
+    let mut state = test_state(temp_dir);
+    state.cfg.maintenance_mode = true;
     state
 }
 
@@ -1362,6 +1408,22 @@ async fn verify(
     headers: axum::http::HeaderMap,
     Json(req): Json<VerifyRequest>,
 ) -> impl IntoResponse {
+    if req.proof.version < 9 {
+        return ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "legacy_statement_unbound",
+            "pre-v9 proofs do not bind the advertised application statement and are rejected by the hosted verifier",
+        )
+        .into_response();
+    }
+    if state.cfg.maintenance_mode {
+        return ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "protocol_upgrade",
+            "hosted verification is disabled while TinyZKP builds and independently reviews its resource-bounded Plonky3 backend",
+        )
+        .into_response();
+    }
     // Require auth if configured (prevents unauthenticated CPU burn).
     let tenant = match guarded_auth(&state, &headers) {
         Ok(t) => t,
@@ -1446,6 +1508,45 @@ async fn verify(
             ApiError::new(StatusCode::REQUEST_TIMEOUT, "timeout", "verify timeout").into_response()
         }
     }
+}
+
+// ---- Plonky3 backend recovery API -----------------------------------------
+
+#[derive(serde::Serialize)]
+struct V1Capabilities {
+    maintenance_mode: bool,
+    service_status: &'static str,
+    backend: &'static str,
+    plonky3_version: &'static str,
+    compatibility_profile: &'static str,
+    proof_format: &'static str,
+    verifier: &'static str,
+    proving_available: bool,
+    verification_available: bool,
+    account_creation_enabled: bool,
+    checkout_enabled: bool,
+    legacy_verification: &'static str,
+    benchmarking_available: bool,
+    release: ReleaseInfo,
+}
+
+async fn v1_capabilities(State(state): State<AppState>) -> Json<V1Capabilities> {
+    Json(V1Capabilities {
+        maintenance_mode: state.cfg.maintenance_mode,
+        service_status: "backend_recovery",
+        backend: "plonky3",
+        plonky3_version: "0.6.1",
+        compatibility_profile: "tinyzkp-p3-goldilocks-v1",
+        proof_format: "official_plonky3",
+        verifier: "unmodified_official_plonky3",
+        proving_available: false,
+        verification_available: false,
+        account_creation_enabled: false,
+        checkout_enabled: false,
+        legacy_verification: "offline_research_only",
+        benchmarking_available: true,
+        release: api_release_info(),
+    })
 }
 
 /// Verify a `ProofBytes` whose `version == 100` — i.e., a zkML envelope

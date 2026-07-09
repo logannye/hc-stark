@@ -15,6 +15,12 @@
 
 set -euo pipefail
 
+if [[ "${TINYZKP_ALLOW_LEGACY_BILLING_WRITE:-0}" != "1" ]]; then
+  echo "ERROR: the legacy Production Pilot checkout is retired during the Plonky3 backend recovery." >&2
+  echo "Use an invoiced Memory-Bounded Prover Evaluation agreement instead." >&2
+  exit 1
+fi
+
 PUSH_CLOUDFLARE=0
 USE_STRIPE_CLI=0
 STRIPE_BIN="${STRIPE_BIN:-stripe}"

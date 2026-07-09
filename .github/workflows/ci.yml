@@ -46,6 +46,9 @@ jobs:
       - name: fmt
         run: cargo fmt --all -- --check
 
+      - name: Plonky3 backend recovery gate
+        run: python3 scripts/ci/backend_recovery_gate.py
+
       - name: reconciliation invariants
         run: ./scripts/ci/reconciliation_invariants.sh
 

@@ -9,6 +9,7 @@
 const RATE_LIMIT_MAX = 60;        // 60 poll requests per IP per window
 const RATE_LIMIT_WINDOW_S = 300;  // 5-minute window
 const UPSTREAM_BASE = "https://api.tinyzkp.com/prove";
+const DEMO_ENABLED = false;
 
 async function checkRateLimit(ip) {
   const cache = caches.default;
@@ -37,6 +38,12 @@ function corsHeaders(origin) {
 export async function onRequestGet(context) {
   const origin = context.request.headers.get("Origin") || "";
   const headers = { "Content-Type": "application/json", ...corsHeaders(origin) };
+  if (!DEMO_ENABLED) {
+    return new Response(JSON.stringify({
+      error: "Legacy demo jobs are paused during the v9 protocol upgrade.",
+      code: "protocol_upgrade",
+    }), { status: 503, headers });
+  }
   try {
     const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
     if (!(await checkRateLimit(ip))) {

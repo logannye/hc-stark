@@ -17,6 +17,7 @@
 const RATE_LIMIT_MAX = 5;          // 5 demo proofs per IP per window
 const RATE_LIMIT_WINDOW_S = 3600;  // 1-hour window
 const UPSTREAM = "https://api.tinyzkp.com/prove/template/accumulator_step";
+const DEMO_ENABLED = false;        // v9 protocol-upgrade maintenance gate
 
 async function checkRateLimit(ip) {
   const cache = caches.default;
@@ -67,6 +68,13 @@ function validate(input) {
 export async function onRequestPost(context) {
   const origin = context.request.headers.get("Origin") || "";
   const headers = { "Content-Type": "application/json", ...corsHeaders(origin) };
+  if (!DEMO_ENABLED) {
+    return new Response(JSON.stringify({
+      error: "The legacy receipt demo is paused while TinyZKP ships statement-bound protocol v9.",
+      code: "protocol_upgrade",
+      status: "https://tinyzkp.com/status",
+    }), { status: 503, headers });
+  }
   try {
     const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
     if (!(await checkRateLimit(ip))) {
