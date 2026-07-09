@@ -158,6 +158,55 @@ impl ResourceBoundedUniStarkProver {
         }
     }
 
+    /// Conventional upstream DFT path used only as the benchmark baseline.
+    pub fn prove_reference(
+        workload: WorkloadKind,
+        logical_rows: u64,
+    ) -> Result<InternalProofBundle> {
+        let rows = validate_rows(logical_rows)?;
+        match workload {
+            WorkloadKind::Fibonacci {
+                initial_a,
+                initial_b,
+            } => {
+                let trace = fibonacci_trace::<Val>(initial_a, initial_b, rows);
+                let public = vec![
+                    Val::from_u64(initial_a),
+                    Val::from_u64(initial_b),
+                    trace.values[trace.values.len() - 1],
+                ];
+                let proof_bytes = prove_to_bytes(
+                    Radix2DitParallel::<Val>::default(),
+                    &FibonacciAir,
+                    trace,
+                    &public,
+                )?;
+                Ok(bundle(
+                    WorkloadKind::Fibonacci {
+                        initial_a,
+                        initial_b,
+                    },
+                    rows,
+                    public
+                        .iter()
+                        .map(|value| value.as_canonical_u64())
+                        .collect(),
+                    proof_bytes,
+                ))
+            }
+            WorkloadKind::Poseidon2 => {
+                let trace = poseidon2_trace(rows, 0);
+                let proof_bytes = prove_to_bytes(
+                    Radix2DitParallel::<Val>::default(),
+                    &poseidon2_goldilocks_air(),
+                    trace,
+                    &[],
+                )?;
+                Ok(bundle(WorkloadKind::Poseidon2, rows, vec![], proof_bytes))
+            }
+        }
+    }
+
     fn prove_fibonacci(
         &self,
         initial_a: u64,

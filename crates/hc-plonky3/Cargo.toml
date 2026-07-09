@@ -8,6 +8,7 @@ description = "Resource-bounded backend that emits official Plonky3 0.6.1 proofs
 
 [dependencies]
 blake3.workspace = true
+base64 = "0.22"
 hc-stream = { path = "../hc-stream" }
 p3-air.workspace = true
 p3-challenger.workspace = true
@@ -23,7 +24,9 @@ p3-symmetric.workspace = true
 p3-uni-stark.workspace = true
 postcard = { version = "1", features = ["alloc"] }
 rand = "=0.10.2"
+schemars = "1"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 thiserror.workspace = true
 
 [dev-dependencies]

@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -43,7 +44,7 @@ pub enum StreamError {
     Json(#[from] serde_json::Error),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ResourceMode {
     Auto,
@@ -51,7 +52,7 @@ pub enum ResourceMode {
     Scratch,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckpointPolicy {
     Disabled,
@@ -59,7 +60,7 @@ pub enum CheckpointPolicy {
     RetainOnFailure,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ResourcePolicyV1 {
     pub mode: ResourceMode,
@@ -70,14 +71,14 @@ pub struct ResourcePolicyV1 {
     pub checkpoint_policy: CheckpointPolicy,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
     Memory,
     Scratch,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PhaseEstimate {
     pub phase: String,
@@ -85,7 +86,7 @@ pub struct PhaseEstimate {
     pub write_bytes: u64,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceEstimate {
     pub peak_resident_bytes: u64,
@@ -95,7 +96,7 @@ pub struct ResourceEstimate {
     pub phases: Vec<PhaseEstimate>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PreflightReport {
     pub selected_mode: ExecutionMode,
@@ -268,7 +269,7 @@ pub trait MatrixStore<T>: BlockMatrix<T> {
     fn remove(self) -> Result<()>;
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ArtifactDigest {
     pub rows: u64,
@@ -507,7 +508,7 @@ impl<T: CanonicalElement> MatrixStore<T> for ScratchMatrixStore<T> {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CheckpointArtifactV2 {
     pub name: String,
@@ -515,7 +516,7 @@ pub struct CheckpointArtifactV2 {
     pub digest: ArtifactDigest,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CheckpointManifestV2 {
     pub schema_version: u32,

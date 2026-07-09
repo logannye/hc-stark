@@ -1,5 +1,11 @@
+#[cfg(feature = "legacy-research")]
 pub mod bench;
+#[cfg(feature = "legacy-research")]
 pub mod inspect;
+pub mod plonky3;
+#[cfg(feature = "legacy-research")]
 pub mod prove;
+#[cfg(feature = "legacy-research")]
 pub mod recursion;
+#[cfg(feature = "legacy-research")]
 pub mod verify;

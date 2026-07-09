@@ -55,6 +55,9 @@ jobs:
       - name: Plonky3 official verifier and DFT differential tests
         run: cargo test -p hc-plonky3
 
+      - name: Plonky3 cgroup harness unit tests
+        run: python3 -m pytest scripts/benchmark/test_run_plonky3_cgroup.py -q
+
       - name: reconciliation invariants
         run: ./scripts/ci/reconciliation_invariants.sh
 

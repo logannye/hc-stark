@@ -1389,9 +1389,11 @@ dependencies = [
  "hc-core",
  "hc-fri",
  "hc-hash",
+ "hc-plonky3",
  "hc-prover",
  "hc-recursion",
  "hc-sdk",
+ "hc-stream",
  "hc-verifier",
  "hc-vm",
  "hex",
@@ -1508,6 +1510,7 @@ dependencies = [
 name = "hc-plonky3"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "blake3",
  "hc-stream",
  "p3-air",
@@ -1524,7 +1527,9 @@ dependencies = [
  "p3-uni-stark",
  "postcard",
  "rand 0.10.2",
+ "schemars",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 1.0.69",
 ]
@@ -1665,6 +1670,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "fs2",
+ "schemars",
  "serde",
  "serde_json",
  "tempfile",
