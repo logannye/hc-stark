@@ -196,8 +196,9 @@ python3 -m pytest scripts/ci/test_backup_restore_check.py billing/tests/test_bac
 ```
 
 This verifies that `backup.sh` still snapshots `tenant_store.sqlite`,
-`usage.sqlite`, and `api_keys.txt` with restrictive permissions and off-box
-`rclone` support, and that the restore runbook still references current API
+`usage.sqlite`, `evaluation_applications.sqlite`, `api_keys.txt`, and private
+contract evidence/documents with restrictive permissions and off-box `rclone`
+support, and that the restore runbook still references current API, contract,
 and SQLite verification paths. The executable smoke test runs `backup.sh`
 against temporary SQLite databases using `HC_BACKUP_DATA_DIR`, `HC_BACKUP_DIR`,
 `HC_BACKUP_DATE`, and `HC_BACKUP_REMOTE_DATE` overrides, then validates that the

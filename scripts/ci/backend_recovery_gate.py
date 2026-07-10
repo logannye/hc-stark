@@ -103,9 +103,31 @@ def check_billing_and_release() -> None:
             f"{email_sender} must default outbound email to disabled",
         )
     require(
+        "backend recovery forbids outbound email configuration"
+        in text("scripts/ci/deploy_readiness_check.py"),
+        "production preflight must reject outbound email configuration",
+    )
+    require(
         "TINYZKP_CONTRACT_SENDER_IDENTITY_CONFIRMED" in text("billing/contract_billing.py"),
         "contract invoices must require a verified TinyZKP sender identity",
     )
+    require(
+        "stripe==15.3.0" in text("billing/requirements.txt"),
+        "Stripe Python SDK must remain pinned to the reviewed stable release",
+    )
+    contract_billing = text("billing/contract_billing.py")
+    for marker, message in (
+        ("ContractEvidenceV1", "contract invoices are not bound to signed evidence"),
+        ("expected_plan_sha256", "contract apply does not bind the read-only plan"),
+        ("verify_contract_documents", "contract evidence hashes are not checked against documents"),
+        ("validate_contract_customer", "contract customer identity is not verified"),
+        ("validate_customer_facing_sender_identity", "Stripe customer-facing identity is not verified"),
+        ('value(invoice, "status") == "paid"', "delivery billing does not require a paid deposit"),
+        ("tinyzkp_plan_sha256", "Stripe contract objects are not bound to the approved plan"),
+        ("validate_annual_history", "annual billing does not reject conflicting subscriptions"),
+        ("stripe.StripeClient", "contract billing does not use the current Stripe client"),
+    ):
+        require(marker in contract_billing, message)
     caddy = text("deploy/hetzner/Caddyfile")
     for route in ("@stripe_webhook path /webhook", "@contact_intake path /send-contact", "@webhook_health path /health"):
         require(route in caddy, f"webhook proxy is missing allowlisted route: {route}")

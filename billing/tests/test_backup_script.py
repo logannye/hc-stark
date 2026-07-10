@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 import stat
 import subprocess
+import tarfile
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -28,6 +29,16 @@ def file_mode(path: pathlib.Path) -> int:
 
 
 def backup_env(tmp_path: pathlib.Path, data_dir: pathlib.Path, backup_dir: pathlib.Path) -> dict[str, str]:
+    contract_dir = tmp_path / "contracts"
+    contract_dir.mkdir(mode=0o700, exist_ok=True)
+    contract_dir.chmod(0o700)
+    for name, payload in (
+        ("eval-001.evidence.json", b'{"schema_version":1}\n'),
+        ("eval-001.signed.pdf", b"signed-contract"),
+    ):
+        path = contract_dir / name
+        path.write_bytes(payload)
+        path.chmod(0o600)
     env = os.environ.copy()
     env.update(
         {
@@ -37,6 +48,7 @@ def backup_env(tmp_path: pathlib.Path, data_dir: pathlib.Path, backup_dir: pathl
             "HC_BACKUP_DATE": "20260623_010203",
             "HC_BACKUP_REMOTE_DATE": "2026-06-23",
             "HC_BACKUP_RETENTION_DAYS": "30",
+            "HC_CONTRACT_DATA_DIR": str(contract_dir),
         }
     )
     env.pop("HC_BACKUP_REMOTE", None)
@@ -78,6 +90,7 @@ def test_backup_script_creates_recoverable_snapshots_with_restrictive_permission
     assert "Backed up usage.sqlite" in result.stdout
     assert "Backed up evaluation_applications.sqlite" in result.stdout
     assert "Backed up api_keys.txt" in result.stdout
+    assert "Backed up private contracts" in result.stdout
     assert "on-disk backup ONLY" in result.stderr
     assert file_mode(backup_dir) == 0o700
 
@@ -85,15 +98,20 @@ def test_backup_script_creates_recoverable_snapshots_with_restrictive_permission
     usage_snapshot = backup_dir / "usage_20260623_010203.sqlite"
     evaluation_snapshot = backup_dir / "evaluation_applications_20260623_010203.sqlite"
     keys_snapshot = backup_dir / "api_keys_20260623_010203.txt"
+    contracts_snapshot = backup_dir / "contracts_20260623_010203.tar.gz"
 
     assert file_mode(tenant_snapshot) == 0o600
     assert file_mode(usage_snapshot) == 0o600
     assert file_mode(evaluation_snapshot) == 0o600
     assert file_mode(keys_snapshot) == 0o600
+    assert file_mode(contracts_snapshot) == 0o600
     assert query_one(tenant_snapshot, "SELECT label FROM tenants") == "tenant-a"
     assert query_one(usage_snapshot, "SELECT label FROM usage_log") == "proof-a"
     assert query_one(evaluation_snapshot, "SELECT label FROM applications") == "eval-a"
     assert keys_snapshot.read_text(encoding="utf-8") == "tenant-a:tzk_test\n"
+    with tarfile.open(contracts_snapshot, "r:gz") as archive:
+        assert archive.extractfile("./eval-001.evidence.json").read() == b'{"schema_version":1}\n'
+        assert archive.extractfile("./eval-001.signed.pdf").read() == b"signed-contract"
 
 
 def test_backup_script_pushes_to_dated_rclone_target_when_remote_is_configured(tmp_path):
@@ -160,7 +178,26 @@ def test_backup_script_pushes_each_snapshot_through_http_ingest(tmp_path):
     assert "authenticated HTTP ingest" in result.stdout
     assert "a" * 64 not in result.stdout
     configs = curl_log.read_text(encoding="utf-8")
-    assert configs.count("---request---") == 4
+    assert configs.count("---request---") == 5
     assert "https://backup.example/v1/backups/2026-06-23/tenant_store_20260623_010203.sqlite" in configs
     assert "https://backup.example/v1/backups/2026-06-23/evaluation_applications_20260623_010203.sqlite" in configs
+    assert "https://backup.example/v1/backups/2026-06-23/contracts_20260623_010203.tar.gz" in configs
     assert 'header = "X-Content-SHA256: ' in configs
+
+
+def test_backup_rejects_unsafe_contract_files(tmp_path):
+    data_dir = prepare_data_dir(tmp_path)
+    backup_dir = tmp_path / "backups"
+    env = backup_env(tmp_path, data_dir, backup_dir)
+    contract_dir = pathlib.Path(env["HC_CONTRACT_DATA_DIR"])
+    unsafe = contract_dir / "unsafe-link"
+    unsafe.symlink_to(contract_dir / "eval-001.evidence.json")
+    result = run_backup(env)
+    assert result.returncode != 0
+    assert "contract directory contains a symlink" in result.stderr
+
+    unsafe.unlink()
+    (contract_dir / "eval-001.evidence.json").chmod(0o644)
+    result = run_backup(env)
+    assert result.returncode != 0
+    assert "contract directory is not owner-only" in result.stderr

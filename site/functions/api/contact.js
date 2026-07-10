@@ -189,7 +189,7 @@ export async function onRequestPost(context) {
     if (!resp.ok) {
       const errBody = await resp.json().catch(() => ({}));
       console.error("Contact webhook error:", resp.status, errBody);
-      return new Response(JSON.stringify({ error: errBody.error || "Failed to send message. Please try again in a few minutes." }), {
+      return new Response(JSON.stringify({ error: errBody.error || "Failed to store application. Please try again in a few minutes." }), {
         status: 502,
         headers: jsonHeaders,
       });

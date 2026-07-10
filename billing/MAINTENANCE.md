@@ -26,13 +26,17 @@ Stripe Invoicing; annual agreements use Billing subscriptions with
 `send_invoice`. Public Checkout remains disabled.
 
 Use `billing/contract_billing.py` to preview a deposit, delivery invoice, or
-annual `send_invoice` subscription. Its default is read-only. Apply mode also
-requires exact Stripe account identity and the
+annual `send_invoice` subscription. Its default is read-only. Every request is
+bound to an owner-only `ContractEvidenceV1` record containing the signed
+agreement and scope hashes, signature time, exact offer, agreement, and Stripe
+customer. Apply mode requires the exact read-only `plan_sha256`, exact Stripe
+account identity, a contract-tagged customer, and the
 `TINYZKP_ALLOW_CONTRACT_BILLING_WRITE=1` break-glass variable. The delivery
-invoice requires explicit delivery-acceptance evidence; annual subscriptions
-require an active, exact-price yearly Stripe Price. Apply mode reconciles
-existing Stripe invoices so the founding offer cannot exceed two agreement IDs
-and a delivery invoice cannot precede its non-void deposit invoice.
+invoice requires hashed delivery-acceptance evidence and a paid deposit;
+annual subscriptions require an active, exact-price yearly Stripe Price. Apply
+mode reconciles existing Stripe invoices so the founding offer cannot exceed
+two agreement IDs. Preview and apply both hash the owner-only agreement and
+scope documents directly and reject any mismatch with the evidence record.
 
 Use `billing/configure_contract_portal.py` to preview the restricted Customer
 Portal policy. Apply mode requires exact account identity and

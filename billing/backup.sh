@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Daily SQLite backup for tenant_store, usage, and evaluation application
-# databases, plus api_keys.txt.
+# databases, plus api_keys.txt and private contract evidence/documents.
 # Uses SQLite .backup command (safe with WAL concurrent reads).
 # Retains 30 days of local backups.
 # Off-box push (G13): configure either rclone or the authenticated HTTP ingest.
 set -euo pipefail
 umask 077   # backup artifacts (api_keys.txt, sqlite) must not be group/world-readable
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source .env so HC_BACKUP_REMOTE is available when run from cron.
 # shellcheck source=/dev/null
@@ -16,6 +17,7 @@ DATA_DIR="${HC_BACKUP_DATA_DIR:-/opt/hc-stark/data}"
 DATE="${HC_BACKUP_DATE:-$(date -u +%Y%m%d_%H%M%S)}"
 REMOTE_DATE="${HC_BACKUP_REMOTE_DATE:-$(date -u +%Y-%m-%d)}"
 RETENTION_DAYS="${HC_BACKUP_RETENTION_DAYS:-30}"
+CONTRACT_DIR="${HC_CONTRACT_DATA_DIR:-/var/lib/tinyzkp-private/contracts}"
 
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
@@ -39,6 +41,21 @@ if [ -f "$DATA_DIR/api_keys.txt" ]; then
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Backed up api_keys.txt -> $BACKUP_DIR/api_keys_${DATE}.txt"
 else
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP api_keys.txt (not found)"
+fi
+
+# --- Signed contract evidence/documents snapshot ---
+if [ -d "$CONTRACT_DIR" ]; then
+  "${HC_BACKUP_PYTHON:-python3}" "$SCRIPT_DIR/validate_private_contract_dir.py" "$CONTRACT_DIR"
+  if find "$CONTRACT_DIR" -type f -print -quit | grep -q .; then
+    contract_archive="$BACKUP_DIR/contracts_${DATE}.tar.gz"
+    tar -C "$CONTRACT_DIR" -czf "$contract_archive" .
+    chmod 600 "$contract_archive"
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Backed up private contracts -> $contract_archive"
+  else
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP private contracts (empty)"
+  fi
+else
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP private contracts (not found)"
 fi
 
 # --- Off-box copy (G13) ---
@@ -99,6 +116,7 @@ fi
 # --- Prune local backups older than retention period ---
 find "$BACKUP_DIR" -name "*.sqlite" -mtime +${RETENTION_DAYS} -delete
 find "$BACKUP_DIR" -name "api_keys_*.txt" -mtime +${RETENTION_DAYS} -delete
+find "$BACKUP_DIR" -name "contracts_*.tar.gz" -mtime +${RETENTION_DAYS} -delete
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Pruned backups older than ${RETENTION_DAYS} days"
 if [ "$OFFBOX_FAILED" -ne 0 ]; then
   exit 1

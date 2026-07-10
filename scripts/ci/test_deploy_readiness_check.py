@@ -197,6 +197,30 @@ def test_production_mode_requires_fail_closed_webhook_maintenance():
     assert "TINYZKP_MAINTENANCE_MODE=1 is required" in failures
 
 
+def test_production_mode_rejects_all_outbound_email_configuration():
+    failures, _warnings = _production_failures(
+        {
+            "STRIPE_SECRET_KEY": "sk_live_real",
+            "STRIPE_WEBHOOK_SECRET": "whsec_real",
+            "INTERNAL_SECRET": "random-internal-secret",
+            "STRIPE_EXPECTED_ACCOUNT_ID": "acct_realaccount",
+            "STRIPE_EXPECTED_DISPLAY_NAME": "LN Holdings",
+            "HC_EVALUATION_STORE_PATH": "/opt/hc-stark/data/evaluation_applications.sqlite",
+            "HC_BACKUP_REMOTE": "r2-crypt:tinyzkp",
+            "TINYZKP_MAINTENANCE_MODE": "1",
+            "TINYZKP_OUTBOUND_EMAIL_ENABLED": "1",
+            "TINYZKP_CUSTOMER_EMAILS_ENABLED": "true",
+            "SMTP_FROM": "founder@unrelated.example",
+            "CONTACT_TO_EMAIL": "founder@unrelated.example",
+        }
+    )
+    assert "backend recovery forbids outbound email configuration" in failures
+    assert "TINYZKP_OUTBOUND_EMAIL_ENABLED" in failures
+    assert "TINYZKP_CUSTOMER_EMAILS_ENABLED" in failures
+    assert "SMTP_FROM" in failures
+    assert "CONTACT_TO_EMAIL" in failures
+
+
 def test_production_mode_rejects_legacy_prices_and_meter_overrides():
     failures, _warnings = _production_failures(
         {

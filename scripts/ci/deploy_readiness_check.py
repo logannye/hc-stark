@@ -180,6 +180,28 @@ def check_env(
                 failures.append("HC_BACKUP_HTTP_TOKEN_FILE must not be group/world accessible")
         if not _truthy(_value(env, "TINYZKP_MAINTENANCE_MODE")):
             failures.append("TINYZKP_MAINTENANCE_MODE=1 is required during backend recovery")
+        outbound_email_configuration = sorted(
+            key
+            for key, value in env.items()
+            if value.strip()
+            and (
+                key.startswith("SMTP_")
+                or key == "CONTACT_TO_EMAIL"
+                or (
+                    key
+                    in {
+                        "TINYZKP_OUTBOUND_EMAIL_ENABLED",
+                        "TINYZKP_CUSTOMER_EMAILS_ENABLED",
+                    }
+                    and _truthy(value)
+                )
+            )
+        )
+        if outbound_email_configuration:
+            failures.append(
+                "backend recovery forbids outbound email configuration: "
+                + ", ".join(outbound_email_configuration)
+            )
         forbidden = sorted(
             key
             for key, value in env.items()

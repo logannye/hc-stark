@@ -1,8 +1,9 @@
 # Restore Runbook — hc-stark state (G13)
 
-Covers restoring `tenant_store.sqlite`, `usage.sqlite`, and `api_keys.txt` from an
-off-box rclone backup.  All three files should be restored from the **same timestamp**
-for consistency.
+Covers restoring `tenant_store.sqlite`, `usage.sqlite`,
+`evaluation_applications.sqlite`, `api_keys.txt`, and the private contract
+archive from an off-box rclone backup. All artifacts should be restored from
+the **same timestamp** for consistency.
 
 ---
 
@@ -37,7 +38,10 @@ ls -lh /opt/hc-stark/restore
 ```
 
 You will see files named `tenant_store_<YYYYMMDD_HHMMSS>.sqlite`,
-`usage_<YYYYMMDD_HHMMSS>.sqlite`, and `api_keys_<YYYYMMDD_HHMMSS>.txt`.
+`usage_<YYYYMMDD_HHMMSS>.sqlite`,
+`evaluation_applications_<YYYYMMDD_HHMMSS>.sqlite`,
+`api_keys_<YYYYMMDD_HHMMSS>.txt`, and (after the first signed evaluation)
+`contracts_<YYYYMMDD_HHMMSS>.tar.gz`.
 Pick the timestamp set you want (usually the latest within the day).
 
 ---
@@ -65,10 +69,22 @@ Set `TS` to the exact timestamp of the snapshot set (e.g. `20260529_020001`):
 TS="<YYYYMMDD_HHMMSS>"
 RESTORE_DIR="/opt/hc-stark/restore"
 DATA_DIR="/opt/hc-stark/data"
+CONTRACT_DIR="/var/lib/tinyzkp-private/contracts"
 
 cp "${RESTORE_DIR}/tenant_store_${TS}.sqlite" "${DATA_DIR}/tenant_store.sqlite"
 cp "${RESTORE_DIR}/usage_${TS}.sqlite"        "${DATA_DIR}/usage.sqlite"
+cp "${RESTORE_DIR}/evaluation_applications_${TS}.sqlite" \
+   "${DATA_DIR}/evaluation_applications.sqlite"
 cp "${RESTORE_DIR}/api_keys_${TS}.txt"        "${DATA_DIR}/api_keys.txt"
+
+if [ -f "${RESTORE_DIR}/contracts_${TS}.tar.gz" ]; then
+  mv "${CONTRACT_DIR}" "${CONTRACT_DIR}.pre-restore-${TS}" 2>/dev/null || true
+  install -d -m 700 "${CONTRACT_DIR}"
+  tar -xzf "${RESTORE_DIR}/contracts_${TS}.tar.gz" \
+    --no-same-owner --no-same-permissions -C "${CONTRACT_DIR}"
+  find "${CONTRACT_DIR}" -type d -exec chmod 700 {} +
+  find "${CONTRACT_DIR}" -type f -exec chmod 600 {} +
+fi
 ```
 
 > **WAL note:** The `.backup` command used by `backup.sh` produces a self-contained
@@ -109,6 +125,9 @@ Confirm tenant and usage data look correct:
 ```bash
 sqlite3 /opt/hc-stark/data/tenant_store.sqlite "SELECT count(*) FROM tenants;"
 sqlite3 /opt/hc-stark/data/usage.sqlite        "SELECT count(*) FROM usage_log;"
+sqlite3 /opt/hc-stark/data/evaluation_applications.sqlite \
+  "SELECT count(*) FROM applications;"
+find /var/lib/tinyzkp-private/contracts -maxdepth 2 -type f -print
 ```
 
 ---

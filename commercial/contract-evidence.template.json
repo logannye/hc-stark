@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "agreement_id": "REPLACE_WITH_SAFE_AGREEMENT_ID",
+  "offer_id": "founding_evaluation",
+  "stripe_customer_id": "cus_REPLACE",
+  "agreement_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+  "scope_sha256": "REPLACE_WITH_ACCEPTANCE_MATRIX_OR_ORDER_FORM_SHA256",
+  "signed_at": "REPLACE_WITH_RFC3339_UTC_Z_TIME",
+  "delivery_acceptance_sha256": null,
+  "delivery_accepted_at": null
+}
