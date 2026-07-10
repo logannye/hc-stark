@@ -19,6 +19,9 @@ def main() -> int:
     profile = json.loads(MANIFEST.read_text(encoding="utf-8"))
     lock = tomllib.loads(LOCK.read_text(encoding="utf-8"))
     cargo = tomllib.loads(CARGO.read_text(encoding="utf-8"))
+    backend_cargo = tomllib.loads(
+        (ROOT / "crates" / "hc-plonky3" / "Cargo.toml").read_text(encoding="utf-8")
+    )
     toolchain = tomllib.loads((ROOT / "rust-toolchain.toml").read_text(encoding="utf-8"))
     failures: list[str] = []
 
@@ -48,6 +51,20 @@ def main() -> int:
         (package["name"], package["version"], package.get("checksum"))
         for package in lock["package"]
     }
+    locked_names = {package[0] for package in locked_packages}
+    if "atomic-polyfill" in locked_names:
+        failures.append("postcard default features reintroduced unmaintained atomic-polyfill")
+    crossbeam_epochs = [
+        package["version"] for package in lock["package"] if package["name"] == "crossbeam-epoch"
+    ]
+    if not crossbeam_epochs or any(
+        tuple(int(part) for part in version.split(".")) < (0, 9, 20)
+        for version in crossbeam_epochs
+    ):
+        failures.append("crossbeam-epoch must resolve to >=0.9.20")
+    postcard = backend_cargo["dependencies"].get("postcard", {})
+    if not isinstance(postcard, dict) or postcard.get("default-features") is not False:
+        failures.append("postcard default features must remain disabled")
     workspace_dependencies = cargo["workspace"]["dependencies"]
     for package in profile.get("pinned_crates", []):
         name = package["name"]

@@ -9,7 +9,7 @@ description = "Resource-bounded backend that emits official Plonky3 0.6.1 proofs
 [dependencies]
 blake3.workspace = true
 base64 = "=0.22.1"
-hc-stream = { path = "../hc-stream" }
+hc-stream = { version = "0.1.0", path = "../hc-stream" }
 p3-air.workspace = true
 p3-challenger.workspace = true
 p3-commit.workspace = true
@@ -22,7 +22,7 @@ p3-merkle-tree.workspace = true
 p3-poseidon2-air.workspace = true
 p3-symmetric.workspace = true
 p3-uni-stark.workspace = true
-postcard = { version = "=1.1.3", features = ["alloc"] }
+postcard = { version = "=1.1.3", default-features = false, features = ["alloc"] }
 rand = "=0.10.2"
 schemars = "=1.2.1"
 serde = { version = "=1.0.228", features = ["derive"] }
