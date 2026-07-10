@@ -1,16 +1,17 @@
 use hc_stream::{
-    BlockMatrix, CanonicalElement, ExecutionMode, MatrixStore, PhaseEstimate, ResourceEstimate,
-    ResourceMode, ResourcePolicyV1, ScratchMatrixStore, StreamError,
+    ArtifactDigest, BlockMatrix, CanonicalElement, ExecutionMode, MatrixStore, PhaseEstimate,
+    ResourceEstimate, ResourceMode, ResourcePolicyV1, ScratchMatrixStore, StreamError,
 };
 use p3_dft::{Radix2Dit, TwoAdicSubgroupDft};
-use p3_field::{PrimeCharacteristicRing, PrimeField64, TwoAdicField};
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField64, TwoAdicField};
 use p3_goldilocks::Goldilocks;
 use p3_matrix::bitrev::{BitReversalPerm, BitReversedMatrixView, BitReversibleMatrix};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
+use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 const GOLDILOCKS_MODULUS: u64 = 0xffff_ffff_0000_0001;
@@ -68,10 +69,14 @@ struct ManagedStore {
     store: Mutex<Option<ScratchMatrixStore<GoldilocksWord>>>,
     path: PathBuf,
     job_dir: PathBuf,
+    remove_on_drop: AtomicBool,
 }
 
 impl Drop for ManagedStore {
     fn drop(&mut self) {
+        if !self.remove_on_drop.load(Ordering::Relaxed) {
+            return;
+        }
         if let Ok(store) = self.store.get_mut() {
             if let Some(store) = store.take() {
                 let _ = store.remove();
@@ -95,6 +100,7 @@ impl ScratchPlonky3Matrix {
         width: usize,
         height: usize,
         job_dir: PathBuf,
+        remove_on_drop: bool,
     ) -> Self {
         let path = store.path().to_path_buf();
         Self {
@@ -102,6 +108,7 @@ impl ScratchPlonky3Matrix {
                 store: Mutex::new(Some(store)),
                 path,
                 job_dir,
+                remove_on_drop: AtomicBool::new(remove_on_drop),
             }),
             width,
             height,
@@ -110,6 +117,25 @@ impl ScratchPlonky3Matrix {
 
     pub fn artifact_path(&self) -> &Path {
         &self.inner.path
+    }
+
+    pub fn artifact_digest(&self) -> Result<ArtifactDigest> {
+        let guard = self
+            .inner
+            .store
+            .lock()
+            .map_err(|_| StreamError::Corrupt("scratch matrix lock poisoned"))?;
+        guard
+            .as_ref()
+            .and_then(MatrixStore::digest)
+            .ok_or_else(|| StreamError::Corrupt("scratch matrix is not finalized").into())
+    }
+
+    pub fn reopen(path: &Path, expected: ArtifactDigest) -> Result<Self> {
+        let job_dir = path.parent().ok_or(StreamError::UnsafePath)?.to_path_buf();
+        let store = ScratchMatrixStore::<GoldilocksWord>::reopen(path, expected)?;
+        let height = usize::try_from(expected.rows).map_err(|_| DftError::SizeOverflow)?;
+        Ok(Self::new(store, expected.columns, height, job_dir, false))
     }
 
     pub fn try_row(&self, row: usize) -> Result<Vec<Goldilocks>> {
@@ -204,6 +230,25 @@ impl ResourceBoundedMatrix {
             Self::Scratch(_) => ExecutionMode::Scratch,
         }
     }
+
+    pub fn scratch_artifact(&self) -> Result<(&Path, ArtifactDigest)> {
+        match self {
+            Self::Scratch(matrix) => Ok((matrix.artifact_path(), matrix.artifact_digest()?)),
+            Self::Memory(_) => Err(DftError::InvalidMatrix(
+                "in-memory matrix has no resumable artifact",
+            )),
+        }
+    }
+
+    pub fn reopen_scratch(path: &Path, expected: ArtifactDigest) -> Result<Self> {
+        ScratchPlonky3Matrix::reopen(path, expected).map(Self::Scratch)
+    }
+
+    pub fn retain_for_resume(&self) {
+        if let Self::Scratch(matrix) = self {
+            matrix.inner.remove_on_drop.store(false, Ordering::Relaxed);
+        }
+    }
 }
 
 impl Matrix<Goldilocks> for ResourceBoundedMatrix {
@@ -229,6 +274,38 @@ impl Matrix<Goldilocks> for ResourceBoundedMatrix {
         self.try_row(row)
             .expect("validated resource-bounded row must remain readable")
             .into_iter()
+    }
+}
+
+impl BlockMatrix<GoldilocksWord> for ResourceBoundedMatrix {
+    fn rows(&self) -> u64 {
+        self.height() as u64
+    }
+
+    fn columns(&self) -> usize {
+        self.width()
+    }
+
+    fn read_rows(
+        &self,
+        row_start: u64,
+        row_count: usize,
+        output: &mut [GoldilocksWord],
+    ) -> hc_stream::Result<()> {
+        let row_start = usize::try_from(row_start).map_err(|_| StreamError::OutOfBounds)?;
+        let values = self
+            .try_rows(row_start, row_count)
+            .map_err(|error| match error {
+                DftError::Stream(stream) => stream,
+                _ => StreamError::Corrupt("resource-bounded matrix read failed"),
+            })?;
+        if output.len() != values.len() {
+            return Err(StreamError::OutOfBounds);
+        }
+        for (slot, value) in output.iter_mut().zip(values) {
+            *slot = GoldilocksWord(value);
+        }
+        Ok(())
     }
 }
 
@@ -305,23 +382,37 @@ impl ResourceBoundedDft {
         let elements = height.checked_mul(width).ok_or(DftError::SizeOverflow)? as u64;
         let artifact_bytes = elements.checked_mul(8).ok_or(DftError::SizeOverflow)?;
         let owned_input_bytes = if owned_input { artifact_bytes } else { 0 };
-        let tile_rows = self.policy.tile_rows(8, width)?.min(height) as u64;
-        let tile_buffers = tile_rows
+        let (first_factor, second_factor) = four_step_factors(height);
+        let first_sub_fft_buffers =
+            self.sub_fft_buffer_bytes(first_factor, second_factor, width)?;
+        let second_sub_fft_buffers =
+            self.sub_fft_buffer_bytes(second_factor, first_factor, width)?;
+        let sub_fft_buffers = first_sub_fft_buffers.max(second_sub_fft_buffers);
+        let (outer_tile, inner_tile) = self.transpose_tile_shape(
+            width,
+            first_factor.max(second_factor),
+            first_factor.min(second_factor),
+        )?;
+        let transpose_buffers = (outer_tile as u64)
+            .saturating_mul(inner_tile as u64)
             .saturating_mul(width as u64)
             .saturating_mul(8)
             .saturating_mul(2);
-        let layers = height.max(1).trailing_zeros() as u64;
+        let working_buffers = sub_fft_buffers.max(transpose_buffers);
+        // Initial transpose, first sub-FFT/twiddle, middle transpose, second
+        // sub-FFT, and final transpose each read and write one full artifact.
+        let passes = 5u64;
         Ok(ResourceEstimate {
             peak_resident_bytes: owned_input_bytes
-                .saturating_add(tile_buffers)
+                .saturating_add(working_buffers)
                 .saturating_add(8 * 1024 * 1024),
             scratch_high_water_bytes: artifact_bytes.saturating_mul(2),
-            total_read_bytes: artifact_bytes.saturating_mul(layers.saturating_add(1)),
-            total_write_bytes: artifact_bytes.saturating_mul(layers.saturating_add(1)),
+            total_read_bytes: artifact_bytes.saturating_mul(passes),
+            total_write_bytes: artifact_bytes.saturating_mul(passes),
             phases: vec![PhaseEstimate {
-                phase: "tiled_blockwise_radix2_dft".into(),
-                read_bytes: artifact_bytes.saturating_mul(layers),
-                write_bytes: artifact_bytes.saturating_mul(layers),
+                phase: "near_square_four_step_dft".into(),
+                read_bytes: artifact_bytes.saturating_mul(passes),
+                write_bytes: artifact_bytes.saturating_mul(passes),
             }],
         })
     }
@@ -348,27 +439,27 @@ impl ResourceBoundedDft {
         }
         let job_dir = create_job_dir(&self.policy.scratch_dir)?;
         let result = (|| {
-            let mut input = ScratchMatrixStore::<GoldilocksWord>::create(
+            let (first_factor, second_factor) = four_step_factors(height);
+            let mut input = self.transpose_from_reader(
                 &job_dir,
                 "dft-a.bin",
-                height as u64,
+                second_factor,
+                first_factor,
                 width,
+                |row_start, row_count, output| {
+                    let start = row_start.checked_mul(width).ok_or(DftError::SizeOverflow)?;
+                    let end = start
+                        .checked_add(row_count.checked_mul(width).ok_or(DftError::SizeOverflow)?)
+                        .ok_or(DftError::SizeOverflow)?;
+                    for (slot, value) in output.iter_mut().zip(&matrix.values[start..end]) {
+                        *slot = GoldilocksWord(*value);
+                    }
+                    Ok(())
+                },
             )?;
-            let log_height = height.trailing_zeros() as usize;
-            for destination in 0..height {
-                let source = reverse_low_bits(destination, log_height);
-                let start = source.checked_mul(width).ok_or(DftError::SizeOverflow)?;
-                let end = start.checked_add(width).ok_or(DftError::SizeOverflow)?;
-                let row: Vec<_> = matrix.values[start..end]
-                    .iter()
-                    .copied()
-                    .map(GoldilocksWord::from)
-                    .collect();
-                input.write_rows(destination as u64, 1, &row)?;
-            }
             input.finalize()?;
             drop(matrix);
-            self.finish_transform(input, height, width, &job_dir)
+            self.finish_four_step(input, height, width, &job_dir, false)
                 .map(ResourceBoundedMatrix::Scratch)
         })();
         if result.is_err() {
@@ -403,25 +494,135 @@ impl ResourceBoundedDft {
         }
         let job_dir = create_job_dir(&self.policy.scratch_dir)?;
         let result = (|| {
-            let mut input = ScratchMatrixStore::<GoldilocksWord>::create(
+            let (first_factor, second_factor) = four_step_factors(height);
+            let mut input = self.transpose_from_reader(
                 &job_dir,
                 "dft-a.bin",
-                height as u64,
+                second_factor,
+                first_factor,
                 width,
+                |row_start, row_count, output| {
+                    matrix
+                        .read_rows(row_start as u64, row_count, output)
+                        .map_err(DftError::from)
+                },
             )?;
-            let log_height = height.trailing_zeros() as usize;
-            let mut row = vec![GoldilocksWord::default(); width];
-            for destination in 0..height {
-                let source = reverse_low_bits(destination, log_height);
-                matrix.read_rows(source as u64, 1, &mut row)?;
-                input.write_rows(destination as u64, 1, &row)?;
-            }
             input.finalize()?;
-            self.finish_transform(input, height, width, &job_dir)
+            self.finish_four_step(input, height, width, &job_dir, false)
                 .map(ResourceBoundedMatrix::Scratch)
         })();
         if result.is_err() {
             let _ = fs::remove_dir_all(&job_dir);
+        }
+        result
+    }
+
+    /// Inverse transform over a caller-buffered matrix. This is the first half
+    /// of an external-memory LDE and avoids reconstructing the trace in a Vec.
+    pub fn try_idft_block_matrix<M: BlockMatrix<GoldilocksWord>>(
+        &self,
+        matrix: &M,
+    ) -> Result<ResourceBoundedMatrix> {
+        let height = usize::try_from(matrix.rows()).map_err(|_| DftError::SizeOverflow)?;
+        let width = matrix.columns();
+        self.validate_shape(height, width)?;
+        let selected = self
+            .policy
+            .select_mode(&self.estimate_memory(height, width)?)?;
+        let estimate = match selected {
+            ExecutionMode::Memory => self.estimate_memory(height, width)?,
+            ExecutionMode::Scratch => self.estimate_scratch(height, width, false)?,
+        };
+        self.policy.preflight_for_mode(selected, estimate)?;
+        if selected == ExecutionMode::Memory {
+            let elements = height.checked_mul(width).ok_or(DftError::SizeOverflow)?;
+            let mut words = vec![GoldilocksWord::default(); elements];
+            matrix.read_rows(0, height, &mut words)?;
+            let values = words.into_iter().map(Into::into).collect();
+            return Ok(ResourceBoundedMatrix::Memory(
+                Radix2Dit::<Goldilocks>::default().idft_batch(RowMajorMatrix::new(values, width)),
+            ));
+        }
+        let job_dir = create_job_dir(&self.policy.scratch_dir)?;
+        let result = (|| {
+            let (first_factor, second_factor) = four_step_factors(height);
+            let mut input = self.transpose_from_reader(
+                &job_dir,
+                "dft-a.bin",
+                second_factor,
+                first_factor,
+                width,
+                |row_start, row_count, output| {
+                    matrix
+                        .read_rows(row_start as u64, row_count, output)
+                        .map_err(DftError::from)
+                },
+            )?;
+            input.finalize()?;
+            self.finish_four_step(input, height, width, &job_dir, true)
+                .map(ResourceBoundedMatrix::Scratch)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_dir_all(&job_dir);
+        }
+        result
+    }
+
+    /// Compute a coset LDE from a block-readable evaluation matrix. The
+    /// coefficient and padded-evaluation stores are released before returning;
+    /// the result remains compatible with Plonky3's ordinary DFT output order.
+    pub fn try_coset_lde_block_matrix<M: BlockMatrix<GoldilocksWord>>(
+        &self,
+        matrix: &M,
+        log_blowup: usize,
+        shift: Goldilocks,
+    ) -> Result<ResourceBoundedMatrix> {
+        let height = usize::try_from(matrix.rows()).map_err(|_| DftError::SizeOverflow)?;
+        let width = matrix.columns();
+        self.validate_shape(height, width)?;
+        let blowup = 1usize
+            .checked_shl(log_blowup as u32)
+            .ok_or(DftError::SizeOverflow)?;
+        let lde_height = height.checked_mul(blowup).ok_or(DftError::SizeOverflow)?;
+        self.validate_shape(lde_height, width)?;
+
+        let coefficients = self.try_idft_block_matrix(matrix)?;
+        let staging_dir = create_job_dir(&self.policy.scratch_dir)?;
+        let result = (|| {
+            let mut padded = ScratchMatrixStore::<GoldilocksWord>::create(
+                &staging_dir,
+                "coset-coefficients.bin",
+                lde_height as u64,
+                width,
+            )?;
+            let tile_rows = self.policy.tile_rows(8, width)?.min(height);
+            let mut power = Goldilocks::ONE;
+            for row_start in (0..height).step_by(tile_rows) {
+                let row_count = (height - row_start).min(tile_rows);
+                let mut values: Vec<_> = coefficients
+                    .try_rows(row_start, row_count)?
+                    .into_iter()
+                    .map(GoldilocksWord)
+                    .collect();
+                for row in 0..row_count {
+                    let start = row * width;
+                    for value in &mut values[start..start + width] {
+                        value.0 *= power;
+                    }
+                    power *= shift;
+                }
+                padded.write_rows(row_start as u64, row_count, &values)?;
+            }
+            padded.finalize()?;
+            drop(coefficients);
+            let output = self.try_dft_block_matrix(&padded)?;
+            padded.remove()?;
+            Ok(output)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_dir_all(&staging_dir);
+        } else {
+            let _ = fs::remove_dir(&staging_dir);
         }
         result
     }
@@ -438,67 +639,346 @@ impl ResourceBoundedDft {
         Ok(())
     }
 
-    fn finish_transform(
+    fn finish_four_step(
         &self,
-        mut current: ScratchMatrixStore<GoldilocksWord>,
+        current: ScratchMatrixStore<GoldilocksWord>,
         height: usize,
         width: usize,
         job_dir: &Path,
+        inverse: bool,
     ) -> Result<ScratchPlonky3Matrix> {
-        let log_height = height.trailing_zeros() as usize;
-        let root = Goldilocks::two_adic_generator(log_height);
-        let tile_rows = self.policy.tile_rows(8, width)?.min(height);
-        let tile_elements = tile_rows.checked_mul(width).ok_or(DftError::SizeOverflow)?;
-        let mut high = vec![GoldilocksWord::default(); tile_elements];
-        let mut low = vec![GoldilocksWord::default(); tile_elements];
-        for layer in 0..log_height {
-            let next_name = if layer % 2 == 0 {
-                "dft-b.bin"
-            } else {
-                "dft-a-next.bin"
-            };
-            let mut next = ScratchMatrixStore::<GoldilocksWord>::create(
-                job_dir,
-                next_name,
-                height as u64,
-                width,
-            )?;
-            let half = 1usize << layer;
-            let block = half * 2;
-            let twiddle_stride = height / block;
-            for block_start in (0..height).step_by(block) {
-                for offset in (0..half).step_by(tile_rows) {
-                    let rows = (half - offset).min(tile_rows);
-                    let elements = rows.checked_mul(width).ok_or(DftError::SizeOverflow)?;
-                    let high_row = block_start + offset;
-                    let low_row = high_row + half;
-                    current.read_rows(high_row as u64, rows, &mut high[..elements])?;
-                    current.read_rows(low_row as u64, rows, &mut low[..elements])?;
-                    for local_row in 0..rows {
-                        let twiddle = root.exp_u64(((offset + local_row) * twiddle_stride) as u64);
-                        let row_start = local_row * width;
-                        for column in 0..width {
-                            let index = row_start + column;
-                            let value = high[index].0;
-                            let product = low[index].0 * twiddle;
-                            high[index] = GoldilocksWord(value + product);
-                            low[index] = GoldilocksWord(value - product);
-                        }
-                    }
-                    next.write_rows(high_row as u64, rows, &high[..elements])?;
-                    next.write_rows(low_row as u64, rows, &low[..elements])?;
-                }
-            }
-            next.finalize()?;
-            current.remove()?;
-            current = next;
+        let (first_factor, second_factor) = four_step_factors(height);
+        let mut root = Goldilocks::two_adic_generator(height.trailing_zeros() as usize);
+        if inverse {
+            root = root.inverse();
         }
+
+        // The ingested matrix is laid out as [j1][j2], with each length-n2
+        // transform contiguous. This first stage computes the j2 transforms
+        // and applies the cross-factor twiddle w_N^(j1*k2).
+        let first = self.sub_fft_stage(
+            current,
+            job_dir,
+            "dft-b.bin",
+            first_factor,
+            second_factor,
+            width,
+            Some(root),
+            inverse,
+        )?;
+
+        // [j1][k2] -> [k2][j1], making every length-n1 transform contiguous.
+        let second = self.transpose_store(
+            first,
+            job_dir,
+            "dft-a.bin",
+            first_factor,
+            second_factor,
+            width,
+        )?;
+        let third = self.sub_fft_stage(
+            second,
+            job_dir,
+            "dft-b.bin",
+            second_factor,
+            first_factor,
+            width,
+            None,
+            inverse,
+        )?;
+
+        // [k2][k1] -> [k1][k2]. The resulting physical row index is the
+        // ordinary DFT output index k = k2 + n2*k1 expected by Plonky3.
+        let current = self.transpose_store(
+            third,
+            job_dir,
+            "dft-a.bin",
+            second_factor,
+            first_factor,
+            width,
+        )?;
         Ok(ScratchPlonky3Matrix::new(
             current,
             width,
             height,
             job_dir.to_path_buf(),
+            true,
         ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn sub_fft_stage(
+        &self,
+        source: ScratchMatrixStore<GoldilocksWord>,
+        job_dir: &Path,
+        output_name: &str,
+        group_count: usize,
+        group_len: usize,
+        width: usize,
+        twiddle_root: Option<Goldilocks>,
+        inverse: bool,
+    ) -> Result<ScratchMatrixStore<GoldilocksWord>> {
+        let mut output = ScratchMatrixStore::<GoldilocksWord>::create(
+            job_dir,
+            output_name,
+            source.rows(),
+            width,
+        )?;
+        let group_elements = group_len.checked_mul(width).ok_or(DftError::SizeOverflow)?;
+        let workers = self.sub_fft_workers(group_count, group_len, width)?;
+        let pool = (workers > 1)
+            .then(|| {
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(workers)
+                    .build()
+                    .map_err(|_| DftError::InvalidMatrix("failed to create bounded DFT workers"))
+            })
+            .transpose()?;
+        let mut batches = vec![vec![GoldilocksWord::default(); group_elements]; workers];
+        for batch_start in (0..group_count).step_by(workers) {
+            let batch_count = (group_count - batch_start).min(workers);
+            for (offset, words) in batches[..batch_count].iter_mut().enumerate() {
+                let group = batch_start + offset;
+                let row_start = group.checked_mul(group_len).ok_or(DftError::SizeOverflow)?;
+                source.read_rows(row_start as u64, group_len, words)?;
+            }
+            let transform = |(offset, words): (usize, &mut Vec<GoldilocksWord>)| {
+                transform_sub_fft_group(
+                    words,
+                    batch_start + offset,
+                    group_len,
+                    width,
+                    twiddle_root,
+                    inverse,
+                );
+            };
+            if let Some(pool) = &pool {
+                pool.install(|| {
+                    batches[..batch_count]
+                        .par_iter_mut()
+                        .enumerate()
+                        .for_each(transform)
+                });
+            } else {
+                batches[..batch_count]
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(transform);
+            }
+            for (offset, words) in batches[..batch_count].iter().enumerate() {
+                let row_start = (batch_start + offset)
+                    .checked_mul(group_len)
+                    .ok_or(DftError::SizeOverflow)?;
+                output.write_rows(row_start as u64, group_len, words)?;
+            }
+        }
+        output.finalize()?;
+        source.remove()?;
+        Ok(output)
+    }
+
+    fn sub_fft_workers(&self, group_count: usize, group_len: usize, width: usize) -> Result<usize> {
+        let bytes_per_worker = group_len
+            .checked_mul(width)
+            .and_then(|elements| elements.checked_mul(GoldilocksWord::WIDTH))
+            .and_then(|bytes| bytes.checked_mul(3))
+            .ok_or(DftError::SizeOverflow)?;
+        let memory_workers = usize::try_from(
+            (self.policy.max_resident_bytes / 2)
+                .checked_div(bytes_per_worker as u64)
+                .unwrap_or(0),
+        )
+        .unwrap_or(usize::MAX);
+        if memory_workers == 0 {
+            return Err(StreamError::ResourceLimit {
+                resource: "resident memory",
+                required: bytes_per_worker as u64,
+                cap: self.policy.max_resident_bytes / 2,
+            }
+            .into());
+        }
+        Ok(self
+            .policy
+            .max_threads
+            .min(group_count)
+            .min(memory_workers)
+            .max(1))
+    }
+
+    fn sub_fft_buffer_bytes(
+        &self,
+        group_count: usize,
+        group_len: usize,
+        width: usize,
+    ) -> Result<u64> {
+        let bytes_per_worker = (group_len as u64)
+            .saturating_mul(width as u64)
+            .saturating_mul(GoldilocksWord::WIDTH as u64)
+            .saturating_mul(3);
+        let memory_workers = (self.policy.max_resident_bytes / 2)
+            .checked_div(bytes_per_worker)
+            .unwrap_or(0);
+        let workers = (self.policy.max_threads as u64)
+            .min(group_count as u64)
+            .min(memory_workers.max(1));
+        Ok(bytes_per_worker.saturating_mul(workers))
+    }
+
+    fn transpose_store(
+        &self,
+        source: ScratchMatrixStore<GoldilocksWord>,
+        job_dir: &Path,
+        output_name: &str,
+        outer: usize,
+        inner: usize,
+        width: usize,
+    ) -> Result<ScratchMatrixStore<GoldilocksWord>> {
+        let mut output = self.transpose_from_reader(
+            job_dir,
+            output_name,
+            outer,
+            inner,
+            width,
+            |row_start, row_count, values| {
+                source
+                    .read_rows(row_start as u64, row_count, values)
+                    .map_err(DftError::from)
+            },
+        )?;
+        output.finalize()?;
+        source.remove()?;
+        Ok(output)
+    }
+
+    fn transpose_from_reader<R>(
+        &self,
+        job_dir: &Path,
+        output_name: &str,
+        outer: usize,
+        inner: usize,
+        width: usize,
+        mut read_rows: R,
+    ) -> Result<ScratchMatrixStore<GoldilocksWord>>
+    where
+        R: FnMut(usize, usize, &mut [GoldilocksWord]) -> Result<()>,
+    {
+        let height = outer.checked_mul(inner).ok_or(DftError::SizeOverflow)?;
+        let mut output = ScratchMatrixStore::<GoldilocksWord>::create(
+            job_dir,
+            output_name,
+            height as u64,
+            width,
+        )?;
+        let (outer_tile, inner_tile) = self.transpose_tile_shape(width, outer, inner)?;
+        let max_elements = outer_tile
+            .checked_mul(inner_tile)
+            .and_then(|value| value.checked_mul(width))
+            .ok_or(DftError::SizeOverflow)?;
+        let mut input = vec![GoldilocksWord::default(); max_elements];
+        let mut transposed = vec![GoldilocksWord::default(); max_elements];
+
+        for outer_start in (0..outer).step_by(outer_tile) {
+            let outer_count = (outer - outer_start).min(outer_tile);
+            for inner_start in (0..inner).step_by(inner_tile) {
+                let inner_count = (inner - inner_start).min(inner_tile);
+                let tile_elements = outer_count
+                    .checked_mul(inner_count)
+                    .and_then(|value| value.checked_mul(width))
+                    .ok_or(DftError::SizeOverflow)?;
+                for outer_offset in 0..outer_count {
+                    let source_start = (outer_start + outer_offset)
+                        .checked_mul(inner)
+                        .and_then(|value| value.checked_add(inner_start))
+                        .ok_or(DftError::SizeOverflow)?;
+                    let destination = outer_offset * inner_count * width;
+                    read_rows(
+                        source_start,
+                        inner_count,
+                        &mut input[destination..destination + inner_count * width],
+                    )?;
+                }
+                for outer_offset in 0..outer_count {
+                    for inner_offset in 0..inner_count {
+                        let source = (outer_offset * inner_count + inner_offset) * width;
+                        let destination = (inner_offset * outer_count + outer_offset) * width;
+                        transposed[destination..destination + width]
+                            .copy_from_slice(&input[source..source + width]);
+                    }
+                }
+                debug_assert!(tile_elements <= max_elements);
+                for inner_offset in 0..inner_count {
+                    let destination_start = (inner_start + inner_offset)
+                        .checked_mul(outer)
+                        .and_then(|value| value.checked_add(outer_start))
+                        .ok_or(DftError::SizeOverflow)?;
+                    let source = inner_offset * outer_count * width;
+                    output.write_rows(
+                        destination_start as u64,
+                        outer_count,
+                        &transposed[source..source + outer_count * width],
+                    )?;
+                }
+            }
+        }
+        Ok(output)
+    }
+
+    fn transpose_tile_shape(
+        &self,
+        width: usize,
+        outer: usize,
+        inner: usize,
+    ) -> Result<(usize, usize)> {
+        let bytes_per_factor_element = width
+            .checked_mul(GoldilocksWord::WIDTH)
+            .and_then(|value| value.checked_mul(2))
+            .ok_or(DftError::SizeOverflow)? as u64;
+        let element_budget = (self.policy.max_resident_bytes / 2)
+            .checked_div(bytes_per_factor_element)
+            .unwrap_or(0);
+        if element_budget == 0 {
+            return Err(StreamError::ResourceLimit {
+                resource: "resident memory",
+                required: bytes_per_factor_element,
+                cap: self.policy.max_resident_bytes / 2,
+            }
+            .into());
+        }
+        let side = highest_power_of_two_at_most(integer_sqrt(element_budget) as usize);
+        let outer_tile = side.min(outer).max(1);
+        let remaining = usize::try_from(element_budget)
+            .unwrap_or(usize::MAX)
+            .checked_div(outer_tile)
+            .unwrap_or(1);
+        let inner_tile = highest_power_of_two_at_most(remaining).min(inner).max(1);
+        Ok((outer_tile, inner_tile))
+    }
+}
+
+fn transform_sub_fft_group(
+    words: &mut [GoldilocksWord],
+    group: usize,
+    group_len: usize,
+    width: usize,
+    twiddle_root: Option<Goldilocks>,
+    inverse: bool,
+) {
+    let values = words.iter().map(|word| word.0).collect();
+    let transformed = if inverse {
+        Radix2Dit::<Goldilocks>::default().idft_batch(RowMajorMatrix::new(values, width))
+    } else {
+        Radix2Dit::<Goldilocks>::default().dft_batch(RowMajorMatrix::new(values, width))
+    };
+    let twiddle_step = twiddle_root
+        .map(|root| root.exp_u64(group as u64))
+        .unwrap_or(Goldilocks::ONE);
+    let mut twiddle = Goldilocks::ONE;
+    for row in 0..group_len {
+        let start = row * width;
+        for column in 0..width {
+            words[start + column] = GoldilocksWord(transformed.values[start + column] * twiddle);
+        }
+        twiddle *= twiddle_step;
     }
 }
 
@@ -511,12 +991,31 @@ impl TwoAdicSubgroupDft<Goldilocks> for ResourceBoundedDft {
     }
 }
 
-fn reverse_low_bits(value: usize, bits: usize) -> usize {
-    if bits == 0 {
-        0
-    } else {
-        value.reverse_bits() >> (usize::BITS as usize - bits)
+fn four_step_factors(height: usize) -> (usize, usize) {
+    let log_height = height.trailing_zeros() as usize;
+    let first = 1usize << (log_height / 2);
+    (first, height / first)
+}
+
+fn integer_sqrt(value: u64) -> u64 {
+    if value < 2 {
+        return value;
     }
+    let mut low = 1u64;
+    let mut high = value.min(u32::MAX as u64 + 1);
+    while low + 1 < high {
+        let middle = low + (high - low) / 2;
+        if middle <= value / middle {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    low
+}
+
+fn highest_power_of_two_at_most(value: usize) -> usize {
+    1usize << (usize::BITS - 1 - value.max(1).leading_zeros())
 }
 
 fn create_job_dir(root: &Path) -> Result<PathBuf> {
@@ -589,6 +1088,32 @@ mod tests {
     }
 
     #[test]
+    fn policy_bounded_parallel_sub_ffts_are_deterministic() {
+        let single_dir = tempfile::tempdir().unwrap();
+        let parallel_dir = tempfile::tempdir().unwrap();
+        let height = 1024;
+        let width = 8;
+        let values: Vec<_> = (0..height * width)
+            .map(|value| Goldilocks::new((value as u64).wrapping_mul(17).wrapping_add(3)))
+            .collect();
+        let input = RowMajorMatrix::new(values, width);
+        let single = ResourceBoundedDft::new(policy(single_dir.path()))
+            .unwrap()
+            .try_dft_batch(input.clone())
+            .unwrap();
+        let mut parallel_policy = policy(parallel_dir.path());
+        parallel_policy.max_threads = 4;
+        let parallel_dft = ResourceBoundedDft::new(parallel_policy).unwrap();
+        let estimate = parallel_dft.estimate_scratch(height, width, true).unwrap();
+        assert!(estimate.peak_resident_bytes <= 32 * 1024 * 1024);
+        let parallel = parallel_dft.try_dft_batch(input).unwrap();
+        assert_eq!(
+            single.try_rows(0, height).unwrap(),
+            parallel.try_rows(0, height).unwrap()
+        );
+    }
+
+    #[test]
     fn block_matrix_entrypoint_avoids_owned_input_floor() {
         let dir = tempfile::tempdir().unwrap();
         let mut input =
@@ -604,6 +1129,44 @@ mod tests {
             .unwrap();
         assert_eq!(output.height(), 8);
         assert_eq!(output.width(), 2);
+    }
+
+    #[test]
+    fn inverse_and_coset_lde_block_paths_match_reference() {
+        let dir = tempfile::tempdir().unwrap();
+        let dft = ResourceBoundedDft::new(policy(dir.path())).unwrap();
+        for height in [2usize, 8, 32] {
+            let width = 3;
+            let values: Vec<_> = (0..height * width)
+                .map(|value| Goldilocks::new((value * 17 + 9) as u64))
+                .collect();
+            let input = RowMajorMatrix::new(values.clone(), width);
+            let mut store = ScratchMatrixStore::<GoldilocksWord>::create(
+                dir.path(),
+                &format!("lde-input-{height}.bin"),
+                height as u64,
+                width,
+            )
+            .unwrap();
+            let words: Vec<_> = values.into_iter().map(GoldilocksWord).collect();
+            store.write_rows(0, height, &words).unwrap();
+            store.finalize().unwrap();
+
+            let expected_inverse = Radix2Dit::<Goldilocks>::default().idft_batch(input.clone());
+            let actual_inverse = dft.try_idft_block_matrix(&store).unwrap();
+            assert_eq!(
+                actual_inverse.try_rows(0, height).unwrap(),
+                expected_inverse.values
+            );
+
+            let shift = Goldilocks::GENERATOR;
+            let expected_lde = Radix2Dit::<Goldilocks>::default().coset_lde_batch(input, 1, shift);
+            let actual_lde = dft.try_coset_lde_block_matrix(&store, 1, shift).unwrap();
+            assert_eq!(
+                actual_lde.try_rows(0, height * 2).unwrap(),
+                expected_lde.values
+            );
+        }
     }
 
     #[cfg(unix)]
@@ -656,11 +1219,51 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_outputs_use_isolated_scratch_directories() {
+        let dir = tempfile::tempdir().unwrap();
+        let dft = ResourceBoundedDft::new(policy(dir.path())).unwrap();
+        let first = dft
+            .try_dft_batch(RowMajorMatrix::new(
+                (0..32).map(Goldilocks::new).collect(),
+                2,
+            ))
+            .unwrap();
+        let second = dft
+            .try_dft_batch(RowMajorMatrix::new(
+                (32..64).map(Goldilocks::new).collect(),
+                2,
+            ))
+            .unwrap();
+        let (first_path, _) = first.scratch_artifact().unwrap();
+        let (second_path, _) = second.scratch_artifact().unwrap();
+        assert_ne!(first_path.parent(), second_path.parent());
+        assert!(first_path.is_file() && second_path.is_file());
+    }
+
+    #[test]
+    fn insufficient_resident_budget_fails_in_preflight() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut constrained = policy(dir.path());
+        constrained.max_resident_bytes = 16 * 1024 * 1024;
+        constrained.max_scratch_bytes = u64::MAX;
+        let dft = ResourceBoundedDft::new(constrained.clone()).unwrap();
+        let estimate = dft.estimate_scratch(1 << 30, 180, false).unwrap();
+        assert!(matches!(
+            constrained.preflight_for_mode(ExecutionMode::Scratch, estimate),
+            Err(StreamError::ResourceLimit {
+                resource: "resident memory",
+                ..
+            })
+        ));
+    }
+
+    #[test]
     fn differential_release_dimensions_match_reference() {
         let dir = tempfile::tempdir().unwrap();
         let dft = ResourceBoundedDft::new(policy(dir.path())).unwrap();
         let mut state = 0x4d595df4d0f33173u64;
-        for log_height in 10..=18 {
+        let max_log_height = if cfg!(debug_assertions) { 18 } else { 20 };
+        for log_height in 10..=max_log_height {
             let height = 1usize << log_height;
             let width = if log_height % 2 == 0 { 1 } else { 3 };
             let values: Vec<_> = (0..height * width)

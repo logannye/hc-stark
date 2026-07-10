@@ -18,6 +18,7 @@ const STORE_MAGIC: &[u8; 8] = b"TZMATV1\0";
 const STORE_HEADER_LEN: u64 = 8 + 8 + 8 + 8;
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 const MAX_CHALLENGER_STATE_BYTES: usize = 64 * 1024;
+const MAX_RESUME_PAYLOAD_BYTES: usize = 64 * 1024;
 const MAX_CHECKPOINT_ARTIFACTS: usize = 1024;
 const HASH_BUFFER_BYTES: usize = 1024 * 1024;
 
@@ -193,35 +194,47 @@ impl ResourcePolicyV1 {
         selected_mode: ExecutionMode,
         estimate: ResourceEstimate,
     ) -> Result<PreflightReport> {
-        self.validate()?;
-        self.validate_estimate(selected_mode, &estimate)?;
-        ensure_private_dir(&self.scratch_dir)?;
-        let probe = self.scratch_dir.join(format!(
-            ".tinyzkp-preflight-{}-{}",
-            std::process::id(),
-            monotonic_suffix()
-        ));
-        let mut probe_file = create_private_file(&probe)?;
-        probe_file.write_all(b"preflight")?;
-        drop(probe_file);
-        fs::remove_file(&probe)?;
-        let available = fs2::available_space(&self.scratch_dir)?;
-        if selected_mode == ExecutionMode::Scratch && estimate.scratch_high_water_bytes > available
+        #[cfg(target_arch = "wasm32")]
         {
-            return Err(StreamError::ResourceLimit {
-                resource: "available scratch storage",
-                required: estimate.scratch_high_water_bytes,
-                cap: available,
-            });
+            let _ = (selected_mode, estimate);
+            Err(StreamError::InvalidPolicy(
+                "filesystem resource preflight is unavailable on wasm32",
+            ))
         }
-        Ok(PreflightReport {
-            selected_mode,
-            available_scratch_bytes: available,
-            memory_selection_threshold_bytes: self.memory_selection_threshold(),
-            estimate,
-        })
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.validate()?;
+            self.validate_estimate(selected_mode, &estimate)?;
+            ensure_private_dir(&self.scratch_dir)?;
+            let probe = self.scratch_dir.join(format!(
+                ".tinyzkp-preflight-{}-{}",
+                std::process::id(),
+                monotonic_suffix()
+            ));
+            let mut probe_file = create_private_file(&probe)?;
+            probe_file.write_all(b"preflight")?;
+            drop(probe_file);
+            fs::remove_file(&probe)?;
+            let available = fs2::available_space(&self.scratch_dir)?;
+            if selected_mode == ExecutionMode::Scratch
+                && estimate.scratch_high_water_bytes > available
+            {
+                return Err(StreamError::ResourceLimit {
+                    resource: "available scratch storage",
+                    required: estimate.scratch_high_water_bytes,
+                    cap: available,
+                });
+            }
+            Ok(PreflightReport {
+                selected_mode,
+                available_scratch_bytes: available,
+                memory_selection_threshold_bytes: self.memory_selection_threshold(),
+                estimate,
+            })
+        }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn validate_estimate(
         &self,
         selected_mode: ExecutionMode,
@@ -281,6 +294,22 @@ pub trait CanonicalElement: Copy + Default + Send + Sync + 'static {
     const WIDTH: usize;
     fn encode(self, out: &mut [u8]);
     fn decode(bytes: &[u8]) -> Result<Self>;
+}
+
+impl CanonicalElement for u8 {
+    const WIDTH: usize = 1;
+
+    fn encode(self, out: &mut [u8]) {
+        out[0] = self;
+    }
+
+    fn decode(bytes: &[u8]) -> Result<Self> {
+        bytes
+            .first()
+            .copied()
+            .filter(|_| bytes.len() == 1)
+            .ok_or(StreamError::Corrupt("invalid u8 width"))
+    }
 }
 
 impl CanonicalElement for u64 {
@@ -597,6 +626,17 @@ impl<T: CanonicalElement> ScratchMatrixStore<T> {
         let path = path.as_ref().to_path_buf();
         reject_symlink(&path)?;
         let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
+        let expected_payload = expected
+            .rows
+            .checked_mul(expected.columns as u64)
+            .and_then(|elements| elements.checked_mul(expected.element_width as u64))
+            .ok_or(StreamError::OutOfBounds)?;
+        let expected_len = STORE_HEADER_LEN
+            .checked_add(expected_payload)
+            .ok_or(StreamError::OutOfBounds)?;
+        if file.metadata()?.len() != expected_len {
+            return Err(StreamError::Corrupt("artifact length mismatch"));
+        }
         let actual_header = read_header(&mut file)?;
         if actual_header != (expected.rows, expected.columns, expected.element_width) {
             return Err(StreamError::Corrupt("artifact header mismatch"));
@@ -784,16 +824,79 @@ impl<T: CanonicalElement> MatrixStore<T> for ScratchMatrixStore<T> {
     }
 
     fn remove(self) -> Result<()> {
+        #[cfg(not(target_arch = "wasm32"))]
         drop(self.file);
+        #[cfg(target_arch = "wasm32")]
+        let _file = self.file;
         fs::remove_file(self.path)?;
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "phase", rename_all = "snake_case", deny_unknown_fields)]
+pub enum PipelinePhaseV1 {
+    Trace,
+    TraceLde,
+    TraceCommitment,
+    Quotient,
+    QuotientLde,
+    QuotientCommitment,
+    FriLayer { layer: u32 },
+    Openings,
+    ProofAssembly,
+}
+
+impl std::fmt::Display for PipelinePhaseV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Trace => formatter.write_str("trace"),
+            Self::TraceLde => formatter.write_str("trace_lde"),
+            Self::TraceCommitment => formatter.write_str("trace_commitment"),
+            Self::Quotient => formatter.write_str("quotient"),
+            Self::QuotientLde => formatter.write_str("quotient_lde"),
+            Self::QuotientCommitment => formatter.write_str("quotient_commitment"),
+            Self::FriLayer { layer } => write!(formatter, "fri_layer_{layer}"),
+            Self::Openings => formatter.write_str("openings"),
+            Self::ProofAssembly => formatter.write_str("proof_assembly"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PipelineArtifactKindV1 {
+    Trace,
+    TraceLde,
+    TraceMmcsLevel,
+    Quotient,
+    QuotientLde,
+    QuotientMmcsLevel,
+    FriLayer,
+    FriMmcsLevel,
+    Openings,
+    ProofBundle,
+}
+
+impl PipelineArtifactKindV1 {
+    fn requires_ordinal(self) -> bool {
+        matches!(
+            self,
+            Self::TraceMmcsLevel
+                | Self::QuotientLde
+                | Self::QuotientMmcsLevel
+                | Self::FriLayer
+                | Self::FriMmcsLevel
+        )
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CheckpointArtifactV2 {
-    pub name: String,
+    pub kind: PipelineArtifactKindV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ordinal: Option<u32>,
     pub relative_path: PathBuf,
     pub digest: ArtifactDigest,
 }
@@ -809,8 +912,13 @@ pub struct CheckpointManifestV2 {
     pub workload_hash: [u8; 32],
     pub input_hash: [u8; 32],
     pub resource_policy_hash: [u8; 32],
-    pub completed_phase: String,
+    pub completed_phase: PipelinePhaseV1,
     pub challenger_state: Vec<u8>,
+    /// Backend-defined, schema-versioned public continuation metadata. This
+    /// must never contain witness values; large state belongs in checksummed
+    /// artifacts instead of the manifest.
+    #[serde(default)]
+    pub resume_payload: Vec<u8>,
     pub artifacts: Vec<CheckpointArtifactV2>,
 }
 
@@ -828,18 +936,16 @@ pub struct CheckpointIdentityV2 {
 impl CheckpointManifestV2 {
     pub fn validate_structure(&self) -> Result<()> {
         if self.schema_version != 2
-            || self.completed_phase.trim().is_empty()
-            || self.completed_phase.len() > 128
             || self.challenger_state.len() > MAX_CHALLENGER_STATE_BYTES
+            || self.resume_payload.len() > MAX_RESUME_PAYLOAD_BYTES
             || self.artifacts.len() > MAX_CHECKPOINT_ARTIFACTS
         {
             return Err(StreamError::CheckpointMismatch);
         }
-        let mut names = HashSet::new();
+        let mut identities = HashSet::new();
         let mut paths = HashSet::new();
         for artifact in &self.artifacts {
-            if artifact.name.trim().is_empty()
-                || artifact.name.len() > 128
+            if artifact.kind.requires_ordinal() != artifact.ordinal.is_some()
                 || artifact.digest.rows == 0
                 || artifact.digest.columns == 0
                 || artifact.digest.element_width == 0
@@ -847,7 +953,7 @@ impl CheckpointManifestV2 {
                 return Err(StreamError::CheckpointMismatch);
             }
             validate_relative_path(&artifact.relative_path)?;
-            if !names.insert(artifact.name.as_str())
+            if !identities.insert((artifact.kind, artifact.ordinal))
                 || !paths.insert(artifact.relative_path.as_path())
             {
                 return Err(StreamError::CheckpointMismatch);
@@ -926,11 +1032,27 @@ impl CheckpointManifestV2 {
         for artifact in &self.artifacts {
             validate_relative_path(&artifact.relative_path)?;
             let path = root.join(&artifact.relative_path);
-            let store = ScratchMatrixStore::<u64>::reopen(&path, artifact.digest)?;
-            drop(store);
+            validate_scratch_artifact(&path, artifact.digest)?;
         }
         Ok(())
     }
+}
+
+/// Validate a matrix artifact without assuming its field element width. Typed
+/// reopening still performs canonical element decoding; checkpoint validation
+/// only needs the immutable header and payload digest.
+pub fn validate_scratch_artifact(path: impl AsRef<Path>, expected: ArtifactDigest) -> Result<()> {
+    let path = path.as_ref();
+    reject_symlink(path)?;
+    let mut file = File::open(path)?;
+    if read_header(&mut file)? != (expected.rows, expected.columns, expected.element_width) {
+        return Err(StreamError::Corrupt("artifact header mismatch"));
+    }
+    let actual = digest_raw_payload(&mut file, expected)?;
+    if actual != expected {
+        return Err(StreamError::Corrupt("artifact checksum mismatch"));
+    }
+    Ok(())
 }
 
 pub fn cleanup_job_directory(
@@ -1036,8 +1158,22 @@ fn digest_payload<T: CanonicalElement>(
     rows: u64,
     columns: usize,
 ) -> Result<ArtifactDigest> {
+    let expected = ArtifactDigest {
+        rows,
+        columns,
+        element_width: T::WIDTH,
+        blake3: [0; 32],
+    };
+    digest_raw_payload(file, expected)
+}
+
+fn digest_raw_payload(file: &mut File, shape: ArtifactDigest) -> Result<ArtifactDigest> {
     file.seek(SeekFrom::Start(STORE_HEADER_LEN))?;
-    let mut remaining = checked_payload_bytes::<T>(rows, columns)?;
+    let mut remaining = shape
+        .rows
+        .checked_mul(shape.columns as u64)
+        .and_then(|elements| elements.checked_mul(shape.element_width as u64))
+        .ok_or(StreamError::OutOfBounds)?;
     let mut hasher = blake3::Hasher::new();
     let mut buffer = vec![0u8; HASH_BUFFER_BYTES];
     while remaining > 0 {
@@ -1047,9 +1183,9 @@ fn digest_payload<T: CanonicalElement>(
         remaining -= take as u64;
     }
     Ok(ArtifactDigest {
-        rows,
-        columns,
-        element_width: T::WIDTH,
+        rows: shape.rows,
+        columns: shape.columns,
+        element_width: shape.element_width,
         blake3: *hasher.finalize().as_bytes(),
     })
 }
@@ -1137,9 +1273,9 @@ fn reject_symlink(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn sync_directory(path: &Path) -> Result<()> {
+fn sync_directory(_path: &Path) -> Result<()> {
     #[cfg(unix)]
-    File::open(path)?.sync_all()?;
+    File::open(_path)?.sync_all()?;
     Ok(())
 }
 
@@ -1212,6 +1348,22 @@ mod tests {
             ScratchMatrixStore::<u64>::reopen(&path, digest),
             Err(StreamError::Corrupt("artifact checksum mismatch"))
         ));
+
+        let mut truncated =
+            ScratchMatrixStore::<u64>::create(dir.path(), "truncated.bin", 2, 2).unwrap();
+        truncated.write_rows(0, 2, &[1, 2, 3, 4]).unwrap();
+        let truncated_digest = truncated.finalize().unwrap();
+        let truncated_path = truncated.path().to_path_buf();
+        drop(truncated);
+        let file = OpenOptions::new()
+            .write(true)
+            .open(&truncated_path)
+            .unwrap();
+        file.set_len(file.metadata().unwrap().len() - 1).unwrap();
+        assert!(matches!(
+            ScratchMatrixStore::<u64>::reopen(&truncated_path, truncated_digest),
+            Err(StreamError::Corrupt("artifact length mismatch"))
+        ));
     }
 
     #[test]
@@ -1283,10 +1435,12 @@ mod tests {
             workload_hash: identity.workload_hash,
             input_hash: identity.input_hash,
             resource_policy_hash: identity.resource_policy_hash,
-            completed_phase: "trace".into(),
+            completed_phase: PipelinePhaseV1::Trace,
             challenger_state: vec![8, 9],
+            resume_payload: br#"{"workload":"test"}"#.to_vec(),
             artifacts: vec![CheckpointArtifactV2 {
-                name: "trace".into(),
+                kind: PipelineArtifactKindV1::Trace,
+                ordinal: None,
                 relative_path: PathBuf::from("trace.bin"),
                 digest,
             }],
@@ -1296,10 +1450,10 @@ mod tests {
         let loaded = CheckpointManifestV2::read(&manifest_path).unwrap();
         loaded.validate_identity(identity).unwrap();
         loaded.validate_artifacts(dir.path()).unwrap();
-        let mut empty_phase = loaded.clone();
-        empty_phase.completed_phase.clear();
+        let mut missing_ordinal = loaded.clone();
+        missing_ordinal.artifacts[0].kind = PipelineArtifactKindV1::FriLayer;
         assert!(matches!(
-            empty_phase.validate_structure(),
+            missing_ordinal.validate_structure(),
             Err(StreamError::CheckpointMismatch)
         ));
         let mut duplicate = loaded.clone();
@@ -1308,12 +1462,23 @@ mod tests {
             duplicate.validate_structure(),
             Err(StreamError::CheckpointMismatch)
         ));
-        let mut wrong = identity;
-        wrong.release_hash = [0; 32];
-        assert!(matches!(
-            loaded.validate_identity(wrong),
-            Err(StreamError::CheckpointMismatch)
-        ));
+        let mutations: [fn(&mut CheckpointIdentityV2); 7] = [
+            |value| value.backend_hash = [0; 32],
+            |value| value.profile_hash = [0; 32],
+            |value| value.release_hash = [0; 32],
+            |value| value.dependency_lock_hash = [0; 32],
+            |value| value.workload_hash = [0; 32],
+            |value| value.input_hash = [0; 32],
+            |value| value.resource_policy_hash = [0; 32],
+        ];
+        for mutate in mutations {
+            let mut wrong = identity;
+            mutate(&mut wrong);
+            assert!(matches!(
+                loaded.validate_identity(wrong),
+                Err(StreamError::CheckpointMismatch)
+            ));
+        }
     }
 
     #[test]
@@ -1365,5 +1530,37 @@ mod tests {
         assert!(job.exists());
         cleanup_job_directory(&job, CheckpointPolicy::RetainOnFailure, false, false).unwrap();
         assert!(!job.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_roots_and_artifacts_fail_closed() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let target = dir.path().join("target");
+        fs::create_dir(&target).unwrap();
+        let linked_root = dir.path().join("linked-root");
+        symlink(&target, &linked_root).unwrap();
+        let linked_policy = ResourcePolicyV1 {
+            scratch_dir: linked_root,
+            ..policy(dir.path(), ResourceMode::Scratch)
+        };
+        assert!(matches!(
+            linked_policy.preflight(estimate(1, 1)),
+            Err(StreamError::UnsafePath)
+        ));
+
+        let mut store = ScratchMatrixStore::<u64>::create(&target, "real.bin", 1, 1).unwrap();
+        store.write_rows(0, 1, &[9]).unwrap();
+        let digest = store.finalize().unwrap();
+        let real = store.path().to_path_buf();
+        drop(store);
+        let linked_artifact = target.join("linked.bin");
+        symlink(&real, &linked_artifact).unwrap();
+        assert!(matches!(
+            ScratchMatrixStore::<u64>::reopen(&linked_artifact, digest),
+            Err(StreamError::UnsafePath)
+        ));
     }
 }
