@@ -63,6 +63,10 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
         Step("frozen Plonky3 compatibility profile", (python, "scripts/ci/plonky3_compatibility_gate.py")),
         Step("launch gate audit", (python, "scripts/ci/launch_gate_audit.py")),
         Step("backup/restore drift check", (python, "scripts/ci/backup_restore_check.py")),
+        Step(
+            "backup execution and retention tests",
+            (python, "-m", "pytest", "billing/tests/test_backup_script.py"),
+        ),
         Step("static site route check", (python, "scripts/ci/site_route_check.py")),
         Step("static site route policy tests", (python, "-m", "pytest", "scripts/ci/test_site_route_check.py")),
         Step(

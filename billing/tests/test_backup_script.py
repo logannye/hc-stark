@@ -54,6 +54,7 @@ def backup_env(tmp_path: pathlib.Path, data_dir: pathlib.Path, backup_dir: pathl
     env.pop("HC_BACKUP_REMOTE", None)
     env.pop("HC_BACKUP_HTTP_URL", None)
     env.pop("HC_BACKUP_HTTP_TOKEN_FILE", None)
+    env.pop("HC_BACKUP_HTTP_RETENTION_CONFIRMED", None)
     return env
 
 
@@ -123,7 +124,9 @@ def test_backup_script_pushes_to_dated_rclone_target_when_remote_is_configured(t
     rclone = fake_bin / "rclone"
     rclone.write_text(
         "#!/usr/bin/env bash\n"
-        "printf '%s\\0' \"$@\" > \"$RCLONE_LOG\"\n"
+        "printf 'BEGIN\\0' >> \"$RCLONE_LOG\"\n"
+        "printf '%s\\0' \"$@\" >> \"$RCLONE_LOG\"\n"
+        "printf 'END\\0' >> \"$RCLONE_LOG\"\n"
         "exit 0\n",
         encoding="utf-8",
     )
@@ -138,12 +141,23 @@ def test_backup_script_pushes_to_dated_rclone_target_when_remote_is_configured(t
 
     assert result.returncode == 0, result.stderr
     assert "Off-box backup pushed to s3:tinyzkp-backups/" in result.stdout
-    assert rclone_log.read_bytes().split(b"\0")[:-1] == [
+    assert "Pruned off-box backups older than 30 days" in result.stdout
+    assert rclone_log.read_bytes().split(b"\0") == [
+        b"BEGIN",
         b"copy",
         str(backup_dir).encode(),
         b"s3:tinyzkp-backups/2026-06-23",
         b"--max-age",
         b"25h",
+        b"END",
+        b"BEGIN",
+        b"delete",
+        b"s3:tinyzkp-backups",
+        b"--min-age",
+        b"30d",
+        b"--rmdirs",
+        b"END",
+        b"",
     ]
 
 
@@ -169,6 +183,7 @@ def test_backup_script_pushes_each_snapshot_through_http_ingest(tmp_path):
     env = backup_env(tmp_path, data_dir, backup_dir)
     env["HC_BACKUP_HTTP_URL"] = "https://backup.example/v1/backups"
     env["HC_BACKUP_HTTP_TOKEN_FILE"] = str(token_file)
+    env["HC_BACKUP_HTTP_RETENTION_CONFIRMED"] = "1"
     env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
     env["CURL_LOG"] = str(curl_log)
 
@@ -183,6 +198,29 @@ def test_backup_script_pushes_each_snapshot_through_http_ingest(tmp_path):
     assert "https://backup.example/v1/backups/2026-06-23/evaluation_applications_20260623_010203.sqlite" in configs
     assert "https://backup.example/v1/backups/2026-06-23/contracts_20260623_010203.tar.gz" in configs
     assert 'header = "X-Content-SHA256: ' in configs
+
+
+def test_backup_script_fails_closed_when_http_retention_is_not_confirmed(tmp_path):
+    data_dir = prepare_data_dir(tmp_path)
+    backup_dir = tmp_path / "backups"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    curl = fake_bin / "curl"
+    curl.write_text("#!/usr/bin/env bash\ncat >/dev/null\nexit 0\n", encoding="utf-8")
+    curl.chmod(0o755)
+    token_file = tmp_path / "token"
+    token_file.write_text("a" * 64 + "\n", encoding="utf-8")
+    token_file.chmod(0o600)
+
+    env = backup_env(tmp_path, data_dir, backup_dir)
+    env["HC_BACKUP_HTTP_URL"] = "https://backup.example/v1/backups"
+    env["HC_BACKUP_HTTP_TOKEN_FILE"] = str(token_file)
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+
+    result = run_backup(env)
+
+    assert result.returncode != 0
+    assert "HTTP backup destination retention is not confirmed" in result.stderr
 
 
 def test_backup_rejects_unsafe_contract_files(tmp_path):

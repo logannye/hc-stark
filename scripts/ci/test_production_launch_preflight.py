@@ -41,6 +41,7 @@ def test_local_preflight_builds_fast_static_gate_sequence():
         ("python", "scripts/ci/plonky3_compatibility_gate.py"),
         ("python", "scripts/ci/launch_gate_audit.py"),
         ("python", "scripts/ci/backup_restore_check.py"),
+        ("python", "-m", "pytest", "billing/tests/test_backup_script.py"),
         ("python", "scripts/ci/site_route_check.py"),
         ("python", "-m", "pytest", "scripts/ci/test_site_route_check.py"),
         (
