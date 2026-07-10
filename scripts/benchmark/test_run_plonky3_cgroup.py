@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 MODULE_PATH = Path(__file__).with_name("run_plonky3_cgroup.py")
 SPEC = importlib.util.spec_from_file_location("run_plonky3_cgroup", MODULE_PATH)
@@ -22,3 +24,18 @@ def test_parse_cpu_usage_and_baseline_path():
     assert MODULE.baseline_report_path(Path("raw/report.json")) == Path(
         "raw/report.baseline.json"
     )
+
+
+def test_failed_report_is_persisted_before_gate_failure(tmp_path):
+    report_path = tmp_path / "candidate.json"
+    report = {
+        "verification_succeeded": False,
+        "exit_status": 137,
+        "failure_diagnostic": "cgroup memory limit reached",
+    }
+
+    with pytest.raises(RuntimeError, match="raw report preserved"):
+        MODULE.persist_report(report_path, report, "bounded")
+
+    assert report_path.is_file()
+    assert "cgroup memory limit reached" in report_path.read_text()

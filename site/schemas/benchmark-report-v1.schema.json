@@ -20,6 +20,13 @@
       "type": "integer",
       "format": "int32"
     },
+    "failure_diagnostic": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 4000
+    },
     "hardware": {
       "type": "string"
     },

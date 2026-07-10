@@ -200,11 +200,7 @@ def run_one(
         "exit_status": process.returncode,
     }
     if not verification_succeeded:
-        diagnostic = (stderr or stdout)[-4000:]
-        raise RuntimeError(
-            f"{mode} worker failed with exit {process.returncode}; raw report={json.dumps(report)}; "
-            f"diagnostic={diagnostic}"
-        )
+        report["failure_diagnostic"] = (stderr or stdout)[-4000:]
     return report
 
 
@@ -217,6 +213,16 @@ def write_json(path: Path, payload: dict) -> None:
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(temp, path)
+
+
+def persist_report(path: Path, report: dict, label: str) -> None:
+    """Persist raw evidence before converting an unsuccessful run into a gate failure."""
+    write_json(path, report)
+    if not report.get("verification_succeeded"):
+        raise RuntimeError(
+            f"{label} worker failed with exit {report.get('exit_status')}; "
+            f"raw report preserved at {path}"
+        )
 
 
 def parse_args() -> argparse.Namespace:
@@ -252,6 +258,7 @@ def main() -> int:
     if baseline_memory_cap < candidate_memory_cap:
         raise RuntimeError("baseline memory cap cannot be below the candidate manifest cap")
 
+    baseline_path = baseline_report_path(args.report)
     baseline = run_one(
         cli=cli,
         manifest_path=args.manifest.resolve(),
@@ -261,6 +268,7 @@ def main() -> int:
         release_sha=release_sha,
         memory_cap=baseline_memory_cap,
     )
+    persist_report(baseline_path, baseline, "conventional")
     candidate = run_one(
         cli=cli,
         manifest_path=args.manifest.resolve(),
@@ -270,13 +278,12 @@ def main() -> int:
         release_sha=release_sha,
         memory_cap=candidate_memory_cap,
     )
-    write_json(baseline_report_path(args.report), baseline)
-    write_json(args.report, candidate)
+    persist_report(args.report, candidate, "bounded")
     print(
         json.dumps(
             {
                 "candidate_report": str(args.report),
-                "baseline_report": str(baseline_report_path(args.report)),
+                "baseline_report": str(baseline_path),
                 "ram_reduction": (
                     baseline["peak_rss_bytes"] / candidate["peak_rss_bytes"]
                     if candidate["peak_rss_bytes"]

@@ -236,6 +236,9 @@ pub struct BenchmarkReportV1 {
     pub verification_time_ms: u64,
     pub verification_succeeded: bool,
     pub exit_status: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(length(max = 4000))]
+    pub failure_diagnostic: Option<String>,
 }
 
 impl BenchmarkReportV1 {
@@ -249,6 +252,10 @@ impl BenchmarkReportV1 {
             || self.workload_manifest_digest_hex.len() != 64
             || self.cpu_seconds.is_sign_negative()
             || !self.cpu_seconds.is_finite()
+            || self
+                .failure_diagnostic
+                .as_ref()
+                .is_some_and(|value| value.len() > 4000)
         {
             return Err(ContractError::ProfileMismatch);
         }
