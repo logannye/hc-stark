@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from html.parser import HTMLParser
 import json
 import sys
 import urllib.error
@@ -24,6 +25,22 @@ class Observation:
     name: str
     status: int
     body: bytes
+
+
+class ContactFormParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fields: dict[str, tuple[str, dict[str, str | None]]] = {}
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        if tag not in {"input", "select"}:
+            return
+        attributes = dict(attrs)
+        name = attributes.get("name")
+        if isinstance(name, str) and name:
+            self.fields[name] = (tag, attributes)
 
 
 def request(name: str, url: str, *, method: str = "GET", body: bytes | None = None, timeout: int = 20) -> Observation:
@@ -67,6 +84,7 @@ def validate(site_url: str, api_url: str, mcp_url: str, timeout: int) -> list[st
             timeout=timeout,
         ),
         request("homepage", site_url.rstrip("/") + "/", timeout=timeout),
+        request("contact", urljoin(site_url.rstrip("/") + "/", "contact"), timeout=timeout),
         request("status", urljoin(site_url.rstrip("/") + "/", "status"), timeout=timeout),
         request("mcp version", urljoin(mcp_url.rstrip("/") + "/", "version"), timeout=timeout),
     ]
@@ -105,6 +123,39 @@ def validate(site_url: str, api_url: str, mcp_url: str, timeout: int) -> list[st
         for claim in forbidden_claims:
             if claim.lower() in text:
                 failures.append(f"{name} contains forbidden claim {claim!r}")
+
+    contact = by_name["contact"]
+    contact_text = contact.body.decode("utf-8", errors="replace")
+    parser = ContactFormParser()
+    parser.feed(contact_text)
+    email = parser.fields.get("email")
+    contact_method = parser.fields.get("contact_method")
+    contact_handle = parser.fields.get("contact_handle")
+    if contact.status != 200:
+        failures.append(f"contact returned HTTP {contact.status}")
+    if (
+        email is None
+        or email[0] != "input"
+        or not isinstance(email[1].get("type"), str)
+        or email[1]["type"].lower() != "email"
+        or "required" in email[1]
+    ):
+        failures.append("contact email field must exist and remain optional")
+    if (
+        contact_method is None
+        or contact_method[0] != "select"
+        or "required" not in contact_method[1]
+    ):
+        failures.append("contact must require a no-email reply channel")
+    if (
+        contact_handle is None
+        or contact_handle[0] != "input"
+        or "required" not in contact_handle[1]
+    ):
+        failures.append("contact must require a no-email reply handle")
+    normalized_contact = " ".join(contact_text.lower().replace("-", " ").split())
+    if "no email" not in normalized_contact:
+        failures.append("contact does not disclose the no-email recovery policy")
 
     mcp_version = json_object(by_name["mcp version"])
     if by_name["mcp version"].status != 200 or mcp_version.get("service") != "mcp":
