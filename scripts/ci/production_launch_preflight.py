@@ -59,17 +59,43 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
     steps = [
         Step("recovery reconciliation invariants", (python, "scripts/ci/recovery_reconciliation_invariants.py")),
         Step("backend recovery gate", (python, "scripts/ci/backend_recovery_gate.py")),
+        Step("MCP recovery server-card", (python, "scripts/ci/server_card_check.py")),
         Step("frozen Plonky3 compatibility profile", (python, "scripts/ci/plonky3_compatibility_gate.py")),
         Step("launch gate audit", (python, "scripts/ci/launch_gate_audit.py")),
         Step("backup/restore drift check", (python, "scripts/ci/backup_restore_check.py")),
         Step("static site route check", (python, "scripts/ci/site_route_check.py")),
         Step("static site route policy tests", (python, "-m", "pytest", "scripts/ci/test_site_route_check.py")),
-        Step("release identity policy tests", (python, "-m", "pytest", "scripts/ci/test_release_identity_check.py")),
+        Step(
+            "release identity policy tests",
+            (
+                python,
+                "-m",
+                "pytest",
+                "scripts/ci/test_release_identity_check.py",
+                "scripts/ci/test_site_asset_manifest.py",
+            ),
+        ),
         Step(
             "legacy billing containment tests",
-            (python, "-m", "pytest", "billing/tests/test_legacy_billing_containment.py"),
+            (
+                python,
+                "-m",
+                "pytest",
+                "billing/tests/test_legacy_billing_containment.py",
+                "billing/tests/test_legacy_write_quarantine.py",
+            ),
         ),
-        Step("evaluation intake tests", (python, "-m", "pytest", "billing/tests/test_contact_intake.py")),
+        Step(
+            "evaluation intake tests",
+            (
+                python,
+                "-m",
+                "pytest",
+                "billing/tests/test_contact_intake.py",
+                "billing/tests/test_evaluation_store.py",
+                "scripts/monitoring/test_contact_intake_readiness.py",
+            ),
+        ),
         Step("public claims lint", (python, "-m", "pytest", "billing/tests/test_site_pricing_parity.py")),
         Step("commercial offer parity", (python, "scripts/commercial/render_offers.py", "--check")),
         Step(
@@ -80,6 +106,7 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
                 "pytest",
                 "billing/tests/test_contract_billing.py",
                 "billing/tests/test_configure_contract_portal.py",
+                "billing/tests/test_evaluation_start_ready.py",
             ),
         ),
         Step(
@@ -93,6 +120,10 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
         ),
         Step("Cloudflare Pages worker dispatch check", (node, "scripts/ci/site_worker_dispatch_test.mjs")),
         Step("Docker Compose render check", (python, "scripts/ci/compose_config_check.py")),
+        Step(
+            "billing service hardening tests",
+            (python, "-m", "pytest", "scripts/ci/test_billing_service_hardening.py"),
+        ),
         Step("deploy readiness check", tuple(deploy_readiness_cmd)),
     ]
 
@@ -131,6 +162,20 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
                         args.mcp_url,
                     ),
                     timeout_secs=180,
+                ),
+                Step(
+                    "live durable contact intake canary",
+                    (
+                        python,
+                        "scripts/monitoring/contact_intake_readiness.py",
+                        "--site-url",
+                        args.site_url,
+                        "--webhook-url",
+                        args.webhook_url,
+                        "--internal-secret-file",
+                        args.contact_readiness_secret_file,
+                    ),
+                    timeout_secs=120,
                 ),
             ]
         )
@@ -259,6 +304,15 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--api-url", default="https://api.tinyzkp.com", help="TinyZKP API origin for live checks")
     parser.add_argument("--mcp-url", default="https://mcp.tinyzkp.com", help="TinyZKP MCP origin for live checks")
     parser.add_argument(
+        "--webhook-url",
+        default="https://webhook.tinyzkp.com",
+        help="TinyZKP billing/contact webhook origin for the durable intake canary",
+    )
+    parser.add_argument(
+        "--contact-readiness-secret-file",
+        help="Owner-only file containing INTERNAL_SECRET for the live durable intake canary",
+    )
+    parser.add_argument(
         "--expected-release-sha",
         help="Expected Git SHA for live site/API release identity checks; defaults to TINYZKP_EXPECT_RELEASE_SHA",
     )
@@ -272,6 +326,13 @@ def main(argv: list[str]) -> int:
 
     if args.production and not args.pages_bindings_file:
         parser.error("--production requires --pages-bindings-file")
+    if args.live and not (
+        (args.expected_release_sha or "").strip()
+        or os.environ.get("TINYZKP_EXPECT_RELEASE_SHA", "").strip()
+    ):
+        parser.error("--live requires --expected-release-sha (or TINYZKP_EXPECT_RELEASE_SHA)")
+    if args.live and not args.contact_readiness_secret_file:
+        parser.error("--live requires --contact-readiness-secret-file")
 
     steps = build_steps(args, python=sys.executable)
     results = run_steps(steps)

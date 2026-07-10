@@ -73,6 +73,28 @@ def check_server_and_mcp() -> None:
     require('PRODUCTION_TOOL_NAMES: &[&str] = &["get_capabilities"]' in mcp, "MCP production discovery is not capability-only")
     require('"service_status": "backend_recovery"' in discovery, "MCP capabilities do not report backend recovery")
     require('"proving": false' in discovery and '"verification": false' in discovery, "MCP execution features must be false")
+    registry = json.loads(text("server.json"))
+    require("backend recovery" in registry.get("description", "").lower(), "official MCP registry metadata omits recovery")
+    require(registry.get("remotes", [{}])[0].get("headers") == [], "official MCP registry still requests credentials")
+    require(
+        registry.get("remotes", [{}])[0].get("url") == "https://mcp.tinyzkp.com/mcp",
+        "official MCP registry endpoint is not the capability-only transport",
+    )
+    package_card = json.loads(text("crates/hc-mcp/mcp.json"))
+    require(
+        {tool.get("name") for tool in package_card.get("tools", [])} == {"get_capabilities"},
+        "packaged MCP metadata is not capability-only",
+    )
+    require(package_card.get("service_status") == "backend_recovery", "packaged MCP metadata omits recovery")
+    server_card = json.loads(text("deploy/server-card.json"))
+    require(
+        {tool.get("name") for tool in server_card.get("tools", [])} == {"get_capabilities"},
+        "MCP directory card is not capability-only",
+    )
+    require(
+        server_card.get("metadata", {}).get("service_status") == "backend_recovery",
+        "MCP directory card does not report backend recovery",
+    )
 
 
 def check_billing_and_release() -> None:
@@ -90,6 +112,16 @@ def check_billing_and_release() -> None:
     require("MAINTENANCE_DISABLED_API_ROUTES" in worker, "worker lacks maintenance route denials")
     require('const ROUTES = { "/api/contact": contact };' in worker, "worker deploys more than evaluation intake")
     require("TINYZKP_ALLOW_LEGACY_BILLING_WRITE" in text("billing/setup_stripe_products.sh"), "legacy Stripe catalog writes are not fail-closed")
+    require(
+        "TINYZKP_ALLOW_LEGACY_RESEARCH_CATALOG" in text("billing/setup_stripe_v2_pricing.sh")
+        and '"_live_"' in text("billing/setup_stripe_v2_pricing.sh"),
+        "legacy v2 Stripe catalog script is not test-only and live-key-blocked",
+    )
+    require(
+        "TINYZKP_ALLOW_LEGACY_TEST_CHECKOUT" in text("billing/create_checkout.py")
+        and '"_live_"' in text("billing/create_checkout.py"),
+        "legacy Checkout helper is not test-only and live-key-blocked",
+    )
     require("TINYZKP_ALLOW_LEGACY_METER_EVENTS" in text("billing/sync_usage.py"), "legacy meter events are not fail-closed")
     require('os.environ.get("CONTACT_TO_EMAIL", "hello@tinyzkp.com")' in text("billing/provision_tenant.py"), "contact recipient is not environment-configured")
     require('os.environ.get("TINYZKP_MAINTENANCE_MODE", "1")' in text("billing/provision_tenant.py"), "billing webhook maintenance mode is not fail-closed")
@@ -129,7 +161,12 @@ def check_billing_and_release() -> None:
     ):
         require(marker in contract_billing, message)
     caddy = text("deploy/hetzner/Caddyfile")
-    for route in ("@stripe_webhook path /webhook", "@contact_intake path /send-contact", "@webhook_health path /health"):
+    for route in (
+        "@stripe_webhook path /webhook",
+        "@contact_intake path /send-contact",
+        "@contact_readiness path /contact-readiness",
+        "@webhook_health path /health",
+    ):
         require(route in caddy, f"webhook proxy is missing allowlisted route: {route}")
     for retired_route in ("/provision-free", "/rotate", "/send-magic-link", "/verify-magic-link"):
         require(retired_route not in caddy, f"webhook proxy exposes retired account route: {retired_route}")

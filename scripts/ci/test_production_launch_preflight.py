@@ -1,6 +1,8 @@
 import argparse
 import pathlib
 
+import pytest
+
 import production_launch_preflight as preflight
 
 
@@ -16,6 +18,8 @@ def args(**overrides):
         "site_url": "https://tinyzkp.com",
         "api_url": "https://api.tinyzkp.com",
         "mcp_url": "https://mcp.tinyzkp.com",
+        "webhook_url": "https://webhook.tinyzkp.com",
+        "contact_readiness_secret_file": "/secure/internal-secret",
         "expected_release_sha": None,
         "authenticated_smoke": False,
     }
@@ -33,14 +37,34 @@ def test_local_preflight_builds_fast_static_gate_sequence():
     assert commands(built) == [
         ("python", "scripts/ci/recovery_reconciliation_invariants.py"),
         ("python", "scripts/ci/backend_recovery_gate.py"),
+        ("python", "scripts/ci/server_card_check.py"),
         ("python", "scripts/ci/plonky3_compatibility_gate.py"),
         ("python", "scripts/ci/launch_gate_audit.py"),
         ("python", "scripts/ci/backup_restore_check.py"),
         ("python", "scripts/ci/site_route_check.py"),
         ("python", "-m", "pytest", "scripts/ci/test_site_route_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_release_identity_check.py"),
-        ("python", "-m", "pytest", "billing/tests/test_legacy_billing_containment.py"),
-        ("python", "-m", "pytest", "billing/tests/test_contact_intake.py"),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "scripts/ci/test_release_identity_check.py",
+            "scripts/ci/test_site_asset_manifest.py",
+        ),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "billing/tests/test_legacy_billing_containment.py",
+            "billing/tests/test_legacy_write_quarantine.py",
+        ),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "billing/tests/test_contact_intake.py",
+            "billing/tests/test_evaluation_store.py",
+            "scripts/monitoring/test_contact_intake_readiness.py",
+        ),
         ("python", "-m", "pytest", "billing/tests/test_site_pricing_parity.py"),
         ("python", "scripts/commercial/render_offers.py", "--check"),
         (
@@ -49,12 +73,14 @@ def test_local_preflight_builds_fast_static_gate_sequence():
             "pytest",
             "billing/tests/test_contract_billing.py",
             "billing/tests/test_configure_contract_portal.py",
+            "billing/tests/test_evaluation_start_ready.py",
         ),
         ("python", "-m", "pytest", "scripts/commercial/test_validate_scorecard.py"),
         ("python", "scripts/ci/site_deploy_check.py"),
         ("python", "-m", "pytest", "scripts/ci/test_cloudflare_pages_secret_check.py"),
         ("node", "scripts/ci/site_worker_dispatch_test.mjs"),
         ("python", "scripts/ci/compose_config_check.py"),
+        ("python", "-m", "pytest", "scripts/ci/test_billing_service_hardening.py"),
         ("python", "scripts/ci/deploy_readiness_check.py", "--env-file", ".env"),
     ]
 
@@ -107,6 +133,16 @@ def test_live_steps_are_opt_in_and_use_recovery_canary():
         "https://mcp.tinyzkp.com",
     )
     assert ("python", "scripts/ci/cloudflare_pages_secret_check.py") in commands(built)
+    assert (
+        "python",
+        "scripts/monitoring/contact_intake_readiness.py",
+        "--site-url",
+        "https://tinyzkp.com",
+        "--webhook-url",
+        "https://webhook.tinyzkp.com",
+        "--internal-secret-file",
+        "/secure/internal-secret",
+    ) in commands(built)
 
 
 def test_expected_release_sha_adds_live_release_identity_check():
@@ -182,3 +218,10 @@ def test_run_step_reports_missing_command():
     assert result.status == "FAIL"
     assert result.returncode is None
     assert result.error
+
+
+def test_live_cli_requires_expected_release_sha(monkeypatch):
+    monkeypatch.delenv("TINYZKP_EXPECT_RELEASE_SHA", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        preflight.main(["--live"])
+    assert exc.value.code == 2
