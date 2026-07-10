@@ -29,6 +29,8 @@ REQUIRED_MARKERS = {
         "validate_private_contract_dir.py",
         "HC_BACKUP_REMOTE",
         "rclone copy",
+        "rclone delete",
+        "HC_BACKUP_HTTP_RETENTION_CONFIRMED",
         "on-disk backup ONLY",
     ),
     "billing/validate_private_contract_dir.py": (

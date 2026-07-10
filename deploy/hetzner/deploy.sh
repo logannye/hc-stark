@@ -24,11 +24,22 @@ fi
 cd "$REPO"
 
 sync_host_billing_services() {
+    if ! getent group tinyzkp-billing >/dev/null; then
+        groupadd --system tinyzkp-billing
+    fi
+    if ! id -u tinyzkp-billing >/dev/null 2>&1; then
+        useradd --system --gid tinyzkp-billing --home-dir /nonexistent \
+            --shell /usr/sbin/nologin tinyzkp-billing
+    fi
+    install -d -o tinyzkp-billing -g tinyzkp-billing -m 0700 /opt/hc-stark/data
+    chown -R tinyzkp-billing:tinyzkp-billing /opt/hc-stark/data
+
     cat > /etc/cron.d/hc-billing <<'CRON'
 # TinyZKP backend recovery: legacy usage meters, checkout recovery, lifecycle
 # nudges, and growth automation are intentionally disabled. Contract invoices
 # are operator-created through the reviewed Stripe Invoicing workflow.
 0 2 * * * root /opt/hc-stark/billing/backup.sh >> /var/log/hc-backup.log 2>&1
+17 3 * * * root /opt/hc-stark/.venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /var/log/hc-evaluation-retention.log 2>&1
 CRON
     chmod 644 /etc/cron.d/hc-billing
 
@@ -39,11 +50,20 @@ After=network.target
 
 [Service]
 Type=simple
+User=tinyzkp-billing
+Group=tinyzkp-billing
 WorkingDirectory=/opt/hc-stark/billing
 ExecStart=/opt/hc-stark/.venv/bin/gunicorn -w 2 -b 127.0.0.1:5001 provision_tenant:app
 Restart=on-failure
 RestartSec=5
+UMask=0077
+Environment=PYTHONDONTWRITEBYTECODE=1
 EnvironmentFile=/opt/hc-stark/.env
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/hc-stark/data
 
 [Install]
 WantedBy=multi-user.target
@@ -151,6 +171,14 @@ if [ "$sr" = "403" ]; then
     echo "    OK   webhook /send-contact (403 — internal-secret gate live)"
 else
     echo "    FAIL webhook /send-contact (got $sr, want 403 — webhook may be stale)"; fail=1
+fi
+rr=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+    -X POST -H 'Content-Type: application/json' -d '{}' \
+    "$WEBHOOK_LOCAL/contact-readiness" 2>/dev/null || echo 000)
+if [ "$rr" = "403" ]; then
+    echo "    OK   webhook /contact-readiness (403 — internal-secret gate live)"
+else
+    echo "    FAIL webhook /contact-readiness (got $rr, want 403)"; fail=1
 fi
 
 cap=$(curl -sf --max-time 10 "$API_LOCAL/v1/capabilities" 2>/dev/null || true)

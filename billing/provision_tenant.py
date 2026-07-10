@@ -216,6 +216,21 @@ NO_EMAIL_CONTACT_METHODS = {
     "phone",
 }
 
+DESIGN_PARTNER_REQUIRED_FIELDS = (
+    "company",
+    "stack",
+    "workload",
+    "logical_rows",
+    "current_memory",
+    "target_ram",
+    "scratch",
+    "verifier_target",
+    "data_sensitivity",
+    "technical_owner",
+    "budget_owner",
+    "timeline",
+)
+
 ATTRIBUTION_FIELDS = (
     "source",
     "medium",
@@ -490,6 +505,8 @@ def _handle_pilot_payment_completed(
 
 def _handle_checkout_completed(event: dict) -> tuple[str, int]:
     """Handle checkout.session.completed — provision new tenant."""
+    if MAINTENANCE_MODE:
+        return "checkout disabled during backend recovery", 200
     conn = tenant_store.open_db()
 
     event_id = event["id"]
@@ -960,22 +977,25 @@ def send_contact():
         return flask.jsonify(error="invalid email"), 400
     if len(name) > 200 or len(message) > 5000:
         return flask.jsonify(error="invalid input"), 400
-    if category == "Design Partner" and qualification.get("consent") != "twelve_month_retention":
-        return flask.jsonify(error="retention consent is required"), 400
-    if category == "Design Partner" and (
-        contact_method not in NO_EMAIL_CONTACT_METHODS or not contact_handle
-    ):
-        return flask.jsonify(error="a supported no-email contact method and handle are required"), 400
-
     valid_categories = {
         "General Inquiry",
         "Bug Report",
         "Feature Request",
         "Design Partner",
+        "Security Report",
+        "Privacy Request",
         "Billing",
         "Enterprise",
     }
     safe_category = category if category in valid_categories else "General Inquiry"
+    if safe_category == "Design Partner":
+        missing = [field for field in DESIGN_PARTNER_REQUIRED_FIELDS if not qualification.get(field)]
+        if missing:
+            return flask.jsonify(error=f"missing evaluation fields: {', '.join(missing)}"), 400
+    if qualification.get("consent") != "twelve_month_retention":
+        return flask.jsonify(error="retention acknowledgement is required"), 400
+    if contact_method not in NO_EMAIL_CONTACT_METHODS or not contact_handle:
+        return flask.jsonify(error="a supported no-email contact method and handle are required"), 400
 
     try:
         application_id = evaluation_store.create_application(
@@ -989,16 +1009,39 @@ def send_contact():
         print(f"ERROR: Failed to persist evaluation application: {exc}", file=sys.stderr)
         return flask.jsonify(error="application storage unavailable"), 503
 
-    return flask.jsonify(
-        ok=True,
-        application_id=application_id,
-        benchmark_url="https://tinyzkp.com/benchmarks",
-        benchmark_command=(
-            "hc-cli benchmark plonky3 --manifest workload.json "
-            "--baseline conventional --candidate bounded --report report.json"
-        ),
-        next_action="Save this application ID and prepare a non-sensitive reproducible manifest.",
-    ), 201
+    response = {
+        "ok": True,
+        "application_id": application_id,
+        "next_action": "Save this request ID; TinyZKP will reply through the selected no-email channel.",
+    }
+    if safe_category == "Design Partner":
+        response.update(
+            benchmark_url="https://tinyzkp.com/benchmarks",
+            benchmark_command=(
+                "hc-cli benchmark plonky3 --manifest workload.json "
+                "--baseline conventional --candidate bounded --report report.json"
+            ),
+            next_action="Save this application ID and prepare a non-sensitive reproducible manifest.",
+        )
+    return flask.jsonify(**response), 201
+
+
+@app.route("/contact-readiness", methods=["POST"])
+def contact_readiness():
+    """Reconcile and delete a no-PII probe submitted through Cloudflare."""
+    if not _require_internal_secret():
+        return flask.jsonify(error="unauthorized"), 403
+    data = flask.request.get_json(silent=True) or {}
+    application_id = _contact_string(data.get("application_id"), 64)
+    nonce = _contact_string(data.get("nonce"), 80)
+    try:
+        consumed = evaluation_store.consume_readiness_probe(application_id, nonce)
+    except (OSError, sqlite3.Error) as exc:
+        print(f"ERROR: Contact readiness storage check failed: {exc}", file=sys.stderr)
+        return flask.jsonify(error="application storage unavailable"), 503
+    if not consumed:
+        return flask.jsonify(error="readiness probe not found or mismatched"), 409
+    return flask.jsonify(ok=True, stored=True, cleaned=True), 200
 
 
 @app.route("/verify-magic-link", methods=["POST"])

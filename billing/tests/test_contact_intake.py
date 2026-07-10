@@ -16,6 +16,28 @@ SECRET = "test-internal-secret-contact"
 HEADERS = {"X-Internal-Secret": SECRET, "Content-Type": "application/json"}
 
 
+def _complete_qualification(**overrides):
+    value = {
+        "company": "Example",
+        "stack": "Plonky3 0.6.1",
+        "workload": "Poseidon2 AIR",
+        "logical_rows": "1048576",
+        "current_memory": "OOM at 16 GiB",
+        "target_ram": "2 GiB",
+        "scratch": "100 GiB local NVMe",
+        "verifier_target": "Unmodified Plonky3 verifier",
+        "data_sensitivity": "Public deterministic generator",
+        "technical_owner": "Proving Lead",
+        "budget_owner": "CTO",
+        "timeline": "This quarter",
+        "contact_method": "github",
+        "contact_handle": "https://github.com/example",
+        "consent": "twelve_month_retention",
+    }
+    value.update(overrides)
+    return value
+
+
 class _ImmediateThread:
     def __init__(self, target, daemon=False):
         self.target = target
@@ -80,14 +102,12 @@ def test_send_contact_route_persists_sanitized_qualification(monkeypatch):
             json={
                 "name": "Buyer",
                 "email": "Buyer@Example.com",
-                "category": "General Inquiry",
+                "category": "Design Partner",
                 "message": "We have a long trace use case.",
-                "qualification": {
-                    "workload": "Long Plonky3 trace",
-                    "logical_rows": "1048576",
-                    "current_memory": "OOM at 16 GiB",
-                    "api_key": "tzk_never_forward",
-                },
+                    "qualification": _complete_qualification(
+                        workload="Long Plonky3 trace",
+                        api_key="tzk_never_forward",
+                    ),
             },
         )
 
@@ -95,10 +115,91 @@ def test_send_contact_route_persists_sanitized_qualification(monkeypatch):
     assert resp.get_json()["application_id"] == "eval_test123"
     assert "hc-cli benchmark plonky3" in resp.get_json()["benchmark_command"]
     assert captured["email"] == "buyer@example.com"
-    assert captured["category"] == "General Inquiry"
+    assert captured["category"] == "Design Partner"
     assert captured["qualification"]["workload"] == "Long Plonky3 trace"
     assert captured["qualification"]["logical_rows"] == "1048576"
     assert "api_key" not in captured["qualification"]
+
+
+def test_operational_request_uses_no_email_channel_and_no_benchmark_instructions(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(provision_tenant, "INTERNAL_SECRET", SECRET)
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return "eval_security_request"
+
+    monkeypatch.setattr(provision_tenant.evaluation_store, "create_application", fake_create)
+    provision_tenant.app.config["TESTING"] = True
+    with provision_tenant.app.test_client() as client:
+        resp = client.post(
+            "/send-contact",
+            headers=HEADERS,
+            json={
+                "name": "Reporter",
+                "email": "",
+                "category": "Security Report",
+                "message": "High-level report; details withheld pending private channel.",
+                "qualification": {
+                    "contact_method": "github",
+                    "contact_handle": "https://github.com/example",
+                    "consent": "twelve_month_retention",
+                },
+            },
+        )
+
+    assert resp.status_code == 201
+    assert captured["category"] == "Security Report"
+    assert captured["email"] == ""
+    assert resp.get_json()["application_id"] == "eval_security_request"
+    assert "benchmark_command" not in resp.get_json()
+    assert "no-email channel" in resp.get_json()["next_action"]
+
+
+def test_all_contact_categories_require_no_email_reply_channel(monkeypatch):
+    monkeypatch.setattr(provision_tenant, "INTERNAL_SECRET", SECRET)
+    provision_tenant.app.config["TESTING"] = True
+    with provision_tenant.app.test_client() as client:
+        resp = client.post(
+            "/send-contact",
+            headers=HEADERS,
+            json={
+                "name": "Requester",
+                "email": "buyer@example.com",
+                "category": "Privacy Request",
+                "message": "Please delete application eval_example.",
+                "qualification": {"consent": "twelve_month_retention"},
+            },
+        )
+
+    assert resp.status_code == 400
+    assert "no-email contact" in resp.get_json()["error"]
+
+
+def test_design_partner_server_rejects_browser_bypass_with_incomplete_scope(monkeypatch):
+    monkeypatch.setattr(provision_tenant, "INTERNAL_SECRET", SECRET)
+    provision_tenant.app.config["TESTING"] = True
+    with provision_tenant.app.test_client() as client:
+        resp = client.post(
+            "/send-contact",
+            headers=HEADERS,
+            json={
+                "name": "Proving Lead",
+                "email": "",
+                "category": "Design Partner",
+                "message": "Incomplete application",
+                "qualification": {
+                    "company": "Example",
+                    "contact_method": "github",
+                    "contact_handle": "https://github.com/example",
+                    "consent": "twelve_month_retention",
+                },
+            },
+        )
+
+    assert resp.status_code == 400
+    assert "missing evaluation fields" in resp.get_json()["error"]
+    assert "stack" in resp.get_json()["error"]
 
 
 def test_send_contact_rejects_oversized_message(monkeypatch):
@@ -148,16 +249,10 @@ def test_design_partner_intake_sends_no_email(monkeypatch):
                 "email": "lead@example.com",
                 "category": "Design Partner",
                 "message": "Public deterministic workload",
-                "qualification": {
-                    "company": "Example",
-                    "stack": "Plonky3 0.6.1",
-                    "logical_rows": "1048576",
-                    "current_memory": "OOM at 16 GiB",
-                    "target_ram": "2 GiB",
-                    "contact_method": "signal",
-                    "contact_handle": "+15555550123",
-                    "consent": "twelve_month_retention",
-                },
+                    "qualification": _complete_qualification(
+                        contact_method="signal",
+                        contact_handle="+15555550123",
+                    ),
             },
         )
 
@@ -202,12 +297,7 @@ def test_design_partner_intake_accepts_no_email_with_no_email_contact(monkeypatc
                 "email": "",
                 "category": "Design Partner",
                 "message": "Public deterministic workload",
-                "qualification": {
-                    "company": "Example",
-                    "contact_method": "github",
-                    "contact_handle": "https://github.com/example",
-                    "consent": "twelve_month_retention",
-                },
+                    "qualification": _complete_qualification(),
             },
         )
 
@@ -228,16 +318,41 @@ def test_design_partner_intake_requires_supported_no_email_contact(monkeypatch):
                 "email": "lead@example.com",
                 "category": "Design Partner",
                 "message": "Public deterministic workload",
-                "qualification": {
-                    "contact_method": "email",
-                    "contact_handle": "lead@example.com",
-                    "consent": "twelve_month_retention",
-                },
+                    "qualification": _complete_qualification(
+                        contact_method="email",
+                        contact_handle="lead@example.com",
+                    ),
             },
         )
 
     assert resp.status_code == 400
     assert "no-email contact" in resp.get_json()["error"]
+
+
+def test_contact_readiness_requires_secret_and_consumes_exact_probe(monkeypatch):
+    calls = []
+    monkeypatch.setattr(provision_tenant, "INTERNAL_SECRET", SECRET)
+    monkeypatch.setattr(
+        provision_tenant.evaluation_store,
+        "consume_readiness_probe",
+        lambda application_id, nonce: calls.append((application_id, nonce)) or True,
+    )
+    provision_tenant.app.config["TESTING"] = True
+    with provision_tenant.app.test_client() as client:
+        denied = client.post(
+            "/contact-readiness",
+            json={"application_id": "eval_probe", "nonce": "probe_nonce"},
+        )
+        accepted = client.post(
+            "/contact-readiness",
+            headers=HEADERS,
+            json={"application_id": "eval_probe", "nonce": "probe_nonce"},
+        )
+
+    assert denied.status_code == 403
+    assert accepted.status_code == 200
+    assert accepted.get_json() == {"ok": True, "stored": True, "cleaned": True}
+    assert calls == [("eval_probe", "probe_nonce")]
 
 
 def test_signed_legacy_checkout_is_ignored_in_maintenance(monkeypatch):

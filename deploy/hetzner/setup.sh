@@ -96,6 +96,7 @@ CRON_FILE="/etc/cron.d/hc-billing"
 cat > "$CRON_FILE" <<'CRON'
 # TinyZKP backend recovery: no usage meter, checkout recovery, lifecycle,
 # outbound, or growth-automation jobs may run.
+17 3 * * * root /opt/hc-stark/.venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /var/log/hc-evaluation-retention.log 2>&1
 CRON
 chmod 644 "$CRON_FILE"
 
@@ -127,6 +128,16 @@ mkdir -p /opt/hc-stark/backups
 echo "NOTICE: Set HC_BACKUP_REMOTE in /opt/hc-stark/.env and install rclone for off-box backups (G13)."
 
 # ---- Billing webhook systemd ----
+if ! getent group tinyzkp-billing >/dev/null; then
+    groupadd --system tinyzkp-billing
+fi
+if ! id -u tinyzkp-billing >/dev/null 2>&1; then
+    useradd --system --gid tinyzkp-billing --home-dir /nonexistent \
+        --shell /usr/sbin/nologin tinyzkp-billing
+fi
+install -d -o tinyzkp-billing -g tinyzkp-billing -m 0700 /opt/hc-stark/data
+chown -R tinyzkp-billing:tinyzkp-billing /opt/hc-stark/data
+
 cat > /etc/systemd/system/hc-billing-webhook.service <<'UNIT'
 [Unit]
 Description=TinyZKP Stripe Webhook
@@ -134,11 +145,20 @@ After=network.target
 
 [Service]
 Type=simple
+User=tinyzkp-billing
+Group=tinyzkp-billing
 WorkingDirectory=/opt/hc-stark/billing
 ExecStart=/opt/hc-stark/.venv/bin/gunicorn -w 2 -b 127.0.0.1:5001 provision_tenant:app
 Restart=on-failure
 RestartSec=5
+UMask=0077
+Environment=PYTHONDONTWRITEBYTECODE=1
 EnvironmentFile=/opt/hc-stark/.env
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/hc-stark/data
 
 [Install]
 WantedBy=multi-user.target

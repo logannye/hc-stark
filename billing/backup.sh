@@ -71,6 +71,12 @@ OFFBOX_FAILED=0
 if [ -n "${HC_BACKUP_REMOTE:-}" ] && command -v rclone >/dev/null 2>&1; then
   if rclone copy "$BACKUP_DIR" "${HC_BACKUP_REMOTE%/}/${REMOTE_DATE}" --max-age 25h; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Off-box backup pushed to ${HC_BACKUP_REMOTE}"
+    if rclone delete "${HC_BACKUP_REMOTE%/}" --min-age "${RETENTION_DAYS}d" --rmdirs; then
+      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Pruned off-box backups older than ${RETENTION_DAYS} days"
+    else
+      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR: rclone off-box retention prune FAILED" >&2
+      OFFBOX_FAILED=1
+    fi
   else
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR: rclone off-box push FAILED" >&2
     OFFBOX_FAILED=1
@@ -105,6 +111,10 @@ elif [ -n "${HC_BACKUP_HTTP_URL:-}" ] && [ -n "${HC_BACKUP_HTTP_TOKEN_FILE:-}" ]
         done
         if [ "$OFFBOX_FAILED" -eq 0 ]; then
           echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Off-box backup pushed through authenticated HTTP ingest"
+          if [ "${HC_BACKUP_HTTP_RETENTION_CONFIRMED:-0}" != "1" ]; then
+            echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR: HTTP backup destination retention is not confirmed" >&2
+            OFFBOX_FAILED=1
+          fi
         fi
         ;;
     esac
