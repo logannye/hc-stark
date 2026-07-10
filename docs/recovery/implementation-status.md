@@ -5,7 +5,7 @@ Updated: 2026-07-09. This is a gap ledger, not a release announcement.
 ## Implemented locally
 
 - WIP snapshot preserved on `codex/recovery-wip-snapshot`; clean recovery work
-  is being split into reviewable commits on `codex/plonky3-backend-recovery`.
+  is split into reviewable commits on `codex/plonky3-backend-recovery`.
 - Website, API, MCP, checkout, billing-meter, and release paths are fail-closed
   in source. Live deployment and customer billing actions have not been run.
 - Plonky3 crates are exact-pinned to `0.6.1` with lockfile checksums.
