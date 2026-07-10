@@ -1,7 +1,7 @@
 {
   "name": "tinyzkp",
-  "version": "0.1.1",
-  "description": "TypeScript client for TinyZKP proof receipts — generate, poll, and verify STARK state transitions",
+  "version": "0.2.0-dev.0",
+  "description": "Local artifact SDK for TinyZKP's resource-bounded Plonky3 backend",
   "type": "module",
   "main": "./dist/cjs/client.js",
   "module": "./dist/esm/client.js",
@@ -22,20 +22,18 @@
     "build:esm": "tsc -p tsconfig.json",
     "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist/cjs/package.json', JSON.stringify({type:'commonjs'}, null, 2))\"",
     "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
-    "test": "node --test tests/*.test.mjs tests/*.test.cjs",
+    "test": "npm run build && node --test tests/*.test.mjs tests/*.test.cjs",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
     "zk",
     "stark",
-    "zero-knowledge",
+    "plonky3",
     "proof",
     "cryptography",
     "tinyzkp",
-    "receipt",
-    "verification",
-    "ai-agent",
-    "audit-log"
+    "artifact",
+    "verification"
   ],
   "author": "TinyZKP <support@tinyzkp.com>",
   "license": "MIT",
@@ -51,11 +49,16 @@
   "engines": {
     "node": ">=18"
   },
+  "dependencies": {
+    "@noble/hashes": "1.8.0",
+    "json-bigint": "1.0.0"
+  },
   "publishConfig": {
     "access": "public"
   },
   "devDependencies": {
-    "typescript": "^5.3",
-    "@types/node": "^20"
+    "@types/json-bigint": "1.0.4",
+    "@types/node": "^20",
+    "typescript": "^5.3"
   }
 }

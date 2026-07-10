@@ -1,21 +1,29 @@
 {
   "name": "@tinyzkp/verify",
-  "version": "0.1.1",
-  "description": "Client-side WASM verifier for TinyZKP STARK proof receipts",
+  "version": "0.1.0",
+  "description": "Client-side verifier for official Plonky3 ProofBundleV1 artifacts",
+  "type": "module",
   "main": "tinyzkp-verify.js",
+  "module": "tinyzkp-verify.js",
   "types": "tinyzkp-verify.d.ts",
+  "exports": {
+    ".": {
+      "types": "./tinyzkp-verify.d.ts",
+      "import": "./tinyzkp-verify.js"
+    }
+  },
   "files": [
+    "LICENSE",
     "tinyzkp-verify_bg.wasm",
     "tinyzkp-verify_bg.wasm.d.ts",
     "tinyzkp-verify.js",
-    "tinyzkp-verify.d.ts",
-    "README.md"
+    "tinyzkp-verify.d.ts"
   ],
-  "keywords": ["zkp", "stark", "zero-knowledge", "wasm", "verifier", "tinyzkp", "receipt", "verification", "browser"],
+  "keywords": ["plonky3", "stark", "verifiable-computation", "wasm", "verifier", "tinyzkp"],
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/logannye/hc-stark"
   },
-  "homepage": "https://tinyzkp.com?source=npm_wasm_verifier&medium=package_registry&platform=npm&intent=learn"
+  "homepage": "https://tinyzkp.com"
 }

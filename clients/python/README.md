@@ -1,71 +1,28 @@
-# tinyzkp
+# TinyZKP Python artifact SDK
 
-Python client for the [TinyZKP](https://tinyzkp.com) proving API — generate and verify ZK-STARK proofs.
-
-TinyZKP turns state transitions into receipt-sized STARK proofs that humans,
-services, and AI agents can verify later. Get a free API key at
-[tinyzkp.com/signup](https://tinyzkp.com/signup?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=api_key)
-with 100 proofs/month and no credit card.
-
-## Install
-
-```bash
-pip install tinyzkp
-```
-
-## Quick Start
+Typed local artifact models for TinyZKP’s resource-bounded Plonky3 backend.
+Schema `TypedDict` models are generated from the Rust-emitted JSON Schemas;
+CI rejects generated-file drift.
+The package validates and hashes manifests, validates proof-bundle/report
+envelopes, loads size-limited files, and invokes a local `hc-cli` binary.
+Benchmark reports carry a 128-bit session identifier and typed CPU, memory, and
+storage facts so release validation can bind a comparison to one host run.
 
 ```python
-import asyncio
-from tinyzkp import TinyZKP
+from tinyzkp import ResourcePolicyV1, WorkloadManifestV1
 
-async def main():
-    async with TinyZKP("https://api.tinyzkp.com", api_key="tzk_...") as client:
-        # Prove that 1000 + 10 + 20 + 15 = 1045.
-        job_id = await client.prove_template("accumulator_step", params={
-            "initial": 1000, "final": 1045, "deltas": [10, 20, 15],
-        })
-
-        # Wait for the proof (polls automatically, typically 1-5 seconds)
-        proof = await client.wait_for_proof(job_id)
-
-        # Verify it (always free)
-        result = await client.verify(proof)
-        assert result.ok  # True
-
-asyncio.run(main())
+policy = ResourcePolicyV1(
+    mode="scratch",
+    max_resident_bytes=512 * 1024**2,
+    max_scratch_bytes=64 * 1024**3,
+    scratch_dir="/var/tmp/tinyzkp",
+    max_threads=4,
+    checkpoint_policy="retain_on_failure",
+)
+manifest = WorkloadManifestV1.fibonacci(0, 1, 1 << 20, policy)
+print(manifest.digest_hex())
 ```
 
-## What does the live template prove?
-
-The live self-serve template is `accumulator_step`. It proves a transparent state transition: starting from `initial`, applying each value in `deltas` reaches `final`. Use it for balance updates, ledger reconciliation, audit-log checkpoints, and agent state receipts where the verifier needs a compact receipt.
-
-## API
-
-- `TinyZKP(base_url, *, api_key=None, timeout=30.0)` — Create a client
-- `prove_template(template_id, params={...})` — Submit a proof via template (recommended)
-- `prove(program=..., initial_acc=0, final_acc=0, **params)` — Submit via raw program
-- `prove_status(job_id)` — Check job status
-- `wait_for_proof(job_id, poll_interval=1.0, timeout=300.0)` — Poll until proof is ready
-- `verify(proof)` — Verify a proof (free)
-- `healthz()` — Check server health
-
-## Templates
-
-Production template discovery includes a `lifecycle` field. Public production listings expose live templates by default; audit-gated and preview templates are not part of the self-serve catalog unless a deployment explicitly enables them.
-
-| Template | Lifecycle | Proves | Example |
-|----------|-----------|--------|---------|
-| `accumulator_step` | `live` | Additive chain is correct | Balance updates, state receipts |
-
-Use [tinyzkp.com/docs](https://tinyzkp.com/docs) for the current template catalog, fit guidance, and security notes. Default receipts are transparent; do not market them as input-private unless the exact flow is documented as supported and audit-cleared.
-
-## Distribution Links
-
-- [Get a free API key](https://tinyzkp.com/signup?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=api_key)
-- [Verify a receipt in the browser](https://tinyzkp.com/verify?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=verify_receipt)
-- [Pricing and limits](https://tinyzkp.com/limits?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=limits)
-- [Agent-readable offers](https://tinyzkp.com/.well-known/tinyzkp-offers.json?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=agent_offer)
-
-Default receipts are transparent. Do not put secrets, raw customer data, or
-credentials into receipt parameters.
+Cryptographic bundle verification is performed by `Cli.verify`; Python does
+not reimplement Plonky3. There are no hosted proving, template, polling,
+receipt, or remote-verification APIs in this replacement package.

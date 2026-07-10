@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "vectors": [
+    {
+      "name": "sorted_nested_object",
+      "value": {
+        "z": [
+          3,
+          {
+            "b": true,
+            "a": "value"
+          }
+        ],
+        "a": 1
+      },
+      "canonical_utf8": "{\"a\":1,\"z\":[3,{\"a\":\"value\",\"b\":true}]}",
+      "blake3_hex": "75cb2762f02e1cf0c67805150ce6179cf7f05e6eb28e5353d5923dcccbf7598c"
+    }
+  ]
+}

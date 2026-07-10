@@ -1,105 +1,159 @@
-// ESM test — runs against the built ESM output.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HcClient, HcClientError, ProofBytes, TinyZKP } from "../dist/esm/client.js";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  ArtifactError,
+  canonicalDigestHex,
+  canonicalJsonV1,
+  decodeBase64Url,
+  fibonacciManifest,
+  loadBundle,
+  loadReport,
+  manifestDigestHex,
+  loadManifest,
+  validateManifest,
+} from "../dist/esm/client.js";
 
-function withMockedFetch(handler, fn) {
-  return async () => {
-    const original = globalThis.fetch;
-    globalThis.fetch = handler;
-    try { await fn(); } finally { globalThis.fetch = original; }
-  };
-}
+const policy = {
+  mode: "scratch",
+  max_resident_bytes: 128 * 1024 * 1024,
+  max_scratch_bytes: 2 * 1024 * 1024 * 1024,
+  scratch_dir: "/tmp/tinyzkp-test",
+  max_threads: 1,
+  checkpoint_policy: "retain_on_failure",
+};
 
-test("healthz returns true on 200", withMockedFetch(
-  async (input) => { assert.match(String(input), /\/healthz$/); return new Response(null, { status: 200 }); },
-  async () => {
-    const c = new HcClient("https://api.example.com");
-    assert.equal(await c.healthz(), true);
-  },
-));
-
-test("healthz returns false on error", withMockedFetch(
-  async () => new Response("nope", { status: 500 }),
-  async () => {
-    const c = new HcClient("https://api.example.com");
-    assert.equal(await c.healthz(), false);
-  },
-));
-
-test("templates() parses list response", withMockedFetch(
-  async () => new Response(JSON.stringify({
-    count: 1,
-    templates: [{ id: "accumulator_step", summary: "x", tags: ["a"], cost_category: "small", backend: "vm", lifecycle: "live" }],
-  }), { status: 200, headers: { "content-type": "application/json" } }),
-  async () => {
-    const c = new HcClient("https://api.example.com");
-    const t = await c.templates();
-    assert.equal(t.length, 1);
-    assert.equal(t[0].id, "accumulator_step");
-    assert.equal(t[0].lifecycle, "live");
-  },
-));
-
-test("proveTemplate sends auth header and returns job_id", withMockedFetch(
-  async (input, init) => {
-    assert.match(String(input), /\/prove\/template\/accumulator_step$/);
-    assert.equal(init?.method, "POST");
-    assert.equal(init?.headers.Authorization, "Bearer tzk_test");
-    return new Response(JSON.stringify({ job_id: "prf_abc" }), { status: 200, headers: { "content-type": "application/json" } });
-  },
-  async () => {
-    const c = new HcClient("https://api.example.com", { apiKey: "tzk_test" });
-    const jobId = await c.proveTemplate("accumulator_step", { initial: 1000, final: 1045, deltas: [10, 20, 15] });
-    assert.equal(jobId, "prf_abc");
-  },
-));
-
-test("verify returns ok=true", withMockedFetch(
-  async () => new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } }),
-  async () => {
-    const c = new HcClient("https://api.example.com");
-    const result = await c.verify({ version: 3, bytes: [1, 2, 3] });
-    assert.equal(result.ok, true);
-  },
-));
-
-test("non-2xx raises HcClientError", withMockedFetch(
-  async () => new Response("rate limited", { status: 429 }),
-  async () => {
-    const c = new HcClient("https://api.example.com");
-    await assert.rejects(
-      () => c.verify({ version: 3, bytes: [] }),
-      (err) => err instanceof HcClientError && err.statusCode === 429,
-    );
-  },
-));
-
-test("TinyZKP alias is exported", () => {
-  assert.equal(TinyZKP, HcClient);
+test("canonical JSON and BLAKE3 match the shared golden vector", () => {
+  const value = { z: [3, { b: true, a: "value" }], a: 1 };
+  assert.equal(
+    new TextDecoder().decode(canonicalJsonV1(value)),
+    '{"a":1,"z":[3,{"a":"value","b":true}]}',
+  );
+  assert.equal(
+    canonicalDigestHex(value),
+    "75cb2762f02e1cf0c67805150ce6179cf7f05e6eb28e5353d5923dcccbf7598c",
+  );
 });
 
-test("ProofBytes is a runtime class", () => {
-  const p = new ProofBytes(3, [1, 2, 3]);
-  assert.equal(p.version, 3);
-  assert.deepEqual(p.bytes, [1, 2, 3]);
-  assert.ok(p instanceof ProofBytes);
-  assert.deepEqual(p.toJSON(), { version: 3, bytes: [1, 2, 3] });
-  const p2 = ProofBytes.from({ version: 4, bytes: [9] });
-  assert.ok(p2 instanceof ProofBytes);
-  assert.equal(p2.version, 4);
+test("manifest construction, validation, and digest are deterministic", () => {
+  const manifest = fibonacciManifest(0, 1, 1024, policy);
+  validateManifest(manifest);
+  assert.match(manifestDigestHex(manifest), /^[0-9a-f]{64}$/);
+  assert.equal(manifestDigestHex(manifest), manifestDigestHex(structuredClone(manifest)));
 });
 
-test("proveStatus wraps succeeded proof in ProofBytes", withMockedFetch(
-  async () => new Response(JSON.stringify({
-    status: "succeeded",
-    proof: { version: 3, bytes: [1, 2, 3] },
-  }), { status: 200, headers: { "content-type": "application/json" } }),
-  async () => {
-    const c = new HcClient("https://api.example.com");
-    const status = await c.proveStatus("prf_abc");
-    assert.equal(status.status, "succeeded");
-    assert.ok(status.proof instanceof ProofBytes);
-    assert.equal(status.proof.version, 3);
-  },
-));
+test("shared manifest vector matches the Rust digest", () => {
+  const manifest = loadManifest(
+    new URL("../../../test-vectors/plonky3/fibonacci-16.manifest.json", import.meta.url).pathname,
+  );
+  assert.equal(
+    manifestDigestHex(manifest),
+    "9d131602e27428ca290c5ca87d543d085873840e4dba22dd3d8074945e57efcd",
+  );
+});
+
+test("full Goldilocks values load losslessly and match the Rust digest", () => {
+  const manifest = loadManifest(
+    new URL(
+      "../../../test-vectors/plonky3/fibonacci-max-field.manifest.json",
+      import.meta.url,
+    ).pathname,
+  );
+  assert.equal(manifest.input_generator.kind, "fibonacci");
+  assert.equal(typeof manifest.input_generator.initial_a, "bigint");
+  assert.equal(manifest.input_generator.initial_a, 18446744069414584320n);
+  assert.equal(
+    manifestDigestHex(manifest),
+    "d66d868441137e6db964add9d7e4a2164ca3a722c66e73cbf06c2a576efee653",
+  );
+  assert.equal(
+    new TextDecoder().decode(canonicalJsonV1({ value: 18446744069414584320n })),
+    '{"value":18446744069414584320}',
+  );
+  assert.throws(() => canonicalJsonV1({ value: 1n << 64n }), ArtifactError);
+});
+
+test("bundle public values remain lossless across canonical file loading", () => {
+  const fixture = new URL(
+    "../../../test-vectors/plonky3/fibonacci-16.bundle.json",
+    import.meta.url,
+  ).pathname;
+  const source = loadBundle(fixture);
+  source.public_values = [18446744069414584320n];
+  const directory = mkdtempSync(join(tmpdir(), "tinyzkp-u64-bundle-"));
+  const path = join(directory, "bundle.json");
+  writeFileSync(path, canonicalJsonV1(source));
+
+  const loaded = loadBundle(path);
+  assert.equal(loaded.public_values[0], 18446744069414584320n);
+});
+
+test("shared bundle fixture rejects truncation, dependency skew, and unknown fields", () => {
+  const fixture = new URL(
+    "../../../test-vectors/plonky3/fibonacci-16.bundle.json",
+    import.meta.url,
+  ).pathname;
+  const bundle = loadBundle(fixture);
+  assert.equal(bundle.provenance.dependency_profile, "tinyzkp-p3-goldilocks-v1");
+
+  const source = JSON.parse(readFileSync(fixture, "utf8"));
+  const mutations = [
+    { ...structuredClone(source), proof_base64url: source.proof_base64url.slice(0, -1) },
+    {
+      ...structuredClone(source),
+      provenance: { ...source.provenance, dependency_profile: "unreviewed-profile" },
+    },
+    { ...structuredClone(source), unknown: true },
+  ];
+  for (const [index, mutation] of mutations.entries()) {
+    const directory = mkdtempSync(join(tmpdir(), `tinyzkp-sdk-${index}-`));
+    const path = join(directory, "bundle.json");
+    writeFileSync(path, JSON.stringify(mutation));
+    assert.throws(() => loadBundle(path), ArtifactError);
+  }
+});
+
+test("shared report fixture rejects unknown fields", () => {
+  const fixture = new URL(
+    "../../../test-vectors/plonky3/benchmark-report-v1.json",
+    import.meta.url,
+  ).pathname;
+  const report = loadReport(fixture);
+  assert.equal(report.mode, "bounded");
+  const mutated = { ...report, unbound_metric: 1 };
+  const directory = mkdtempSync(join(tmpdir(), "tinyzkp-report-"));
+  const path = join(directory, "report.json");
+  writeFileSync(path, JSON.stringify(mutated));
+  assert.throws(() => loadReport(path), ArtifactError);
+
+  writeFileSync(path, JSON.stringify({ ...report, benchmark_session_id: "not-a-session" }));
+  assert.throws(() => loadReport(path), ArtifactError);
+
+  writeFileSync(
+    path,
+    readFileSync(fixture, "utf8").replace(
+      '"total_memory_bytes": 17179869184',
+      '"total_memory_bytes": 18446744073709551616',
+    ),
+  );
+  assert.throws(() => loadReport(path), ArtifactError);
+});
+
+test("unknown fields and non-power-of-two rows fail closed", () => {
+  const manifest = fibonacciManifest(0, 1, 1024, policy);
+  assert.throws(
+    () => validateManifest({ ...manifest, unknown: true }),
+    ArtifactError,
+  );
+  assert.throws(
+    () => validateManifest({ ...manifest, logical_rows: 1000 }),
+    ArtifactError,
+  );
+});
+
+test("canonical base64url is enforced", () => {
+  assert.deepEqual(Array.from(decodeBase64Url("AQID")), [1, 2, 3]);
+  assert.throws(() => decodeBase64Url("AQID="), ArtifactError);
+});
