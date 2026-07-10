@@ -80,7 +80,10 @@ echo "==> [5/10] Build containerized tiers"
 $COMPOSE build
 
 echo "==> [6/10] Confirm production image has no proving workers"
-if docker run --rm --entrypoint /bin/sh "$($COMPOSE images -q hc-server)" -c \
+# Resolve the freshly built service image through Compose. `compose images -q`
+# inspects the currently running container first and fails when Docker has
+# already pruned that container's old image ID.
+if $COMPOSE run --rm --no-deps --entrypoint /bin/sh hc-server -c \
     'test ! -e /app/hc-worker && test ! -e /app/hc-job-worker'; then
     echo "    production image is capability-only"
 else
