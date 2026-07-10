@@ -52,9 +52,60 @@ def request(action="evaluation-deposit", offer_id="founding_evaluation", **overr
         "days_until_due": 15,
         "evidence": contract_evidence,
         "stripe_price_id": None,
+        "stripe_product_id": None,
     }
     values.update(overrides)
     return billing.BillingRequest(**values)
+
+
+def acceptance_matrix(agreement_id="eval-001", offer_id="founding_evaluation"):
+    return {
+        "schema_version": "tinyzkp-evaluation-acceptance-v1",
+        "agreement_id": agreement_id,
+        "offer_id": offer_id,
+        "workload": {
+            "name": "Poseidon2 AIR",
+            "repository": "https://github.com/example/workload",
+            "revision": "abc123",
+            "manifest_sha256": "d" * 64,
+            "input_generator": "cargo run --release -- generate-public-input",
+            "logical_rows": 1_048_576,
+            "plonky3_version": "0.6.1",
+            "verifier_target": "unmodified-p3-uni-stark-0.6.1",
+        },
+        "baseline": {
+            "command": "cargo run --release -- baseline",
+            "host_id": "fixed-host-8cpu-16g-nvme",
+            "peak_rss_bytes": None,
+            "wall_time_seconds": None,
+            "oom_evidence": "OOM under 2 GiB cgroup",
+        },
+        "candidate": {
+            "command": "hc-cli benchmark plonky3 --manifest workload.json --mode ceiling",
+            "max_resident_bytes": 2_147_483_648,
+            "max_scratch_bytes": 200_000_000_000,
+            "scratch_medium": "local-nvme",
+        },
+        "acceptance": {
+            "official_verifier_must_accept": True,
+            "target_peak_rss_bytes": 2_147_483_648,
+            "minimum_ram_reduction_ratio": 1.5,
+            "maximum_wall_time_ratio": 3.0,
+            "performance_target_is_guaranteed": False,
+        },
+        "data_boundary": {
+            "public_or_non_sensitive_generator_only": True,
+            "witness_transfer_allowed": False,
+            "credentials_transfer_allowed": False,
+            "customer_data_transfer_allowed": False,
+        },
+        "delivery": {
+            "raw_report_required": True,
+            "reproduction_commands_required": True,
+            "known_limitations_required": True,
+            "written_acceptance_required_before_delivery_invoice": True,
+        },
+    }
 
 
 def test_evaluation_plan_is_half_and_never_checkout():
@@ -172,7 +223,7 @@ def test_contract_documents_are_owner_only_and_hash_bound(tmp_path):
     agreement = tmp_path / "signed-agreement.pdf"
     scope = tmp_path / "acceptance.json"
     agreement.write_bytes(b"signed agreement")
-    scope.write_bytes(b"frozen scope")
+    scope.write_text(json.dumps(acceptance_matrix()))
     agreement.chmod(0o600)
     scope.chmod(0o600)
     bound = evidence(
@@ -200,6 +251,30 @@ def test_contract_documents_are_owner_only_and_hash_bound(tmp_path):
         billing.private_document_sha256(scope, "scope document")
 
 
+def test_acceptance_matrix_must_be_complete_and_semantically_safe(tmp_path):
+    scope = tmp_path / "acceptance.json"
+    incomplete = acceptance_matrix()
+    incomplete["candidate"]["max_scratch_bytes"] = None
+    scope.write_text(json.dumps(incomplete))
+    scope.chmod(0o600)
+    with pytest.raises(ValueError, match="max_scratch_bytes"):
+        billing.validate_acceptance_matrix(scope, evidence())
+
+    unsafe = acceptance_matrix()
+    unsafe["data_boundary"]["witness_transfer_allowed"] = True
+    scope.write_text(json.dumps(unsafe))
+    scope.chmod(0o600)
+    with pytest.raises(ValueError, match="data boundary"):
+        billing.validate_acceptance_matrix(scope, evidence())
+
+    placeholder = acceptance_matrix()
+    placeholder["baseline"]["host_id"] = "REPLACE_ME"
+    scope.write_text(json.dumps(placeholder))
+    scope.chmod(0o600)
+    with pytest.raises(ValueError, match="must be completed"):
+        billing.validate_acceptance_matrix(scope, evidence())
+
+
 def test_stripe_client_is_version_pinned_and_retry_safe(monkeypatch):
     captured = {}
 
@@ -221,49 +296,111 @@ def test_annual_contract_requires_matching_annual_price():
         action="annual-contract",
         offer_id="tinyzkp_certified",
         stripe_price_id="price_certified",
+        stripe_product_id="prod_certified",
     )
     offer = req.validate(billing.load_offers())
     billing.validate_annual_price(
         {
+            "id": "price_certified",
             "active": True,
             "currency": "usd",
             "unit_amount": 6_000_000,
             "recurring": {"interval": "year", "interval_count": 1},
+            "lookup_key": "tinyzkp_certified_annual_contract_v1",
+            "metadata": {
+                "tinyzkp_offer_id": "tinyzkp_certified",
+                "tinyzkp_contract_price": "true",
+            },
+            "product": {
+                "id": "prod_certified",
+                "active": True,
+                "name": "TinyZKP Certified",
+                "metadata": {
+                    "tinyzkp_offer_id": "tinyzkp_certified",
+                    "tinyzkp_contract_product": "true",
+                },
+            },
         },
         offer,
+        expected_price_id="price_certified",
+        expected_product_id="prod_certified",
     )
     with pytest.raises(ValueError, match="amount/currency"):
         billing.validate_annual_price(
             {
+                "id": "price_certified",
                 "active": True,
                 "currency": "usd",
                 "unit_amount": 1,
                 "recurring": {"interval": "year", "interval_count": 1},
+                "product": {"id": "prod_certified"},
             },
             offer,
+            expected_price_id="price_certified",
+            expected_product_id="prod_certified",
+        )
+
+    wrong_product = {
+        "id": "price_certified",
+        "active": True,
+        "currency": "usd",
+        "unit_amount": 6_000_000,
+        "recurring": {"interval": "year", "interval_count": 1},
+        "product": {"id": "prod_unrelated"},
+    }
+    with pytest.raises(ValueError, match="identity mismatch"):
+        billing.validate_annual_price(
+            wrong_product,
+            offer,
+            expected_price_id="price_certified",
+            expected_product_id="prod_certified",
         )
 
 
-def test_annual_contract_is_blocked_while_backend_release_is_blocked(tmp_path, monkeypatch):
+def test_annual_contract_requires_hash_bound_signed_release_authorization(tmp_path, monkeypatch):
     annual = request(
         action="annual-contract",
         offer_id="tinyzkp_certified",
         stripe_price_id="price_certified",
+        stripe_product_id="prod_certified",
     )
-    with pytest.raises(ValueError, match="blocked until every backend-v1 release gate"):
+    monkeypatch.delenv(billing.RELEASE_AUTHORIZATION_PATH_ENV, raising=False)
+    monkeypatch.delenv(billing.RELEASE_AUTHORIZATION_SHA_ENV, raising=False)
+    with pytest.raises(ValueError, match="hash-bound signed backend release authorization"):
         billing.validate_release_availability(annual)
 
-    ready = tmp_path / "gates.json"
-    ready.write_text(
-        json.dumps(
-            {
-                "status": "ready",
-                "gates": {"review": {"passed": True, "evidence": "report.pdf"}},
-            }
-        )
+    ready = tmp_path / "authorization.json"
+    ready.write_text(json.dumps({
+        "schema_version": 1,
+        "status": "ready",
+        "release_sha": "a" * 40,
+        "source_tree_sha256": "b" * 64,
+        "backend_evidence_sha256": "c" * 64,
+        "backend_release_ready_report_sha256": "d" * 64,
+        "signed_release_manifest_sha256": "e" * 64,
+        "signature_bundle_sha256": "f" * 64,
+        "verified_at": "2026-07-10T12:00:00Z",
+        "validator": "scripts/ci/backend_release_ready.py",
+        "validator_exit_code": 0,
+    }))
+    ready.chmod(0o600)
+    monkeypatch.setenv(billing.RELEASE_AUTHORIZATION_PATH_ENV, str(ready))
+    monkeypatch.setenv(
+        billing.RELEASE_AUTHORIZATION_SHA_ENV,
+        hashlib.sha256(ready.read_bytes()).hexdigest(),
     )
-    monkeypatch.setattr(billing, "RELEASE_GATES_PATH", ready)
     billing.validate_release_availability(annual)
+
+    weak = json.loads(ready.read_text())
+    weak["status"] = "blocked"
+    ready.write_text(json.dumps(weak))
+    ready.chmod(0o600)
+    monkeypatch.setenv(
+        billing.RELEASE_AUTHORIZATION_SHA_ENV,
+        hashlib.sha256(ready.read_bytes()).hexdigest(),
+    )
+    with pytest.raises(ValueError, match="not ready"):
+        billing.validate_release_availability(annual)
 
 
 def test_evaluation_milestone_isolated_to_its_own_invoice(monkeypatch):
@@ -390,6 +527,7 @@ def test_annual_history_and_creation_are_plan_bound():
         action="annual-contract",
         offer_id="tinyzkp_certified",
         stripe_price_id="price_certified",
+        stripe_product_id="prod_certified",
     )
     offer = req.validate(billing.load_offers())
     plan_sha256 = billing.plan(req, offer)["plan_sha256"]
@@ -411,11 +549,26 @@ def test_annual_history_and_creation_are_plan_bound():
         or {"id": "sub_contract"},
     )
     prices = SimpleNamespace(
-        retrieve=lambda price_id: {
+        retrieve=lambda price_id, params: {
+            "id": "price_certified",
             "active": True,
             "currency": "usd",
             "unit_amount": 6_000_000,
             "recurring": {"interval": "year", "interval_count": 1},
+            "lookup_key": "tinyzkp_certified_annual_contract_v1",
+            "metadata": {
+                "tinyzkp_offer_id": "tinyzkp_certified",
+                "tinyzkp_contract_price": "true",
+            },
+            "product": {
+                "id": "prod_certified",
+                "active": True,
+                "name": "TinyZKP Certified",
+                "metadata": {
+                    "tinyzkp_offer_id": "tinyzkp_certified",
+                    "tinyzkp_contract_product": "true",
+                },
+            },
         }
     )
     client = SimpleNamespace(v1=SimpleNamespace(subscriptions=subscriptions, prices=prices))
@@ -435,6 +588,13 @@ def test_contract_customer_must_be_explicitly_bound():
     customer = {
         "id": "cus_test",
         "email": "billing@customer.example",
+        "name": "Example Customer LLC",
+        "address": {
+            "line1": "1 Main Street",
+            "city": "San Francisco",
+            "postal_code": "94105",
+            "country": "US",
+        },
         "metadata": {
             "tinyzkp_contract_customer": "true",
             "tinyzkp_agreement_id": "eval-001",
@@ -446,12 +606,17 @@ def test_contract_customer_must_be_explicitly_bound():
     with pytest.raises(ValueError, match="contract-tagged"):
         billing.validate_contract_customer(customer, req)
 
+    customer["metadata"]["tinyzkp_agreement_id"] = "eval-001"
+    customer["address"]["postal_code"] = ""
+    with pytest.raises(ValueError, match="contract-tagged"):
+        billing.validate_contract_customer(customer, req)
+
 
 def test_apply_requires_exact_read_only_plan_hash_before_stripe(tmp_path, monkeypatch):
     agreement = tmp_path / "signed-agreement.pdf"
     scope = tmp_path / "acceptance.json"
     agreement.write_bytes(b"signed agreement")
-    scope.write_bytes(b"frozen scope")
+    scope.write_text(json.dumps(acceptance_matrix()))
     agreement.chmod(0o600)
     scope.chmod(0o600)
     bound = evidence(
@@ -471,6 +636,7 @@ def test_apply_requires_exact_read_only_plan_hash_before_stripe(tmp_path, monkey
             agreement_id="eval-001",
             days_until_due=15,
             stripe_price_id=None,
+            stripe_product_id=None,
             contract_evidence=contract,
             agreement_document=agreement,
             scope_document=scope,

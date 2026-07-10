@@ -1,37 +1,73 @@
 #!/usr/bin/env python3
-"""Inventory and safely contain TinyZKP's legacy Stripe catalog.
+"""Inventory and contain an exact, reviewed set of legacy Stripe objects.
 
-The command is read-only unless an explicit apply flag is supplied. It always
-verifies the connected Stripe account first, scopes mutations to legacy
-TinyZKP products/meters, and will not pause a customer subscription until an
-operator-provided notification ledger records the promised resolution.
+Read-only inventory is the default. No name, event-name, or price heuristic is
+ever used to select a write target. An apply run requires an owner-reviewed
+scope manifest bound to the complete live inventory digest, the exact preview
+plan digest, a second environment write gate, and (for subscriptions) a strict
+no-email notification/resolution ledger.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
+import re
+import stat
 from typing import Any, Iterable
 
 import stripe
 
 
 STRIPE_API_VERSION = "2026-02-25.clover"
-LEGACY_PRODUCT_NAMES = {
-    "Compute",
-    "TinyZKP Developer",
-    "TinyZKP Pro",
-    "TinyZKP Pro Plan",
-    "TinyZKP Proof Generation",
-    "TinyZKP Scale",
-    "TinyZKP Team",
-}
-LEGACY_METER_EVENT_NAMES = {"proof_usage", "trace_step_usage"}
+WRITE_GATE_ENV = "TINYZKP_ALLOW_LEGACY_BILLING_WRITE"
 CHARGEABLE_SUBSCRIPTION_STATES = {"active", "trialing", "past_due", "unpaid", "paused"}
 ALLOWED_RESOLUTIONS = {"refund", "credit", "none_due"}
+ALLOWED_NOTIFICATION_CHANNELS = {
+    "github",
+    "linkedin",
+    "signal",
+    "discord",
+    "telegram",
+    "matrix",
+    "phone",
+    "certified_mail",
+}
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+ID_PREFIXES = {
+    "product_ids": "prod_",
+    "price_ids": "price_",
+    "payment_link_ids": "plink_",
+    "meter_ids": "mtr_",
+    "subscription_ids": "sub_",
+    "open_invoice_ids": "in_",
+}
+SCOPE_KEYS = {
+    "schema_version",
+    "stripe_account_id",
+    "stripe_display_name",
+    "inventory_sha256",
+    "selections",
+}
+LEDGER_KEYS = {"schema_version", "stripe_account_id", "inventory_sha256", "subscriptions"}
+LEDGER_RECORD_KEYS = {
+    "subscription_id",
+    "customer_id",
+    "notified_at",
+    "notification_channel",
+    "notification_evidence_sha256",
+    "resolution",
+    "resolution_object_id",
+    "resolution_amount",
+    "currency",
+    "resolution_evidence_sha256",
+    "approved_open_invoice_ids",
+}
 
 
 def _value(value: Any, key: str, default: Any = None) -> Any:
@@ -54,6 +90,31 @@ def _all(page: Any) -> list[Any]:
     return list(iterator()) if callable(iterator) else list(_value(page, "data", []))
 
 
+def _canonical(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+
+
+def _sha256(value: Any) -> str:
+    return hashlib.sha256(_canonical(value)).hexdigest()
+
+
+def _metadata(value: Any) -> dict[str, str]:
+    raw = _value(value, "metadata", {}) or {}
+    if not isinstance(raw, dict):
+        raw = dict(raw)
+    return {str(key): str(item) for key, item in sorted(raw.items())}
+
+
+def _object_id(value: Any) -> str:
+    return str(_value(value, "id", "")).strip()
+
+
+def _related_id(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return _object_id(value)
+
+
 def account_display_name(account: Any) -> str:
     return str(
         _nested(account, "settings", "dashboard", "display_name")
@@ -63,7 +124,7 @@ def account_display_name(account: Any) -> str:
 
 
 def verify_account(account: Any, expected_account_id: str, expected_display_name: str) -> None:
-    actual_id = str(_value(account, "id", ""))
+    actual_id = _object_id(account)
     actual_name = account_display_name(account)
     if not expected_account_id or not expected_display_name:
         raise RuntimeError("expected account ID and display name are required")
@@ -74,53 +135,25 @@ def verify_account(account: Any, expected_account_id: str, expected_display_name
         )
 
 
-def is_legacy_product(product: Any) -> bool:
-    name = str(_value(product, "name", "")).strip()
-    return name in LEGACY_PRODUCT_NAMES or name.startswith("TinyZKP ")
-
-
 def subscription_product_ids(subscription: Any) -> set[str]:
     items = _nested(subscription, "items", "data") or []
-    product_ids: set[str] = set()
-    for item in items:
-        product = _nested(item, "price", "product")
-        product_id = _value(product, "id") if product is not None else None
-        if product_id is None and isinstance(product, str):
-            product_id = product
-        if product_id:
-            product_ids.add(str(product_id))
-    return product_ids
+    return {
+        product_id
+        for item in items
+        if (product_id := _related_id(_nested(item, "price", "product")))
+    }
 
 
-def load_notification_ledger(path: Path | None) -> dict[str, dict[str, str]]:
-    if path is None:
-        return {}
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
-        raise RuntimeError("notification ledger must be an object with schema_version=1")
-    records = payload.get("subscriptions")
-    if not isinstance(records, list):
-        raise RuntimeError("notification ledger subscriptions must be an array")
-    result: dict[str, dict[str, str]] = {}
-    for record in records:
-        if not isinstance(record, dict):
-            raise RuntimeError("notification ledger records must be objects")
-        subscription_id = str(record.get("subscription_id", "")).strip()
-        notified_at = str(record.get("notified_at", "")).strip()
-        resolution = str(record.get("resolution", "")).strip()
-        if not subscription_id or not notified_at or resolution not in ALLOWED_RESOLUTIONS:
-            raise RuntimeError(
-                "each notification record requires subscription_id, notified_at, and "
-                f"resolution in {sorted(ALLOWED_RESOLUTIONS)}"
-            )
-        result[subscription_id] = {
-            "notified_at": notified_at,
-            "resolution": resolution,
-        }
-    return result
+def payment_link_product_ids(link: Any) -> set[str]:
+    items = _nested(link, "line_items", "data") or []
+    return {
+        product_id
+        for item in items
+        if (product_id := _related_id(_nested(item, "price", "product")))
+    }
 
 
-@dataclass
+@dataclass(frozen=True)
 class Inventory:
     products: list[Any]
     prices: list[Any]
@@ -129,142 +162,446 @@ class Inventory:
     meters: list[Any]
     open_invoices: list[Any]
 
-    def summary(self, account: Any) -> dict[str, Any]:
+    def document(self, account: Any) -> dict[str, Any]:
+        def sorted_records(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+            return sorted(records, key=lambda item: str(item["id"]))
+
         return {
-            "stripe_account_id": _value(account, "id"),
+            "schema_version": 1,
+            "stripe_account_id": _object_id(account),
             "stripe_display_name": account_display_name(account),
-            "legacy_active_products": len(self.products),
-            "legacy_active_prices": len(self.prices),
-            "legacy_active_payment_links": len(self.payment_links),
-            "legacy_chargeable_subscriptions": len(self.subscriptions),
-            "legacy_active_meters": len(self.meters),
-            "open_invoice_count": len(self.open_invoices),
-            "safe_to_cancel_subscriptions": False,
+            "objects": {
+                "products": sorted_records(
+                    {
+                        "id": _object_id(item),
+                        "name": str(_value(item, "name", "")),
+                        "active": bool(_value(item, "active", False)),
+                        "metadata": _metadata(item),
+                    }
+                    for item in self.products
+                ),
+                "prices": sorted_records(
+                    {
+                        "id": _object_id(item),
+                        "product_id": _related_id(_value(item, "product")),
+                        "active": bool(_value(item, "active", False)),
+                        "currency": str(_value(item, "currency", "")),
+                        "lookup_key": str(_value(item, "lookup_key", "") or ""),
+                        "metadata": _metadata(item),
+                    }
+                    for item in self.prices
+                ),
+                "payment_links": sorted_records(
+                    {
+                        "id": _object_id(item),
+                        "active": bool(_value(item, "active", False)),
+                        "product_ids": sorted(payment_link_product_ids(item)),
+                    }
+                    for item in self.payment_links
+                ),
+                "subscriptions": sorted_records(
+                    {
+                        "id": _object_id(item),
+                        "customer_id": _related_id(_value(item, "customer")),
+                        "status": str(_value(item, "status", "")),
+                        "product_ids": sorted(subscription_product_ids(item)),
+                    }
+                    for item in self.subscriptions
+                ),
+                "meters": sorted_records(
+                    {
+                        "id": _object_id(item),
+                        "event_name": str(_value(item, "event_name", "")),
+                        "status": str(_value(item, "status", "")),
+                    }
+                    for item in self.meters
+                ),
+                "open_invoices": sorted_records(
+                    {
+                        "id": _object_id(item),
+                        "customer_id": _related_id(_value(item, "customer")),
+                        "subscription_id": _related_id(
+                            _value(item, "subscription")
+                            or _nested(item, "parent", "subscription_details", "subscription")
+                        ),
+                        "status": str(_value(item, "status", "")),
+                        "amount_remaining": int(_value(item, "amount_remaining", 0) or 0),
+                        "currency": str(_value(item, "currency", "")),
+                    }
+                    for item in self.open_invoices
+                ),
+            },
         }
 
 
-def collect_inventory() -> tuple[Any, Inventory]:
-    account = stripe.Account.retrieve()
-    products = [
-        product
-        for product in _all(stripe.Product.list(active=True, limit=100))
-        if is_legacy_product(product)
-    ]
-    product_ids = {str(_value(product, "id")) for product in products}
-    prices = [
-        price
-        for price in _all(stripe.Price.list(active=True, limit=100))
-        if str(_value(price, "product", "")) in product_ids
-    ]
-
-    payment_links: list[Any] = []
+def collect_inventory(verified_account: Any) -> Inventory:
+    """List complete active/chargeable state only after account verification."""
+    if not _object_id(verified_account):
+        raise RuntimeError("verified Stripe account is required before inventory")
+    products = _all(stripe.Product.list(active=True, limit=100))
+    prices = _all(stripe.Price.list(active=True, limit=100))
+    payment_links = []
     for link in _all(stripe.PaymentLink.list(active=True, limit=100)):
-        expanded = stripe.PaymentLink.retrieve(
-            str(_value(link, "id")), expand=["line_items.data.price.product"]
+        payment_links.append(
+            stripe.PaymentLink.retrieve(
+                _object_id(link), expand=["line_items.data.price.product"]
+            )
         )
-        line_items = _nested(expanded, "line_items", "data") or []
-        if any(
-            str(_nested(item, "price", "product", "id") or _nested(item, "price", "product"))
-            in product_ids
-            for item in line_items
-        ):
-            payment_links.append(expanded)
-
     subscriptions = [
-        subscription
-        for subscription in _all(
+        item
+        for item in _all(
             stripe.Subscription.list(
                 status="all", limit=100, expand=["data.items.data.price.product"]
             )
         )
-        if str(_value(subscription, "status", "")) in CHARGEABLE_SUBSCRIPTION_STATES
-        and subscription_product_ids(subscription) & product_ids
+        if str(_value(item, "status", "")) in CHARGEABLE_SUBSCRIPTION_STATES
     ]
-    meters = [
-        meter
-        for meter in _all(stripe.billing.Meter.list(status="active", limit=100))
-        if str(_value(meter, "event_name", "")) in LEGACY_METER_EVENT_NAMES
-    ]
+    meters = _all(stripe.billing.Meter.list(status="active", limit=100))
     open_invoices = _all(stripe.Invoice.list(status="open", limit=100))
-    return account, Inventory(products, prices, payment_links, subscriptions, meters, open_invoices)
+    return Inventory(products, prices, payment_links, subscriptions, meters, open_invoices)
 
 
-def _idempotency_key(action: str, object_id: str) -> str:
-    return f"tinyzkp-backend-recovery-{action}-{object_id}"
+def inventory_digest(account: Any, inventory: Inventory) -> str:
+    return _sha256(inventory.document(account))
 
 
-def archive_catalog(inventory: Inventory) -> None:
-    for link in inventory.payment_links:
-        object_id = str(_value(link, "id"))
-        stripe.PaymentLink.modify(
-            object_id, active=False, idempotency_key=_idempotency_key("link", object_id)
-        )
-    for price in inventory.prices:
-        object_id = str(_value(price, "id"))
-        stripe.Price.modify(
-            object_id, active=False, idempotency_key=_idempotency_key("price", object_id)
-        )
-    for product in inventory.products:
-        object_id = str(_value(product, "id"))
-        stripe.Product.modify(
-            object_id, active=False, idempotency_key=_idempotency_key("product", object_id)
-        )
-    for meter in inventory.meters:
-        object_id = str(_value(meter, "id"))
+def write_private_json(path: Path, value: Any) -> None:
+    if path.exists() and path.is_symlink():
+        raise RuntimeError(f"refusing to replace symlink: {path}")
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.parent.chmod(0o700)
+    temporary = path.with_name(f".{path.name}.tmp")
+    if temporary.exists() or temporary.is_symlink():
+        temporary.unlink()
+    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.chmod(0o600)
+    temporary.replace(path)
+    path.chmod(0o600)
+    if stat.S_IMODE(path.stat().st_mode) != 0o600:
+        raise RuntimeError(f"inventory output is not owner-only: {path}")
+
+
+@dataclass(frozen=True)
+class Scope:
+    stripe_account_id: str
+    stripe_display_name: str
+    inventory_sha256: str
+    selections: dict[str, tuple[str, ...]]
+
+
+def _load_json_object(path: Path, label: str) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError(f"{label} must be a regular non-symlink file")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"{label} must be a JSON object")
+    return payload
+
+
+def load_scope_manifest(path: Path) -> Scope:
+    payload = _load_json_object(path, "scope manifest")
+    if set(payload) != SCOPE_KEYS or payload.get("schema_version") != 1:
+        raise RuntimeError("scope manifest fields/schema_version are invalid")
+    account_id = str(payload.get("stripe_account_id", "")).strip()
+    display_name = str(payload.get("stripe_display_name", "")).strip()
+    digest = str(payload.get("inventory_sha256", "")).strip().lower()
+    if not account_id.startswith("acct_") or not display_name or not SHA256_RE.fullmatch(digest):
+        raise RuntimeError("scope manifest account identity or inventory digest is invalid")
+    raw_selections = payload.get("selections")
+    if not isinstance(raw_selections, dict) or set(raw_selections) != set(ID_PREFIXES):
+        raise RuntimeError(f"scope selections must contain exactly {sorted(ID_PREFIXES)}")
+    selections: dict[str, tuple[str, ...]] = {}
+    for field, prefix in ID_PREFIXES.items():
+        raw_ids = raw_selections[field]
+        if not isinstance(raw_ids, list) or not all(isinstance(item, str) for item in raw_ids):
+            raise RuntimeError(f"scope selection {field} must be a string array")
+        ids = tuple(item.strip() for item in raw_ids)
+        if len(ids) != len(set(ids)) or any(not item.startswith(prefix) for item in ids):
+            raise RuntimeError(f"scope selection {field} contains duplicate or malformed IDs")
+        selections[field] = tuple(sorted(ids))
+    return Scope(account_id, display_name, digest, selections)
+
+
+def build_plan(account: Any, inventory: Inventory, scope: Scope) -> dict[str, Any]:
+    document = inventory.document(account)
+    digest = _sha256(document)
+    if scope.stripe_account_id != _object_id(account):
+        raise RuntimeError("scope manifest Stripe account ID mismatch")
+    if scope.stripe_display_name.casefold() != account_display_name(account).casefold():
+        raise RuntimeError("scope manifest Stripe display name mismatch")
+    if scope.inventory_sha256 != digest:
+        raise RuntimeError("scope manifest inventory digest is stale or mismatched")
+
+    object_fields = {
+        "product_ids": "products",
+        "price_ids": "prices",
+        "payment_link_ids": "payment_links",
+        "meter_ids": "meters",
+        "subscription_ids": "subscriptions",
+        "open_invoice_ids": "open_invoices",
+    }
+    available: dict[str, dict[str, dict[str, Any]]] = {
+        selection: {record["id"]: record for record in document["objects"][object_field]}
+        for selection, object_field in object_fields.items()
+    }
+    for field, selected in scope.selections.items():
+        missing = sorted(set(selected) - set(available[field]))
+        if missing:
+            raise RuntimeError(f"scope manifest {field} contains absent IDs: {missing}")
+
+    selected_products = set(scope.selections["product_ids"])
+    for price_id in scope.selections["price_ids"]:
+        if available["price_ids"][price_id]["product_id"] not in selected_products:
+            raise RuntimeError(f"selected price {price_id} is not bound to a selected product")
+    for link_id in scope.selections["payment_link_ids"]:
+        if not set(available["payment_link_ids"][link_id]["product_ids"]) <= selected_products:
+            raise RuntimeError(f"selected Payment Link {link_id} references an unselected product")
+    for subscription_id in scope.selections["subscription_ids"]:
+        if not set(available["subscription_ids"][subscription_id]["product_ids"]) <= selected_products:
+            raise RuntimeError(f"selected subscription {subscription_id} references an unselected product")
+    selected_subscriptions = set(scope.selections["subscription_ids"])
+    for invoice_id in scope.selections["open_invoice_ids"]:
+        if available["open_invoice_ids"][invoice_id]["subscription_id"] not in selected_subscriptions:
+            raise RuntimeError(f"selected invoice {invoice_id} is not bound to a selected subscription")
+
+    actions = []
+    for field, action in (
+        ("payment_link_ids", "archive_payment_link"),
+        ("price_ids", "archive_price"),
+        ("product_ids", "archive_product"),
+        ("meter_ids", "deactivate_meter"),
+        ("subscription_ids", "pause_subscription"),
+        ("open_invoice_ids", "void_open_invoice"),
+    ):
+        actions.extend({"action": action, "object_id": item} for item in scope.selections[field])
+    plan = {
+        "schema_version": 1,
+        "stripe_account_id": _object_id(account),
+        "stripe_display_name": account_display_name(account),
+        "inventory_sha256": digest,
+        "actions": actions,
+    }
+    return {**plan, "plan_sha256": _sha256(plan)}
+
+
+def _parse_timestamp(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text.endswith("Z"):
+        raise RuntimeError("notification timestamps must be RFC3339 UTC values ending in Z")
+    try:
+        parsed = dt.datetime.fromisoformat(text[:-1] + "+00:00")
+    except ValueError as exc:
+        raise RuntimeError("notification timestamp is malformed") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() != dt.timedelta(0):
+        raise RuntimeError("notification timestamp must be UTC")
+    return text
+
+
+def load_notification_ledger(
+    path: Path | None,
+    *,
+    expected_account_id: str | None = None,
+    expected_inventory_sha256: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    if path is None:
+        return {}
+    payload = _load_json_object(path, "notification ledger")
+    if set(payload) != LEDGER_KEYS or payload.get("schema_version") != 2:
+        raise RuntimeError("notification ledger fields/schema_version are invalid")
+    if expected_account_id and payload.get("stripe_account_id") != expected_account_id:
+        raise RuntimeError("notification ledger Stripe account mismatch")
+    if expected_inventory_sha256 and payload.get("inventory_sha256") != expected_inventory_sha256:
+        raise RuntimeError("notification ledger inventory digest mismatch")
+    if not SHA256_RE.fullmatch(str(payload.get("inventory_sha256", ""))):
+        raise RuntimeError("notification ledger inventory digest is invalid")
+    records = payload.get("subscriptions")
+    if not isinstance(records, list):
+        raise RuntimeError("notification ledger subscriptions must be an array")
+    result: dict[str, dict[str, Any]] = {}
+    for record in records:
+        if not isinstance(record, dict) or set(record) != LEDGER_RECORD_KEYS:
+            raise RuntimeError("notification ledger record fields are invalid")
+        subscription_id = str(record["subscription_id"]).strip()
+        customer_id = str(record["customer_id"]).strip()
+        channel = str(record["notification_channel"]).strip()
+        resolution = str(record["resolution"]).strip()
+        currency = str(record["currency"]).strip().lower()
+        amount = record["resolution_amount"]
+        approved_invoices = record["approved_open_invoice_ids"]
+        if subscription_id in result:
+            raise RuntimeError(f"duplicate notification record for {subscription_id}")
+        if not subscription_id.startswith("sub_") or not customer_id.startswith("cus_"):
+            raise RuntimeError("notification ledger subscription/customer IDs are malformed")
+        if channel not in ALLOWED_NOTIFICATION_CHANNELS or resolution not in ALLOWED_RESOLUTIONS:
+            raise RuntimeError("notification channel or resolution is unsupported")
+        if not isinstance(amount, int) or amount < 0 or not re.fullmatch(r"[a-z]{3}", currency):
+            raise RuntimeError("resolution amount/currency are invalid")
+        if resolution == "none_due":
+            if amount != 0 or str(record["resolution_object_id"]).strip():
+                raise RuntimeError("none_due requires zero amount and no resolution object")
+        elif amount <= 0 or not str(record["resolution_object_id"]).strip():
+            raise RuntimeError("refund/credit requires a positive amount and resolution object")
+        for digest_field in ("notification_evidence_sha256", "resolution_evidence_sha256"):
+            if not SHA256_RE.fullmatch(str(record[digest_field])):
+                raise RuntimeError(f"{digest_field} must be a SHA-256 digest")
+        if not isinstance(approved_invoices, list) or not all(
+            isinstance(item, str) and item.startswith("in_") for item in approved_invoices
+        ):
+            raise RuntimeError("approved_open_invoice_ids must be an invoice ID array")
+        if len(approved_invoices) != len(set(approved_invoices)):
+            raise RuntimeError("approved_open_invoice_ids contains duplicates")
+        result[subscription_id] = {
+            **record,
+            "notified_at": _parse_timestamp(record["notified_at"]),
+            "approved_open_invoice_ids": sorted(approved_invoices),
+        }
+    return result
+
+
+def _idempotency_key(action: str, object_id: str, plan_sha256: str) -> str:
+    return f"tinyzkp-recovery-{action}-{object_id}-{plan_sha256[:16]}"
+
+
+def _objects_by_id(values: Iterable[Any]) -> dict[str, Any]:
+    return {_object_id(value): value for value in values}
+
+
+def archive_catalog(inventory: Inventory, plan: dict[str, Any]) -> None:
+    actions = {(item["action"], item["object_id"]) for item in plan["actions"]}
+    digest = plan["plan_sha256"]
+    for action, values, modify in (
+        ("archive_payment_link", inventory.payment_links, stripe.PaymentLink.modify),
+        ("archive_price", inventory.prices, stripe.Price.modify),
+        ("archive_product", inventory.products, stripe.Product.modify),
+    ):
+        by_id = _objects_by_id(values)
+        for _, object_id in sorted(item for item in actions if item[0] == action):
+            if object_id not in by_id:
+                raise RuntimeError(f"planned object disappeared before apply: {object_id}")
+            modify(
+                object_id,
+                active=False,
+                idempotency_key=_idempotency_key(action, object_id, digest),
+            )
+    for _, object_id in sorted(item for item in actions if item[0] == "deactivate_meter"):
+        if object_id not in _objects_by_id(inventory.meters):
+            raise RuntimeError(f"planned meter disappeared before apply: {object_id}")
         stripe.billing.Meter.deactivate(
-            object_id, idempotency_key=_idempotency_key("meter", object_id)
+            object_id,
+            idempotency_key=_idempotency_key("deactivate_meter", object_id, digest),
         )
 
 
 def pause_notified_subscriptions(
-    subscriptions: Iterable[Any], ledger: dict[str, dict[str, str]]
+    inventory: Inventory,
+    plan: dict[str, Any],
+    ledger: dict[str, dict[str, Any]],
 ) -> None:
-    for subscription in subscriptions:
-        object_id = str(_value(subscription, "id"))
-        if object_id not in ledger:
-            raise RuntimeError(
-                f"refusing to pause {object_id}: no notification and refund/credit record"
-            )
-    for subscription in subscriptions:
-        object_id = str(_value(subscription, "id"))
+    actions = {(item["action"], item["object_id"]) for item in plan["actions"]}
+    digest = plan["plan_sha256"]
+    subscriptions = _objects_by_id(inventory.subscriptions)
+    invoices = _objects_by_id(inventory.open_invoices)
+    selected_subscriptions = sorted(item[1] for item in actions if item[0] == "pause_subscription")
+    selected_invoices = sorted(item[1] for item in actions if item[0] == "void_open_invoice")
+    approved_invoice_ids: set[str] = set()
+    for subscription_id in selected_subscriptions:
+        subscription = subscriptions.get(subscription_id)
+        record = ledger.get(subscription_id)
+        if subscription is None or record is None:
+            raise RuntimeError(f"refusing to pause {subscription_id}: exact notification record missing")
+        if record["customer_id"] != _related_id(_value(subscription, "customer")):
+            raise RuntimeError(f"refusing to pause {subscription_id}: customer identity mismatch")
+        approved_invoice_ids.update(record["approved_open_invoice_ids"])
+    if approved_invoice_ids != set(selected_invoices):
+        raise RuntimeError("notification ledger invoice approvals do not exactly match the plan")
+
+    for subscription_id in selected_subscriptions:
         stripe.Subscription.modify(
-            object_id,
+            subscription_id,
             pause_collection={"behavior": "void"},
-            metadata={"tinyzkp_backend_recovery": "2026-07"},
-            idempotency_key=_idempotency_key("pause", object_id),
+            metadata={
+                "tinyzkp_backend_recovery": "2026-07",
+                "tinyzkp_plan_sha256": digest,
+            },
+            idempotency_key=_idempotency_key("pause_subscription", subscription_id, digest),
+        )
+    for invoice_id in selected_invoices:
+        if invoice_id not in invoices:
+            raise RuntimeError(f"planned invoice disappeared before apply: {invoice_id}")
+        stripe.Invoice.void_invoice(
+            invoice_id,
+            idempotency_key=_idempotency_key("void_open_invoice", invoice_id, digest),
         )
 
 
-def parse_args() -> argparse.Namespace:
+def require_apply_authorization(expected_plan_sha256: str | None, plan: dict[str, Any]) -> None:
+    if os.environ.get(WRITE_GATE_ENV, "").strip() != "1":
+        raise RuntimeError(f"apply requires {WRITE_GATE_ENV}=1")
+    expected = str(expected_plan_sha256 or "").strip().lower()
+    if not SHA256_RE.fullmatch(expected) or expected != plan["plan_sha256"]:
+        raise RuntimeError("apply requires the exact reviewed --expected-plan-sha256")
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-account-id", default=os.environ.get("STRIPE_EXPECTED_ACCOUNT_ID"))
     parser.add_argument(
         "--expected-display-name", default=os.environ.get("STRIPE_EXPECTED_DISPLAY_NAME")
     )
+    parser.add_argument("--inventory-output", type=Path)
+    parser.add_argument("--scope-manifest", type=Path)
+    parser.add_argument("--expected-plan-sha256")
     parser.add_argument("--apply-catalog", action="store_true")
     parser.add_argument("--pause-notified-subscriptions", action="store_true")
     parser.add_argument("--notification-ledger", type=Path)
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
     stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
     stripe.api_version = STRIPE_API_VERSION
     if not stripe.api_key:
         raise SystemExit("STRIPE_SECRET_KEY is required")
 
-    account, inventory = collect_inventory()
+    account = stripe.Account.retrieve()
     verify_account(account, args.expected_account_id or "", args.expected_display_name or "")
-    summary = inventory.summary(account)
-    summary["mode"] = "apply" if args.apply_catalog or args.pause_notified_subscriptions else "read_only"
-    print(json.dumps(summary, indent=2, sort_keys=True))
+    inventory = collect_inventory(account)
+    document = inventory.document(account)
+    digest = _sha256(document)
+    if args.inventory_output:
+        write_private_json(args.inventory_output, {**document, "inventory_sha256": digest})
 
+    applying = args.apply_catalog or args.pause_notified_subscriptions
+    if applying and args.scope_manifest is None:
+        raise RuntimeError("apply requires --scope-manifest")
+    plan = None
+    if args.scope_manifest is not None:
+        plan = build_plan(account, inventory, load_scope_manifest(args.scope_manifest))
+
+    output = {
+        "mode": "apply" if applying else "read_only",
+        "stripe_account_id": _object_id(account),
+        "stripe_display_name": account_display_name(account),
+        "inventory_sha256": digest,
+        "counts": {key: len(value) for key, value in document["objects"].items()},
+        "inventory_output": str(args.inventory_output) if args.inventory_output else None,
+        "plan": plan,
+    }
+    print(json.dumps(output, indent=2, sort_keys=True))
+
+    if applying:
+        assert plan is not None
+        require_apply_authorization(args.expected_plan_sha256, plan)
     if args.apply_catalog:
-        archive_catalog(inventory)
+        archive_catalog(inventory, plan)
     if args.pause_notified_subscriptions:
-        ledger = load_notification_ledger(args.notification_ledger)
-        pause_notified_subscriptions(inventory.subscriptions, ledger)
+        ledger = load_notification_ledger(
+            args.notification_ledger,
+            expected_account_id=_object_id(account),
+            expected_inventory_sha256=digest,
+        )
+        pause_notified_subscriptions(inventory, plan, ledger)
 
 
 if __name__ == "__main__":

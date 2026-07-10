@@ -113,6 +113,7 @@ class _ImmediateThread:
 
 
 def test_checkout_completed_persists_paid_attribution(monkeypatch, tmp_path):
+    monkeypatch.setattr(provision_tenant, "MAINTENANCE_MODE", False)
     db_path = str(tmp_path / "tenant_store.sqlite")
     real_open = tenant_store.open_db
     monkeypatch.setattr(tenant_store, "open_db", lambda path=None: real_open(db_path))
@@ -201,6 +202,7 @@ def test_checkout_completed_purges_leftover_free_tenant(monkeypatch, tmp_path):
     # Root-cause fix for the free-then-pay duplicate-tenant bug: after a paid
     # checkout, any pre-existing free tenant for that email is purged so login
     # resolves to the new paid account.
+    monkeypatch.setattr(provision_tenant, "MAINTENANCE_MODE", False)
     db_path = str(tmp_path / "tenant_store.sqlite")
     real_open = tenant_store.open_db
     monkeypatch.setattr(tenant_store, "open_db", lambda path=None: real_open(db_path))
@@ -276,6 +278,7 @@ def test_checkout_completed_routes_one_time_pilot_payment(monkeypatch, tmp_path)
     monkeypatch.setattr(provision_tenant, "_send_contact_email", fake_send)
     monkeypatch.setattr(provision_tenant.threading, "Thread", _ImmediateThread)
 
+    monkeypatch.setattr(provision_tenant, "MAINTENANCE_MODE", True)
     text, status = provision_tenant._handle_checkout_completed({
         "id": "evt_pilot_checkout",
         "data": {
@@ -304,25 +307,12 @@ def test_checkout_completed_routes_one_time_pilot_payment(monkeypatch, tmp_path)
     })
 
     assert status == 200
-    assert text == "pilot payment captured"
-    assert captured["name"] == "Pilot Buyer"
-    assert captured["email"] == "pilot@example.com"
-    assert captured["category"] == "Paid Pilot"
-    assert "Production Pilot payment completed" in captured["message"]
-    assert "cs_pilot" in captured["message"]
-    assert "$5,000.00" in captured["message"]
-    assert captured["qualification"]["plan"] == "production_pilot"
-    assert captured["qualification"]["source"] == "agent_offer"
-    assert captured["qualification"]["medium"] == "llm"
-    assert captured["qualification"]["platform"] == "openai_agents"
-    assert captured["qualification"]["workflow"] == "agent_policy_rollout"
-    assert captured["qualification"]["intent"] == "paid_pilot_checkout"
-    assert captured["qualification"]["use_case"] == "AI-agent state receipts"
-    assert "api_key" not in captured["qualification"]
+    assert text == "checkout disabled during backend recovery"
+    assert captured == {}
 
     conn = real_open(db_path)
     try:
-        assert tenant_store.is_event_processed(conn, "evt_pilot_checkout")
+        assert not tenant_store.is_event_processed(conn, "evt_pilot_checkout")
         assert tenant_store.get_by_email(conn, "pilot@example.com") is None
     finally:
         conn.close()

@@ -27,12 +27,39 @@ from legacy_billing_containment import STRIPE_API_VERSION, verify_account
 ROOT = Path(__file__).resolve().parents[1]
 OFFERS_PATH = ROOT / "site" / "pricing.json"
 RELEASE_GATES_PATH = ROOT / "release" / "backend-v1-gates.json"
+RELEASE_AUTHORIZATION_PATH_ENV = "TINYZKP_BACKEND_RELEASE_AUTHORIZATION"
+RELEASE_AUTHORIZATION_SHA_ENV = "TINYZKP_BACKEND_RELEASE_AUTHORIZATION_SHA256"
 EVALUATIONS = {"founding_evaluation", "standard_evaluation"}
 ANNUAL = {"tinyzkp_certified", "tinyzkp_fleet_oem"}
 HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 AGREEMENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 MAX_EVIDENCE_BYTES = 64 * 1024
 MAX_CONTRACT_DOCUMENT_BYTES = 16 * 1024 * 1024
+ACCEPTANCE_SCHEMA_VERSION = "tinyzkp-evaluation-acceptance-v1"
+ACCEPTANCE_TOP_LEVEL_KEYS = {
+    "schema_version",
+    "agreement_id",
+    "offer_id",
+    "workload",
+    "baseline",
+    "candidate",
+    "acceptance",
+    "data_boundary",
+    "delivery",
+}
+RELEASE_AUTHORIZATION_KEYS = {
+    "schema_version",
+    "status",
+    "release_sha",
+    "source_tree_sha256",
+    "backend_evidence_sha256",
+    "backend_release_ready_report_sha256",
+    "signed_release_manifest_sha256",
+    "signature_bundle_sha256",
+    "verified_at",
+    "validator",
+    "validator_exit_code",
+}
 CONTRACT_EVIDENCE_KEYS = {
     "schema_version",
     "agreement_id",
@@ -169,6 +196,153 @@ def private_document_sha256(path: Path, label: str) -> str:
         raise ValueError(f"{label} is unavailable or unsafe") from error
 
 
+def load_private_json_document(path: Path, label: str) -> dict[str, Any]:
+    private_document_sha256(path, label)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"{label} must be valid JSON") from error
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return payload
+
+
+def _required_string(mapping: dict[str, Any], field: str, label: str) -> str:
+    raw = mapping.get(field)
+    if not isinstance(raw, str) or not raw.strip() or "REPLACE" in raw.upper():
+        raise ValueError(f"{label}.{field} must be completed")
+    return raw.strip()
+
+
+def _exact_keys(mapping: Any, keys: set[str], label: str) -> dict[str, Any]:
+    if not isinstance(mapping, dict) or set(mapping) != keys:
+        raise ValueError(f"{label} fields are missing or unknown")
+    return mapping
+
+
+def validate_acceptance_matrix(path: Path, evidence: ContractEvidenceV1) -> dict[str, Any]:
+    payload = load_private_json_document(path, "scope document")
+    _exact_keys(payload, ACCEPTANCE_TOP_LEVEL_KEYS, "acceptance matrix")
+    if payload.get("schema_version") != ACCEPTANCE_SCHEMA_VERSION:
+        raise ValueError("acceptance matrix schema_version is unsupported")
+    if payload.get("agreement_id") != evidence.agreement_id or payload.get("offer_id") != evidence.offer_id:
+        raise ValueError("acceptance matrix does not bind the agreement and offer")
+
+    workload = _exact_keys(
+        payload.get("workload"),
+        {
+            "name",
+            "repository",
+            "revision",
+            "manifest_sha256",
+            "input_generator",
+            "logical_rows",
+            "plonky3_version",
+            "verifier_target",
+        },
+        "workload",
+    )
+    for field in ("name", "repository", "revision", "input_generator"):
+        _required_string(workload, field, "workload")
+    if not isinstance(workload.get("manifest_sha256"), str) or not HEX_SHA256.fullmatch(
+        workload["manifest_sha256"]
+    ):
+        raise ValueError("workload.manifest_sha256 must be lowercase SHA-256")
+    logical_rows = workload.get("logical_rows")
+    if not isinstance(logical_rows, int) or isinstance(logical_rows, bool) or logical_rows <= 0:
+        raise ValueError("workload.logical_rows must be a positive integer")
+    if workload.get("plonky3_version") != "0.6.1":
+        raise ValueError("workload.plonky3_version must equal 0.6.1")
+    if workload.get("verifier_target") != "unmodified-p3-uni-stark-0.6.1":
+        raise ValueError("workload.verifier_target must use the frozen unmodified verifier")
+
+    baseline = _exact_keys(
+        payload.get("baseline"),
+        {"command", "host_id", "peak_rss_bytes", "wall_time_seconds", "oom_evidence"},
+        "baseline",
+    )
+    _required_string(baseline, "command", "baseline")
+    _required_string(baseline, "host_id", "baseline")
+    if baseline.get("peak_rss_bytes") is not None and (
+        not isinstance(baseline["peak_rss_bytes"], int) or baseline["peak_rss_bytes"] <= 0
+    ):
+        raise ValueError("baseline.peak_rss_bytes must be null or positive")
+    if baseline.get("wall_time_seconds") is not None and (
+        not isinstance(baseline["wall_time_seconds"], (int, float))
+        or isinstance(baseline["wall_time_seconds"], bool)
+        or baseline["wall_time_seconds"] <= 0
+    ):
+        raise ValueError("baseline.wall_time_seconds must be null or positive")
+    if baseline.get("oom_evidence") is not None:
+        _required_string(baseline, "oom_evidence", "baseline")
+
+    candidate = _exact_keys(
+        payload.get("candidate"),
+        {"command", "max_resident_bytes", "max_scratch_bytes", "scratch_medium"},
+        "candidate",
+    )
+    _required_string(candidate, "command", "candidate")
+    _required_string(candidate, "scratch_medium", "candidate")
+    for field in ("max_resident_bytes", "max_scratch_bytes"):
+        if not isinstance(candidate.get(field), int) or isinstance(candidate[field], bool) or candidate[field] <= 0:
+            raise ValueError(f"candidate.{field} must be a positive integer")
+
+    acceptance = _exact_keys(
+        payload.get("acceptance"),
+        {
+            "official_verifier_must_accept",
+            "target_peak_rss_bytes",
+            "minimum_ram_reduction_ratio",
+            "maximum_wall_time_ratio",
+            "performance_target_is_guaranteed",
+        },
+        "acceptance",
+    )
+    if acceptance.get("official_verifier_must_accept") is not True:
+        raise ValueError("acceptance must require the official verifier")
+    if acceptance.get("performance_target_is_guaranteed") is not False:
+        raise ValueError("evaluation performance target must not be represented as guaranteed")
+    if not isinstance(acceptance.get("target_peak_rss_bytes"), int) or acceptance["target_peak_rss_bytes"] <= 0:
+        raise ValueError("acceptance.target_peak_rss_bytes must be positive")
+    ratio = acceptance.get("minimum_ram_reduction_ratio")
+    if not isinstance(ratio, (int, float)) or isinstance(ratio, bool) or ratio < 1.5:
+        raise ValueError("acceptance.minimum_ram_reduction_ratio must be at least 1.5")
+    wall_ratio = acceptance.get("maximum_wall_time_ratio")
+    if not isinstance(wall_ratio, (int, float)) or isinstance(wall_ratio, bool) or wall_ratio <= 0:
+        raise ValueError("acceptance.maximum_wall_time_ratio must be positive")
+
+    data_boundary = _exact_keys(
+        payload.get("data_boundary"),
+        {
+            "public_or_non_sensitive_generator_only",
+            "witness_transfer_allowed",
+            "credentials_transfer_allowed",
+            "customer_data_transfer_allowed",
+        },
+        "data_boundary",
+    )
+    if data_boundary != {
+        "public_or_non_sensitive_generator_only": True,
+        "witness_transfer_allowed": False,
+        "credentials_transfer_allowed": False,
+        "customer_data_transfer_allowed": False,
+    }:
+        raise ValueError("acceptance matrix data boundary is unsafe")
+    delivery = _exact_keys(
+        payload.get("delivery"),
+        {
+            "raw_report_required",
+            "reproduction_commands_required",
+            "known_limitations_required",
+            "written_acceptance_required_before_delivery_invoice",
+        },
+        "delivery",
+    )
+    if any(value is not True for value in delivery.values()):
+        raise ValueError("all evaluation delivery evidence requirements must be enabled")
+    return payload
+
+
 def verify_contract_documents(
     evidence: ContractEvidenceV1,
     action: str,
@@ -181,6 +355,8 @@ def verify_contract_documents(
         raise ValueError("agreement document does not match contract evidence")
     if private_document_sha256(scope_document, "scope document") != evidence.scope_sha256:
         raise ValueError("scope document does not match contract evidence")
+    if action in {"evaluation-deposit", "evaluation-delivery"}:
+        validate_acceptance_matrix(scope_document, evidence)
     if action == "evaluation-delivery":
         if delivery_acceptance_document is None:
             raise ValueError("delivery invoice requires the written acceptance document")
@@ -204,6 +380,7 @@ class BillingRequest:
     days_until_due: int
     evidence: ContractEvidenceV1
     stripe_price_id: str | None = None
+    stripe_product_id: str | None = None
 
     def validate(self, offers: dict[str, dict[str, Any]]) -> dict[str, Any]:
         if self.offer_id not in offers:
@@ -235,6 +412,8 @@ class BillingRequest:
                 raise ValueError("annual-contract requires Certified or Fleet/OEM")
             if not self.stripe_price_id or not self.stripe_price_id.startswith("price_"):
                 raise ValueError("annual-contract requires a Stripe annual price ID")
+            if not self.stripe_product_id or not self.stripe_product_id.startswith("prod_"):
+                raise ValueError("annual-contract requires the exact Stripe product ID")
         else:
             raise ValueError("unsupported billing action")
         return offers[self.offer_id]
@@ -247,21 +426,36 @@ def offer_amount(offer: dict[str, Any]) -> int:
 def validate_release_availability(request: BillingRequest) -> None:
     if request.action != "annual-contract":
         return
-    payload = json.loads(RELEASE_GATES_PATH.read_text(encoding="utf-8"))
-    gates = payload.get("gates")
-    ready = payload.get("status") == "ready" and isinstance(gates, dict) and bool(gates)
-    if ready:
-        ready = all(
-            isinstance(gate, dict)
-            and gate.get("passed") is True
-            and isinstance(gate.get("evidence"), str)
-            and bool(gate["evidence"].strip())
-            for gate in gates.values()
-        )
-    if not ready:
+    authorization_path = os.environ.get(RELEASE_AUTHORIZATION_PATH_ENV, "").strip()
+    expected_digest = os.environ.get(RELEASE_AUTHORIZATION_SHA_ENV, "").strip().lower()
+    if not authorization_path or not HEX_SHA256.fullmatch(expected_digest):
         raise ValueError(
-            "annual Certified and Fleet/OEM billing is blocked until every backend-v1 release gate has evidence"
+            "annual Certified and Fleet/OEM billing requires a hash-bound signed backend release authorization"
         )
+    path = Path(authorization_path)
+    if private_document_sha256(path, "backend release authorization") != expected_digest:
+        raise ValueError("backend release authorization digest mismatch")
+    payload = load_private_json_document(path, "backend release authorization")
+    if set(payload) != RELEASE_AUTHORIZATION_KEYS or payload.get("schema_version") != 1:
+        raise ValueError("backend release authorization fields/schema_version are invalid")
+    if payload.get("status") != "ready" or payload.get("validator_exit_code") != 0:
+        raise ValueError("backend release authorization is not ready")
+    if payload.get("validator") != "scripts/ci/backend_release_ready.py":
+        raise ValueError("backend release authorization used an unrecognized validator")
+    if not isinstance(payload.get("release_sha"), str) or not re.fullmatch(
+        r"[0-9a-f]{40}", payload["release_sha"]
+    ):
+        raise ValueError("backend release authorization release_sha is invalid")
+    for field in (
+        "source_tree_sha256",
+        "backend_evidence_sha256",
+        "backend_release_ready_report_sha256",
+        "signed_release_manifest_sha256",
+        "signature_bundle_sha256",
+    ):
+        if not isinstance(payload.get(field), str) or not HEX_SHA256.fullmatch(payload[field]):
+            raise ValueError(f"backend release authorization {field} is invalid")
+    canonical_timestamp(str(payload.get("verified_at", "")), "verified_at")
 
 
 def validate_sender_identity_gate() -> None:
@@ -309,6 +503,7 @@ def plan(request: BillingRequest, offer: dict[str, Any]) -> dict[str, Any]:
         "days_until_due": request.days_until_due,
         "public_checkout": False,
         "stripe_price_id": request.stripe_price_id,
+        "stripe_product_id": request.stripe_product_id,
         "contract_evidence_sha256": request.evidence.digest(),
         "agreement_sha256": request.evidence.agreement_sha256,
         "scope_sha256": request.evidence.scope_sha256,
@@ -346,11 +541,16 @@ def contract_metadata(
 def validate_contract_customer(customer: Any, request: BillingRequest) -> None:
     metadata = value(customer, "metadata", {}) or {}
     email = value(customer, "email")
+    name = value(customer, "name")
+    address = value(customer, "address", {}) or {}
     if (
         value(customer, "id") != request.customer_id
         or value(customer, "deleted") is True
         or not isinstance(email, str)
         or "@" not in email
+        or not isinstance(name, str)
+        or not name.strip()
+        or any(not str(value(address, field, "") or "").strip() for field in ("line1", "city", "postal_code", "country"))
         or value(metadata, "tinyzkp_contract_customer") != "true"
         or value(metadata, "tinyzkp_agreement_id") != request.agreement_id
         or value(metadata, "tinyzkp_offer_id") != request.offer_id
@@ -368,15 +568,37 @@ def create_stripe_client(api_key: str) -> Any:
     )
 
 
-def validate_annual_price(price: Any, offer: dict[str, Any]) -> None:
+def validate_annual_price(
+    price: Any,
+    offer: dict[str, Any],
+    *,
+    expected_price_id: str,
+    expected_product_id: str,
+) -> None:
     recurring = value(price, "recurring", {}) or {}
+    metadata = value(price, "metadata", {}) or {}
+    product = value(price, "product", {}) or {}
+    product_metadata = value(product, "metadata", {}) or {}
     expected = offer_amount(offer) * 100
+    if value(price, "id") != expected_price_id or value(product, "id") != expected_product_id:
+        raise ValueError("annual Stripe price/product identity mismatch")
     if value(price, "active") is not True:
         raise ValueError("annual Stripe price is inactive")
     if value(price, "currency") != "usd" or value(price, "unit_amount") != expected:
         raise ValueError("annual Stripe price amount/currency does not match the offer source")
     if value(recurring, "interval") != "year" or value(recurring, "interval_count", 1) != 1:
         raise ValueError("annual Stripe price must recur exactly yearly")
+    expected_lookup_key = f"{offer['id']}_annual_contract_v1"
+    if (
+        value(price, "lookup_key") != expected_lookup_key
+        or value(metadata, "tinyzkp_offer_id") != offer["id"]
+        or value(metadata, "tinyzkp_contract_price") != "true"
+        or value(product, "active") is not True
+        or value(product, "name") != offer["name"]
+        or value(product_metadata, "tinyzkp_offer_id") != offer["id"]
+        or value(product_metadata, "tinyzkp_contract_product") != "true"
+    ):
+        raise ValueError("annual Stripe price/product provenance does not match the offer")
 
 
 def listed_invoices(client: Any, *, customer_id: str | None = None) -> list[Any]:
@@ -509,8 +731,13 @@ def create_annual_contract(
     client: Any,
     plan_sha256: str,
 ) -> Any:
-    price = client.v1.prices.retrieve(request.stripe_price_id)
-    validate_annual_price(price, offer)
+    price = client.v1.prices.retrieve(request.stripe_price_id, {"expand": ["product"]})
+    validate_annual_price(
+        price,
+        offer,
+        expected_price_id=request.stripe_price_id or "",
+        expected_product_id=request.stripe_product_id or "",
+    )
     metadata = contract_metadata(request, "annual", plan_sha256)
     metadata["tinyzkp_support_hours_per_quarter"] = str(
         offer.get("included_support_hours_per_quarter", 0)
@@ -539,6 +766,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--agreement-id", required=True)
     parser.add_argument("--days-until-due", type=int, default=15)
     parser.add_argument("--stripe-price-id")
+    parser.add_argument("--stripe-product-id")
     parser.add_argument("--contract-evidence", type=Path, required=True)
     parser.add_argument("--agreement-document", type=Path, required=True)
     parser.add_argument("--scope-document", type=Path, required=True)
@@ -568,6 +796,7 @@ def main() -> None:
         days_until_due=args.days_until_due,
         evidence=evidence,
         stripe_price_id=args.stripe_price_id,
+        stripe_product_id=args.stripe_product_id,
     )
     offer = request.validate(load_offers())
     summary = plan(request, offer)

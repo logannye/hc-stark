@@ -74,8 +74,8 @@ def test_report_groups_accounts_by_attribution_source(tmp_path):
     assert by_source["pypi_tinyzkp"].paid_accounts == 0
     assert by_source["smithery_mcp"].paid_accounts == 1
     assert by_source["smithery_mcp"].paid_proofs == 1
-    assert by_source["smithery_mcp"].estimated_base_mrr == 79
-    assert by_source["smithery_mcp"].estimated_usage_revenue_cents == 4
+    assert by_source["smithery_mcp"].estimated_base_mrr == 0
+    assert by_source["smithery_mcp"].estimated_usage_revenue_cents == 0
     assert by_source["smithery_mcp"].trace_length_sum == 256
     assert by_source["smithery_mcp"].first_proof_accounts == 1
     assert by_source["smithery_mcp"].avg_time_to_first_proof_hours > 0
@@ -126,7 +126,7 @@ def test_report_estimates_compute_trace_step_revenue(tmp_path):
     assert group.paid_accounts == 1
     assert group.compute_trace_steps == 10_000_000
     assert group.estimated_base_mrr == 0
-    assert group.estimated_usage_revenue_cents == 500
+    assert group.estimated_usage_revenue_cents == 0
 
 
 def test_markdown_report_omits_email_addresses(tmp_path):
@@ -147,5 +147,6 @@ def test_markdown_report_omits_email_addresses(tmp_path):
 
     assert "secret@example.com" not in markdown
     assert "landing:/pricing" in markdown
+    assert "not contracted ARR, cash, or pipeline value" in markdown
     assert "Estimated active base MRR" in markdown
     assert "Estimated usage revenue" in markdown
