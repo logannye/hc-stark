@@ -9,6 +9,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+if python3 -c 'import json; raise SystemExit(0 if json.load(open("release/backend-v1-gates.json"))["status"] == "blocked" else 1)' 2>/dev/null; then
+  exec python3 scripts/ci/recovery_reconciliation_invariants.py
+fi
+
 MODE="${1:-local}"
 SITE_URL="${SITE_URL:-https://tinyzkp.com}"
 API_URL="${API_URL:-https://api.tinyzkp.com}"

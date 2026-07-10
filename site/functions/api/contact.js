@@ -1,9 +1,7 @@
 // Cloudflare Pages Function — contact form intake.
 //
 // Forwards submissions to the billing-webhook service on Hetzner, which
-// holds the SMTP creds and delivers to logan@galenhealth.org. Mirrors
-// the send-magic-link.js pattern for consistency + single source of
-// truth on outbound email infrastructure.
+// holds SMTP credentials and uses an environment-configured TinyZKP mailbox.
 
 const RATE_LIMIT_MAX = 3;          // max contact submissions per window per IP
 const RATE_LIMIT_WINDOW_S = 600;   // 10-minute window
@@ -14,12 +12,7 @@ const VALID_CATEGORIES = new Set([
   "General Inquiry",
   "Bug Report",
   "Feature Request",
-  "Compute Inquiry",
   "Design Partner",
-  "Fit Assessment",
-  "Business Case",
-  "Paid Pilot",
-  "Platform Rollout",
   "Billing",
   "Enterprise",
 ]);
@@ -27,19 +20,22 @@ const VALID_CATEGORIES = new Set([
 const QUALIFICATION_FIELDS = [
   "source",
   "platform",
-  "plan",
-  "workflow",
   "intent",
-  "current_path",
   "referrer",
-  "use_case",
-  "trace_length",
-  "proof_frequency",
-  "verification_environment",
-  "privacy_requirement",
-  "latency_requirement",
-  "current_alternative",
+  "company",
+  "repository",
+  "stack",
+  "workload",
+  "logical_rows",
+  "current_memory",
+  "target_ram",
+  "scratch",
+  "verifier_target",
+  "data_sensitivity",
+  "technical_owner",
   "budget_owner",
+  "timeline",
+  "consent",
 ];
 
 async function checkRateLimit(ip) {
@@ -80,8 +76,8 @@ function sanitizeQualification(raw) {
 
 export async function onRequestPost(context) {
   const origin = context.request.headers.get("Origin") || "";
-  const allowedOrigin = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com"
-    ? origin : "https://tinyzkp.com";
+  const originAllowed = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com";
+  const allowedOrigin = originAllowed ? origin : "https://tinyzkp.com";
   const corsHeaders = {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -90,6 +86,12 @@ export async function onRequestPost(context) {
   const jsonHeaders = { "Content-Type": "application/json", ...corsHeaders };
 
   try {
+    if (!originAllowed) {
+      return new Response(JSON.stringify({ error: "origin not allowed" }), {
+        status: 403,
+        headers: jsonHeaders,
+      });
+    }
     // Rate limit by IP.
     const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
     const allowed = await checkRateLimit(ip);
@@ -179,8 +181,9 @@ export async function onRequestPost(context) {
 
 export async function onRequestOptions(context) {
   const origin = context.request.headers.get("Origin") || "";
-  const allowedOrigin = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com"
-    ? origin : "https://tinyzkp.com";
+  const originAllowed = origin === "https://tinyzkp.com" || origin === "https://www.tinyzkp.com";
+  if (!originAllowed) return new Response(null, { status: 403 });
+  const allowedOrigin = origin;
   return new Response(null, {
     headers: {
       "Access-Control-Allow-Origin": allowedOrigin,

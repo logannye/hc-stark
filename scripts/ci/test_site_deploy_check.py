@@ -17,48 +17,29 @@ def test_parse_env_file_supports_export_and_quotes(tmp_path):
         """
         # comment
         export INTERNAL_SECRET='secret-value'
-        STRIPE_SECRET_KEY="sk_live_real"
-        TINYZKP_DEMO_API_KEY=tzk_demo
+        TINYZKP_RELEASE_SHA=abc123
         """,
         encoding="utf-8",
     )
     parsed = check.parse_env_file(env_file)
     assert parsed["INTERNAL_SECRET"] == "secret-value"
-    assert parsed["STRIPE_SECRET_KEY"] == "sk_live_real"
-    assert parsed["TINYZKP_DEMO_API_KEY"] == "tzk_demo"
+    assert parsed["TINYZKP_RELEASE_SHA"] == "abc123"
 
 
 def test_validate_production_bindings_accepts_complete_set():
     bindings = {
         "INTERNAL_SECRET": "secret-value",
-        "STRIPE_SECRET_KEY": "sk_live_real",
-        "STRIPE_PRICE_ID_TRACE_STEP_METERED": "price_trace",
-        "STRIPE_PRICE_ID_DEVELOPER": "price_developer",
-        "STRIPE_PRICE_ID_PRO": "price_pro",
-        "STRIPE_PRICE_ID_SCALE": "price_scale",
-        "STRIPE_PRICE_ID_PILOT": "price_pilot",
-        "STRIPE_PRICE_ID_METERED": "price_metered",
-        "TINYZKP_DEMO_API_KEY": "tzk_demo",
     }
     failures = []
     check.validate_production_bindings(bindings, failures)
     assert failures == []
 
 
-def test_validate_production_bindings_requires_one_proof_meter_price():
-    bindings = {
-        "INTERNAL_SECRET": "secret-value",
-        "STRIPE_SECRET_KEY": "sk_live_real",
-        "STRIPE_PRICE_ID_TRACE_STEP_METERED": "price_trace",
-        "STRIPE_PRICE_ID_DEVELOPER": "price_developer",
-        "STRIPE_PRICE_ID_PRO": "price_pro",
-        "STRIPE_PRICE_ID_SCALE": "price_scale",
-        "STRIPE_PRICE_ID_PILOT": "price_pilot",
-        "TINYZKP_DEMO_API_KEY": "tzk_demo",
-    }
+def test_validate_production_bindings_requires_only_internal_secret():
+    bindings = {}
     failures = []
     check.validate_production_bindings(bindings, failures)
-    assert "requires one of: STRIPE_PRICE_ID_METERED, STRIPE_PRICE_ID" in "\n".join(failures)
+    assert failures == ["production Pages binding INTERNAL_SECRET is missing or placeholder"]
 
 
 def test_static_check_classifies_current_site_bindings():

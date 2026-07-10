@@ -23,38 +23,14 @@ class ComposeScenario:
     forbidden_services: frozenset[str] = frozenset()
 
 
-BASE_ENV = {
-    "GRAFANA_ADMIN_PASSWORD": "dummy-grafana-password",
-    "STRIPE_SECRET_KEY": "sk_test_dummy",
-}
+BASE_ENV: dict[str, str] = {}
 
-PROD_ENV = {
-    **BASE_ENV,
-    "HC_SERVER_API_KEYS": "tenant:tzk_dummy_key",
-    "HC_METRICS_TOKEN": "dummy-metrics-token",
-}
-
-SHARED_WORKER_ENV = {
-    **PROD_ENV,
-    "COMPOSE_PROFILES": "shared-workers",
-    "HC_SERVER_PROVE_DISPATCH": "shared",
-    "HC_SERVER_PG_URL": "postgres://tinyzkp:dummy@db:5432/tinyzkp",
-    "HC_SERVER_USAGE_READ_FROM": "postgres",
-    "HC_USAGE_SOURCE": "postgres",
-    "HC_RATE_LIMIT_PG_URL": "postgres://tinyzkp:dummy@db:5432/tinyzkp",
-    "HC_SERVER_JOB_INDEX_SOURCE": "postgres",
-    "HC_JOB_INDEX_PG_URL": "postgres://tinyzkp:dummy@db:5432/tinyzkp",
-    "HC_JOB_WORKER_USAGE_PG_URL": "postgres://tinyzkp:dummy@db:5432/tinyzkp",
-}
+PROD_ENV = BASE_ENV
 
 BASE_SERVICES = frozenset(
     {
         "hc-server",
         "hc-mcp",
-        "prometheus",
-        "grafana",
-        "alertmanager",
-        "billing-cron",
     }
 )
 
@@ -64,20 +40,14 @@ SCENARIOS = (
         files=("docker-compose.yml",),
         env=BASE_ENV,
         required_services=BASE_SERVICES,
-        forbidden_services=frozenset({"hc-job-worker"}),
+        forbidden_services=frozenset({"hc-job-worker", "prometheus", "grafana", "alertmanager"}),
     ),
     ComposeScenario(
         name="production",
         files=("docker-compose.yml", "deploy/hetzner/docker-compose.prod.yml"),
         env=PROD_ENV,
         required_services=BASE_SERVICES,
-        forbidden_services=frozenset({"hc-job-worker"}),
-    ),
-    ComposeScenario(
-        name="production-shared-workers",
-        files=("docker-compose.yml", "deploy/hetzner/docker-compose.prod.yml"),
-        env=SHARED_WORKER_ENV,
-        required_services=BASE_SERVICES | {"hc-job-worker"},
+        forbidden_services=frozenset({"hc-job-worker", "prometheus", "grafana", "alertmanager"}),
     ),
 )
 

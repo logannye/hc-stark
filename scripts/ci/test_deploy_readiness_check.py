@@ -112,41 +112,80 @@ def test_host_python_check_accepts_current_interpreter_without_mirror():
 def test_production_mode_rejects_placeholder_secrets():
     failures, _warnings = _production_failures(
         {
-            "HC_SERVER_API_KEYS": "tenant1:CHANGE_ME",
             "STRIPE_SECRET_KEY": "sk_live_xxx",
             "STRIPE_WEBHOOK_SECRET": "whsec_xxx",
             "INTERNAL_SECRET": "CHANGE_ME_TO_A_RANDOM_STRING",
-            "GRAFANA_ADMIN_PASSWORD": "changeme",
+            "STRIPE_EXPECTED_ACCOUNT_ID": "acct_xxx",
+            "STRIPE_EXPECTED_DISPLAY_NAME": "",
+            "SMTP_HOST": "smtp.example.com",
+            "SMTP_PASSWORD": "xxx",
+            "SMTP_FROM": "hello@tinyzkp.com",
+            "HC_BACKUP_REMOTE": "",
         }
     )
-    assert "HC_SERVER_API_KEYS or an API key file path is missing or still a placeholder" in failures
     assert "STRIPE_SECRET_KEY is missing or still a placeholder" in failures
     assert "STRIPE_WEBHOOK_SECRET is missing or still a placeholder" in failures
     assert "INTERNAL_SECRET is missing or still a placeholder" in failures
-    assert "GRAFANA_ADMIN_PASSWORD is missing or still a placeholder" in failures
+    assert "STRIPE_EXPECTED_ACCOUNT_ID is missing or still a placeholder" in failures
+    assert "SMTP_PASSWORD is missing or still a placeholder" in failures
+    assert "HC_BACKUP_REMOTE is missing or still a placeholder" in failures
 
 
 def test_production_mode_accepts_realistic_values():
     failures, _warnings = _production_failures(
         {
-            "HC_SERVER_API_KEYS": "tenant1:tzk_real_key",
             "STRIPE_SECRET_KEY": "sk_live_real",
             "STRIPE_WEBHOOK_SECRET": "whsec_real",
             "INTERNAL_SECRET": "random-internal-secret",
-            "GRAFANA_ADMIN_PASSWORD": "random-grafana-password",
+            "STRIPE_EXPECTED_ACCOUNT_ID": "acct_realaccount",
+            "STRIPE_EXPECTED_DISPLAY_NAME": "LN Holdings",
+            "SMTP_HOST": "smtp.example.com",
+            "SMTP_PASSWORD": "smtp-secret",
+            "SMTP_FROM": "hello@tinyzkp.com",
+            "HC_BACKUP_REMOTE": "r2-crypt:tinyzkp",
+            "TINYZKP_MAINTENANCE_MODE": "1",
         }
     )
     assert failures == ""
 
 
-def test_production_mode_accepts_api_keys_file_source():
+def test_production_mode_requires_fail_closed_webhook_maintenance():
     failures, _warnings = _production_failures(
         {
-            "HC_SERVER_API_KEYS_FILE": "/data/api_keys.txt",
             "STRIPE_SECRET_KEY": "sk_live_real",
             "STRIPE_WEBHOOK_SECRET": "whsec_real",
             "INTERNAL_SECRET": "random-internal-secret",
-            "GRAFANA_ADMIN_PASSWORD": "random-grafana-password",
+            "STRIPE_EXPECTED_ACCOUNT_ID": "acct_realaccount",
+            "STRIPE_EXPECTED_DISPLAY_NAME": "LN Holdings",
+            "SMTP_HOST": "smtp.example.com",
+            "SMTP_PASSWORD": "smtp-secret",
+            "SMTP_FROM": "hello@tinyzkp.com",
+            "HC_BACKUP_REMOTE": "r2-crypt:tinyzkp",
+            "TINYZKP_MAINTENANCE_MODE": "0",
         }
     )
-    assert failures == ""
+    assert "TINYZKP_MAINTENANCE_MODE=1 is required" in failures
+
+
+def test_production_mode_rejects_legacy_prices_and_meter_overrides():
+    failures, _warnings = _production_failures(
+        {
+            "STRIPE_SECRET_KEY": "sk_live_real",
+            "STRIPE_WEBHOOK_SECRET": "whsec_real",
+            "INTERNAL_SECRET": "random-internal-secret",
+            "STRIPE_EXPECTED_ACCOUNT_ID": "acct_realaccount",
+            "STRIPE_EXPECTED_DISPLAY_NAME": "LN Holdings",
+            "SMTP_HOST": "smtp.example.com",
+            "SMTP_PASSWORD": "smtp-secret",
+            "SMTP_FROM": "hello@tinyzkp.com",
+            "HC_BACKUP_REMOTE": "r2-crypt:tinyzkp",
+            "TINYZKP_MAINTENANCE_MODE": "1",
+            "STRIPE_PRICE_ID_PRO": "price_legacy",
+            "STRIPE_METER_EVENT_NAME": "proof_usage",
+            "TINYZKP_ALLOW_LEGACY_METER_EVENTS": "1",
+        }
+    )
+    assert "backend recovery forbids legacy billing configuration" in failures
+    assert "STRIPE_PRICE_ID_PRO" in failures
+    assert "STRIPE_METER_EVENT_NAME" in failures
+    assert "TINYZKP_ALLOW_LEGACY_METER_EVENTS" in failures

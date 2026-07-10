@@ -44,7 +44,8 @@ import tenant_store
 
 # ---- Config ----
 
-stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+stripe.api_version = "2026-02-25.clover"
 
 USAGE_DB_PATH = os.environ.get("HC_USAGE_DB_PATH", "/opt/hc-stark/data/usage.sqlite")
 USAGE_SOURCE = os.environ.get("HC_USAGE_SOURCE", "sqlite").strip().lower() or "sqlite"
@@ -236,6 +237,19 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Print actions without touching Stripe")
     parser.add_argument("--report", action="store_true", help="Output unbilled summary as JSON")
     args = parser.parse_args()
+
+    # Test-mode and reporting runs remain available, but a live Stripe key can
+    # never emit a legacy meter event during maintenance without a deliberate
+    # break-glass override. Public usage billing is not part of the Plonky3-first
+    # commercial model; any future hosted offer requires a new reviewed ledger.
+    if (
+        not args.dry_run
+        and not args.report
+        and (stripe.api_key or "").startswith("sk_live_")
+        and os.environ.get("TINYZKP_ALLOW_LEGACY_METER_EVENTS") != "1"
+    ):
+        _log({"action": "disabled", "reason": "plonky3_backend_recovery"})
+        return
 
     usage_source = open_usage_source()
     if usage_source is None:

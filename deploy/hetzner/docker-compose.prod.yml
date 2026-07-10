@@ -1,92 +1,18 @@
-# Production overrides for TinyZKP.
-# Usage: docker compose -f docker-compose.yml -f deploy/hetzner/docker-compose.prod.yml up -d
+# Production maintenance overrides. No prover worker, billing cron, database,
+# or on-host observability stack is deployed during backend recovery.
 services:
   hc-server:
     restart: unless-stopped
-    environment:
-      - RUST_LOG=info
-      - HC_RELEASE_SHA=${HC_RELEASE_SHA:-}
-      - HC_RELEASE_REF=${HC_RELEASE_REF:-}
-      - HC_RELEASE_BUILD_URL=${HC_RELEASE_BUILD_URL:-}
-      - HC_SERVER_DATA_DIR=/data
-      - HC_SERVER_MAX_INFLIGHT=8
-      - HC_SERVER_MAX_PROVE_SECS=3600
-      - HC_SERVER_API_KEYS=${HC_SERVER_API_KEYS}
-      - HC_SERVER_API_KEYS_FILE=/data/api_keys.txt
-      - HC_SERVER_AUTH_PG_URL=${HC_SERVER_AUTH_PG_URL:-}
-      - HC_SERVER_AUTH_PG_TLS=${HC_SERVER_AUTH_PG_TLS:-}
-      - HC_SERVER_ALLOW_CUSTOM_PROGRAMS=false
-      - HC_SERVER_PROVE_DISPATCH=${HC_SERVER_PROVE_DISPATCH:-local}
-      - HC_SERVER_JOB_INDEX_SOURCE=${HC_SERVER_JOB_INDEX_SOURCE:-sqlite}
-      - HC_SERVER_PG_URL=${HC_SERVER_PG_URL:-}
-      - HC_SERVER_PG_TLS=${HC_SERVER_PG_TLS:-}
-      - HC_SERVER_USAGE_READ_FROM=${HC_SERVER_USAGE_READ_FROM:-sqlite}
-      - HC_RATE_LIMIT_PG_URL=${HC_RATE_LIMIT_PG_URL:-}
-      - HC_RATE_LIMIT_PG_TLS=${HC_RATE_LIMIT_PG_TLS:-}
-      - HC_JOB_INDEX_PG_URL=${HC_JOB_INDEX_PG_URL:-}
-      - HC_JOB_INDEX_PG_TLS=${HC_JOB_INDEX_PG_TLS:-}
-      # Prometheus scrape token (G10). Must be set in the host .env.
-      - HC_METRICS_TOKEN=${HC_METRICS_TOKEN}
-    volumes:
-      - /opt/hc-stark/data:/data
     deploy:
       resources:
         limits:
-          cpus: "8"
-          memory: 16G
-        reservations:
-          memory: 12G
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    stop_grace_period: 60s
-
-  hc-job-worker:
-    environment:
-      - RUST_LOG=info
-      - HC_SERVER_ALLOW_CUSTOM_PROGRAMS=false
-      - HC_JOB_WORKER_INDEX_SOURCE=${HC_JOB_WORKER_INDEX_SOURCE:-postgres}
-      - HC_SERVER_PG_URL=${HC_SERVER_PG_URL:-}
-      - HC_SERVER_PG_TLS=${HC_SERVER_PG_TLS:-}
-      - HC_JOB_INDEX_PG_URL=${HC_JOB_INDEX_PG_URL:-}
-      - HC_JOB_INDEX_PG_TLS=${HC_JOB_INDEX_PG_TLS:-}
-      - HC_JOB_WORKER_USAGE_PG_URL=${HC_JOB_WORKER_USAGE_PG_URL:-}
-      - HC_JOB_WORKER_LEASE_MS=${HC_JOB_WORKER_LEASE_MS:-30000}
-      - HC_JOB_WORKER_HEARTBEAT_MS=${HC_JOB_WORKER_HEARTBEAT_MS:-5000}
-      - HC_JOB_WORKER_POLL_MS=${HC_JOB_WORKER_POLL_MS:-1000}
-      - HC_JOB_WORKER_MAX_PROVE_SECS=${HC_JOB_WORKER_MAX_PROVE_SECS:-3600}
-    deploy:
-      resources:
-        limits:
-          cpus: "8"
-          memory: 16G
-        reservations:
-          memory: 8G
+          cpus: "1"
+          memory: 256M
 
   hc-mcp:
-    environment:
-      - RUST_LOG=info
-      - HC_RELEASE_SHA=${HC_RELEASE_SHA:-}
-      - HC_RELEASE_REF=${HC_RELEASE_REF:-}
-      - HC_RELEASE_BUILD_URL=${HC_RELEASE_BUILD_URL:-}
-      - HC_MCP_HTTP_HOST=0.0.0.0
-      - HC_MCP_HTTP_PORT=3001
-      - HC_MCP_MAX_INFLIGHT=2
-      - HC_SERVER_API_KEYS=${HC_SERVER_API_KEYS:-}
-      - HC_SERVER_API_KEYS_FILE=/data/api_keys.txt
-      - HC_SERVER_AUTH_PG_URL=${HC_SERVER_AUTH_PG_URL:-}
-      - HC_SERVER_AUTH_PG_TLS=${HC_SERVER_AUTH_PG_TLS:-}
-      - HC_RATE_LIMIT_PG_URL=${HC_RATE_LIMIT_PG_URL:-}
-      - HC_RATE_LIMIT_PG_TLS=${HC_RATE_LIMIT_PG_TLS:-}
-    volumes:
-      - /opt/hc-stark/data:/data
-
-  prometheus:
     restart: unless-stopped
-    environment:
-      - HC_METRICS_TOKEN=${HC_METRICS_TOKEN}
-
-  grafana:
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M

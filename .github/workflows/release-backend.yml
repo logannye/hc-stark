@@ -1,0 +1,75 @@
+name: Release Plonky3 backend
+
+on:
+  push:
+    tags:
+      - "backend-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require every evidenced backend-v1 gate
+        run: python3 scripts/ci/backend_release_ready.py
+
+  signed-artifacts:
+    needs: release-gate
+    runs-on: ubuntu-latest
+    env:
+      HC_RELEASE_SHA: ${{ github.sha }}
+      HC_RELEASE_REF: ${{ github.ref_name }}
+      HC_RELEASE_BUILD_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@v2
+      - name: Build locked production binaries
+        run: cargo build --locked --release -p hc-cli -p hc-server -p hc-mcp --bins
+      - name: Assemble release payload
+        run: |
+          install -d release-artifacts
+          install -m 0755 target/release/hc-cli release-artifacts/hc-cli-linux-x86_64
+          install -m 0755 target/release/hc-server release-artifacts/hc-server-linux-x86_64
+          install -m 0755 target/release/hc-mcp-http release-artifacts/hc-mcp-http-linux-x86_64
+          install -m 0755 target/release/hc-mcp-stdio release-artifacts/hc-mcp-stdio-linux-x86_64
+          cp release/plonky3-compatibility-v1.json release-artifacts/
+          cp release/backend-v1-gates.json release-artifacts/
+          release-artifacts/hc-cli-linux-x86_64 release > release-artifacts/cli-release.json
+      - name: Build maintenance OCI image archive
+        run: |
+          docker buildx build \
+            --build-arg HC_RELEASE_SHA \
+            --build-arg HC_RELEASE_REF \
+            --build-arg HC_RELEASE_BUILD_URL \
+            --output type=oci,dest=release-artifacts/tinyzkp-maintenance.oci.tar .
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: release-artifacts
+          format: spdx-json
+          output-file: release-artifacts/tinyzkp-backend.spdx.json
+      - name: Create checksums
+        working-directory: release-artifacts
+        run: find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+      - uses: sigstore/cosign-installer@v3
+      - name: Keyless-sign the checksum manifest
+        working-directory: release-artifacts
+        run: cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+      - name: Attest released files
+        uses: actions/attest@v4
+        with:
+          subject-checksums: release-artifacts/SHA256SUMS
+      - name: Publish draft GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: release-artifacts/*

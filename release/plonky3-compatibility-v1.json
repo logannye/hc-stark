@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "profile_id": "tinyzkp-p3-goldilocks-v1",
+  "release_status": "backend_recovery",
+  "rust_toolchain": "1.95.0",
+  "cargo_lock_sha256": "be309e26c2c0375174b8c61d5111e02db87c613346724f0198712dc9d70a967e",
+  "upstream": {
+    "repository": "https://github.com/Plonky3/Plonky3",
+    "tag": "v0.6.1",
+    "reference_configuration": "keccak-air/examples/prove_goldilocks_poseidon2.rs"
+  },
+  "configuration": {
+    "field": "p3_goldilocks::Goldilocks",
+    "challenge_field": "BinomialExtensionField<Goldilocks,2>",
+    "merkle_and_transcript_permutation": "Poseidon2Goldilocks<8>",
+    "permutation_seed": 1,
+    "fri_parameters": "FriParameters::new_benchmark",
+    "proof_system": "p3_uni_stark",
+    "proof_serializer": "postcard-1.1.3",
+    "official_verifier_required": true
+  },
+  "pinned_crates": [
+    {"name":"p3-air","version":"0.6.1","checksum":"a3e18b22bf85451382098e54da526733c7f390f83d4141b3b8b93e98e805df55"},
+    {"name":"p3-challenger","version":"0.6.1","checksum":"272b2cfdcd3cf1affeab292aa7888ed7e4c156e0d5ffc19612c86553941db178"},
+    {"name":"p3-commit","version":"0.6.1","checksum":"13d28e529d508f538409306f1e34132d3eabed303bda5a3eb3c0ed3217b97a78"},
+    {"name":"p3-dft","version":"0.6.1","checksum":"1dc420990b39aa4cdb78ac248d5defe97f760c1056aeceb160dcf3e62baf4eb7"},
+    {"name":"p3-field","version":"0.6.1","checksum":"ab37408c6c964e7e18c2305a15e31bc784aa20eb82eb513b4850aaa13ee445d3"},
+    {"name":"p3-fri","version":"0.6.1","checksum":"32ea6753da59cef42a3f2beedad3e5911171dc02b70f4cc5aa6a22f066654932"},
+    {"name":"p3-goldilocks","version":"0.6.1","checksum":"cdf8c89d8e833f93c488bd207786cd2d525a9f93de7f00363bca5652c88110a4"},
+    {"name":"p3-matrix","version":"0.6.1","checksum":"a7c5e32dd61fa6341f8ce7abe2a97e9c3f8a93d9ea17bf4f675a2f6c987b658e"},
+    {"name":"p3-merkle-tree","version":"0.6.1","checksum":"72553183a32393dda348c1bcfb478657d35f6242e962c378644a9bc062b5798f"},
+    {"name":"p3-poseidon2-air","version":"0.6.1","checksum":"fb8761b9be7ce2130077c13967f9d14f7b7c6c0b37bf29d2c358f47b752cabcc"},
+    {"name":"p3-symmetric","version":"0.6.1","checksum":"284db1f284c4007eeb65cef4656426c93192af9bd9703b7f3afbf7faab274500"},
+    {"name":"p3-uni-stark","version":"0.6.1","checksum":"14e2195220ed01aa53e149836b3011c76fe347b54e5eb16beb8de8aac72fff3b"}
+  ],
+  "artifact_dependencies": [
+    {"name":"base64","version":"0.22.1","checksum":"72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"},
+    {"name":"blake3","version":"1.8.2","checksum":"3888aaa89e4b2a40fca9848e400f6a658a5a3978de7be858e209cafa8be9a4a0"},
+    {"name":"postcard","version":"1.1.3","checksum":"6764c3b5dd454e283a30e6dfe78e9b31096d9e32036b5d1eaac7a6119ccb9a24"},
+    {"name":"rand","version":"0.10.2","checksum":"c7f5fa3a058cd35567ef9bfa5e75732bee0f9e4c55fa90477bef2dfcdbc4be80"},
+    {"name":"serde","version":"1.0.228","checksum":"9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"},
+    {"name":"serde_json","version":"1.0.145","checksum":"402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"}
+  ],
+  "validated_workloads": ["fibonacci", "poseidon2_goldilocks"],
+  "known_limits": [
+    "The Plonky3 0.6.1 TwoAdicSubgroupDft trait owns its input RowMajorMatrix.",
+    "The block-readable entry point removes that input floor but is not yet consumed by upstream p3-uni-stark.",
+    "The scratch DFT uses bounded butterfly tiles; the planned near-square four-step transform and transpose are not yet implemented.",
+    "FriParameters::new_benchmark is frozen for compatibility testing, not represented as an audited production security claim.",
+    "Full-pipeline one-million-row and ten-million-row resource gates remain open."
+  ]
+}

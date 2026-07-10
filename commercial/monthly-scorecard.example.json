@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "period": "2026-07",
+  "contracted_arr_usd": 0,
+  "cash_collected_usd": 0,
+  "evaluation_revenue_usd": 0,
+  "recurring_software_revenue_usd": 0,
+  "recurring_software_cogs_usd": 0,
+  "hosted_revenue_usd": 0,
+  "hosted_cogs_usd": 0,
+  "buyer_calls_completed": 0,
+  "reproducible_bottlenecks": 0,
+  "benchmark_reports_received": 0,
+  "evaluations_sold": 0,
+  "annual_conversions": 0,
+  "customers": [],
+  "pipeline": [],
+  "runway_months": 0,
+  "notes": "Evidence only; traffic, listings, free accounts, and unsent leads are not pipeline."
+}

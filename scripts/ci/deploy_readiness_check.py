@@ -49,7 +49,10 @@ def merged_env(path: pathlib.Path) -> dict[str, str]:
         if (
             key.startswith("HC_")
             or key.startswith("TINYZKP_")
-            or key in {"COMPOSE_PROFILES", "STRIPE_SECRET_KEY", "INTERNAL_SECRET"}
+            or key.startswith("STRIPE_")
+            or key.startswith("SMTP_")
+            or key.startswith("CONTACT_")
+            or key in {"COMPOSE_PROFILES", "INTERNAL_SECRET", "ALERT_WEBHOOK_URL"}
         ):
             env[key] = value
     return env
@@ -145,23 +148,37 @@ def check_env(
 
     if production:
         required = {
-            "STRIPE_SECRET_KEY": "Stripe webhook and billing sync require a live secret key",
+            "STRIPE_SECRET_KEY": "existing-customer webhooks and contract billing require a live secret key",
             "STRIPE_WEBHOOK_SECRET": "Stripe webhook signature verification requires a webhook secret",
             "INTERNAL_SECRET": "Cloudflare Pages functions and billing webhook must share INTERNAL_SECRET",
-            "GRAFANA_ADMIN_PASSWORD": "Grafana must not deploy with a blank/default admin password",
+            "STRIPE_EXPECTED_ACCOUNT_ID": "contract and containment tools require exact account identity",
+            "STRIPE_EXPECTED_DISPLAY_NAME": "contract and containment tools require exact account identity",
+            "SMTP_HOST": "evaluation applications require a working acknowledgement channel",
+            "SMTP_PASSWORD": "evaluation applications require authenticated email delivery",
+            "SMTP_FROM": "evaluation acknowledgements require a TinyZKP sender",
+            "HC_BACKUP_REMOTE": "existing customer and contract records require off-host backups",
         }
-        if (
-            _placeholder(_value(env, "HC_SERVER_API_KEYS"))
-            and _placeholder(_value(env, "HC_SERVER_API_KEYS_FILE"))
-            and _placeholder(_value(env, "HC_API_KEYS_FILE"))
-        ):
-            failures.append(
-                "HC_SERVER_API_KEYS or an API key file path is missing or still a placeholder: "
-                "API tenants need at least one configured key source"
-            )
         for key, reason in required.items():
             if _placeholder(_value(env, key)):
                 failures.append(f"{key} is missing or still a placeholder: {reason}")
+        if not _truthy(_value(env, "TINYZKP_MAINTENANCE_MODE")):
+            failures.append("TINYZKP_MAINTENANCE_MODE=1 is required during backend recovery")
+        forbidden = sorted(
+            key
+            for key, value in env.items()
+            if value.strip()
+            and (
+                key.startswith("STRIPE_PRICE_ID")
+                or key == "STRIPE_METER_EVENT_NAME"
+                or (key.startswith("TINYZKP_ALLOW_LEGACY_") and _truthy(value))
+            )
+        )
+        if forbidden:
+            failures.append(
+                "backend recovery forbids legacy billing configuration: " + ", ".join(forbidden)
+            )
+        if shared_dispatch or "shared-workers" in compose_profiles:
+            failures.append("backend recovery forbids shared proving dispatch and worker profiles")
 
     if (tenant_pg or tenant_pg_required) and check_host_python:
         if host_python:
@@ -179,6 +196,20 @@ def check_env(
                     failures.append(f"HC_TENANT_PG_URL mirroring requires psycopg in {host_python}")
         elif importlib.util.find_spec("psycopg") is None:
             failures.append("HC_TENANT_PG_URL mirroring requires the host Python package psycopg")
+
+    if production and check_host_python and host_python:
+        try:
+            result = subprocess.run(
+                [host_python, "-c", "import flask, gunicorn, stripe"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except OSError:
+            failures.append(f"billing webhook runtime is unavailable in {host_python}")
+        else:
+            if result.returncode != 0:
+                failures.append(f"billing webhook runtime is incomplete in {host_python}")
 
     return failures, warnings
 

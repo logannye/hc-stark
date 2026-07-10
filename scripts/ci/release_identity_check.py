@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import sys
 import urllib.error
 import urllib.request
@@ -60,6 +61,7 @@ def validate_payload(surface: ReleaseSurface, payload: dict[str, object], expect
 
 def check_surfaces(surfaces: list[ReleaseSurface], expected_sha: str, timeout: int) -> list[str]:
     failures: list[str] = []
+    versions: dict[str, str] = {}
     for surface in surfaces:
         try:
             payload = fetch_json(surface.url, timeout)
@@ -67,6 +69,14 @@ def check_surfaces(surfaces: list[ReleaseSurface], expected_sha: str, timeout: i
             failures.append(str(exc))
             continue
         failures.extend(validate_payload(surface, payload, expected_sha))
+        package_version = payload.get("package_version")
+        if isinstance(package_version, str) and package_version:
+            versions[surface.name] = package_version
+    if len(set(versions.values())) > 1:
+        failures.append(
+            "release package versions disagree: "
+            + ", ".join(f"{name}={version}" for name, version in sorted(versions.items()))
+        )
     return failures
 
 
@@ -78,6 +88,29 @@ def release_surfaces(site_url: str, api_url: str, mcp_url: str) -> list[ReleaseS
     ]
 
 
+def validate_artifact(path: Path, expected_sha: str, expected_service: str) -> list[str]:
+    try:
+        if path.stat().st_size > 1024 * 1024:
+            return [f"{path} exceeds the 1 MiB release artifact limit"]
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return [f"{path} is not a readable JSON release artifact: {exc}"]
+    if not isinstance(payload, dict):
+        return [f"{path} must contain a JSON object"]
+    if expected_service == "benchmark":
+        failures = []
+        if payload.get("release_sha") != expected_sha:
+            failures.append(f"benchmark release_sha must be {expected_sha!r}; got {payload.get('release_sha')!r}")
+        if payload.get("dependency_profile") != "tinyzkp-p3-goldilocks-v1":
+            failures.append("benchmark dependency_profile mismatch")
+        if payload.get("verification_succeeded") is not True:
+            failures.append("benchmark did not record successful verification")
+        return failures
+    return validate_payload(
+        ReleaseSurface(expected_service, str(path), expected_service), payload, expected_sha
+    )
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-sha", required=True, help="Git commit SHA expected on all release surfaces")
@@ -85,6 +118,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--api-url", default="https://api.tinyzkp.com", help="TinyZKP API origin")
     parser.add_argument("--mcp-url", default="https://mcp.tinyzkp.com", help="TinyZKP MCP HTTP origin")
     parser.add_argument("--timeout", type=int, default=20, help="Per-request timeout in seconds")
+    parser.add_argument("--cli-release-file", type=Path, help="Optional JSON emitted by `hc-cli release`")
+    parser.add_argument("--benchmark-report", type=Path, help="Optional BenchmarkReportV1 to bind to the same release")
     args = parser.parse_args(argv)
 
     expected_sha = args.expected_sha.strip()
@@ -97,6 +132,10 @@ def main(argv: list[str]) -> int:
         expected_sha,
         args.timeout,
     )
+    if args.cli_release_file:
+        failures.extend(validate_artifact(args.cli_release_file, expected_sha, "cli"))
+    if args.benchmark_report:
+        failures.extend(validate_artifact(args.benchmark_report, expected_sha, "benchmark"))
     if failures:
         for failure in failures:
             print(f"FAIL  {failure}", file=sys.stderr)

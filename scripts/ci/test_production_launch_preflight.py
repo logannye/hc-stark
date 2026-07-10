@@ -31,73 +31,37 @@ def test_local_preflight_builds_fast_static_gate_sequence():
     built = preflight.build_steps(args(), python="python", node="node")
 
     assert commands(built) == [
-        ("bash", "./scripts/ci/reconciliation_invariants.sh"),
+        ("python", "scripts/ci/recovery_reconciliation_invariants.py"),
+        ("python", "scripts/ci/backend_recovery_gate.py"),
+        ("python", "scripts/ci/plonky3_compatibility_gate.py"),
         ("python", "scripts/ci/launch_gate_audit.py"),
         ("python", "scripts/ci/backup_restore_check.py"),
         ("python", "scripts/ci/site_route_check.py"),
         ("python", "-m", "pytest", "scripts/ci/test_site_route_check.py"),
-        ("node", "scripts/ci/test_analytics_attribution.mjs"),
         ("python", "-m", "pytest", "scripts/ci/test_release_identity_check.py"),
-        ("python", "scripts/ci/offer_metadata_check.py"),
-        ("python", "scripts/ci/receipt_share_contract_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_receipt_share_contract_check.py"),
-        ("python", "scripts/ci/badge_embed_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_badge_embed_check.py"),
-        ("python", "scripts/ci/openai_chatgpt_app_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_openai_chatgpt_app_check.py"),
-        ("python", "scripts/monitoring/gtm_distribution_monitor.py", "--offline"),
-        ("python", "-m", "pytest", "scripts/ci/test_gtm_distribution_monitor.py"),
-        ("python", "scripts/monitoring/gtm_growth_monitor.py", "--offline"),
-        ("python", "-m", "pytest", "scripts/ci/test_gtm_growth_monitor.py"),
-        ("bash", "-n", "scripts/monitoring/verify_growth_data_wiring.sh"),
-        ("python", "-m", "pytest", "scripts/ci/test_growth_data_wiring_verify.py"),
-        ("python", "scripts/marketing/render_gtm_execution_ledger.py", "--check"),
-        ("python", "scripts/ci/gtm_execution_ledger_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_gtm_execution_ledger.py"),
-        ("python", "scripts/marketing/render_gtm_pipeline_ledger.py", "--check"),
-        ("python", "scripts/ci/gtm_pipeline_ledger_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_gtm_pipeline_ledger.py"),
-        ("python", "scripts/ci/manual_distribution_assets_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_manual_distribution_assets_check.py"),
-        ("python", "scripts/ci/outbound_targets_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_outbound_target_pipeline.py"),
-        ("python", "scripts/marketing/render_outbound_send_queue.py", "--check"),
-        ("python", "scripts/ci/outbound_send_queue_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_outbound_send_queue.py"),
-        ("python", "scripts/marketing/enrich_outbound_research.py", "--check"),
-        ("python", "scripts/ci/outbound_research_packets_check.py"),
-        ("python", "scripts/marketing/sync_outbound_research_pipeline.py", "--check"),
-        ("python", "-m", "pytest", "scripts/ci/test_outbound_research_packets.py"),
-        ("python", "scripts/marketing/render_mcp_submissions.py", "--check"),
-        ("python", "-m", "pytest", "scripts/ci/test_mcp_submission_renderer.py"),
-        ("python", "scripts/ci/cursor_plugin_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_cursor_plugin_check.py"),
-        ("python", "scripts/marketing/indexnow_submit.py"),
-        ("python", "scripts/ci/package_distribution_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_package_distribution_check.py"),
-        ("python", "scripts/ci/seo_conversion_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_seo_conversion_check.py"),
-        ("python", "-m", "pytest", "billing/tests/test_gtm_revenue_report.py"),
-        ("python", "-m", "pytest", "billing/tests/test_stripe_account_context_check.py"),
-        ("python", "-m", "pytest", "billing/tests/test_stripe_revenue_readiness.py"),
-        ("python", "-m", "pytest", "billing/tests/test_stripe_checkout_monitor.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_stripe_checkout_canary.py"),
-        ("python", "-m", "pytest", "billing/tests/test_stripe_revenue_ops_audit.py"),
-        ("python", "-m", "pytest", "billing/tests/test_stripe_catalog_write_preflight.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_stripe_checkout_pipeline_sync.py"),
-        ("python", "scripts/ci/server_card_check.py"),
-        ("python", "-m", "pytest", "scripts/ci/test_server_card_check.py"),
+        ("python", "-m", "pytest", "billing/tests/test_legacy_billing_containment.py"),
+        ("python", "-m", "pytest", "billing/tests/test_contact_intake.py"),
+        ("python", "-m", "pytest", "billing/tests/test_site_pricing_parity.py"),
+        ("python", "scripts/commercial/render_offers.py", "--check"),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "billing/tests/test_contract_billing.py",
+            "billing/tests/test_configure_contract_portal.py",
+        ),
+        ("python", "-m", "pytest", "scripts/commercial/test_validate_scorecard.py"),
         ("python", "scripts/ci/site_deploy_check.py"),
+        ("python", "-m", "pytest", "scripts/ci/test_cloudflare_pages_secret_check.py"),
         ("node", "scripts/ci/site_worker_dispatch_test.mjs"),
         ("python", "scripts/ci/compose_config_check.py"),
         ("python", "scripts/ci/deploy_readiness_check.py", "--env-file", ".env"),
     ]
 
 
-def test_require_legacy_and_production_add_stricter_deploy_gates():
+def test_production_adds_stricter_deploy_gates():
     built = preflight.build_steps(
         args(
-            require_legacy=True,
             production=True,
             pages_bindings_file="/secure/pages.env",
             env_file="/opt/hc-stark/.env",
@@ -108,7 +72,7 @@ def test_require_legacy_and_production_add_stricter_deploy_gates():
         node="node",
     )
 
-    assert ("python", "scripts/ci/launch_gate_audit.py", "--require-legacy") in commands(built)
+    assert ("python", "scripts/ci/launch_gate_audit.py") in commands(built)
     assert (
         "python",
         "scripts/ci/deploy_readiness_check.py",
@@ -128,14 +92,21 @@ def test_require_legacy_and_production_add_stricter_deploy_gates():
     ) in commands(built)
 
 
-def test_live_steps_are_opt_in_and_public_smoke_sets_public_only_env():
+def test_live_steps_are_opt_in_and_use_recovery_canary():
     built = preflight.build_steps(args(live=True), python="python", node="node")
 
-    public_smoke = next(step for step in built if step.name == "live public smoke")
-    assert public_smoke.command == ("bash", "scripts/monitoring/shared_dispatch_smoke.sh")
-    assert public_smoke.env == {"TINYZKP_SMOKE_PUBLIC_ONLY": "1"}
+    canary = next(step for step in built if step.name == "live backend recovery canary")
+    assert canary.command == (
+        "python",
+        "scripts/monitoring/backend_recovery_canary.py",
+        "--site-url",
+        "https://tinyzkp.com",
+        "--api-url",
+        "https://api.tinyzkp.com",
+        "--mcp-url",
+        "https://mcp.tinyzkp.com",
+    )
     assert ("python", "scripts/ci/cloudflare_pages_secret_check.py") in commands(built)
-    assert ("bash", "./scripts/ci/reconciliation_invariants.sh", "--live") in commands(built)
 
 
 def test_expected_release_sha_adds_live_release_identity_check():
@@ -166,12 +137,12 @@ def test_expected_release_sha_adds_live_release_identity_check():
 
 
 def test_authenticated_smoke_is_separate_from_public_live_canary():
-    built = preflight.build_steps(args(authenticated_smoke=True), python="python", node="node")
-
-    smoke = built[-1]
-    assert smoke.name == "live authenticated prove/verify smoke"
-    assert smoke.command == ("bash", "scripts/monitoring/shared_dispatch_smoke.sh")
-    assert smoke.env == {}
+    try:
+        preflight.build_steps(args(authenticated_smoke=True), python="python", node="node")
+    except ValueError as exc:
+        assert "unavailable while backend v1 is blocked" in str(exc)
+    else:
+        raise AssertionError("authenticated proving smoke must fail closed during recovery")
 
 
 def test_run_step_captures_success(tmp_path):

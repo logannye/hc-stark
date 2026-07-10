@@ -1,6 +1,12 @@
 # syntax=docker/dockerfile:1.6
 
-FROM rust:1.77-slim AS builder
+FROM rust:1.95-slim AS builder
+ARG HC_RELEASE_SHA
+ARG HC_RELEASE_REF
+ARG HC_RELEASE_BUILD_URL
+ENV HC_RELEASE_SHA=${HC_RELEASE_SHA}
+ENV HC_RELEASE_REF=${HC_RELEASE_REF}
+ENV HC_RELEASE_BUILD_URL=${HC_RELEASE_BUILD_URL}
 RUN apt-get update && apt-get install -y --no-install-recommends curl pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
@@ -11,15 +17,13 @@ COPY docs ./docs
 COPY scripts ./scripts
 COPY README.md ./
 
-RUN cargo build -p hc-server -p hc-mcp --release --bins
+RUN cargo build --locked -p hc-server -p hc-mcp --release --bins
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 RUN useradd -m -u 10001 hc
 WORKDIR /app
 COPY --from=builder /app/target/release/hc-server /app/hc-server
-COPY --from=builder /app/target/release/hc-worker /app/hc-worker
-COPY --from=builder /app/target/release/hc-job-worker /app/hc-job-worker
 COPY --from=builder /app/target/release/hc-mcp-http /app/hc-mcp-http
 USER hc
 

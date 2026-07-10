@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProofBundleV1",
+  "type": "object",
+  "properties": {
+    "manifest": {
+      "$ref": "#/$defs/WorkloadManifestV1"
+    },
+    "manifest_digest_hex": {
+      "type": "string"
+    },
+    "proof_base64url": {
+      "type": "string"
+    },
+    "proof_digest_hex": {
+      "type": "string"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ReleaseProvenanceV1"
+    },
+    "public_values": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest",
+    "manifest_digest_hex",
+    "proof_base64url",
+    "proof_digest_hex",
+    "public_values",
+    "provenance"
+  ],
+  "$defs": {
+    "CheckpointPolicy": {
+      "type": "string",
+      "enum": [
+        "disabled",
+        "delete_on_success",
+        "retain_on_failure"
+      ]
+    },
+    "InputGeneratorV1": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "initial_a": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "initial_b": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "fibonacci"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "initial_a",
+            "initial_b"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "poseidon2"
+            },
+            "seed": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "seed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "blake3_hex": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "digest"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "blake3_hex"
+          ]
+        }
+      ]
+    },
+    "ReleaseProvenanceV1": {
+      "type": "object",
+      "properties": {
+        "dependency_profile": {
+          "type": "string"
+        },
+        "proof_serializer": {
+          "type": "string"
+        },
+        "prover_version": {
+          "type": "string"
+        },
+        "release_sha": {
+          "type": "string"
+        },
+        "verifier_version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "prover_version",
+        "verifier_version",
+        "release_sha",
+        "dependency_profile",
+        "proof_serializer"
+      ]
+    },
+    "ResourceMode": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "memory",
+        "scratch"
+      ]
+    },
+    "ResourcePolicyV1": {
+      "type": "object",
+      "properties": {
+        "checkpoint_policy": {
+          "$ref": "#/$defs/CheckpointPolicy"
+        },
+        "max_resident_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_scratch_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_threads": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "mode": {
+          "$ref": "#/$defs/ResourceMode"
+        },
+        "scratch_dir": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "max_resident_bytes",
+        "max_scratch_bytes",
+        "scratch_dir",
+        "max_threads",
+        "checkpoint_policy"
+      ]
+    },
+    "WorkloadId": {
+      "type": "string",
+      "enum": [
+        "fibonacci",
+        "poseidon2_goldilocks"
+      ]
+    },
+    "WorkloadManifestV1": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "deterministic_seed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "expected_verifier": {
+          "type": "string"
+        },
+        "input_generator": {
+          "$ref": "#/$defs/InputGeneratorV1"
+        },
+        "logical_rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "profile": {
+          "type": "string"
+        },
+        "resource_policy": {
+          "$ref": "#/$defs/ResourcePolicyV1"
+        },
+        "schema_version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "workload_id": {
+          "$ref": "#/$defs/WorkloadId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "workload_id",
+        "backend",
+        "profile",
+        "input_generator",
+        "logical_rows",
+        "deterministic_seed",
+        "resource_policy",
+        "expected_verifier"
+      ]
+    }
+  }
+}

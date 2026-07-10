@@ -43,10 +43,6 @@ class StepResult:
 
 
 def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str = "node") -> list[Step]:
-    launch_cmd = [python, "scripts/ci/launch_gate_audit.py"]
-    if args.require_legacy:
-        launch_cmd.append("--require-legacy")
-
     deploy_readiness_cmd = [
         python,
         "scripts/ci/deploy_readiness_check.py",
@@ -61,84 +57,40 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
         deploy_readiness_cmd.extend(["--host-python", args.host_python])
 
     steps = [
-        Step("local reconciliation invariants", ("bash", "./scripts/ci/reconciliation_invariants.sh")),
-        Step("launch gate audit", tuple(launch_cmd)),
+        Step("recovery reconciliation invariants", (python, "scripts/ci/recovery_reconciliation_invariants.py")),
+        Step("backend recovery gate", (python, "scripts/ci/backend_recovery_gate.py")),
+        Step("frozen Plonky3 compatibility profile", (python, "scripts/ci/plonky3_compatibility_gate.py")),
+        Step("launch gate audit", (python, "scripts/ci/launch_gate_audit.py")),
         Step("backup/restore drift check", (python, "scripts/ci/backup_restore_check.py")),
         Step("static site route check", (python, "scripts/ci/site_route_check.py")),
         Step("static site route policy tests", (python, "-m", "pytest", "scripts/ci/test_site_route_check.py")),
-        Step("analytics attribution handoff test", (node, "scripts/ci/test_analytics_attribution.mjs")),
         Step("release identity policy tests", (python, "-m", "pytest", "scripts/ci/test_release_identity_check.py")),
-        Step("agent-readable offer metadata check", (python, "scripts/ci/offer_metadata_check.py")),
-        Step("receipt-share contract check", (python, "scripts/ci/receipt_share_contract_check.py")),
-        Step("receipt-share contract policy tests", (python, "-m", "pytest", "scripts/ci/test_receipt_share_contract_check.py")),
-        Step("badge embed contract check", (python, "scripts/ci/badge_embed_check.py")),
-        Step("badge embed contract policy tests", (python, "-m", "pytest", "scripts/ci/test_badge_embed_check.py")),
-        Step("OpenAI ChatGPT app prototype check", (python, "scripts/ci/openai_chatgpt_app_check.py")),
-        Step("OpenAI ChatGPT app policy tests", (python, "-m", "pytest", "scripts/ci/test_openai_chatgpt_app_check.py")),
-        Step("GTM distribution target check", (python, "scripts/monitoring/gtm_distribution_monitor.py", "--offline")),
-        Step("GTM distribution policy tests", (python, "-m", "pytest", "scripts/ci/test_gtm_distribution_monitor.py")),
-        Step("GTM growth monitor", (python, "scripts/monitoring/gtm_growth_monitor.py", "--offline")),
-        Step("GTM growth monitor policy tests", (python, "-m", "pytest", "scripts/ci/test_gtm_growth_monitor.py")),
-        Step("daily growth data wiring verifier syntax", ("bash", "-n", "scripts/monitoring/verify_growth_data_wiring.sh")),
         Step(
-            "daily growth data wiring verifier tests",
-            (python, "-m", "pytest", "scripts/ci/test_growth_data_wiring_verify.py"),
+            "legacy billing containment tests",
+            (python, "-m", "pytest", "billing/tests/test_legacy_billing_containment.py"),
         ),
-        Step("GTM execution ledger freshness check", (python, "scripts/marketing/render_gtm_execution_ledger.py", "--check")),
-        Step("GTM execution ledger check", (python, "scripts/ci/gtm_execution_ledger_check.py")),
+        Step("evaluation intake tests", (python, "-m", "pytest", "billing/tests/test_contact_intake.py")),
+        Step("public claims lint", (python, "-m", "pytest", "billing/tests/test_site_pricing_parity.py")),
+        Step("commercial offer parity", (python, "scripts/commercial/render_offers.py", "--check")),
         Step(
-            "GTM execution ledger policy tests",
-            (python, "-m", "pytest", "scripts/ci/test_gtm_execution_ledger.py"),
+            "contract billing policy tests",
+            (
+                python,
+                "-m",
+                "pytest",
+                "billing/tests/test_contract_billing.py",
+                "billing/tests/test_configure_contract_portal.py",
+            ),
         ),
-        Step("GTM pipeline ledger freshness check", (python, "scripts/marketing/render_gtm_pipeline_ledger.py", "--check")),
-        Step("GTM pipeline ledger check", (python, "scripts/ci/gtm_pipeline_ledger_check.py")),
         Step(
-            "GTM pipeline ledger policy tests",
-            (python, "-m", "pytest", "scripts/ci/test_gtm_pipeline_ledger.py"),
+            "commercial scorecard policy tests",
+            (python, "-m", "pytest", "scripts/commercial/test_validate_scorecard.py"),
         ),
-        Step("manual distribution asset check", (python, "scripts/ci/manual_distribution_assets_check.py")),
-        Step(
-            "manual distribution asset policy tests",
-            (python, "-m", "pytest", "scripts/ci/test_manual_distribution_assets_check.py"),
-        ),
-        Step("founder outbound target catalog check", (python, "scripts/ci/outbound_targets_check.py")),
-        Step(
-            "founder outbound target policy tests",
-            (python, "-m", "pytest", "scripts/ci/test_outbound_target_pipeline.py"),
-        ),
-        Step("founder outbound send queue freshness check", (python, "scripts/marketing/render_outbound_send_queue.py", "--check")),
-        Step("founder outbound send queue check", (python, "scripts/ci/outbound_send_queue_check.py")),
-        Step(
-            "founder outbound send queue policy tests",
-            (python, "-m", "pytest", "scripts/ci/test_outbound_send_queue.py"),
-        ),
-        Step("founder outbound research packets freshness check", (python, "scripts/marketing/enrich_outbound_research.py", "--check")),
-        Step("founder outbound research packet check", (python, "scripts/ci/outbound_research_packets_check.py")),
-        Step("founder outbound research pipeline sync check", (python, "scripts/marketing/sync_outbound_research_pipeline.py", "--check")),
-        Step(
-            "founder outbound research packet policy tests",
-            (python, "-m", "pytest", "scripts/ci/test_outbound_research_packets.py"),
-        ),
-        Step("MCP submission drafts freshness check", (python, "scripts/marketing/render_mcp_submissions.py", "--check")),
-        Step("MCP submission renderer tests", (python, "-m", "pytest", "scripts/ci/test_mcp_submission_renderer.py")),
-        Step("Cursor plugin package check", (python, "scripts/ci/cursor_plugin_check.py")),
-        Step("Cursor plugin package tests", (python, "-m", "pytest", "scripts/ci/test_cursor_plugin_check.py")),
-        Step("IndexNow submission dry-run", (python, "scripts/marketing/indexnow_submit.py")),
-        Step("package distribution surface check", (python, "scripts/ci/package_distribution_check.py")),
-        Step("package distribution policy tests", (python, "-m", "pytest", "scripts/ci/test_package_distribution_check.py")),
-        Step("SEO conversion surface check", (python, "scripts/ci/seo_conversion_check.py")),
-        Step("SEO conversion policy tests", (python, "-m", "pytest", "scripts/ci/test_seo_conversion_check.py")),
-        Step("GTM revenue report tests", (python, "-m", "pytest", "billing/tests/test_gtm_revenue_report.py")),
-        Step("Stripe account context tests", (python, "-m", "pytest", "billing/tests/test_stripe_account_context_check.py")),
-        Step("Stripe revenue readiness tests", (python, "-m", "pytest", "billing/tests/test_stripe_revenue_readiness.py")),
-        Step("Stripe checkout monitor tests", (python, "-m", "pytest", "billing/tests/test_stripe_checkout_monitor.py")),
-        Step("Stripe checkout canary policy tests", (python, "-m", "pytest", "scripts/ci/test_stripe_checkout_canary.py")),
-        Step("Stripe revenue ops audit tests", (python, "-m", "pytest", "billing/tests/test_stripe_revenue_ops_audit.py")),
-        Step("Stripe catalog write preflight tests", (python, "-m", "pytest", "billing/tests/test_stripe_catalog_write_preflight.py")),
-        Step("Stripe checkout pipeline sync tests", (python, "-m", "pytest", "scripts/ci/test_stripe_checkout_pipeline_sync.py")),
-        Step("MCP server-card check", (python, "scripts/ci/server_card_check.py")),
-        Step("MCP server-card policy tests", (python, "-m", "pytest", "scripts/ci/test_server_card_check.py")),
         Step("Cloudflare Pages static deploy check", (python, "scripts/ci/site_deploy_check.py")),
+        Step(
+            "Cloudflare Pages secret policy tests",
+            (python, "-m", "pytest", "scripts/ci/test_cloudflare_pages_secret_check.py"),
+        ),
         Step("Cloudflare Pages worker dispatch check", (node, "scripts/ci/site_worker_dispatch_test.mjs")),
         Step("Docker Compose render check", (python, "scripts/ci/compose_config_check.py")),
         Step("deploy readiness check", tuple(deploy_readiness_cmd)),
@@ -167,14 +119,17 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
                     timeout_secs=60,
                 ),
                 Step(
-                    "live reconciliation canary",
-                    ("bash", "./scripts/ci/reconciliation_invariants.sh", "--live"),
-                    timeout_secs=180,
-                ),
-                Step(
-                    "live public smoke",
-                    ("bash", "scripts/monitoring/shared_dispatch_smoke.sh"),
-                    env={"TINYZKP_SMOKE_PUBLIC_ONLY": "1"},
+                    "live backend recovery canary",
+                    (
+                        python,
+                        "scripts/monitoring/backend_recovery_canary.py",
+                        "--site-url",
+                        args.site_url,
+                        "--api-url",
+                        args.api_url,
+                        "--mcp-url",
+                        args.mcp_url,
+                    ),
                     timeout_secs=180,
                 ),
             ]
@@ -201,13 +156,7 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
             )
 
     if args.authenticated_smoke:
-        steps.append(
-            Step(
-                "live authenticated prove/verify smoke",
-                ("bash", "scripts/monitoring/shared_dispatch_smoke.sh"),
-                timeout_secs=300,
-            )
-        )
+        raise ValueError("authenticated proving smoke is unavailable while backend v1 is blocked")
 
     return steps
 

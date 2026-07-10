@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "workload_id": "fibonacci",
+  "backend": "plonky3",
+  "profile": "tinyzkp-p3-goldilocks-v1",
+  "input_generator": {
+    "kind": "fibonacci",
+    "initial_a": 0,
+    "initial_b": 1
+  },
+  "logical_rows": 1024,
+  "deterministic_seed": 0,
+  "resource_policy": {
+    "mode": "scratch",
+    "max_resident_bytes": 536870912,
+    "max_scratch_bytes": 8589934592,
+    "scratch_dir": "/tmp/tinyzkp-example",
+    "max_threads": 1,
+    "checkpoint_policy": "delete_on_success"
+  },
+  "expected_verifier": "p3_uni_stark_0.6.1"
+}

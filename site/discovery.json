@@ -1,139 +1,45 @@
 {
-  "$schema": "https://tinyzkp.com/schemas/tinyzkp-discovery.schema.json",
+  "schema_version": 3,
   "name": "TinyZKP",
   "canonical_url": "https://tinyzkp.com",
-  "generated_at": "2026-06-24",
+  "updated_at": "2026-07-09",
+  "service_status": "backend_recovery",
   "positioning": {
-    "short": "Proof receipts for automated work.",
-    "description": "TinyZKP gives AI agents, APIs, backend workflows, and transparent state transitions portable proof receipts that other people, services, and agents can verify without replaying the producer system.",
-    "primary_audiences": [
-      "AI agent builders",
-      "agent platforms and IDEs",
-      "API and SaaS teams",
-      "audit, reconciliation, and governance teams",
-      "infrastructure teams comparing managed proving with self-hosted prover operations"
-    ],
-    "best_first_workflows": [
-      "agent tool-call batches that mutate durable state",
-      "customer-visible API mutations",
-      "workflow checkpoints that auditors or downstream services inspect",
-      "long supported state-transition traces where high-RAM prover infrastructure is expensive"
-    ],
-    "not_a_default_fit": [
-      "generic private-input zero-knowledge",
-      "arbitrary zkVM execution",
-      "zkML inference proofs",
-      "on-chain verifier support for every chain",
-      "truth claims not encoded into the proven statement"
-    ]
+    "short": "Run larger Plonky3 workloads within a fixed RAM budget.",
+    "description": "MIT-licensed, resource-bounded Plonky3 proving infrastructure with deterministic SSD scratch, checkpoint recovery, and reproducible resource reports.",
+    "privacy_claim": "none",
+    "proof_format": "official Plonky3",
+    "verifier": "unmodified official Plonky3 verifier",
+    "primary_audiences": ["proving lead", "protocol engineering lead", "zkVM or rollup CTO", "proof-network infrastructure owner"]
+  },
+  "availability": {
+    "hosted_proving": false,
+    "hosted_verification": false,
+    "account_creation": false,
+    "paid_checkout": false,
+    "source_and_component_benchmarks": true,
+    "design_partner_evaluations": true
   },
   "primary_actions": [
-    {
-      "label": "Generate a live receipt",
-      "url": "https://tinyzkp.com/try",
-      "audience": "evaluators and developers"
-    },
-    {
-      "label": "Install MCP server",
-      "url": "https://tinyzkp.com/mcp",
-      "audience": "AI agent builders and agent platforms"
-    },
-    {
-      "label": "Install in Claude Code",
-      "url": "https://tinyzkp.com/integrations/claude-code",
-      "audience": "Claude Code users and agentic development teams"
-    },
-    {
-      "label": "Configure Cursor MCP",
-      "url": "https://tinyzkp.com/integrations/cursor",
-      "audience": "Cursor users and agentic coding teams"
-    },
-    {
-      "label": "Use with OpenAI-powered agents",
-      "url": "https://tinyzkp.com/integrations/openai-agents",
-      "audience": "OpenAI-powered agent application teams"
-    },
-    {
-      "label": "Find the right route",
-      "url": "https://tinyzkp.com/fit",
-      "audience": "buyers and autonomous evaluators"
-    },
-    {
-      "label": "Build the business case",
-      "url": "https://tinyzkp.com/roi",
-      "audience": "finance, procurement, and product owners"
-    },
-    {
-      "label": "Review security status",
-      "url": "https://tinyzkp.com/security",
-      "audience": "security, procurement, and enterprise buyers"
-    }
+    {"label":"Apply for a workload evaluation","url":"https://tinyzkp.com/contact?intent=memory_bounded_evaluation"},
+    {"label":"Run the open-source benchmark","url":"https://github.com/logannye/hc-stark"},
+    {"label":"Review engine architecture","url":"https://tinyzkp.com/engine"},
+    {"label":"Review benchmark evidence","url":"https://tinyzkp.com/benchmarks"},
+    {"label":"Review release gates","url":"https://tinyzkp.com/security"}
   ],
   "commercial_routes": [
-    {
-      "name": "Free",
-      "url": "https://tinyzkp.com/signup",
-      "best_for": "evaluation, demos, and first agent integrations"
-    },
-    {
-      "name": "Developer",
-      "url": "https://tinyzkp.com/pricing",
-      "best_for": "one production workflow before customer-visible scale"
-    },
-    {
-      "name": "Pro",
-      "url": "https://tinyzkp.com/pricing",
-      "best_for": "recurring customer-visible or auditor-visible receipt volume"
-    },
-    {
-      "name": "Scale",
-      "url": "https://tinyzkp.com/pricing",
-      "best_for": "high-volume customer-visible production services"
-    },
-    {
-      "name": "Compute",
-      "url": "https://tinyzkp.com/compute",
-      "best_for": "large supported state-transition traces priced by trace steps"
-    },
-    {
-      "name": "Paid Pilot",
-      "url": "https://tinyzkp.com/pilot?source=discovery&medium=metadata&intent=paid_pilot_checkout",
-      "best_for": "one scoped production receipt workflow before rollout; confirmed buyers can fund the $5,000 pilot through Stripe Checkout"
-    },
-    {
-      "name": "Platform Rollout",
-      "url": "https://tinyzkp.com/platform-rollout",
-      "best_for": "agent platforms, IDEs, workflow engines, and marketplaces making receipts native"
-    },
-    {
-      "name": "Enterprise",
-      "url": "https://tinyzkp.com/enterprise",
-      "best_for": "reserved capacity, support targets, procurement artifacts, and custom state-machine review"
-    }
+    {"id":"founding_evaluation","price_usd":25000,"availability":"first_two_customers","url":"https://tinyzkp.com/contact?intent=memory_bounded_evaluation"},
+    {"id":"standard_evaluation","price_usd":40000,"url":"https://tinyzkp.com/contact?intent=memory_bounded_evaluation"},
+    {"id":"tinyzkp_certified","annual_price_usd":60000,"url":"https://tinyzkp.com/contact?intent=certified"},
+    {"id":"tinyzkp_fleet_oem","annual_minimum_usd":125000,"url":"https://tinyzkp.com/contact?intent=fleet_oem"},
+    {"id":"reserved_hosted_capacity","monthly_minimum_usd":15000,"availability":"closed_until_release_demand_and_margin_gates","url":"https://tinyzkp.com/contact?intent=reserved_capacity"}
   ],
   "machine_readable_assets": {
-    "llms": "https://tinyzkp.com/llms.txt",
-    "sitemap": "https://tinyzkp.com/sitemap.xml",
-    "openapi": "https://tinyzkp.com/openapi.json",
-    "mcp": "https://tinyzkp.com/mcp.json",
-    "mcp_server_card": "https://tinyzkp.com/.well-known/mcp/server-card.json",
-    "offers": "https://tinyzkp.com/.well-known/tinyzkp-offers.json",
-    "receipt_share_contract": "https://tinyzkp.com/.well-known/tinyzkp-receipt-share.json",
-    "badge_contract": "https://tinyzkp.com/.well-known/tinyzkp-badge.json",
-    "agent_policy": "https://tinyzkp.com/agent-policy.json",
-    "pricing": "https://tinyzkp.com/pricing.json",
-    "limits": "https://tinyzkp.com/limits.json",
-    "templates": "https://tinyzkp.com/templates.json",
-    "examples": "https://tinyzkp.com/examples.json",
-    "fit_finder": "https://tinyzkp.com/fit.json",
-    "roi": "https://tinyzkp.com/roi.json",
-    "security": "https://tinyzkp.com/security",
-    "discovery": "https://tinyzkp.com/discovery.json",
-    "changelog": "https://tinyzkp.com/changelog.json"
+    "openapi":"https://tinyzkp.com/openapi.json",
+    "pricing":"https://tinyzkp.com/pricing.json",
+    "offers":"https://tinyzkp.com/pricing.json",
+    "llms":"https://tinyzkp.com/llms.txt",
+    "sitemap":"https://tinyzkp.com/sitemap.xml"
   },
-  "support": {
-    "contact": "https://tinyzkp.com/contact",
-    "security": "https://tinyzkp.com/.well-known/security.txt",
-    "status": "https://tinyzkp.com/status"
-  }
+  "support": {"contact":"https://tinyzkp.com/contact","security":"https://tinyzkp.com/.well-known/security.txt","status":"https://tinyzkp.com/status"}
 }

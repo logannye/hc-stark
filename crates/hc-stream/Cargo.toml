@@ -1,0 +1,18 @@
+[package]
+name = "hc-stream"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Versioned resource policy, matrix storage, and recovery contracts for TinyZKP"
+
+[dependencies]
+blake3.workspace = true
+fs2 = "0.4"
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

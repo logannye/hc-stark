@@ -7,8 +7,8 @@
   "display": "standalone",
   "background_color": "#050a12",
   "theme_color": "#050a12",
-  "description": "Proof receipts for AI agents, APIs, backend workflows, and transparent state transitions.",
-  "categories": ["developer", "business", "productivity", "security"],
+  "description": "Resource-bounded Plonky3 proving infrastructure with deterministic SSD scratch.",
+  "categories": ["developer", "business", "security"],
   "icons": [
     {
       "src": "/favicon.svg",
@@ -25,28 +25,16 @@
   ],
   "shortcuts": [
     {
-      "name": "Generate a receipt",
-      "short_name": "Try",
-      "description": "Mint a live state-transition receipt in the browser.",
-      "url": "/try"
+      "name": "Benchmark your workload",
+      "short_name": "Benchmark",
+      "description": "Review the reproducible benchmark contract and release gates.",
+      "url": "/benchmarks"
     },
     {
-      "name": "Verify a receipt",
-      "short_name": "Verify",
-      "description": "Check a TinyZKP proof receipt.",
-      "url": "/verify"
-    },
-    {
-      "name": "Install MCP server",
-      "short_name": "MCP",
-      "description": "Add TinyZKP proof tools to Claude, Cursor, and agent runtimes.",
-      "url": "/mcp"
-    },
-    {
-      "name": "Choose a plan",
-      "short_name": "Pricing",
-      "description": "Compare Free, Developer, Pro, Scale, Compute, pilot, and enterprise routes.",
-      "url": "/pricing"
+      "name": "Apply for an evaluation",
+      "short_name": "Evaluation",
+      "description": "Submit one reproducible Plonky3 memory bottleneck.",
+      "url": "/contact?intent=memory_bounded_evaluation"
     }
   ]
 }

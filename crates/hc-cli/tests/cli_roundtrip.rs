@@ -1,129 +1,132 @@
-#![allow(deprecated)]
-
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
-use std::io::Write;
+use serde_json::json;
 use tempfile::tempdir;
 
 #[test]
-fn prove_and_verify_roundtrip() {
-    let dir = tempdir().expect("tempdir");
-    let proof_path = dir.path().join("proof.json");
-    Command::cargo_bin("hc-cli")
-        .expect("binary exists")
-        .args(["prove", "--output", proof_path.to_str().expect("path utf8")])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("trace commitment"));
+fn release_identity_is_machine_readable_and_profile_pinned() {
+    let output = cargo_bin_cmd!("hc-cli")
+        .env("HC_RELEASE_SHA", "abc123")
+        .arg("release")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(payload["service"], "cli");
+    assert_eq!(payload["release_sha"], "abc123");
+    assert_eq!(payload["plonky3_version"], "0.6.1");
+    assert_eq!(payload["compatibility_profile"], "tinyzkp-p3-goldilocks-v1");
+}
 
-    Command::cargo_bin("hc-cli")
-        .expect("binary exists")
-        .args(["verify", "--input", proof_path.to_str().expect("path utf8")])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("proof verified"));
+fn write_fibonacci_manifest(dir: &std::path::Path) -> std::path::PathBuf {
+    let manifest = dir.join("manifest.json");
+    let scratch = dir.join("scratch");
+    let payload = json!({
+        "schema_version": 1,
+        "workload_id": "fibonacci",
+        "backend": "plonky3",
+        "profile": "tinyzkp-p3-goldilocks-v1",
+        "input_generator": {"kind": "fibonacci", "initial_a": 0, "initial_b": 1},
+        "logical_rows": 8,
+        "deterministic_seed": 0,
+        "resource_policy": {
+            "mode": "scratch",
+            "max_resident_bytes": 134217728,
+            "max_scratch_bytes": 1073741824,
+            "scratch_dir": scratch,
+            "max_threads": 1,
+            "checkpoint_policy": "delete_on_success"
+        },
+        "expected_verifier": "p3_uni_stark_0.6.1"
+    });
+    std::fs::write(&manifest, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
+    manifest
 }
 
 #[test]
-fn prove_with_kzg_commitment() {
-    let dir = tempdir().expect("tempdir");
-    let proof_path = dir.path().join("proof_kzg.json");
-    Command::cargo_bin("hc-cli")
-        .expect("binary exists")
+fn production_generic_commands_fail_with_migration_guidance() {
+    for command in ["prove", "verify"] {
+        cargo_bin_cmd!("hc-cli")
+            .arg(command)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "legacy TinyZKP proving and verification are disabled",
+            ));
+    }
+}
+
+#[test]
+fn plonky3_prove_and_official_verify_round_trip() {
+    let dir = tempdir().unwrap();
+    let manifest = write_fibonacci_manifest(dir.path());
+    let bundle = dir.path().join("proof-bundle.json");
+
+    cargo_bin_cmd!("hc-cli")
         .args([
+            "plonky3",
             "prove",
+            "--manifest",
+            manifest.to_str().unwrap(),
             "--output",
-            proof_path.to_str().expect("path utf8"),
-            "--commitment",
-            "kzg",
+            bundle.to_str().unwrap(),
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("trace commitment: kzg:"));
+        .stdout(predicate::str::contains(
+            "verified official Plonky3 proof bundle",
+        ));
 
-    Command::cargo_bin("hc-cli")
-        .expect("binary exists")
-        .args(["verify", "--input", proof_path.to_str().expect("path utf8")])
+    cargo_bin_cmd!("hc-cli")
+        .args(["plonky3", "verify", "--bundle", bundle.to_str().unwrap()])
         .assert()
         .success()
-        .stdout(predicate::str::contains("proof verified"));
+        .stdout(predicate::str::contains("official p3-uni-stark verifier"));
 }
 
 #[test]
-fn proof_file_is_succinctish() {
-    let dir = tempdir().expect("tempdir");
-    let proof_path = dir.path().join("proof.json");
-    Command::cargo_bin("hc-cli")
-        .expect("binary exists")
-        .args(["prove", "--output", proof_path.to_str().expect("path utf8")])
+fn proof_bundle_mutation_is_rejected_before_verification() {
+    let dir = tempdir().unwrap();
+    let manifest = write_fibonacci_manifest(dir.path());
+    let bundle = dir.path().join("proof-bundle.json");
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "prove",
+            "--manifest",
+            manifest.to_str().unwrap(),
+            "--output",
+            bundle.to_str().unwrap(),
+        ])
         .assert()
         .success();
 
-    let metadata = std::fs::metadata(&proof_path).expect("stat proof");
-    // This is a coarse guardrail that catches accidental reintroduction of full-vector
-    // oracle serialization (O(T)) for the toy trace used by the CLI.
-    // With query_count=80 (production default for 128-bit security),
-    // proofs are larger than with the legacy query_count=30.
-    assert!(
-        metadata.len() < 500_000,
-        "proof.json unexpectedly large: {} bytes",
-        metadata.len()
-    );
-}
+    let mut payload: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&bundle).unwrap()).unwrap();
+    payload["proof_digest_hex"] = json!("00".repeat(32));
+    std::fs::write(&bundle, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
 
-#[test]
-fn verify_rejects_tampered_proof_file() {
-    let dir = tempdir().expect("tempdir");
-    let proof_path = dir.path().join("proof.json");
-    Command::cargo_bin("hc-cli")
-        .expect("binary exists")
-        .args(["prove", "--output", proof_path.to_str().expect("path utf8")])
-        .assert()
-        .success();
-
-    // Flip a byte in the serialized proof JSON.
-    let mut bytes = std::fs::read(&proof_path).expect("read proof");
-    assert!(!bytes.is_empty(), "proof file should not be empty");
-    let mid = bytes.len() / 2;
-    bytes[mid] ^= 0x5a;
-    let mut f = std::fs::File::create(&proof_path).expect("rewrite proof");
-    f.write_all(&bytes).expect("write tampered bytes");
-
-    Command::cargo_bin("hc-cli")
-        .expect("binary exists")
-        .args(["verify", "--input", proof_path.to_str().expect("path utf8")])
+    cargo_bin_cmd!("hc-cli")
+        .args(["plonky3", "verify", "--bundle", bundle.to_str().unwrap()])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Error"));
+        .stderr(predicate::str::contains(
+            "proof encoding or digest mismatch",
+        ));
 }
 
 #[test]
-fn bench_respects_auto_profile() {
-    let dir = tempdir().expect("tempdir");
-    let bench_dir = dir.path();
-    Command::cargo_bin("hc-cli")
-        .expect("binary exists")
-        .current_dir(bench_dir)
-        .args([
-            "bench",
-            "--scenario",
-            "prover",
-            "--iterations",
-            "1",
-            "--auto-block-size",
-            "--trace-length",
-            "256",
-            "--profile",
-            "memory",
-        ])
+fn schemas_are_exported_from_rust_contracts() {
+    let dir = tempdir().unwrap();
+    cargo_bin_cmd!("hc-cli")
+        .args(["schema", "--output-dir", dir.path().to_str().unwrap()])
         .assert()
         .success();
-
-    let latest = bench_dir.join("benchmarks/latest.json");
-    assert!(latest.exists(), "benchmarks/latest.json should be created");
-    let contents = std::fs::read_to_string(latest).expect("read latest");
-    assert!(
-        contents.contains("\"scenario\": \"prover\""),
-        "bench output should mention scenario"
-    );
+    for file in [
+        "workload-manifest-v1.schema.json",
+        "proof-bundle-v1.schema.json",
+        "benchmark-report-v1.schema.json",
+    ] {
+        assert!(dir.path().join(file).is_file());
+    }
 }

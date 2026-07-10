@@ -1,7 +1,13 @@
 pub mod discovery;
+#[cfg(feature = "legacy-research")]
 pub mod monitoring;
+#[cfg(feature = "legacy-research")]
 pub mod output;
+#[cfg(feature = "legacy-research")]
 pub mod proving;
+#[cfg(feature = "legacy-research")]
 pub mod spartan;
+#[cfg(feature = "legacy-research")]
 pub mod verification;
+#[cfg(feature = "legacy-research")]
 pub mod zkml;
