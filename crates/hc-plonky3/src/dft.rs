@@ -305,17 +305,21 @@ impl ResourceBoundedDft {
         let elements = height.checked_mul(width).ok_or(DftError::SizeOverflow)? as u64;
         let artifact_bytes = elements.checked_mul(8).ok_or(DftError::SizeOverflow)?;
         let owned_input_bytes = if owned_input { artifact_bytes } else { 0 };
-        let row_buffers = (width as u64).saturating_mul(8).saturating_mul(4);
+        let tile_rows = self.policy.tile_rows(8, width)?.min(height) as u64;
+        let tile_buffers = tile_rows
+            .saturating_mul(width as u64)
+            .saturating_mul(8)
+            .saturating_mul(2);
         let layers = height.max(1).trailing_zeros() as u64;
         Ok(ResourceEstimate {
             peak_resident_bytes: owned_input_bytes
-                .saturating_add(row_buffers)
+                .saturating_add(tile_buffers)
                 .saturating_add(8 * 1024 * 1024),
             scratch_high_water_bytes: artifact_bytes.saturating_mul(2),
             total_read_bytes: artifact_bytes.saturating_mul(layers.saturating_add(1)),
             total_write_bytes: artifact_bytes.saturating_mul(layers.saturating_add(1)),
             phases: vec![PhaseEstimate {
-                phase: "blockwise_radix2_dft".into(),
+                phase: "tiled_blockwise_radix2_dft".into(),
                 read_bytes: artifact_bytes.saturating_mul(layers),
                 write_bytes: artifact_bytes.saturating_mul(layers),
             }],
@@ -443,6 +447,10 @@ impl ResourceBoundedDft {
     ) -> Result<ScratchPlonky3Matrix> {
         let log_height = height.trailing_zeros() as usize;
         let root = Goldilocks::two_adic_generator(log_height);
+        let tile_rows = self.policy.tile_rows(8, width)?.min(height);
+        let tile_elements = tile_rows.checked_mul(width).ok_or(DftError::SizeOverflow)?;
+        let mut high = vec![GoldilocksWord::default(); tile_elements];
+        let mut low = vec![GoldilocksWord::default(); tile_elements];
         for layer in 0..log_height {
             let next_name = if layer % 2 == 0 {
                 "dft-b.bin"
@@ -458,24 +466,27 @@ impl ResourceBoundedDft {
             let half = 1usize << layer;
             let block = half * 2;
             let twiddle_stride = height / block;
-            let mut high = vec![GoldilocksWord::default(); width];
-            let mut low = vec![GoldilocksWord::default(); width];
-            let mut high_out = vec![GoldilocksWord::default(); width];
-            let mut low_out = vec![GoldilocksWord::default(); width];
             for block_start in (0..height).step_by(block) {
-                for offset in 0..half {
+                for offset in (0..half).step_by(tile_rows) {
+                    let rows = (half - offset).min(tile_rows);
+                    let elements = rows.checked_mul(width).ok_or(DftError::SizeOverflow)?;
                     let high_row = block_start + offset;
                     let low_row = high_row + half;
-                    current.read_rows(high_row as u64, 1, &mut high)?;
-                    current.read_rows(low_row as u64, 1, &mut low)?;
-                    let twiddle = root.exp_u64((offset * twiddle_stride) as u64);
-                    for column in 0..width {
-                        let product = low[column].0 * twiddle;
-                        high_out[column] = GoldilocksWord(high[column].0 + product);
-                        low_out[column] = GoldilocksWord(high[column].0 - product);
+                    current.read_rows(high_row as u64, rows, &mut high[..elements])?;
+                    current.read_rows(low_row as u64, rows, &mut low[..elements])?;
+                    for local_row in 0..rows {
+                        let twiddle = root.exp_u64(((offset + local_row) * twiddle_stride) as u64);
+                        let row_start = local_row * width;
+                        for column in 0..width {
+                            let index = row_start + column;
+                            let value = high[index].0;
+                            let product = low[index].0 * twiddle;
+                            high[index] = GoldilocksWord(value + product);
+                            low[index] = GoldilocksWord(value - product);
+                        }
                     }
-                    next.write_rows(high_row as u64, 1, &high_out)?;
-                    next.write_rows(low_row as u64, 1, &low_out)?;
+                    next.write_rows(high_row as u64, rows, &high[..elements])?;
+                    next.write_rows(low_row as u64, rows, &low[..elements])?;
                 }
             }
             next.finalize()?;
@@ -510,19 +521,22 @@ fn reverse_low_bits(value: usize, bits: usize) -> usize {
 
 fn create_job_dir(root: &Path) -> Result<PathBuf> {
     fs::create_dir_all(root)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(root, fs::Permissions::from_mode(0o700))?;
+    let metadata = fs::symlink_metadata(root)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(StreamError::UnsafePath.into());
     }
     let id = JOB_COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = root.join(format!("dft-{}-{id}", std::process::id()));
-    fs::create_dir(&path)?;
     #[cfg(unix)]
     {
+        use std::os::unix::fs::DirBuilderExt;
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+        let mut builder = fs::DirBuilder::new();
+        builder.mode(0o700).create(&path)?;
+        debug_assert_eq!(fs::metadata(&path)?.permissions().mode() & 0o777, 0o700);
     }
+    #[cfg(not(unix))]
+    fs::create_dir(&path)?;
     Ok(path)
 }
 
@@ -590,6 +604,34 @@ mod tests {
             .unwrap();
         assert_eq!(output.height(), 8);
         assert_eq!(output.width(), 2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scratch_artifact_and_job_directory_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let input = RowMajorMatrix::new((0..16).map(Goldilocks::new).collect(), 2);
+        let output = ResourceBoundedDft::new(policy(dir.path()))
+            .unwrap()
+            .try_dft_batch(input)
+            .unwrap();
+        let ResourceBoundedMatrix::Scratch(matrix) = output else {
+            panic!("scratch policy returned an in-memory matrix");
+        };
+        let artifact_mode = fs::metadata(matrix.artifact_path())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        let job_mode = fs::metadata(matrix.artifact_path().parent().unwrap())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(artifact_mode, 0o600);
+        assert_eq!(job_mode, 0o700);
     }
 
     #[test]

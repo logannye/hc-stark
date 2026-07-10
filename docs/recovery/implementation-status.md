@@ -15,10 +15,12 @@ Updated: 2026-07-09. This is a gap ledger, not a release announcement.
   rejection, and deterministic proof-byte comparisons for small test cases.
 - `hc-stream` exposes resource policy, block matrix, matrix store, resource
   estimate, and checkpoint manifest contracts with checksummed owner-only
-  scratch storage.
+  scratch storage. Matrix stores support fallible caller-buffered rectangular
+  reads and writes.
 - The Plonky3 DFT adapter can consume a block matrix without an owned input and
-  produces reference-equivalent output; the Plonky3 trait adapter accounts for
-  the owned input imposed by upstream `0.6.1`.
+  produces reference-equivalent output using two bounded butterfly tiles; the
+  Plonky3 trait adapter accounts for the owned input imposed by upstream
+  `0.6.1`.
 - Rust artifact contracts, JSON Schema generation, proof packaging, strict size
   limits, and a cgroup-v2 benchmark harness are present.
 - Production containers exclude legacy workers. Default production API, MCP,

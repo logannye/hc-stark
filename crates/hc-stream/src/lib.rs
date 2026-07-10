@@ -123,6 +123,13 @@ impl ResourcePolicyV1 {
         if self.scratch_dir.as_os_str().is_empty() {
             return Err(StreamError::InvalidPolicy("scratch_dir must be set"));
         }
+        if self
+            .scratch_dir
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+        {
+            return Err(StreamError::UnsafePath);
+        }
         if self.max_threads == 0 {
             return Err(StreamError::InvalidPolicy("max_threads must be positive"));
         }
@@ -189,7 +196,6 @@ impl ResourcePolicyV1 {
         self.validate()?;
         self.validate_estimate(selected_mode, &estimate)?;
         ensure_private_dir(&self.scratch_dir)?;
-        reject_symlink(&self.scratch_dir)?;
         let probe = self.scratch_dir.join(format!(
             ".tinyzkp-preflight-{}-{}",
             std::process::id(),
@@ -297,6 +303,46 @@ pub trait BlockMatrix<T> {
     fn columns(&self) -> usize;
     fn read_rows(&self, row_start: u64, row_count: usize, output: &mut [T]) -> Result<()>;
 
+    /// Read a rectangular row-major tile into caller-owned storage.
+    fn read_tile(
+        &self,
+        row_start: u64,
+        row_count: usize,
+        column_start: usize,
+        column_count: usize,
+        output: &mut [T],
+    ) -> Result<()>
+    where
+        T: Copy + Default,
+    {
+        let expected = checked_tile_len(
+            self.rows(),
+            self.columns(),
+            row_start,
+            row_count,
+            column_start,
+            column_count,
+        )?;
+        if output.len() != expected {
+            return Err(StreamError::OutOfBounds);
+        }
+        if column_start == 0 && column_count == self.columns() {
+            return self.read_rows(row_start, row_count, output);
+        }
+        let full_len = row_count
+            .checked_mul(self.columns())
+            .ok_or(StreamError::OutOfBounds)?;
+        let mut rows = vec![T::default(); full_len];
+        self.read_rows(row_start, row_count, &mut rows)?;
+        for row in 0..row_count {
+            let source = row * self.columns() + column_start;
+            let destination = row * column_count;
+            output[destination..destination + column_count]
+                .copy_from_slice(&rows[source..source + column_count]);
+        }
+        Ok(())
+    }
+
     fn is_empty(&self) -> bool {
         self.rows() == 0 || self.columns() == 0
     }
@@ -304,6 +350,44 @@ pub trait BlockMatrix<T> {
 
 pub trait MatrixStore<T>: BlockMatrix<T> {
     fn write_rows(&mut self, row_start: u64, row_count: usize, values: &[T]) -> Result<()>;
+    fn write_tile(
+        &mut self,
+        row_start: u64,
+        row_count: usize,
+        column_start: usize,
+        column_count: usize,
+        values: &[T],
+    ) -> Result<()>
+    where
+        T: Copy + Default,
+    {
+        let expected = checked_tile_len(
+            self.rows(),
+            self.columns(),
+            row_start,
+            row_count,
+            column_start,
+            column_count,
+        )?;
+        if values.len() != expected {
+            return Err(StreamError::OutOfBounds);
+        }
+        if column_start == 0 && column_count == self.columns() {
+            return self.write_rows(row_start, row_count, values);
+        }
+        let full_len = row_count
+            .checked_mul(self.columns())
+            .ok_or(StreamError::OutOfBounds)?;
+        let mut rows = vec![T::default(); full_len];
+        self.read_rows(row_start, row_count, &mut rows)?;
+        for row in 0..row_count {
+            let source = row * column_count;
+            let destination = row * self.columns() + column_start;
+            rows[destination..destination + column_count]
+                .copy_from_slice(&values[source..source + column_count]);
+        }
+        self.write_rows(row_start, row_count, &rows)
+    }
     fn finalize(&mut self) -> Result<ArtifactDigest>;
     fn digest(&self) -> Option<ArtifactDigest>;
     fn remove(self) -> Result<()>;
@@ -358,6 +442,35 @@ impl<T: CanonicalElement> BlockMatrix<T> for MemoryMatrix<T> {
         output.copy_from_slice(&self.values[start..end]);
         Ok(())
     }
+
+    fn read_tile(
+        &self,
+        row_start: u64,
+        row_count: usize,
+        column_start: usize,
+        column_count: usize,
+        output: &mut [T],
+    ) -> Result<()> {
+        let expected = checked_tile_len(
+            self.rows,
+            self.columns,
+            row_start,
+            row_count,
+            column_start,
+            column_count,
+        )?;
+        if output.len() != expected {
+            return Err(StreamError::OutOfBounds);
+        }
+        let row_start = usize::try_from(row_start).map_err(|_| StreamError::OutOfBounds)?;
+        for row in 0..row_count {
+            let source = (row_start + row) * self.columns + column_start;
+            let destination = row * column_count;
+            output[destination..destination + column_count]
+                .copy_from_slice(&self.values[source..source + column_count]);
+        }
+        Ok(())
+    }
 }
 
 impl<T: CanonicalElement> MatrixStore<T> for MemoryMatrix<T> {
@@ -371,6 +484,38 @@ impl<T: CanonicalElement> MatrixStore<T> for MemoryMatrix<T> {
             return Err(StreamError::OutOfBounds);
         }
         self.values[start..end].copy_from_slice(values);
+        Ok(())
+    }
+
+    fn write_tile(
+        &mut self,
+        row_start: u64,
+        row_count: usize,
+        column_start: usize,
+        column_count: usize,
+        values: &[T],
+    ) -> Result<()> {
+        if self.digest.is_some() {
+            return Err(StreamError::Corrupt("cannot mutate finalized matrix"));
+        }
+        let expected = checked_tile_len(
+            self.rows,
+            self.columns,
+            row_start,
+            row_count,
+            column_start,
+            column_count,
+        )?;
+        if values.len() != expected {
+            return Err(StreamError::OutOfBounds);
+        }
+        let row_start = usize::try_from(row_start).map_err(|_| StreamError::OutOfBounds)?;
+        for row in 0..row_count {
+            let source = row * column_count;
+            let destination = (row_start + row) * self.columns + column_start;
+            self.values[destination..destination + column_count]
+                .copy_from_slice(&values[source..source + column_count]);
+        }
         Ok(())
     }
 
@@ -424,7 +569,6 @@ impl<T: CanonicalElement> ScratchMatrixStore<T> {
             return Err(StreamError::OutOfBounds);
         }
         ensure_private_dir(root)?;
-        reject_symlink(root)?;
         validate_file_name(file_name)?;
         let path = root.join(file_name);
         let payload_len = checked_payload_bytes::<T>(rows, columns)?;
@@ -505,6 +649,51 @@ impl<T: CanonicalElement> BlockMatrix<T> for ScratchMatrixStore<T> {
         }
         Ok(())
     }
+
+    fn read_tile(
+        &self,
+        row_start: u64,
+        row_count: usize,
+        column_start: usize,
+        column_count: usize,
+        output: &mut [T],
+    ) -> Result<()> {
+        let expected = checked_tile_len(
+            self.rows,
+            self.columns,
+            row_start,
+            row_count,
+            column_start,
+            column_count,
+        )?;
+        if output.len() != expected {
+            return Err(StreamError::OutOfBounds);
+        }
+        let mut file = self.file.try_clone()?;
+        let byte_len = column_count
+            .checked_mul(T::WIDTH)
+            .ok_or(StreamError::OutOfBounds)?;
+        let mut bytes = vec![0u8; byte_len];
+        for row in 0..row_count {
+            let absolute_row = row_start
+                .checked_add(row as u64)
+                .ok_or(StreamError::OutOfBounds)?;
+            file.seek(SeekFrom::Start(payload_tile_offset::<T>(
+                absolute_row,
+                self.columns,
+                column_start,
+            )?))?;
+            file.read_exact(&mut bytes)?;
+            let destination = row * column_count;
+            for (slot, chunk) in output[destination..destination + column_count]
+                .iter_mut()
+                .zip(bytes.chunks_exact(T::WIDTH))
+            {
+                *slot = T::decode(chunk)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<T: CanonicalElement> MatrixStore<T> for ScratchMatrixStore<T> {
@@ -530,6 +719,53 @@ impl<T: CanonicalElement> MatrixStore<T> for ScratchMatrixStore<T> {
             value.encode(output);
         }
         self.file.write_all(&bytes)?;
+        Ok(())
+    }
+
+    fn write_tile(
+        &mut self,
+        row_start: u64,
+        row_count: usize,
+        column_start: usize,
+        column_count: usize,
+        values: &[T],
+    ) -> Result<()> {
+        if self.digest.is_some() {
+            return Err(StreamError::Corrupt("cannot mutate finalized matrix"));
+        }
+        let expected = checked_tile_len(
+            self.rows,
+            self.columns,
+            row_start,
+            row_count,
+            column_start,
+            column_count,
+        )?;
+        if values.len() != expected {
+            return Err(StreamError::OutOfBounds);
+        }
+        let byte_len = column_count
+            .checked_mul(T::WIDTH)
+            .ok_or(StreamError::OutOfBounds)?;
+        let mut bytes = vec![0u8; byte_len];
+        for row in 0..row_count {
+            let source = row * column_count;
+            for (value, output) in values[source..source + column_count]
+                .iter()
+                .zip(bytes.chunks_exact_mut(T::WIDTH))
+            {
+                value.encode(output);
+            }
+            let absolute_row = row_start
+                .checked_add(row as u64)
+                .ok_or(StreamError::OutOfBounds)?;
+            self.file.seek(SeekFrom::Start(payload_tile_offset::<T>(
+                absolute_row,
+                self.columns,
+                column_start,
+            )?))?;
+            self.file.write_all(&bytes)?;
+        }
         Ok(())
     }
 
@@ -747,9 +983,47 @@ fn checked_row_range(
     Ok((start, end, expected))
 }
 
+fn checked_tile_len(
+    rows: u64,
+    columns: usize,
+    row_start: u64,
+    row_count: usize,
+    column_start: usize,
+    column_count: usize,
+) -> Result<usize> {
+    let end_row = row_start
+        .checked_add(row_count as u64)
+        .ok_or(StreamError::OutOfBounds)?;
+    let end_column = column_start
+        .checked_add(column_count)
+        .ok_or(StreamError::OutOfBounds)?;
+    if row_count == 0 || column_count == 0 || end_row > rows || end_column > columns {
+        return Err(StreamError::OutOfBounds);
+    }
+    row_count
+        .checked_mul(column_count)
+        .ok_or(StreamError::OutOfBounds)
+}
+
 fn payload_offset<T: CanonicalElement>(row_start: u64, columns: usize) -> Result<u64> {
     let element = row_start
         .checked_mul(columns as u64)
+        .and_then(|value| value.checked_mul(T::WIDTH as u64))
+        .ok_or(StreamError::OutOfBounds)?;
+    STORE_HEADER_LEN
+        .checked_add(element)
+        .ok_or(StreamError::OutOfBounds)
+}
+
+fn payload_tile_offset<T: CanonicalElement>(
+    row: u64,
+    columns: usize,
+    column_start: usize,
+) -> Result<u64> {
+    let column_start = u64::try_from(column_start).map_err(|_| StreamError::OutOfBounds)?;
+    let element = row
+        .checked_mul(columns as u64)
+        .and_then(|value| value.checked_add(column_start))
         .and_then(|value| value.checked_mul(T::WIDTH as u64))
         .ok_or(StreamError::OutOfBounds)?;
     STORE_HEADER_LEN
@@ -827,11 +1101,20 @@ fn validate_relative_path(path: &Path) -> Result<()> {
 }
 
 fn ensure_private_dir(path: &Path) -> Result<()> {
-    fs::create_dir_all(path)?;
+    let created = !path.exists();
+    if created {
+        fs::create_dir_all(path)?;
+    }
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(StreamError::UnsafePath);
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+        if created {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+        }
     }
     Ok(())
 }
@@ -932,6 +1215,38 @@ mod tests {
     }
 
     #[test]
+    fn memory_and_scratch_tiles_are_caller_buffered_and_bounded() {
+        let dir = tempdir().unwrap();
+        let values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+        let mut memory = MemoryMatrix::<u64>::preallocated(3, 4).unwrap();
+        memory.write_rows(0, 3, &values).unwrap();
+        memory.write_tile(1, 2, 1, 2, &[50, 60, 90, 100]).unwrap();
+        let mut memory_tile = [0; 4];
+        memory.read_tile(1, 2, 1, 2, &mut memory_tile).unwrap();
+        assert_eq!(memory_tile, [50, 60, 90, 100]);
+
+        let mut scratch = ScratchMatrixStore::<u64>::create(dir.path(), "tile.bin", 3, 4).unwrap();
+        scratch.write_rows(0, 3, &values).unwrap();
+        scratch.write_tile(1, 2, 1, 2, &[50, 60, 90, 100]).unwrap();
+        let mut scratch_tile = [0; 4];
+        scratch.read_tile(1, 2, 1, 2, &mut scratch_tile).unwrap();
+        assert_eq!(scratch_tile, memory_tile);
+
+        let mut full = [0; 12];
+        scratch.read_rows(0, 3, &mut full).unwrap();
+        assert_eq!(full, [1, 2, 3, 4, 5, 50, 60, 8, 9, 90, 100, 12]);
+        assert!(matches!(
+            scratch.read_tile(2, 2, 0, 1, &mut [0; 2]),
+            Err(StreamError::OutOfBounds)
+        ));
+        assert!(matches!(
+            scratch.write_tile(0, 1, 4, 1, &[1]),
+            Err(StreamError::OutOfBounds)
+        ));
+    }
+
+    #[test]
     fn finalized_matrices_are_immutable() {
         let dir = tempdir().unwrap();
         let mut store = ScratchMatrixStore::<u64>::create(dir.path(), "trace.bin", 1, 1).unwrap();
@@ -1016,6 +1331,31 @@ mod tests {
             ScratchMatrixStore::<u64>::create(dir.path(), "../escape", 1, 1),
             Err(StreamError::UnsafePath)
         ));
+        let traversal_policy = ResourcePolicyV1 {
+            scratch_dir: dir.path().join("job").join("..").join("escape"),
+            ..policy(dir.path(), ResourceMode::Scratch)
+        };
+        assert!(matches!(
+            traversal_policy.validate(),
+            Err(StreamError::UnsafePath)
+        ));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let shared = dir.path().join("shared");
+            fs::create_dir(&shared).unwrap();
+            fs::set_permissions(&shared, fs::Permissions::from_mode(0o755)).unwrap();
+            let shared_policy = ResourcePolicyV1 {
+                scratch_dir: shared.clone(),
+                ..policy(dir.path(), ResourceMode::Scratch)
+            };
+            shared_policy.preflight(estimate(1, 1)).unwrap();
+            assert_eq!(
+                fs::metadata(&shared).unwrap().permissions().mode() & 0o777,
+                0o755,
+                "preflight must not silently chmod the configured base directory"
+            );
+        }
         let job = dir.path().join("job");
         fs::create_dir(&job).unwrap();
         assert!(

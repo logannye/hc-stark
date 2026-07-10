@@ -45,6 +45,7 @@
   "known_limits": [
     "The Plonky3 0.6.1 TwoAdicSubgroupDft trait owns its input RowMajorMatrix.",
     "The block-readable entry point removes that input floor but is not yet consumed by upstream p3-uni-stark.",
+    "The scratch DFT uses bounded butterfly tiles; the planned near-square four-step transform and transpose are not yet implemented.",
     "FriParameters::new_benchmark is frozen for compatibility testing, not represented as an audited production security claim.",
     "Full-pipeline one-million-row and ten-million-row resource gates remain open."
   ]
