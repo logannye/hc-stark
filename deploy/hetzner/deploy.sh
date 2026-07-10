@@ -28,6 +28,7 @@ sync_host_billing_services() {
 # TinyZKP backend recovery: legacy usage meters, checkout recovery, lifecycle
 # nudges, and growth automation are intentionally disabled. Contract invoices
 # are operator-created through the reviewed Stripe Invoicing workflow.
+0 2 * * * root /opt/hc-stark/billing/backup.sh >> /var/log/hc-backup.log 2>&1
 CRON
     chmod 644 /etc/cron.d/hc-billing
 

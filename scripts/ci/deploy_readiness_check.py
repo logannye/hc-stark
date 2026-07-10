@@ -153,14 +153,31 @@ def check_env(
             "INTERNAL_SECRET": "Cloudflare Pages functions and billing webhook must share INTERNAL_SECRET",
             "STRIPE_EXPECTED_ACCOUNT_ID": "contract and containment tools require exact account identity",
             "STRIPE_EXPECTED_DISPLAY_NAME": "contract and containment tools require exact account identity",
-            "SMTP_HOST": "evaluation applications require a working acknowledgement channel",
-            "SMTP_PASSWORD": "evaluation applications require authenticated email delivery",
-            "SMTP_FROM": "evaluation acknowledgements require a TinyZKP sender",
-            "HC_BACKUP_REMOTE": "existing customer and contract records require off-host backups",
+            "HC_EVALUATION_STORE_PATH": "evaluation applications require a durable owner-only ledger",
         }
         for key, reason in required.items():
             if _placeholder(_value(env, key)):
                 failures.append(f"{key} is missing or still a placeholder: {reason}")
+        backup_remote = _value(env, "HC_BACKUP_REMOTE")
+        backup_http_url = _value(env, "HC_BACKUP_HTTP_URL")
+        backup_http_token_file = _value(env, "HC_BACKUP_HTTP_TOKEN_FILE")
+        if not backup_remote and not (backup_http_url and backup_http_token_file):
+            failures.append(
+                "off-host backups require HC_BACKUP_REMOTE or both "
+                "HC_BACKUP_HTTP_URL and HC_BACKUP_HTTP_TOKEN_FILE"
+            )
+        if bool(backup_http_url) != bool(backup_http_token_file):
+            failures.append(
+                "HC_BACKUP_HTTP_URL and HC_BACKUP_HTTP_TOKEN_FILE must be configured together"
+            )
+        if backup_http_url and not backup_http_url.startswith("https://"):
+            failures.append("HC_BACKUP_HTTP_URL must use https")
+        if backup_http_token_file and check_host_python:
+            token_path = pathlib.Path(backup_http_token_file)
+            if not token_path.is_file():
+                failures.append("HC_BACKUP_HTTP_TOKEN_FILE does not exist")
+            elif token_path.stat().st_mode & 0o077:
+                failures.append("HC_BACKUP_HTTP_TOKEN_FILE must not be group/world accessible")
         if not _truthy(_value(env, "TINYZKP_MAINTENANCE_MODE")):
             failures.append("TINYZKP_MAINTENANCE_MODE=1 is required during backend recovery")
         forbidden = sorted(
