@@ -67,6 +67,19 @@ def validate(source: dict[str, object]) -> list[str]:
         actual = offer.get("price", offer.get("minimum_price"))
         if actual != expected:
             failures.append(f"{offer_id} price must be {expected}")
+    expected_availability = {
+        "founding_evaluation": "first_two_customers",
+        "standard_evaluation": "contracted_during_recovery",
+        "tinyzkp_certified": "after_backend_v1_release",
+        "tinyzkp_fleet_oem": "after_backend_v1_release",
+        "reserved_hosted_capacity": "unavailable_until_review_demand_and_margin_gates",
+    }
+    for offer_id, expected in expected_availability.items():
+        offer = by_id.get(offer_id, {})
+        if offer.get("availability") != expected:
+            failures.append(f"{offer_id} availability must be {expected}")
+        if offer_id in PUBLIC_IDS and not str(offer.get("availability_label", "")).strip():
+            failures.append(f"{offer_id} requires an availability label")
     certified = by_id.get("tinyzkp_certified", {})
     if certified.get("included_support_hours_per_quarter") != 10:
         failures.append("Certified support cap must be ten hours per quarter")
@@ -103,7 +116,9 @@ def render_cards(source: dict[str, object]) -> str:
         cards.append(
             f'<article class="card"><div class="kicker">{escape(str(offer["kicker"]))}</div>'
             f'<h3>{escape(str(offer["name"]))}</h3><p class="price">{price}</p>'
-            f'<p class="unit">{escape(str(offer["unit"]))}</p><ul>{deliverables}</ul></article>'
+            f'<p class="unit">{escape(str(offer["unit"]))}</p>'
+            f'<p class="small"><strong>Availability:</strong> {escape(str(offer["availability_label"]))}</p>'
+            f'<ul>{deliverables}</ul></article>'
         )
     return f"{BEGIN}\n" + "\n".join(cards) + f"\n{END}"
 
@@ -127,7 +142,11 @@ def render_jsonld(source: dict[str, object]) -> str:
             "price": str(price),
             "priceCurrency": source["currency"],
             "url": offer["contact_url"],
-            "availability": "https://schema.org/LimitedAvailability",
+            "availability": (
+                "https://schema.org/PreOrder"
+                if offer["availability"] == "after_backend_v1_release"
+                else "https://schema.org/LimitedAvailability"
+            ),
         })
     payload = {
         "@context": "https://schema.org",
@@ -145,8 +164,8 @@ def render_sales_matrix(source: dict[str, object]) -> str:
         "",
         "> Generated from `site/pricing.json`; do not edit by hand.",
         "",
-        "| Offer | Price | Billing | Scope control |",
-        "|---|---:|---|---|",
+        "| Offer | Price | Availability | Billing | Scope control |",
+        "|---|---:|---|---|---|",
     ]
     for offer_id in PUBLIC_IDS:
         offer = offers_by_id(source)[offer_id]
@@ -161,7 +180,10 @@ def render_sales_matrix(source: dict[str, object]) -> str:
                 else "Custom work separately scoped"
             )
         )
-        lines.append(f"| {offer['name']} | {price} | {offer['billing']} | {scope} |")
+        lines.append(
+            f"| {offer['name']} | {price} | {offer['availability_label']} | "
+            f"{offer['billing']} | {scope} |"
+        )
     lines.extend([
         "",
         "Public checkout is disabled. Evaluations use invoicing milestones; annual agreements are prepaid `send_invoice` contracts.",

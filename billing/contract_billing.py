@@ -21,6 +21,7 @@ from legacy_billing_containment import STRIPE_API_VERSION, verify_account
 
 ROOT = Path(__file__).resolve().parents[1]
 OFFERS_PATH = ROOT / "site" / "pricing.json"
+RELEASE_GATES_PATH = ROOT / "release" / "backend-v1-gates.json"
 EVALUATIONS = {"founding_evaluation", "standard_evaluation"}
 ANNUAL = {"tinyzkp_certified", "tinyzkp_fleet_oem"}
 
@@ -70,6 +71,26 @@ class BillingRequest:
 
 def offer_amount(offer: dict[str, Any]) -> int:
     return int(offer.get("price", offer.get("minimum_price")))
+
+
+def validate_release_availability(request: BillingRequest) -> None:
+    if request.action != "annual-contract":
+        return
+    payload = json.loads(RELEASE_GATES_PATH.read_text(encoding="utf-8"))
+    gates = payload.get("gates")
+    ready = payload.get("status") == "ready" and isinstance(gates, dict) and bool(gates)
+    if ready:
+        ready = all(
+            isinstance(gate, dict)
+            and gate.get("passed") is True
+            and isinstance(gate.get("evidence"), str)
+            and bool(gate["evidence"].strip())
+            for gate in gates.values()
+        )
+    if not ready:
+        raise ValueError(
+            "annual Certified and Fleet/OEM billing is blocked until every backend-v1 release gate has evidence"
+        )
 
 
 def plan(request: BillingRequest, offer: dict[str, Any]) -> dict[str, Any]:
@@ -235,6 +256,7 @@ def main() -> None:
         raise SystemExit("STRIPE_SECRET_KEY is required")
     account = stripe.Account.retrieve()
     verify_account(account, args.expected_account_id or "", args.expected_display_name or "")
+    validate_release_availability(request)
     if request.action.startswith("evaluation-"):
         validate_evaluation_history(request)
     created = (

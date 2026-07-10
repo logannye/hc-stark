@@ -32,8 +32,8 @@ updating that source and its parity gates.
 |---|---|---|
 | Founding Evaluation | $25K; first two customers; 50% signature / 50% delivery | One workload, three weeks, maximum fifteen engineering days |
 | Standard Evaluation | $40K; 50% signature / 50% delivery | Same fixed scope; changes require written order |
-| TinyZKP Certified | $60K/year prepaid | One workload, signed LTS, notices, automated quarterly report, ≤10 support hours/quarter |
-| TinyZKP Fleet/OEM | $125K/year minimum prepaid | Private deployment, policy, observability, checkpoint operations, release coordination, SLA |
+| TinyZKP Certified | $60K/year prepaid after backend v1 release | One workload, signed LTS, notices, automated quarterly report, ≤10 support hours/quarter |
+| TinyZKP Fleet/OEM | $125K/year minimum prepaid after backend v1 release | Private deployment, policy, observability, checkpoint operations, release coordination, SLA |
 | Custom engineering | $300/hour minimum effective rate | Separately scoped; must improve the backend, adapter, or repeatable deployment product |
 | Reserved capacity | Future $15K/month minimum | Unavailable until review, demand, and ≥80% measured gross margin |
 

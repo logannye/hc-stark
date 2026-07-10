@@ -14,8 +14,10 @@ Commercial work during maintenance is contracted and invoiced as one of:
 
 - $25,000 Founding Memory-Bounded Evaluation for the first two customers
 - $40,000 standard Memory-Bounded Prover Evaluation
-- $60,000/year TinyZKP Certified (annual prepaid, capped support)
-- $125,000/year minimum TinyZKP Fleet / OEM (annual prepaid)
+- $60,000/year TinyZKP Certified after backend v1 release (annual prepaid,
+  capped support)
+- $125,000/year minimum TinyZKP Fleet / OEM after backend v1 release (annual
+  prepaid)
 - custom engineering separately scoped at a $300/hour minimum effective rate
 
 The replacement hosted catalog must not be activated until the audit and

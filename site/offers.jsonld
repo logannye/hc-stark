@@ -20,7 +20,7 @@
     },
     {
       "@type": "Offer",
-      "availability": "https://schema.org/LimitedAvailability",
+      "availability": "https://schema.org/PreOrder",
       "name": "TinyZKP Certified",
       "price": "60000",
       "priceCurrency": "USD",
@@ -28,7 +28,7 @@
     },
     {
       "@type": "Offer",
-      "availability": "https://schema.org/LimitedAvailability",
+      "availability": "https://schema.org/PreOrder",
       "name": "TinyZKP Fleet / OEM",
       "price": "125000",
       "priceCurrency": "USD",

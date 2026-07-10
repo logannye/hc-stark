@@ -158,9 +158,9 @@ checkpoint operations, observability, and commercial SLAs:
 
 - Founding Evaluation: $25K for the first two customers;
 - Standard Evaluation: $40K fixed, three weeks, fifteen engineering days;
-- TinyZKP Certified: $60K/year prepaid, one workload, at most ten support hours
-  per quarter;
-- TinyZKP Fleet/OEM: $125K/year minimum prepaid;
+- TinyZKP Certified after backend v1 release: $60K/year prepaid, one workload,
+  at most ten support hours per quarter;
+- TinyZKP Fleet/OEM after backend v1 release: $125K/year minimum prepaid;
 - custom engineering: at least $300/hour, separately scoped.
 
 Reserved hosted capacity remains unavailable until a signed customer exists,

@@ -1,4 +1,5 @@
 import pytest
+import json
 
 import contract_billing as billing
 
@@ -58,6 +59,28 @@ def test_annual_contract_requires_matching_annual_price():
             },
             offer,
         )
+
+
+def test_annual_contract_is_blocked_while_backend_release_is_blocked(tmp_path, monkeypatch):
+    annual = request(
+        action="annual-contract",
+        offer_id="tinyzkp_certified",
+        stripe_price_id="price_certified",
+    )
+    with pytest.raises(ValueError, match="blocked until every backend-v1 release gate"):
+        billing.validate_release_availability(annual)
+
+    ready = tmp_path / "gates.json"
+    ready.write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "gates": {"review": {"passed": True, "evidence": "report.pdf"}},
+            }
+        )
+    )
+    monkeypatch.setattr(billing, "RELEASE_GATES_PATH", ready)
+    billing.validate_release_availability(annual)
 
 
 def test_evaluation_milestone_isolated_to_its_own_invoice(monkeypatch):
