@@ -2,8 +2,9 @@
 """Validate live Cloudflare Pages secret inventory for TinyZKP.
 
 This check intentionally reads only secret names from `wrangler pages secret
-list`; it never requests or prints secret values. Use it in live preflight before
-running checkout canaries so missing bindings fail before public launch.
+list`; it never requests or prints secret values. Recovery Pages needs only the
+internal webhook secret. Legacy Stripe prices, Stripe API keys, and demo keys
+must be absent because no deployed Pages function consumes them.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-from site_deploy_check import ONE_OF_BINDINGS, REQUIRED_BINDINGS
+from site_deploy_check import REQUIRED_BINDINGS
 
 
 SECRET_RE = re.compile(r"^\s*-\s+([A-Z][A-Z0-9_]*):\s+Value Encrypted\s*$")
@@ -44,13 +45,21 @@ def validate_secret_names(secret_names: set[str]) -> list[Check]:
         else:
             checks.append(Check("FAIL", key, "missing from Cloudflare Pages production secrets"))
 
-    for alternatives in ONE_OF_BINDINGS:
-        label = " / ".join(alternatives)
-        present = sorted(key for key in alternatives if key in secret_names)
-        if present:
-            checks.append(Check("PASS", label, "at least one accepted proof-meter price secret is present: " + ", ".join(present)))
-        else:
-            checks.append(Check("FAIL", label, "missing all accepted proof-meter price secrets: " + ", ".join(alternatives)))
+    forbidden = sorted(
+        name
+        for name in secret_names
+        if name.startswith("STRIPE_") or name == "TINYZKP_DEMO_API_KEY"
+    )
+    if forbidden:
+        checks.append(
+            Check(
+                "FAIL",
+                "legacy billing/demo secrets",
+                "remove unused recovery secrets: " + ", ".join(forbidden),
+            )
+        )
+    else:
+        checks.append(Check("PASS", "legacy billing/demo secrets", "none present"))
     return checks
 
 
@@ -88,7 +97,7 @@ def main(argv: list[str]) -> int:
     if failures:
         print(f"\n{len(failures)} Cloudflare Pages secret check(s) failed.", file=sys.stderr)
         return 1
-    print("\nAll Cloudflare Pages production secrets are present.")
+    print("\nCloudflare Pages recovery secret inventory is minimal and complete.")
     return 0
 
 

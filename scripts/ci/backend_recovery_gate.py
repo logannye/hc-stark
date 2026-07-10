@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import pathlib
 import sys
+import tomllib
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -60,6 +61,12 @@ def check_server_and_mcp() -> None:
     require("autobins = false" in server_cargo, "legacy worker binaries can still be auto-discovered")
     require("hc-worker" not in text("Dockerfile"), "production image still contains a legacy proving worker")
     require("hc-job-worker" not in text("Dockerfile"), "production image still contains a legacy queue worker")
+    workspace = tomllib.loads(text("Cargo.toml"))
+    package_version = workspace["workspace"]["package"]["version"]
+    require(
+        f'package_version: "{package_version}"' in text("site/_worker.js"),
+        "site package version differs from the Rust workspace",
+    )
 
     mcp = text("crates/hc-mcp/src/lib.rs")
     discovery = text("crates/hc-mcp/src/tools/discovery.rs")
@@ -69,22 +76,41 @@ def check_server_and_mcp() -> None:
 
 
 def check_billing_and_release() -> None:
-    require("CHECKOUT_ENABLED = false" in text("site/functions/api/create-checkout.js"), "self-serve checkout is not hard-disabled")
-    require("CHECKOUT_ENABLED = false" in text("site/functions/api/create-pilot-checkout.js"), "pilot checkout is not hard-disabled")
-    require("ACCOUNT_CREATION_ENABLED = false" in text("site/functions/api/create-free-account.js"), "account creation is not hard-disabled")
+    worker = text("site/_worker.js")
+    for retired_function in (
+        "create-checkout.js",
+        "create-pilot-checkout.js",
+        "create-free-account.js",
+        "demo-prove.js",
+    ):
+        require(
+            not (ROOT / "site/functions/api" / retired_function).exists(),
+            f"retired Pages function still deploys: {retired_function}",
+        )
+    require("MAINTENANCE_DISABLED_API_ROUTES" in worker, "worker lacks maintenance route denials")
+    require('const ROUTES = { "/api/contact": contact };' in worker, "worker deploys more than evaluation intake")
     require("TINYZKP_ALLOW_LEGACY_BILLING_WRITE" in text("billing/setup_stripe_products.sh"), "legacy Stripe catalog writes are not fail-closed")
     require("TINYZKP_ALLOW_LEGACY_METER_EVENTS" in text("billing/sync_usage.py"), "legacy meter events are not fail-closed")
     require('os.environ.get("CONTACT_TO_EMAIL", "hello@tinyzkp.com")' in text("billing/provision_tenant.py"), "contact recipient is not environment-configured")
+    require('os.environ.get("TINYZKP_MAINTENANCE_MODE", "1")' in text("billing/provision_tenant.py"), "billing webhook maintenance mode is not fail-closed")
+    caddy = text("deploy/hetzner/Caddyfile")
+    for route in ("@stripe_webhook path /webhook", "@contact_intake path /send-contact", "@webhook_health path /health"):
+        require(route in caddy, f"webhook proxy is missing allowlisted route: {route}")
+    for retired_route in ("/provision-free", "/rotate", "/send-magic-link", "/verify-magic-link"):
+        require(retired_route not in caddy, f"webhook proxy exposes retired account route: {retired_route}")
+    require("respond 404" in caddy, "webhook proxy does not fail closed for unknown routes")
 
     release = json.loads(text("release/backend-v1-gates.json"))
     require(release["status"] == "blocked", "backend v1 must remain blocked during recovery")
     for gate_name in (
         "one_million_row_resource_gate",
         "ten_million_row_resource_gate",
+        "deterministic_cross_mode_proofs",
         "crash_resume_and_corruption_suite",
         "plonky3_specialist_review",
         "implementation_review_no_high_findings",
         "external_design_partner_integration",
+        "replacement_sdk_contracts",
         "signed_release_sbom_and_checksums",
         "api_mcp_site_cli_identity_match",
     ):

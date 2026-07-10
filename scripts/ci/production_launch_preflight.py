@@ -71,7 +71,17 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
         ),
         Step("evaluation intake tests", (python, "-m", "pytest", "billing/tests/test_contact_intake.py")),
         Step("public claims lint", (python, "-m", "pytest", "billing/tests/test_site_pricing_parity.py")),
+        Step("commercial offer parity", (python, "scripts/commercial/render_offers.py", "--check")),
+        Step("contract billing policy tests", (python, "-m", "pytest", "billing/tests/test_contract_billing.py")),
+        Step(
+            "commercial scorecard policy tests",
+            (python, "-m", "pytest", "scripts/commercial/test_validate_scorecard.py"),
+        ),
         Step("Cloudflare Pages static deploy check", (python, "scripts/ci/site_deploy_check.py")),
+        Step(
+            "Cloudflare Pages secret policy tests",
+            (python, "-m", "pytest", "scripts/ci/test_cloudflare_pages_secret_check.py"),
+        ),
         Step("Cloudflare Pages worker dispatch check", (node, "scripts/ci/site_worker_dispatch_test.mjs")),
         Step("Docker Compose render check", (python, "scripts/ci/compose_config_check.py")),
         Step("deploy readiness check", tuple(deploy_readiness_cmd)),

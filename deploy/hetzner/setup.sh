@@ -44,7 +44,6 @@ fi
 # ---- Directory structure ----
 echo "Setting up /opt/hc-stark..."
 mkdir -p /opt/hc-stark/{data,site}
-mkdir -p /opt/hc-stark/data/growth_snapshots
 
 # ---- Host billing Python runtime ----
 if [ -x /opt/hc-stark/deploy/hetzner/install_billing_runtime.sh ]; then

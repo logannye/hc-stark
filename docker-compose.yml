@@ -4,57 +4,17 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - RUST_LOG=info
       - HC_RELEASE_SHA=${HC_RELEASE_SHA:-}
       - HC_RELEASE_REF=${HC_RELEASE_REF:-}
       - HC_RELEASE_BUILD_URL=${HC_RELEASE_BUILD_URL:-}
-      - HC_SERVER_DATA_DIR=/data
-      - HC_SERVER_MAX_INFLIGHT=4
-      - HC_SERVER_MAX_PROVE_SECS=300
-      # Multi-tenant-lite API keys: "tenant:key" pairs (comma-separated).
-      # Clients must send: Authorization: Bearer <key>
-      # Set per-deployment; empty by default so there is NO live default credential.
-      # Local dev: export HC_SERVER_API_KEYS=demo:demo_key before `docker compose up`.
-      - HC_SERVER_API_KEYS=${HC_SERVER_API_KEYS:-}
-      # DB-backed auth fallback: closes the 60s window between webhook
-      # provisioning a new tenant and the file-based key reload picking
-      # it up. Path is the same tenant_store.sqlite the webhook writes
-      # (volume-mounted at /data inside the container; host path is
-      # /opt/hc-stark/data/tenant_store.sqlite).
-      - HC_SERVER_AUTH_DB_PATH=/data/tenant_store.sqlite
-      # Shared Postgres tenant/auth source. When set, this takes
-      # precedence over HC_SERVER_AUTH_DB_PATH and lets API + MCP
-      # authenticate from the same tenant table during cutover.
-      - HC_SERVER_AUTH_PG_URL=${HC_SERVER_AUTH_PG_URL:-}
-      - HC_SERVER_AUTH_PG_TLS=${HC_SERVER_AUTH_PG_TLS:-}
-      # Prometheus scrape token (G10). Unset → /metrics returns 404.
-      # Set this in your .env or shell before running docker compose.
-      - HC_METRICS_TOKEN=${HC_METRICS_TOKEN:-}
-      - HC_SERVER_PG_URL=${HC_SERVER_PG_URL:-}
-      - HC_SERVER_PG_TLS=${HC_SERVER_PG_TLS:-}
-      - HC_SERVER_USAGE_READ_FROM=${HC_SERVER_USAGE_READ_FROM:-sqlite}
-      - HC_RATE_LIMIT_PG_URL=${HC_RATE_LIMIT_PG_URL:-}
-      - HC_RATE_LIMIT_PG_TLS=${HC_RATE_LIMIT_PG_TLS:-}
-      - HC_SERVER_JOB_INDEX_SOURCE=${HC_SERVER_JOB_INDEX_SOURCE:-sqlite}
-      - HC_JOB_INDEX_PG_URL=${HC_JOB_INDEX_PG_URL:-}
-      - HC_JOB_INDEX_PG_TLS=${HC_JOB_INDEX_PG_TLS:-}
-    volumes:
-      # Bind-mount the host data dir so hc-server reads the SAME
-      # tenant_store.sqlite the host-side billing-webhook writes to.
-      # Earlier PRs (#15/#16) shipped the DB-fallback code + env but
-      # left the mount as a named docker volume — those are different
-      # files (different inodes), so the fallback resolved against a
-      # stale snapshot and the daily audit's persistent key 401'd.
-      - /opt/hc-stark/data:/data
     deploy:
       resources:
         limits:
-          cpus: "4"
-          memory: 8G
-        reservations:
-          memory: 6G
+          cpus: "1"
+          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/healthz"]
       interval: 30s
@@ -64,8 +24,8 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "100m"
-        max-file: "5"
+        max-size: "20m"
+        max-file: "3"
     stop_grace_period: 30s
 
   hc-mcp:
@@ -82,136 +42,21 @@ services:
       - HC_RELEASE_BUILD_URL=${HC_RELEASE_BUILD_URL:-}
       - HC_MCP_HTTP_HOST=0.0.0.0
       - HC_MCP_HTTP_PORT=3001
-      - HC_MCP_MAX_INFLIGHT=2
-      - HC_SERVER_API_KEYS=${HC_SERVER_API_KEYS:-}
-      - HC_SERVER_API_KEYS_FILE=${HC_SERVER_API_KEYS_FILE:-}
-      - HC_SERVER_AUTH_PG_URL=${HC_SERVER_AUTH_PG_URL:-}
-      - HC_SERVER_AUTH_PG_TLS=${HC_SERVER_AUTH_PG_TLS:-}
-      - HC_RATE_LIMIT_PG_URL=${HC_RATE_LIMIT_PG_URL:-}
-      - HC_RATE_LIMIT_PG_TLS=${HC_RATE_LIMIT_PG_TLS:-}
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 4G
-        reservations:
-          memory: 2G
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "-X", "POST", "-H", "Content-Type: application/json", "-H", "Accept: application/json, text/event-stream", "-d", "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0\"}}}", "http://localhost:3001/mcp"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
-    stop_grace_period: 30s
-
-  prometheus:
-    image: prom/prometheus:v2.54.1
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=30d"
-    environment:
-      # Make HC_METRICS_TOKEN available for entrypoint scripts if needed.
-      - HC_METRICS_TOKEN=${HC_METRICS_TOKEN:-}
-    volumes:
-      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
-      # Write the token to a file inside the container so prometheus.yml's
-      # credentials_file: /etc/prometheus/metrics_token can read it.
-      # The entrypoint script (or operator) should populate this file with
-      # the raw token value matching HC_METRICS_TOKEN on hc-server.
-      - ./deploy/prometheus/metrics_token:/etc/prometheus/metrics_token:ro
-      - prometheus_data:/prometheus
-    ports:
-      - "9090:9090"
-    depends_on:
-      - hc-server
     deploy:
       resources:
         limits:
           cpus: "1"
-          memory: 1G
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
-
-  grafana:
-    image: grafana/grafana:11.3.0
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}
-    volumes:
-      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    depends_on:
-      - prometheus
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: 512M
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
-
-  alertmanager:
-    image: prom/alertmanager:v0.27.0
-    command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-    volumes:
-      - ./deploy/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-    ports:
-      - "9093:9093"
-    depends_on:
-      - prometheus
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
           memory: 256M
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/version"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
     restart: unless-stopped
     logging:
       driver: "json-file"
       options:
-        max-size: "50m"
+        max-size: "20m"
         max-file: "3"
-
-  # NOTE: billing-webhook is NOT a docker service. It runs as the host-level
-  # systemd unit `hc-billing-webhook.service` directly bound to 127.0.0.1:5001
-  # (Caddy reverse-proxies webhook.tinyzkp.com to it). The previous compose
-  # entry was an orphan — built and ran a container with no host port mapping,
-  # so traffic never reached it. Removed 2026-04-29 after diagnosing why a
-  # contact-form fix to billing/provision_tenant.py wasn't taking effect.
-  # Deploy procedure for changes to provision_tenant.py:
-  #   git pull && systemctl restart hc-billing-webhook
-
-volumes:
-  prometheus_data:
+    stop_grace_period: 30s

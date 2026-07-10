@@ -85,7 +85,11 @@ async function main() {
       assert.deepEqual(assets.calls, []);
     }
 
-    for (const retired of ["/agents", "/agent-policy", "/roi", "/calculator", "/use-cases", "/compare/foo", "/integrations"]) {
+    for (const retired of [
+      "/agents", "/agents.html", "/agent-policy", "/agent-policy.json", "/roi",
+      "/roi.json", "/calculator", "/use-cases", "/compare/foo", "/integrations",
+      "/mcp.json", "/.well-known/tinyzkp-offers.json",
+    ]) {
       const assets = assetsMock();
       const response = await worker.fetch(
         new Request(`https://tinyzkp.com${retired}`),
@@ -126,6 +130,28 @@ async function main() {
         } finally {
           globalThis.fetch = originalFetch;
         }
+      }
+    }
+
+    {
+      const assets = assetsMock();
+      const originalFetch = globalThis.fetch;
+      let upstreamCalls = 0;
+      globalThis.fetch = async () => { upstreamCalls += 1; throw new Error("unexpected upstream"); };
+      try {
+        const response = await worker.fetch(
+          new Request("https://tinyzkp.com/api/contact", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Origin: "https://attacker.example" },
+            body: JSON.stringify({ name: "Bot", email: "bot@example.com", message: "spam" }),
+          }),
+          { ASSETS: assets },
+          { waitUntil() {} },
+        );
+        assert.equal(response.status, 403);
+        assert.equal(upstreamCalls, 0);
+      } finally {
+        globalThis.fetch = originalFetch;
       }
     }
 
@@ -188,7 +214,7 @@ async function main() {
         { ASSETS: assets },
         { waitUntil() {} },
       );
-      assert.equal(response.status, 401, `${route} must remain session-gated`);
+      assert.equal(response.status, 404, `${route} must be absent from the recovery worker`);
       assert.deepEqual(assets.calls, []);
     }
 

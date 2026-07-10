@@ -1,53 +1,28 @@
 import cloudflare_pages_secret_check as check
 
 
-def test_parse_secret_names_from_wrangler_output():
+def test_parse_secret_names_returns_names_only():
     output = """
-     ⛅️ wrangler 4.85.0
-    The "production" environment has access to:
       - INTERNAL_SECRET: Value Encrypted
       - STRIPE_SECRET_KEY: Value Encrypted
-      - STRIPE_PRICE_ID_PILOT: Value Encrypted
-      - ignored_lowercase: Value Encrypted
+      noise that must be ignored
     """
-
-    assert check.parse_secret_names(output) == {
-        "INTERNAL_SECRET",
-        "STRIPE_SECRET_KEY",
-        "STRIPE_PRICE_ID_PILOT",
-    }
+    assert check.parse_secret_names(output) == {"INTERNAL_SECRET", "STRIPE_SECRET_KEY"}
 
 
-def test_validate_secret_names_accepts_complete_inventory():
-    secrets = {
-        "INTERNAL_SECRET",
-        "STRIPE_SECRET_KEY",
-        "STRIPE_PRICE_ID_TRACE_STEP_METERED",
-        "STRIPE_PRICE_ID_DEVELOPER",
-        "STRIPE_PRICE_ID_PRO",
-        "STRIPE_PRICE_ID_SCALE",
-        "STRIPE_PRICE_ID_PILOT",
-        "STRIPE_PRICE_ID_METERED",
-        "TINYZKP_DEMO_API_KEY",
-    }
+def test_recovery_inventory_requires_internal_secret_and_rejects_legacy_secrets():
+    checks = check.validate_secret_names({"INTERNAL_SECRET"})
+    assert all(item.status == "PASS" for item in checks)
 
-    checks = check.validate_secret_names(secrets)
-
-    assert not [item for item in checks if item.status == "FAIL"]
+    checks = check.validate_secret_names(
+        {"INTERNAL_SECRET", "STRIPE_SECRET_KEY", "STRIPE_PRICE_ID_PRO", "TINYZKP_DEMO_API_KEY"}
+    )
+    failure = next(item for item in checks if item.name == "legacy billing/demo secrets")
+    assert failure.status == "FAIL"
+    assert "STRIPE_PRICE_ID_PRO" in failure.detail
 
 
-def test_validate_secret_names_accepts_inline_pilot_checkout_without_pilot_price():
-    secrets = {
-        "INTERNAL_SECRET",
-        "STRIPE_SECRET_KEY",
-        "STRIPE_PRICE_ID_TRACE_STEP_METERED",
-        "STRIPE_PRICE_ID_DEVELOPER",
-        "STRIPE_PRICE_ID_PRO",
-        "STRIPE_PRICE_ID_SCALE",
-        "STRIPE_PRICE_ID_METERED",
-        "TINYZKP_DEMO_API_KEY",
-    }
-
-    checks = check.validate_secret_names(secrets)
-
-    assert not [item for item in checks if item.status == "FAIL"]
+def test_missing_internal_secret_fails():
+    checks = check.validate_secret_names(set())
+    internal = next(item for item in checks if item.name == "INTERNAL_SECRET")
+    assert internal.status == "FAIL"

@@ -36,16 +36,22 @@ EXPECTED_OUTPUT_DIR = "."
 
 REQUIRED_FILES = [
     "index.html",
+    "engine.html",
+    "benchmarks.html",
+    "plonky3.html",
     "docs.html",
-    "research.html",
     "security.html",
-    "signup.html",
+    "pricing.html",
     "contact.html",
     "status.html",
+    "privacy.html",
+    "terms.html",
+    "pricing.json",
+    "offers.jsonld",
+    "openapi.json",
     "sitemap.xml",
     "robots.txt",
     "shared.css",
-    "analytics.js",
     "favicon.svg",
     "og-image.png",
     "og-image.svg",
@@ -54,27 +60,14 @@ REQUIRED_FILES = [
 
 REQUIRED_BINDINGS = {
     "INTERNAL_SECRET",
-    "STRIPE_SECRET_KEY",
-    "STRIPE_PRICE_ID_TRACE_STEP_METERED",
-    "STRIPE_PRICE_ID_DEVELOPER",
-    "STRIPE_PRICE_ID_PRO",
-    "STRIPE_PRICE_ID_SCALE",
-    "TINYZKP_DEMO_API_KEY",
 }
 
-ONE_OF_BINDINGS = [
-    ("STRIPE_PRICE_ID_METERED", "STRIPE_PRICE_ID"),
-]
+ONE_OF_BINDINGS: list[tuple[str, ...]] = []
 
 OPTIONAL_BINDINGS = {
     "CF_PAGES_BRANCH",
     "CF_PAGES_COMMIT_SHA",
     "CF_PAGES_URL",
-    "STRIPE_PRICE_ID",
-    "STRIPE_PRICE_ID_METERED",
-    "STRIPE_PRICE_ID_PILOT",
-    "STRIPE_PRICE_ID_TEAM",
-    "STRIPE_PORTAL_CONFIG_ID",
     "TINYZKP_RELEASE_BUILD_URL",
     "TINYZKP_RELEASE_REF",
     "TINYZKP_RELEASE_SHA",
@@ -123,8 +116,7 @@ def load_bindings(path: pathlib.Path | None) -> dict[str, str]:
     env = {
         key: value
         for key, value in os.environ.items()
-        if key.startswith("STRIPE_")
-        or key.startswith("TINYZKP_")
+        if key.startswith("TINYZKP_")
         or key in {"INTERNAL_SECRET", "WEBHOOK_BASE_URL"}
     }
     if path is not None:
@@ -249,12 +241,9 @@ def main(argv: list[str]) -> int:
             "required production bindings are not referenced by site functions: "
             + ", ".join(missing_static_refs)
         )
-    if not any(key in env_refs for group in ONE_OF_BINDINGS for key in group):
-        failures.append("no Stripe per-proof price binding is referenced by checkout code")
     unused_classified = sorted(expected_refs - env_refs)
-    # STRIPE_PORTAL_CONFIG_ID and WEBHOOK_BASE_URL can stay optional, but the rest
-    # should be visible in code or the required binding list is drifting.
-    unexpected_unused = [key for key in unused_classified if key not in {"STRIPE_PORTAL_CONFIG_ID", "WEBHOOK_BASE_URL"}]
+    # WEBHOOK_BASE_URL has a safe canonical default.
+    unexpected_unused = [key for key in unused_classified if key != "WEBHOOK_BASE_URL"]
     if unexpected_unused:
         failures.append("classified Pages bindings are not referenced: " + ", ".join(unexpected_unused))
 

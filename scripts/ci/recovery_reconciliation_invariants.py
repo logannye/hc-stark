@@ -70,12 +70,23 @@ def main() -> int:
         "cargo test -p hc-plonky3",
         "backup restore checks",
         "billing python checks",
+        "render_offers.py --check",
         "Python SDK checks",
         "TypeScript SDK checks",
         "compose_config_check.py",
         "cargo audit",
     ):
         require(marker in workflow, f"CI lost retained gate: {marker}")
+
+    release_workflow = text(".github/workflows/release-backend.yml")
+    for marker in (
+        "backend_release_ready.py",
+        "cargo build --locked",
+        "tinyzkp-backend.spdx.json",
+        "cosign sign-blob",
+        "actions/attest@v4",
+    ):
+        require(marker in release_workflow, f"release workflow lost integrity control: {marker}")
 
     require((ROOT / "crates/hc-server/src/lib.rs").is_file(), "historical server source was deleted")
     require((ROOT / "crates/hc-server/src/bin/hc-worker.rs").is_file(), "legacy worker research source was deleted")

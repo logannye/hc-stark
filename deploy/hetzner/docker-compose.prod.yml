@@ -1,46 +1,18 @@
-# Production overrides for TinyZKP.
-# Usage: docker compose -f docker-compose.yml -f deploy/hetzner/docker-compose.prod.yml up -d
+# Production maintenance overrides. No prover worker, billing cron, database,
+# or on-host observability stack is deployed during backend recovery.
 services:
   hc-server:
     restart: unless-stopped
-    environment:
-      - RUST_LOG=info
-      - HC_RELEASE_SHA=${HC_RELEASE_SHA:-}
-      - HC_RELEASE_REF=${HC_RELEASE_REF:-}
-      - HC_RELEASE_BUILD_URL=${HC_RELEASE_BUILD_URL:-}
-      - HC_SERVER_DATA_DIR=/data
-    volumes:
-      - /opt/hc-stark/data:/data
     deploy:
       resources:
         limits:
-          cpus: "8"
-          memory: 16G
-        reservations:
-          memory: 12G
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    stop_grace_period: 60s
+          cpus: "1"
+          memory: 256M
 
   hc-mcp:
-    environment:
-      - RUST_LOG=info
-      - HC_RELEASE_SHA=${HC_RELEASE_SHA:-}
-      - HC_RELEASE_REF=${HC_RELEASE_REF:-}
-      - HC_RELEASE_BUILD_URL=${HC_RELEASE_BUILD_URL:-}
-      - HC_MCP_HTTP_HOST=0.0.0.0
-      - HC_MCP_HTTP_PORT=3001
-      - HC_MCP_MAX_INFLIGHT=2
-    volumes:
-      - /opt/hc-stark/data:/data
-
-  prometheus:
     restart: unless-stopped
-    environment:
-      - HC_METRICS_TOKEN=${HC_METRICS_TOKEN}
-
-  grafana:
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M

@@ -23,24 +23,14 @@ class ComposeScenario:
     forbidden_services: frozenset[str] = frozenset()
 
 
-BASE_ENV = {
-    "GRAFANA_ADMIN_PASSWORD": "dummy-grafana-password",
-    "STRIPE_SECRET_KEY": "sk_test_dummy",
-}
+BASE_ENV: dict[str, str] = {}
 
-PROD_ENV = {
-    **BASE_ENV,
-    "HC_SERVER_API_KEYS": "tenant:tzk_dummy_key",
-    "HC_METRICS_TOKEN": "dummy-metrics-token",
-}
+PROD_ENV = BASE_ENV
 
 BASE_SERVICES = frozenset(
     {
         "hc-server",
         "hc-mcp",
-        "prometheus",
-        "grafana",
-        "alertmanager",
     }
 )
 
@@ -50,14 +40,14 @@ SCENARIOS = (
         files=("docker-compose.yml",),
         env=BASE_ENV,
         required_services=BASE_SERVICES,
-        forbidden_services=frozenset({"hc-job-worker"}),
+        forbidden_services=frozenset({"hc-job-worker", "prometheus", "grafana", "alertmanager"}),
     ),
     ComposeScenario(
         name="production",
         files=("docker-compose.yml", "deploy/hetzner/docker-compose.prod.yml"),
         env=PROD_ENV,
         required_services=BASE_SERVICES,
-        forbidden_services=frozenset({"hc-job-worker"}),
+        forbidden_services=frozenset({"hc-job-worker", "prometheus", "grafana", "alertmanager"}),
     ),
 )
 

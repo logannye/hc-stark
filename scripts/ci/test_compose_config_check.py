@@ -42,8 +42,8 @@ def test_check_scenario_runs_render_and_service_commands(monkeypatch):
     assert warnings == []
     assert calls[0][0] == compose.compose_command(compose.SCENARIOS[1].files, "config")
     assert calls[1][0] == compose.compose_command(compose.SCENARIOS[1].files, "config", "--services")
-    assert calls[0][1]["HC_SERVER_API_KEYS"] == "tenant:tzk_dummy_key"
-    assert calls[0][1]["HC_METRICS_TOKEN"] == "dummy-metrics-token"
+    assert "HC_SERVER_API_KEYS" not in calls[0][1]
+    assert "HC_METRICS_TOKEN" not in calls[0][1]
 
 
 def test_check_scenario_surfaces_compose_failure(monkeypatch):

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # TinyZKP — one-shot production deploy for the Hetzner host.
 #
-# Deploys ALL THREE production tiers in the correct order so the host-level
-# billing-webhook (a systemd unit, NOT a docker service) is never left
+# Deploys the maintenance API/MCP plus the host-level billing/contact webhook
+# in the correct order so the systemd service is never left
 # running stale code after a `git pull`. That exact omission broke the
 # Phase 0.2 session layer on 2026-05-30: the site (Cloudflare) and API
 # (hc-server container) were deployed, but `provision_tenant.py` kept
@@ -24,8 +24,6 @@ fi
 cd "$REPO"
 
 sync_host_billing_services() {
-    mkdir -p /opt/hc-stark/data/growth_snapshots
-
     cat > /etc/cron.d/hc-billing <<'CRON'
 # TinyZKP backend recovery: legacy usage meters, checkout recovery, lifecycle
 # nudges, and growth automation are intentionally disabled. Contract invoices
@@ -89,7 +87,7 @@ else
     exit 1
 fi
 
-echo "==> [7/10] Restart maintenance API/MCP and monitoring tiers"
+echo "==> [7/10] Restart maintenance API and capability-only MCP"
 $COMPOSE up -d
 
 echo "==> [8/10] Sync Caddy reverse-proxy config (host systemd) if changed"
@@ -140,19 +138,38 @@ check "hc-server /healthz" "$API_LOCAL/healthz" 200
 check "hc-server /version" "$API_LOCAL/version" 200
 check "hc-mcp /version" "http://127.0.0.1:3001/version" 200
 check "webhook /health"    "$WEBHOOK_LOCAL/health" 200
-# A live, internal-secret-gated session route returns 403. A 404 here means
-# the webhook is serving stale (pre-Phase-0.2) code — the bug this script prevents.
+# A live, internal-secret-gated contact route returns 403 without the secret.
 sr=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
     -X POST -H 'Content-Type: application/json' -d '{}' \
-    "$WEBHOOK_LOCAL/session/resolve" 2>/dev/null || echo 000)
+    "$WEBHOOK_LOCAL/send-contact" 2>/dev/null || echo 000)
 if [ "$sr" = "403" ]; then
-    echo "    OK   webhook /session/resolve (403 — session layer live)"
+    echo "    OK   webhook /send-contact (403 — internal-secret gate live)"
 else
-    echo "    FAIL webhook /session/resolve (got $sr, want 403 — webhook may be stale)"; fail=1
+    echo "    FAIL webhook /send-contact (got $sr, want 403 — webhook may be stale)"; fail=1
+fi
+
+cap=$(curl -sf --max-time 10 "$API_LOCAL/v1/capabilities" 2>/dev/null || true)
+if printf '%s' "$cap" | grep -q '"proving_available":false' \
+    && printf '%s' "$cap" | grep -q '"checkout_enabled":false'; then
+    echo "    OK   API capabilities are recovery-only"
+else
+    echo "    FAIL API capabilities do not fail closed"; fail=1
+fi
+prove_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
+    -H 'Content-Type: application/json' -d '{}' "$API_LOCAL/prove" 2>/dev/null || echo 000)
+legacy_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
+    -H 'Content-Type: application/json' -d '{"proof":{"version":7}}' \
+    "$API_LOCAL/verify" 2>/dev/null || echo 000)
+if [ "$prove_code" = "503" ] && [ "$legacy_code" = "422" ]; then
+    echo "    OK   prove=503 and legacy verify=422"
+else
+    echo "    FAIL maintenance errors (prove=$prove_code legacy_verify=$legacy_code)"; fail=1
 fi
 
 if [ "$fail" -eq 0 ]; then
-    echo "==> Deploy complete — all three tiers healthy."
+    echo "==> Host deploy complete — maintenance surfaces healthy."
+    echo "    Deploy Cloudflare Pages from the same $RELEASE_SHA, then run:"
+    echo "    python3 scripts/ci/production_launch_preflight.py --live --expected-release-sha $RELEASE_SHA"
 else
     echo "==> Deploy finished WITH FAILURES — investigate above." >&2
     exit 1
