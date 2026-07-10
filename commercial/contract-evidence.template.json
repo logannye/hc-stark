@@ -7,5 +7,8 @@
   "scope_sha256": "REPLACE_WITH_ACCEPTANCE_MATRIX_OR_ORDER_FORM_SHA256",
   "signed_at": "REPLACE_WITH_RFC3339_UTC_Z_TIME",
   "delivery_acceptance_sha256": null,
-  "delivery_accepted_at": null
+  "delivery_accepted_at": null,
+  "deposit_invoice_id": null,
+  "deposit_plan_sha256": null,
+  "negotiated_annual_amount_cents": null
 }

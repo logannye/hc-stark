@@ -37,6 +37,14 @@ Preview and apply the twelve-month purge:
 The evaluation database is included in the encrypted/private off-host backup
 set. Do not export it into the repository, issue tracker, or benchmark bundle.
 
+The installed daily retention job runs as `tinyzkp-billing`, the same account
+that owns the database and its `0700` parent directory. Its output is written
+with `umask 077` to
+`/opt/hc-stark/data/evaluation-retention.log`. A root-owned retention cron will
+fail closed because the ledger rejects access by a process with a different
+effective owner; do not change the cron user independently of the service
+account and data ownership.
+
 ## Contract and invoice handoff
 
 1. Have counsel approve `commercial/evaluation-sow.counsel-draft.md`.
@@ -55,7 +63,8 @@ sha256sum SIGNED_AGREEMENT ACCEPTANCE_MATRIX
    Fill the private record with those hashes, the canonical UTC signature
    time, the exact offer/agreement IDs, and the exact Stripe customer ID. For a
    delivery invoice, create a separate record that also includes the written
-   acceptance hash and canonical acceptance time.
+   acceptance hash, canonical acceptance time, exact paid deposit invoice ID,
+   and the deposit invoice's `tinyzkp_plan_sha256` metadata value.
 5. Create or select the positively identified Stripe customer. Before apply,
    its Stripe metadata must contain:
 
@@ -87,12 +96,117 @@ python3 billing/contract_billing.py evaluation-deposit \
    as TinyZKP and does not use an unrelated business mailbox. The CLI verifies
    the retrieved Stripe account has public business name `TinyZKP`, a
    `@tinyzkp.com` support email, and a `tinyzkp.com` support URL; the environment
-   acknowledgement alone is insufficient.
+   acknowledgement alone is insufficient. Evaluation invoices remain
+   `auto_advance=false` after finalization and the CLI never invokes Stripe's
+   send operation. Copy the returned `hosted_invoice_url` into the
+   applicant-selected no-email channel; do not enable Stripe email reminders.
 
-The delivery command additionally requires a paid deposit invoice in Stripe;
-an open, draft, void, or uncollectible deposit is insufficient. It also
+The delivery command additionally requires the exact paid deposit invoice in
+Stripe. The object ID, customer, amount, currency, collection mode, document
+hashes, and recorded deposit plan must all match the delivery evidence; an
+open, draft, void, uncollectible, or edited deposit is insufficient. It also
 requires `--delivery-acceptance-document`; the CLI hashes all supplied private
 documents and refuses any mismatch with the owner-only evidence record.
 
 No evaluation work starts until the signed agreement, paid deposit, frozen
 workload digest, acceptance matrix, and baseline host are all recorded.
+
+## Annual contract release authorization
+
+Certified and Fleet/OEM invoicing remains blocked until the audited backend
+release workflow emits `backend-v1-commercial-authorization.json` and its
+separate `backend-v1-commercial-authorization.sigstore.json` bundle. Download
+both only from the corresponding published, non-prerelease `backend-v*` GitHub
+release. Verify each GitHub artifact attestation and independently verify that
+the authorization was signed by the pinned backend release workflow:
+
+```bash
+gh attestation verify backend-v1-commercial-authorization.json \
+  --repo logannye/hc-stark \
+  --signer-workflow logannye/hc-stark/.github/workflows/release-backend.yml
+gh attestation verify backend-v1-commercial-authorization.sigstore.json \
+  --repo logannye/hc-stark \
+  --signer-workflow logannye/hc-stark/.github/workflows/release-backend.yml
+cosign verify-blob \
+  --bundle backend-v1-commercial-authorization.sigstore.json \
+  --certificate-identity-regexp \
+  '^https://github\.com/logannye/hc-stark/\.github/workflows/release-backend\.yml@refs/tags/backend-v[^/]+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  backend-v1-commercial-authorization.json
+```
+
+Only after all three checks succeed, install both files on the billing host
+without trusting archive/download permissions:
+
+```bash
+install -m 0600 backend-v1-commercial-authorization.json \
+  /var/lib/tinyzkp-private/backend-v1-commercial-authorization.json
+install -m 0600 backend-v1-commercial-authorization.sigstore.json \
+  /var/lib/tinyzkp-private/backend-v1-commercial-authorization.sigstore.json
+sha256sum \
+  /var/lib/tinyzkp-private/backend-v1-commercial-authorization.json \
+  /var/lib/tinyzkp-private/backend-v1-commercial-authorization.sigstore.json
+```
+
+Set `TINYZKP_BACKEND_RELEASE_AUTHORIZATION` to that installed path and
+`TINYZKP_BACKEND_RELEASE_AUTHORIZATION_SHA256` to the locally recomputed
+digest. Set `TINYZKP_BACKEND_RELEASE_AUTHORIZATION_BUNDLE` to the installed
+Sigstore bundle and `TINYZKP_BACKEND_RELEASE_AUTHORIZATION_BUNDLE_SHA256` to
+its locally recomputed digest. Never author or edit either file by hand. The
+contract CLI reads each owner-only file through one `O_NOFOLLOW` descriptor,
+checks both configured digests, and reruns the pinned Sigstore verification.
+The authorization binds the final backend
+evidence, validator report, signed checksum manifest, Sigstore bundle, release
+SHA, and stable source-tree digest. Annual previews include the authorization
+digest, its bundle digest, the release SHA, and the source-tree digest in
+`plan_sha256`. Apply mode revalidates the exact same binding immediately before
+the Stripe subscription write and stores it in Stripe metadata. Preview and
+write therefore fail closed when either file, mode, schema, status, signer,
+validator identity, configured hash, or release identity differs.
+
+For an annual order, set `negotiated_annual_amount_cents` in the owner-only
+contract evidence and complete an owner-only copy of
+`commercial/annual-order.template.json`. Export that typed scope with the
+countersigned agreement; it binds the exact amount to the agreement digest,
+customer, Stripe Price/Product, term, and countersignature times. TinyZKP
+Certified requires exactly `6000000`; Fleet/OEM accepts the signed negotiated
+amount only when it is at least `12500000`, and the Stripe annual Price must
+match it exactly.
+
+Configure an owner-only `TINYZKP_CONTRACT_BILLING_LEDGER_PATH` before apply.
+The production default is
+`/var/lib/tinyzkp-private/billing/contract_billing.sqlite`; deploy/setup create
+its parent as root-owned mode `0700`, matching the root/operator that owns the
+contract evidence and runs this CLI. Do not put this ledger back under the
+`tinyzkp-billing`-owned `/opt/hc-stark/data` directory.
+The tool reserves the operation atomically before contacting Stripe.
+Evaluation invoice creation records every durable phase and resumes the exact
+draft, line item, or finalized object after a process or network failure.
+Annual subscription creation is a single write; if it was accepted before the
+object ID was recorded, locate that original result and pass
+`--reconcile-stripe-object-id`.
+
+Creating the annual `send_invoice` subscription is not permission to deliver
+Certified or Fleet/OEM service. After Stripe records the initial invoice as
+paid, generate the machine-checkable entitlement record:
+
+```bash
+python3 billing/evaluation_start_ready.py \
+  --offer-id tinyzkp_fleet_oem \
+  --customer-id cus_REPLACE \
+  --agreement-id REPLACE \
+  --annual-subscription-id sub_REPLACE \
+  --annual-invoice-id in_REPLACE \
+  --stripe-price-id price_REPLACE \
+  --stripe-product-id prod_REPLACE \
+  --contract-evidence /secure/contract-evidence.json \
+  --agreement-document /secure/signed-agreement.pdf \
+  --scope-document /secure/signed-order-form.json
+```
+
+Do not enable service unless this command emits `readiness_kind` equal to
+`annual_entitlement` and `ready` equal to `true`. It verifies the paid amount,
+initial invoice, exact subscription Price, signed plan, authorization and
+source identities, and emits no customer contact data. Re-running any billing
+apply command for an existing plan returns that exact Stripe object without a
+second create; void or cancel the old object explicitly before replacing it.

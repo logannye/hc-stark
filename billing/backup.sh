@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Daily SQLite backup for tenant_store, usage, and evaluation application
-# databases, plus api_keys.txt and private contract evidence/documents.
+# Daily SQLite backup for tenant_store, usage, evaluation application, and
+# contract billing reservation databases, plus api_keys.txt and private
+# contract evidence/documents.
 # Uses SQLite .backup command (safe with WAL concurrent reads).
 # Retains 30 days of local backups.
 # Off-box push (G13): configure either rclone or the authenticated HTTP ingest.
@@ -8,9 +9,15 @@ set -euo pipefail
 umask 077   # backup artifacts (api_keys.txt, sqlite) must not be group/world-readable
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Source .env so HC_BACKUP_REMOTE is available when run from cron.
-# shellcheck source=/dev/null
-[ -f "${HC_BACKUP_ENV_FILE:-/opt/hc-stark/.env}" ] && . "${HC_BACKUP_ENV_FILE:-/opt/hc-stark/.env}"
+# The cron runs as root. Never shell-source the deployment env. A private,
+# data-only parser exports only backup settings and re-execs this script.
+BACKUP_ENV_FILE="${HC_BACKUP_ENV_FILE:-/opt/hc-stark/.env}"
+if [ "${TINYZKP_BACKUP_ENV_LOADED:-0}" != "1" ] \
+    && { [ -e "$BACKUP_ENV_FILE" ] || [ -L "$BACKUP_ENV_FILE" ]; }; then
+  exec "${HC_BACKUP_PYTHON:-python3}" "$SCRIPT_DIR/backup_env_exec.py" \
+    --env-file "$BACKUP_ENV_FILE" -- "$0" "$@"
+fi
+unset TINYZKP_BACKUP_ENV_LOADED
 
 BACKUP_DIR="${HC_BACKUP_DIR:-/opt/hc-stark/backups}"
 DATA_DIR="${HC_BACKUP_DATA_DIR:-/opt/hc-stark/data}"
@@ -18,6 +25,18 @@ DATE="${HC_BACKUP_DATE:-$(date -u +%Y%m%d_%H%M%S)}"
 REMOTE_DATE="${HC_BACKUP_REMOTE_DATE:-$(date -u +%Y-%m-%d)}"
 RETENTION_DAYS="${HC_BACKUP_RETENTION_DAYS:-30}"
 CONTRACT_DIR="${HC_CONTRACT_DATA_DIR:-/var/lib/tinyzkp-private/contracts}"
+BILLING_LEDGER_PATH="${TINYZKP_CONTRACT_BILLING_LEDGER_PATH:-/var/lib/tinyzkp-private/billing/contract_billing.sqlite}"
+
+case "$RETENTION_DAYS" in
+  ''|*[!0-9]*)
+    echo "ERROR: HC_BACKUP_RETENTION_DAYS must be an integer from 1 through 3650" >&2
+    exit 1
+    ;;
+esac
+if [ "$RETENTION_DAYS" -lt 1 ] || [ "$RETENTION_DAYS" -gt 3650 ]; then
+  echo "ERROR: HC_BACKUP_RETENTION_DAYS must be an integer from 1 through 3650" >&2
+  exit 1
+fi
 
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
@@ -34,6 +53,17 @@ for db in tenant_store.sqlite usage.sqlite evaluation_applications.sqlite; do
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP $db (not found)"
   fi
 done
+
+# The contract billing reservation ledger is operator-owned and deliberately
+# separated from the service-owned application data directory.
+if [ -f "$BILLING_LEDGER_PATH" ]; then
+  billing_dest="$BACKUP_DIR/contract_billing_${DATE}.sqlite"
+  sqlite3 "$BILLING_LEDGER_PATH" ".backup '$billing_dest'"
+  chmod 600 "$billing_dest"
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Backed up contract billing ledger -> $billing_dest"
+else
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP contract billing ledger (not found)"
+fi
 
 # --- api_keys.txt snapshot ---
 if [ -f "$DATA_DIR/api_keys.txt" ]; then
@@ -120,13 +150,18 @@ elif [ -n "${HC_BACKUP_HTTP_URL:-}" ] && [ -n "${HC_BACKUP_HTTP_TOKEN_FILE:-}" ]
     esac
   fi
 else
-  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) WARNING: no usable off-box backup transport — on-disk backup ONLY (G13 off-box requirement NOT satisfied)" >&2
+  if [ -n "${HC_BACKUP_REMOTE:-}" ]; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR: HC_BACKUP_REMOTE is configured but rclone is unavailable and no usable HTTP transport exists" >&2
+  else
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR: no usable off-box backup transport — on-disk backup ONLY (G13 off-box requirement NOT satisfied)" >&2
+  fi
+  OFFBOX_FAILED=1
 fi
 
 # --- Prune local backups older than retention period ---
-find "$BACKUP_DIR" -name "*.sqlite" -mtime +${RETENTION_DAYS} -delete
-find "$BACKUP_DIR" -name "api_keys_*.txt" -mtime +${RETENTION_DAYS} -delete
-find "$BACKUP_DIR" -name "contracts_*.tar.gz" -mtime +${RETENTION_DAYS} -delete
+find "$BACKUP_DIR" -name "*.sqlite" -mtime "+$RETENTION_DAYS" -delete
+find "$BACKUP_DIR" -name "api_keys_*.txt" -mtime "+$RETENTION_DAYS" -delete
+find "$BACKUP_DIR" -name "contracts_*.tar.gz" -mtime "+$RETENTION_DAYS" -delete
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Pruned backups older than ${RETENTION_DAYS} days"
 if [ "$OFFBOX_FAILED" -ne 0 ]; then
   exit 1

@@ -33,13 +33,16 @@ sync_host_billing_services() {
     fi
     install -d -o tinyzkp-billing -g tinyzkp-billing -m 0700 /opt/hc-stark/data
     chown -R tinyzkp-billing:tinyzkp-billing /opt/hc-stark/data
+    install -d -o root -g root -m 0700 \
+        /var/lib/tinyzkp-private /var/lib/tinyzkp-private/billing
 
+    rm -f /etc/cron.d/hc-backup
     cat > /etc/cron.d/hc-billing <<'CRON'
 # TinyZKP backend recovery: legacy usage meters, checkout recovery, lifecycle
 # nudges, and growth automation are intentionally disabled. Contract invoices
 # are operator-created through the reviewed Stripe Invoicing workflow.
 0 2 * * * root /opt/hc-stark/billing/backup.sh >> /var/log/hc-backup.log 2>&1
-17 3 * * * root /opt/hc-stark/.venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /var/log/hc-evaluation-retention.log 2>&1
+17 3 * * * tinyzkp-billing /bin/sh -c 'umask 077; exec /opt/hc-stark/.venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /opt/hc-stark/data/evaluation-retention.log 2>&1'
 CRON
     chmod 644 /etc/cron.d/hc-billing
 
@@ -202,7 +205,7 @@ fi
 if [ "$fail" -eq 0 ]; then
     echo "==> Host deploy complete — maintenance surfaces healthy."
     echo "    Deploy Cloudflare Pages from the same $RELEASE_SHA, then run:"
-    echo "    python3 scripts/ci/production_launch_preflight.py --live --expected-release-sha $RELEASE_SHA"
+    echo "    python3 scripts/ci/production_launch_preflight.py --production --env-file /opt/hc-stark/.env --pages-bindings-file /secure/pages-bindings.env --host-python /opt/hc-stark/.venv/bin/python --live --contact-readiness-secret-file /secure/internal-secret --expected-release-sha $RELEASE_SHA"
 else
     echo "==> Deploy finished WITH FAILURES — investigate above." >&2
     exit 1

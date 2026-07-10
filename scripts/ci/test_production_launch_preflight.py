@@ -75,6 +75,7 @@ def test_local_preflight_builds_fast_static_gate_sequence():
             "billing/tests/test_contract_billing.py",
             "billing/tests/test_configure_contract_portal.py",
             "billing/tests/test_evaluation_start_ready.py",
+            "billing/tests/test_stripe_production_identity_check.py",
         ),
         ("python", "-m", "pytest", "scripts/commercial/test_validate_scorecard.py"),
         ("python", "scripts/ci/site_deploy_check.py"),
@@ -111,6 +112,12 @@ def test_production_adds_stricter_deploy_gates():
         "/opt/hc-stark/.venv/bin/python",
     ) in commands(built)
     assert (
+        "/opt/hc-stark/.venv/bin/python",
+        "billing/stripe_production_identity_check.py",
+        "--env-file",
+        "/opt/hc-stark/.env",
+    ) in commands(built)
+    assert (
         "python",
         "scripts/ci/site_deploy_check.py",
         "--production",
@@ -119,8 +126,55 @@ def test_production_adds_stricter_deploy_gates():
     ) in commands(built)
 
 
+def test_production_build_always_enables_host_checks():
+    built = preflight.build_steps(
+        args(
+            production=True,
+            pages_bindings_file="/secure/pages.env",
+            env_file="/opt/hc-stark/.env",
+            check_host_python=False,
+            host_python="/opt/hc-stark/.venv/bin/python",
+        ),
+        python="python",
+        node="node",
+    )
+
+    assert (
+        "python",
+        "scripts/ci/deploy_readiness_check.py",
+        "--env-file",
+        "/opt/hc-stark/.env",
+        "--production",
+        "--check-host-python",
+        "--host-python",
+        "/opt/hc-stark/.venv/bin/python",
+    ) in commands(built)
+
+
+def test_production_build_rejects_omitted_host_python():
+    with pytest.raises(ValueError, match="production host Python"):
+        preflight.build_steps(
+            args(
+                production=True,
+                pages_bindings_file="/secure/pages.env",
+                host_python=None,
+            ),
+            python="python",
+            node="node",
+        )
+
+
 def test_live_steps_are_opt_in_and_use_recovery_canary():
-    built = preflight.build_steps(args(live=True), python="python", node="node")
+    built = preflight.build_steps(
+        args(
+            live=True,
+            production=True,
+            pages_bindings_file="/secure/pages.env",
+            host_python="/opt/hc-stark/.venv/bin/python",
+        ),
+        python="python",
+        node="node",
+    )
 
     canary = next(step for step in built if step.name == "live backend recovery canary")
     assert canary.command == (
@@ -150,6 +204,9 @@ def test_expected_release_sha_adds_live_release_identity_check():
     built = preflight.build_steps(
         args(
             live=True,
+            production=True,
+            pages_bindings_file="/secure/pages.env",
+            host_python="/opt/hc-stark/.venv/bin/python",
             expected_release_sha="abc123",
             site_url="https://site.example",
             api_url="https://api.example",
@@ -173,13 +230,22 @@ def test_expected_release_sha_adds_live_release_identity_check():
     ) in commands(built)
 
 
+def test_live_build_rejects_partial_nonproduction_preflight():
+    with pytest.raises(ValueError, match="complete production preflight"):
+        preflight.build_steps(args(live=True), python="python", node="node")
+
+
 def test_authenticated_smoke_is_separate_from_public_live_canary():
     try:
-        preflight.build_steps(args(authenticated_smoke=True), python="python", node="node")
+        preflight.build_steps(
+            args(authenticated_smoke=True), python="python", node="node"
+        )
     except ValueError as exc:
         assert "unavailable while backend v1 is blocked" in str(exc)
     else:
-        raise AssertionError("authenticated proving smoke must fail closed during recovery")
+        raise AssertionError(
+            "authenticated proving smoke must fail closed during recovery"
+        )
 
 
 def test_run_step_captures_success(tmp_path):
@@ -198,7 +264,9 @@ def test_run_step_captures_success(tmp_path):
 
 def test_run_step_captures_failure(tmp_path):
     script = tmp_path / "fail.py"
-    script.write_text("import sys\nprint('bad', file=sys.stderr)\nsys.exit(7)\n", encoding="utf-8")
+    script.write_text(
+        "import sys\nprint('bad', file=sys.stderr)\nsys.exit(7)\n", encoding="utf-8"
+    )
 
     result = preflight.run_step(
         preflight.Step("fail", ("python3", str(script))),
@@ -226,3 +294,26 @@ def test_live_cli_requires_expected_release_sha(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         preflight.main(["--live"])
     assert exc.value.code == 2
+
+
+def test_production_cli_requires_explicit_existing_host_python(tmp_path):
+    bindings = tmp_path / "pages.env"
+    bindings.write_text("placeholder\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as omitted:
+        preflight.main(
+            ["--production", "--pages-bindings-file", str(bindings)]
+        )
+    assert omitted.value.code == 2
+
+    with pytest.raises(SystemExit) as missing:
+        preflight.main(
+            [
+                "--production",
+                "--pages-bindings-file",
+                str(bindings),
+                "--host-python",
+                str(tmp_path / "missing-python"),
+            ]
+        )
+    assert missing.value.code == 2

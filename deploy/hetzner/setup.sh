@@ -96,17 +96,11 @@ CRON_FILE="/etc/cron.d/hc-billing"
 cat > "$CRON_FILE" <<'CRON'
 # TinyZKP backend recovery: no usage meter, checkout recovery, lifecycle,
 # outbound, or growth-automation jobs may run.
-17 3 * * * root /opt/hc-stark/.venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /var/log/hc-evaluation-retention.log 2>&1
+0 2 * * * root /opt/hc-stark/billing/backup.sh >> /var/log/hc-backup.log 2>&1
+17 3 * * * tinyzkp-billing /bin/sh -c 'umask 077; exec /opt/hc-stark/.venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /opt/hc-stark/data/evaluation-retention.log 2>&1'
 CRON
 chmod 644 "$CRON_FILE"
-
-# ---- Backup cron ----
-# Runs daily at 02:00 UTC. The script itself sources /opt/hc-stark/.env so that
-# HC_BACKUP_REMOTE (and any other env vars) are available to rclone for off-box push (G13).
-BACKUP_CRON_LINE="0 2 * * * root /opt/hc-stark/billing/backup.sh >> /var/log/hc-backup.log 2>&1"
-BACKUP_CRON_FILE="/etc/cron.d/hc-backup"
-echo "$BACKUP_CRON_LINE" > "$BACKUP_CRON_FILE"
-chmod 644 "$BACKUP_CRON_FILE"
+rm -f /etc/cron.d/hc-backup
 mkdir -p /opt/hc-stark/backups
 
 # ---- Off-box backup (G13) — operator action required ----
@@ -123,7 +117,7 @@ mkdir -p /opt/hc-stark/backups
 #        HC_BACKUP_REMOTE="s3:my-bucket/hc-stark"
 #        HC_BACKUP_REMOTE="sftp-box:backups/hc-stark"
 #
-#   backup.sh will log a loud WARNING each run until HC_BACKUP_REMOTE is set.
+#   backup.sh exits nonzero until a usable off-host transport is configured.
 #   Verify first push manually: /opt/hc-stark/billing/backup.sh
 echo "NOTICE: Set HC_BACKUP_REMOTE in /opt/hc-stark/.env and install rclone for off-box backups (G13)."
 
@@ -137,6 +131,8 @@ if ! id -u tinyzkp-billing >/dev/null 2>&1; then
 fi
 install -d -o tinyzkp-billing -g tinyzkp-billing -m 0700 /opt/hc-stark/data
 chown -R tinyzkp-billing:tinyzkp-billing /opt/hc-stark/data
+install -d -o root -g root -m 0700 \
+    /var/lib/tinyzkp-private /var/lib/tinyzkp-private/billing
 
 cat > /etc/systemd/system/hc-billing-webhook.service <<'UNIT'
 [Unit]

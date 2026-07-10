@@ -42,7 +42,15 @@ class StepResult:
     error: str | None = None
 
 
-def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str = "node") -> list[Step]:
+def build_steps(
+    args: argparse.Namespace, *, python: str = "python3", node: str = "node"
+) -> list[Step]:
+    if args.live and not args.production:
+        raise ValueError("live launch checks require the complete production preflight")
+    if args.production and not args.host_python:
+        raise ValueError(
+            "production preflight requires the explicit production host Python interpreter"
+        )
     deploy_readiness_cmd = [
         python,
         "scripts/ci/deploy_readiness_check.py",
@@ -51,24 +59,35 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
     ]
     if args.production:
         deploy_readiness_cmd.append("--production")
-    if args.check_host_python:
+    if args.check_host_python or args.production:
         deploy_readiness_cmd.append("--check-host-python")
     if args.host_python:
         deploy_readiness_cmd.extend(["--host-python", args.host_python])
 
     steps = [
-        Step("recovery reconciliation invariants", (python, "scripts/ci/recovery_reconciliation_invariants.py")),
+        Step(
+            "recovery reconciliation invariants",
+            (python, "scripts/ci/recovery_reconciliation_invariants.py"),
+        ),
         Step("backend recovery gate", (python, "scripts/ci/backend_recovery_gate.py")),
         Step("MCP recovery server-card", (python, "scripts/ci/server_card_check.py")),
-        Step("frozen Plonky3 compatibility profile", (python, "scripts/ci/plonky3_compatibility_gate.py")),
+        Step(
+            "frozen Plonky3 compatibility profile",
+            (python, "scripts/ci/plonky3_compatibility_gate.py"),
+        ),
         Step("launch gate audit", (python, "scripts/ci/launch_gate_audit.py")),
-        Step("backup/restore drift check", (python, "scripts/ci/backup_restore_check.py")),
+        Step(
+            "backup/restore drift check", (python, "scripts/ci/backup_restore_check.py")
+        ),
         Step(
             "backup execution and retention tests",
             (python, "-m", "pytest", "billing/tests/test_backup_script.py"),
         ),
         Step("static site route check", (python, "scripts/ci/site_route_check.py")),
-        Step("static site route policy tests", (python, "-m", "pytest", "scripts/ci/test_site_route_check.py")),
+        Step(
+            "static site route policy tests",
+            (python, "-m", "pytest", "scripts/ci/test_site_route_check.py"),
+        ),
         Step(
             "release identity policy tests",
             (
@@ -100,8 +119,14 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
                 "scripts/monitoring/test_contact_intake_readiness.py",
             ),
         ),
-        Step("public claims lint", (python, "-m", "pytest", "billing/tests/test_site_pricing_parity.py")),
-        Step("commercial offer parity", (python, "scripts/commercial/render_offers.py", "--check")),
+        Step(
+            "public claims lint",
+            (python, "-m", "pytest", "billing/tests/test_site_pricing_parity.py"),
+        ),
+        Step(
+            "commercial offer parity",
+            (python, "scripts/commercial/render_offers.py", "--check"),
+        ),
         Step(
             "contract billing policy tests",
             (
@@ -111,19 +136,34 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
                 "billing/tests/test_contract_billing.py",
                 "billing/tests/test_configure_contract_portal.py",
                 "billing/tests/test_evaluation_start_ready.py",
+                "billing/tests/test_stripe_production_identity_check.py",
             ),
         ),
         Step(
             "commercial scorecard policy tests",
             (python, "-m", "pytest", "scripts/commercial/test_validate_scorecard.py"),
         ),
-        Step("Cloudflare Pages static deploy check", (python, "scripts/ci/site_deploy_check.py")),
+        Step(
+            "Cloudflare Pages static deploy check",
+            (python, "scripts/ci/site_deploy_check.py"),
+        ),
         Step(
             "Cloudflare Pages secret policy tests",
-            (python, "-m", "pytest", "scripts/ci/test_cloudflare_pages_secret_check.py"),
+            (
+                python,
+                "-m",
+                "pytest",
+                "scripts/ci/test_cloudflare_pages_secret_check.py",
+            ),
         ),
-        Step("Cloudflare Pages worker dispatch check", (node, "scripts/ci/site_worker_dispatch_test.mjs")),
-        Step("Docker Compose render check", (python, "scripts/ci/compose_config_check.py")),
+        Step(
+            "Cloudflare Pages worker dispatch check",
+            (node, "scripts/ci/site_worker_dispatch_test.mjs"),
+        ),
+        Step(
+            "Docker Compose render check",
+            (python, "scripts/ci/compose_config_check.py"),
+        ),
         Step(
             "billing service hardening tests",
             (python, "-m", "pytest", "scripts/ci/test_billing_service_hardening.py"),
@@ -132,17 +172,29 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
     ]
 
     if args.production:
-        steps.append(
-            Step(
-                "Cloudflare Pages production binding check",
-                (
-                    python,
-                    "scripts/ci/site_deploy_check.py",
-                    "--production",
-                    "--bindings-file",
-                    args.pages_bindings_file,
+        steps.extend(
+            [
+                Step(
+                    "read-only Stripe production identity check",
+                    (
+                        args.host_python,
+                        "billing/stripe_production_identity_check.py",
+                        "--env-file",
+                        args.env_file,
+                    ),
+                    timeout_secs=60,
                 ),
-            )
+                Step(
+                    "Cloudflare Pages production binding check",
+                    (
+                        python,
+                        "scripts/ci/site_deploy_check.py",
+                        "--production",
+                        "--bindings-file",
+                        args.pages_bindings_file,
+                    ),
+                ),
+            ]
         )
 
     if args.live:
@@ -183,7 +235,10 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
                 ),
             ]
         )
-        expected_release_sha = (args.expected_release_sha or os.environ.get("TINYZKP_EXPECT_RELEASE_SHA", "")).strip()
+        expected_release_sha = (
+            args.expected_release_sha
+            or os.environ.get("TINYZKP_EXPECT_RELEASE_SHA", "")
+        ).strip()
         if expected_release_sha:
             steps.append(
                 Step(
@@ -205,7 +260,9 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
             )
 
     if args.authenticated_smoke:
-        raise ValueError("authenticated proving smoke is unavailable while backend v1 is blocked")
+        raise ValueError(
+            "authenticated proving smoke is unavailable while backend v1 is blocked"
+        )
 
     return steps
 
@@ -297,16 +354,51 @@ def print_text(results: list[StepResult]) -> None:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--require-legacy", action="store_true", help="Require sibling legacy checkout evidence")
-    parser.add_argument("--env-file", default=".env", help="Production env file for deploy readiness checks")
-    parser.add_argument("--production", action="store_true", help="Enable production env and Pages binding checks")
-    parser.add_argument("--pages-bindings-file", help="Cloudflare Pages production bindings/secrets file")
-    parser.add_argument("--check-host-python", action="store_true", help="Verify host Python packages for enabled services")
-    parser.add_argument("--host-python", help="Host Python interpreter used by billing services")
-    parser.add_argument("--live", action="store_true", help="Run public live canaries; use after deploy")
-    parser.add_argument("--site-url", default="https://tinyzkp.com", help="TinyZKP website origin for live checks")
-    parser.add_argument("--api-url", default="https://api.tinyzkp.com", help="TinyZKP API origin for live checks")
-    parser.add_argument("--mcp-url", default="https://mcp.tinyzkp.com", help="TinyZKP MCP origin for live checks")
+    parser.add_argument(
+        "--require-legacy",
+        action="store_true",
+        help="Require sibling legacy checkout evidence",
+    )
+    parser.add_argument(
+        "--env-file",
+        default=".env",
+        help="Production env file for deploy readiness checks",
+    )
+    parser.add_argument(
+        "--production",
+        action="store_true",
+        help="Enable production env and Pages binding checks",
+    )
+    parser.add_argument(
+        "--pages-bindings-file",
+        help="Cloudflare Pages production bindings/secrets file",
+    )
+    parser.add_argument(
+        "--check-host-python",
+        action="store_true",
+        help="Verify host Python packages for enabled services",
+    )
+    parser.add_argument(
+        "--host-python", help="Host Python interpreter used by billing services"
+    )
+    parser.add_argument(
+        "--live", action="store_true", help="Run public live canaries; use after deploy"
+    )
+    parser.add_argument(
+        "--site-url",
+        default="https://tinyzkp.com",
+        help="TinyZKP website origin for live checks",
+    )
+    parser.add_argument(
+        "--api-url",
+        default="https://api.tinyzkp.com",
+        help="TinyZKP API origin for live checks",
+    )
+    parser.add_argument(
+        "--mcp-url",
+        default="https://mcp.tinyzkp.com",
+        help="TinyZKP MCP origin for live checks",
+    )
     parser.add_argument(
         "--webhook-url",
         default="https://webhook.tinyzkp.com",
@@ -325,16 +417,35 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Run authenticated prove/verify smoke using TINYZKP_SMOKE_API_KEY or TINYZKP_AUDIT_API_KEY",
     )
-    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    parser.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON"
+    )
     args = parser.parse_args(argv)
 
     if args.production and not args.pages_bindings_file:
         parser.error("--production requires --pages-bindings-file")
+    if args.live and not args.production:
+        parser.error("--live requires --production")
+    if args.production and not args.host_python:
+        parser.error("--production requires --host-python")
+    if args.production:
+        host_python = pathlib.Path(args.host_python)
+        if (
+            not host_python.is_absolute()
+            or not host_python.is_file()
+            or not os.access(host_python, os.X_OK)
+        ):
+            parser.error(
+                "--host-python must be an existing executable absolute path"
+            )
+        args.check_host_python = True
     if args.live and not (
         (args.expected_release_sha or "").strip()
         or os.environ.get("TINYZKP_EXPECT_RELEASE_SHA", "").strip()
     ):
-        parser.error("--live requires --expected-release-sha (or TINYZKP_EXPECT_RELEASE_SHA)")
+        parser.error(
+            "--live requires --expected-release-sha (or TINYZKP_EXPECT_RELEASE_SHA)"
+        )
     if args.live and not args.contact_readiness_secret_file:
         parser.error("--live requires --contact-readiness-secret-file")
 
@@ -343,15 +454,23 @@ def main(argv: list[str]) -> int:
     failures = [result for result in results if result.status != "PASS"]
 
     if args.json:
-        print(json.dumps({"results": [result_to_json(result) for result in results]}, indent=2))
+        print(
+            json.dumps(
+                {"results": [result_to_json(result) for result in results]}, indent=2
+            )
+        )
     else:
         print_text(results)
         print()
-        print(f"Production launch preflight: {len(results) - len(failures)} passed, {len(failures)} failed")
+        print(
+            f"Production launch preflight: {len(results) - len(failures)} passed, {len(failures)} failed"
+        )
         if args.live and not failures:
             print("Live canaries passed; public launch/announcement gate is clear.")
         elif not args.live:
-            print("Live canaries were not run; use --live after deploy before public announcement.")
+            print(
+                "Live canaries were not run; use --live after deploy before public announcement."
+            )
 
     return 1 if failures else 0
 

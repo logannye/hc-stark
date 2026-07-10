@@ -1,9 +1,9 @@
 # Restore Runbook — hc-stark state (G13)
 
 Covers restoring `tenant_store.sqlite`, `usage.sqlite`,
-`evaluation_applications.sqlite`, `api_keys.txt`, and the private contract
-archive from an off-box rclone backup. All artifacts should be restored from
-the **same timestamp** for consistency.
+`evaluation_applications.sqlite`, `contract_billing.sqlite`, `api_keys.txt`,
+and the private contract archive from an off-box rclone backup. All artifacts
+should be restored from the **same timestamp** for consistency.
 
 ---
 
@@ -40,6 +40,7 @@ ls -lh /opt/hc-stark/restore
 You will see files named `tenant_store_<YYYYMMDD_HHMMSS>.sqlite`,
 `usage_<YYYYMMDD_HHMMSS>.sqlite`,
 `evaluation_applications_<YYYYMMDD_HHMMSS>.sqlite`,
+`contract_billing_<YYYYMMDD_HHMMSS>.sqlite`,
 `api_keys_<YYYYMMDD_HHMMSS>.txt`, and (after the first signed evaluation)
 `contracts_<YYYYMMDD_HHMMSS>.tar.gz`.
 Pick the timestamp set you want (usually the latest within the day).
@@ -56,7 +57,9 @@ systemctl stop hc-billing-webhook
 Confirm nothing is writing to the databases:
 
 ```bash
-lsof /opt/hc-stark/data/*.sqlite 2>/dev/null || echo "No open handles — safe to proceed"
+lsof /opt/hc-stark/data/*.sqlite \
+  /var/lib/tinyzkp-private/billing/contract_billing.sqlite \
+  2>/dev/null || echo "No open handles — safe to proceed"
 ```
 
 ---
@@ -70,12 +73,27 @@ TS="<YYYYMMDD_HHMMSS>"
 RESTORE_DIR="/opt/hc-stark/restore"
 DATA_DIR="/opt/hc-stark/data"
 CONTRACT_DIR="/var/lib/tinyzkp-private/contracts"
+BILLING_DIR="/var/lib/tinyzkp-private/billing"
 
 cp "${RESTORE_DIR}/tenant_store_${TS}.sqlite" "${DATA_DIR}/tenant_store.sqlite"
 cp "${RESTORE_DIR}/usage_${TS}.sqlite"        "${DATA_DIR}/usage.sqlite"
 cp "${RESTORE_DIR}/evaluation_applications_${TS}.sqlite" \
    "${DATA_DIR}/evaluation_applications.sqlite"
+install -d -o root -g root -m 700 "${BILLING_DIR}"
+install -o root -g root -m 600 \
+  "${RESTORE_DIR}/contract_billing_${TS}.sqlite" \
+  "${BILLING_DIR}/contract_billing.sqlite"
 cp "${RESTORE_DIR}/api_keys_${TS}.txt"        "${DATA_DIR}/api_keys.txt"
+chown tinyzkp-billing:tinyzkp-billing \
+  "${DATA_DIR}/tenant_store.sqlite" \
+  "${DATA_DIR}/usage.sqlite" \
+  "${DATA_DIR}/evaluation_applications.sqlite" \
+  "${DATA_DIR}/api_keys.txt"
+chmod 600 \
+  "${DATA_DIR}/tenant_store.sqlite" \
+  "${DATA_DIR}/usage.sqlite" \
+  "${DATA_DIR}/evaluation_applications.sqlite" \
+  "${DATA_DIR}/api_keys.txt"
 
 if [ -f "${RESTORE_DIR}/contracts_${TS}.tar.gz" ]; then
   mv "${CONTRACT_DIR}" "${CONTRACT_DIR}.pre-restore-${TS}" 2>/dev/null || true
@@ -127,6 +145,8 @@ sqlite3 /opt/hc-stark/data/tenant_store.sqlite "SELECT count(*) FROM tenants;"
 sqlite3 /opt/hc-stark/data/usage.sqlite        "SELECT count(*) FROM usage_log;"
 sqlite3 /opt/hc-stark/data/evaluation_applications.sqlite \
   "SELECT count(*) FROM applications;"
+sqlite3 /var/lib/tinyzkp-private/billing/contract_billing.sqlite \
+  "SELECT count(*) FROM billing_operations;"
 find /var/lib/tinyzkp-private/contracts -maxdepth 2 -type f -print
 ```
 
