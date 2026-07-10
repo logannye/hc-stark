@@ -372,6 +372,99 @@ def test_crash_matrix_requires_every_phase_disk_full_and_release_identity(tmp_pa
     ) == []
 
 
+def fuzz_target(name):
+    return {
+        "target": name,
+        "command": [
+            "cargo",
+            "+nightly",
+            "fuzz",
+            "run",
+            name,
+            f"/private/execution-corpus/{name}",
+            f"/private/smoke-corpus/{name}",
+            "--",
+            "-max_total_time=30",
+            "-rss_limit_mb=2048",
+            "-timeout=30",
+            f"-artifact_prefix=/private/artifacts/{name}/",
+            "-print_final_stats=1",
+        ],
+        "exit_status": 0,
+        "duration_ms": 1000,
+        "log_bytes": 100,
+        "smoke_seed_count": gate.FUZZ_SMOKE_SEED_LIMIT,
+        "smoke_corpus_sha256": "a" * 64,
+        "log_sha256": "b" * 64,
+        "artifacts": [],
+    }
+
+
+def test_fuzz_smoke_requires_every_bounded_reproducible_target(tmp_path):
+    report = tmp_path / "fuzz.json"
+    targets = [fuzz_target(name) for name in sorted(gate.FUZZ_TARGETS)]
+    write_json(
+        report,
+        {
+            "schema_version": 1,
+            "release_sha": "abc",
+            "profile": "tinyzkp-p3-goldilocks-v1",
+            "toolchain": "nightly",
+            "rustc_version": "rustc nightly\ncommit-hash: abc\nrelease: nightly",
+            "cargo_fuzz_version": "cargo-fuzz 0.13.2",
+            "all_targets_passed": True,
+            "targets": targets,
+        },
+    )
+    artifacts = [(report, {"role": "fuzz_smoke"})]
+    assert gate.validate_fuzz_smoke(artifacts, "abc") == []
+
+    write_json(
+        report,
+        {
+            "schema_version": 1,
+            "release_sha": "abc",
+            "profile": "tinyzkp-p3-goldilocks-v1",
+            "toolchain": "nightly",
+            "rustc_version": "rustc nightly\ncommit-hash: abc\nrelease: nightly",
+            "cargo_fuzz_version": "cargo-fuzz 0.13.2",
+            "all_targets_passed": True,
+            "targets": targets[:-1],
+        },
+    )
+    assert gate.validate_fuzz_smoke(artifacts, "abc") == [
+        f"required fuzz smoke target is missing: {targets[-1]['target']}"
+    ]
+
+
+def test_fuzz_smoke_rejects_unbounded_or_noncanonical_evidence(tmp_path):
+    report = tmp_path / "fuzz.json"
+    targets = [fuzz_target(name) for name in sorted(gate.FUZZ_TARGETS)]
+    targets[0]["smoke_seed_count"] = gate.FUZZ_SMOKE_SEED_LIMIT + 1
+    targets[1]["smoke_corpus_sha256"] = "A" * 64
+    targets[2]["command"][6] = 42
+    targets[3]["duration_ms"] = True
+    targets.append(fuzz_target("unknown_target"))
+    write_json(
+        report,
+        {
+            "schema_version": 1,
+            "release_sha": "abc",
+            "profile": "tinyzkp-p3-goldilocks-v1",
+            "toolchain": "nightly",
+            "rustc_version": "rustc nightly\ncommit-hash: abc\nrelease: nightly",
+            "cargo_fuzz_version": "cargo-fuzz 0.13.2",
+            "all_targets_passed": True,
+            "targets": targets,
+        },
+    )
+    failures = gate.validate_fuzz_smoke(
+        [(report, {"role": "fuzz_smoke"})], "abc"
+    )
+    assert any("did not pass reproducibly" in failure for failure in failures)
+    assert "unknown fuzz smoke target: unknown_target" in failures
+
+
 def test_partner_evidence_requires_typed_adapter_report_and_acceptance(tmp_path):
     adapter = tmp_path / "adapter.json"
     resource = tmp_path / "resource.json"

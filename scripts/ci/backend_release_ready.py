@@ -62,6 +62,18 @@ CRASH_INTEGRITY_CASES = {
     "symlink_rejection",
     "disk_full_resume",
 }
+FUZZ_TARGETS = {
+    "workload_manifest_v1",
+    "proof_bundle_v1",
+    "plonky3_proof_bytes_v1",
+    "benchmark_report_v1",
+    "checkpoint_manifest_v2",
+    "challenger_snapshot_v1",
+    "scratch_artifact_header_v1",
+    "checkpoint_identity_v2",
+    "resume_checkpoint_v2",
+}
+FUZZ_SMOKE_SEED_LIMIT = 16
 BENCHMARK_REPORT_REQUIRED_FIELDS = {
     "schema_version",
     "scope",
@@ -369,6 +381,115 @@ def validate_crash_matrix(
     return failures
 
 
+def validate_fuzz_smoke(
+    artifacts: list[tuple[Path, dict[str, object]]], release_sha: str
+) -> list[str]:
+    roles = {descriptor.get("role"): path for path, descriptor in artifacts}
+    try:
+        report = read_object(roles["fuzz_smoke"])
+    except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
+        return [f"fuzz smoke evidence is incomplete: {error}"]
+    failures: list[str] = []
+    if (
+        report.get("schema_version") != 1
+        or report.get("release_sha") != release_sha
+        or report.get("profile") != "tinyzkp-p3-goldilocks-v1"
+        or report.get("toolchain") != "nightly"
+        or not isinstance(report.get("rustc_version"), str)
+        or "commit-hash:" not in report["rustc_version"]
+        or "release:" not in report["rustc_version"]
+        or report.get("cargo_fuzz_version") != "cargo-fuzz 0.13.2"
+        or report.get("all_targets_passed") is not True
+    ):
+        failures.append("fuzz smoke identity or completion status is invalid")
+    targets = report.get("targets")
+    if not isinstance(targets, list):
+        return failures + ["fuzz smoke target list is missing"]
+    actual: set[str] = set()
+    for target in targets:
+        if not isinstance(target, dict) or not isinstance(target.get("target"), str):
+            failures.append("fuzz smoke contains a malformed target")
+            continue
+        name = target["target"]
+        if name in actual:
+            failures.append(f"fuzz smoke target is duplicated: {name}")
+        actual.add(name)
+        command = target.get("command")
+        paths = (
+            [Path(command[index]) for index in (5, 6)]
+            if isinstance(command, list)
+            and len(command) > 6
+            and all(isinstance(command[index], str) and command[index] for index in (5, 6))
+            else []
+        )
+        execution_path, corpus_path = paths if len(paths) == 2 else (None, None)
+        artifact_option = command[11] if isinstance(command, list) and len(command) > 11 else None
+        artifact_path = (
+            Path(artifact_option.removeprefix("-artifact_prefix=").rstrip("/"))
+            if isinstance(artifact_option, str)
+            and artifact_option.startswith("-artifact_prefix=")
+            and artifact_option.removeprefix("-artifact_prefix=").rstrip("/")
+            else None
+        )
+        command_valid = (
+            isinstance(command, list)
+            and command[:5] == ["cargo", "+nightly", "fuzz", "run", name]
+            and len(command) == 13
+            and execution_path is not None
+            and execution_path.name == name
+            and execution_path.parent.name == "execution-corpus"
+            and ".." not in execution_path.parts
+            and corpus_path is not None
+            and corpus_path.name == name
+            and corpus_path.parent.name == "smoke-corpus"
+            and ".." not in corpus_path.parts
+            and command[7] == "--"
+            and isinstance(command[8], str)
+            and command[8].startswith("-max_total_time=")
+            and command[8].removeprefix("-max_total_time=").isdigit()
+            and int(command[8].removeprefix("-max_total_time=")) > 0
+            and command[9] == "-rss_limit_mb=2048"
+            and isinstance(command[10], str)
+            and command[10].startswith("-timeout=")
+            and command[10].removeprefix("-timeout=").isdigit()
+            and int(command[10].removeprefix("-timeout=")) > 0
+            and artifact_path is not None
+            and artifact_path.name == name
+            and artifact_path.parent.name == "artifacts"
+            and ".." not in artifact_path.parts
+            and command[12] == "-print_final_stats=1"
+        )
+        seed_count = target.get("smoke_seed_count")
+        digest = target.get("smoke_corpus_sha256")
+        log_digest = target.get("log_sha256")
+        if (
+            target.get("exit_status") != 0
+            or target.get("artifacts") != []
+            or not isinstance(target.get("duration_ms"), int)
+            or isinstance(target.get("duration_ms"), bool)
+            or target["duration_ms"] <= 0
+            or not isinstance(target.get("log_bytes"), int)
+            or isinstance(target.get("log_bytes"), bool)
+            or target["log_bytes"] <= 0
+            or not command_valid
+            or not isinstance(seed_count, int)
+            or isinstance(seed_count, bool)
+            or not 1 <= seed_count <= FUZZ_SMOKE_SEED_LIMIT
+            or not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            or not isinstance(log_digest, str)
+            or len(log_digest) != 64
+            or any(character not in "0123456789abcdef" for character in log_digest)
+        ):
+            failures.append(f"fuzz smoke target did not pass reproducibly: {name}")
+    for name in sorted(FUZZ_TARGETS - actual):
+        failures.append(f"required fuzz smoke target is missing: {name}")
+    for name in sorted(actual - FUZZ_TARGETS):
+        failures.append(f"unknown fuzz smoke target: {name}")
+    return failures
+
+
 def validate_test_run_evidence(
     artifacts: list[tuple[Path, dict[str, object]]],
     metadata: dict[str, object],
@@ -613,6 +734,10 @@ def validate_gate(
             failures.extend(
                 f"{name}: {failure}"
                 for failure in validate_crash_matrix(resolved, release_sha)
+            )
+            failures.extend(
+                f"{name}: {failure}"
+                for failure in validate_fuzz_smoke(resolved, release_sha)
             )
     elif expected_kind.startswith("resource_"):
         failures.extend(validate_resource_gate(expected_kind, resolved, release_sha))

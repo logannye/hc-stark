@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import stat
 import zipfile
 
 
@@ -30,8 +31,13 @@ def test_review_bundle_is_byte_deterministic(tmp_path):
     one = MODULE.build_bundle(output=first, release_sha="abc123", optional=optional)
     two = MODULE.build_bundle(output=second, release_sha="abc123", optional=optional)
     assert first.read_bytes() == second.read_bytes()
+    assert stat.S_IMODE(first.stat().st_mode) == 0o600
+    assert stat.S_IMODE(second.stat().st_mode) == 0o600
     assert one["bundle_sha256"] == two["bundle_sha256"]
-    assert "cargo +nightly fuzz run plonky3_proof_bytes_v1" in one["reproduction_commands"]
+    assert any(
+        "HC_RELEASE_SHA=abc123 python3 scripts/release/run_fuzz_smoke.py" in command
+        for command in one["reproduction_commands"]
+    )
     assert sum("--require-fixed-host" in command for command in one["reproduction_commands"]) == 4
     with zipfile.ZipFile(first) as archive:
         assert "review-manifest.json" in archive.namelist()

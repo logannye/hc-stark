@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 import zipfile
@@ -177,33 +178,33 @@ def build_bundle(
             "python3 scripts/benchmark/validate_release_gate.py --gate ten-million --expected-release-sha $HC_RELEASE_SHA --manifest examples/plonky3/fibonacci-16m.json --candidate raw-reports/fibonacci-16m.json",
             "python3 scripts/benchmark/validate_release_gate.py --gate ten-million --expected-release-sha $HC_RELEASE_SHA --manifest examples/plonky3/poseidon2-16m.json --candidate raw-reports/poseidon2-16m.json",
             "python3 scripts/release/run_crash_matrix.py --output raw-reports/crash-matrix.json --log-dir raw-reports/crash-logs --disk-full-scratch /mnt/tinyzkp-disk-full",
-            "cargo +nightly fuzz run workload_manifest_v1",
-            "cargo +nightly fuzz run proof_bundle_v1",
-            "cargo +nightly fuzz run plonky3_proof_bytes_v1",
-            "cargo +nightly fuzz run benchmark_report_v1",
-            "cargo +nightly fuzz run checkpoint_manifest_v2",
-            "cargo +nightly fuzz run challenger_snapshot_v1",
-            "cargo +nightly fuzz run scratch_artifact_header_v1",
-            "cargo +nightly fuzz run checkpoint_identity_v2",
-            "cargo +nightly fuzz run resume_checkpoint_v2",
+            f"HC_RELEASE_SHA={release_sha} python3 scripts/release/run_fuzz_smoke.py --seconds 60 --rss-limit-mb 2048 --output raw-reports/fuzz-smoke.json --log-dir raw-reports/fuzz-logs",
         ],
     }
     manifest_bytes = json.dumps(manifest, indent=2, sort_keys=True).encode() + b"\n"
     output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = output.with_name(f".{output.name}.tmp")
-    if temporary.exists():
-        temporary.unlink()
-    with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
-        for name, path in sorted(unique.items()):
-            info = zipfile.ZipInfo(name, FIXED_ZIP_TIME)
-            info.external_attr = 0o100644 << 16
-            info.compress_type = zipfile.ZIP_DEFLATED
-            bundle.writestr(info, path.read_bytes())
-        info = zipfile.ZipInfo("review-manifest.json", FIXED_ZIP_TIME)
-        info.external_attr = 0o100644 << 16
-        info.compress_type = zipfile.ZIP_DEFLATED
-        bundle.writestr(info, manifest_bytes)
-    temporary.replace(output)
+    temporary = output.with_name(f".{output.name}.{os.getpid()}.tmp")
+    descriptor = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "w+b") as handle:
+            with zipfile.ZipFile(
+                handle, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+            ) as bundle:
+                for name, path in sorted(unique.items()):
+                    info = zipfile.ZipInfo(name, FIXED_ZIP_TIME)
+                    info.external_attr = 0o100644 << 16
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    bundle.writestr(info, path.read_bytes())
+                info = zipfile.ZipInfo("review-manifest.json", FIXED_ZIP_TIME)
+                info.external_attr = 0o100644 << 16
+                info.compress_type = zipfile.ZIP_DEFLATED
+                bundle.writestr(info, manifest_bytes)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, output)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     return {**manifest, "bundle_sha256": sha256(output)}
 
 

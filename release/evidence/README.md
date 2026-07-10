@@ -81,9 +81,16 @@ bytes. Critical/high findings pass only when their status is
 `remediated` and `reviewer_verified` is true; risk acceptance cannot waive a
 release-blocking finding.
 
-Crash evidence uses the `crash_matrix` role and must contain every durable
-phase, the integrity cases, and the Linux disk-full recovery case from
-`scripts/release/run_crash_matrix.py`. Design-partner evidence requires three
+Crash/recovery evidence uses both `crash_matrix` and `fuzz_smoke` roles. The
+crash matrix must contain every durable phase, the integrity cases, and the
+Linux disk-full recovery case from `scripts/release/run_crash_matrix.py`. Fuzz
+smoke must include all nine backend targets, each run from the deterministic,
+version-controlled seed sample emitted by `scripts/release/run_fuzz_smoke.py`; a report
+that omits its profile, exact Rust/cargo-fuzz identities, or corpus/log digests
+does not pass. LibFuzzer discoveries use a separate disposable corpus, while
+crash artifacts and all evidence files remain owner-only. Cargo-fuzz is pinned
+to `0.13.2`; changing it requires an explicit evidence-policy update.
+Design-partner evidence requires three
 separately hashed roles: `adapter_result`, `resource_report`, and
 `acceptance_record`. All three are machine-readable and release-bound. The
 acceptance record contains an opaque partner/acceptance ID, acceptance time,

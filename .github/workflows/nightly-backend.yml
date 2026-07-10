@@ -45,7 +45,7 @@ jobs:
               --log-dir raw-reports/crash-logs \
               --disk-full-scratch "$mount_dir"
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
       - name: Parser and recovery fuzz smoke
         env:
           HC_RELEASE_SHA: ${{ github.sha }}

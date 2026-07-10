@@ -6,8 +6,10 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
 
 - WIP snapshot preserved on `codex/recovery-wip-snapshot`; clean recovery work
   is split into reviewable commits on `codex/plonky3-backend-recovery`.
-- Website, API, MCP, checkout, billing-meter, and release paths are fail-closed
-  in source. Live deployment and customer billing actions have not been run.
+- Website, API, MCP, checkout, billing-meter, and release paths are fail-closed.
+  Containment release `5719292ad0c8c4b5f0f6b0500db41cdf6888134c` is live and
+  passed external site/API/MCP identity and maintenance canaries. No customer
+  cancellation, refund, rebill, or production proving action was run.
 - Plonky3 crates are exact-pinned to `0.6.1` with lockfile checksums.
 - The frozen upstream-style Goldilocks/Poseidon2 Uni-STARK configuration emits
   official Plonky3 proofs accepted by the unmodified verifier. Its seeded
@@ -39,6 +41,14 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
   Bundle fuzzing covers envelope validation separately from a valid-envelope
   target that always reaches the official Plonky3 proof decoder. The release
   validator requires every phase plus the Linux disk-full case.
+- The fuzz smoke runner builds and hashes a deterministic bounded corpus from
+  version-controlled fixtures for each target, so its time limit applies to
+  fuzz execution rather than hours of accumulated-corpus initialization. Smoke
+  seeds remain immutable while newly discovered units use a disposable corpus.
+  Crash artifacts, logs, and evidence outputs are owner-only; release evidence
+  records the compatibility profile and exact Rust identity, and cargo-fuzz is
+  pinned to `0.13.2` in the runner and nightly workflow.
+  Full-corpus campaigns remain separate long-running evidence.
 - Rust artifact contracts, JSON Schema generation, proof packaging, strict size
   limits, and a cgroup-v2 benchmark harness are present. Replacement Rust,
   Python, TypeScript, and local-verification WASM contracts share golden
@@ -98,6 +108,11 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
 - The partner adapter exposes generic preflight/prove/verify APIs, compare and
   single-mode workers, compact release-bound evidence, and a Linux cgroup-v2
   resource-report wrapper. External partner acceptance is still required.
+- A non-release macOS 1M smoke completed both workloads in bounded and
+  conventional modes. All four proofs passed the official verifier, and each
+  workload's proof bytes matched exactly across modes. This does not satisfy a
+  resource gate because the host was not Linux/cgroup-v2 or the fixed machine
+  class; macOS retained freed large allocations in RSS.
 
 ## Not implemented or not yet evidenced
 
@@ -112,13 +127,13 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
 
 ## External actions requiring operator/customer coordination
 
-- deploy maintenance API, MCP, and website from one release and run external
-  canaries;
-- authenticate that the Stripe account is TinyZKP, archive legacy checkout
-  routes, and stop charges only after affected customers are notified and a
-  refund/credit decision is recorded;
-- remove obsolete Cloudflare price bindings after confirming no supported path
-  consumes them;
+- deploy any future containment revision from one release and rerun external
+  identity/capability canaries;
+- obtain write-capable, least-privilege Stripe authorization to archive only
+  positively identified TinyZKP catalog objects; the current restricted key
+  cannot mutate them and the unrelated active product must remain untouched;
+- resolve notification and refund/credit/`none_due` treatment for the active
+  TinyZKP legacy customer before pausing or cancelling that subscription;
 - commission the specialist and implementation reviews;
 - provision a fixed 8-vCPU/16-GB NVMe benchmark host;
 - recruit and contract a design partner.

@@ -101,6 +101,47 @@ def main() -> int:
     ):
         require(marker in finalizer, f"signed finalization lost policy control: {marker}")
 
+    evidence_builder = text("scripts/release/build_candidate_evidence.py")
+    release_validator = text("scripts/ci/backend_release_ready.py")
+    fuzz_runner = text("scripts/release/run_fuzz_smoke.py")
+    require(
+        '"crash_resume_and_corruption_suite": ["crash_matrix", "fuzz_smoke"]'
+        in evidence_builder,
+        "candidate evidence no longer requires both crash and fuzz reports",
+    )
+    for marker in (
+        "validate_fuzz_smoke",
+        "FUZZ_TARGETS",
+        "FUZZ_SMOKE_SEED_LIMIT",
+    ):
+        require(marker in release_validator, f"release fuzz gate lost control: {marker}")
+    for marker in (
+        "SMOKE_SEED_LIMIT",
+        'CARGO_FUZZ_VERSION = "cargo-fuzz 0.13.2"',
+        "WORKLOAD_FIXTURES",
+        "seed_payloads",
+        "prepare_smoke_corpus",
+        "smoke_corpus_sha256",
+        "execution-corpus",
+        "-artifact_prefix=",
+        "harden_tree",
+    ):
+        require(marker in fuzz_runner, f"bounded fuzz smoke lost control: {marker}")
+    nightly_workflow = text(".github/workflows/nightly-backend.yml")
+    require(
+        "cargo install cargo-fuzz --version 0.13.2 --locked" in nightly_workflow,
+        "cargo-fuzz release tool is not version-pinned",
+    )
+
+    preliminary_sbom = text("scripts/release/build_preliminary_sbom.py")
+    review_bundle = text("scripts/release/build_review_bundle.py")
+    for source, label in (
+        (preliminary_sbom, "preliminary SBOM"),
+        (review_bundle, "review bundle"),
+    ):
+        for marker in ("0o600", "os.fsync"):
+            require(marker in source, f"{label} lost private atomic output: {marker}")
+
     benches_workflow = text(".github/workflows/benches.yml")
     require(
         benches_workflow.count("--require-fixed-host") == 3,

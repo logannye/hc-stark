@@ -45,7 +45,7 @@ GATE_ROLES = {
         *[f"one_million_{role}" for role in ONE_MILLION_ROLES],
         *[f"ten_million_{role}" for role in TEN_MILLION_ROLES],
     ],
-    "crash_resume_and_corruption_suite": ["crash_matrix"],
+    "crash_resume_and_corruption_suite": ["crash_matrix", "fuzz_smoke"],
     "plonky3_specialist_review": ["review_report", "remediation_ledger"],
     "implementation_review_no_high_findings": [
         "review_report",

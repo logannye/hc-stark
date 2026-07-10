@@ -21,6 +21,10 @@ def test_template_contains_exact_unsigned_gate_set():
         assert [artifact["role"] for artifact in gate["artifacts"]] == module.GATE_ROLES[name]
     assert len(value["gates"]["one_million_row_resource_gate"]["artifacts"]) == 10
     assert len(value["gates"]["independent_resource_reproduction"]["artifacts"]) == 17
+    assert [
+        artifact["role"]
+        for artifact in value["gates"]["crash_resume_and_corruption_suite"]["artifacts"]
+    ] == ["crash_matrix", "fuzz_smoke"]
 
 
 def test_hashed_artifact_rejects_extra_fields_and_symlinks(tmp_path):

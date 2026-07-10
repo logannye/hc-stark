@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import stat
 
 
 MODULE_PATH = Path(__file__).with_name("build_preliminary_sbom.py")
@@ -56,3 +57,9 @@ def test_preliminary_spdx_rejects_ambiguous_identity_and_bad_lock_checksum(tmp_p
         assert "checksum" in str(error)
     else:
         raise AssertionError("malformed Cargo.lock checksum was accepted")
+
+
+def test_preliminary_spdx_output_is_owner_only(tmp_path):
+    output = tmp_path / "preliminary.spdx.json"
+    MODULE.write_atomic(output, {"spdxVersion": "SPDX-2.3"})
+    assert stat.S_IMODE(output.stat().st_mode) == 0o600
