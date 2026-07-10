@@ -50,6 +50,24 @@ async function main() {
     {
       const assets = assetsMock();
       const response = await worker.fetch(
+        new Request("https://preview-branch.tinyzkp.pages.dev/vendor/tinyzkp-verify/tinyzkp-verify.js"),
+        { ASSETS: assets },
+        { waitUntil() {} },
+      );
+      assert.equal(response.status, 308);
+      assert.equal(
+        response.headers.get("Location"),
+        "https://tinyzkp.com/vendor/tinyzkp-verify/tinyzkp-verify.js",
+      );
+      assert.deepEqual(assets.calls, []);
+    }
+
+    {
+      const assets = assetsMock(async (request) => {
+        const pathname = new URL(request.url).pathname;
+        return new Response(`asset:${pathname}`, { status: 200 });
+      });
+      const response = await worker.fetch(
         new Request("https://tinyzkp.com/api/release"),
         {
           ASSETS: assets,
@@ -63,7 +81,9 @@ async function main() {
       assert.equal(body.service, "site");
       assert.equal(body.release_sha, "abc123");
       assert.equal(body.release_ref, "main");
-      assert.deepEqual(assets.calls, []);
+      assert.equal(body.asset_manifest_complete, true);
+      assert.match(body.asset_manifest_sha256, /^[0-9a-f]{64}$/);
+      assert.equal(assets.calls.length, 10);
     }
 
     for (const [source, destination] of [
@@ -89,6 +109,9 @@ async function main() {
       "/agents", "/agents.html", "/agent-policy", "/agent-policy.json", "/roi",
       "/roi.json", "/calculator", "/use-cases", "/compare/foo", "/integrations",
       "/mcp.json", "/.well-known/tinyzkp-offers.json",
+      "/.well-known/mcp/server-card.json",
+      "/vendor/tinyzkp-verify/tinyzkp-verify.js",
+      "/vendor/tinyzkp-verify/tinyzkp-verify_bg.wasm",
     ]) {
       const assets = assetsMock();
       const response = await worker.fetch(
@@ -179,9 +202,16 @@ async function main() {
               qualification: {
                 company: "Example",
                 stack: "Plonky3 0.6.1",
+                workload: "Poseidon2 AIR",
                 logical_rows: "1048576",
                 current_memory: "OOM at 16 GiB",
                 target_ram: "2 GiB",
+                scratch: "100 GiB local NVMe",
+                verifier_target: "Unmodified Plonky3 verifier",
+                data_sensitivity: "Public deterministic generator",
+                technical_owner: "Proving Lead",
+                budget_owner: "CTO",
+                timeline: "This quarter",
                 contact_method: "github",
                 contact_handle: "https://github.com/example",
                 consent: "twelve_month_retention",
@@ -226,7 +256,7 @@ async function main() {
             body: JSON.stringify({
               name: "No Email Applicant",
               email: "",
-              category: "Design Partner",
+              category: "Security Report",
               message: "Reproducible public workload",
               qualification: {
                 contact_method: "github",
@@ -278,6 +308,18 @@ async function main() {
       assert.equal(await response.text(), "backend recovery");
       assert.deepEqual(assets.calls, ["/status", "/status.html"]);
       assert.equal(response.headers.get("X-Frame-Options"), "DENY");
+    }
+
+    {
+      const assets = assetsMock(async () => new Response("homepage fallback", { status: 200 }));
+      const response = await worker.fetch(
+        new Request("https://tinyzkp.com/totally-nonexistent-audit-path"),
+        { ASSETS: assets },
+        { waitUntil() {} },
+      );
+      assert.equal(response.status, 404);
+      assert.equal(await response.text(), "not found");
+      assert.deepEqual(assets.calls, []);
     }
 
     console.log("site worker maintenance dispatch: PASS");

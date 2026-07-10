@@ -23,6 +23,8 @@ const VALID_CATEGORIES = new Set([
   "Bug Report",
   "Feature Request",
   "Design Partner",
+  "Security Report",
+  "Privacy Request",
   "Billing",
   "Enterprise",
 ]);
@@ -48,6 +50,21 @@ const QUALIFICATION_FIELDS = [
   "contact_method",
   "contact_handle",
   "consent",
+];
+
+const DESIGN_PARTNER_REQUIRED_FIELDS = [
+  "company",
+  "stack",
+  "workload",
+  "logical_rows",
+  "current_memory",
+  "target_ram",
+  "scratch",
+  "verifier_target",
+  "data_sensitivity",
+  "technical_owner",
+  "budget_owner",
+  "timeline",
 ];
 
 async function checkRateLimit(ip) {
@@ -160,14 +177,28 @@ export async function onRequestPost(context) {
       ...(qualification && typeof qualification === "object" && !Array.isArray(qualification) ? qualification : {}),
     });
     const contactMethod = (safeQualification.contact_method || "").toLowerCase();
+    if (safeCategory === "Design Partner") {
+      const missing = DESIGN_PARTNER_REQUIRED_FIELDS.filter((field) => !safeQualification[field]);
+      if (missing.length) {
+        return new Response(JSON.stringify({ error: `missing evaluation fields: ${missing.join(", ")}` }), {
+          status: 400,
+          headers: jsonHeaders,
+        });
+      }
+    }
     if (
-      safeCategory === "Design Partner" &&
-      (!NO_EMAIL_CONTACT_METHODS.has(contactMethod) || !safeQualification.contact_handle)
+      !NO_EMAIL_CONTACT_METHODS.has(contactMethod) || !safeQualification.contact_handle
     ) {
       return new Response(
         JSON.stringify({ error: "a supported no-email contact method and handle are required" }),
         { status: 400, headers: jsonHeaders }
       );
+    }
+    if (safeQualification.consent !== "twelve_month_retention") {
+      return new Response(JSON.stringify({ error: "retention acknowledgement is required" }), {
+        status: 400,
+        headers: jsonHeaders,
+      });
     }
 
     const WEBHOOK_URL = context.env.WEBHOOK_BASE_URL || "https://webhook.tinyzkp.com";

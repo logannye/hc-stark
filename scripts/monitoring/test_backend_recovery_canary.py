@@ -26,6 +26,23 @@ def test_validate_accepts_consistent_maintenance_surfaces(monkeypatch):
             200,
             b'<input name="email" type="email"><select name="contact_method" required></select><input name="contact_handle" required><p>No email will be sent.</p>',
         ),
+        observation("security", 200, b"HTTPS security reporting"),
+        observation("privacy", 200, b"HTTPS privacy requests"),
+        observation("terms", 200, b"HTTPS operational requests"),
+        observation(
+            "requests",
+            200,
+            b'<form id="request-form"><select name="category" required></select><select name="contact_method" required></select><input name="contact_handle" required><p>No email is sent</p></form>',
+        ),
+        observation("unknown path", 404, b"not found"),
+        observation(
+            "security.txt",
+            200,
+            b"Contact: https://site/requests?intent=security\nExpires: 2027-07-10T00:00:00Z\n",
+        ),
+        observation("retired website MCP card", 410, b"gone"),
+        observation("retired verifier JavaScript", 410, b"gone"),
+        observation("retired verifier WASM", 410, b"gone"),
         observation("status", 200, b"Backend recovery in progress"),
         observation("mcp version", 200, {"service": "mcp"}),
     ])
@@ -51,6 +68,15 @@ def test_validate_rejects_enabled_proving_and_legacy_acceptance(monkeypatch):
             200,
             b'<input name="email" type="email" required>',
         ),
+        observation("security", 200, b"Email security@tinyzkp.com"),
+        observation("privacy", 200, b"Privacy"),
+        observation("terms", 200, b"mailto:hello@tinyzkp.com"),
+        observation("requests", 404, b"missing"),
+        observation("unknown path", 200, b"homepage fallback"),
+        observation("security.txt", 200, b"Contact: mailto:logan@tinyzkp.com\n"),
+        observation("retired website MCP card", 200, b'{"tools":["prove_template"]}'),
+        observation("retired verifier JavaScript", 200, b"legacy verifier"),
+        observation("retired verifier WASM", 200, b"legacy verifier"),
         observation("status", 200, b"All systems operational"),
         observation("mcp version", 200, {"service": "mcp"}),
     ])
@@ -63,3 +89,11 @@ def test_validate_rejects_enabled_proving_and_legacy_acceptance(monkeypatch):
     assert any("contact must require a no-email reply channel" in failure for failure in failures)
     assert any("contact must require a no-email reply handle" in failure for failure in failures)
     assert any("contact does not disclose the no-email recovery policy" in failure for failure in failures)
+    assert any("security publishes a forbidden email contact" in failure for failure in failures)
+    assert any("terms publishes a forbidden email contact" in failure for failure in failures)
+    assert any("security.txt must publish HTTPS Contact fields only" in failure for failure in failures)
+    assert any("obsolete website MCP server card" in failure for failure in failures)
+    assert any("retired verifier JavaScript must return" in failure for failure in failures)
+    assert any("retired verifier WASM must return" in failure for failure in failures)
+    assert any("requests route is not the operational request form" in failure for failure in failures)
+    assert any("unknown website path returned HTTP 200" in failure for failure in failures)

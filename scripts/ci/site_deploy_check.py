@@ -46,6 +46,7 @@ REQUIRED_FILES = [
     "status.html",
     "privacy.html",
     "terms.html",
+    "requests.html",
     "pricing.json",
     "offers.jsonld",
     "openapi.json",

@@ -12,6 +12,8 @@ import urllib.request
 from dataclasses import dataclass
 from urllib.parse import urljoin
 
+import site_asset_manifest
+
 MONITOR_HEADERS = {
     "Accept": "application/json",
     "User-Agent": "TinyZKP-Release-Check/1.0 (+https://tinyzkp.com)",
@@ -59,7 +61,12 @@ def validate_payload(surface: ReleaseSurface, payload: dict[str, object], expect
     return failures
 
 
-def check_surfaces(surfaces: list[ReleaseSurface], expected_sha: str, timeout: int) -> list[str]:
+def check_surfaces(
+    surfaces: list[ReleaseSurface],
+    expected_sha: str,
+    timeout: int,
+    expected_site_asset_sha256: str | None = None,
+) -> list[str]:
     failures: list[str] = []
     versions: dict[str, str] = {}
     for surface in surfaces:
@@ -69,6 +76,14 @@ def check_surfaces(surfaces: list[ReleaseSurface], expected_sha: str, timeout: i
             failures.append(str(exc))
             continue
         failures.extend(validate_payload(surface, payload, expected_sha))
+        if surface.expected_service == "site" and expected_site_asset_sha256 is not None:
+            if payload.get("asset_manifest_complete") is not True:
+                failures.append("site asset manifest is incomplete")
+            if payload.get("asset_manifest_sha256") != expected_site_asset_sha256:
+                failures.append(
+                    "site asset manifest digest must be "
+                    f"{expected_site_asset_sha256!r}; got {payload.get('asset_manifest_sha256')!r}"
+                )
         package_version = payload.get("package_version")
         if isinstance(package_version, str) and package_version:
             versions[surface.name] = package_version
@@ -131,6 +146,7 @@ def main(argv: list[str]) -> int:
         release_surfaces(args.site_url, args.api_url, args.mcp_url),
         expected_sha,
         args.timeout,
+        str(site_asset_manifest.build(site_asset_manifest.ROOT / "site")["sha256"]),
     )
     if args.cli_release_file:
         failures.extend(validate_artifact(args.cli_release_file, expected_sha, "cli"))

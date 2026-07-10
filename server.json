@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.logannye/tinyzkp",
   "title": "TinyZKP",
-  "description": "Hosted MCP server for STARK proof receipts. Agents mint receipts and verify proofs for free.",
-  "websiteUrl": "https://tinyzkp.com?source=official_mcp_registry&medium=mcp_directory&platform=modelcontextprotocol&intent=mcp_install",
+  "description": "Capability-only MCP endpoint for TinyZKP's Plonky3 backend recovery. Proving, verification, accounts, API keys, and checkout are unavailable.",
+  "websiteUrl": "https://tinyzkp.com/status",
   "repository": {
     "url": "https://github.com/logannye/hc-stark",
     "source": "github",
@@ -13,21 +13,15 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.tinyzkp.com",
-      "headers": [
-        {
-          "name": "Authorization",
-          "description": "Optional Bearer API key. Use format: Bearer tzk_...; the public lane works without a key, and authenticated requests unlock account-scoped limits.",
-          "isRequired": false,
-          "isSecret": true
-        }
-      ]
+      "url": "https://mcp.tinyzkp.com/mcp",
+      "headers": []
     }
   ],
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
-      "source": "tinyzkp_gtm_distribution",
-      "conversionUrl": "https://tinyzkp.com/signup?source=official_mcp_registry&medium=mcp_directory&platform=modelcontextprotocol&intent=mcp_install"
+      "serviceStatus": "backend_recovery",
+      "capabilitiesUrl": "https://tinyzkp.com/status",
+      "contactUrl": "https://tinyzkp.com/requests"
     }
   }
 }

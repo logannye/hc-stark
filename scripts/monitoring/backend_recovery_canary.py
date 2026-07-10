@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from html.parser import HTMLParser
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -18,6 +19,11 @@ HEADERS = {
     "Content-Type": "application/json",
     "User-Agent": "TinyZKP-Recovery-Canary/1.0 (+https://tinyzkp.com/status)",
 }
+PUBLIC_EMAIL_RE = re.compile(
+    rb"(?:mailto:|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})",
+    re.IGNORECASE,
+)
+OBFUSCATED_EMAIL_MARKERS = (b"__cf_email__", b"/cdn-cgi/l/email-protection")
 
 
 @dataclass(frozen=True)
@@ -85,6 +91,35 @@ def validate(site_url: str, api_url: str, mcp_url: str, timeout: int) -> list[st
         ),
         request("homepage", site_url.rstrip("/") + "/", timeout=timeout),
         request("contact", urljoin(site_url.rstrip("/") + "/", "contact"), timeout=timeout),
+        request("security", urljoin(site_url.rstrip("/") + "/", "security"), timeout=timeout),
+        request("privacy", urljoin(site_url.rstrip("/") + "/", "privacy"), timeout=timeout),
+        request("terms", urljoin(site_url.rstrip("/") + "/", "terms"), timeout=timeout),
+        request("requests", urljoin(site_url.rstrip("/") + "/", "requests"), timeout=timeout),
+        request(
+            "unknown path",
+            urljoin(site_url.rstrip("/") + "/", "tinyzkp-containment-nonexistent-probe"),
+            timeout=timeout,
+        ),
+        request(
+            "security.txt",
+            urljoin(site_url.rstrip("/") + "/", ".well-known/security.txt"),
+            timeout=timeout,
+        ),
+        request(
+            "retired website MCP card",
+            urljoin(site_url.rstrip("/") + "/", ".well-known/mcp/server-card.json"),
+            timeout=timeout,
+        ),
+        request(
+            "retired verifier JavaScript",
+            urljoin(site_url.rstrip("/") + "/", "vendor/tinyzkp-verify/tinyzkp-verify.js"),
+            timeout=timeout,
+        ),
+        request(
+            "retired verifier WASM",
+            urljoin(site_url.rstrip("/") + "/", "vendor/tinyzkp-verify/tinyzkp-verify_bg.wasm"),
+            timeout=timeout,
+        ),
         request("status", urljoin(site_url.rstrip("/") + "/", "status"), timeout=timeout),
         request("mcp version", urljoin(mcp_url.rstrip("/") + "/", "version"), timeout=timeout),
     ]
@@ -123,6 +158,63 @@ def validate(site_url: str, api_url: str, mcp_url: str, timeout: int) -> list[st
         for claim in forbidden_claims:
             if claim.lower() in text:
                 failures.append(f"{name} contains forbidden claim {claim!r}")
+
+    for name in ("homepage", "contact", "security", "privacy", "terms", "requests", "status"):
+        observation = by_name[name]
+        if observation.status != 200:
+            failures.append(f"{name} returned HTTP {observation.status}")
+        match = PUBLIC_EMAIL_RE.search(observation.body)
+        if match:
+            failures.append(
+                f"{name} publishes a forbidden email contact: {match.group(0).decode('utf-8', errors='replace')}"
+            )
+        if any(marker in observation.body.lower() for marker in OBFUSCATED_EMAIL_MARKERS):
+            failures.append(f"{name} publishes an obfuscated email contact")
+
+    request_page = by_name["requests"]
+    request_text = request_page.body.decode("utf-8", errors="replace")
+    request_parser = ContactFormParser()
+    request_parser.feed(request_text)
+    for field in ("category", "contact_method", "contact_handle"):
+        parsed_field = request_parser.fields.get(field)
+        if parsed_field is None or "required" not in parsed_field[1]:
+            failures.append(f"requests form must require {field}")
+    if 'id="request-form"' not in request_text and "id='request-form'" not in request_text:
+        failures.append("requests route is not the operational request form")
+
+    if by_name["unknown path"].status != 404:
+        failures.append(
+            f"unknown website path returned HTTP {by_name['unknown path'].status}; expected 404"
+        )
+
+    security_txt = by_name["security.txt"]
+    security_text = security_txt.body.decode("utf-8", errors="replace")
+    if security_txt.status != 200:
+        failures.append(f"security.txt returned HTTP {security_txt.status}")
+    contacts = [
+        line.removeprefix("Contact:").strip()
+        for line in security_text.splitlines()
+        if line.startswith("Contact:")
+    ]
+    if not contacts or any(not contact.startswith("https://") for contact in contacts):
+        failures.append("security.txt must publish HTTPS Contact fields only")
+    if not any(line.startswith("Expires:") for line in security_text.splitlines()):
+        failures.append("security.txt is missing Expires")
+    match = PUBLIC_EMAIL_RE.search(security_txt.body)
+    if match:
+        failures.append("security.txt publishes a forbidden email contact")
+    if any(marker in security_txt.body.lower() for marker in OBFUSCATED_EMAIL_MARKERS):
+        failures.append("security.txt publishes an obfuscated email contact")
+
+    retired_card = by_name["retired website MCP card"]
+    if retired_card.status not in {404, 410}:
+        failures.append(
+            "obsolete website MCP server card must return 404 or 410, "
+            f"not HTTP {retired_card.status}"
+        )
+    for name in ("retired verifier JavaScript", "retired verifier WASM"):
+        if by_name[name].status not in {404, 410}:
+            failures.append(f"{name} must return 404 or 410, not HTTP {by_name[name].status}")
 
     contact = by_name["contact"]
     contact_text = contact.body.decode("utf-8", errors="replace")

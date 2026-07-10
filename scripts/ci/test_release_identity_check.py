@@ -65,6 +65,21 @@ def test_live_surfaces_must_share_package_version(monkeypatch):
     assert "release package versions disagree: api=0.2.0, site=0.1.0" in failures
 
 
+def test_site_release_identity_binds_critical_static_asset_digest(monkeypatch):
+    payload = {
+        "service": "site",
+        "package_version": "0.1.0",
+        "release_sha": "abc",
+        "asset_manifest_complete": True,
+        "asset_manifest_sha256": "a" * 64,
+    }
+    monkeypatch.setattr(check, "fetch_json", lambda _url, _timeout: payload)
+    surface = check.ReleaseSurface("site", "https://site/api/release", "site")
+    assert check.check_surfaces([surface], "abc", 1, "a" * 64) == []
+    failures = check.check_surfaces([surface], "abc", 1, "b" * 64)
+    assert any("site asset manifest digest" in failure for failure in failures)
+
+
 def test_local_cli_and_benchmark_artifacts_bind_to_same_release(tmp_path):
     cli = tmp_path / "cli.json"
     cli.write_text('{"service":"cli","package_version":"0.1.0","release_sha":"abc123"}')
