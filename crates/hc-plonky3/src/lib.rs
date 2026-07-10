@@ -11,7 +11,7 @@ mod dft;
 mod prover;
 mod workloads;
 
-pub use dft::{GoldilocksWord, ResourceBoundedDft, ScratchPlonky3Matrix};
+pub use dft::{GoldilocksWord, ResourceBoundedDft, ResourceBoundedMatrix, ScratchPlonky3Matrix};
 pub use prover::{
     BackendError, InternalProofBundle, ResourceBoundedUniStarkProver, WorkloadKind,
     COMPATIBILITY_PROFILE, PLONKY3_VERSION,

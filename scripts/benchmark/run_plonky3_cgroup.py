@@ -129,9 +129,9 @@ def run_one(
     mode: str,
     cgroup_parent: Path,
     release_sha: str,
+    memory_cap: int,
 ) -> dict:
     cgroup = cgroup_parent / f"tinyzkp-{mode}-{uuid.uuid4().hex}"
-    memory_cap = int(manifest["resource_policy"]["max_resident_bytes"])
     configure_cgroup(cgroup, memory_cap)
     scratch = Path(manifest["resource_policy"]["scratch_dir"])
 
@@ -227,6 +227,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--hc-cli", type=Path, default=Path("target/release/hc-cli"))
     parser.add_argument(
+        "--baseline-memory-cap",
+        type=int,
+        help="Optional conventional-process cap; candidate always uses the manifest cap",
+    )
+    parser.add_argument(
         "--cgroup-parent", type=Path, default=Path("/sys/fs/cgroup/tinyzkp-bench")
     )
     return parser.parse_args()
@@ -242,6 +247,10 @@ def main() -> int:
     if not cli.is_file():
         raise RuntimeError(f"hc-cli release binary not found: {cli}")
     release_sha = os.environ.get("HC_RELEASE_SHA", "development-unreleased")
+    candidate_memory_cap = int(manifest["resource_policy"]["max_resident_bytes"])
+    baseline_memory_cap = args.baseline_memory_cap or candidate_memory_cap
+    if baseline_memory_cap < candidate_memory_cap:
+        raise RuntimeError("baseline memory cap cannot be below the candidate manifest cap")
 
     baseline = run_one(
         cli=cli,
@@ -250,6 +259,7 @@ def main() -> int:
         mode=args.baseline,
         cgroup_parent=args.cgroup_parent,
         release_sha=release_sha,
+        memory_cap=baseline_memory_cap,
     )
     candidate = run_one(
         cli=cli,
@@ -258,6 +268,7 @@ def main() -> int:
         mode=args.candidate,
         cgroup_parent=args.cgroup_parent,
         release_sha=release_sha,
+        memory_cap=candidate_memory_cap,
     )
     write_json(baseline_report_path(args.report), baseline)
     write_json(args.report, candidate)

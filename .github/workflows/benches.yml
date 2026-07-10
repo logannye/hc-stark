@@ -1,26 +1,58 @@
-name: Benches
+name: Fixed-host Plonky3 reports
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 3 * * 0"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  benches:
-    runs-on: ubuntu-latest
+  one-million-rows:
+    # Release evidence must come from the labeled 8-vCPU/16-GB NVMe host, not a
+    # variable GitHub-hosted runner. The job remains queued until that host is
+    # deliberately provisioned and online.
+    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
+    timeout-minutes: 720
+    strategy:
+      fail-fast: false
+      matrix:
+        workload: [fibonacci, poseidon2]
     steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
-
-      - name: Install toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Compile benchmarks
-        run: cargo test -p hc-bench --release --all-features --no-fail-fast
-
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@v2
+      - name: Build pinned release CLI
+        run: cargo build --release -p hc-cli --locked
+      - name: Prepare owner-only scratch and cgroup
+        run: |
+          sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-1m
+          sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
+      - name: Measure baseline and bounded candidate
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/run_plonky3_cgroup.py \
+            --manifest examples/plonky3/${{ matrix.workload }}-1m.json \
+            --baseline-memory-cap 17179869184 \
+            --report raw-reports/${{ matrix.workload }}-1m.json
+      - name: Validate one-million-row acceptance
+        run: |
+          python3 scripts/benchmark/validate_release_gate.py \
+            --gate one-million \
+            --manifest examples/plonky3/${{ matrix.workload }}-1m.json \
+            --baseline raw-reports/${{ matrix.workload }}-1m.baseline.json \
+            --candidate raw-reports/${{ matrix.workload }}-1m.json
+      - name: Upload raw reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plonky3-${{ matrix.workload }}-1m-${{ github.sha }}
+          path: raw-reports/*.json
+          if-no-files-found: warn

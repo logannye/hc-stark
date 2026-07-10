@@ -3,6 +3,21 @@ use predicates::prelude::*;
 use serde_json::json;
 use tempfile::tempdir;
 
+#[test]
+fn release_identity_is_machine_readable_and_profile_pinned() {
+    let output = cargo_bin_cmd!("hc-cli")
+        .env("HC_RELEASE_SHA", "abc123")
+        .arg("release")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(payload["service"], "cli");
+    assert_eq!(payload["release_sha"], "abc123");
+    assert_eq!(payload["plonky3_version"], "0.6.1");
+    assert_eq!(payload["compatibility_profile"], "tinyzkp-p3-goldilocks-v1");
+}
+
 fn write_fibonacci_manifest(dir: &std::path::Path) -> std::path::PathBuf {
     let manifest = dir.join("manifest.json");
     let scratch = dir.join("scratch");
@@ -13,7 +28,7 @@ fn write_fibonacci_manifest(dir: &std::path::Path) -> std::path::PathBuf {
         "profile": "tinyzkp-p3-goldilocks-v1",
         "input_generator": {"kind": "fibonacci", "initial_a": 0, "initial_b": 1},
         "logical_rows": 8,
-        "deterministic_seed": 1,
+        "deterministic_seed": 0,
         "resource_policy": {
             "mode": "scratch",
             "max_resident_bytes": 134217728,

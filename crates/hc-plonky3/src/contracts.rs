@@ -75,9 +75,13 @@ impl WorkloadManifestV1 {
             return Err(ContractError::ProfileMismatch);
         }
         match (&self.workload_id, &self.input_generator) {
-            (WorkloadId::Fibonacci, InputGeneratorV1::Fibonacci { .. }) => Ok(()),
+            (WorkloadId::Fibonacci, InputGeneratorV1::Fibonacci { .. })
+                if self.deterministic_seed == 0 =>
+            {
+                Ok(())
+            }
             (WorkloadId::Poseidon2Goldilocks, InputGeneratorV1::Poseidon2 { seed })
-                if *seed == self.deterministic_seed =>
+                if *seed == 0 && self.deterministic_seed == 0 =>
             {
                 Ok(())
             }
@@ -160,7 +164,7 @@ impl ProofBundleV1 {
                 verifier_version: PLONKY3_VERSION.into(),
                 release_sha: release_sha.into(),
                 dependency_profile: COMPATIBILITY_PROFILE.into(),
-                proof_serializer: "postcard-1".into(),
+                proof_serializer: "postcard-1.1.3".into(),
             },
         })
     }
@@ -170,7 +174,9 @@ impl ProofBundleV1 {
             || self.provenance.prover_version != PLONKY3_VERSION
             || self.provenance.verifier_version != PLONKY3_VERSION
             || self.provenance.dependency_profile != COMPATIBILITY_PROFILE
-            || self.provenance.proof_serializer != "postcard-1"
+            || self.provenance.proof_serializer != "postcard-1.1.3"
+            || self.provenance.release_sha.is_empty()
+            || self.provenance.release_sha.len() > 128
         {
             return Err(ContractError::ProfileMismatch);
         }
@@ -288,7 +294,7 @@ mod tests {
                 initial_b: 1,
             },
             logical_rows: 8,
-            deterministic_seed: 1,
+            deterministic_seed: 0,
             resource_policy: ResourcePolicyV1 {
                 mode: ResourceMode::Scratch,
                 max_resident_bytes: 128 * 1024 * 1024,
@@ -313,7 +319,10 @@ mod tests {
         bundle.verify().unwrap();
 
         let mut mutation = bundle;
-        mutation.manifest.deterministic_seed ^= 1;
+        mutation.manifest.input_generator = InputGeneratorV1::Fibonacci {
+            initial_a: 1,
+            initial_b: 1,
+        };
         assert!(matches!(
             mutation.verify(),
             Err(ContractError::ManifestDigestMismatch)
@@ -333,5 +342,24 @@ mod tests {
                 "https://json-schema.org/draft/2020-12/schema"
             );
         }
+    }
+
+    #[test]
+    fn reference_generators_reject_unbound_seed_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fibonacci = manifest(dir.path());
+        fibonacci.deterministic_seed = 1;
+        assert!(matches!(
+            fibonacci.validate(),
+            Err(ContractError::InvalidWorkload)
+        ));
+
+        fibonacci.workload_id = WorkloadId::Poseidon2Goldilocks;
+        fibonacci.input_generator = InputGeneratorV1::Poseidon2 { seed: 9 };
+        fibonacci.deterministic_seed = 9;
+        assert!(matches!(
+            fibonacci.validate(),
+            Err(ContractError::InvalidWorkload)
+        ));
     }
 }

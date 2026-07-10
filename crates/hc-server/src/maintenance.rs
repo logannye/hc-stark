@@ -73,9 +73,12 @@ fn release_info() -> ReleaseInfo {
     ReleaseInfo {
         service: "api",
         package_version: env!("CARGO_PKG_VERSION"),
-        release_sha: nonempty_env("HC_RELEASE_SHA"),
-        release_ref: nonempty_env("HC_RELEASE_REF"),
-        build_url: nonempty_env("HC_RELEASE_BUILD_URL"),
+        release_sha: nonempty_env("HC_RELEASE_SHA")
+            .or_else(|| option_env!("HC_RELEASE_SHA").map(ToString::to_string)),
+        release_ref: nonempty_env("HC_RELEASE_REF")
+            .or_else(|| option_env!("HC_RELEASE_REF").map(ToString::to_string)),
+        build_url: nonempty_env("HC_RELEASE_BUILD_URL")
+            .or_else(|| option_env!("HC_RELEASE_BUILD_URL").map(ToString::to_string)),
     }
 }
 

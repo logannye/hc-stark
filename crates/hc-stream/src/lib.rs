@@ -8,6 +8,7 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
@@ -16,6 +17,8 @@ use std::path::{Component, Path, PathBuf};
 const STORE_MAGIC: &[u8; 8] = b"TZMATV1\0";
 const STORE_HEADER_LEN: u64 = 8 + 8 + 8 + 8;
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+const MAX_CHALLENGER_STATE_BYTES: usize = 64 * 1024;
+const MAX_CHECKPOINT_ARTIFACTS: usize = 1024;
 const HASH_BUFFER_BYTES: usize = 1024 * 1024;
 
 pub type Result<T> = std::result::Result<T, StreamError>;
@@ -172,6 +175,19 @@ impl ResourcePolicyV1 {
     /// before a backend reads the complete input.
     pub fn preflight(&self, estimate: ResourceEstimate) -> Result<PreflightReport> {
         let selected_mode = self.select_mode(&estimate)?;
+        self.preflight_for_mode(selected_mode, estimate)
+    }
+
+    /// Preflight an already selected mode when the backend has distinct memory
+    /// and scratch estimates. This prevents `Auto` from reselecting memory after
+    /// the backend has calculated the lower resident footprint of scratch mode.
+    pub fn preflight_for_mode(
+        &self,
+        selected_mode: ExecutionMode,
+        estimate: ResourceEstimate,
+    ) -> Result<PreflightReport> {
+        self.validate()?;
+        self.validate_estimate(selected_mode, &estimate)?;
         ensure_private_dir(&self.scratch_dir)?;
         reject_symlink(&self.scratch_dir)?;
         let probe = self.scratch_dir.join(format!(
@@ -198,6 +214,30 @@ impl ResourcePolicyV1 {
             memory_selection_threshold_bytes: self.memory_selection_threshold(),
             estimate,
         })
+    }
+
+    fn validate_estimate(
+        &self,
+        selected_mode: ExecutionMode,
+        estimate: &ResourceEstimate,
+    ) -> Result<()> {
+        if estimate.peak_resident_bytes > self.max_resident_bytes {
+            return Err(StreamError::ResourceLimit {
+                resource: "resident memory",
+                required: estimate.peak_resident_bytes,
+                cap: self.max_resident_bytes,
+            });
+        }
+        if selected_mode == ExecutionMode::Scratch
+            && estimate.scratch_high_water_bytes > self.max_scratch_bytes
+        {
+            return Err(StreamError::ResourceLimit {
+                resource: "scratch storage",
+                required: estimate.scratch_high_water_bytes,
+                cap: self.max_scratch_bytes,
+            });
+        }
+        Ok(())
     }
 
     /// Power-of-two row tile sized so two tiles and fixed backend overhead can
@@ -287,6 +327,9 @@ pub struct MemoryMatrix<T> {
 
 impl<T: CanonicalElement> MemoryMatrix<T> {
     pub fn preallocated(rows: u64, columns: usize) -> Result<Self> {
+        if rows == 0 || columns == 0 {
+            return Err(StreamError::OutOfBounds);
+        }
         let elements = checked_elements(rows, columns)?;
         Ok(Self {
             rows,
@@ -377,6 +420,9 @@ impl<T: CanonicalElement> ScratchMatrixStore<T> {
         columns: usize,
     ) -> Result<Self> {
         let root = root.as_ref();
+        if rows == 0 || columns == 0 {
+            return Err(StreamError::OutOfBounds);
+        }
         ensure_private_dir(root)?;
         reject_symlink(root)?;
         validate_file_name(file_name)?;
@@ -544,9 +590,39 @@ pub struct CheckpointIdentityV2 {
 }
 
 impl CheckpointManifestV2 {
-    pub fn validate_identity(&self, expected: CheckpointIdentityV2) -> Result<()> {
+    pub fn validate_structure(&self) -> Result<()> {
         if self.schema_version != 2
-            || self.backend_hash != expected.backend_hash
+            || self.completed_phase.trim().is_empty()
+            || self.completed_phase.len() > 128
+            || self.challenger_state.len() > MAX_CHALLENGER_STATE_BYTES
+            || self.artifacts.len() > MAX_CHECKPOINT_ARTIFACTS
+        {
+            return Err(StreamError::CheckpointMismatch);
+        }
+        let mut names = HashSet::new();
+        let mut paths = HashSet::new();
+        for artifact in &self.artifacts {
+            if artifact.name.trim().is_empty()
+                || artifact.name.len() > 128
+                || artifact.digest.rows == 0
+                || artifact.digest.columns == 0
+                || artifact.digest.element_width == 0
+            {
+                return Err(StreamError::CheckpointMismatch);
+            }
+            validate_relative_path(&artifact.relative_path)?;
+            if !names.insert(artifact.name.as_str())
+                || !paths.insert(artifact.relative_path.as_path())
+            {
+                return Err(StreamError::CheckpointMismatch);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn validate_identity(&self, expected: CheckpointIdentityV2) -> Result<()> {
+        self.validate_structure()?;
+        if self.backend_hash != expected.backend_hash
             || self.profile_hash != expected.profile_hash
             || self.release_hash != expected.release_hash
             || self.dependency_lock_hash != expected.dependency_lock_hash
@@ -560,9 +636,7 @@ impl CheckpointManifestV2 {
     }
 
     pub fn write_atomic(&self, path: impl AsRef<Path>) -> Result<()> {
-        if self.schema_version != 2 {
-            return Err(StreamError::CheckpointMismatch);
-        }
+        self.validate_structure()?;
         let path = path.as_ref();
         let parent = path.parent().ok_or(StreamError::UnsafePath)?;
         ensure_private_dir(parent)?;
@@ -605,13 +679,12 @@ impl CheckpointManifestV2 {
             });
         }
         let manifest: Self = serde_json::from_slice(&fs::read(path)?)?;
-        if manifest.schema_version != 2 {
-            return Err(StreamError::CheckpointMismatch);
-        }
+        manifest.validate_structure()?;
         Ok(manifest)
     }
 
     pub fn validate_artifacts(&self, root: impl AsRef<Path>) -> Result<()> {
+        self.validate_structure()?;
         let root = root.as_ref();
         reject_symlink(root)?;
         for artifact in &self.artifacts {
@@ -908,6 +981,18 @@ mod tests {
         let loaded = CheckpointManifestV2::read(&manifest_path).unwrap();
         loaded.validate_identity(identity).unwrap();
         loaded.validate_artifacts(dir.path()).unwrap();
+        let mut empty_phase = loaded.clone();
+        empty_phase.completed_phase.clear();
+        assert!(matches!(
+            empty_phase.validate_structure(),
+            Err(StreamError::CheckpointMismatch)
+        ));
+        let mut duplicate = loaded.clone();
+        duplicate.artifacts.push(duplicate.artifacts[0].clone());
+        assert!(matches!(
+            duplicate.validate_structure(),
+            Err(StreamError::CheckpointMismatch)
+        ));
         let mut wrong = identity;
         wrong.release_hash = [0; 32];
         assert!(matches!(
@@ -919,6 +1004,14 @@ mod tests {
     #[test]
     fn path_traversal_and_unnoted_retention_are_rejected() {
         let dir = tempdir().unwrap();
+        assert!(matches!(
+            ScratchMatrixStore::<u64>::create(dir.path(), "empty.bin", 0, 1),
+            Err(StreamError::OutOfBounds)
+        ));
+        assert!(matches!(
+            MemoryMatrix::<u64>::preallocated(1, 0),
+            Err(StreamError::OutOfBounds)
+        ));
         assert!(matches!(
             ScratchMatrixStore::<u64>::create(dir.path(), "../escape", 1, 1),
             Err(StreamError::UnsafePath)

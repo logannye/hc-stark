@@ -46,3 +46,40 @@ def test_release_surfaces_include_site_api_and_mcp_version_endpoints():
         "https://mcp.tinyzkp.com/version",
     ]
     assert [surface.expected_service for surface in surfaces] == ["site", "api", "mcp"]
+
+
+def test_live_surfaces_must_share_package_version(monkeypatch):
+    payloads = {
+        "https://site/version": {"service": "site", "package_version": "0.1.0", "release_sha": "abc"},
+        "https://api/version": {"service": "api", "package_version": "0.2.0", "release_sha": "abc"},
+    }
+    monkeypatch.setattr(check, "fetch_json", lambda url, _timeout: payloads[url])
+    failures = check.check_surfaces(
+        [
+            check.ReleaseSurface("site", "https://site/version", "site"),
+            check.ReleaseSurface("api", "https://api/version", "api"),
+        ],
+        "abc",
+        1,
+    )
+    assert "release package versions disagree: api=0.2.0, site=0.1.0" in failures
+
+
+def test_local_cli_and_benchmark_artifacts_bind_to_same_release(tmp_path):
+    cli = tmp_path / "cli.json"
+    cli.write_text('{"service":"cli","package_version":"0.1.0","release_sha":"abc123"}')
+    assert check.validate_artifact(cli, "abc123", "cli") == []
+
+    report = tmp_path / "report.json"
+    report.write_text(
+        '{"release_sha":"abc123","dependency_profile":"tinyzkp-p3-goldilocks-v1",'
+        '"verification_succeeded":true}'
+    )
+    assert check.validate_artifact(report, "abc123", "benchmark") == []
+    report.write_text(
+        '{"release_sha":"old","dependency_profile":"tinyzkp-p3-goldilocks-v1",'
+        '"verification_succeeded":true}'
+    )
+    assert "benchmark release_sha must be 'abc123'; got 'old'" in check.validate_artifact(
+        report, "abc123", "benchmark"
+    )

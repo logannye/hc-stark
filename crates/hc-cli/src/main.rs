@@ -19,6 +19,8 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Emit machine-readable CLI and backend release identity.
+    Release,
     /// Official Plonky3 proof workflows.
     Plonky3 {
         #[command(subcommand)]
@@ -111,6 +113,29 @@ enum LegacyResearchCommand {
 
 fn main() -> Result<()> {
     match Cli::parse().command {
+        Commands::Release => {
+            let release_sha = std::env::var("HC_RELEASE_SHA")
+                .ok()
+                .filter(|value| !value.is_empty())
+                .or_else(|| option_env!("HC_RELEASE_SHA").map(ToString::to_string));
+            let release_ref = std::env::var("HC_RELEASE_REF")
+                .ok()
+                .filter(|value| !value.is_empty())
+                .or_else(|| option_env!("HC_RELEASE_REF").map(ToString::to_string));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "service": "cli",
+                    "package_version": env!("CARGO_PKG_VERSION"),
+                    "release_sha": release_sha,
+                    "release_ref": release_ref,
+                    "backend": "plonky3",
+                    "plonky3_version": hc_plonky3::PLONKY3_VERSION,
+                    "compatibility_profile": hc_plonky3::COMPATIBILITY_PROFILE,
+                }))?
+            );
+            Ok(())
+        }
         Commands::Plonky3 { command } => match command {
             Plonky3Command::Prove { manifest, output } => {
                 commands::plonky3::prove(&manifest, &output)

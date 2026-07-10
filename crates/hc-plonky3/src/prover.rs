@@ -338,6 +338,13 @@ mod tests {
         }
     }
 
+    fn memory_policy(root: &std::path::Path) -> ResourcePolicyV1 {
+        ResourcePolicyV1 {
+            mode: ResourceMode::Memory,
+            ..policy(root)
+        }
+    }
+
     #[test]
     fn fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier() {
         let dir = tempfile::tempdir().unwrap();
@@ -429,5 +436,23 @@ mod tests {
         )
         .unwrap();
         assert_eq!(bounded, reference);
+    }
+
+    #[test]
+    fn memory_and_scratch_modes_emit_identical_official_proofs() {
+        let dir = tempfile::tempdir().unwrap();
+        let workload = WorkloadKind::Fibonacci {
+            initial_a: 0,
+            initial_b: 1,
+        };
+        let memory = ResourceBoundedUniStarkProver::new(memory_policy(dir.path()))
+            .unwrap()
+            .prove(workload.clone(), 16)
+            .unwrap();
+        let scratch = ResourceBoundedUniStarkProver::new(policy(dir.path()))
+            .unwrap()
+            .prove(workload, 16)
+            .unwrap();
+        assert_eq!(memory, scratch);
     }
 }
