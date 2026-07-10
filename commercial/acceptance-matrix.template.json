@@ -1,0 +1,47 @@
+{
+  "schema_version": "tinyzkp-evaluation-acceptance-v1",
+  "agreement_id": "REPLACE_ME",
+  "offer_id": "founding_evaluation",
+  "workload": {
+    "name": "REPLACE_ME",
+    "repository": "REPLACE_ME",
+    "revision": "REPLACE_ME",
+    "manifest_sha256": "REPLACE_WITH_64_HEX",
+    "input_generator": "REPLACE_WITH_NON_SENSITIVE_COMMAND",
+    "logical_rows": 1048576,
+    "plonky3_version": "0.6.1",
+    "verifier_target": "unmodified-p3-uni-stark-0.6.1"
+  },
+  "baseline": {
+    "command": "REPLACE_ME",
+    "host_id": "REPLACE_ME",
+    "peak_rss_bytes": null,
+    "wall_time_seconds": null,
+    "oom_evidence": null
+  },
+  "candidate": {
+    "command": "REPLACE_ME",
+    "max_resident_bytes": 2147483648,
+    "max_scratch_bytes": null,
+    "scratch_medium": "local-nvme"
+  },
+  "acceptance": {
+    "official_verifier_must_accept": true,
+    "target_peak_rss_bytes": null,
+    "minimum_ram_reduction_ratio": null,
+    "maximum_wall_time_ratio": null,
+    "performance_target_is_guaranteed": false
+  },
+  "data_boundary": {
+    "public_or_non_sensitive_generator_only": true,
+    "witness_transfer_allowed": false,
+    "credentials_transfer_allowed": false,
+    "customer_data_transfer_allowed": false
+  },
+  "delivery": {
+    "raw_report_required": true,
+    "reproduction_commands_required": true,
+    "known_limitations_required": true,
+    "written_acceptance_required_before_delivery_invoice": true
+  }
+}

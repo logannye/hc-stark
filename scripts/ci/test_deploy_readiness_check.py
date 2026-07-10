@@ -117,9 +117,7 @@ def test_production_mode_rejects_placeholder_secrets():
             "INTERNAL_SECRET": "CHANGE_ME_TO_A_RANDOM_STRING",
             "STRIPE_EXPECTED_ACCOUNT_ID": "acct_xxx",
             "STRIPE_EXPECTED_DISPLAY_NAME": "",
-            "SMTP_HOST": "smtp.example.com",
-            "SMTP_PASSWORD": "xxx",
-            "SMTP_FROM": "hello@tinyzkp.com",
+            "HC_EVALUATION_STORE_PATH": "",
             "HC_BACKUP_REMOTE": "",
         }
     )
@@ -127,8 +125,44 @@ def test_production_mode_rejects_placeholder_secrets():
     assert "STRIPE_WEBHOOK_SECRET is missing or still a placeholder" in failures
     assert "INTERNAL_SECRET is missing or still a placeholder" in failures
     assert "STRIPE_EXPECTED_ACCOUNT_ID is missing or still a placeholder" in failures
-    assert "SMTP_PASSWORD is missing or still a placeholder" in failures
-    assert "HC_BACKUP_REMOTE is missing or still a placeholder" in failures
+    assert "HC_EVALUATION_STORE_PATH is missing or still a placeholder" in failures
+    assert "off-host backups require HC_BACKUP_REMOTE" in failures
+
+
+def test_production_mode_accepts_https_backup_ingest(tmp_path):
+    token_file = tmp_path / "backup-token"
+    token_file.write_text("a" * 64, encoding="utf-8")
+    token_file.chmod(0o600)
+    env = {
+        "STRIPE_SECRET_KEY": "sk_live_real",
+        "STRIPE_WEBHOOK_SECRET": "whsec_real",
+        "INTERNAL_SECRET": "random-internal-secret",
+        "STRIPE_EXPECTED_ACCOUNT_ID": "acct_realaccount",
+        "STRIPE_EXPECTED_DISPLAY_NAME": "LN Holdings",
+        "HC_EVALUATION_STORE_PATH": "/opt/hc-stark/data/evaluation_applications.sqlite",
+        "HC_BACKUP_HTTP_URL": "https://backup.example/v1/backups",
+        "HC_BACKUP_HTTP_TOKEN_FILE": str(token_file),
+        "TINYZKP_MAINTENANCE_MODE": "1",
+    }
+    failures, _warnings = readiness.check_env(env, production=True, check_host_python=True)
+    assert failures == []
+
+
+def test_production_mode_rejects_insecure_or_partial_backup_ingest():
+    failures, _warnings = _production_failures(
+        {
+            "STRIPE_SECRET_KEY": "sk_live_real",
+            "STRIPE_WEBHOOK_SECRET": "whsec_real",
+            "INTERNAL_SECRET": "random-internal-secret",
+            "STRIPE_EXPECTED_ACCOUNT_ID": "acct_realaccount",
+            "STRIPE_EXPECTED_DISPLAY_NAME": "LN Holdings",
+            "HC_EVALUATION_STORE_PATH": "/opt/hc-stark/data/evaluation_applications.sqlite",
+            "HC_BACKUP_HTTP_URL": "http://backup.example/v1/backups",
+            "TINYZKP_MAINTENANCE_MODE": "1",
+        }
+    )
+    assert "must be configured together" in failures
+    assert "must use https" in failures
 
 
 def test_production_mode_accepts_realistic_values():
@@ -139,9 +173,7 @@ def test_production_mode_accepts_realistic_values():
             "INTERNAL_SECRET": "random-internal-secret",
             "STRIPE_EXPECTED_ACCOUNT_ID": "acct_realaccount",
             "STRIPE_EXPECTED_DISPLAY_NAME": "LN Holdings",
-            "SMTP_HOST": "smtp.example.com",
-            "SMTP_PASSWORD": "smtp-secret",
-            "SMTP_FROM": "hello@tinyzkp.com",
+            "HC_EVALUATION_STORE_PATH": "/opt/hc-stark/data/evaluation_applications.sqlite",
             "HC_BACKUP_REMOTE": "r2-crypt:tinyzkp",
             "TINYZKP_MAINTENANCE_MODE": "1",
         }
@@ -157,9 +189,7 @@ def test_production_mode_requires_fail_closed_webhook_maintenance():
             "INTERNAL_SECRET": "random-internal-secret",
             "STRIPE_EXPECTED_ACCOUNT_ID": "acct_realaccount",
             "STRIPE_EXPECTED_DISPLAY_NAME": "LN Holdings",
-            "SMTP_HOST": "smtp.example.com",
-            "SMTP_PASSWORD": "smtp-secret",
-            "SMTP_FROM": "hello@tinyzkp.com",
+            "HC_EVALUATION_STORE_PATH": "/opt/hc-stark/data/evaluation_applications.sqlite",
             "HC_BACKUP_REMOTE": "r2-crypt:tinyzkp",
             "TINYZKP_MAINTENANCE_MODE": "0",
         }
@@ -175,9 +205,7 @@ def test_production_mode_rejects_legacy_prices_and_meter_overrides():
             "INTERNAL_SECRET": "random-internal-secret",
             "STRIPE_EXPECTED_ACCOUNT_ID": "acct_realaccount",
             "STRIPE_EXPECTED_DISPLAY_NAME": "LN Holdings",
-            "SMTP_HOST": "smtp.example.com",
-            "SMTP_PASSWORD": "smtp-secret",
-            "SMTP_FROM": "hello@tinyzkp.com",
+            "HC_EVALUATION_STORE_PATH": "/opt/hc-stark/data/evaluation_applications.sqlite",
             "HC_BACKUP_REMOTE": "r2-crypt:tinyzkp",
             "TINYZKP_MAINTENANCE_MODE": "1",
             "STRIPE_PRICE_ID_PRO": "price_legacy",

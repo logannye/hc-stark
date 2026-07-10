@@ -28,6 +28,7 @@ sync_host_billing_services() {
 # TinyZKP backend recovery: legacy usage meters, checkout recovery, lifecycle
 # nudges, and growth automation are intentionally disabled. Contract invoices
 # are operator-created through the reviewed Stripe Invoicing workflow.
+0 2 * * * root /opt/hc-stark/billing/backup.sh >> /var/log/hc-backup.log 2>&1
 CRON
     chmod 644 /etc/cron.d/hc-billing
 
@@ -79,7 +80,11 @@ echo "==> [5/10] Build containerized tiers"
 $COMPOSE build
 
 echo "==> [6/10] Confirm production image has no proving workers"
-if docker run --rm --entrypoint /bin/sh "$($COMPOSE images -q hc-server)" -c \
+# The project path is fixed at /opt/hc-stark, so Compose tags this freshly
+# built service image as hc-stark-hc-server:latest. Do not resolve it through
+# `compose images` or `compose run`: both inspect the currently running
+# container first and fail when Docker has already pruned its old image ID.
+if docker run --rm --entrypoint /bin/sh hc-stark-hc-server:latest -c \
     'test ! -e /app/hc-worker && test ! -e /app/hc-job-worker'; then
     echo "    production image is capability-only"
 else
