@@ -814,6 +814,7 @@ require_contains deploy/hetzner/deploy.sh "deploy_readiness_check.py" "Hetzner d
 require_contains deploy/hetzner/deploy.sh "install_billing_runtime.sh" "Hetzner deploy refreshes billing runtime"
 require_contains deploy/hetzner/deploy.sh "--host-python \"\$REPO/.venv/bin/python\"" "Hetzner deploy readiness checks billing virtualenv"
 require_contains deploy/hetzner/deploy.sh "sync_host_billing_services" "Hetzner deploy syncs billing host service definitions"
+require_contains deploy/hetzner/deploy.sh "billing/backup.sh" "recovery deploy preserves the daily off-host backup job"
 require_contains deploy/hetzner/deploy.sh "/opt/hc-stark/.venv/bin/gunicorn" "Hetzner deploy writes venv-backed billing webhook unit"
 require_contains deploy/hetzner/deploy.sh "scripts/monitoring/host_cron_env.sh billing/sync_usage.py" "Hetzner deploy writes env-loaded billing cron"
 require_contains deploy/hetzner/deploy.sh "billing/lifecycle_nudges.py" "Hetzner deploy writes lifecycle nudge cron"

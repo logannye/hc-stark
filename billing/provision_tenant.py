@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import secrets
+import sqlite3
 import smtplib
 import string
 import sys
@@ -28,6 +29,7 @@ import stripe
 
 import tenant_store
 import sync_keys
+import evaluation_store
 
 app = flask.Flask(__name__)
 
@@ -905,7 +907,7 @@ def send_magic_link():
 
 @app.route("/send-contact", methods=["POST"])
 def send_contact():
-    """Forward a contact-form submission to the support inbox."""
+    """Persist a contact-form submission without sending outbound email."""
     req_secret = flask.request.headers.get("X-Internal-Secret", "")
     if not INTERNAL_SECRET or not secrets.compare_digest(req_secret, INTERNAL_SECRET):
         return flask.jsonify(error="unauthorized"), 403
@@ -941,16 +943,28 @@ def send_contact():
     }
     safe_category = category if category in valid_categories else "General Inquiry"
 
-    def _bg_send():
-        try:
-            _send_contact_email(name, email, safe_category, message, qualification)
-            if safe_category == "Design Partner":
-                _send_evaluation_ack(name, email)
-        except Exception as e:
-            print(f"WARNING: Contact email failed from {email}: {e}", file=sys.stderr)
+    try:
+        application_id = evaluation_store.create_application(
+            name=name,
+            email=email,
+            category=safe_category,
+            message=message,
+            qualification=qualification,
+        )
+    except (OSError, sqlite3.Error) as exc:
+        print(f"ERROR: Failed to persist evaluation application: {exc}", file=sys.stderr)
+        return flask.jsonify(error="application storage unavailable"), 503
 
-    threading.Thread(target=_bg_send, daemon=True).start()
-    return flask.jsonify(ok=True), 200
+    return flask.jsonify(
+        ok=True,
+        application_id=application_id,
+        benchmark_url="https://tinyzkp.com/benchmarks",
+        benchmark_command=(
+            "hc-cli benchmark plonky3 --manifest workload.json "
+            "--baseline conventional --candidate bounded --report report.json"
+        ),
+        next_action="Save this application ID and prepare a non-sensitive reproducible manifest.",
+    ), 201
 
 
 @app.route("/verify-magic-link", methods=["POST"])

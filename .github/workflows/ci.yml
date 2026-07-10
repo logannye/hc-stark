@@ -115,6 +115,7 @@ jobs:
           python3 -m pytest billing/tests/test_usage_pg_tools.py
           python3 -m pytest billing/tests/test_tenant_pg_tools.py
           python3 -m pytest billing/tests/test_contact_intake.py
+          python3 -m pytest billing/tests/test_evaluation_store.py
           python3 -m pytest billing/tests/test_contract_billing.py
           python3 -m pytest billing/tests/test_configure_contract_portal.py
           python3 -m pytest billing/tests/test_legacy_billing_containment.py
@@ -151,6 +152,8 @@ jobs:
           python3 -m py_compile billing/legacy_billing_containment.py
           python3 -m py_compile billing/configure_contract_portal.py
           python3 -m py_compile billing/contract_billing.py
+          python3 -m py_compile billing/evaluation_store.py
+          python3 -m py_compile billing/evaluation_intake.py
           python3 -m py_compile scripts/commercial/render_offers.py
           python3 -m py_compile scripts/benchmark/validate_release_gate.py
           bash -n scripts/monitoring/api_health_audit.sh
@@ -172,6 +175,7 @@ jobs:
           find site/functions/api -name '*.js' -print0 | xargs -0 -n1 node --check
           node --check site/analytics.js
           node --check deploy/uptime-probe/worker.js
+          node scripts/ci/cloudflare_backup_worker_test.mjs
 
       - name: clippy production packages
         run: cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-server -p hc-mcp --all-targets -- -D warnings

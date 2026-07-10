@@ -1,7 +1,7 @@
 // Cloudflare Pages Function — contact form intake.
 //
-// Forwards submissions to the billing-webhook service on Hetzner, which
-// holds SMTP credentials and uses an environment-configured TinyZKP mailbox.
+// Persists submissions in the owner-only evaluation ledger on Hetzner.
+// No outbound email is sent by this recovery-period intake path.
 
 const RATE_LIMIT_MAX = 3;          // max contact submissions per window per IP
 const RATE_LIMIT_WINDOW_S = 600;   // 10-minute window
@@ -166,7 +166,14 @@ export async function onRequestPost(context) {
       });
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
+    const stored = await resp.json().catch(() => ({}));
+    return new Response(JSON.stringify({
+      ok: true,
+      application_id: stored.application_id,
+      benchmark_url: stored.benchmark_url,
+      benchmark_command: stored.benchmark_command,
+      next_action: stored.next_action,
+    }), {
       status: 200,
       headers: jsonHeaders,
     });

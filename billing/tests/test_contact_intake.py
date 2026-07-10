@@ -56,10 +56,10 @@ def test_contact_format_includes_project_fit():
     assert "Verifier target: Unmodified Plonky3 verifier" in body
 
 
-def test_send_contact_route_forwards_sanitized_qualification(monkeypatch):
+def test_send_contact_route_persists_sanitized_qualification(monkeypatch):
     captured = {}
 
-    def fake_send(name, email, category, message, qualification=None):
+    def fake_create(*, name, email, category, message, qualification):
         captured.update({
             "name": name,
             "email": email,
@@ -67,11 +67,10 @@ def test_send_contact_route_forwards_sanitized_qualification(monkeypatch):
             "message": message,
             "qualification": qualification or {},
         })
-        return True
+        return "eval_test123"
 
     monkeypatch.setattr(provision_tenant, "INTERNAL_SECRET", SECRET)
-    monkeypatch.setattr(provision_tenant, "_send_contact_email", fake_send)
-    monkeypatch.setattr(provision_tenant.threading, "Thread", _ImmediateThread)
+    monkeypatch.setattr(provision_tenant.evaluation_store, "create_application", fake_create)
 
     provision_tenant.app.config["TESTING"] = True
     with provision_tenant.app.test_client() as client:
@@ -92,7 +91,9 @@ def test_send_contact_route_forwards_sanitized_qualification(monkeypatch):
             },
         )
 
-    assert resp.status_code == 200
+    assert resp.status_code == 201
+    assert resp.get_json()["application_id"] == "eval_test123"
+    assert "hc-cli benchmark plonky3" in resp.get_json()["benchmark_command"]
     assert captured["email"] == "buyer@example.com"
     assert captured["category"] == "General Inquiry"
     assert captured["qualification"]["workload"] == "Long Plonky3 trace"
@@ -118,16 +119,24 @@ def test_send_contact_rejects_oversized_message(monkeypatch):
     assert resp.status_code == 400
 
 
-def test_design_partner_receives_automatic_benchmark_acknowledgement(monkeypatch):
-    acknowledgements = []
+def test_design_partner_intake_sends_no_email(monkeypatch):
+    outbound_calls = []
     monkeypatch.setattr(provision_tenant, "INTERNAL_SECRET", SECRET)
-    monkeypatch.setattr(provision_tenant, "_send_contact_email", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        provision_tenant.evaluation_store,
+        "create_application",
+        lambda **kwargs: "eval_no_email",
+    )
+    monkeypatch.setattr(
+        provision_tenant,
+        "_send_contact_email",
+        lambda *args, **kwargs: outbound_calls.append("forward"),
+    )
     monkeypatch.setattr(
         provision_tenant,
         "_send_evaluation_ack",
-        lambda name, email: acknowledgements.append((name, email)) or True,
+        lambda *args, **kwargs: outbound_calls.append("ack"),
     )
-    monkeypatch.setattr(provision_tenant.threading, "Thread", _ImmediateThread)
 
     provision_tenant.app.config["TESTING"] = True
     with provision_tenant.app.test_client() as client:
@@ -150,8 +159,9 @@ def test_design_partner_receives_automatic_benchmark_acknowledgement(monkeypatch
             },
         )
 
-    assert resp.status_code == 200
-    assert acknowledgements == [("Proving Lead", "lead@example.com")]
+    assert resp.status_code == 201
+    assert resp.get_json()["application_id"] == "eval_no_email"
+    assert outbound_calls == []
 
 
 def test_signed_legacy_checkout_is_ignored_in_maintenance(monkeypatch):
