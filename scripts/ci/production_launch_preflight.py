@@ -72,7 +72,16 @@ def build_steps(args: argparse.Namespace, *, python: str = "python3", node: str 
         Step("evaluation intake tests", (python, "-m", "pytest", "billing/tests/test_contact_intake.py")),
         Step("public claims lint", (python, "-m", "pytest", "billing/tests/test_site_pricing_parity.py")),
         Step("commercial offer parity", (python, "scripts/commercial/render_offers.py", "--check")),
-        Step("contract billing policy tests", (python, "-m", "pytest", "billing/tests/test_contract_billing.py")),
+        Step(
+            "contract billing policy tests",
+            (
+                python,
+                "-m",
+                "pytest",
+                "billing/tests/test_contract_billing.py",
+                "billing/tests/test_configure_contract_portal.py",
+            ),
+        ),
         Step(
             "commercial scorecard policy tests",
             (python, "-m", "pytest", "scripts/commercial/test_validate_scorecard.py"),

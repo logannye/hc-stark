@@ -28,4 +28,11 @@ annual `send_invoice` subscription. Its default is read-only. Apply mode also
 requires exact Stripe account identity and the
 `TINYZKP_ALLOW_CONTRACT_BILLING_WRITE=1` break-glass variable. The delivery
 invoice requires explicit delivery-acceptance evidence; annual subscriptions
-require an active, exact-price yearly Stripe Price.
+require an active, exact-price yearly Stripe Price. Apply mode reconciles
+existing Stripe invoices so the founding offer cannot exceed two agreement IDs
+and a delivery invoice cannot precede its non-void deposit invoice.
+
+Use `billing/configure_contract_portal.py` to preview the restricted Customer
+Portal policy. Apply mode requires exact account identity and
+`TINYZKP_ALLOW_PORTAL_CONFIGURATION_WRITE=1`; the portal exposes invoices and
+payment-method updates but forbids subscription changes and cancellation.

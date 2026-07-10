@@ -116,6 +116,7 @@ jobs:
           python3 -m pytest billing/tests/test_tenant_pg_tools.py
           python3 -m pytest billing/tests/test_contact_intake.py
           python3 -m pytest billing/tests/test_contract_billing.py
+          python3 -m pytest billing/tests/test_configure_contract_portal.py
           python3 -m pytest billing/tests/test_legacy_billing_containment.py
           python3 -m pytest billing/tests/test_stripe_account_context_check.py
           python3 -m pytest billing/tests/test_stripe_catalog_write_preflight.py

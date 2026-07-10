@@ -101,6 +101,46 @@ def validate_annual_price(price: Any, offer: dict[str, Any]) -> None:
         raise ValueError("annual Stripe price must recur exactly yearly")
 
 
+def listed_invoices(*, customer_id: str | None = None) -> list[Any]:
+    params: dict[str, Any] = {"limit": 100}
+    if customer_id:
+        params["customer"] = customer_id
+    page = stripe.Invoice.list(**params)
+    auto_paging_iter = getattr(page, "auto_paging_iter", None)
+    if callable(auto_paging_iter):
+        return list(auto_paging_iter())
+    return list(value(page, "data", []) or [])
+
+
+def validate_evaluation_history(request: BillingRequest) -> None:
+    """Enforce founding slots and deposit-before-delivery from Stripe records."""
+    if request.action == "evaluation-delivery":
+        deposits = [
+            invoice
+            for invoice in listed_invoices(customer_id=request.customer_id)
+            if value(value(invoice, "metadata", {}) or {}, "tinyzkp_offer_id")
+            == request.offer_id
+            and value(value(invoice, "metadata", {}) or {}, "tinyzkp_agreement_id")
+            == request.agreement_id
+            and value(value(invoice, "metadata", {}) or {}, "tinyzkp_milestone") == "deposit"
+            and value(invoice, "status") != "void"
+        ]
+        if not deposits:
+            raise ValueError("delivery invoice requires a non-void deposit invoice for this agreement")
+    if request.action == "evaluation-deposit" and request.offer_id == "founding_evaluation":
+        agreements = {
+            str(value(metadata, "tinyzkp_agreement_id"))
+            for invoice in listed_invoices()
+            if value(invoice, "status") != "void"
+            if (metadata := value(invoice, "metadata", {}) or {})
+            if value(metadata, "tinyzkp_offer_id") == "founding_evaluation"
+            and value(metadata, "tinyzkp_milestone") == "deposit"
+            and value(metadata, "tinyzkp_agreement_id")
+        }
+        if request.agreement_id not in agreements and len(agreements) >= 2:
+            raise ValueError("the two Founding Evaluation slots are already allocated")
+
+
 def create_invoice(request: BillingRequest, offer: dict[str, Any]) -> Any:
     amount_cents = offer_amount(offer) * 100 // 2
     milestone = "deposit" if request.action == "evaluation-deposit" else "delivery"
@@ -109,23 +149,31 @@ def create_invoice(request: BillingRequest, offer: dict[str, Any]) -> Any:
         "tinyzkp_agreement_id": request.agreement_id,
         "tinyzkp_milestone": milestone,
     }
+    invoice = stripe.Invoice.create(
+        customer=request.customer_id,
+        collection_method="send_invoice",
+        days_until_due=request.days_until_due,
+        auto_advance=False,
+        metadata=metadata,
+        description=f"TinyZKP agreement {request.agreement_id}",
+        idempotency_key=f"tinyzkp-{request.agreement_id}-{milestone}-invoice",
+    )
+    invoice_id = value(invoice, "id")
+    if not isinstance(invoice_id, str) or not invoice_id.startswith("in_"):
+        raise ValueError("Stripe did not return a valid draft invoice ID")
     stripe.InvoiceItem.create(
         customer=request.customer_id,
+        invoice=invoice_id,
         amount=amount_cents,
         currency="usd",
         description=f"{offer['name']} — {milestone}",
         metadata=metadata,
         idempotency_key=f"tinyzkp-{request.agreement_id}-{milestone}-item",
     )
-    return stripe.Invoice.create(
-        customer=request.customer_id,
-        collection_method="send_invoice",
-        days_until_due=request.days_until_due,
-        pending_invoice_items_behavior="include",
+    return stripe.Invoice.finalize_invoice(
+        invoice_id,
         auto_advance=True,
-        metadata=metadata,
-        description=f"TinyZKP agreement {request.agreement_id}",
-        idempotency_key=f"tinyzkp-{request.agreement_id}-{milestone}-invoice",
+        idempotency_key=f"tinyzkp-{request.agreement_id}-{milestone}-finalize",
     )
 
 
@@ -187,6 +235,8 @@ def main() -> None:
         raise SystemExit("STRIPE_SECRET_KEY is required")
     account = stripe.Account.retrieve()
     verify_account(account, args.expected_account_id or "", args.expected_display_name or "")
+    if request.action.startswith("evaluation-"):
+        validate_evaluation_history(request)
     created = (
         create_annual_contract(request, offer)
         if request.action == "annual-contract"

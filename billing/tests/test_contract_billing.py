@@ -58,3 +58,81 @@ def test_annual_contract_requires_matching_annual_price():
             },
             offer,
         )
+
+
+def test_evaluation_milestone_isolated_to_its_own_invoice(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        billing.stripe.Invoice,
+        "create",
+        lambda **kwargs: calls.append(("invoice", kwargs)) or {"id": "in_eval"},
+    )
+    monkeypatch.setattr(
+        billing.stripe.InvoiceItem,
+        "create",
+        lambda **kwargs: calls.append(("item", kwargs)) or {"id": "ii_eval"},
+    )
+    monkeypatch.setattr(
+        billing.stripe.Invoice,
+        "finalize_invoice",
+        lambda invoice_id, **kwargs: calls.append(("finalize", invoice_id, kwargs))
+        or {"id": invoice_id, "status": "open"},
+    )
+    req = request()
+    created = billing.create_invoice(req, req.validate(billing.load_offers()))
+
+    invoice_call = calls[0][1]
+    item_call = calls[1][1]
+    assert created["id"] == "in_eval"
+    assert invoice_call["auto_advance"] is False
+    assert "pending_invoice_items_behavior" not in invoice_call
+    assert item_call["invoice"] == "in_eval"
+    assert calls[2][0:2] == ("finalize", "in_eval")
+    assert calls[2][2]["auto_advance"] is True
+
+
+def test_founding_offer_is_limited_to_two_unique_agreements(monkeypatch):
+    invoices = {
+        "data": [
+            {
+                "status": "paid",
+                "metadata": {
+                    "tinyzkp_offer_id": "founding_evaluation",
+                    "tinyzkp_agreement_id": agreement,
+                    "tinyzkp_milestone": "deposit",
+                },
+            }
+            for agreement in ("eval-001", "eval-002")
+        ]
+    }
+    monkeypatch.setattr(billing.stripe.Invoice, "list", lambda **kwargs: invoices)
+
+    billing.validate_evaluation_history(request(agreement_id="eval-001"))
+    with pytest.raises(ValueError, match="slots are already allocated"):
+        billing.validate_evaluation_history(request(agreement_id="eval-003"))
+
+
+def test_delivery_requires_existing_non_void_deposit(monkeypatch):
+    monkeypatch.setattr(
+        billing.stripe.Invoice,
+        "list",
+        lambda **kwargs: {
+            "data": [
+                {
+                    "status": "void",
+                    "metadata": {
+                        "tinyzkp_offer_id": "standard_evaluation",
+                        "tinyzkp_agreement_id": "eval-001",
+                        "tinyzkp_milestone": "deposit",
+                    },
+                }
+            ]
+        },
+    )
+    delivery = request(
+        action="evaluation-delivery",
+        offer_id="standard_evaluation",
+        delivery_accepted_at="2026-07-09T12:00:00Z",
+    )
+    with pytest.raises(ValueError, match="non-void deposit invoice"):
+        billing.validate_evaluation_history(delivery)
