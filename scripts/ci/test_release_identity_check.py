@@ -1,3 +1,6 @@
+import json
+import stat
+
 import release_identity_check as check
 
 
@@ -83,3 +86,67 @@ def test_local_cli_and_benchmark_artifacts_bind_to_same_release(tmp_path):
     assert "benchmark release_sha must be 'abc123'; got 'old'" in check.validate_artifact(
         report, "abc123", "benchmark"
     )
+
+
+def test_main_writes_owner_only_typed_identity_report(monkeypatch, tmp_path):
+    live = {
+        name: {
+            "url": f"https://{name}.example/version",
+            "service": name,
+            "package_version": "0.1.0",
+            "release_sha": "abc123",
+        }
+        for name in ("site", "api", "mcp")
+    }
+    monkeypatch.setattr(check, "collect_surfaces", lambda *_args: ([], live.copy()))
+    cli = tmp_path / "cli.json"
+    cli.write_text(
+        '{"service":"cli","package_version":"0.1.0","release_sha":"abc123"}',
+        encoding="utf-8",
+    )
+    output = tmp_path / "evidence" / "identity.json"
+
+    assert check.main(
+        [
+            "--expected-sha",
+            "abc123",
+            "--cli-release-file",
+            str(cli),
+            "--output",
+            str(output),
+        ]
+    ) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["schema_version"] == 1
+    assert report["release_sha"] == "abc123"
+    assert set(report["surfaces"]) == {"api", "mcp", "site", "cli"}
+    assert stat.S_IMODE(output.stat().st_mode) == 0o600
+
+
+def test_typed_report_rejects_cli_package_version_skew(monkeypatch, tmp_path):
+    live = {
+        name: {
+            "url": f"https://{name}.example/version",
+            "service": name,
+            "package_version": "0.1.0",
+            "release_sha": "abc123",
+        }
+        for name in ("site", "api", "mcp")
+    }
+    monkeypatch.setattr(check, "collect_surfaces", lambda *_args: ([], live.copy()))
+    cli = tmp_path / "cli.json"
+    cli.write_text(
+        '{"service":"cli","package_version":"0.2.0","release_sha":"abc123"}',
+        encoding="utf-8",
+    )
+
+    assert check.main(
+        [
+            "--expected-sha",
+            "abc123",
+            "--cli-release-file",
+            str(cli),
+            "--output",
+            str(tmp_path / "identity.json"),
+        ]
+    ) == 1

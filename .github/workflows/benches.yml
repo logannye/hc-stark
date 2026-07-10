@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "0 3 * * 0"
   workflow_dispatch:
+    inputs:
+      exploratory_128m:
+        description: "Run the non-blocking 2^27-row exploratory workloads"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -28,6 +34,8 @@ jobs:
         with:
           toolchain: "1.95.0"
       - uses: Swatinem/rust-cache@v2
+      - name: Install benchmark validator dependencies
+        run: python3 -m pip install --user -r scripts/benchmark/requirements.txt
       - name: Build pinned release CLI
         run: cargo build --release -p hc-cli --locked
       - name: Prepare owner-only scratch and cgroup
@@ -38,14 +46,21 @@ jobs:
         env:
           HC_RELEASE_SHA: ${{ github.sha }}
         run: |
+          mkdir -p raw-reports
+          report_owner="$(id -u):$(id -g)"
+          reclaim_reports() { sudo chown -R "$report_owner" raw-reports || true; }
+          trap reclaim_reports EXIT
           sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/run_plonky3_cgroup.py \
             --manifest examples/plonky3/${{ matrix.workload }}-1m.json \
+            --mode throughput \
+            --require-fixed-host \
             --baseline-memory-cap 17179869184 \
             --report raw-reports/${{ matrix.workload }}-1m.json
       - name: Validate one-million-row acceptance
         run: |
           python3 scripts/benchmark/validate_release_gate.py \
             --gate one-million \
+            --expected-release-sha "${{ github.sha }}" \
             --manifest examples/plonky3/${{ matrix.workload }}-1m.json \
             --baseline raw-reports/${{ matrix.workload }}-1m.baseline.json \
             --candidate raw-reports/${{ matrix.workload }}-1m.json
@@ -54,5 +69,97 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: plonky3-${{ matrix.workload }}-1m-${{ github.sha }}
+          path: raw-reports/*.json
+          if-no-files-found: warn
+
+  sixteen-million-row-ceiling:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
+    timeout-minutes: 1440
+    strategy:
+      fail-fast: false
+      matrix:
+        workload: [fibonacci, poseidon2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install benchmark validator dependencies
+        run: python3 -m pip install --user -r scripts/benchmark/requirements.txt
+      - name: Build pinned release CLI
+        run: cargo build --release -p hc-cli --locked
+      - name: Prepare owner-only scratch and cgroup
+        run: |
+          sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-16m
+          sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
+      - name: Measure bounded ceiling mode
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p raw-reports
+          report_owner="$(id -u):$(id -g)"
+          reclaim_reports() { sudo chown -R "$report_owner" raw-reports || true; }
+          trap reclaim_reports EXIT
+          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/run_plonky3_cgroup.py \
+            --manifest examples/plonky3/${{ matrix.workload }}-16m.json \
+            --mode ceiling \
+            --require-fixed-host \
+            --report raw-reports/${{ matrix.workload }}-16m.json
+      - name: Validate 2^24-row ceiling acceptance
+        run: |
+          python3 scripts/benchmark/validate_release_gate.py \
+            --gate ten-million \
+            --expected-release-sha "${{ github.sha }}" \
+            --manifest examples/plonky3/${{ matrix.workload }}-16m.json \
+            --candidate raw-reports/${{ matrix.workload }}-16m.json
+      - name: Upload raw reports and normalized manifests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plonky3-${{ matrix.workload }}-16m-${{ github.sha }}
+          path: raw-reports/*.json
+          if-no-files-found: warn
+
+  exploratory-128m-ceiling:
+    if: github.event_name == 'workflow_dispatch' && inputs.exploratory_128m
+    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
+    timeout-minutes: 2880
+    strategy:
+      fail-fast: false
+      matrix:
+        workload: [fibonacci, poseidon2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@v2
+      - name: Build pinned release CLI
+        run: cargo build --release -p hc-cli --locked
+      - name: Prepare owner-only exploratory scratch and cgroup
+        run: |
+          sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-128m
+          sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
+      - name: Measure non-blocking 2^27-row candidate
+        continue-on-error: true
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p raw-reports
+          report_owner="$(id -u):$(id -g)"
+          reclaim_reports() { sudo chown -R "$report_owner" raw-reports || true; }
+          trap reclaim_reports EXIT
+          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/run_plonky3_cgroup.py \
+            --manifest examples/plonky3/${{ matrix.workload }}-128m.json \
+            --mode ceiling \
+            --require-fixed-host \
+            --report raw-reports/${{ matrix.workload }}-128m.json
+      - name: Upload exploratory raw evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plonky3-${{ matrix.workload }}-128m-exploratory-${{ github.sha }}
           path: raw-reports/*.json
           if-no-files-found: warn

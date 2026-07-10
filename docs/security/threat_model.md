@@ -1,102 +1,74 @@
-# Threat Model
+# TinyZKP Plonky3 backend threat model
 
-## System Boundaries
+## Security boundary
 
-hc-stark is a ZK-STARK proof system. The security-critical boundary is:
+Plonky3 0.6.1 owns AIR semantics, the Fiat–Shamir transcript, PCS/FRI proof
+types, and verification. TinyZKP changes prover-side orchestration and storage
+only. A bounded proof must deserialize as the official Plonky3 proof and verify
+under the unmodified `p3_uni_stark::verify` implementation.
 
-**Prover (untrusted) -> Proof -> Verifier (trusted)**
+`ProofBundleV1` packages the official proof, public values, workload manifest,
+and release provenance. It is not a new statement or proof protocol.
 
-The verifier must reject ALL invalid proofs. A valid proof must only be producible by someone who knows a valid witness (the execution trace).
+The frozen profile is transparent verifiable computation. TinyZKP makes no
+zero-knowledge or witness-privacy claim for backend v1.
 
-## Attacker Model
+## Adversaries and goals
 
-### Adversary Capabilities
+An adversary may control proof/bundle/checkpoint bytes, scratch directory
+contents, process timing and cancellation, and all untrusted workload input.
+Relevant goals are:
 
-- **Full control over proof bytes**: The attacker can craft arbitrary proof data.
-- **Knowledge of the protocol**: The STARK protocol is public. Security relies on computational hardness, not secrecy.
-- **Computational bound**: The attacker is polynomially bounded (standard cryptographic assumption).
+1. make a false official proof verify;
+2. alter public values, workload, profile, dependency lock, or release identity
+   without detection;
+3. resume from stale, corrupt, cross-workload, or attacker-selected artifacts;
+4. escape the scratch root through traversal or symlinks;
+5. cause unbounded allocation, disk exhaustion, verifier panic, or silent
+   partial output;
+6. leak witness values through progress events, manifests, reports, or logs.
 
-### Adversary Goals
+## Controls
 
-1. **Forge a proof**: Produce a proof that verifies for a false statement (violates soundness).
-2. **Crash the verifier**: Cause a panic, OOM, or infinite loop in the verifier (violates availability).
-3. **Extract private information**: Learn the execution trace from the proof (violates zero-knowledge, when ZK masking is enabled).
-4. **Timing side-channel**: Extract secret exponents or field elements through timing variations.
+- Exact Plonky3 `0.6.1` crates, checksums, profile, Poseidon2 seed, FRI
+  parameters, and postcard serializer are pinned by a compatibility manifest.
+- Conventional, memory, scratch, and resumed execution must produce identical
+  proof bytes for deterministic workloads.
+- The unmodified verifier is run before a proof bundle is returned.
+- JSON contracts reject unknown versions and fields and impose input-size
+  limits before proof decoding. Proof bytes use canonical unpadded base64url
+  and a BLAKE3 digest.
+- Scratch elements use canonical field encoding, headers, dimensions, and
+  payload digests. Owner-only paths, non-symlink checks, safe relative paths,
+  preallocation, atomic manifests, and fail-closed reopen validation are
+  required.
+- `CheckpointManifestV2` binds backend, profile, release, dependency lock,
+  workload, input, resource policy, phase, transcript state, and every resume
+  artifact. The Poseidon2 permutation is reconstructed rather than serialized.
+- Cgroup-v2 release benchmarks enforce the process memory ceiling and record
+  whole-process peak memory, CPU, block I/O, scratch high-water, proof size,
+  and official verification.
+- CLI events contain phase/progress/provenance/resource metadata only; witness
+  values are forbidden.
+- Release publication derives from hashed evidence. Handwritten pass booleans,
+  unresolved critical/high review findings, missing partner acceptance, or
+  release-identity skew block publication.
 
-## Security Properties
+## Residual risks and open gates
 
-### Soundness
-
-A computationally bounded adversary cannot produce a proof that verifies for a false statement, except with negligible probability.
-
-**Soundness error**: FRI soundness is governed by the **proximity gap** for
-Reed-Solomon codes, *not* by `1/|F|^query_count`. The per-query error is a
-function of the code rate ρ = 1/blowup (deployed blowup 8 ⇒ ρ = 1/8), giving
-≈ √ρ … ρ per query (conservative vs. ethSTARK-conjecture regimes); soundness-
-critical challenges are drawn from the quadratic extension K ≈ 2^128. At the
-**deployed verifier floor** (40 queries, blowup 8, 20 grinding bits, min proof
-version 5) this is a **conjectured ~80–140-bit** level — **conjectured** because
-it relies on the ethSTARK proximity-gap conjecture, and **audit-pending** (no
-bit figure is advertised until the external Phase 4 audit). See
-[`soundness_proof.md`](soundness_proof.md) for the full argument and parameter
-table.
-
-**Dependencies**:
-- The ethSTARK proximity-gap conjecture for Reed-Solomon codes
-- FRI low-degree test correctness (antipodal + 1/x fold, final-degree check)
-- Merkle commitment binding (Blake3 collision resistance)
-- Constraint composition over K ≈ 2^128 (single composition challenge)
-- Fiat-Shamir transcript determinism + grinding (no malleability)
-- Constraint polynomial evaluation correctness
-
-### Zero-Knowledge (when enabled)
-
-When `zk_mask_degree > 0` (protocol version 4), the proof reveals nothing about the execution trace beyond the public inputs.
-
-**Mechanism**: Random masking polynomial of the specified degree is added to the trace polynomial before commitment.
-
-### Completeness
-
-An honest prover with a valid witness always produces a proof that verifies.
-
-### Verifier Safety
-
-The verifier must never panic, OOM, or loop on ANY input. All error paths return `Err(VerifierError)`.
-
-## Trust Assumptions
-
-| Component | Trust Level | Rationale |
-|-----------|------------|-----------|
-| Goldilocks field arithmetic | High | Constant-time ops, proptest-verified algebraic properties |
-| Blake3 hash | High | Well-audited cryptographic hash |
-| Merkle tree | Medium | Custom implementation, needs audit of height_dfs.rs |
-| FRI verifier | Medium | Core soundness-critical code, 0 unwrap calls |
-| Fiat-Shamir transcript | Medium | Protocol labels must be unique and collision-free |
-| Proof deserialization | Medium | JSON parsing, hardened against malformed input |
-| WASM/Python/Node bindings | Low | Thin wrappers, security depends on underlying verifier |
-
-## Attack Surface
-
-### Proof Deserialization
-- **Risk**: Malformed JSON could cause panics or excessive allocation
-- **Mitigation**: serde_json handles bounds; all unwrap calls removed from verifier
-- **Fuzz coverage**: `decode_proof_bytes`, `verify_proof_bytes`, `malformed_proof` targets
-
-### Merkle Path Verification
-- **Risk**: Adversarial paths could fool the verifier
-- **Mitigation**: Path length checked against tree height; sibling hashes recomputed
-- **Fuzz coverage**: `merkle_path` target
-
-### FRI Protocol
-- **Risk**: Incorrect folding or final polynomial check
-- **Mitigation**: Layer roots committed before challenges drawn; final poly evaluated at all points
-- **Fuzz coverage**: Indirect via `verify_proof_bytes`
-
-### Field Arithmetic
-- **Risk**: Non-canonical elements, overflow, or timing leaks
-- **Mitigation**: All operations produce canonical results (< MODULUS); constant-time add/sub/neg/pow_ct
-- **Fuzz coverage**: `field_ops` target; proptest algebraic properties
-
-### HTTP Server
-- **Risk**: DoS via large proofs, rate limiting bypass
-- **Mitigation**: Auth + rate limiting configurable; proof size bounded by JSON parser limits
+- Plonky3’s frozen benchmark FRI parameters have not yet received the required
+  specialist and implementation reviews for TinyZKP production use.
+- Unit and subprocess fault injection cover every durable phase from trace
+  generation through verified proof assembly. The machine-readable matrix also
+  covers real disk-full recovery, chunk truncation/corruption, stale identity,
+  path traversal, symlinks, and cancellation retention. Independent fixed-host
+  reproduction, SIGTERM, and power-loss simulation remain release evidence
+  gates.
+- Fixed-host 1M throughput and 2²⁴-row ceiling reports have not yet been
+  independently reproduced. Reports bind comparison subprocesses with one
+  session ID and record typed CPU, memory, block-device, rotational, and NVMe
+  facts; the gate rejects mixed-host or nonconforming-host comparisons.
+- Filesystem availability and SSD endurance remain operator responsibilities;
+  preflight estimates cannot guarantee a disk will not fail mid-job.
+- A statically linked partner AIR is part of the trusted integration surface
+  and requires its own AIR correctness review.

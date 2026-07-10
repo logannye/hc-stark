@@ -293,16 +293,40 @@ def audit_backend_recovery(root: pathlib.Path) -> list[GateResult] | None:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("status") != "blocked":
         return None
+    required = (
+        "clean_release_source",
+        "plonky3_dependency_profile_pinned",
+        "official_verifier_fibonacci",
+        "official_verifier_poseidon2",
+        "deterministic_cross_mode_proofs",
+        "one_million_row_resource_gate",
+        "ten_million_row_resource_gate",
+        "independent_resource_reproduction",
+        "crash_resume_and_corruption_suite",
+        "plonky3_specialist_review",
+        "implementation_review_no_high_findings",
+        "external_design_partner_integration",
+        "replacement_sdk_contracts",
+        "signed_release_sbom_and_checksums",
+        "api_mcp_site_cli_identity_match",
+    )
+    evidence_path = root / str(payload.get("evidence_manifest", ""))
+    evidence = {}
+    if evidence_path.is_file():
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8")).get("gates", {})
     results = []
-    for name, gate in payload["gates"].items():
-        passed = bool(gate.get("passed"))
-        evidence = str(gate.get("evidence", "")).strip()
-        details = [evidence] if evidence else ["release-blocking evidence not yet earned"]
+    for name in required:
+        gate = evidence.get(name) if isinstance(evidence, dict) else None
+        details = (
+            ["hashed evidence recorded; backend_release_ready.py decides validity"]
+            if isinstance(gate, dict)
+            else ["release-blocking evidence not yet earned"]
+        )
         results.append(
             GateResult(
                 "Backend v1",
                 name.replace("_", " "),
-                "PASS" if passed else "SKIP",
+                "SKIP",
                 details,
                 None,
             )

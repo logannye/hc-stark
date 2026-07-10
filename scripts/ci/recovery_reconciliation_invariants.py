@@ -88,6 +88,33 @@ def main() -> int:
     ):
         require(marker in release_workflow, f"release workflow lost integrity control: {marker}")
 
+    require(
+        "test_build_external_records.py" in workflow,
+        "CI does not validate hash-bound external evidence record generation",
+    )
+    finalizer = text("scripts/release/finalize_signed_evidence.py")
+    for marker in (
+        "REQUIRED_CHECKSUM_ENTRIES",
+        "--certificate-identity-regexp",
+        "--certificate-oidc-issuer",
+        "verify_spdx_sbom",
+    ):
+        require(marker in finalizer, f"signed finalization lost policy control: {marker}")
+
+    benches_workflow = text(".github/workflows/benches.yml")
+    require(
+        benches_workflow.count("--require-fixed-host") == 3,
+        "fixed-host workflows do not fail closed on machine/storage class",
+    )
+    require(
+        benches_workflow.count("trap reclaim_reports EXIT") == 3,
+        "root-run fixed-host reports are not returned to the workflow owner",
+    )
+    require(
+        benches_workflow.count("--expected-release-sha") == 2,
+        "blocking fixed-host validators do not bind reports to the workflow SHA",
+    )
+
     require((ROOT / "crates/hc-server/src/lib.rs").is_file(), "historical server source was deleted")
     require((ROOT / "crates/hc-server/src/bin/hc-worker.rs").is_file(), "legacy worker research source was deleted")
     require((ROOT / "crates/hc-server/src/bin/hc-job-worker.rs").is_file(), "legacy queue-worker research source was deleted")

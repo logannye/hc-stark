@@ -85,14 +85,22 @@ def main() -> int:
     source = (ROOT / "crates" / "hc-plonky3" / "src" / "prover.rs").read_text(
         encoding="utf-8"
     )
+    checkpoint_source = (ROOT / "crates" / "hc-plonky3" / "src" / "checkpoint.rs").read_text(
+        encoding="utf-8"
+    )
     for required in [
         'pub const PLONKY3_VERSION: &str = "0.6.1"',
         'pub const COMPATIBILITY_PROFILE: &str = "tinyzkp-p3-goldilocks-v1"',
         "FriParameters::new_benchmark",
         "Radix2DitParallel::<Val>::default()",
+        f'pub const DEPENDENCY_LOCK_SHA256: &str =\n    "{actual_lock_hash}"',
     ]:
         if required not in source:
             failures.append(f"backend source is missing frozen profile token {required!r}")
+    if profile.get("configuration", {}).get("permutation_rng") != "rand-0.10.2::Xoshiro256PlusPlus":
+        failures.append("compatibility profile does not pin the cross-target permutation RNG")
+    if "Xoshiro256PlusPlus::seed_from_u64(1)" not in checkpoint_source:
+        failures.append("backend does not reconstruct cross-target-stable permutation parameters")
 
     if failures:
         print("Plonky3 compatibility gate failed:")

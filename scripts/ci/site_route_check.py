@@ -75,6 +75,7 @@ GONE_ROUTE_PREFIXES = {
     "/recipes",
     "/research",
     "/templates",
+    "/vendor",
 }
 
 

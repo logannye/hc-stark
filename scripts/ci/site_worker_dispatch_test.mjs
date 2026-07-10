@@ -89,6 +89,7 @@ async function main() {
       "/agents", "/agents.html", "/agent-policy", "/agent-policy.json", "/roi",
       "/roi.json", "/calculator", "/use-cases", "/compare/foo", "/integrations",
       "/mcp.json", "/.well-known/tinyzkp-offers.json",
+      "/vendor/tinyzkp-verify/tinyzkp-verify.js",
     ]) {
       const assets = assetsMock();
       const response = await worker.fetch(

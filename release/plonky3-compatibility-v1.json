@@ -3,7 +3,7 @@
   "profile_id": "tinyzkp-p3-goldilocks-v1",
   "release_status": "backend_recovery",
   "rust_toolchain": "1.95.0",
-  "cargo_lock_sha256": "be309e26c2c0375174b8c61d5111e02db87c613346724f0198712dc9d70a967e",
+  "cargo_lock_sha256": "7a3e859e9d457006e38737f418fdf16f0e538977c23bf9882b4225d43b3db455",
   "upstream": {
     "repository": "https://github.com/Plonky3/Plonky3",
     "tag": "v0.6.1",
@@ -14,6 +14,8 @@
     "challenge_field": "BinomialExtensionField<Goldilocks,2>",
     "merkle_and_transcript_permutation": "Poseidon2Goldilocks<8>",
     "permutation_seed": 1,
+    "permutation_rng": "rand-0.10.2::Xoshiro256PlusPlus",
+    "poseidon2_trace_rng": "rand-0.10.2::Xoshiro256PlusPlus",
     "fri_parameters": "FriParameters::new_benchmark",
     "proof_system": "p3_uni_stark",
     "proof_serializer": "postcard-1.1.3",
@@ -36,17 +38,19 @@
   "artifact_dependencies": [
     {"name":"base64","version":"0.22.1","checksum":"72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"},
     {"name":"blake3","version":"1.8.2","checksum":"3888aaa89e4b2a40fca9848e400f6a658a5a3978de7be858e209cafa8be9a4a0"},
+    {"name":"getrandom","version":"0.4.2","checksum":"0de51e6874e94e7bf76d726fc5d13ba782deca734ff60d5bb2fb2607c7406555"},
     {"name":"postcard","version":"1.1.3","checksum":"6764c3b5dd454e283a30e6dfe78e9b31096d9e32036b5d1eaac7a6119ccb9a24"},
     {"name":"rand","version":"0.10.2","checksum":"c7f5fa3a058cd35567ef9bfa5e75732bee0f9e4c55fa90477bef2dfcdbc4be80"},
+    {"name":"rayon","version":"1.11.0","checksum":"368f01d005bf8fd9b1206fb6fa653e6c4a81ceb1466406b81792d87c5677a58f"},
     {"name":"serde","version":"1.0.228","checksum":"9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"},
     {"name":"serde_json","version":"1.0.145","checksum":"402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"}
   ],
   "validated_workloads": ["fibonacci", "poseidon2_goldilocks"],
   "known_limits": [
     "The Plonky3 0.6.1 TwoAdicSubgroupDft trait owns its input RowMajorMatrix.",
-    "The block-readable entry point removes that input floor but is not yet consumed by upstream p3-uni-stark.",
-    "The scratch DFT uses bounded butterfly tiles; the planned near-square four-step transform and transpose are not yet implemented.",
+    "TinyZKP uses local pinned prover orchestration so block-readable stores do not change upstream proof types or verification.",
+    "All durable phase checkpoints and signal cancellation require fixed-host crash, disk-full, and termination evidence before release.",
     "FriParameters::new_benchmark is frozen for compatibility testing, not represented as an audited production security claim.",
-    "Full-pipeline one-million-row and ten-million-row resource gates remain open."
+    "Full-pipeline 1,048,576-row and 16,777,216-row fixed-host resource gates remain open."
   ]
 }

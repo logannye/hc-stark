@@ -37,6 +37,7 @@ const GONE_PREFIXES = [
   "/agents", "/agent-", "/verifiable-agent-output", "/roi", "/calculator",
   "/fit", "/use-cases", "/compare", "/integrations", "/apps", "/badges",
   "/examples", "/limits", "/recipes", "/research", "/templates",
+  "/vendor",
 ];
 
 const GONE_ASSETS = new Set([

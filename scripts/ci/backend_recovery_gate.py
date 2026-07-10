@@ -102,19 +102,10 @@ def check_billing_and_release() -> None:
 
     release = json.loads(text("release/backend-v1-gates.json"))
     require(release["status"] == "blocked", "backend v1 must remain blocked during recovery")
-    for gate_name in (
-        "one_million_row_resource_gate",
-        "ten_million_row_resource_gate",
-        "deterministic_cross_mode_proofs",
-        "crash_resume_and_corruption_suite",
-        "plonky3_specialist_review",
-        "implementation_review_no_high_findings",
-        "external_design_partner_integration",
-        "replacement_sdk_contracts",
-        "signed_release_sbom_and_checksums",
-        "api_mcp_site_cli_identity_match",
-    ):
-        require(not release["gates"][gate_name]["passed"], f"unearned release gate is marked passed: {gate_name}")
+    require(release.get("schema_version") == 2, "backend release gate config is not evidence-derived v2")
+    require("gates" not in release, "backend release config still trusts manual gate booleans")
+    evidence_path = ROOT / release.get("evidence_manifest", "")
+    require(not evidence_path.exists(), "release evidence manifest exists during explicitly blocked recovery")
 
 
 def main() -> int:

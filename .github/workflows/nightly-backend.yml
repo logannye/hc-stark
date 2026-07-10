@@ -1,0 +1,64 @@
+name: Nightly Plonky3 backend stress
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof-equality-crash-and-fuzz:
+    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
+    timeout-minutes: 720
+    env:
+      TINYZKP_NIGHTLY_MAX_LOG: "18"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95.0"
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - uses: Swatinem/rust-cache@v2
+      - name: Randomized proof equality through 2^18
+        run: cargo test -p hc-plonky3 --release --locked nightly_proof_equality_through_configured_power_of_two -- --ignored --nocapture
+      - name: Complete machine-readable checkpoint crash rotation
+        run: |
+          image="$(mktemp)"
+          mount_dir="$(mktemp -d)"
+          cleanup() {
+            sudo umount "$mount_dir" || true
+            rm -f "$image"
+            rmdir "$mount_dir" || true
+          }
+          trap cleanup EXIT
+          truncate -s 134217728 "$image"
+          mkfs.ext4 -q -F "$image"
+          sudo mount -o loop "$image" "$mount_dir"
+          sudo chown "$(id -u):$(id -g)" "$mount_dir"
+          HC_RELEASE_SHA="${{ github.sha }}" \
+            python3 scripts/release/run_crash_matrix.py \
+              --output raw-reports/crash-matrix.json \
+              --log-dir raw-reports/crash-logs \
+              --disk-full-scratch "$mount_dir"
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Parser and recovery fuzz smoke
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          python3 scripts/release/run_fuzz_smoke.py \
+            --seconds 60 \
+            --rss-limit-mb 2048 \
+            --output raw-reports/fuzz-smoke.json \
+            --log-dir raw-reports/fuzz-logs
+      - name: Upload crash/fuzz logs and summaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plonky3-fuzz-smoke-${{ github.sha }}
+          path: raw-reports/
+          if-no-files-found: warn

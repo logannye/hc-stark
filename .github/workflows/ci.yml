@@ -21,6 +21,7 @@ jobs:
         with:
           toolchain: "1.95.0"
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -28,7 +29,7 @@ jobs:
           node-version: 20
 
       - name: Install Python test deps
-        run: python3 -m pip install --user pytest -r billing/requirements.txt
+        run: python3 -m pip install --user pytest -r billing/requirements.txt -r scripts/benchmark/requirements.txt
 
       - name: Install runtime test deps
         run: sudo apt-get update && sudo apt-get install -y sqlite3
@@ -50,11 +51,22 @@ jobs:
       - name: Plonky3 backend recovery gate
         run: python3 scripts/ci/backend_recovery_gate.py
 
+      - name: Backend source secret and generated-artifact scan
+        run: |
+          python3 scripts/ci/backend_source_scan.py
+          python3 -m pytest scripts/ci/test_backend_source_scan.py -q
+
       - name: Frozen Plonky3 compatibility profile
         run: python3 scripts/ci/plonky3_compatibility_gate.py
 
       - name: Plonky3 official verifier and DFT differential tests
-        run: cargo test -p hc-plonky3
+        run: cargo test -p hc-plonky3 --locked
+
+      - name: Release four-step DFT differential through 2^20 rows
+        run: cargo test -p hc-plonky3 --release dft --locked
+
+      - name: Plonky3 known-answer vectors are deterministic
+        run: bash scripts/ci/check_plonky3_known_answers.sh
 
       - name: Plonky3 cgroup harness unit tests
         run: |
@@ -67,6 +79,11 @@ jobs:
       - name: launch gate audit
         run: |
           python3 -m pytest scripts/ci/test_backend_release_ready.py
+          python3 -m pytest scripts/ci/test_backend_prerelease_ready.py
+          python3 -m pytest scripts/release/test_finalize_signed_evidence.py
+          python3 -m pytest scripts/release/test_build_candidate_evidence.py
+          python3 -m pytest scripts/release/test_verify_sdk_release_versions.py
+          python3 -m pytest scripts/release/test_verify_sdk_backend_compatibility.py
           python3 scripts/ci/launch_gate_audit.py
           python3 -m pytest scripts/ci/test_launch_gate_audit.py
           python3 scripts/ci/production_launch_preflight.py
@@ -135,7 +152,34 @@ jobs:
           npm test
 
       - name: Rust SDK checks
-        run: cargo test --manifest-path clients/rust/Cargo.toml
+        run: cargo test --manifest-path clients/rust/Cargo.toml --locked
+
+      - name: WASM local verifier cross-target check
+        run: cargo check -p hc-wasm --target wasm32-unknown-unknown --locked
+
+      - name: WASM local verifier golden runtime
+        run: |
+          cargo install wasm-pack --version 0.14.0 --locked
+          crates/hc-wasm/build.sh
+          node crates/hc-wasm/test-package.mjs
+
+      - name: Statically linked partner adapter example
+        run: |
+          cargo test --manifest-path examples/partner-adapter/Cargo.toml --locked
+          python3 -m pytest examples/partner-adapter/test_run_cgroup.py -q
+
+      - name: Deterministic review bundle tooling
+        run: |
+          python3 -m pytest scripts/release/test_build_preliminary_sbom.py -q
+          python3 -m pytest scripts/release/test_build_review_bundle.py -q
+          python3 -m pytest scripts/release/test_build_external_records.py -q
+          python3 -m pytest scripts/release/test_run_fuzz_smoke.py -q
+          python3 -m pytest scripts/release/test_run_crash_matrix.py -q
+          python3 -m pytest scripts/release/test_run_evidenced_command.py -q
+          python3 -m pytest scripts/ci/test_generate_sdk_schema_models.py -q
+
+      - name: Durable checkpoint and crash-resume matrix
+        run: cargo test -p hc-plonky3 --features fault-injection --locked bounded_prover::tests
 
       - name: shell script syntax
         run: |
@@ -144,8 +188,12 @@ jobs:
           python3 -m py_compile scripts/ci/release_identity_check.py
           python3 -m py_compile scripts/ci/recovery_reconciliation_invariants.py
           python3 -m py_compile scripts/ci/backend_recovery_gate.py
+          python3 -m py_compile scripts/ci/backend_source_scan.py
+          python3 -m py_compile scripts/ci/generate_sdk_schema_models.py
           python3 -m py_compile scripts/ci/plonky3_compatibility_gate.py
+          bash -n scripts/ci/sdk_contract_gate.sh
           python3 -m py_compile scripts/ci/backend_release_ready.py
+          python3 -m py_compile scripts/ci/backend_prerelease_ready.py
           python3 -m py_compile scripts/ci/cloudflare_pages_secret_check.py
           python3 -m py_compile scripts/monitoring/backend_recovery_canary.py
           python3 -m py_compile billing/legacy_billing_containment.py
@@ -153,7 +201,20 @@ jobs:
           python3 -m py_compile billing/contract_billing.py
           python3 -m py_compile scripts/commercial/render_offers.py
           python3 -m py_compile scripts/benchmark/validate_release_gate.py
+          python3 -m py_compile scripts/release/build_preliminary_sbom.py
+          python3 -m py_compile scripts/release/build_review_bundle.py
+          python3 -m py_compile scripts/release/build_external_records.py
+          python3 -m py_compile scripts/release/build_candidate_evidence.py
+          python3 -m py_compile scripts/release/finalize_signed_evidence.py
+          python3 -m py_compile scripts/release/verify_sdk_release_versions.py
+          python3 -m py_compile scripts/release/verify_sdk_backend_compatibility.py
+          python3 -m py_compile scripts/release/run_fuzz_smoke.py
+          python3 -m py_compile scripts/release/run_crash_matrix.py
+          python3 -m py_compile scripts/release/run_evidenced_command.py
+          python3 -m py_compile scripts/release/wait_for_crate_version.py
+          python3 -m py_compile examples/partner-adapter/run_cgroup.py
           bash -n scripts/monitoring/api_health_audit.sh
+          bash -n scripts/ci/check_plonky3_known_answers.sh
           bash -n scripts/monitoring/host_cron_env.sh
           python3 -m py_compile billing/stripe_account_context_check.py
           python3 -m py_compile billing/stripe_revenue_ops_audit.py
@@ -173,11 +234,11 @@ jobs:
           node --check site/analytics.js
           node --check deploy/uptime-probe/worker.js
 
-      - name: clippy production packages
-        run: cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-server -p hc-mcp --all-targets -- -D warnings
+      - name: clippy production packages and partner API example
+        run: cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm -p hc-server -p hc-mcp -p tinyzkp-partner-adapter-example --all-targets --locked -- -D warnings
 
       - name: production package tests
-        run: cargo test -p hc-stream -p hc-plonky3 -p hc-cli -p hc-server -p hc-mcp
+        run: cargo test -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm -p hc-server -p hc-mcp --locked
 
       - name: cargo audit
         run: |
@@ -191,4 +252,12 @@ jobs:
           cargo deny check
 
       - name: Plonky3 artifact schema smoke
-        run: cargo run -p hc-cli -- schema --output-dir /tmp/tinyzkp-schemas
+        run: |
+          rm -rf /tmp/tinyzkp-schemas
+          cargo run -p hc-cli --locked -- schema --output-dir /tmp/tinyzkp-schemas
+          diff -ru site/schemas /tmp/tinyzkp-schemas
+          python3 scripts/ci/generate_sdk_schema_models.py \
+            --schema-dir /tmp/tinyzkp-schemas \
+            --python-output clients/python/tinyzkp/schema_models.py \
+            --typescript-output clients/typescript/src/schema-models.ts \
+            --check

@@ -14,9 +14,82 @@ jobs:
   release-gate:
     runs-on: ubuntu-latest
     steps:
+      - name: Require a published backend release tag
+        env:
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
+          BACKEND_TAG: ${{ vars.TINYZKP_BACKEND_RELEASE_TAG }}
+        run: |
+          test "$RELEASE_REF_TYPE" = tag
+          test -n "$BACKEND_TAG"
       - uses: actions/checkout@v4
-      - name: Require all backend-v1 release evidence
-        run: python3 scripts/ci/backend_release_ready.py
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.TINYZKP_BACKEND_RELEASE_TAG }}
+          path: backend-gate
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: sigstore/cosign-installer@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Download final evidence from the published backend release
+        working-directory: backend-gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BACKEND_TAG: ${{ vars.TINYZKP_BACKEND_RELEASE_TAG }}
+        run: |
+          test "$(gh release view "$BACKEND_TAG" --json isDraft --jq .isDraft)" = false
+          test "$(gh release view "$BACKEND_TAG" --json isPrerelease --jq .isPrerelease)" = false
+          install -d release-artifacts
+          gh release download "$BACKEND_TAG" \
+            --dir release-artifacts \
+            --pattern backend-v1-final-evidence.json \
+            --pattern backend-v1-final-gates.json \
+            --pattern SHA256SUMS \
+            --pattern SHA256SUMS.sigstore.json \
+            --pattern plonky3-compatibility-v1.json
+      - name: Verify signed backend release and full evidence gate
+        working-directory: backend-gate
+        run: |
+          python3 -m pip install -r scripts/benchmark/requirements.txt
+          cosign verify-blob \
+            --bundle release-artifacts/SHA256SUMS.sigstore.json \
+            release-artifacts/SHA256SUMS
+          (cd release-artifacts && sha256sum --check --ignore-missing SHA256SUMS)
+          cmp release/plonky3-compatibility-v1.json \
+            release-artifacts/plonky3-compatibility-v1.json
+          python3 scripts/ci/backend_release_ready.py \
+            --config release-artifacts/backend-v1-final-gates.json
+      - name: Require SDK tag, schemas, dependencies, and contracts to match
+        env:
+          SDK_TAG: ${{ github.ref_name }}
+        run: |
+          python3 scripts/release/verify_sdk_release_versions.py --tag "$SDK_TAG"
+          python3 scripts/release/verify_sdk_backend_compatibility.py \
+            --backend-root backend-gate
+          python3 -m pip install -e 'clients/python[test]'
+          python3 -m pytest clients/python/tests -q
+          npm --prefix clients/typescript ci
+          npm --prefix clients/typescript test
+          cargo test --manifest-path clients/rust/Cargo.toml --locked
+      - name: Require audited backend crates to be available
+        run: |
+          stream_version="$(cargo metadata --manifest-path backend-gate/Cargo.toml --no-deps --format-version 1 | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(p["version"] for p in data["packages"] if p["name"] == "hc-stream"))')"
+          plonky3_version="$(cargo metadata --manifest-path backend-gate/Cargo.toml --no-deps --format-version 1 | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(p["version"] for p in data["packages"] if p["name"] == "hc-plonky3"))')"
+          python3 backend-gate/scripts/release/wait_for_crate_version.py \
+            hc-stream "$stream_version" --timeout-seconds 60
+          python3 backend-gate/scripts/release/wait_for_crate_version.py \
+            hc-plonky3 "$plonky3_version" --timeout-seconds 60
+      - name: Build every registry artifact before permitting uploads
+        run: |
+          python3 -m pip install build twine
+          python3 -m build clients/python
+          (cd clients/typescript && npm pack --dry-run)
+          cargo package --manifest-path clients/rust/Cargo.toml --locked
 
   publish-python:
     needs: release-gate
@@ -76,7 +149,7 @@ jobs:
           toolchain: "1.95.0"
       - name: Package
         working-directory: clients/rust
-        run: cargo package
+        run: cargo package --locked
       - name: Attest Rust crate package
         uses: actions/attest@v4
         with:
@@ -85,7 +158,7 @@ jobs:
         working-directory: clients/rust
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: cargo publish
+        run: cargo publish --locked
 
   publish-wasm:
     needs: release-gate
@@ -93,22 +166,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.TINYZKP_BACKEND_RELEASE_TAG }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.95.0"
           targets: wasm32-unknown-unknown
       - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        run: cargo install wasm-pack --version 0.14.0 --locked
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
       - name: Build WASM package
         working-directory: crates/hc-wasm
+        env:
+          TINYZKP_SDK_VERSION: ${{ github.ref_name }}
         run: ./build.sh
       - name: Test WASM package
-        working-directory: crates/hc-wasm/pkg
-        run: npm pack --dry-run
+        working-directory: crates/hc-wasm
+        run: |
+          node test-package.mjs
+          cd pkg
+          npm pack --dry-run
       - name: Attest WASM package files
         uses: actions/attest@v4
         with:
@@ -136,6 +216,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.TINYZKP_BACKEND_RELEASE_TAG }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.95.0"

@@ -1,0 +1,78 @@
+name: Publish audited backend crates
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  publish:
+    if: startsWith(github.event.release.tag_name, 'backend-v')
+    runs-on: ubuntu-latest
+    env:
+      BACKEND_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95.0"
+      - uses: sigstore/cosign-installer@v3
+      - name: Download and verify final backend evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          install -d release-artifacts
+          gh release download "$BACKEND_TAG" \
+            --dir release-artifacts \
+            --pattern backend-v1-final-evidence.json \
+            --pattern backend-v1-final-gates.json \
+            --pattern SHA256SUMS \
+            --pattern SHA256SUMS.sigstore.json \
+            --pattern plonky3-compatibility-v1.json
+          python3 -m pip install -r scripts/benchmark/requirements.txt
+          cosign verify-blob \
+            --bundle release-artifacts/SHA256SUMS.sigstore.json \
+            release-artifacts/SHA256SUMS
+          (cd release-artifacts && sha256sum --check --ignore-missing SHA256SUMS)
+          cmp release/plonky3-compatibility-v1.json \
+            release-artifacts/plonky3-compatibility-v1.json
+          python3 scripts/ci/backend_release_ready.py \
+            --config release-artifacts/backend-v1-final-gates.json
+      - name: Resolve audited crate versions
+        id: versions
+        run: |
+          echo "stream=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(p["version"] for p in data["packages"] if p["name"] == "hc-stream"))')" >> "$GITHUB_OUTPUT"
+          echo "plonky3=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(p["version"] for p in data["packages"] if p["name"] == "hc-plonky3"))')" >> "$GITHUB_OUTPUT"
+      - name: Package and attest hc-stream
+        run: cargo package --locked -p hc-stream
+      - uses: actions/attest@v4
+        with:
+          subject-path: target/package/hc-stream-${{ steps.versions.outputs.stream }}.crate
+      - name: Publish hc-stream
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          cargo publish --locked -p hc-stream
+          python3 scripts/release/wait_for_crate_version.py \
+            hc-stream "${{ steps.versions.outputs.stream }}"
+      - name: Package and attest hc-plonky3
+        run: cargo package --locked -p hc-plonky3
+      - uses: actions/attest@v4
+        with:
+          subject-path: target/package/hc-plonky3-${{ steps.versions.outputs.plonky3 }}.crate
+      - name: Publish hc-plonky3
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          cargo publish --locked -p hc-plonky3
+          python3 scripts/release/wait_for_crate_version.py \
+            hc-plonky3 "${{ steps.versions.outputs.plonky3 }}"
