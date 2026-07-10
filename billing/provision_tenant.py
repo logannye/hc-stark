@@ -33,6 +33,12 @@ app = flask.Flask(__name__)
 
 stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 WEBHOOK_SECRET = os.environ["STRIPE_WEBHOOK_SECRET"]
+MAINTENANCE_MODE = os.environ.get("TINYZKP_MAINTENANCE_MODE", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
 
 API_KEYS_FILE = os.environ.get("HC_API_KEYS_FILE", "/opt/hc-stark/data/api_keys.txt")
 
@@ -170,20 +176,9 @@ def _send_magic_link_email(email: str, link: str) -> bool:
 CONTACT_RECIPIENT = os.environ.get("CONTACT_TO_EMAIL", "hello@tinyzkp.com")
 CONTACT_QUALIFICATION_FIELDS = (
     ("source", "Source"),
-    ("medium", "Medium"),
-    ("campaign", "Campaign"),
     ("platform", "Platform"),
-    ("plan", "Plan"),
-    ("workflow", "Workflow"),
     ("intent", "Intent"),
-    ("use_case", "Use case"),
-    ("trace_length", "Trace length"),
-    ("proof_frequency", "Proof frequency"),
-    ("verification_environment", "Verification"),
-    ("privacy_requirement", "Privacy need"),
-    ("latency_requirement", "Latency"),
-    ("current_alternative", "Current alternative"),
-    ("budget_owner", "Budget owner"),
+    ("referrer", "Referrer"),
     ("company", "Company"),
     ("repository", "Repository / stack reference"),
     ("stack", "Proving stack"),
@@ -195,6 +190,7 @@ CONTACT_QUALIFICATION_FIELDS = (
     ("verifier_target", "Verifier target"),
     ("data_sensitivity", "Data sensitivity"),
     ("technical_owner", "Technical owner"),
+    ("budget_owner", "Budget owner"),
     ("timeline", "Timeline"),
     ("consent", "Retention consent"),
 )
@@ -319,6 +315,9 @@ def _send_evaluation_ack(name: str, email: str) -> bool:
         "baseline, a measured RAM bottleneck, an official verifier target, and a "
         "non-sensitive deterministic input generator.\n\n"
         "Benchmark methodology: https://tinyzkp.com/benchmarks\n"
+        "Benchmark command:\n"
+        "  hc-cli benchmark plonky3 --manifest workload.json "
+        "--baseline conventional --candidate bounded --report report.json\n"
         "Engine status: https://tinyzkp.com/status\n\n"
         "Submitting the form does not create a contract or reserve capacity.\n"
     )
@@ -685,6 +684,15 @@ def stripe_webhook():
 
     event_type = event["type"]
 
+    if event_type == "checkout.session.completed" and MAINTENANCE_MODE:
+        # A stale Checkout Session can outlive removal of its public link. Keep
+        # Stripe delivery successful so it is not retried, but never create a
+        # tenant, API key, entitlement, or welcome email during recovery.
+        print(
+            f"Ignored legacy checkout event {event.get('id', '<missing>')} during backend recovery",
+            file=sys.stderr,
+        )
+        return "checkout disabled during backend recovery", 200
     if event_type == "checkout.session.completed":
         return _handle_checkout_completed(event)
     elif event_type == "customer.subscription.updated":
@@ -927,7 +935,6 @@ def send_contact():
         "General Inquiry",
         "Bug Report",
         "Feature Request",
-        "Compute Inquiry",
         "Design Partner",
         "Billing",
         "Enterprise",

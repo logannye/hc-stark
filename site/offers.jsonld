@@ -1,0 +1,40 @@
+{
+  "@context": "https://schema.org",
+  "@type": "OfferCatalog",
+  "itemListElement": [
+    {
+      "@type": "Offer",
+      "availability": "https://schema.org/LimitedAvailability",
+      "name": "Founding Memory-Bounded Evaluation",
+      "price": "25000",
+      "priceCurrency": "USD",
+      "url": "https://tinyzkp.com/contact?intent=memory_bounded_evaluation"
+    },
+    {
+      "@type": "Offer",
+      "availability": "https://schema.org/LimitedAvailability",
+      "name": "Memory-Bounded Prover Evaluation",
+      "price": "40000",
+      "priceCurrency": "USD",
+      "url": "https://tinyzkp.com/contact?intent=memory_bounded_evaluation"
+    },
+    {
+      "@type": "Offer",
+      "availability": "https://schema.org/LimitedAvailability",
+      "name": "TinyZKP Certified",
+      "price": "60000",
+      "priceCurrency": "USD",
+      "url": "https://tinyzkp.com/contact?intent=certified"
+    },
+    {
+      "@type": "Offer",
+      "availability": "https://schema.org/LimitedAvailability",
+      "name": "TinyZKP Fleet / OEM",
+      "price": "125000",
+      "priceCurrency": "USD",
+      "url": "https://tinyzkp.com/contact?intent=fleet_oem"
+    }
+  ],
+  "name": "TinyZKP Commercial Offers",
+  "url": "https://tinyzkp.com/pricing"
+}

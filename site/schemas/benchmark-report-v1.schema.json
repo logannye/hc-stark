@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BenchmarkReportV1",
+  "type": "object",
+  "properties": {
+    "cpu_seconds": {
+      "type": "number",
+      "format": "double"
+    },
+    "dependency_profile": {
+      "type": "string"
+    },
+    "exact_command": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "exit_status": {
+      "type": "integer",
+      "format": "int32"
+    },
+    "hardware": {
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/BenchmarkMode"
+    },
+    "operating_system": {
+      "type": "string"
+    },
+    "peak_rss_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "proof_size_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "read_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "release_sha": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "scope": {
+      "type": "string"
+    },
+    "scratch_high_water_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "storage": {
+      "type": "string"
+    },
+    "verification_succeeded": {
+      "type": "boolean"
+    },
+    "verification_time_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "wall_time_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "workload_manifest_digest_hex": {
+      "type": "string"
+    },
+    "write_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scope",
+    "mode",
+    "hardware",
+    "operating_system",
+    "storage",
+    "release_sha",
+    "dependency_profile",
+    "exact_command",
+    "workload_manifest_digest_hex",
+    "cpu_seconds",
+    "wall_time_ms",
+    "peak_rss_bytes",
+    "scratch_high_water_bytes",
+    "read_bytes",
+    "write_bytes",
+    "proof_size_bytes",
+    "verification_time_ms",
+    "verification_succeeded",
+    "exit_status"
+  ],
+  "$defs": {
+    "BenchmarkMode": {
+      "type": "string",
+      "enum": [
+        "baseline",
+        "bounded"
+      ]
+    }
+  }
+}

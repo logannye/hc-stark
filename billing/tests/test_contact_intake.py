@@ -27,33 +27,33 @@ class _ImmediateThread:
 
 def test_contact_qualification_sanitizer_keeps_only_known_fields():
     out = provision_tenant._sanitize_contact_qualification({
-        "use_case": "  Long accumulator trace  ",
-        "trace_length": "100M+ steps",
+        "stack": "  Plonky3 0.6.1  ",
+        "current_memory": "OOM at 16 GiB",
         "api_key": "tzk_should_not_survive",
         "message": "also ignored",
         "budget_owner": "Engineering",
-        "latency_requirement": "x" * 200,
+        "workload": "x" * 200,
     })
 
-    assert out["use_case"] == "Long accumulator trace"
-    assert out["trace_length"] == "100M+ steps"
+    assert out["stack"] == "Plonky3 0.6.1"
+    assert out["current_memory"] == "OOM at 16 GiB"
     assert out["budget_owner"] == "Engineering"
-    assert len(out["latency_requirement"]) == 160
+    assert len(out["workload"]) == 160
     assert "api_key" not in out
     assert "message" not in out
 
 
 def test_contact_format_includes_project_fit():
     body = provision_tenant._format_contact_qualification({
-        "use_case": "Audit-log checkpoints",
-        "proof_frequency": "Daily checkpoints",
-        "verification_environment": "AI agent / MCP",
+        "workload": "Poseidon2 AIR",
+        "logical_rows": "1048576",
+        "verifier_target": "Unmodified Plonky3 verifier",
     })
 
     assert "Project fit:" in body
-    assert "Use case: Audit-log checkpoints" in body
-    assert "Proof frequency: Daily checkpoints" in body
-    assert "Verification: AI agent / MCP" in body
+    assert "Workload: Poseidon2 AIR" in body
+    assert "Rows / work units: 1048576" in body
+    assert "Verifier target: Unmodified Plonky3 verifier" in body
 
 
 def test_send_contact_route_forwards_sanitized_qualification(monkeypatch):
@@ -81,12 +81,12 @@ def test_send_contact_route_forwards_sanitized_qualification(monkeypatch):
             json={
                 "name": "Buyer",
                 "email": "Buyer@Example.com",
-                "category": "Compute Inquiry",
+                "category": "General Inquiry",
                 "message": "We have a long trace use case.",
                 "qualification": {
-                    "use_case": "Long accumulator trace",
-                    "trace_length": "100M+ steps",
-                    "proof_frequency": "Hourly checkpoints",
+                    "workload": "Long Plonky3 trace",
+                    "logical_rows": "1048576",
+                    "current_memory": "OOM at 16 GiB",
                     "api_key": "tzk_never_forward",
                 },
             },
@@ -94,9 +94,9 @@ def test_send_contact_route_forwards_sanitized_qualification(monkeypatch):
 
     assert resp.status_code == 200
     assert captured["email"] == "buyer@example.com"
-    assert captured["category"] == "Compute Inquiry"
-    assert captured["qualification"]["use_case"] == "Long accumulator trace"
-    assert captured["qualification"]["trace_length"] == "100M+ steps"
+    assert captured["category"] == "General Inquiry"
+    assert captured["qualification"]["workload"] == "Long Plonky3 trace"
+    assert captured["qualification"]["logical_rows"] == "1048576"
     assert "api_key" not in captured["qualification"]
 
 
@@ -116,3 +116,69 @@ def test_send_contact_rejects_oversized_message(monkeypatch):
         )
 
     assert resp.status_code == 400
+
+
+def test_design_partner_receives_automatic_benchmark_acknowledgement(monkeypatch):
+    acknowledgements = []
+    monkeypatch.setattr(provision_tenant, "INTERNAL_SECRET", SECRET)
+    monkeypatch.setattr(provision_tenant, "_send_contact_email", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        provision_tenant,
+        "_send_evaluation_ack",
+        lambda name, email: acknowledgements.append((name, email)) or True,
+    )
+    monkeypatch.setattr(provision_tenant.threading, "Thread", _ImmediateThread)
+
+    provision_tenant.app.config["TESTING"] = True
+    with provision_tenant.app.test_client() as client:
+        resp = client.post(
+            "/send-contact",
+            headers=HEADERS,
+            json={
+                "name": "Proving Lead",
+                "email": "lead@example.com",
+                "category": "Design Partner",
+                "message": "Public deterministic workload",
+                "qualification": {
+                    "company": "Example",
+                    "stack": "Plonky3 0.6.1",
+                    "logical_rows": "1048576",
+                    "current_memory": "OOM at 16 GiB",
+                    "target_ram": "2 GiB",
+                    "consent": "twelve_month_retention",
+                },
+            },
+        )
+
+    assert resp.status_code == 200
+    assert acknowledgements == [("Proving Lead", "lead@example.com")]
+
+
+def test_signed_legacy_checkout_is_ignored_in_maintenance(monkeypatch):
+    event = {
+        "id": "evt_stale_checkout",
+        "type": "checkout.session.completed",
+        "data": {"object": {"id": "cs_stale"}},
+    }
+    monkeypatch.setattr(
+        provision_tenant.stripe.Webhook,
+        "construct_event",
+        lambda payload, signature, secret: event,
+    )
+    monkeypatch.setattr(provision_tenant, "MAINTENANCE_MODE", True)
+
+    def fail_if_called(_event):
+        raise AssertionError("legacy checkout handler must remain disabled")
+
+    monkeypatch.setattr(provision_tenant, "_handle_checkout_completed", fail_if_called)
+
+    provision_tenant.app.config["TESTING"] = True
+    with provision_tenant.app.test_client() as client:
+        response = client.post(
+            "/webhook",
+            data="{}",
+            headers={"Stripe-Signature": "test"},
+        )
+
+    assert response.status_code == 200
+    assert response.get_data(as_text=True) == "checkout disabled during backend recovery"

@@ -1,727 +1,194 @@
-# TinyZKP — Proof Receipts for Agents, APIs, and State Transitions
+# TinyZKP
 
-[![npm: @tinyzkp/cli](https://img.shields.io/npm/v/%40tinyzkp%2Fcli?label=%40tinyzkp%2Fcli&color=2ee8d4)](https://www.npmjs.com/package/@tinyzkp/cli)
-[![npm: tinyzkp](https://img.shields.io/npm/v/tinyzkp?label=tinyzkp%20%28TS%20SDK%29&color=2ee8d4)](https://www.npmjs.com/package/tinyzkp)
-[![npm: @tinyzkp/verify](https://img.shields.io/npm/v/%40tinyzkp%2Fverify?label=%40tinyzkp%2Fverify%20%28WASM%29&color=2ee8d4)](https://www.npmjs.com/package/@tinyzkp/verify)
-[![PyPI: tinyzkp](https://img.shields.io/pypi/v/tinyzkp?label=tinyzkp%20%28Python%20SDK%29&color=2ee8d4)](https://pypi.org/project/tinyzkp/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Free tier](https://img.shields.io/badge/free%20tier-100%20proofs%2Fmo-34d399)](https://tinyzkp.com/signup)
-[![Smithery](https://img.shields.io/badge/Smithery-tinyzkp--mcp-2ee8d4)](https://smithery.ai/servers/logan/tinyzkp-mcp)
+TinyZKP is an MIT-licensed, resource-bounded proving backend for Plonky3. Its
+production objective is simple: let proving teams complete larger STARK traces
+under an explicit RAM ceiling, using deterministic SSD scratch where global
+transforms require it, while retaining the official Plonky3 proof format and
+unmodified verifier.
 
-**[tinyzkp.com](https://tinyzkp.com)** &middot; **[Try it in browser](https://tinyzkp.com/try)** &middot; **[API docs](https://tinyzkp.com/docs)** &middot; **[Free signup](https://tinyzkp.com/signup)**
+> **Backend recovery:** hosted proving, hosted verification, account creation,
+> public checkout, and legacy usage meters are disabled. The public API and MCP
+> surface expose status, release identity, and capabilities only. Do not use this
+> repository as a production prover until every gate in
+> [`release/backend-v1-gates.json`](release/backend-v1-gates.json) is passed.
 
-Mint a tamper-evident proof that a state-transition chain is consistent — *start at X, apply these steps, provably reach Y* — so an agent (or any caller) can hand over a verifiable receipt instead of "trust me." **One MCP install. One API call. Verify in milliseconds.** No cryptography degree required.
+## Product boundary
 
-## Three ways to start in under a minute
+TinyZKP does not introduce a new production transcript, verifier, proof format,
+or security profile. The production path is pinned to Plonky3 `0.6.1` and the
+upstream Goldilocks/Poseidon2 `p3-uni-stark` example configuration, frozen as
+`tinyzkp-p3-goldilocks-v1`.
 
-### 1. Try in browser, no signup
+The differentiating layer is prover-side infrastructure:
 
-Mint and verify a real ZK proof at [**tinyzkp.com/try**](https://tinyzkp.com/try) — type a value, hit Generate, hit Verify. Result in ~2 seconds.
+- resource policies for RAM, scratch, threads, and checkpoint retention;
+- checksummed, owner-only matrix stores and block-readable matrix access;
+- a deterministic scratch-backed Plonky3 DFT adapter;
+- official Plonky3 proof generation and verification for Fibonacci and
+  Goldilocks Poseidon2 reference AIRs;
+- versioned workload, proof-bundle, and benchmark-report contracts;
+- Linux cgroup-v2 measurement from fresh process creation through verification;
+- release provenance, compatibility locking, and fail-closed publication gates.
 
-### 2. Native install for AI agents (Claude Code)
+The current implementation is a compatibility prototype, not the completed
+bounded-memory pipeline. Plonky3 `0.6.1` still hands the DFT an owned
+`RowMajorMatrix`, trace generation is not yet streamed, the DFT is blockwise
+radix-2 rather than the planned tiled four-step transform, and MMCS, quotient,
+FRI, and challenger checkpoint recovery are not yet external-memory. These
+limits are intentionally reflected by blocked release gates.
 
-```bash
-claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
-```
+Standalone TinyZKP protocols, legacy receipts, recursion, zkML, zkVM, IPA,
+Spartan, KZG, and rollup prototypes are research only. Legacy CLI access
+requires the explicit `legacy-research` feature and is not compiled into the
+production API, MCP service, container, or default CI path.
 
-Your agent now has 10 state-transition proof tools (`list_templates`, `describe_template`, `prove_template`, `poll_job`, `get_proof`, `verify_proof`, ...) as native function calls. **No signup, no API key, no credit card** — the MCP endpoint is public and rate-limited via a server-side concurrency cap. For Claude Desktop, Cursor, OpenAI agents, and other MCP clients, see [the MCP install guide](https://tinyzkp.com/docs#mcp).
+## Repository map
 
-Discovery via [Smithery](https://smithery.ai/servers/logan/tinyzkp-mcp) works the same way — the directory routes through Smithery's gateway to the same endpoint.
+| Path | Purpose |
+|---|---|
+| `crates/hc-stream` | Resource policy, block matrices, matrix stores, preflight, and checkpoint contracts |
+| `crates/hc-plonky3` | Pinned Plonky3 configuration, workloads, DFT adapter, official prover/verifier, and artifact contracts |
+| `crates/hc-cli` | Production Plonky3 CLI and benchmark worker |
+| `crates/hc-server` | Maintenance-only public API; historical implementation is retained but not compiled |
+| `crates/hc-mcp` | Capability-only production MCP surface |
+| `scripts/benchmark` | cgroup-v2 benchmark orchestration and report tooling |
+| `release` | Dependency compatibility and mandatory release-gate evidence |
+| `site` | Maintenance website and evaluation application |
+| `billing` | Billing containment, customer-record preservation, contract invoicing tools, and backups |
+| `docs/recovery` | Architecture, delivery, release, and operating documentation |
 
-If you want Claude to *recognize* when a use case calls for a proof on its own (not just respond to "use TinyZKP"), install the companion Claude Skill at [`skills/tinyzkp-proofs/`](./skills/tinyzkp-proofs/SKILL.md).
+## Build and test
 
-### 3. Terminal CLI (works against any TinyZKP API key)
-
-```bash
-npx @tinyzkp/cli templates                                # list available templates
-npx @tinyzkp/cli prove accumulator_step '{"initial":1000,"final":1045,"deltas":[10,20,15]}' --wait
-npx @tinyzkp/cli verify proof.json                        # always free
-```
-
-`@tinyzkp/cli` is a zero-dependency Node 18+ ESM package. See [`clients/cli/README.md`](./clients/cli/README.md) for the full command reference.
-
-## What you can prove
-
-| Template | What it proves | Typical use |
-|----------|---------------|-------------|
-| `accumulator_step` | "Starting at X, applying these deltas reaches Y" | State machine attestation, audit-log checkpoints |
-
-More proof types are in development.
-
-## Two-line plain HTTP version
-
-```bash
-curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
-  -H "Authorization: Bearer tzk_..." \
-  -H "Content-Type: application/json" \
-  -d '{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'
-# -> {"job_id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
-curl https://api.tinyzkp.com/prove/<job_id> -H "Authorization: Bearer tzk_..."
-# -> {"status":"succeeded","proof":{"version":5,"bytes":[106,143,59,44,...]}}
-```
-
-Verification is always free. The hosted API requires auth to prevent abuse; the public verifier and compatible first-party WASM verifier can verify without exposing an API key to the recipient. SDKs ship for Python (`pip install tinyzkp`), TypeScript (`npm install tinyzkp`), and Rust.
-
----
-
-## What sits underneath
-
-`hc-stark` is the open-source Rust engine behind TinyZKP. The hosted service has been live since 2026-04-25 on a single dedicated Hetzner CPX42 (8 vCPU / 16 GB / Nuremberg); live health at [tinyzkp.com/status](https://tinyzkp.com/status). The engine uses a **height-compressed streaming architecture** that runs in O(√T) prover memory instead of O(T) — the structural advantage that lets us price the small-proof tier at $0.05/proof and offer a real free tier without going broke.
-
-| Property | hc-stark | Standard STARK |
-|----------|----------|----------------|
-| Prover memory | **~O(√T)** | O(T) |
-| Prover time | ~O(T · log² T) | ~O(T · log T) |
-| Verifier time | polylog(T) | polylog(T) |
-| Proof size | polylog(T) | polylog(T) |
-| Transparent (no trusted setup) | Yes | Yes |
-| Post-quantum (hash-based) | Yes | Yes |
-
-**Measured, not asserted:** in a reproducible sweep, the streaming commitment's peak working set stays ~0.04 MB from a 64-element trace up to a 16.7M-element one, where the conventional O(T) path needs **513 MB** — a √T (≈4,096×) reduction, at the identical Merkle root. Re-run it with `./scripts/bench/run_sqrt_sweep.sh`; numbers + method in [`docs/benchmarks/sqrt_memory_scaling.md`](docs/benchmarks/sqrt_memory_scaling.md).
-
-The technical writeup is in [`docs/whitepaper.md`](docs/whitepaper.md).
-
-### Research lineage
-
-TinyZKP has an older public repository,
-[`logannye/space-efficient-zero-knowledge-proofs`](https://github.com/logannye/space-efficient-zero-knowledge-proofs),
-that explores sublinear-space proving with KZG commitments over BN254 and
-serves as research lineage for the memory-efficiency thesis. It is not the
-hosted TinyZKP engine and it is not the trust model behind the live API.
-
-The current product path is this repository: transparent STARK-style
-state-transition receipts, no trusted setup ceremony for the receipt path,
-offline verification, SDKs, MCP, billing, and operations. The public
-reconciliation story is at [tinyzkp.com/research](https://tinyzkp.com/research),
-and the operating roadmap is in
-[`docs/strategy/reconciliation_roadmap.md`](docs/strategy/reconciliation_roadmap.md).
-
----
-
-## Use the hosted API
-
-The fastest way to start is the hosted service at **[api.tinyzkp.com](https://tinyzkp.com/docs)**. Free tier: 100 proofs/month, no credit card.
-
-### 1. Get an API key
-
-Sign up at [tinyzkp.com/signup](https://tinyzkp.com/signup). Your key arrives via email instantly.
-
-### 2. Submit a proof
-
-Use template-based proving — no need to specify block_size, initial/final accumulator, or FRI parameters. The API handles it:
+Rust `1.95.0` is pinned because Plonky3 `0.6.1` uses APIs unavailable on older
+toolchains. Plonky3 and artifact-serialization dependencies are exact-pinned in the
+workspace and verified against [`release/plonky3-compatibility-v1.json`](release/plonky3-compatibility-v1.json).
 
 ```bash
-curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
-  -H "Authorization: Bearer tzk_..." \
-  -H "Content-Type: application/json" \
-  -d '{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'
+cargo test -p hc-stream -p hc-plonky3 -p hc-cli -p hc-server -p hc-mcp
+cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-server -p hc-mcp \
+  --all-targets -- -D warnings
+python3 scripts/ci/production_launch_preflight.py
 ```
 
-### 3. Poll and verify
+The recovery preflight deliberately does not run live canaries. After an
+authorized deployment, add `--live` and the expected release SHA. Do not use
+the legacy authenticated prove/verify smoke during recovery.
+
+## CLI
+
+Generate the three JSON Schemas from their Rust source of truth:
 
 ```bash
-# Poll job status
-curl https://api.tinyzkp.com/prove/<job_id> \
-  -H "Authorization: Bearer tzk_..."
-
-# Verify (free)
-curl -X POST https://api.tinyzkp.com/verify \
-  -H "Authorization: Bearer tzk_..." \
-  -d '{"proof": {...}}'
+cargo run -p hc-cli -- schema --output-dir /tmp/tinyzkp-schemas
 ```
 
-### Client SDKs
-
-**Python:**
-```python
-from tinyzkp import TinyZKP
-
-async with TinyZKP("https://api.tinyzkp.com", api_key="tzk_...") as client:
-    job_id = await client.prove_template("accumulator_step", params={"initial":1000,"final":1045,"deltas":[10,20,15]})
-    proof  = await client.wait_for_proof(job_id)
-    result = await client.verify(proof)  # free!
-```
+Create and verify an official Plonky3 proof bundle:
 
 ```bash
-pip install tinyzkp
+cargo run -p hc-cli -- plonky3 doctor --policy examples/plonky3/resource-policy.local.json
+cargo run -p hc-cli -- plonky3 prove \
+  --manifest examples/plonky3/fibonacci-small.json \
+  --output /tmp/fibonacci.proof.json
+cargo run -p hc-cli -- plonky3 verify --bundle /tmp/fibonacci.proof.json
 ```
 
-**TypeScript:**
-```typescript
-import { TinyZKP } from "tinyzkp";   // alias of HcClient — both exported
+`hc-cli plonky3 resume` currently validates the checkpoint envelope and then
+fails closed because deterministic Plonky3 challenger continuation is not yet
+implemented. It will not silently restart and label that behavior as resume.
 
-const client = new TinyZKP("https://api.tinyzkp.com", { apiKey: "tzk_..." });
-const jobId  = await client.proveTemplate("accumulator_step", { initial:1000, final:1045, deltas:[10,20,15] });
-const proof  = await client.waitForProof(jobId);
-const result = await client.verify(proof);  // free!
-```
-
-The `tinyzkp` package ships a dual ESM+CJS build (works in modern Node 18+ ESM, classic `require()`, bundlers, edge runtimes).
+Generic `prove` and `verify` commands return migration guidance. Historical
+reproduction is available only in an offline research build:
 
 ```bash
-npm install tinyzkp
+cargo run -p hc-cli --features legacy-research -- legacy-research --help
 ```
 
-**Browser (WASM — no server, no API key):**
-```javascript
-import init, { verify } from '@tinyzkp/verify';
+`hc-cli release` emits JSON for cross-checking CLI, API, MCP, site, and
+benchmark provenance before publication.
 
-await init();
-const result = verify({ version: 5, bytes: proofBytes });
-console.log(result.ok); // true — verified client-side
-```
+## Benchmark integrity
+
+Release measurements must run on Linux under cgroup v2, with baseline and
+candidate each launched in a fresh process. The report includes hardware, OS,
+storage, release SHA, dependency profile, exact command, CPU seconds,
+whole-process peak memory, scratch high-water mark, block I/O, proof size,
+verification time, and verifier result.
 
 ```bash
-npm install @tinyzkp/verify
+cargo build --release -p hc-cli
+sudo python3 scripts/benchmark/run_plonky3_cgroup.py \
+  --manifest examples/plonky3/fibonacci-small.json \
+  --report /tmp/fibonacci-bounded.json
 ```
 
----
-
-## Pricing
-
-Pay for state-transition receipts based on trace complexity. Verification is always free. The O(√T) prover-memory architecture is the pricing advantage: long traces can be metered by steps without forcing customers to reserve high-RAM prover boxes.
-
-`pricing.json` at the repo root is the single source of truth for plan limits and the per-proof rate sheet, with parity tests on both the Rust (`hc-server`) and Python (`billing/`) sides — drift between either side and the JSON fails CI.
-
-### Self-serve plans
-
-| Plan | Monthly Base | Per-Proof Discount | Key Limits |
-|------|-------------|-------------------|------------|
-| Free | $0 | — | 100 proofs/mo, 1 inflight, 10 RPM, $5/mo cap |
-| Developer | $19 | Base rates | 4 inflight, 100 RPM, $500/mo cap |
-| Pro | $79 | 25% off | 8 inflight, 300 RPM, $2,500/mo cap |
-| Scale | $199 | 40% off | 16 inflight, 500 RPM, $10,000/mo cap |
-
-Self-serve paid plans bill monthly. Annual prepaid contracts should stay manual until annual usage metering is wired deliberately.
-
-### Compute (usage-based, no monthly base)
-
-For long state-transition traces — the tier where the O(√T) prover replaces the RAM-heavy infrastructure you would otherwise operate yourself. zkVM, zkML, and custom rollup proving are roadmap / early-access work, not default self-serve products.
-
-| Plan | Pricing | Key Limits |
-|------|---------|------------|
-| Compute | $0.50 per million trace steps | up to 100M-step traces, 100 RPM, 8 inflight |
-
-Enterprise covers reserved capacity, dedicated support, and SOC 2 / BAA / MSA paperwork via [tinyzkp.com/contact](https://tinyzkp.com/contact). The legacy `team` slug remains as an admin/backward-compatibility alias for Pro and is not a public storefront plan.
-
-### Per-proof base rates (Developer plan)
-
-| Trace Steps | Price |
-|-------------|-------|
-| < 10K | $0.05/proof |
-| 10K – 100K | $0.50/proof |
-| 100K – 1M | $2.00/proof |
-| 1M – 10M | $8.00/proof |
-| > 10M | $30.00/proof |
-
-Pro plans receive automatic 25% discounts and Scale plans receive 40% discounts on every regular receipt. Compute uses the step meter instead of the per-proof table, which is the right fit when trace length and RAM requirements are the buyer's pain. See [tinyzkp.com/docs#plans](https://tinyzkp.com/docs#plans) for full details.
-
----
-
-## Proof templates
-
-Browse templates via the discovery API:
-
-```bash
-# List all templates
-curl https://api.tinyzkp.com/templates
-
-# Get full schema + example for a template
-curl https://api.tinyzkp.com/templates/accumulator_step
-
-# Submit a proof using a template (smart defaults, no block_size needed)
-curl -X POST https://api.tinyzkp.com/prove/template/accumulator_step \
-  -H "Authorization: Bearer tzk_..." \
-  -H "Content-Type: application/json" \
-  -d '{"params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'
-
-# Estimate cost before proving (no auth required)
-curl -X POST https://api.tinyzkp.com/estimate \
-  -d '{"template_id":"accumulator_step","params":{"initial":1000,"final":1045,"deltas":[10,20,15]}}'
-```
-
-| Template | What It Proves | Key Parameters |
-|----------|---------------|----------------|
-| `accumulator_step` | "Starting from X, applying these deltas reaches Y" | `initial`, `final`, `deltas[]` |
-
-More proof types are in development.
-
----
-
-## AI agent integration (MCP)
-
-hc-stark ships as an **MCP server** so AI agents (Claude, GPT, Cursor) can generate and verify proofs natively. Supports both local (stdio) and remote (HTTP) transport.
-
-### Remote access (no install, no auth)
-
-```bash
-# Claude Code
-claude mcp add --transport http tinyzkp https://mcp.tinyzkp.com
-```
-
-The hosted endpoint at `mcp.tinyzkp.com` accepts both public requests (no Authorization header — bounded by `HC_MCP_MAX_INFLIGHT=2`) and authenticated requests (`Authorization: Bearer tzk_...`). Authenticated requests get per-tenant rate limits matched to their plan: Free 10/min, Developer 100/min, Pro 300/min, Scale 500/min — same ladder as the HTTP API's `prove_rpm`. Setting `HC_MCP_TENANT_RPM` to a non-zero value overrides the plan ladder with a single global cap (operator throttling during incidents). Authenticated requests bypass the global anonymous cap. Operators who want to lock down the public lane entirely can set `HC_MCP_REQUIRE_AUTH=true` to require Bearer on every call. The HTTP transport also validates the `Origin` header against an allowlist that includes `*.claude.ai`, `*.anthropic.com`, and `tinyzkp.com`.
-
-Additionally, `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json` serves a static [server card](deploy/server-card.json) (RFC-style description with the full tools list + configSchema) for MCP-directory scanners that prefer not to do live `tools/list` discovery — Smithery uses this path to populate the catalog.
-
-### Local install (stdio)
-
-```bash
-cargo install --path crates/hc-mcp --bin hc-mcp-stdio
-```
-
-Or download a prebuilt binary from the [releases page](https://github.com/logannye/hc-stark/releases).
-
-**Claude Desktop** (`claude_desktop_config.json`):
-```json
-{
-  "mcpServers": {
-    "tinyzkp": {
-      "command": "hc-mcp-stdio"
-    }
-  }
-}
-```
-
-### Companion Claude Skill
-
-The repo also ships a [Claude Skill](./skills/tinyzkp-proofs/SKILL.md) that teaches Claude when and how to use these tools. Install it alongside the MCP and Claude will *recognize* situations where a proof is the right primitive — agent-action receipts, state-transition attestation — without the user having to explicitly say "use TinyZKP."
-
-### MCP tools
-
-All 10 tools declare `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` annotations.
-
-| Tool | Title | Read-only |
-|---|---|:-:|
-| `list_templates` | List Proof Templates | ✓ |
-| `list_workloads` | List Workloads | ✓ |
-| `describe_template` | Describe Proof Template | ✓ |
-| `get_capabilities` | Get Server Capabilities | ✓ |
-| `prove_template` | Generate Proof from Template | — |
-| `prove_workload` | Generate Proof from Workload | — |
-| `poll_job` | Poll Proof Job Status | ✓ |
-| `verify_proof` | Verify Proof | ✓ |
-| `get_proof` | Get Proof Bytes | ✓ |
-| `get_proof_summary` | Get Proof Summary | ✓ |
-
-The standard workflow is `list_templates → describe_template → prove_template → poll_job → get_proof → verify_proof`. `verify_proof` is a pure cryptographic check — anyone with the proof bytes can run it independently of TinyZKP.
-
----
-
-## API reference
-
-Base URL: `https://api.tinyzkp.com`
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| **Template Discovery** | | | |
-| GET | `/templates` | None | List all proof templates |
-| GET | `/templates/:id` | None | Get template schema + example |
-| POST | `/estimate` | None | Estimate cost, time, proof size |
-| **Proving** | | | |
-| POST | `/prove/template/:id` | Required | Submit proof via template (recommended) |
-| POST | `/prove` | Required | Submit proof via workload_id or program |
-| POST | `/prove/batch` | Required | Submit multiple prove jobs |
-| GET | `/prove/:job_id` | Required | Get job status and result |
-| GET | `/prove/:job_id/inspect` | Required | Detailed proof breakdown + timing |
-| POST | `/prove/:job_id/cancel` | Required | Cancel a running job |
-| DELETE | `/prove/:job_id` | Required | Delete a completed job |
-| GET | `/prove` | Required | List jobs (`?status`, `?limit`, `?offset`) |
-| **Verification** | | | |
-| POST | `/verify` | Required | Verify a proof (free, no charge) |
-| **Billing & Ops** | | | |
-| GET | `/usage` | Required | View usage and estimated costs |
-| GET | `/healthz` | None | Liveness check |
-| GET | `/readyz` | None | Readiness check |
-| GET | `/metrics` | None | Prometheus metrics (incl. `hc_sqlite_lock_wait_seconds`, `hc_worker_spawn_seconds`, `hc_worker_spawn_permits_available`, `hc_job_queue_depth`) |
-| GET | `/docs` | None | Interactive Swagger UI |
-| **MCP transport** | | | |
-| POST | `/mcp` (on `mcp.tinyzkp.com`) | Optional | Streamable HTTP MCP transport — 10 tools |
-| GET | `/.well-known/mcp/server-card.json` (on `mcp.tinyzkp.com`) | None | Static server card for MCP-directory scanners |
-| **Account** | | | |
-| POST | `/api/rotate-key` | Required | Rotate API key (once per 24h) |
-
-Interactive API explorer: **[api.tinyzkp.com/docs](https://api.tinyzkp.com/docs)**
-
-### Authentication
-
-Most proving and account-management HTTP API endpoints require a Bearer token:
-
-```
-Authorization: Bearer tzk_...
-```
-
-Server-side verification is free but still requires auth to prevent abuse.
-The hosted MCP transport is different: `mcp.tinyzkp.com/mcp` accepts an
-anonymous public lane with a global concurrency cap, and optional Bearer auth
-for per-plan limits.
-
-Rotate a compromised key instantly:
-```bash
-curl -X POST https://tinyzkp.com/api/rotate-key \
-  -H "Authorization: Bearer tzk_YOUR_CURRENT_KEY"
-```
-
----
-
-## Public website and distribution assets
-
-The Cloudflare Pages site lives in [`site/`](./site). It is intentionally more than a marketing page: it includes buyer-routing pages, trust/pricing/evaluation content, integration guides for agent surfaces, and machine-readable assets for automated buyers and agent catalogs.
-
-Key public contracts:
-
-- [`site/llms.txt`](./site/llms.txt) and [`site/discovery.json`](./site/discovery.json) for crawler/agent discovery.
-- [`site/openapi.json`](./site/openapi.json), [`site/mcp.json`](./site/mcp.json), and [`site/integrations.json`](./site/integrations.json) for API/MCP/integration metadata.
-- [`site/templates.json`](./site/templates.json), [`site/limits.json`](./site/limits.json), and [`site/pricing.json`](./site/pricing.json) for product boundaries, quotas, and pricing surfaces.
-- [`site/schemas/`](./site/schemas/) for receipt and agent-output JSON schemas.
-- [`site/vendor/tinyzkp-verify/`](./site/vendor/tinyzkp-verify/) for the first-party browser verifier bundle used by the public verifier path.
-
-Before publishing, run:
-
-```bash
-git diff --check
-python3 scripts/ci/site_route_check.py
-python3 scripts/ci/site_deploy_check.py
-node scripts/ci/site_worker_dispatch_test.mjs
-pytest billing/tests/test_pricing_parity.py billing/tests/test_site_pricing_parity.py
-```
-
-Do not commit real `tzk_...`, `sk_live_...`, `whsec_...`, or `INTERNAL_SECRET` values. Public examples must use placeholders such as `tzk_...`, `tzk_YOUR_KEY`, or documented fake test fixtures only.
-
----
-
-## Self-host
-
-### Build from source
-
-```bash
-# Build and test
-cargo test --workspace
-
-# Run the server locally
-HC_SERVER_API_KEYS=demo:demo_key cargo run -p hc-server --release
-
-# Run with Docker Compose (server + Prometheus + Grafana + billing)
-GRAFANA_ADMIN_PASSWORD=changeme docker compose up --build
-```
-
-### Docker Compose stack
-
-The full production stack includes:
-
-| Service | Purpose |
-|---------|---------|
-| `hc-server` | Rust proving API (port 8080) |
-| `billing-webhook` | Stripe webhook handler (Flask) |
-| `billing-cron` | Hourly usage sync to Stripe |
-| `prometheus` | Metrics collection (port 9090) |
-| `grafana` | Dashboards (port 3000) |
-| `alertmanager` | Alert routing (port 9093) |
-
-```bash
-# Production deploy (Hetzner example)
-docker compose -f docker-compose.yml -f deploy/hetzner/docker-compose.prod.yml up -d
-```
-
-See [`docs/operations.md`](docs/operations.md) for full configuration reference.
-
-### Server configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HC_SERVER_API_KEYS` | unset | `tenant:key` pairs (comma-separated) |
-| `HC_SERVER_API_KEYS_FILE` | unset | Path to API keys file (`tenant:key:plan` per line) |
-| `HC_SERVER_AUTH_PG_URL` | unset | Optional shared Postgres tenant/auth source. When set, API and MCP can authenticate Bearer keys from the `tenants` table instead of relying only on host-local `api_keys.txt` |
-| `HC_SERVER_AUTH_PG_TLS` | inferred from URL | Optional TLS override for `HC_SERVER_AUTH_PG_URL` |
-| `HC_TENANT_PG_URL` | unset | Optional billing-webhook Postgres mirror for tenant/auth rows before API/MCP auth read cutover |
-| `HC_TENANT_PG_REQUIRED` | `false` | Fail tenant mutations if the Postgres mirror write fails; use after parity is proven |
-| `HC_SERVER_AUTH_GRACE_MS` | `300000` | Rotation grace window: rotated-out keys still authenticate for this long after a hot-reload swap |
-| `HC_SERVER_WORKER_PATH` | unset | Explicit path to `hc-worker`; validated at boot. Falls back to sibling-binary lookup, then PATH |
-| `HC_SERVER_MAX_INFLIGHT` | `4` | Max concurrent prove jobs per tenant |
-| `HC_SERVER_MAX_WORKER_SPAWN` | `32` | Global cap on concurrent worker subprocess spawns (EMFILE guard); 0 disables |
-| `HC_SERVER_MAX_PROVE_SECS` | `300` | Per-job timeout |
-| `HC_SERVER_ALLOW_CUSTOM_PROGRAMS` | `false` | Allow arbitrary VM programs |
-| `HC_SERVER_PROVE_DISPATCH` | `local` | Prove dispatch mode: `local` spawns `hc-worker` in the API process; `shared` enqueues to the job index for `hc-job-worker` |
-| `HC_SERVER_MAX_PROVE_RPM` | `100` | Per-tenant prove rate limit |
-| `HC_SERVER_MAX_VERIFY_RPM` | `300` | Per-tenant verify rate limit |
-| `HC_SERVER_JOB_INDEX_SQLITE` | `true` | Enable SQLite job index |
-| `HC_SERVER_JOB_INDEX_SOURCE` | `sqlite` | Job index backend: `sqlite`, `postgres`, or `disabled`. `postgres` stores request/status JSON and completed proof bytes in Postgres |
-| `HC_JOB_INDEX_PG_URL` | falls back to `HC_SERVER_PG_URL` | Postgres connection string for `HC_SERVER_JOB_INDEX_SOURCE=postgres` |
-| `HC_JOB_INDEX_PG_TLS` | inferred from URL | Optional TLS override for the Postgres job index |
-| `HC_SERVER_PG_URL` | unset | Postgres connection string for Phase 1 usage dual-write. When set, `usage_log`, `verify_log`, and `failed_proofs` writes mirror to Postgres while SQLite remains the read/cap source |
-| `HC_SERVER_PG_TLS` | inferred from URL | Optional Postgres TLS override: `true`/`require` or `false`/`disable`. URL `sslmode=require`, `verify-ca`, or `verify-full` also enables TLS |
-| `HC_SERVER_USAGE_READ_FROM` | `sqlite` | Usage read source for `/usage` and monthly cap checks: `sqlite` or `postgres`. Use `postgres` only after dual-write parity is proven |
-| `HC_RATE_LIMIT_PG_URL` | unset | Optional Postgres shared rate-limit store. Set in both `hc-server` and `hc-mcp-http` so authenticated HTTP and MCP requests consume the same tenant RPM window |
-| `HC_RATE_LIMIT_PG_TLS` | inferred from URL | Optional TLS override for `HC_RATE_LIMIT_PG_URL` |
-| `HC_JOB_WORKER_INDEX_SOURCE` | `postgres` | `hc-job-worker` queue source. Use with `HC_SERVER_PROVE_DISPATCH=shared` and `HC_SERVER_JOB_INDEX_SOURCE=postgres` |
-| `HC_JOB_WORKER_USAGE_PG_URL` | falls back to `HC_SERVER_PG_URL` | Postgres usage recorder for jobs executed by `hc-job-worker` |
-| `HC_JOB_WORKER_LEASE_MS` | `30000` | Shared job lease duration for `hc-job-worker`; renewed while `hc-worker` runs |
-| `HC_JOB_WORKER_HEARTBEAT_MS` | `5000` | How often `hc-job-worker` renews leases and checks cancellation |
-| `HC_ALLOW_UNAUDITED_TEMPLATES` | `false` | Expose/dispatch templates whose AIR does not yet enforce their named predicate (every template except `accumulator_step`). Off in production; set `true` only for Phase-1B development. Honored identically by `hc-server` and `hc-mcp`. |
-| `HC_METRICS_TOKEN` | unset | Secret token for `/metrics`. Unset (or empty) → `/metrics` returns 404 (disabled). Set → endpoint requires `Authorization: Bearer <token>`; mismatched token → 401. Set in production to prevent leaking per-tenant revenue counters (audit finding G10). |
-| `HC_MCP_HTTP_HOST` | `0.0.0.0` | hc-mcp-http bind host |
-| `HC_MCP_HTTP_PORT` | `3001` | hc-mcp-http bind port |
-| `HC_MCP_REQUIRE_AUTH` | `false` | When true, hc-mcp-http rejects unauthenticated requests with 401 |
-| `HC_MCP_TENANT_RPM` | `0` | Optional global RPM override on the MCP path; 0 = use per-plan ladder |
-| `HC_MCP_MAX_INFLIGHT` | `2` | Global concurrency cap on the MCP anonymous lane |
-| `HC_MCP_ALLOWED_ORIGINS` | unset | Extra CORS origins (comma-separated) on top of the default allowlist |
-| `HC_UNBILLED_ALERT_HOURS` | `12` | Billing cron alerts if unbilled rows are older than this (must stay below Stripe's ~24h dedup window) |
-
-### Zero-knowledge mode
-
-The default public path is transparent state-transition attestation: the receipt proves the transition chain, but it is not a privacy claim. Protocol v4 supports experimental masking parameters for audited use cases:
-
-- **API**: Set `zk_mask_degree > 0` in the prove request
-- **CLI**: `cargo run -p hc-cli -- prove --zk-mask-degree 8`
-- **MCP**: `"zk": true` in prove parameters
-
-Do not describe the default `accumulator_step` receipt as hiding inputs from TinyZKP or from the verifier. Treat privacy-oriented templates as gated until separately audited.
-
----
-
-## How the repo is organized
-
-```
-hc-stark/
-  crates/
-    hc-core/        # Field arithmetic (Goldilocks), FFTs, SIMD
-    hc-commit/      # Merkle trees, vector commitments
-    hc-hash/        # Hash digests, Fiat-Shamir transcripts
-    hc-fri/         # Streaming FRI prover/verifier
-    hc-air/         # AIR definitions, constraints, selectors
-    hc-vm/          # 28-instruction register VM, DSL compiler
-    hc-replay/      # Block producers, deterministic replay
-    hc-prover/      # Height-compressed streaming prover
-    hc-verifier/    # STARK verifier
-    hc-sdk/         # Proof serialization, output formats
-    hc-workloads/   # proof templates + workload registry
-    hc-mcp/         # MCP server for AI agents (10 tools)
-    hc-server/      # axum HTTP API with multi-tenant auth
-    hc-cli/         # CLI: prove/verify/bench/recursion
-    hc-bench/       # Benchmarking harness
-    hc-recursion/   # Proof aggregation (in development)
-    hc-height/      # Height-compression interfaces
-    hc-simd/        # SIMD-accelerated field ops
-    hc-wasm/        # WASM verifier (@tinyzkp/verify npm package, 785K)
-    hc-python/      # Python bindings
-    hc-node/        # Node.js native bindings
-    hc-rollup/      # Rollup state transition API
-  clients/          # Python, TypeScript, and Rust client SDKs
-  billing/          # Stripe billing (tenant provisioning, usage sync)
-  site/             # Marketing site (tinyzkp.com, Cloudflare Pages)
-  deploy/           # Docker, Prometheus, Grafana configs
-  docs/             # Whitepaper, operations, proof format specs
-  contracts/        # Verifier contract interfaces
-```
-
----
-
-## How the prover works
-
-### Classic STARK pipeline
-
-A standard STARK prover materializes the full trace (T rows), FFTs over full vectors, builds Merkle trees, and answers queries. Memory: **O(T)**.
-
-### Height-compressed pipeline
-
-hc-stark refactors this into a streaming computation tree:
-
-1. **Block tiling** — Choose block size `b ~ √T`. The trace becomes `T/b ~ √T` blocks.
-2. **Computation tree** — Each STARK step becomes a binary tree of block computations.
-3. **Pointerless DFS** — The tree is traversed with O(log T) stack frames — no heap-allocated tree.
-4. **Replay engine** — Only O(1) blocks are live at any time. Blocks are replayed from checkpoints.
-
-Peak prover space: **~O(√T · polylog(T))**.
-
----
-
-## Development
-
-```bash
-# Full test suite
-./scripts/test_suite.sh all
-
-# Specific categories
-./scripts/test_suite.sh sanity   # Build, unit tests, CLI roundtrip
-./scripts/test_suite.sh stress   # Edge cases, parameter variations
-./scripts/test_suite.sh ladder   # √T scaling verification with RSS tracking
-
-# Benchmarks
-cargo run -p hc-cli -- bench --scenario prover --auto-block-size --trace-length 1048576
-cargo run -p hc-cli -- bench --scenario merkle --leaves 4096 --queries 128
-cargo run -p hc-cli -- bench --scenario recursion --proofs 8
-```
-
-### Standards
-
-- **Toolchain:** Rust stable, `cargo fmt`, `cargo clippy -- -D warnings`
-- **Safety:** All crates use `#![forbid(unsafe_code)]`
-- **Error handling:** `HcError` / `HcResult<T>` / `hc_ensure!` — no panics in library code
-- **CI:** `.github/workflows/ci.yml` runs fmt, clippy, test, full suite, and benchmark regression gating on every push
-
----
-
-## Troubleshooting
-
-### `claude mcp add` succeeds but tools don't appear
-
-The connector may need a session restart. Quit Claude Code (or close the conversation) and start a fresh one. In Claude.ai web, the connector also needs to be enabled per-conversation via the connector picker — not all chats expose all installed connectors.
-
-### `prove_template` returns `status: failed` with `query_count … below minimum`
-
-You're hitting an old build of the MCP server (this was a real bug, fixed in commit [`f4f27ae`](https://github.com/logannye/hc-stark/commit/f4f27ae)). The hosted endpoint at `mcp.tinyzkp.com` is current; if you self-host, pull the latest `main`.
-
-### `verify_proof` returns `valid: false`
-
-This is the system working as intended. A failed verification means one of: the proof bytes were tampered with in transit, the public inputs you passed differ from the prover's, or the prover lied. Re-fetch the proof via `get_proof` and try again. If it still fails, the proof is genuinely invalid — *do not* treat it as authentic.
-
-### Long-running proofs / timeouts
-
-The `accumulator_step` template typically completes in ~1–3 s and may need 2–3 polls. Wait ~1–2 s between polls; do not loop without a delay. If a job stays in `running` state for >30 s, that's a bug — file an issue with the `job_id`.
-
-### "Could not connect to MCP server"
-
-Check `https://tinyzkp.com/status` for the live health of `mcp.tinyzkp.com`. If the endpoint is up but you still can't connect, you're probably behind a corporate firewall — the MCP traffic is HTTPS POST to `mcp.tinyzkp.com:443`. Allowlist the host or use a personal network for testing.
-
-### CORS errors in browser-based clients
-
-Caddy is configured to send the right CORS headers (`Access-Control-Allow-Origin: *`, all standard methods, `Mcp-Session-Id` exposed) and to respond `204` to OPTIONS preflights. If you see a CORS error, capture the failing request's `Origin` header and the response headers and file an issue.
-
-### Anything else
-
-Open an issue at <https://github.com/logannye/hc-stark/issues> or email **logan@tinyzkp.com**. Include: the tool name, the parameters you passed (redact secrets), the response you got, and any `job_id`.
-
----
-
-## Roadmap
-
-### Shipped
-
-- Height-compressed streaming prover with O(√T) memory
-- Complete verifier with streaming Merkle replay
-- Zero-knowledge mode (protocol v4)
-- **Hosted MCP server live at [`mcp.tinyzkp.com`](https://mcp.tinyzkp.com)** — anonymous lane (no Bearer required, bounded by global concurrency cap) plus authenticated lane with per-plan rate limits matching the HTTP API ladder; full tool annotations + Origin allowlist + opt-in closed-door mode (`HC_MCP_REQUIRE_AUTH=true`)
-- **Claude Skill (`tinyzkp-proofs`)** — teaches Claude when and how to mint and verify ZK proofs via the MCP, even when the user doesn't say "zero-knowledge proof" explicitly
-- MCP server with 10 tools for AI agents (stdio + HTTP transport)
-- Streamable HTTP transport for MCP (remote agent access)
-- Proof templates with discovery API (`GET /templates`)
-- Template-based proving (`POST /prove/template/:id`)
-- Cost estimation endpoint (`POST /estimate`)
-- Proof inspection endpoint (`GET /prove/:job_id/inspect`)
-- WASM verifier package (`@tinyzkp/verify`, 785K)
-- **`@tinyzkp/cli` published to npm** — `npx @tinyzkp/cli verify proof.json`
-- Self-service API key rotation (`POST /api/rotate-key`)
-- DSL compiler for custom programs
-- Multi-tenant HTTP API with rate limiting
-- **Production service at [tinyzkp.com](https://tinyzkp.com)**
-- Stripe billing (Free tier, $19 Developer, $79 Pro, $199 Scale, plus a usage-based Compute product at $0.50/M trace steps; monthly self-serve checkout; `team` retained only as a legacy/admin alias for Pro)
-- **Publish-ready client SDKs** — Python (`pip install tinyzkp`, on PyPI), TypeScript (`npm install tinyzkp`, dual ESM+CJS build, on npm), Rust (`cargo add tinyzkp`)
-- **MCP directory listings**:
-  - **[Smithery](https://smithery.ai/servers/logan/tinyzkp-mcp)** — live since 2026-04-28. Catalogued from a static [server-card.json](deploy/server-card.json) at `https://mcp.tinyzkp.com/.well-known/mcp/server-card.json`.
-  - **Anthropic MCP directory** — application submitted 2026-04-28, pending review.
-  - **mcp.so** — submission packet prepared at [`marketing/MCP_DIRECTORY_MCPSO.md`](marketing/MCP_DIRECTORY_MCPSO.md), submission pending.
-  - All three submission paths are operator-driven web forms — no CLI/PR submission path exists. Packets at [`marketing/MCP_DIRECTORY*.md`](marketing/) document what each form expects.
-- **Browser playground at [`tinyzkp.com/try`](https://tinyzkp.com/try)** — mint and verify proofs without signup
-- Live status page at [`tinyzkp.com/status`](https://tinyzkp.com/status) — real Grafana panels backing it
-- Docker Compose production stack with monitoring (Prometheus + Grafana + Alertmanager)
-- **Templates with copy-paste examples + integration tests** — full curl, Python, TypeScript, Rust, and CLI snippets shipped on [`tinyzkp.com/docs`](https://tinyzkp.com/docs), with copy buttons and compatibility guidance; integration test at [`crates/hc-workloads/tests/template_examples.rs`](crates/hc-workloads/tests/template_examples.rs) asserts every documented template example builds via `build_from_template()`
-- **Customer-discovery pipeline** — recruit → script → synthesis playbook in [`marketing/USER_INTERVIEWS.md`](marketing/USER_INTERVIEWS.md), targeting 5 interviews / 14 days against free-tier signups, MCP installs, and playground completions
-- **Protocol transcript v2 contract** — versioned Fiat–Shamir transcript domains (`hc-stark/v2`, `hc-stark/fri/v2`) with canonical labels in `hc_hash::protocol`; treated as a wire-compatibility contract (see [`docs/whitepaper.md`](docs/whitepaper.md) §7.0 and [`docs/design_notes/security_considerations.md`](docs/design_notes/security_considerations.md) §2.4)
-- **Security audit suite** — threat model, soundness argument (conjectured, audit-pending), and audit checklist under [`docs/security/`](docs/security/), plus per-pillar fuzzing harnesses under [`fuzz/`](fuzz/)
-
-### Recently shipped (production-readiness sweep)
-
-Sprint of focused production-readiness work, organized around the categories
-flagged in an external code review:
-
-- **Perf** (compounding through the prove pipeline):
-  - Goldilocks fast reduction, ~8.4× on the field-mul primitive
-  - rayon-parallelized batch field ops (above 524K elements)
-  - SIMD specialization for the FRI fold hot path, ~1.4×
-  - Precomputed FFT twiddle table per stage, ~1.5×
-- **Billing correctness**:
-  - Stripe Meter-Event idempotency keys derived from immutable proof identity
-  - Try/except + alert on post-MeterEvent SQLite `UPDATE billed=1` failure
-  - Freshness check warns if rows age past Stripe's dedup window
-- **Auth & rate limits**:
-  - Optional Bearer auth on MCP with opt-in closed-door (`HC_MCP_REQUIRE_AUTH`)
-  - Per-plan MCP rate-limit ladder matching hc-server's `prove_rpm`
-  - Optional Postgres-backed shared quota (`HC_RATE_LIMIT_PG_URL`) across HTTP API and MCP
-  - 5-minute API key rotation grace window (no in-flight 401s on rotation)
-- **Ops & resilience**:
-  - hc-worker binary validated at boot (refuses to start if missing/non-executable)
-  - SQLite `busy_timeout=5s` on jobs/usage handles + Python cron parity
-  - Concurrent worker-spawn cap (`HC_SERVER_MAX_WORKER_SPAWN`, EMFILE guard)
-  - Prometheus histograms: SQLite lock-wait, worker spawn time, job queue depth
-- **Single source of truth**:
-  - `pricing.json` at repo root, with parity tests in both Rust and Python
-- **Testing**:
-  - Failure-mode integration tests (auth-file corruption, SQLite contention)
-  - Worker-crash mid-prove → Failed status (regression guard)
-- **Docs & infra**:
-  - Postgres migration plan + Phase 1 usage dual-write behind `HC_SERVER_PG_URL`
-  - Phase 2-ready Postgres usage read source behind `HC_SERVER_USAGE_READ_FROM=postgres`
-  - Postgres tenant/auth read source behind `HC_SERVER_AUTH_PG_URL`
-  - Postgres job index backend behind `HC_SERVER_JOB_INDEX_SOURCE=postgres`
-  - Restored `cargo clippy -- -D warnings` strict gate
-
-### Next
-
-The next structural unlock is the **full Postgres cutover** — the single Hetzner SQLite ceiling sits at roughly tens of proves/min sustained, and horizontal scaling unblocks when usage reads, billing sync, tenant auth, and job state move off local SQLite/files. Phase 1 usage dual-write is wired today: set `HC_SERVER_PG_URL` to mirror `usage_log`, `verify_log`, and `failed_proofs` into Postgres while SQLite remains the source of truth. Phase 2 usage reads are implemented behind `HC_SERVER_USAGE_READ_FROM=postgres`; tenant/API-key auth has a billing-webhook mirror behind `HC_TENANT_PG_URL` and shared API/MCP reads behind `HC_SERVER_AUTH_PG_URL`. These switches should only be enabled after parity checks pass. The full operator sequence is in [`docs/postgres_migration.md`](docs/postgres_migration.md).
-
-After that, in priority order:
-
-- **Worker dispatch cutover**: usage reads, billing sync, shared RPM windows, and the job index now have Postgres migration paths; worker request/proof handoff streams over stdin/stdout; and `hc-job-worker` can claim leased jobs, renew leases, watch cancellation, and publish terminal status/proof bytes. True multi-host proving still needs the production cutover to `HC_SERVER_PROVE_DISPATCH=shared` plus observed Postgres-backed operation.
-- **`hc-zkml` (verifiable AI inference)** — Phase 1 of the four-pillar [extension roadmap](ROADMAP_EXTENSIONS.md). Public API + type contracts already locked in; tiled MatMul AIR + ONNX subset frontend is the next implementation.
-- **Worker warm pool** (vs current spawn-per-job) — ops concern under hundreds-per-min QPS; bounded today via the spawn-cap semaphore.
-- **Custom program sandboxing** (paid tier).
-- **Node.js native bindings package** — scaffolded at [`crates/hc-node`](crates/hc-node/) (NAPI cdylib + rlib).
-- **GPU acceleration** (CUDA/Metal kernels).
-- **Rollup state-transition API** — `hc-rollup` crate already in the workspace.
-- **`hc-zkvm` / `hc-sumcheck` / `hc-ipa`** — Phases 2–4 of the [extension roadmap](ROADMAP_EXTENSIONS.md).
-- **Distributed proving across multiple machines**.
-
----
-
-## Links
-
-### Product
-- **Marketing site:** [tinyzkp.com](https://tinyzkp.com)
-- **Browser playground:** [tinyzkp.com/try](https://tinyzkp.com/try)
-- **Long-trace compute brief:** [tinyzkp.com/compute](https://tinyzkp.com/compute)
-- **Research lineage:** [tinyzkp.com/research](https://tinyzkp.com/research)
-- **Security & audit status:** [tinyzkp.com/security](https://tinyzkp.com/security)
-- **Account dashboard:** [tinyzkp.com/account](https://tinyzkp.com/account)
-- **Docs:** [tinyzkp.com/docs](https://tinyzkp.com/docs)
-- **Swagger UI:** [api.tinyzkp.com/docs](https://api.tinyzkp.com/docs)
-- **Status:** [tinyzkp.com/status](https://tinyzkp.com/status)
-- **Sign up / contact:** [tinyzkp.com/signup](https://tinyzkp.com/signup) · [tinyzkp.com/contact](https://tinyzkp.com/contact)
-
-### Distribution
-- **Smithery listing:** [smithery.ai/servers/logan/tinyzkp-mcp](https://smithery.ai/servers/logan/tinyzkp-mcp)
-- **PyPI:** [pypi.org/project/tinyzkp](https://pypi.org/project/tinyzkp/)
-- **npm — TS SDK:** [npmjs.com/package/tinyzkp](https://www.npmjs.com/package/tinyzkp)
-- **npm — CLI:** [npmjs.com/package/@tinyzkp/cli](https://www.npmjs.com/package/@tinyzkp/cli)
-- **npm — WASM verifier:** [npmjs.com/package/@tinyzkp/verify](https://www.npmjs.com/package/@tinyzkp/verify)
-- **Cargo:** [crates.io/crates/tinyzkp](https://crates.io/crates/tinyzkp)
-
-### Documents in this repo
-- **Business guide:** [`BUSINESS_GUIDE.md`](BUSINESS_GUIDE.md)
-- **Reconciliation roadmap:** [`docs/strategy/reconciliation_roadmap.md`](docs/strategy/reconciliation_roadmap.md)
-- **Release and compatibility policy:** [`docs/governance/release_policy.md`](docs/governance/release_policy.md)
-- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md)
-- **Extension roadmap (zkML / zkVM / sumcheck / IPA):** [`ROADMAP_EXTENSIONS.md`](ROADMAP_EXTENSIONS.md)
-- **Whitepaper:** [`docs/whitepaper.md`](docs/whitepaper.md)
-- **Proof format v4:** [`docs/proof_format_v4_zk.md`](docs/proof_format_v4_zk.md)
-- **Operations:** [`docs/operations.md`](docs/operations.md)
-- **Hetzner deploy runbooks:** [`docs/runbooks/`](docs/runbooks/)
-- **Incident response runbook:** [`docs/runbooks/incident_response.md`](docs/runbooks/incident_response.md)
-- **Release provenance runbook:** [`docs/runbooks/release_provenance.md`](docs/runbooks/release_provenance.md)
-- **Postgres migration plan:** [`docs/postgres_migration.md`](docs/postgres_migration.md)
-- **Security audit suite (threat model, soundness argument [conjectured, audit-pending], audit checklist):** [`docs/security/`](docs/security/)
-- **MCP directory submission packets:** [`marketing/MCP_DIRECTORY*.md`](marketing/)
-- **Customer-discovery playbook:** [`marketing/USER_INTERVIEWS.md`](marketing/USER_INTERVIEWS.md)
-- **HN launch draft:** [`marketing/HN_LAUNCH.md`](marketing/HN_LAUNCH.md)
-
-### Legal
-- **Privacy policy:** [tinyzkp.com/privacy](https://tinyzkp.com/privacy)
-- **Terms of service:** [tinyzkp.com/terms](https://tinyzkp.com/terms)
+macOS measurements and component-only tests are useful for development but are
+not acceptable release evidence. TinyZKP never infers full-prover memory,
+throughput, cost, or capacity from a component benchmark.
+
+Release targets remain blocked until independently reproduced:
+
+- 1M rows: at least 4× lower peak RAM, at most 3× baseline wall time, and no
+  more than 10% above the configured cap;
+- 10M rows: at most 2 GiB whole-process peak memory, successful official
+  verification, and scratch usage within 10% of preflight;
+- deterministic crash recovery, parser/resource fuzzing, independent review,
+  one external design-partner integration, signed artifacts, SBOM, checksums,
+  and release identity agreement.
+
+## Public service behavior
+
+During recovery:
+
+- `GET /healthz`, `GET /version`, and `GET /v1/capabilities` are available;
+- proving paths return `503 protocol_upgrade`;
+- hosted v5/v7 verification returns `422 legacy_statement_unbound`;
+- MCP discovery exposes only `get_capabilities`;
+- checkout, account creation, demos, and meter emission are disabled;
+- tags cannot publish SDKs, WASM, or MCP binaries while backend-v1 gates are
+  blocked.
+
+Run [`scripts/monitoring/backend_recovery_canary.py`](scripts/monitoring/backend_recovery_canary.py)
+from an external machine after deployment.
+
+## Commercial model
+
+Local software remains MIT. TinyZKP sells fixed-scope evaluations, signed LTS
+releases, compatibility guidance, private deployment, policy enforcement,
+checkpoint operations, observability, and commercial SLAs:
+
+- Founding Evaluation: $25K for the first two customers;
+- Standard Evaluation: $40K fixed, three weeks, fifteen engineering days;
+- TinyZKP Certified: $60K/year prepaid, one workload, at most ten support hours
+  per quarter;
+- TinyZKP Fleet/OEM: $125K/year minimum prepaid;
+- custom engineering: at least $300/hour, separately scoped.
+
+Reserved hosted capacity remains unavailable until a signed customer exists,
+the implementation is reviewed, and measured COGS support at least 80% gross
+margin. There is no public Checkout path. Evaluation milestones use Stripe
+Invoicing; annual agreements use `send_invoice` subscriptions.
+
+The machine-readable commercial source is [`site/pricing.json`](site/pricing.json).
+See [`BUSINESS_GUIDE.md`](BUSINESS_GUIDE.md) for operating controls and
+[`docs/recovery/implementation-status.md`](docs/recovery/implementation-status.md)
+for the current gap ledger.
+
+## Security and disclosure
+
+Do not commit secrets, witness data, customer inputs, Stripe credentials,
+private keys, or production environment files. Scratch artifacts must be
+owner-only and are untrusted on reopen; manifests, chunks, release identity,
+dependency lock, workload, input, and policy must all be validated before
+resume.
+
+Report security issues through the address on
+[tinyzkp.com/security](https://tinyzkp.com/security). Performance claims and
+security claims require reproducible evidence; backend recovery is not a
+production certification.
+
+## License
+
+The existing repository and new public backend code are MIT licensed. Private
+Fleet control-plane modules may be created in a separate repository only after
+a signed annual agreement; they must invoke the public CLI/container through
+the published artifact contracts rather than fork the proof protocol.

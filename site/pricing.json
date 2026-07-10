@@ -24,6 +24,15 @@
       "billing": "50_percent_upfront_50_percent_on_delivery",
       "duration": "3_weeks",
       "engineering_day_cap": 15,
+      "kicker": "First two customers",
+      "unit": "fixed · 3 weeks",
+      "deliverables": [
+        "One workload and conventional baseline",
+        "Bounded integration prototype",
+        "Reproducible RAM, time, I/O, scratch, proof, and verifier report",
+        "50% on signature and 50% on delivery",
+        "At most fifteen engineering days"
+      ],
       "contact_url": "https://tinyzkp.com/contact?intent=memory_bounded_evaluation"
     },
     {
@@ -33,6 +42,14 @@
       "billing": "50_percent_upfront_50_percent_on_delivery",
       "duration": "3_weeks",
       "engineering_day_cap": 15,
+      "kicker": "Standard evaluation",
+      "unit": "fixed · 3 weeks",
+      "deliverables": [
+        "Same fixed scope and acceptance matrix",
+        "One workload and one hardware baseline",
+        "Production recommendation",
+        "Additional work requires a written change order"
+      ],
       "contact_url": "https://tinyzkp.com/contact?intent=memory_bounded_evaluation"
     },
     {
@@ -43,6 +60,15 @@
       "billing": "annual_prepaid_send_invoice",
       "included_support_hours_per_quarter": 10,
       "supported_workloads": 1,
+      "kicker": "Recurring",
+      "unit": "per year · prepaid",
+      "deliverables": [
+        "Signed LTS builds and compatibility matrix",
+        "One supported workload",
+        "Security and upgrade notices",
+        "Quarterly automated performance report",
+        "Up to ten support hours per quarter"
+      ],
       "contact_url": "https://tinyzkp.com/contact?intent=certified"
     },
     {
@@ -52,6 +78,14 @@
       "period": "year",
       "billing": "annual_prepaid_send_invoice",
       "custom_engineering_minimum_hourly_rate": 300,
+      "kicker": "Recurring",
+      "unit": "annual minimum · prepaid",
+      "deliverables": [
+        "Private deployment and resource policy",
+        "Checkpoint operations and observability",
+        "Release coordination and commercial SLA",
+        "Custom engineering separately scoped at $300/hour minimum"
+      ],
       "contact_url": "https://tinyzkp.com/contact?intent=fleet_oem"
     },
     {
@@ -61,6 +95,7 @@
       "period": "month",
       "availability": "unavailable_until_review_demand_and_margin_gates",
       "required_projected_gross_margin_percent": 80,
+      "unit": "per month",
       "contact_url": "https://tinyzkp.com/contact?intent=reserved_capacity"
     }
   ],

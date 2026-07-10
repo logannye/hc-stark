@@ -22,3 +22,10 @@ The replacement hosted catalog must not be activated until the audit and
 review, demand, and 80% gross-margin gates pass. Evaluation milestones use
 Stripe Invoicing; annual agreements use Billing subscriptions with
 `send_invoice`. Public Checkout remains disabled.
+
+Use `billing/contract_billing.py` to preview a deposit, delivery invoice, or
+annual `send_invoice` subscription. Its default is read-only. Apply mode also
+requires exact Stripe account identity and the
+`TINYZKP_ALLOW_CONTRACT_BILLING_WRITE=1` break-glass variable. The delivery
+invoice requires explicit delivery-acceptance evidence; annual subscriptions
+require an active, exact-price yearly Stripe Price.

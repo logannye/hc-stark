@@ -1,66 +1,10 @@
-// site/_worker.js — Cloudflare Pages Advanced Mode worker.
-//
-// When `_worker.js` exists at the project root, Cloudflare Pages uses it as
-// the single Worker entry point and IGNORES auto-discovery of the
-// `functions/` directory. We adopt this pattern because Cloudflare's
-// auto-discovery silently dropped the new demo-{prove,poll,verify} functions
-// from the deployed bundle even though the local build registered them
-// correctly. Routing through this single worker is more deterministic.
-//
-// Structure: re-export each function module, build a route table, dispatch
-// by (path, method). Anything unmatched falls through to the static asset
-// handler via env.ASSETS.fetch().
+// Cloudflare Pages Advanced Mode worker for the TinyZKP backend recovery.
+// Only release identity and evaluation intake execute server-side. Historical
+// account, checkout, receipt, demo, and proving functions are not imported.
 
-import * as contact            from "./functions/api/contact.js";
-import * as createCheckout     from "./functions/api/create-checkout.js";
-import * as createFreeAccount  from "./functions/api/create-free-account.js";
-import * as createPilotCheckout from "./functions/api/create-pilot-checkout.js";
-import * as createPortal       from "./functions/api/create-portal-session.js";
-import * as demoPoll           from "./functions/api/demo-poll.js";
-import * as demoProve          from "./functions/api/demo-prove.js";
-import * as demoVerify         from "./functions/api/demo-verify.js";
-import * as events             from "./functions/api/events.js";
-import * as rotateKey          from "./functions/api/rotate-key.js";
-import * as sendMagicLink      from "./functions/api/send-magic-link.js";
-import * as verifyMagicLink    from "./functions/api/verify-magic-link.js";
-import * as sessionResolve     from "./functions/api/session-resolve.js";
-import * as statusProbe        from "./functions/api/status-probe.js";
-import * as revealKey          from "./functions/api/reveal-key.js";
-import * as logout             from "./functions/api/logout.js";
-import * as usage              from "./functions/api/usage.js";
-import * as jobs               from "./functions/api/jobs.js";
+import * as contact from "./functions/api/contact.js";
 
-const ROUTES = {
-  "/api/contact":              contact,
-  "/api/create-checkout":      createCheckout,
-  "/api/create-free-account":  createFreeAccount,
-  "/api/create-pilot-checkout": createPilotCheckout,
-  "/api/create-portal-session": createPortal,
-  "/api/demo-poll":            demoPoll,
-  "/api/demo-prove":           demoProve,
-  "/api/demo-verify":          demoVerify,
-  "/api/events":               events,
-  "/api/rotate-key":           rotateKey,
-  "/api/send-magic-link":      sendMagicLink,
-  "/api/verify-magic-link":    verifyMagicLink,
-  "/api/session-resolve":      sessionResolve,
-  "/api/status-probe":         statusProbe,
-  "/api/reveal-key":           revealKey,
-  "/api/logout":               logout,
-  "/api/usage":                usage,
-  "/api/jobs":                 jobs,
-};
-
-// Map HTTP method → expected export name on the function module.
-const METHOD_HANDLER = {
-  GET:     "onRequestGet",
-  POST:    "onRequestPost",
-  PUT:     "onRequestPut",
-  DELETE:  "onRequestDelete",
-  PATCH:   "onRequestPatch",
-  HEAD:    "onRequestHead",
-  OPTIONS: "onRequestOptions",
-};
+const ROUTES = { "/api/contact": contact };
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -71,11 +15,7 @@ const SECURITY_HEADERS = {
 };
 
 const CANONICAL_HOST = "tinyzkp.com";
-const TYPO_HOSTS = new Set([
-  "www.tinyzkp.com",
-  "tny" + "zkp.com",
-  "www.tny" + "zkp.com",
-]);
+const TYPO_HOSTS = new Set(["www.tinyzkp.com", "tny" + "zkp.com", "www.tny" + "zkp.com"]);
 
 const PERMANENT_REDIRECTS = new Map([
   ["/account", "/status"],
@@ -94,31 +34,21 @@ const PERMANENT_REDIRECTS = new Map([
 ]);
 
 const GONE_PREFIXES = [
-  "/agents",
-  "/agent-",
-  "/verifiable-agent-output",
-  "/roi",
-  "/calculator",
-  "/fit",
-  "/use-cases",
-  "/compare",
-  "/integrations",
-  "/apps",
-  "/badges",
-  "/examples",
-  "/limits",
-  "/recipes",
-  "/research",
-  "/templates",
+  "/agents", "/agent-", "/verifiable-agent-output", "/roi", "/calculator",
+  "/fit", "/use-cases", "/compare", "/integrations", "/apps", "/badges",
+  "/examples", "/limits", "/recipes", "/research", "/templates",
 ];
 
+const GONE_ASSETS = new Set([
+  "/mcp.json", "/evaluation.json", "/enterprise.json", "/platform-rollout.json",
+  "/changelog.json", "/fit.json", "/integrations.json", "/limits.json",
+  "/.well-known/tinyzkp-badge.json", "/.well-known/tinyzkp-offers.json",
+  "/.well-known/tinyzkp-receipt-share.json", "/pilot-preview.jpg",
+]);
+
 const MAINTENANCE_DISABLED_API_ROUTES = new Set([
-  "/api/create-checkout",
-  "/api/create-free-account",
-  "/api/create-pilot-checkout",
-  "/api/demo-poll",
-  "/api/demo-prove",
-  "/api/demo-verify",
+  "/api/create-checkout", "/api/create-free-account", "/api/create-pilot-checkout",
+  "/api/demo-poll", "/api/demo-prove", "/api/demo-verify",
 ]);
 
 function envString(env, key) {
@@ -126,37 +56,49 @@ function envString(env, key) {
   return value || null;
 }
 
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) headers.set(name, value);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function canonicalHostRedirect(url) {
   const host = url.hostname.toLowerCase();
   if (host === CANONICAL_HOST && url.protocol === "https:") return null;
   if (host !== CANONICAL_HOST && !TYPO_HOSTS.has(host)) return null;
-
   const target = new URL(url);
   target.protocol = "https:";
   target.hostname = CANONICAL_HOST;
   target.port = "";
   return new Response(null, {
     status: 308,
-    headers: {
-      "Location": target.toString(),
-      "Cache-Control": "public, max-age=3600",
-    },
+    headers: { Location: target.toString(), "Cache-Control": "public, max-age=3600" },
   });
 }
 
+function normalizedRetiredPath(pathname) {
+  return pathname.endsWith(".html") ? pathname.slice(0, -5) : pathname;
+}
+
 function retiredSurfaceResponse(url) {
-  const redirect = PERMANENT_REDIRECTS.get(url.pathname);
+  const normalized = normalizedRetiredPath(url.pathname);
+  const redirect = PERMANENT_REDIRECTS.get(normalized);
   if (redirect) {
     return new Response(null, {
       status: 308,
       headers: {
-        "Location": new URL(redirect, "https://tinyzkp.com").toString(),
+        Location: new URL(redirect, "https://tinyzkp.com").toString(),
         "Cache-Control": "public, max-age=86400",
       },
     });
   }
-
-  if (!GONE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) return null;
+  const gone = GONE_ASSETS.has(url.pathname)
+    || GONE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+  if (!gone) return null;
   return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Retired surface — TinyZKP</title></head><body><main><h1>This surface has been retired.</h1><p>TinyZKP is focused on resource-bounded Plonky3 proving infrastructure.</p><p><a href="/engine">Review the engine</a> · <a href="/benchmarks">Run the benchmark</a></p></main></body></html>`, {
     status: 410,
     headers: {
@@ -172,10 +114,7 @@ function protocolUpgradeResponse() {
     code: "protocol_upgrade",
     error: "Hosted proving, account creation, and paid checkout are disabled while the Plonky3 resource-bounded backend is under review.",
     status: "https://tinyzkp.com/status",
-  }), {
-    status: 503,
-    headers: { "Content-Type": "application/json" },
-  });
+  }), { status: 503, headers: { "Content-Type": "application/json" } });
 }
 
 function releaseInfo(env) {
@@ -188,31 +127,14 @@ function releaseInfo(env) {
   };
 }
 
-function withSecurityHeaders(response) {
-  const headers = new Headers(response.headers);
-  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
-    headers.set(name, value);
-  }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
 async function fetchStaticAsset(request, env, url) {
   const direct = await env.ASSETS.fetch(request);
   if (direct.status !== 404) return withSecurityHeaders(direct);
-
-  // Cloudflare Pages usually resolves extensionless HTML paths, but Advanced
-  // Mode workers can bypass that behavior. Keep canonical URLs like /verify
-  // and /use-cases/verifiable-state-transition working by trying .html on
-  // static, non-API paths that do not already contain an extension.
-  if (request.method !== "GET" && request.method !== "HEAD") return withSecurityHeaders(direct);
-  if (url.pathname === "/" || url.pathname.startsWith("/api/")) return withSecurityHeaders(direct);
+  if (!new Set(["GET", "HEAD"]).has(request.method) || url.pathname === "/" || url.pathname.startsWith("/api/")) {
+    return withSecurityHeaders(direct);
+  }
   const lastSegment = url.pathname.split("/").pop() || "";
   if (lastSegment.includes(".")) return withSecurityHeaders(direct);
-
   const htmlUrl = new URL(url);
   htmlUrl.pathname = `${url.pathname}.html`;
   return withSecurityHeaders(await env.ASSETS.fetch(new Request(htmlUrl, request)));
@@ -223,59 +145,45 @@ export default {
     const url = new URL(request.url);
     const canonicalRedirect = canonicalHostRedirect(url);
     if (canonicalRedirect) return withSecurityHeaders(canonicalRedirect);
+    const retired = retiredSurfaceResponse(url);
+    if (retired) return withSecurityHeaders(retired);
 
-    const retiredSurface = retiredSurfaceResponse(url);
-    if (retiredSurface) return withSecurityHeaders(retiredSurface);
-
-    if (url.pathname === "/api/release" && request.method.toUpperCase() === "GET") {
+    if (url.pathname === "/api/release" && request.method === "GET") {
       return withSecurityHeaders(new Response(JSON.stringify(releaseInfo(env)), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }));
     }
-
     if (MAINTENANCE_DISABLED_API_ROUTES.has(url.pathname)) {
       return withSecurityHeaders(protocolUpgradeResponse());
     }
-
-    const mod = ROUTES[url.pathname];
-
-    if (mod) {
+    if (ROUTES[url.pathname]) {
       const method = request.method.toUpperCase();
-      const handlerName = METHOD_HANDLER[method];
-      const fn = handlerName ? mod[handlerName] : undefined;
-      // Fallback: a generic onRequest handler that runs for any method.
-      const generic = mod.onRequest;
-
-      if (fn || generic) {
-        const context = {
+      const handler = method === "POST" ? contact.onRequestPost
+        : method === "OPTIONS" ? contact.onRequestOptions : null;
+      if (!handler) return withSecurityHeaders(new Response(null, { status: 405, headers: { Allow: "POST, OPTIONS" } }));
+      try {
+        return withSecurityHeaders(await handler({
           request,
           env,
           params: {},
           waitUntil: ctx && ctx.waitUntil ? ctx.waitUntil.bind(ctx) : (() => {}),
-          next:     async () => fetchStaticAsset(request, env, url),
-          data:     {},
-        };
-        try {
-          return withSecurityHeaders(await (fn || generic)(context));
-        } catch (e) {
-          console.error(`[worker] handler error on ${url.pathname}:`, e);
-          return withSecurityHeaders(new Response(JSON.stringify({ error: "internal error" }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }));
-        }
+          data: {},
+        }));
+      } catch (error) {
+        console.error("[worker] contact handler failed", error);
+        return withSecurityHeaders(new Response(JSON.stringify({ error: "internal error" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }));
       }
-      // Route exists but no handler for this method.
-      return withSecurityHeaders(new Response(null, {
-        status: 405,
-        headers: { "Allow": Object.entries(METHOD_HANDLER)
-          .filter(([_, h]) => mod[h])
-          .map(([m]) => m).join(", ") },
+    }
+    if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/functions/")) {
+      return withSecurityHeaders(new Response(JSON.stringify({ error: "not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
       }));
     }
-
-    // Not an /api/* route — fall through to static assets.
     return fetchStaticAsset(request, env, url);
   },
 };

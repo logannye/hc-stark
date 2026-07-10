@@ -37,7 +37,7 @@
   "machine_readable_assets": {
     "openapi":"https://tinyzkp.com/openapi.json",
     "pricing":"https://tinyzkp.com/pricing.json",
-    "offers":"https://tinyzkp.com/.well-known/tinyzkp-offers.json",
+    "offers":"https://tinyzkp.com/pricing.json",
     "llms":"https://tinyzkp.com/llms.txt",
     "sitemap":"https://tinyzkp.com/sitemap.xml"
   },
