@@ -19,6 +19,11 @@ clients/python/*.egg-info/
 clients/python/.pytest_cache/
 clients/rust/Cargo.lock
 
+# Local cargo-fuzz state (CI publishes explicit machine-readable summaries).
+/fuzz/artifacts/
+/fuzz/corpus/
+/fuzz/target/
+
 # Local secrets / state
 billing/.stripe_ids.json
 billing/.stripe_webhook_secret

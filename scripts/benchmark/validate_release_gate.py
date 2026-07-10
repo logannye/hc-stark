@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 from pathlib import Path
@@ -12,6 +13,31 @@ import sys
 
 MAX_JSON_BYTES = 1024 * 1024
 PROFILE = "tinyzkp-p3-goldilocks-v1"
+REPORT_REQUIRED_FIELDS = {
+    "schema_version", "scope", "mode", "benchmark_session_id", "hardware",
+    "logical_cpu_count", "total_memory_bytes", "operating_system", "storage",
+    "storage_device", "storage_is_rotational", "storage_is_nvme",
+    "release_sha", "dependency_profile", "exact_command", "normalized_manifest_path",
+    "workload_manifest_digest_hex", "normalized_manifest_digest_hex", "preflight_estimate",
+    "cpu_seconds", "wall_time_ms", "peak_rss_bytes", "cgroup_peak_bytes", "scratch_high_water_bytes",
+    "read_bytes", "write_bytes", "proof_size_bytes", "verification_time_ms",
+    "verification_succeeded", "exit_status",
+}
+
+
+def canonical_manifest_digest(manifest: dict[str, object]) -> str:
+    try:
+        from blake3 import blake3
+    except ImportError as error:
+        raise ValueError("release validation requires blake3==1.0.9") from error
+    encoded = json.dumps(
+        manifest,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return blake3(encoded).hexdigest()
 
 
 def read_object(path: Path) -> dict[str, object]:
@@ -25,38 +51,186 @@ def read_object(path: Path) -> dict[str, object]:
 
 def validate_common(
     manifest: dict[str, object],
-    baseline: dict[str, object],
+    baseline: dict[str, object] | None,
     candidate: dict[str, object],
+    baseline_normalized: dict[str, object] | None,
+    candidate_normalized: dict[str, object] | None,
 ) -> list[str]:
     failures: list[str] = []
-    for name, report in (("baseline", baseline), ("candidate", candidate)):
+    try:
+        expected_manifest_digest = canonical_manifest_digest(manifest)
+    except (TypeError, ValueError) as error:
+        return [f"manifest cannot be canonically hashed: {error}"]
+    reports = [("candidate", candidate, candidate_normalized)]
+    if baseline is not None:
+        reports.insert(0, ("baseline", baseline, baseline_normalized))
+    for name, report, normalized_manifest in reports:
+        keys = set(report)
+        if not REPORT_REQUIRED_FIELDS.issubset(keys) or not keys.issubset(
+            REPORT_REQUIRED_FIELDS | {"failure_diagnostic"}
+        ):
+            failures.append(f"{name} fields do not match BenchmarkReportV1")
         if report.get("schema_version") != 1:
             failures.append(f"{name} schema_version must be 1")
         if report.get("scope") != "full_pipeline":
             failures.append(f"{name} must be a full_pipeline report")
+        session = report.get("benchmark_session_id")
+        if (
+            not isinstance(session, str)
+            or len(session) != 32
+            or any(character not in "0123456789abcdef" for character in session)
+        ):
+            failures.append(f"{name} benchmark session ID is malformed")
+        for field in ("hardware", "operating_system", "storage", "storage_device"):
+            if not isinstance(report.get(field), str) or not report.get(field):
+                failures.append(f"{name} {field} is missing")
+        if report.get("logical_cpu_count") != 8:
+            failures.append(f"{name} release host must expose exactly 8 logical CPUs")
+        memory = report.get("total_memory_bytes")
+        if (
+            not isinstance(memory, int)
+            or isinstance(memory, bool)
+            or not 15 * 1024**3 <= memory <= 17 * 1024**3
+        ):
+            failures.append(f"{name} release host is not in the 16-GB memory class")
+        if report.get("storage_is_rotational") is not False:
+            failures.append(f"{name} release scratch storage is rotational or unknown")
+        if report.get("storage_is_nvme") is not True:
+            failures.append(f"{name} release scratch storage is not verified NVMe")
         if report.get("dependency_profile") != PROFILE:
             failures.append(f"{name} dependency profile mismatch")
+        if report.get("workload_manifest_digest_hex") != expected_manifest_digest:
+            failures.append(f"{name} workload manifest digest mismatch")
+        if normalized_manifest is None:
+            failures.append(f"{name} normalized manifest artifact is missing")
+        else:
+            try:
+                normalized_digest = canonical_manifest_digest(normalized_manifest)
+            except (TypeError, ValueError) as error:
+                failures.append(f"{name} normalized manifest cannot be hashed: {error}")
+            else:
+                if report.get("normalized_manifest_digest_hex") != normalized_digest:
+                    failures.append(f"{name} normalized manifest digest mismatch")
+            comparable = copy.deepcopy(normalized_manifest)
+            source_policy = manifest.get("resource_policy")
+            normalized_policy = comparable.get("resource_policy")
+            if not isinstance(source_policy, dict) or not isinstance(normalized_policy, dict):
+                failures.append(f"{name} normalized manifest policy is missing")
+            else:
+                normalized_scratch = normalized_policy.get("scratch_dir")
+                source_scratch = source_policy.get("scratch_dir")
+                if (
+                    not isinstance(normalized_scratch, str)
+                    or not normalized_scratch
+                    or normalized_scratch == source_scratch
+                ):
+                    failures.append(f"{name} normalized scratch directory is not unique")
+                normalized_policy["scratch_dir"] = source_scratch
+                if comparable != manifest:
+                    failures.append(
+                        f"{name} normalized manifest changed fields other than scratch_dir"
+                    )
+        if not isinstance(report.get("release_sha"), str) or not report.get("release_sha"):
+            failures.append(f"{name} release identity is missing")
+        if not isinstance(report.get("preflight_estimate"), dict):
+            failures.append(f"{name} embedded preflight estimate is missing")
+        else:
+            estimate = report["preflight_estimate"]
+            if set(estimate) != {
+                "peak_resident_bytes", "scratch_high_water_bytes", "total_read_bytes",
+                "total_write_bytes", "phases",
+            }:
+                failures.append(f"{name} preflight fields do not match ResourceEstimate")
+            for field in (
+                "peak_resident_bytes", "scratch_high_water_bytes", "total_read_bytes",
+                "total_write_bytes",
+            ):
+                value = estimate.get(field)
+                if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                    failures.append(f"{name} preflight {field} must be non-negative")
+            phases = estimate.get("phases")
+            if not isinstance(phases, list) or any(
+                not isinstance(phase, dict)
+                or set(phase) != {"phase", "read_bytes", "write_bytes"}
+                or not isinstance(phase.get("phase"), str)
+                or not phase.get("phase")
+                or any(
+                    not isinstance(phase.get(field), int)
+                    or isinstance(phase.get(field), bool)
+                    or phase.get(field) < 0
+                    for field in ("read_bytes", "write_bytes")
+                )
+                for phase in phases
+            ):
+                failures.append(f"{name} preflight phases are malformed")
+        if not isinstance(report.get("exact_command"), list) or not report.get("exact_command"):
+            failures.append(f"{name} exact reproduction command is missing")
+        elif any(not isinstance(value, str) or not value for value in report["exact_command"]):
+            failures.append(f"{name} exact reproduction command is malformed")
+        if not isinstance(report.get("normalized_manifest_path"), str) or not report.get(
+            "normalized_manifest_path"
+        ):
+            failures.append(f"{name} normalized manifest path is missing")
+        cpu_seconds = report.get("cpu_seconds")
+        if (
+            not isinstance(cpu_seconds, (int, float))
+            or isinstance(cpu_seconds, bool)
+            or not math.isfinite(cpu_seconds)
+            or cpu_seconds < 0
+        ):
+            failures.append(f"{name} cpu_seconds must be finite and non-negative")
+        for field in ("read_bytes", "write_bytes", "proof_size_bytes", "verification_time_ms"):
+            value = report.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                failures.append(f"{name} {field} must be a non-negative integer")
         if report.get("verification_succeeded") is not True or report.get("exit_status") != 0:
             failures.append(f"{name} did not complete official verification")
-        for field in ("peak_rss_bytes", "scratch_high_water_bytes", "wall_time_ms"):
+        for field in (
+            "peak_rss_bytes",
+            "cgroup_peak_bytes",
+            "scratch_high_water_bytes",
+            "wall_time_ms",
+        ):
             value = report.get(field)
             if not isinstance(value, int) or value < 0:
                 failures.append(f"{name} {field} must be a non-negative integer")
-    for field in ("release_sha", "dependency_profile", "workload_manifest_digest_hex"):
-        if baseline.get(field) != candidate.get(field):
-            failures.append(f"baseline/candidate {field} mismatch")
-    if baseline.get("mode") != "baseline":
-        failures.append("baseline mode must be baseline")
+        peak_rss = report.get("peak_rss_bytes")
+        cgroup_peak = report.get("cgroup_peak_bytes")
+        if not isinstance(peak_rss, int) or peak_rss <= 0:
+            failures.append(f"{name} peak RSS must be positive")
+        if not isinstance(cgroup_peak, int) or cgroup_peak <= 0:
+            failures.append(f"{name} cgroup peak must be positive")
+        elif isinstance(peak_rss, int) and cgroup_peak < peak_rss:
+            failures.append(f"{name} cgroup peak cannot be below process RSS")
+    if baseline is not None:
+        for field in (
+            "release_sha",
+            "dependency_profile",
+            "workload_manifest_digest_hex",
+            "benchmark_session_id",
+            "hardware",
+            "logical_cpu_count",
+            "total_memory_bytes",
+            "operating_system",
+            "storage",
+            "storage_device",
+            "storage_is_rotational",
+            "storage_is_nvme",
+        ):
+            if baseline.get(field) != candidate.get(field):
+                failures.append(f"baseline/candidate {field} mismatch")
+        if baseline.get("mode") != "baseline":
+            failures.append("baseline mode must be baseline")
     if candidate.get("mode") != "bounded":
         failures.append("candidate mode must be bounded")
     policy = manifest.get("resource_policy")
     if not isinstance(policy, dict):
         failures.append("manifest resource_policy is missing")
-    elif isinstance(candidate.get("peak_rss_bytes"), int):
+    elif isinstance(candidate.get("cgroup_peak_bytes"), int):
         cap = policy.get("max_resident_bytes")
         if not isinstance(cap, int) or cap <= 0:
             failures.append("manifest resident cap is invalid")
-        elif candidate["peak_rss_bytes"] > math.floor(cap * 1.10):
+        elif candidate["cgroup_peak_bytes"] > math.floor(cap * 1.10):
             failures.append("candidate exceeded the configured resident cap by more than 10%")
     return failures
 
@@ -64,18 +238,31 @@ def validate_common(
 def validate_gate(
     gate: str,
     manifest: dict[str, object],
-    baseline: dict[str, object],
+    baseline: dict[str, object] | None,
     candidate: dict[str, object],
-    *,
-    preflight_scratch_estimate: int | None = None,
+    expected_release_sha: str | None = None,
+    baseline_normalized: dict[str, object] | None = None,
+    candidate_normalized: dict[str, object] | None = None,
 ) -> list[str]:
-    failures = validate_common(manifest, baseline, candidate)
+    failures = validate_common(
+        manifest,
+        baseline,
+        candidate,
+        baseline_normalized,
+        candidate_normalized,
+    )
+    if expected_release_sha is not None:
+        for name, report in (("candidate", candidate), ("baseline", baseline)):
+            if report is not None and report.get("release_sha") != expected_release_sha:
+                failures.append(f"{name} release identity does not match evidence")
     rows = manifest.get("logical_rows")
-    baseline_rss = baseline.get("peak_rss_bytes")
+    baseline_rss = baseline.get("peak_rss_bytes") if baseline else None
     candidate_rss = candidate.get("peak_rss_bytes")
-    baseline_ms = baseline.get("wall_time_ms")
+    baseline_ms = baseline.get("wall_time_ms") if baseline else None
     candidate_ms = candidate.get("wall_time_ms")
     if gate == "one-million":
+        if baseline is None:
+            failures.append("one-million gate requires a conventional baseline")
         if rows != 1_048_576:
             failures.append("one-million gate requires exactly 1,048,576 logical rows")
         if not isinstance(baseline_rss, int) or not isinstance(candidate_rss, int) or candidate_rss <= 0:
@@ -87,12 +274,16 @@ def validate_gate(
         elif candidate_ms / baseline_ms > 3.0:
             failures.append("one-million gate requires candidate wall time within 3x baseline")
     elif gate == "ten-million":
-        if not isinstance(rows, int) or rows < 10_000_000:
-            failures.append("ten-million gate requires at least 10,000,000 logical rows")
+        if rows != 16_777_216:
+            failures.append("ten-million gate requires the frozen 2^24-row workload")
         if not isinstance(candidate_rss, int) or candidate_rss > 2 * 1024**3:
             failures.append("ten-million gate requires candidate peak RSS at or below 2 GiB")
         scratch = candidate.get("scratch_high_water_bytes")
-        if preflight_scratch_estimate is None or preflight_scratch_estimate <= 0:
+        preflight = candidate.get("preflight_estimate")
+        preflight_scratch_estimate = (
+            preflight.get("scratch_high_water_bytes") if isinstance(preflight, dict) else None
+        )
+        if not isinstance(preflight_scratch_estimate, int) or preflight_scratch_estimate <= 0:
             failures.append("ten-million gate requires a positive preflight scratch estimate")
         elif not isinstance(scratch, int) or abs(scratch - preflight_scratch_estimate) > math.ceil(preflight_scratch_estimate * 0.10):
             failures.append("ten-million scratch usage differs from preflight by more than 10%")
@@ -105,17 +296,23 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gate", choices=("one-million", "ten-million"), required=True)
     parser.add_argument("--manifest", type=Path, required=True)
-    parser.add_argument("--baseline", type=Path, required=True)
+    parser.add_argument("--baseline", type=Path)
     parser.add_argument("--candidate", type=Path, required=True)
-    parser.add_argument("--preflight-scratch-estimate", type=int)
+    parser.add_argument("--expected-release-sha")
     args = parser.parse_args(argv)
     try:
+        baseline = read_object(args.baseline) if args.baseline else None
+        candidate = read_object(args.candidate)
+        baseline_normalized = read_report_normalized_manifest(baseline) if baseline else None
+        candidate_normalized = read_report_normalized_manifest(candidate)
         failures = validate_gate(
             args.gate,
             read_object(args.manifest),
-            read_object(args.baseline),
-            read_object(args.candidate),
-            preflight_scratch_estimate=args.preflight_scratch_estimate,
+            baseline,
+            candidate,
+            expected_release_sha=args.expected_release_sha,
+            baseline_normalized=baseline_normalized,
+            candidate_normalized=candidate_normalized,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         failures = [str(exc)]
@@ -125,6 +322,13 @@ def main(argv: list[str]) -> int:
         return 1
     print(f"PASS  {args.gate} backend-v1 resource gate")
     return 0
+
+
+def read_report_normalized_manifest(report: dict[str, object]) -> dict[str, object]:
+    raw = report.get("normalized_manifest_path")
+    if not isinstance(raw, str) or not raw:
+        raise ValueError("report normalized manifest path is missing")
+    return read_object(Path(raw))
 
 
 if __name__ == "__main__":

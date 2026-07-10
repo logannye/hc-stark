@@ -23,6 +23,43 @@ import uuid
 
 
 PROFILE = "tinyzkp-p3-goldilocks-v1"
+REQUIRED_CGROUP_CONTROLLERS = {"cpu", "io", "memory", "pids"}
+
+
+def valid_resource_estimate(value: object) -> bool:
+    if not isinstance(value, dict) or set(value) != {
+        "peak_resident_bytes",
+        "scratch_high_water_bytes",
+        "total_read_bytes",
+        "total_write_bytes",
+        "phases",
+    }:
+        return False
+    for field in (
+        "peak_resident_bytes",
+        "scratch_high_water_bytes",
+        "total_read_bytes",
+        "total_write_bytes",
+    ):
+        metric = value.get(field)
+        if not isinstance(metric, int) or isinstance(metric, bool) or metric < 0:
+            return False
+    if value["peak_resident_bytes"] == 0 or value["scratch_high_water_bytes"] == 0:
+        return False
+    phases = value.get("phases")
+    return isinstance(phases, list) and all(
+        isinstance(phase, dict)
+        and set(phase) == {"phase", "read_bytes", "write_bytes"}
+        and isinstance(phase.get("phase"), str)
+        and bool(phase.get("phase"))
+        and all(
+            isinstance(phase.get(field), int)
+            and not isinstance(phase.get(field), bool)
+            and phase.get(field) >= 0
+            for field in ("read_bytes", "write_bytes")
+        )
+        for phase in phases
+    )
 
 
 def parse_key_values(text: str) -> dict[str, int]:
@@ -70,6 +107,18 @@ def read_int(path: Path) -> int:
         return 0
 
 
+def process_rss_bytes(pid: int) -> int:
+    try:
+        for line in (Path("/proc") / str(pid) / "status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                fields = line.split()
+                if len(fields) >= 2:
+                    return int(fields[1]) * 1024
+    except (FileNotFoundError, ProcessLookupError, ValueError):
+        pass
+    return 0
+
+
 def write_control(path: Path, value: str) -> None:
     path.write_text(value, encoding="utf-8")
 
@@ -81,6 +130,28 @@ def ensure_cgroup_v2(parent: Path) -> None:
     parent.mkdir(parents=True, exist_ok=True)
     if not os.access(parent, os.W_OK):
         raise RuntimeError(f"cgroup parent is not writable: {parent}")
+    controllers_path = parent / "cgroup.controllers"
+    subtree_path = parent / "cgroup.subtree_control"
+    try:
+        available = set(controllers_path.read_text(encoding="utf-8").split())
+        enabled = set(subtree_path.read_text(encoding="utf-8").split())
+    except OSError as error:
+        raise RuntimeError("cgroup parent does not expose controller delegation") from error
+    missing = REQUIRED_CGROUP_CONTROLLERS - available
+    if missing:
+        raise RuntimeError(
+            "cgroup parent lacks delegated controllers: " + ", ".join(sorted(missing))
+        )
+    for controller in sorted(REQUIRED_CGROUP_CONTROLLERS - enabled):
+        try:
+            write_control(subtree_path, f"+{controller}")
+        except OSError as error:
+            raise RuntimeError(
+                f"cannot enable cgroup controller {controller}; run with delegated privileges"
+            ) from error
+    enabled = set(subtree_path.read_text(encoding="utf-8").split())
+    if not REQUIRED_CGROUP_CONTROLLERS.issubset(enabled):
+        raise RuntimeError("cgroup controller activation did not persist")
 
 
 def configure_cgroup(path: Path, memory_cap: int) -> None:
@@ -110,10 +181,90 @@ def hardware_description() -> str:
     return f"{model}; logical_cpus={os.cpu_count() or 0}"
 
 
-def storage_description(scratch: Path) -> str:
+def total_memory_bytes() -> int:
+    meminfo = Path("/proc/meminfo")
+    if meminfo.is_file():
+        for line in meminfo.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("MemTotal:"):
+                fields = line.split()
+                if len(fields) >= 2:
+                    return int(fields[1]) * 1024
+    page_size = int(os.sysconf("SC_PAGE_SIZE"))
+    page_count = int(os.sysconf("SC_PHYS_PAGES"))
+    return page_size * page_count
+
+
+def _block_characteristics(device_id: str) -> tuple[str, bool, bool]:
+    link = Path("/sys/dev/block") / device_id
+    if not link.exists():
+        raise RuntimeError(f"scratch block device is not represented in sysfs: {device_id}")
+    root = link.resolve()
+    pending = [root]
+    visited: set[Path] = set()
+    names: set[str] = set()
+    rotational_values: list[int] = []
+    while pending:
+        path = pending.pop()
+        if path in visited:
+            continue
+        visited.add(path)
+        names.add(path.name)
+        names.update(part for part in path.parts if part.startswith("nvme"))
+        for candidate in (path, *path.parents):
+            if candidate == Path("/sys"):
+                break
+            rotational = candidate / "queue" / "rotational"
+            if rotational.is_file():
+                try:
+                    rotational_values.append(int(rotational.read_text().strip()))
+                except ValueError:
+                    pass
+                break
+        slaves = path / "slaves"
+        if slaves.is_dir():
+            pending.extend(child.resolve() for child in slaves.iterdir())
+    if not rotational_values:
+        raise RuntimeError(f"scratch rotational status is unavailable: {device_id}")
+    backing = ",".join(sorted(names))
+    is_rotational = any(value != 0 for value in rotational_values)
+    is_nvme = any(name.startswith("nvme") for name in names)
+    return backing, is_rotational, is_nvme
+
+
+def collect_host_metadata(scratch: Path) -> dict[str, object]:
     scratch.mkdir(parents=True, exist_ok=True)
     usage = shutil.disk_usage(scratch)
-    return f"path={scratch}; total_bytes={usage.total}; free_bytes={usage.free}"
+    stat = scratch.stat()
+    device_id = f"{os.major(stat.st_dev)}:{os.minor(stat.st_dev)}"
+    backing, is_rotational, is_nvme = _block_characteristics(device_id)
+    storage_device = f"{device_id}:{backing}"
+    return {
+        "hardware": hardware_description(),
+        "logical_cpu_count": os.cpu_count() or 0,
+        "total_memory_bytes": total_memory_bytes(),
+        "operating_system": platform.platform(),
+        "storage": (
+            f"device={storage_device};rotational={int(is_rotational)};"
+            f"nvme={int(is_nvme)};total_bytes={usage.total}"
+        ),
+        "storage_device": storage_device,
+        "storage_is_rotational": is_rotational,
+        "storage_is_nvme": is_nvme,
+    }
+
+
+def fixed_host_failures(metadata: dict[str, object]) -> list[str]:
+    failures: list[str] = []
+    if metadata.get("logical_cpu_count") != 8:
+        failures.append("release host must expose exactly 8 logical CPUs")
+    memory = metadata.get("total_memory_bytes")
+    if not isinstance(memory, int) or not 15 * 1024**3 <= memory <= 17 * 1024**3:
+        failures.append("release host memory must be within the 16-GB class")
+    if metadata.get("storage_is_rotational") is not False:
+        failures.append("release scratch storage must be non-rotational")
+    if metadata.get("storage_is_nvme") is not True:
+        failures.append("release scratch storage must be backed by NVMe")
+    return failures
 
 
 def baseline_report_path(report: Path) -> Path:
@@ -121,93 +272,183 @@ def baseline_report_path(report: Path) -> Path:
     return report.with_name(f"{report.stem}.baseline{suffix}")
 
 
+def normalized_manifest_path(report: Path, mode: str) -> Path:
+    suffix = report.suffix or ".json"
+    return report.with_name(f"{report.stem}.{mode}.manifest{suffix}")
+
+
+def prepare_run_manifest(manifest: dict, report_path: Path, mode: str) -> tuple[Path, dict, Path]:
+    configured_root = Path(manifest["resource_policy"]["scratch_dir"])
+    configured_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    scratch = Path(tempfile.mkdtemp(prefix=f"tinyzkp-{mode}-", dir=configured_root))
+    scratch.chmod(0o700)
+    normalized = json.loads(json.dumps(manifest))
+    normalized["resource_policy"]["scratch_dir"] = str(scratch)
+    path = normalized_manifest_path(report_path, mode)
+    write_json(path, normalized)
+    return path.resolve(), normalized, scratch
+
+
+def doctor_metadata(cli: Path, manifest_path: Path) -> dict:
+    completed = subprocess.run(
+        [str(cli), "plonky3", "doctor", "--manifest", str(manifest_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"resource preflight failed: {completed.stderr[-4000:]}")
+    report = json.loads(completed.stdout)
+    if not isinstance(report, dict):
+        raise RuntimeError("doctor did not return an object")
+    return report
+
+
+def preflight_manifest_payload(manifest: dict, mode: str, memory_cap: int) -> dict:
+    payload = json.loads(json.dumps(manifest))
+    if mode == "conventional":
+        payload["resource_policy"]["mode"] = "memory"
+        payload["resource_policy"]["max_resident_bytes"] = memory_cap
+    elif mode != "bounded":
+        raise RuntimeError("preflight mode must be conventional or bounded")
+    return payload
+
+
+def doctor_estimate(
+    cli: Path, manifest_path: Path, mode: str, memory_cap: int
+) -> dict:
+    source = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload = preflight_manifest_payload(source, mode, memory_cap)
+    preflight_path = manifest_path.with_name(
+        f".{manifest_path.stem}.preflight-{uuid.uuid4().hex}.json"
+    )
+    write_json(preflight_path, payload)
+    try:
+        metadata = doctor_metadata(cli, preflight_path)
+    finally:
+        preflight_path.unlink(missing_ok=True)
+    estimate = metadata.get("estimate")
+    if not valid_resource_estimate(estimate):
+        raise RuntimeError("doctor did not return a ResourceEstimate")
+    return estimate
+
+
 def run_one(
     *,
     cli: Path,
-    manifest_path: Path,
     manifest: dict,
     mode: str,
     cgroup_parent: Path,
     release_sha: str,
     memory_cap: int,
+    report_path: Path,
+    source_manifest_digest: str,
+    benchmark_session_id: str,
+    host_metadata: dict[str, object],
 ) -> dict:
     cgroup = cgroup_parent / f"tinyzkp-{mode}-{uuid.uuid4().hex}"
-    configure_cgroup(cgroup, memory_cap)
-    scratch = Path(manifest["resource_policy"]["scratch_dir"])
-
-    with tempfile.TemporaryDirectory(prefix=f"tinyzkp-{mode}-") as temp:
-        worker_output = Path(temp) / "worker.json"
-        command = [
-            str(cli),
-            "benchmark-worker",
-            "--manifest",
-            str(manifest_path),
-            "--mode",
-            mode,
-            "--output",
-            str(worker_output),
-        ]
-        started = time.monotonic()
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            preexec_fn=child_join_cgroup(cgroup),
-        )
-        scratch_peak = 0
-        observed_memory_peak = 0
-        while process.poll() is None:
-            scratch_peak = max(scratch_peak, directory_bytes(scratch))
-            observed_memory_peak = max(observed_memory_peak, read_int(cgroup / "memory.current"))
-            time.sleep(0.01)
-        stdout, stderr = process.communicate()
-        wall_ms = int((time.monotonic() - started) * 1000)
-        scratch_peak = max(scratch_peak, directory_bytes(scratch))
-        memory_peak = max(observed_memory_peak, read_int(cgroup / "memory.peak"))
-        cpu_seconds = parse_cpu_stat((cgroup / "cpu.stat").read_text(encoding="utf-8"))
-        io_values = parse_key_values((cgroup / "io.stat").read_text(encoding="utf-8"))
-        worker = {}
-        if worker_output.is_file():
-            worker = json.loads(worker_output.read_text(encoding="utf-8"))
-
+    run_manifest_path, _, scratch = prepare_run_manifest(manifest, report_path, mode)
     try:
-        cgroup.rmdir()
-    except OSError:
-        pass
+        preflight_estimate = doctor_estimate(
+            cli, run_manifest_path, mode, memory_cap
+        )
+        configure_cgroup(cgroup, memory_cap)
+        with tempfile.TemporaryDirectory(prefix=f"tinyzkp-{mode}-") as temp:
+            worker_output = Path(temp) / "worker.json"
+            command = [
+                str(cli),
+                "benchmark-worker",
+                "--manifest",
+                str(run_manifest_path),
+                "--mode",
+                mode,
+                "--output",
+                str(worker_output),
+            ]
+            started = time.monotonic()
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                preexec_fn=child_join_cgroup(cgroup),
+            )
+            scratch_peak = 0
+            observed_rss_peak = 0
+            while process.poll() is None:
+                scratch_peak = max(scratch_peak, directory_bytes(scratch))
+                observed_rss_peak = max(observed_rss_peak, process_rss_bytes(process.pid))
+                time.sleep(0.01)
+            stdout, stderr = process.communicate()
+            wall_ms = int((time.monotonic() - started) * 1000)
+            scratch_peak = max(scratch_peak, directory_bytes(scratch))
+            cgroup_peak = read_int(cgroup / "memory.peak")
+            cpu_seconds = parse_cpu_stat(
+                (cgroup / "cpu.stat").read_text(encoding="utf-8")
+            )
+            io_values = parse_key_values(
+                (cgroup / "io.stat").read_text(encoding="utf-8")
+            )
+            worker = {}
+            if worker_output.is_file():
+                worker = json.loads(worker_output.read_text(encoding="utf-8"))
+            scratch_peak = max(
+                scratch_peak,
+                int(worker.get("prover_scratch_high_water_bytes", 0)),
+            )
 
-    verification_succeeded = bool(worker.get("verification_succeeded")) and process.returncode == 0
-    report = {
-        "schema_version": 1,
-        "scope": "full_pipeline",
-        "mode": "baseline" if mode == "conventional" else "bounded",
-        "hardware": hardware_description(),
-        "operating_system": platform.platform(),
-        "storage": storage_description(scratch),
-        "release_sha": release_sha,
-        "dependency_profile": PROFILE,
-        "exact_command": command,
-        "workload_manifest_digest_hex": worker.get("manifest_digest_hex", ""),
-        "cpu_seconds": cpu_seconds,
-        "wall_time_ms": wall_ms,
-        "peak_rss_bytes": memory_peak,
-        "scratch_high_water_bytes": scratch_peak,
-        "read_bytes": io_values.get("rbytes", 0),
-        "write_bytes": io_values.get("wbytes", 0),
-        "proof_size_bytes": int(worker.get("proof_size_bytes", 0)),
-        "verification_time_ms": int(worker.get("verification_time_ms", 0)),
-        "verification_succeeded": verification_succeeded,
-        "exit_status": process.returncode,
-    }
-    if not verification_succeeded:
-        report["failure_diagnostic"] = (stderr or stdout)[-4000:]
-    return report
+        verification_succeeded = (
+            bool(worker.get("verification_succeeded")) and process.returncode == 0
+        )
+        report = {
+            "schema_version": 1,
+            "scope": "full_pipeline",
+            "mode": "baseline" if mode == "conventional" else "bounded",
+            "benchmark_session_id": benchmark_session_id,
+            **host_metadata,
+            "release_sha": release_sha,
+            "dependency_profile": PROFILE,
+            "exact_command": command,
+            "normalized_manifest_path": str(run_manifest_path),
+            "workload_manifest_digest_hex": source_manifest_digest,
+            "normalized_manifest_digest_hex": worker.get("manifest_digest_hex", ""),
+            "preflight_estimate": preflight_estimate,
+            "cpu_seconds": cpu_seconds,
+            "wall_time_ms": wall_ms,
+            "peak_rss_bytes": observed_rss_peak,
+            "cgroup_peak_bytes": cgroup_peak,
+            "scratch_high_water_bytes": scratch_peak,
+            "read_bytes": io_values.get("rbytes", 0),
+            "write_bytes": io_values.get("wbytes", 0),
+            "proof_size_bytes": int(worker.get("proof_size_bytes", 0)),
+            "verification_time_ms": int(worker.get("verification_time_ms", 0)),
+            "verification_succeeded": verification_succeeded,
+            "exit_status": process.returncode,
+        }
+        if not verification_succeeded:
+            memory_events = ""
+            try:
+                memory_events = (cgroup / "memory.events").read_text(encoding="utf-8")
+            except OSError:
+                pass
+            diagnostic = (stderr or stdout)[-3000:]
+            report["failure_diagnostic"] = (
+                f"{diagnostic}\ncgroup memory.events:\n{memory_events}"
+            )[-4000:]
+        return report
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+        try:
+            cgroup.rmdir()
+        except OSError:
+            pass
 
 
 def write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    with temp.open("x", encoding="utf-8") as handle:
+    descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True)
         handle.write("\n")
         handle.flush()
@@ -228,8 +469,12 @@ def persist_report(path: Path, report: dict, label: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
-    parser.add_argument("--baseline", choices=["conventional"], default="conventional")
-    parser.add_argument("--candidate", choices=["bounded"], default="bounded")
+    parser.add_argument(
+        "--mode",
+        choices=["throughput", "ceiling"],
+        default="throughput",
+        help="throughput compares baseline/candidate; ceiling runs only the bounded candidate",
+    )
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--hc-cli", type=Path, default=Path("target/release/hc-cli"))
     parser.add_argument(
@@ -239,6 +484,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--cgroup-parent", type=Path, default=Path("/sys/fs/cgroup/tinyzkp-bench")
+    )
+    parser.add_argument(
+        "--require-fixed-host",
+        action="store_true",
+        help="fail unless the host is the release 8-vCPU/16-GB/NVMe class",
     )
     return parser.parse_args()
 
@@ -253,45 +503,67 @@ def main() -> int:
     if not cli.is_file():
         raise RuntimeError(f"hc-cli release binary not found: {cli}")
     release_sha = os.environ.get("HC_RELEASE_SHA", "development-unreleased")
+    host_metadata = collect_host_metadata(
+        Path(manifest["resource_policy"]["scratch_dir"])
+    )
+    if args.require_fixed_host:
+        failures = fixed_host_failures(host_metadata)
+        if failures:
+            raise RuntimeError("; ".join(failures))
+    benchmark_session_id = uuid.uuid4().hex
+    source_manifest_digest = doctor_metadata(cli, args.manifest.resolve()).get(
+        "manifest_digest_hex"
+    )
+    if not isinstance(source_manifest_digest, str) or len(source_manifest_digest) != 64:
+        raise RuntimeError("doctor did not return the source manifest digest")
     candidate_memory_cap = int(manifest["resource_policy"]["max_resident_bytes"])
     baseline_memory_cap = args.baseline_memory_cap or candidate_memory_cap
     if baseline_memory_cap < candidate_memory_cap:
         raise RuntimeError("baseline memory cap cannot be below the candidate manifest cap")
 
-    baseline_path = baseline_report_path(args.report)
-    baseline = run_one(
-        cli=cli,
-        manifest_path=args.manifest.resolve(),
-        manifest=manifest,
-        mode=args.baseline,
-        cgroup_parent=args.cgroup_parent,
-        release_sha=release_sha,
-        memory_cap=baseline_memory_cap,
-    )
-    persist_report(baseline_path, baseline, "conventional")
+    baseline = None
+    baseline_path = None
+    if args.mode == "throughput":
+        baseline_path = baseline_report_path(args.report)
+        baseline = run_one(
+            cli=cli,
+            manifest=manifest,
+            mode="conventional",
+            cgroup_parent=args.cgroup_parent,
+            release_sha=release_sha,
+            memory_cap=baseline_memory_cap,
+            report_path=baseline_path,
+            source_manifest_digest=source_manifest_digest,
+            benchmark_session_id=benchmark_session_id,
+            host_metadata=host_metadata,
+        )
+        persist_report(baseline_path, baseline, "conventional")
     candidate = run_one(
         cli=cli,
-        manifest_path=args.manifest.resolve(),
         manifest=manifest,
-        mode=args.candidate,
+        mode="bounded",
         cgroup_parent=args.cgroup_parent,
         release_sha=release_sha,
         memory_cap=candidate_memory_cap,
+        report_path=args.report,
+        source_manifest_digest=source_manifest_digest,
+        benchmark_session_id=benchmark_session_id,
+        host_metadata=host_metadata,
     )
     persist_report(args.report, candidate, "bounded")
     print(
         json.dumps(
             {
                 "candidate_report": str(args.report),
-                "baseline_report": str(baseline_path),
+                "baseline_report": str(baseline_path) if baseline_path else None,
                 "ram_reduction": (
                     baseline["peak_rss_bytes"] / candidate["peak_rss_bytes"]
-                    if candidate["peak_rss_bytes"]
+                    if baseline and candidate["peak_rss_bytes"]
                     else None
                 ),
                 "wall_time_ratio": (
                     candidate["wall_time_ms"] / baseline["wall_time_ms"]
-                    if baseline["wall_time_ms"]
+                    if baseline and baseline["wall_time_ms"]
                     else None
                 ),
             },

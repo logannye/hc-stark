@@ -28,6 +28,7 @@
     "crates/hc-sumcheck",
     "crates/hc-sumcheck-spartan",
     "crates/hc-ipa",
+    "examples/partner-adapter",
  ]
  exclude = [
     "crates/hc-python",
