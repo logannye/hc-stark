@@ -1,0 +1,54 @@
+{
+  "cosign": {
+    "installer_action_sha": "f713795cb21599bc4e5c4b58cbad1da852d7eeb9",
+    "platforms": {
+      "darwin-arm64": {
+        "sha256": "edfc761b27ced77f0f9ca288ff4fac7caa898e1e9db38f4dfdf72160cdf8e638"
+      },
+      "linux-x86_64": {
+        "sha256": "caaad125acef1cb81d58dcdc454a1e429d09a750d1e9e2b3ed1aed8964454708"
+      }
+    },
+    "version": "v2.4.3"
+  },
+  "external_signers": [],
+  "gate_tools": {
+    "platforms": {}
+  },
+  "git": {
+    "platforms": {
+      "darwin-arm64": {
+        "sha256": "3e7d30871a9740446f33a907b14d28f10ebe6d4e1c146a4c0788308f573a6609",
+        "version": "git version 2.50.1 (Apple Git-155)"
+      }
+    }
+  },
+  "schema_version": 1,
+  "toolchains": {
+    "fuzz": {
+      "cargo_fuzz_executables": {},
+      "platforms": {
+        "aarch64-apple-darwin": {
+          "cargo_sha256": "662ba75c2fde58a42bee9f8ec6d773f15abcffa7bd67fecbfb7b86b0d1613fd7",
+          "rustc_sha256": "a17da5c51fa4a86743ef702c72533a7754822f7ffc820ec0e2a074d142612929"
+        },
+        "x86_64-unknown-linux-gnu": {
+          "cargo_sha256": "f87b721ddf9f5c02bab5920c962dd8e14e370a2bf26477434301a251c0c26a15",
+          "rustc_sha256": "7578d1bef0e0524283f4f30411285e5c9bb2b0c5d70d1551e02447dfbfd520ec"
+        }
+      }
+    },
+    "release": {
+      "platforms": {
+        "aarch64-apple-darwin": {
+          "cargo_sha256": "c512bff73c86143b557463f021d0c3d5b0490d97d65040ba59ea2b3427784758",
+          "rustc_sha256": "b829b733131d4e1673eeebd1f34d06ae1e9ff4977b051313cf42e2a9e79ecf1c"
+        },
+        "x86_64-unknown-linux-gnu": {
+          "cargo_sha256": "841072d1d92f9e841d9ba5b0814182a0adf064acf4527cd120967b7bc49dcb66",
+          "rustc_sha256": "bff349e72704ff70bc08a234a3847338e797065bbedde5e556808bc87b7bf7c6"
+        }
+      }
+    }
+  }
+}

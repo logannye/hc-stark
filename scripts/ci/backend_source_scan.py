@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -26,6 +27,12 @@ SECRET_PATTERNS = {
 
 
 def candidate_files(root: Path = ROOT) -> list[Path]:
+    if os.environ.get("TINYZKP_IMMUTABLE_SOURCE") == "1":
+        return sorted(
+            path
+            for path in root.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        )
     completed = subprocess.run(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
         cwd=root,

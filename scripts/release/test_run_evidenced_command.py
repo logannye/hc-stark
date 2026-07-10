@@ -1,9 +1,8 @@
-import hashlib
 import importlib.util
-import json
 from pathlib import Path
-import stat
 import sys
+
+import pytest
 
 
 MODULE_PATH = Path(__file__).with_name("run_evidenced_command.py")
@@ -14,32 +13,37 @@ sys.modules[SPEC.name] = module
 SPEC.loader.exec_module(module)
 
 
-def test_successful_command_is_release_bound_and_hashed(tmp_path):
-    report_path = tmp_path / "report.json"
-    log_path = tmp_path / "command.log"
-    report = module.run(
-        command=["/usr/bin/printf", "verified output"],
-        release_sha="abc123",
-        execution_profile="release",
-        report_path=report_path,
-        log_path=log_path,
-        cwd=tmp_path,
-    )
-    assert report["exit_status"] == 0
-    assert report["release_sha"] == "abc123"
-    assert report["log_sha256"] == hashlib.sha256(log_path.read_bytes()).hexdigest()
-    assert json.loads(report_path.read_text()) == report
-    assert stat.S_IMODE(report_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(log_path.stat().st_mode) == 0o600
+def test_runner_has_only_fixed_gate_commands_and_timeouts():
+    assert set(module.GATES) == {
+        "clean_release_source",
+        "plonky3_dependency_profile_pinned",
+        "official_verifier_fibonacci",
+        "official_verifier_poseidon2",
+        "deterministic_cross_mode_proofs",
+        "replacement_sdk_contracts",
+    }
+    for spec in module.GATES.values():
+        assert spec["command"]
+        assert isinstance(spec["timeout"], int) and spec["timeout"] > 0
+        assert spec["parser"].endswith("_v1")
 
 
-def test_failing_command_is_recorded_without_shell_interpretation(tmp_path):
-    report = module.run(
-        command=["/bin/sh", "-c", "exit 7"],
-        release_sha="abc123",
-        execution_profile="ci",
-        report_path=tmp_path / "report.json",
-        log_path=tmp_path / "command.log",
-        cwd=tmp_path,
-    )
-    assert report["exit_status"] == 7
+def test_output_parsers_reject_generic_success_text_and_duplicate_markers():
+    assert module.parse_output(
+        "clean_release_source", b"all tests passed\n"
+    )["passed"] is False
+    marker = b"PASS TinyZKP deterministic cross-mode proof vectors\n"
+    assert module.parse_output("deterministic_cross_mode_proofs", marker)["passed"] is True
+    assert module.parse_output("deterministic_cross_mode_proofs", marker * 2)["passed"] is False
+
+
+def test_run_rejects_unreviewed_commands_before_touching_outputs(tmp_path):
+    with pytest.raises(ValueError, match="not allowlisted"):
+        module.run(
+            gate="printf-anything",
+            release_sha="a" * 40,
+            report_path=tmp_path / "report.json",
+            log_path=tmp_path / "log",
+            root=tmp_path,
+        )
+    assert not (tmp_path / "report.json").exists()

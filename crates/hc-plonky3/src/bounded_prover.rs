@@ -2914,6 +2914,11 @@ mod tests {
             64,
         )
         .unwrap();
+        eprintln!(
+            "tinyzkp-crash-proof phase={phase} resumed={} reference={}",
+            blake3::hash(&resumed.proof_bytes),
+            blake3::hash(&expected.proof_bytes),
+        );
         assert_eq!(resumed.proof_bytes, expected.proof_bytes);
         assert!(!job_dir.exists());
     }
@@ -3059,7 +3064,17 @@ mod tests {
                 }
                 let mut file = fs::File::create(self.root.join("disk-fill.bin")).unwrap();
                 let block = vec![0xa5; 1024 * 1024];
-                while file.write_all(&block).is_ok() {}
+                let write_error = loop {
+                    match file.write_all(&block) {
+                        Ok(()) => {}
+                        Err(error) => break error,
+                    }
+                };
+                assert_eq!(
+                    write_error.raw_os_error(),
+                    Some(28),
+                    "disk-full injector must observe Linux ENOSPC"
+                );
                 let _ = file.sync_all();
             }
         }
@@ -3093,9 +3108,12 @@ mod tests {
             .find(|path| path.is_file())
             .expect("disk-full failure retained the trace checkpoint");
         let resumed = resume_resource_bounded(&checkpoint).unwrap();
-        assert_eq!(
-            resumed.proof_bytes,
-            prove_resource_reference(&workload).unwrap()
+        let reference = prove_resource_reference(&workload).unwrap();
+        assert_eq!(resumed.proof_bytes, reference);
+        eprintln!(
+            "tinyzkp-disk-full-resume enospc=true resumed={} reference={}",
+            blake3::hash(&resumed.proof_bytes),
+            blake3::hash(&reference),
         );
     }
 }

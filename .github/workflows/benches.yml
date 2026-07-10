@@ -29,11 +29,11 @@ jobs:
       matrix:
         workload: [fibonacci, poseidon2]
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - name: Install benchmark validator dependencies
         run: python3 -m pip install --user -r scripts/benchmark/requirements.txt
       - name: Build pinned release CLI
@@ -77,7 +77,7 @@ jobs:
             --candidate raw-reports/${{ matrix.workload }}-1m.json
       - name: Upload raw reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: plonky3-${{ matrix.workload }}-1m-${{ github.sha }}
           path: raw-reports/*.json
@@ -92,11 +92,11 @@ jobs:
       matrix:
         workload: [fibonacci, poseidon2]
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - name: Install benchmark validator dependencies
         run: python3 -m pip install --user -r scripts/benchmark/requirements.txt
       - name: Build pinned release CLI
@@ -138,7 +138,7 @@ jobs:
             --candidate raw-reports/${{ matrix.workload }}-16m.json
       - name: Upload raw reports and normalized manifests
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: plonky3-${{ matrix.workload }}-16m-${{ github.sha }}
           path: raw-reports/*.json
@@ -153,11 +153,11 @@ jobs:
       matrix:
         workload: [fibonacci, poseidon2]
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - name: Build pinned release CLI
         run: cargo build --release -p hc-cli --locked
       - name: Prepare owner-only exploratory scratch and cgroup
@@ -191,7 +191,7 @@ jobs:
             --report raw-reports/${{ matrix.workload }}-128m.json
       - name: Upload exploratory raw evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: plonky3-${{ matrix.workload }}-128m-exploratory-${{ github.sha }}
           path: raw-reports/*.json

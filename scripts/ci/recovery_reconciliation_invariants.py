@@ -81,6 +81,14 @@ def main() -> int:
     release_workflow = text(".github/workflows/release-backend.yml")
     for marker in (
         "backend_release_ready.py",
+        "group: backend-release-${{ github.ref }}",
+        "cancel-in-progress: false",
+        "fetch-depth: 0",
+        "finalize_signed_evidence.py",
+        "build_commercial_authorization.py",
+        "backend-v1-commercial-authorization.json",
+        "backend-v1-commercial-authorization.sigstore.json",
+        "backend-v1-release-ready-report.json",
         "cargo build --locked",
         "tinyzkp-backend.spdx.json",
         "cosign sign-blob",
@@ -105,23 +113,37 @@ def main() -> int:
     release_validator = text("scripts/ci/backend_release_ready.py")
     fuzz_runner = text("scripts/release/run_fuzz_smoke.py")
     require(
-        '"crash_resume_and_corruption_suite": ["crash_matrix", "fuzz_smoke"]'
-        in evidence_builder,
-        "candidate evidence no longer requires both crash and fuzz reports",
+        '"crash_resume_and_corruption_suite": [' in evidence_builder
+        and '"crash_matrix"' in evidence_builder
+        and '"fuzz_smoke"' in evidence_builder
+        and '"crash_tool_identity"' in evidence_builder
+        and '"fuzz_tool_identity"' in evidence_builder
+        and 'f"crash_log_{name}"' in evidence_builder
+        and 'f"fuzz_log_{name}"' in evidence_builder,
+        "candidate evidence no longer requires crash/fuzz reports, tool provenance, and logs",
     )
     for marker in (
         "validate_fuzz_smoke",
         "FUZZ_TARGETS",
         "FUZZ_SMOKE_SEED_LIMIT",
+        "parse_fuzz_summary",
+        "validate_tool_identity_artifact",
+        "read_bounded_file",
+        "canonical_device_identity",
+        "verify_evidence_only_transition",
+        "expected_crash_command",
     ):
         require(marker in release_validator, f"release fuzz gate lost control: {marker}")
     for marker in (
         "SMOKE_SEED_LIMIT",
         'CARGO_FUZZ_VERSION = "cargo-fuzz 0.13.2"',
+        'FUZZ_TOOLCHAIN = "nightly-2026-04-15"',
         "WORKLOAD_FIXTURES",
         "seed_payloads",
         "prepare_smoke_corpus",
         "smoke_corpus_sha256",
+        "target_marker",
+        "TOOL_IDENTITY_FILE",
         "execution-corpus",
         "-artifact_prefix=",
         "harden_tree",
@@ -132,6 +154,13 @@ def main() -> int:
         "cargo install cargo-fuzz --version 0.13.2 --locked" in nightly_workflow,
         "cargo-fuzz release tool is not version-pinned",
     )
+    for marker in (
+        'toolchain: "nightly-2026-04-15"',
+        "cargo +nightly-2026-04-15 fetch",
+        "--manifest-path fuzz/Cargo.toml",
+        "run_crash_matrix_disk_full.sh",
+    ):
+        require(marker in nightly_workflow, f"nightly evidence workflow lost control: {marker}")
 
     preliminary_sbom = text("scripts/release/build_preliminary_sbom.py")
     review_bundle = text("scripts/release/build_review_bundle.py")
@@ -154,6 +183,44 @@ def main() -> int:
     require(
         benches_workflow.count("--expected-release-sha") == 2,
         "blocking fixed-host validators do not bind reports to the workflow SHA",
+    )
+
+    for workflow_path in (
+        ".github/workflows/publish-backend-crates.yml",
+        ".github/workflows/publish-sdks.yml",
+    ):
+        publish_workflow = text(workflow_path)
+        for marker in (
+            "fetch-depth: 0",
+            "tinyzkp-backend.spdx.json",
+            "--certificate-identity-regexp",
+            "--certificate-oidc-issuer",
+            "gh attestation verify release-artifacts/backend-v1-final-evidence.json",
+            "gh attestation verify release-artifacts/backend-v1-final-gates.json",
+            '--signer-workflow "github.com/$GITHUB_REPOSITORY/.github/workflows/release-backend.yml"',
+            '--source-digest "$evidenced_sha"',
+            '--source-ref "refs/tags/$BACKEND_TAG"',
+            "--deny-self-hosted-runners",
+            'test "$(git rev-parse HEAD)" = "$evidenced_sha"',
+            'test "$(git rev-list -n 1 "$BACKEND_TAG")" = "$evidenced_sha"',
+            "sha256sum --check SHA256SUMS",
+        ):
+            require(
+                marker in publish_workflow,
+                f"publish release identity gate lost control in {workflow_path}: {marker}",
+            )
+        require(
+            "--ignore-missing" not in publish_workflow,
+            f"publish checksum verification became partial in {workflow_path}",
+        )
+        require(
+            "cancel-in-progress: false" in publish_workflow,
+            f"publish workflow can race or cancel an in-flight release in {workflow_path}",
+        )
+    sdk_publish_workflow = text(".github/workflows/publish-sdks.yml")
+    require(
+        sdk_publish_workflow.count("needs.release-gate.outputs.backend_sha") == 2,
+        "SDK WASM/MCP jobs are not pinned to the evidenced backend commit",
     )
 
     require((ROOT / "crates/hc-server/src/lib.rs").is_file(), "historical server source was deleted")

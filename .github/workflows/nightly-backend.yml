@@ -15,35 +15,29 @@ jobs:
     env:
       TINYZKP_NIGHTLY_MAX_LOG: "18"
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
+          toolchain: "nightly-2026-04-15"
           components: rust-src
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - name: Warm exact locked dependencies before offline evidence runs
+        run: |
+          cargo fetch --locked
+          cargo +nightly-2026-04-15 fetch \
+            --manifest-path fuzz/Cargo.toml \
+            --locked
       - name: Randomized proof equality through 2^18
         run: cargo test -p hc-plonky3 --release --locked nightly_proof_equality_through_configured_power_of_two -- --ignored --nocapture
       - name: Complete machine-readable checkpoint crash rotation
         run: |
-          image="$(mktemp)"
-          mount_dir="$(mktemp -d)"
-          cleanup() {
-            sudo umount "$mount_dir" || true
-            rm -f "$image"
-            rmdir "$mount_dir" || true
-          }
-          trap cleanup EXIT
-          truncate -s 134217728 "$image"
-          mkfs.ext4 -q -F "$image"
-          sudo mount -o loop "$image" "$mount_dir"
-          sudo chown "$(id -u):$(id -g)" "$mount_dir"
           HC_RELEASE_SHA="${{ github.sha }}" \
-            python3 scripts/release/run_crash_matrix.py \
-              --output raw-reports/crash-matrix.json \
-              --log-dir raw-reports/crash-logs \
-              --disk-full-scratch "$mount_dir"
+            scripts/release/run_crash_matrix_disk_full.sh \
+              raw-reports/crash-matrix.json \
+              raw-reports/crash-logs
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --version 0.13.2 --locked
       - name: Parser and recovery fuzz smoke
@@ -57,7 +51,7 @@ jobs:
             --log-dir raw-reports/fuzz-logs
       - name: Upload crash/fuzz logs and summaries
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: plonky3-fuzz-smoke-${{ github.sha }}
           path: raw-reports/

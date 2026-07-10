@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import stat
+import subprocess
 import sys
 
 
@@ -89,3 +90,110 @@ def test_atomic_json_is_owner_only(tmp_path):
     module.write_json_atomic(output, {"status": "ready"})
     assert json.loads(output.read_text(encoding="utf-8")) == {"status": "ready"}
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
+
+
+def test_finalization_binds_source_commit_without_requiring_sha_self_reference(
+    tmp_path, monkeypatch
+):
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "lib.rs").write_text("pub fn value() -> u8 { 1 }\n")
+    (tmp_path / "release" / "evidence").mkdir(parents=True)
+    (tmp_path / "release" / "backend-v1-gates.json").write_text("{}\n")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=TinyZKP Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "source",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    source_sha = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True
+    ).strip()
+    source_tree_sha256 = module.source_tree_identity.source_tree_sha256(
+        tmp_path, source_sha
+    )
+    candidate = {
+        "schema_version": 1,
+        "status": "candidate",
+        "release_sha": source_sha,
+        "source_tree_sha256": source_tree_sha256,
+        "gates": {},
+    }
+    candidate_path = tmp_path / "release" / "evidence" / "backend-v1-evidence.json"
+    candidate_path.write_text(json.dumps(candidate))
+    config_path = tmp_path / "release" / "backend-v1-gates.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "status": "candidate",
+                "evidence_manifest": "release/evidence/backend-v1-evidence.json",
+            }
+        )
+    )
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=TinyZKP Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "candidate evidence",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    release_sha = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True
+    ).strip()
+
+    sbom = tmp_path / "sbom.json"
+    checksums = tmp_path / "SHA256SUMS"
+    signature = tmp_path / "signature.json"
+    sbom.write_text("{}")
+    checksums.write_text("placeholder")
+    signature.write_text("{}")
+    cosign = tmp_path / "cosign"
+    cosign.write_text("#!/bin/sh\nexit 0\n")
+    cosign.chmod(0o700)
+    monkeypatch.setattr(module.prerelease, "failures", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(module, "verify_spdx_sbom", lambda _path: None)
+    monkeypatch.setattr(module, "verify_checksum_manifest", lambda *_args, **_kwargs: 9)
+    monkeypatch.setattr(module.final_gate, "evidence_failures", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        module.final_gate.evidence_runtime,
+        "run_anchored_cosign",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, "verified"),
+    )
+
+    evidence, _config = module.finalize(
+        root=tmp_path,
+        candidate_config_path=config_path,
+        release_sha=release_sha,
+        sbom=sbom,
+        checksums=checksums,
+        signature=signature,
+        output_evidence=tmp_path / "final-evidence.json",
+        output_config=tmp_path / "final-config.json",
+        cosign=str(cosign),
+    )
+
+    assert source_sha != release_sha
+    assert evidence["source_release_sha"] == source_sha
+    assert evidence["release_sha"] == release_sha
+    signed = evidence["gates"][module.prerelease.SIGNED_GATE]["metadata"]
+    assert signed["source_tree_sha256"] == source_tree_sha256
+    assert signed["release_tree_sha256"] == source_tree_sha256
+    assert signed["evidence_only_delta_verified"] is True

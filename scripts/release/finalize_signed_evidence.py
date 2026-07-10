@@ -17,8 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CI_DIR = ROOT / "scripts" / "ci"
 if str(CI_DIR) not in sys.path:
     sys.path.insert(0, str(CI_DIR))
-import backend_prerelease_ready as prerelease
-import backend_release_ready as final_gate
+import backend_prerelease_ready as prerelease  # noqa: E402
+import backend_release_ready as final_gate  # noqa: E402
+import source_tree_identity  # noqa: E402
 
 
 CHECKSUM_LINE = re.compile(r"^([0-9a-f]{64}) [ *](.+)$")
@@ -170,8 +171,20 @@ def finalize(
         raise ValueError("candidate evidence is not ready: " + "; ".join(problems))
     evidence_path = root / str(candidate_config["evidence_manifest"])
     candidate_evidence = final_gate.read_object(safe_file(root, evidence_path))
-    if candidate_evidence.get("release_sha") != release_sha:
-        raise ValueError("candidate and signed artifact release identities differ")
+    source_release_sha = candidate_evidence.get("release_sha")
+    source_tree_sha256 = candidate_evidence.get("source_tree_sha256")
+    if not isinstance(source_release_sha, str) or not final_gate.lower_hex(
+        source_tree_sha256, 64
+    ):
+        raise ValueError("candidate source identity is malformed")
+    release_tree_sha256, evidence_delta_paths = (
+        source_tree_identity.verify_evidence_only_transition(
+            root,
+            source_release_sha,
+            release_sha,
+            source_tree_sha256,
+        )
+    )
 
     sbom = safe_file(root, sbom)
     checksums = safe_file(root, checksums)
@@ -191,25 +204,29 @@ def finalize(
         SIGSTORE_ISSUER,
         str(checksums),
     ]
-    verified = subprocess.run(
-        verification_command,
-        cwd=root,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        check=False,
+    verified = final_gate.evidence_runtime.run_anchored_cosign(
+        root,
+        release_sha,
+        cosign,
+        verification_command[1:],
     )
     if verified.returncode != 0:
         raise ValueError(f"Sigstore verification failed: {verified.stdout[-2000:]}")
 
     evidence = json.loads(json.dumps(candidate_evidence))
     evidence["status"] = "ready"
+    evidence["source_release_sha"] = source_release_sha
+    evidence["release_sha"] = release_sha
     gates = evidence["gates"]
     gates[prerelease.SIGNED_GATE] = {
         "kind": "signed_release",
         "metadata": {
             "release_sha": release_sha,
+            "source_release_sha": source_release_sha,
+            "source_tree_sha256": source_tree_sha256,
+            "release_tree_sha256": release_tree_sha256,
+            "evidence_only_delta_verified": True,
+            "evidence_delta_paths": evidence_delta_paths,
             "signatures_verified": True,
             "signer_identity_regexp": SIGSTORE_IDENTITY_REGEXP,
             "signer_oidc_issuer": SIGSTORE_ISSUER,
@@ -294,7 +311,7 @@ def main(argv: list[str]) -> int:
             output_config=args.output_config,
             cosign=args.cosign,
         )
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
         print(f"signed evidence finalization failed: {error}", file=sys.stderr)
         return 2
     print(f"PASS  signed backend evidence finalized for {args.release_sha}")

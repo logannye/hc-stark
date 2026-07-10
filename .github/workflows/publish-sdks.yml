@@ -10,9 +10,15 @@ permissions:
   id-token: write
   attestations: write
 
+concurrency:
+  group: publish-sdks-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release-gate:
     runs-on: ubuntu-latest
+    outputs:
+      backend_sha: ${{ steps.backend-identity.outputs.release_sha }}
     steps:
       - name: Require a published backend release tag
         env:
@@ -21,19 +27,22 @@ jobs:
         run: |
           test "$RELEASE_REF_TYPE" = tag
           test -n "$BACKEND_TAG"
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ vars.TINYZKP_BACKEND_RELEASE_TAG }}
           path: backend-gate
-      - uses: actions/setup-python@v5
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - uses: sigstore/cosign-installer@v3
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
       - name: Download final evidence from the published backend release
@@ -47,19 +56,50 @@ jobs:
           install -d release-artifacts
           gh release download "$BACKEND_TAG" \
             --dir release-artifacts \
+            --pattern hc-cli-linux-x86_64 \
+            --pattern hc-server-linux-x86_64 \
+            --pattern hc-mcp-http-linux-x86_64 \
+            --pattern hc-mcp-stdio-linux-x86_64 \
+            --pattern tinyzkp-maintenance.oci.tar \
+            --pattern tinyzkp-backend.spdx.json \
+            --pattern backend-v1-gates.json \
+            --pattern cli-release.json \
             --pattern backend-v1-final-evidence.json \
             --pattern backend-v1-final-gates.json \
             --pattern SHA256SUMS \
             --pattern SHA256SUMS.sigstore.json \
             --pattern plonky3-compatibility-v1.json
       - name: Verify signed backend release and full evidence gate
+        id: backend-identity
         working-directory: backend-gate
+        env:
+          BACKEND_TAG: ${{ vars.TINYZKP_BACKEND_RELEASE_TAG }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 -m pip install -r scripts/benchmark/requirements.txt
           cosign verify-blob \
             --bundle release-artifacts/SHA256SUMS.sigstore.json \
+            --certificate-identity-regexp '^https://github\.com/logannye/hc-stark/\.github/workflows/release-backend\.yml@refs/tags/backend-v[^/]+$' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             release-artifacts/SHA256SUMS
-          (cd release-artifacts && sha256sum --check --ignore-missing SHA256SUMS)
+          (cd release-artifacts && sha256sum --check SHA256SUMS)
+          evidenced_sha="$(jq -er '.release_sha | select(test("^[0-9a-f]{40}$"))' \
+            release-artifacts/backend-v1-final-evidence.json)"
+          test "$(git rev-parse HEAD)" = "$evidenced_sha"
+          test "$(git rev-list -n 1 "$BACKEND_TAG")" = "$evidenced_sha"
+          gh attestation verify release-artifacts/backend-v1-final-evidence.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "github.com/$GITHUB_REPOSITORY/.github/workflows/release-backend.yml" \
+            --source-digest "$evidenced_sha" \
+            --source-ref "refs/tags/$BACKEND_TAG" \
+            --deny-self-hosted-runners
+          gh attestation verify release-artifacts/backend-v1-final-gates.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "github.com/$GITHUB_REPOSITORY/.github/workflows/release-backend.yml" \
+            --source-digest "$evidenced_sha" \
+            --source-ref "refs/tags/$BACKEND_TAG" \
+            --deny-self-hosted-runners
+          echo "release_sha=$evidenced_sha" >> "$GITHUB_OUTPUT"
           cmp release/plonky3-compatibility-v1.json \
             release-artifacts/plonky3-compatibility-v1.json
           python3 scripts/ci/backend_release_ready.py \
@@ -95,8 +135,8 @@ jobs:
     needs: release-gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Build and publish
@@ -109,7 +149,7 @@ jobs:
           python -m build
           twine check dist/*
       - name: Attest Python distributions
-        uses: actions/attest@v4
+        uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
         with:
           subject-path: clients/python/dist/*
       - name: Upload Python distributions
@@ -124,8 +164,8 @@ jobs:
     needs: release-gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
@@ -143,15 +183,15 @@ jobs:
     needs: release-gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
       - name: Package
         working-directory: clients/rust
         run: cargo package --locked
       - name: Attest Rust crate package
-        uses: actions/attest@v4
+        uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
         with:
           subject-path: clients/rust/target/package/*.crate
       - name: Publish
@@ -165,16 +205,16 @@ jobs:
     name: Publish WASM verifier to npm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ vars.TINYZKP_BACKEND_RELEASE_TAG }}
-      - uses: dtolnay/rust-toolchain@stable
+          ref: ${{ needs.release-gate.outputs.backend_sha }}
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
           targets: wasm32-unknown-unknown
       - name: Install wasm-pack
         run: cargo install wasm-pack --version 0.14.0 --locked
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
@@ -190,7 +230,7 @@ jobs:
           cd pkg
           npm pack --dry-run
       - name: Attest WASM package files
-        uses: actions/attest@v4
+        uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
         with:
           subject-path: crates/hc-wasm/pkg/**
       - name: Publish to npm
@@ -215,10 +255,10 @@ jobs:
             name: hc-mcp-linux-x86_64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ vars.TINYZKP_BACKEND_RELEASE_TAG }}
-      - uses: dtolnay/rust-toolchain@stable
+          ref: ${{ needs.release-gate.outputs.backend_sha }}
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
           targets: ${{ matrix.target }}
@@ -231,10 +271,10 @@ jobs:
           chmod +x ${{ matrix.name }}-stdio ${{ matrix.name }}-http
           shasum -a 256 -b ${{ matrix.name }}-stdio ${{ matrix.name }}-http > ${{ matrix.name }}.sha256
       - name: Attest MCP binaries
-        uses: actions/attest@v4
+        uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
         with:
           subject-checksums: ${{ matrix.name }}.sha256
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |
             ${{ matrix.name }}-stdio

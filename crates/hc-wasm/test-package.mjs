@@ -1,11 +1,13 @@
+import { pathToFileURL } from "node:url";
+import { resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 
-import init, {
-  verify_bundle as verifyBundle,
-  version,
-} from "./pkg/tinyzkp-verify.js";
-
-const wasm = await readFile(new URL("./pkg/tinyzkp-verify_bg.wasm", import.meta.url));
+const packageDir = process.env.TINYZKP_WASM_OUT_DIR
+  ? resolve(process.env.TINYZKP_WASM_OUT_DIR)
+  : resolve(new URL("./pkg", import.meta.url).pathname);
+const modulePath = pathToFileURL(resolve(packageDir, "tinyzkp-verify.js")).href;
+const { default: init, verify_bundle: verifyBundle, version } = await import(modulePath);
+const wasm = await readFile(resolve(packageDir, "tinyzkp-verify_bg.wasm"));
 await init({ module_or_path: wasm });
 
 const fixtureUrl = new URL(

@@ -9,6 +9,10 @@ permissions:
   id-token: write
   attestations: write
 
+concurrency:
+  group: publish-backend-crates-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     if: startsWith(github.event.release.tag_name, 'backend-v')
@@ -16,16 +20,19 @@ jobs:
     env:
       BACKEND_TAG: ${{ github.event.release.tag_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.release.tag_name }}
-      - uses: actions/setup-python@v5
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
       - name: Download and verify final backend evidence
         env:
           GH_TOKEN: ${{ github.token }}
@@ -33,6 +40,14 @@ jobs:
           install -d release-artifacts
           gh release download "$BACKEND_TAG" \
             --dir release-artifacts \
+            --pattern hc-cli-linux-x86_64 \
+            --pattern hc-server-linux-x86_64 \
+            --pattern hc-mcp-http-linux-x86_64 \
+            --pattern hc-mcp-stdio-linux-x86_64 \
+            --pattern tinyzkp-maintenance.oci.tar \
+            --pattern tinyzkp-backend.spdx.json \
+            --pattern backend-v1-gates.json \
+            --pattern cli-release.json \
             --pattern backend-v1-final-evidence.json \
             --pattern backend-v1-final-gates.json \
             --pattern SHA256SUMS \
@@ -41,8 +56,26 @@ jobs:
           python3 -m pip install -r scripts/benchmark/requirements.txt
           cosign verify-blob \
             --bundle release-artifacts/SHA256SUMS.sigstore.json \
+            --certificate-identity-regexp '^https://github\.com/logannye/hc-stark/\.github/workflows/release-backend\.yml@refs/tags/backend-v[^/]+$' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             release-artifacts/SHA256SUMS
-          (cd release-artifacts && sha256sum --check --ignore-missing SHA256SUMS)
+          (cd release-artifacts && sha256sum --check SHA256SUMS)
+          evidenced_sha="$(jq -er '.release_sha | select(test("^[0-9a-f]{40}$"))' \
+            release-artifacts/backend-v1-final-evidence.json)"
+          test "$(git rev-parse HEAD)" = "$evidenced_sha"
+          test "$(git rev-list -n 1 "$BACKEND_TAG")" = "$evidenced_sha"
+          gh attestation verify release-artifacts/backend-v1-final-evidence.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "github.com/$GITHUB_REPOSITORY/.github/workflows/release-backend.yml" \
+            --source-digest "$evidenced_sha" \
+            --source-ref "refs/tags/$BACKEND_TAG" \
+            --deny-self-hosted-runners
+          gh attestation verify release-artifacts/backend-v1-final-gates.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "github.com/$GITHUB_REPOSITORY/.github/workflows/release-backend.yml" \
+            --source-digest "$evidenced_sha" \
+            --source-ref "refs/tags/$BACKEND_TAG" \
+            --deny-self-hosted-runners
           cmp release/plonky3-compatibility-v1.json \
             release-artifacts/plonky3-compatibility-v1.json
           python3 scripts/ci/backend_release_ready.py \
@@ -54,7 +87,7 @@ jobs:
           echo "plonky3=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(p["version"] for p in data["packages"] if p["name"] == "hc-plonky3"))')" >> "$GITHUB_OUTPUT"
       - name: Package and attest hc-stream
         run: cargo package --locked -p hc-stream
-      - uses: actions/attest@v4
+      - uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
         with:
           subject-path: target/package/hc-stream-${{ steps.versions.outputs.stream }}.crate
       - name: Publish hc-stream
@@ -66,7 +99,7 @@ jobs:
             hc-stream "${{ steps.versions.outputs.stream }}"
       - name: Package and attest hc-plonky3
         run: cargo package --locked -p hc-plonky3
-      - uses: actions/attest@v4
+      - uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
         with:
           subject-path: target/package/hc-plonky3-${{ steps.versions.outputs.plonky3 }}.crate
       - name: Publish hc-plonky3

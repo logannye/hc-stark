@@ -14,17 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
 
@@ -35,7 +35,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y sqlite3
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
@@ -79,10 +79,12 @@ jobs:
 
       - name: launch gate audit
         run: |
+          python3 -m pytest scripts/ci/test_source_tree_identity.py
           python3 -m pytest scripts/ci/test_backend_release_ready.py
           python3 -m pytest scripts/ci/test_backend_prerelease_ready.py
           python3 -m pytest scripts/release/test_finalize_signed_evidence.py
           python3 -m pytest scripts/release/test_build_candidate_evidence.py
+          python3 -m pytest scripts/release/test_build_commercial_authorization.py
           python3 -m pytest scripts/release/test_verify_sdk_release_versions.py
           python3 -m pytest scripts/release/test_verify_sdk_backend_compatibility.py
           python3 scripts/ci/launch_gate_audit.py
@@ -172,9 +174,14 @@ jobs:
 
       - name: Deterministic review bundle tooling
         run: |
+          python3 scripts/ci/check_pinned_actions.py
+          python3 -m pytest scripts/ci/test_check_pinned_actions.py -q
+          python3 -m pytest scripts/ci/test_strict_json.py -q
           python3 -m pytest scripts/release/test_build_preliminary_sbom.py -q
           python3 -m pytest scripts/release/test_build_review_bundle.py -q
           python3 -m pytest scripts/release/test_build_external_records.py -q
+          python3 -m pytest scripts/release/test_external_signature_gate.py -q
+          python3 -m pytest scripts/release/test_evidence_runtime.py -q
           python3 -m pytest scripts/release/test_run_fuzz_smoke.py -q
           python3 -m pytest scripts/release/test_run_crash_matrix.py -q
           python3 -m pytest scripts/release/test_run_evidenced_command.py -q
@@ -196,6 +203,9 @@ jobs:
           bash -n scripts/ci/sdk_contract_gate.sh
           python3 -m py_compile scripts/ci/backend_release_ready.py
           python3 -m py_compile scripts/ci/backend_prerelease_ready.py
+          python3 -m py_compile scripts/ci/source_tree_identity.py
+          python3 -m py_compile scripts/ci/strict_json.py
+          python3 -m py_compile scripts/ci/check_pinned_actions.py
           python3 -m py_compile scripts/ci/cloudflare_pages_secret_check.py
           python3 -m py_compile scripts/monitoring/backend_recovery_canary.py
           python3 -m py_compile billing/legacy_billing_containment.py
@@ -211,8 +221,10 @@ jobs:
           python3 -m py_compile scripts/release/build_external_records.py
           python3 -m py_compile scripts/release/build_candidate_evidence.py
           python3 -m py_compile scripts/release/finalize_signed_evidence.py
+          python3 -m py_compile scripts/release/build_commercial_authorization.py
           python3 -m py_compile scripts/release/verify_sdk_release_versions.py
           python3 -m py_compile scripts/release/verify_sdk_backend_compatibility.py
+          python3 -m py_compile scripts/release/evidence_runtime.py
           python3 -m py_compile scripts/release/run_fuzz_smoke.py
           python3 -m py_compile scripts/release/run_crash_matrix.py
           python3 -m py_compile scripts/release/run_evidenced_command.py
@@ -220,6 +232,7 @@ jobs:
           python3 -m py_compile examples/partner-adapter/run_cgroup.py
           bash -n scripts/monitoring/api_health_audit.sh
           bash -n scripts/ci/check_plonky3_known_answers.sh
+          bash -n scripts/release/run_crash_matrix_disk_full.sh
           bash -n scripts/monitoring/host_cron_env.sh
           python3 -m py_compile billing/stripe_account_context_check.py
           python3 -m py_compile billing/stripe_revenue_ops_audit.py

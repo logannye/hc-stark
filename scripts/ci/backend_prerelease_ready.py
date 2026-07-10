@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 
 import backend_release_ready as final_gate
+import source_tree_identity
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,9 +20,33 @@ EXPECTED_GATES = set(final_gate.EXPECTED_KINDS) - {SIGNED_GATE}
 
 def evidence_failures(evidence: dict[str, object], *, root: Path) -> list[str]:
     problems: list[str] = []
+    if set(evidence) != {
+        "schema_version",
+        "status",
+        "release_sha",
+        "source_tree_sha256",
+        "gates",
+    }:
+        problems.append("candidate evidence schema is not closed")
     release_sha = evidence.get("release_sha")
-    if evidence.get("schema_version") != 1 or not isinstance(release_sha, str) or not release_sha:
+    if not final_gate.exact_int(evidence.get("schema_version"), 1) or not isinstance(release_sha, str) or not release_sha:
         return ["candidate evidence identity is malformed"]
+    source_digest = evidence.get("source_tree_sha256")
+    if not final_gate.lower_hex(source_digest, 64):
+        problems.append("candidate source-tree digest is malformed")
+    else:
+        try:
+            canonical_release_sha = source_tree_identity.require_canonical_commit(
+                root, release_sha
+            )
+            actual_digest = source_tree_identity.source_tree_sha256(
+                root, canonical_release_sha
+            )
+        except ValueError as error:
+            problems.append(f"candidate source-tree identity could not be verified: {error}")
+        else:
+            if actual_digest != source_digest:
+                problems.append("candidate source-tree digest does not match its source commit")
     if evidence.get("status") != "candidate":
         problems.append("candidate evidence status must equal candidate")
     gates = evidence.get("gates")
@@ -37,14 +62,33 @@ def evidence_failures(evidence: dict[str, object], *, root: Path) -> list[str]:
             problems.append(f"{name}: evidence descriptor is malformed")
             continue
         problems.extend(
-            final_gate.validate_gate(name, raw, root=root, release_sha=release_sha)
+            final_gate.validate_gate(
+                name,
+                raw,
+                root=root,
+                release_sha=release_sha,
+                source_tree_sha256=source_digest,
+            )
         )
+    problems.extend(
+        final_gate.validate_review_execution_bindings(
+            gates, release_sha, root=root
+        )
+    )
     return problems
 
 
 def failures(config: dict[str, object], *, root: Path = ROOT) -> list[str]:
     problems: list[str] = []
-    if config.get("schema_version") != 2:
+    if set(config) != {
+        "schema_version",
+        "release",
+        "status",
+        "evidence_manifest",
+        "policy",
+    }:
+        problems.append("candidate gate config schema is not closed")
+    if not final_gate.exact_int(config.get("schema_version"), 2):
         problems.append("release gate config schema_version must be 2")
     if config.get("status") != "candidate":
         problems.append("release gate config status must equal candidate")
@@ -52,7 +96,9 @@ def failures(config: dict[str, object], *, root: Path = ROOT) -> list[str]:
     if not isinstance(evidence_path, str) or not evidence_path:
         return problems + ["candidate evidence manifest path is missing"]
     try:
-        evidence = final_gate.read_object(root / evidence_path)
+        evidence = final_gate.read_object(
+            final_gate.safe_evidence_file(root, evidence_path)
+        )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         return problems + [f"candidate evidence manifest is unavailable: {error}"]
     return problems + evidence_failures(evidence, root=root)

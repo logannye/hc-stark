@@ -4,6 +4,17 @@
 It is intentionally absent while the release is blocked. Every referenced
 artifact must be repository-relative, non-symlinked, and bound by SHA-256.
 
+Candidate and final release identities are deliberately distinct. Candidate
+artifacts bind `release_sha` to the reviewed source commit and the builder
+derives `source_tree_sha256` from Git while excluding only
+`release/backend-v1-gates.json` and `release/evidence/`. The evidence/config
+commit therefore cannot create a commit-SHA self-reference. Signed finalization
+records that candidate SHA as `source_release_sha`, records the immutable tag
+commit as `release_sha`, proves the source commit is its ancestor, rejects every
+non-evidence path in the transition, and requires both commits to have the same
+stable source-tree digest. Both release jobs use full Git history so this proof
+cannot silently degrade under a shallow checkout.
+
 Release evidence has two explicit stages. A candidate config has `status` set
 to `candidate` and contains exactly the fourteen gates that can exist before
 artifact signing; validate it with `backend_prerelease_ready.py`. The backend
@@ -13,12 +24,38 @@ supported way to add the signed-release gate and emit the final `ready` config.
 The full `backend_release_ready.py` gate is rerun against those generated files
 before a draft release can be created.
 
+After that independent rerun succeeds, `build_commercial_authorization.py`
+revalidates the final config/evidence, the signed checksum manifest, the SPDX
+SBOM, and the frozen Sigstore workflow identity. It emits an owner-only typed
+release-ready report plus the exact eleven-field commercial authorization
+consumed by TinyZKP annual contract billing. The authorization binds the final
+release SHA, stable source-tree digest, final evidence, validator report,
+signed checksum manifest, and Sigstore bundle by SHA-256. Both new files are
+included in the release workflow's GitHub artifact attestation. The workflow
+also keyless-signs the authorization itself and immediately verifies the
+resulting `backend-v1-commercial-authorization.sigstore.json` against the
+frozen release-workflow identity and GitHub OIDC issuer. The billing operator
+must install and independently verify both files. They are not
+inserted into the already signed checksum manifest, which would introduce an
+ordering/self-reference cycle. An operator must verify the GitHub attestation,
+install the authorization with mode `0600`, recompute its SHA-256 locally, and
+configure that exact digest. A handwritten authorization is not a supported
+release path.
+
 Signed finalization requires the checksum manifest to cover every production
 CLI/API/MCP binary, the maintenance OCI archive, compatibility profile,
 candidate gate file, embedded CLI identity, and a valid SPDX JSON SBOM. Cosign
 verification pins both GitHub's OIDC issuer and the TinyZKP
 `release-backend.yml@refs/tags/backend-v*` workflow certificate identity; a
 valid signature from an unrelated keyless principal is rejected.
+
+Crate and SDK publication redownload every checksummed artifact and perform a
+complete checksum verification without `--ignore-missing`. They repeat the
+pinned Cosign identity/issuer check, verify the GitHub attestations for final
+evidence and config against the release workflow, tag ref, source digest, and
+GitHub-hosted runner policy, and require both the tag target and checked-out
+`HEAD` to equal the final evidenced SHA. Downstream WASM and MCP builds check
+out that SHA directly rather than resolving the tag again.
 
 Do not hand-author digests. Run `build_candidate_evidence.py template` to create
 an unhashed input skeleton, fill its required metadata/roles, then run
@@ -42,7 +79,21 @@ owner-only permissions. A manually copied identity map is not sufficient.
 
 Generate the deterministic preliminary Rust dependency SBOM, then use
 `scripts/release/build_review_bundle.py` to assemble review materials. The
-bundle command rejects a missing, malformed, or symlinked SBOM:
+bundle command rejects a missing, malformed, or symlinked SBOM. `--release-sha`
+must be the full canonical Git commit identifier: mutable refs such as `HEAD`,
+branch names, tags, and abbreviated object IDs are rejected. Every source file
+in the ZIP is read from that commit's Git blobs rather than from the worktree,
+and the review manifest records the same stable `source_tree_sha256` used by
+candidate evidence.
+
+Review-manifest schema v2 records `source_sha256`/`source_bytes` for the exact
+input artifact and `archive_sha256`/`archive_bytes` for the bytes actually
+placed in the ZIP. They are identical for committed source. Optional JSON and
+text evidence may replace absolute repository/home paths with `$REPO` and
+`$HOME`; those entries set `normalized: true` while retaining both digests, so
+reviewers can distinguish a portable review copy from the original hashed
+release evidence. The bundle includes the source-tree identity implementation
+and its tests as part of the reviewed release machinery:
 
 ```bash
 created="$(git show -s --format=%cI "$HC_RELEASE_SHA")"
@@ -79,22 +130,65 @@ official-verification result. It also contains an exact `artifact_sha256` map
 for every independently produced resource artifact; co-locating unbound files
 is not sufficient.
 
-Each external review requires separately hashed `review_report` and
-`remediation_ledger` roles. The ledger is release/profile/scope-bound and uses
-stable finding IDs, and `review_report_sha256` binds it to the reviewed report
-bytes. Critical/high findings pass only when their status is
+Each external review requires separately hashed `review_bundle`,
+`review_report`, and `remediation_ledger` roles. The ledger is
+release/profile/scope-bound and uses stable finding IDs.
+`review_bundle_sha256`, `review_manifest_sha256`, and `source_tree_sha256` bind
+the reviewer to the deterministic bundle, its embedded manifest, and the exact
+candidate source tree; `review_report_sha256` binds the resulting report bytes.
+The release gate independently opens the ZIP and recomputes all four hashes.
+Critical/high findings pass only when their status is
 `remediated` and `reviewer_verified` is true; risk acceptance cannot waive a
 release-blocking finding.
 
-Crash/recovery evidence uses both `crash_matrix` and `fuzz_smoke` roles. The
+Crash/recovery evidence uses both `crash_matrix` and `fuzz_smoke` roles,
+separately hashed `crash_tool_identity` and `fuzz_tool_identity` provenance
+records, and a separately hashed, uniquely pathed log role for every crash case
+and fuzz target. The provenance records capture the exact `-Vv` command,
+canonical executable path, executable SHA-256, full version output, frozen
+toolchain, source identity, and sanitized-environment digest. The
 crash matrix must contain every durable phase, the integrity cases, and the
-Linux disk-full recovery case from `scripts/release/run_crash_matrix.py`. Fuzz
-smoke must include all nine backend targets, each run from the deterministic,
+Linux disk-full recovery case from `scripts/release/run_crash_matrix.py`.
+Release-mode crash execution refuses an arbitrary directory: use
+`run_crash_matrix_disk_full.sh`, which creates a bounded 128 MiB loop device,
+mounts it with `nodev,nosuid,noexec`, makes it owner-only, and cleans it up.
+The Python runner independently requires an exact mount point on a different
+device, a 64--512 MiB capacity, an empty supported filesystem, and an
+owner-only directory before creating its hashed mount sentinel. This prevents
+a mistyped disk-full test from exhausting the fixed host's root filesystem.
+Every crash log must prove that the exact named Rust test ran once and passed;
+Cargo's successful zero-test result is not release evidence.
+The disk-full test captures the first failed write and requires Linux error 28
+(`ENOSPC`) before it can emit its successful-resume marker; permission, I/O, or
+quota failures cannot masquerade as disk exhaustion. Fuzz smoke must include
+all nine backend targets, each run from the deterministic,
 version-controlled seed sample emitted by `scripts/release/run_fuzz_smoke.py`; a report
 that omits its profile, exact Rust/cargo-fuzz identities, or corpus/log digests
-does not pass. LibFuzzer discoveries use a separate disposable corpus, while
+does not pass. The validator parses each hashed log and requires LibFuzzer's
+DONE marker, elapsed time, executed-unit total, and peak RSS to agree with the
+machine report; a claimed duration or arbitrary success log is insufficient.
+The final DONE counter, final run count, and final executed-unit statistic must
+all agree, and measured process duration must cover LibFuzzer's claimed elapsed
+time. Each log also contains exactly one target/corpus/toolchain marker, and
+all target commands must use one canonical execution/corpus/artifact root.
+Each target embeds the ordered seed sizes and SHA-256 digests so the validator
+can recompute the exact corpus descriptor from the committed fixtures. Reports,
+cases, targets, and tool records use closed schemas; noncanonical JSON types,
+oversized or concurrently changed artifacts, reused paths, and noncanonical
+disk device identities fail closed. Both runners require a clean canonical
+`HC_RELEASE_SHA == HEAD`, bind
+the stable source-tree and dependency-lock digests, execute through hashed
+Cargo/Rust identities under a minimal offline environment, and recheck source
+identity after execution. Build overrides such as `RUSTFLAGS`, wrappers, target
+directories, sanitizer options, and injected libraries are not inherited.
+Per-process deadlines kill the entire child process group on timeout.
+LibFuzzer discoveries use a separate disposable corpus, while
 crash artifacts and all evidence files remain owner-only. Cargo-fuzz is pinned
-to `0.13.2`; changing it requires an explicit evidence-policy update.
+to `0.13.2` and the fuzz compiler/toolchain to
+`nightly-2026-04-15`; changing either requires an explicit evidence-policy
+update. Short or disk-full-free diagnostics require explicit `--partial`;
+incomplete runs exit nonzero by default and can never set the release-eligible
+field.
 Design-partner evidence requires three
 separately hashed roles: `adapter_result`, `resource_report`, and
 `acceptance_record`. All three are machine-readable and release-bound. The
@@ -114,5 +208,6 @@ python3 scripts/release/build_external_records.py partner-acceptance --help
 The reproduction command validates all four fixed-host workload gates before
 writing its record. Partner acceptance validates the adapter and resource
 artifacts before preserving the record. Review-ledger generation permits open
-findings so remediation can proceed, but the final release gate still rejects
-every unresolved critical/high item.
+findings so remediation can proceed, but requires `--review-bundle` and an
+exact canonical source commit and refuses a bundle/source mismatch. The final
+release gate still rejects every unresolved critical/high item.

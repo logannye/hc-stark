@@ -12,11 +12,15 @@ set -euo pipefail
 TARGET="${1:-web}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PACKAGE_VERSION="${TINYZKP_SDK_VERSION:-}"
+OUT_DIR="${TINYZKP_WASM_OUT_DIR:-pkg}"
+cargo_bin=${TINYZKP_CARGO:-cargo}
+python_bin=${TINYZKP_PYTHON:-python3}
+wasm_pack_bin=${TINYZKP_WASM_PACK:-wasm-pack}
 
 if [[ -z "$PACKAGE_VERSION" ]]; then
   PACKAGE_VERSION="$({
-    cargo metadata --no-deps --format-version 1 |
-      python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(package["version"] for package in data["packages"] if package["name"] == "hc-wasm"))'
+    "$cargo_bin" metadata --no-deps --format-version 1 |
+      "$python_bin" -c 'import json,sys; data=json.load(sys.stdin); print(next(package["version"] for package in data["packages"] if package["name"] == "hc-wasm"))'
   })"
 fi
 PACKAGE_VERSION="${PACKAGE_VERSION#v}"
@@ -34,14 +38,14 @@ echo "Building @tinyzkp/verify ${PACKAGE_VERSION} for target: ${TARGET}"
 cd "$SCRIPT_DIR"
 
 # Clear RUSTFLAGS to avoid host-target flags (e.g. -Ctarget-cpu) leaking into wasm build.
-RUSTFLAGS='' wasm-pack build \
+RUSTFLAGS='' "$wasm_pack_bin" build \
   --target "$TARGET" \
-  --out-dir pkg \
+  --out-dir "$OUT_DIR" \
   --out-name tinyzkp-verify \
   -- --no-default-features --locked
 
 # Override package.json with our npm metadata.
-cat > pkg/package.json <<PKGJSON
+cat > "$OUT_DIR/package.json" <<PKGJSON
 {
   "name": "@tinyzkp/verify",
   "version": "${PACKAGE_VERSION}",
@@ -73,7 +77,6 @@ cat > pkg/package.json <<PKGJSON
 }
 PKGJSON
 
-install -m 0644 LICENSE pkg/LICENSE
+install -m 0644 LICENSE "$OUT_DIR/LICENSE"
 
-echo "Build complete: pkg/"
-echo "  To publish: cd pkg && npm publish --provenance --access public"
+echo "Build complete: ${OUT_DIR}/"

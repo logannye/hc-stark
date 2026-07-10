@@ -6,10 +6,15 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
 
 - WIP snapshot preserved on `codex/recovery-wip-snapshot`; clean recovery work
   is split into reviewable commits on `codex/plonky3-backend-recovery`.
-- Website, API, MCP, checkout, billing-meter, and release paths are fail-closed.
-  Containment release `5719292ad0c8c4b5f0f6b0500db41cdf6888134c` is live and
-  passed external site/API/MCP identity and maintenance canaries. No customer
-  cancellation, refund, rebill, or production proving action was run.
+- API, MCP, checkout, billing-meter, and proving paths are fail-closed in the
+  live containment release
+  `5719292ad0c8c4b5f0f6b0500db41cdf6888134c`. That older website release does
+  **not** satisfy the current no-email surface: read-only canaries on 2026-07-10
+  found obfuscated email links, a `mailto:` security contact, and no dedicated
+  `/requests` form. The replacement no-email containment source passes its
+  local route, intake, identity, billing, and maintenance gates but has not
+  been deployed. No customer cancellation, refund, rebill, or production
+  proving action was run.
 - Plonky3 crates are exact-pinned to `0.6.1` with lockfile checksums.
 - The frozen upstream-style Goldilocks/Poseidon2 Uni-STARK configuration emits
   official Plonky3 proofs accepted by the unmodified verifier. Its seeded
@@ -132,8 +137,9 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
 
 ## External actions requiring operator/customer coordination
 
-- deploy any future containment revision from one release and rerun external
-  identity/capability canaries;
+- merge and deploy the replacement no-email containment revision from one
+  release, then require the external identity, capability, no-email route, and
+  durable-intake canaries before any public announcement;
 - obtain write-capable, least-privilege Stripe authorization to archive only
   positively identified TinyZKP catalog objects; the current restricted key
   cannot mutate them and the unrelated active product must remain untouched;

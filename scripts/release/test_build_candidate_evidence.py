@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import stat
+import subprocess
 import sys
 
 
@@ -20,11 +21,26 @@ def test_template_contains_exact_unsigned_gate_set():
     for name, gate in value["gates"].items():
         assert [artifact["role"] for artifact in gate["artifacts"]] == module.GATE_ROLES[name]
     assert len(value["gates"]["one_million_row_resource_gate"]["artifacts"]) == 10
-    assert len(value["gates"]["independent_resource_reproduction"]["artifacts"]) == 17
+    assert len(value["gates"]["independent_resource_reproduction"]["artifacts"]) == 18
     assert [
         artifact["role"]
         for artifact in value["gates"]["crash_resume_and_corruption_suite"]["artifacts"]
-    ] == ["crash_matrix", "fuzz_smoke"]
+    ][:2] == ["crash_matrix", "fuzz_smoke"]
+    assert len(value["gates"]["crash_resume_and_corruption_suite"]["artifacts"]) == (
+        4 + len(module.CRASH_CASES) + len(module.FUZZ_TARGETS)
+    )
+    for name in (
+        "plonky3_specialist_review",
+        "implementation_review_no_high_findings",
+    ):
+        assert [
+            artifact["role"] for artifact in value["gates"][name]["artifacts"]
+        ] == [
+            "review_bundle",
+            "review_report",
+            "remediation_ledger",
+            "review_signature",
+        ]
 
 
 def test_hashed_artifact_rejects_extra_fields_and_symlinks(tmp_path):
@@ -53,9 +69,54 @@ def test_invalid_candidate_never_emits_outputs(tmp_path):
     try:
         module.construct_evidence(json.loads(source.read_text()), root=tmp_path)
     except ValueError as error:
-        assert "candidate gates are missing" in str(error)
+        assert "git rev-parse" in str(error)
     else:
         raise AssertionError("incomplete candidate was accepted")
+
+
+def test_candidate_rejects_mutable_or_abbreviated_release_revisions(tmp_path):
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    artifact = tmp_path / "artifact"
+    artifact.write_text("source\n", encoding="utf-8")
+    subprocess.run(["git", "add", "artifact"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=TinyZKP Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "source",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True
+    ).strip()
+    for release_sha in ("HEAD", commit[:12]):
+        source = {
+            "schema_version": 1,
+            "release_sha": release_sha,
+            "gates": {},
+        }
+        try:
+            module.construct_evidence(source, root=tmp_path)
+        except ValueError as error:
+            assert "exact canonical Git commit" in str(error)
+        else:
+            raise AssertionError("mutable candidate release identity was accepted")
+    try:
+        module.construct_evidence(
+            {"schema_version": 1, "release_sha": commit, "gates": {}},
+            root=tmp_path,
+        )
+    except ValueError as error:
+        assert "candidate gates are missing" in str(error)
+    else:
+        raise AssertionError("canonical candidate unexpectedly bypassed gate validation")
 
 
 def test_atomic_output_is_owner_only(tmp_path):

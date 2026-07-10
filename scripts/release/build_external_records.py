@@ -15,7 +15,10 @@ ROOT = Path(__file__).resolve().parents[2]
 CI_DIR = ROOT / "scripts" / "ci"
 if str(CI_DIR) not in sys.path:
     sys.path.insert(0, str(CI_DIR))
-import backend_release_ready as release_gate
+import backend_release_ready as release_gate  # noqa: E402
+import source_tree_identity  # noqa: E402
+import strict_json  # noqa: E402
+import build_review_bundle  # noqa: E402
 
 
 PROFILE = "tinyzkp-p3-goldilocks-v1"
@@ -116,6 +119,7 @@ def reproduction_record(
     organization: str,
     completed_at: str,
     artifacts: dict[str, Path],
+    signer_id: str,
 ) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -129,6 +133,7 @@ def reproduction_record(
         "workloads": ["fibonacci", "poseidon2_goldilocks"],
         "gates": ["one-million", "ten-million"],
         "artifact_sha256": {role: sha256(path) for role, path in sorted(artifacts.items())},
+        "signer_id": signer_id,
     }
 
 
@@ -171,8 +176,12 @@ def review_ledger(
     scope: str,
     reviewer: str,
     completed_at: str,
+    bundle: Path,
+    review_manifest_sha256: str,
+    source_tree_sha256: str,
     report: Path,
     findings: list[dict[str, object]],
+    signer_id: str,
 ) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -182,8 +191,12 @@ def review_ledger(
         "completed_at": completed_at,
         "reviewer": reviewer,
         "reviewer_independent": True,
+        "review_bundle_sha256": sha256(bundle),
+        "review_manifest_sha256": review_manifest_sha256,
+        "source_tree_sha256": source_tree_sha256,
         "review_report_sha256": sha256(report),
         "findings": findings,
+        "signer_id": signer_id,
     }
 
 
@@ -195,6 +208,7 @@ def partner_acceptance(
     accepted_at: str,
     adapter_result: Path,
     resource_report: Path,
+    signer_id: str,
 ) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -208,6 +222,7 @@ def partner_acceptance(
         "witness_data_committed": False,
         "adapter_result_sha256": sha256(adapter_result),
         "resource_report_sha256": sha256(resource_report),
+        "signer_id": signer_id,
     }
 
 
@@ -238,46 +253,54 @@ def build_reproduction(args: argparse.Namespace) -> None:
         organization=nonempty(args.organization, "organization"),
         completed_at=nonempty(args.completed_at, "completion time"),
         artifacts=artifacts,
+        signer_id=nonempty(args.signer_id, "signer ID"),
     )
     output = safe_output(args.output)
     staged = staged_record_path(output)
     write_json_atomic(staged, record)
-    evidence = [(staged, {"role": "reproduction_record"})] + [
-        (path, {"role": role}) for role, path in artifacts.items()
-    ]
-    metadata = {
-        "release_sha": release_sha,
-        "independent": True,
-        "reproducer": args.reproducer,
-        "organization": args.organization,
-        "completed_at": args.completed_at,
-    }
-    try:
-        failures = release_gate.validate_independent_reproduction(
-            evidence, metadata, release_sha
-        )
-        if failures:
-            raise ValueError(
-                "independent record failed validation: " + "; ".join(failures)
-            )
-        os.replace(staged, output)
-    except Exception:
-        staged.unlink(missing_ok=True)
-        raise
+    # This is the exact claim the external reproducer signs.  The final release
+    # gate independently validates the detached signature and every artifact.
+    os.replace(staged, output)
 
 
 def build_review(args: argparse.Namespace) -> None:
+    release_sha = source_tree_identity.require_canonical_commit(
+        ROOT, nonempty(args.release_sha, "release SHA")
+    )
+    bundle = safe_file(args.review_bundle)
+    manifest, manifest_bytes = build_review_bundle.verify_bundle(
+        bundle, root=ROOT, release_sha=release_sha
+    )
+    source_tree_sha256 = source_tree_identity.source_tree_sha256(ROOT, release_sha)
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("schema_version") != 2
+        or isinstance(manifest.get("schema_version"), bool)
+        or manifest.get("release_sha") != release_sha
+        or manifest.get("source_tree_sha256") != source_tree_sha256
+        or manifest.get("profile") != PROFILE
+        or manifest.get("plonky3_version") != "0.6.1"
+    ):
+        raise ValueError("review bundle manifest is incomplete or release-skewed")
     findings_path = safe_file(args.findings)
-    findings = validate_findings(json.loads(findings_path.read_text(encoding="utf-8")))
+    report = safe_file(args.review_report)
+    findings = validate_findings(strict_json.loads(findings_path.read_bytes()))
     record = review_ledger(
-        release_sha=nonempty(args.release_sha, "release SHA"),
+        release_sha=release_sha,
         scope=args.scope,
         reviewer=nonempty(args.reviewer, "reviewer"),
         completed_at=nonempty(args.completed_at, "completion time"),
-        report=safe_file(args.review_report),
+        bundle=bundle,
+        review_manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
+        source_tree_sha256=source_tree_sha256,
+        report=report,
         findings=findings,
+        signer_id=nonempty(args.signer_id, "signer ID"),
     )
-    write_json_atomic(safe_output(args.output), record)
+    output = safe_output(args.output)
+    staged = staged_record_path(output)
+    write_json_atomic(staged, record)
+    os.replace(staged, output)
 
 
 def build_partner(args: argparse.Namespace) -> None:
@@ -291,28 +314,12 @@ def build_partner(args: argparse.Namespace) -> None:
         accepted_at=nonempty(args.accepted_at, "acceptance time"),
         adapter_result=adapter,
         resource_report=resource,
+        signer_id=nonempty(args.signer_id, "signer ID"),
     )
     output = safe_output(args.output)
     staged = staged_record_path(output)
     write_json_atomic(staged, record)
-    try:
-        failures = release_gate.validate_partner_evidence(
-            [
-                (adapter, {"role": "adapter_result"}),
-                (resource, {"role": "resource_report"}),
-                (staged, {"role": "acceptance_record"}),
-            ],
-            release_sha,
-            {"partner_acceptance_id": args.acceptance_id},
-        )
-        if failures:
-            raise ValueError(
-                "partner acceptance failed validation: " + "; ".join(failures)
-            )
-        os.replace(staged, output)
-    except Exception:
-        staged.unlink(missing_ok=True)
-        raise
+    os.replace(staged, output)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -324,6 +331,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     reproduction.add_argument("--reproducer", required=True)
     reproduction.add_argument("--organization", required=True)
     reproduction.add_argument("--completed-at", required=True)
+    reproduction.add_argument("--signer-id", required=True)
     reproduction.add_argument("--artifact", action="append", default=[])
     reproduction.add_argument("--output", type=Path, required=True)
 
@@ -332,6 +340,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--scope", choices=("plonky3_specialist", "implementation"), required=True)
     review.add_argument("--reviewer", required=True)
     review.add_argument("--completed-at", required=True)
+    review.add_argument("--signer-id", required=True)
+    review.add_argument("--review-bundle", type=Path, required=True)
     review.add_argument("--review-report", type=Path, required=True)
     review.add_argument("--findings", type=Path, required=True)
     review.add_argument("--output", type=Path, required=True)
@@ -341,6 +351,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     partner.add_argument("--acceptance-id", required=True)
     partner.add_argument("--partner-id", required=True)
     partner.add_argument("--accepted-at", required=True)
+    partner.add_argument("--signer-id", required=True)
     partner.add_argument("--adapter-result", type=Path, required=True)
     partner.add_argument("--resource-report", type=Path, required=True)
     partner.add_argument("--output", type=Path, required=True)

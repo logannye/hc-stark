@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,12 +14,18 @@ ROOT = Path(__file__).resolve().parents[2]
 CI_DIR = ROOT / "scripts" / "ci"
 if str(CI_DIR) not in sys.path:
     sys.path.insert(0, str(CI_DIR))
-import backend_prerelease_ready as prerelease
-import backend_release_ready as final_gate
+import backend_prerelease_ready as prerelease  # noqa: E402
+import backend_release_ready as final_gate  # noqa: E402
+import source_tree_identity  # noqa: E402
+import strict_json  # noqa: E402
 
 
 MAX_INPUT_BYTES = 1024 * 1024
 WORKLOADS = ("fibonacci", "poseidon2")
+CRASH_CASES = tuple(f"checkpoint_{phase}" for phase in final_gate.CRASH_PHASES) + tuple(
+    sorted(final_gate.CRASH_INTEGRITY_CASES)
+)
+FUZZ_TARGETS = tuple(sorted(final_gate.FUZZ_TARGETS))
 
 
 def resource_roles(*, baseline: bool) -> list[str]:
@@ -42,19 +47,35 @@ GATE_ROLES = {
     "ten_million_row_resource_gate": TEN_MILLION_ROLES,
     "independent_resource_reproduction": [
         "reproduction_record",
+        "reproduction_signature",
         *[f"one_million_{role}" for role in ONE_MILLION_ROLES],
         *[f"ten_million_{role}" for role in TEN_MILLION_ROLES],
     ],
-    "crash_resume_and_corruption_suite": ["crash_matrix", "fuzz_smoke"],
-    "plonky3_specialist_review": ["review_report", "remediation_ledger"],
-    "implementation_review_no_high_findings": [
+    "crash_resume_and_corruption_suite": [
+        "crash_matrix",
+        "fuzz_smoke",
+        "crash_tool_identity",
+        "fuzz_tool_identity",
+        *(f"crash_log_{name}" for name in CRASH_CASES),
+        *(f"fuzz_log_{name}" for name in FUZZ_TARGETS),
+    ],
+    "plonky3_specialist_review": [
+        "review_bundle",
         "review_report",
         "remediation_ledger",
+        "review_signature",
+    ],
+    "implementation_review_no_high_findings": [
+        "review_bundle",
+        "review_report",
+        "remediation_ledger",
+        "review_signature",
     ],
     "external_design_partner_integration": [
         "adapter_result",
         "resource_report",
         "acceptance_record",
+        "partner_signature",
     ],
     "replacement_sdk_contracts": ["test_report", "test_log"],
     "api_mcp_site_cli_identity_match": ["identity_report"],
@@ -62,13 +83,14 @@ GATE_ROLES = {
 
 
 def command_metadata(
-    release_sha: str, command: list[str], profile: str
+    release_sha: str, command: list[str], profile: str, gate_id: str
 ) -> dict[str, object]:
     return {
         "release_sha": release_sha,
         "exit_status": 0,
         "execution_profile": profile,
         "command": command,
+        "gate_id": gate_id,
     }
 
 
@@ -109,6 +131,7 @@ def gate_metadata(name: str, release_sha: str) -> dict[str, object]:
             release_sha,
             commands[name],
             "release" if release_profile else "ci",
+            name,
         )
         if name == "clean_release_source":
             metadata.update(secret_scan_clean=True, generated_scan_clean=True)
@@ -119,12 +142,14 @@ def gate_metadata(name: str, release_sha: str) -> dict[str, object]:
         return {
             "reviewer": "REPLACE_WITH_REVIEWER",
             "completed_at": "REPLACE_WITH_RFC3339_TIME",
+            "signer_id": "REPLACE_WITH_ALLOWLISTED_SIGNER_ID",
             "review_scope": "plonky3_specialist",
         }
     if name == "implementation_review_no_high_findings":
         return {
             "reviewer": "REPLACE_WITH_REVIEWER",
             "completed_at": "REPLACE_WITH_RFC3339_TIME",
+            "signer_id": "REPLACE_WITH_ALLOWLISTED_SIGNER_ID",
             "review_scope": "implementation",
         }
     if name == "independent_resource_reproduction":
@@ -134,6 +159,7 @@ def gate_metadata(name: str, release_sha: str) -> dict[str, object]:
             "reproducer": "REPLACE_WITH_REPRODUCER",
             "organization": "REPLACE_WITH_ORGANIZATION",
             "completed_at": "REPLACE_WITH_RFC3339_TIME",
+            "signer_id": "REPLACE_WITH_ALLOWLISTED_SIGNER_ID",
         }
     if name == "external_design_partner_integration":
         return {
@@ -141,6 +167,7 @@ def gate_metadata(name: str, release_sha: str) -> dict[str, object]:
             "official_verification": True,
             "witness_data_committed": False,
             "bounded_and_conventional": True,
+            "signer_id": "REPLACE_WITH_ALLOWLISTED_SIGNER_ID",
         }
     if name == "api_mcp_site_cli_identity_match":
         return {
@@ -190,7 +217,7 @@ def safe_output(root: Path, path: Path) -> Path:
 def read_source(path: Path) -> dict[str, object]:
     if path.stat().st_size > MAX_INPUT_BYTES:
         raise ValueError("candidate input exceeds 1 MiB")
-    value = json.loads(path.read_text(encoding="utf-8"))
+    value = strict_json.loads(path.read_bytes())
     if not isinstance(value, dict):
         raise ValueError("candidate input must contain a JSON object")
     return value
@@ -207,16 +234,88 @@ def hashed_artifact(root: Path, raw: object) -> dict[str, object]:
     return {
         "role": role,
         "path": path.relative_to(root.resolve()).as_posix(),
-        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "sha256": final_gate.bounded_file_sha256(path),
     }
 
 
-def construct_evidence(source: dict[str, object], *, root: Path) -> dict[str, object]:
-    if source.get("schema_version") != 1:
+def verify_review_execution_coverage(
+    gates: dict[str, object], *, root: Path, release_sha: str
+) -> None:
+    def artifacts(gate_name: str) -> dict[str, dict[str, object]]:
+        gate = gates[gate_name]
+        assert isinstance(gate, dict)
+        return {
+            str(item["role"]): item
+            for item in gate["artifacts"]
+            if isinstance(item, dict)
+        }
+
+    review_bundles = []
+    for gate_name in (
+        "plonky3_specialist_review",
+        "implementation_review_no_high_findings",
+    ):
+        descriptor = artifacts(gate_name).get("review_bundle")
+        if descriptor is None:
+            raise ValueError(f"{gate_name}: review bundle is missing")
+        review_bundles.append(descriptor)
+    if review_bundles[0]["sha256"] != review_bundles[1]["sha256"]:
+        raise ValueError("external reviews did not use the same complete review bundle")
+    bundle = safe_existing_file(root, review_bundles[0]["path"])
+    manifest, _ = final_gate.build_review_bundle.verify_bundle(
+        bundle, root=root, release_sha=release_sha
+    )
+    observed = {
+        (item.get("evidence_category"), item.get("evidence_role")): item.get(
+            "source_sha256"
+        )
+        for item in manifest["files"]
+        if isinstance(item, dict) and item.get("origin") == "artifact"
+    }
+    expected: dict[tuple[str, str], str] = {}
+    one = artifacts("one_million_row_resource_gate")
+    ten = artifacts("ten_million_row_resource_gate")
+    for workload in ("fibonacci", "poseidon2"):
+        for mode in ("baseline", "candidate"):
+            role = f"{workload}_{mode}_report"
+            expected[("raw-reports", f"one_million_{role}")] = str(
+                one[role]["sha256"]
+            )
+        role = f"{workload}_candidate_report"
+        expected[("raw-reports", f"ten_million_{role}")] = str(
+            ten[role]["sha256"]
+        )
+    known = artifacts("deterministic_cross_mode_proofs")
+    expected[("known-answers", "known_answer_test_report")] = str(
+        known["test_report"]["sha256"]
+    )
+    expected[("known-answers", "known_answer_test_log")] = str(
+        known["test_log"]["sha256"]
+    )
+    crash = artifacts("crash_resume_and_corruption_suite")
+    for role, descriptor in crash.items():
+        if role.startswith("crash_"):
+            expected[("crash", role)] = str(descriptor["sha256"])
+        elif role.startswith("fuzz_"):
+            expected[("fuzz", role)] = str(descriptor["sha256"])
+    for key, digest in expected.items():
+        if observed.get(key) != digest:
+            raise ValueError(
+                f"review bundle does not contain exact candidate evidence: {key[0]}/{key[1]}"
+            )
+
+
+def construct_evidence(
+    source: dict[str, object],
+    *,
+    root: Path,
+) -> dict[str, object]:
+    if not final_gate.exact_int(source.get("schema_version"), 1):
         raise ValueError("candidate input schema_version must equal 1")
     release_sha = source.get("release_sha")
     if not isinstance(release_sha, str) or not release_sha or len(release_sha) > 128:
         raise ValueError("candidate release_sha is missing or oversized")
+    release_sha = source_tree_identity.require_canonical_commit(root, release_sha)
     source_gates = source.get("gates")
     if not isinstance(source_gates, dict):
         raise ValueError("candidate gate map is missing")
@@ -254,8 +353,10 @@ def construct_evidence(source: dict[str, object], *, root: Path) -> dict[str, ob
         "schema_version": 1,
         "status": "candidate",
         "release_sha": release_sha,
+        "source_tree_sha256": source_tree_identity.source_tree_sha256(root, release_sha),
         "gates": gates,
     }
+    verify_review_execution_coverage(gates, root=root, release_sha=release_sha)
     problems = prerelease.evidence_failures(evidence, root=root)
     if problems:
         raise ValueError("candidate evidence failed validation: " + "; ".join(problems))
@@ -275,7 +376,7 @@ def write_json_atomic(path: Path, value: object) -> None:
 
 
 def template() -> dict[str, object]:
-    release_sha = "REPLACE_WITH_RELEASE_SHA"
+    release_sha = "REPLACE_WITH_SOURCE_RELEASE_SHA"
     return {
         "schema_version": 1,
         "release_sha": release_sha,
@@ -298,7 +399,8 @@ def template() -> dict[str, object]:
 def build(args: argparse.Namespace) -> None:
     root = ROOT.resolve()
     source_path = safe_existing_file(root, args.input.as_posix())
-    evidence = construct_evidence(read_source(source_path), root=root)
+    source = read_source(source_path)
+    evidence = construct_evidence(source, root=root)
     output_evidence = safe_output(root, args.output_evidence)
     output_config = safe_output(root, args.output_config)
     if output_evidence == output_config:
