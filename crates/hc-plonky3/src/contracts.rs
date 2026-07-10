@@ -247,6 +247,13 @@ pub struct BenchmarkReportV1 {
     pub storage_device: String,
     pub storage_is_rotational: bool,
     pub storage_is_nvme: bool,
+    #[schemars(range(min = 1))]
+    pub storage_total_bytes: u64,
+    #[schemars(range(min = 1))]
+    pub storage_available_bytes: u64,
+    #[schemars(range(min = 448, max = 448))]
+    pub scratch_directory_mode: u32,
+    pub scratch_owned_by_runner: bool,
     pub release_sha: String,
     pub dependency_profile: String,
     pub exact_command: Vec<String>,
@@ -286,6 +293,11 @@ impl BenchmarkReportV1 {
             || self.operating_system.is_empty()
             || self.storage.is_empty()
             || self.storage_device.is_empty()
+            || self.storage_total_bytes == 0
+            || self.storage_available_bytes == 0
+            || self.storage_available_bytes > self.storage_total_bytes
+            || self.scratch_directory_mode != 0o700
+            || !self.scratch_owned_by_runner
             || self.release_sha.is_empty()
             || self.release_sha.len() > 128
             || self.exact_command.is_empty()
@@ -587,6 +599,27 @@ mod tests {
         ))
         .unwrap();
         report.benchmark_session_id = "not-a-session".into();
+        assert!(matches!(
+            report.validate(),
+            Err(ContractError::ProfileMismatch)
+        ));
+
+        let mut report: BenchmarkReportV1 = serde_json::from_str(include_str!(
+            "../../../test-vectors/plonky3/benchmark-report-v1.json"
+        ))
+        .unwrap();
+        report.storage_available_bytes = report.storage_total_bytes + 1;
+        assert!(matches!(
+            report.validate(),
+            Err(ContractError::ProfileMismatch)
+        ));
+
+        let mut report: BenchmarkReportV1 = serde_json::from_str(include_str!(
+            "../../../test-vectors/plonky3/benchmark-report-v1.json"
+        ))
+        .unwrap();
+        report.scratch_directory_mode = 0o755;
+        report.scratch_owned_by_runner = false;
         assert!(matches!(
             report.validate(),
             Err(ContractError::ProfileMismatch)

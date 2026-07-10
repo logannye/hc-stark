@@ -42,6 +42,26 @@ def test_process_rss_reads_linux_status_units(tmp_path, monkeypatch):
     assert MODULE.process_rss_bytes(123) == 2 * 1024 * 1024
 
 
+def test_worker_high_water_mark_is_authoritative_and_required():
+    assert MODULE.authoritative_peak_rss({"peak_rss_bytes": 10_000}, 9_000) == 10_000
+    assert MODULE.authoritative_peak_rss({"peak_rss_bytes": 9_000}, 10_000) == 10_000
+    assert MODULE.authoritative_peak_rss({}, 10_000) == 0
+    assert MODULE.authoritative_peak_rss({"peak_rss_bytes": True}, 10_000) == 0
+
+
+def test_benchmark_runner_uid_honors_sudo_origin(monkeypatch):
+    monkeypatch.setattr(MODULE.os, "geteuid", lambda: 0)
+    monkeypatch.setenv("SUDO_UID", "1001")
+    assert MODULE.benchmark_runner_uid() == 1001
+
+    monkeypatch.setenv("SUDO_UID", "not-a-uid")
+    assert MODULE.benchmark_runner_uid() == 0
+
+    monkeypatch.setattr(MODULE.os, "geteuid", lambda: 501)
+    monkeypatch.setenv("SUDO_UID", "1001")
+    assert MODULE.benchmark_runner_uid() == 501
+
+
 def test_failed_report_is_persisted_before_gate_failure(tmp_path):
     report_path = tmp_path / "candidate.json"
     report = {
@@ -105,6 +125,10 @@ def test_fixed_host_validation_is_typed_and_fail_closed():
         "total_memory_bytes": 16 * 1024**3,
         "storage_is_rotational": False,
         "storage_is_nvme": True,
+        "storage_total_bytes": 1_000_000_000_000,
+        "storage_available_bytes": 500_000_000_000,
+        "scratch_directory_mode": 0o700,
+        "scratch_owned_by_runner": True,
     }
     assert MODULE.fixed_host_failures(valid) == []
 
@@ -114,9 +138,15 @@ def test_fixed_host_validation_is_typed_and_fail_closed():
         "total_memory_bytes": 32 * 1024**3,
         "storage_is_rotational": True,
         "storage_is_nvme": False,
+        "storage_available_bytes": 499_999_999_999,
+        "scratch_directory_mode": 0o755,
+        "scratch_owned_by_runner": False,
     }
     failures = MODULE.fixed_host_failures(invalid)
-    assert len(failures) == 4
+    assert len(failures) == 7
+    assert "release scratch storage must have at least 500 GB available" in failures
+    assert "release scratch directory must have mode 0700" in failures
+    assert "release scratch directory must be owned by the benchmark runner" in failures
 
 
 def test_cgroup_preflight_requires_all_measurement_controllers(tmp_path, monkeypatch):

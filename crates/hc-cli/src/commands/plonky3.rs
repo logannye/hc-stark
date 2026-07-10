@@ -285,6 +285,7 @@ pub struct BenchmarkWorkerResult {
     pub manifest_digest_hex: String,
     pub proof_size_bytes: u64,
     pub prover_scratch_high_water_bytes: u64,
+    pub peak_rss_bytes: u64,
     pub verification_time_ms: u64,
     pub verification_succeeded: bool,
 }
@@ -315,6 +316,7 @@ pub fn benchmark_worker(manifest_path: &Path, mode: &str, output: &Path) -> Resu
     let verify_start = std::time::Instant::now();
     ResourceBoundedUniStarkProver::verify(&internal).map_err(anyhow::Error::msg)?;
     let verification_time_ms = verify_start.elapsed().as_millis() as u64;
+    let peak_rss_bytes = process_peak_rss_bytes();
     let manifest_digest = manifest.digest().map_err(anyhow::Error::msg)?;
     let result = BenchmarkWorkerResult {
         schema_version: 1,
@@ -325,10 +327,36 @@ pub fn benchmark_worker(manifest_path: &Path, mode: &str, output: &Path) -> Resu
             .collect(),
         proof_size_bytes,
         prover_scratch_high_water_bytes,
+        peak_rss_bytes,
         verification_time_ms,
         verification_succeeded: true,
     };
     write_json_atomic(output, &result)
+}
+
+#[cfg(target_os = "linux")]
+fn process_peak_rss_bytes() -> u64 {
+    fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| parse_proc_peak_rss_bytes(&status))
+        .unwrap_or(0)
+}
+
+#[cfg(not(target_os = "linux"))]
+const fn process_peak_rss_bytes() -> u64 {
+    0
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_proc_peak_rss_bytes(status: &str) -> Option<u64> {
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmHWM:"))?
+        .split_whitespace()
+        .next()?
+        .parse::<u64>()
+        .ok()?
+        .checked_mul(1024)
 }
 
 fn read_json_limited<T: DeserializeOwned>(path: &Path, max_bytes: usize) -> Result<T> {
@@ -421,4 +449,19 @@ fn hex_lower(bytes: &[u8]) -> String {
         output.push(HEX[(byte & 0x0f) as usize] as char);
     }
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_proc_peak_rss_bytes;
+
+    #[test]
+    fn parses_linux_process_high_water_mark_in_kibibytes() {
+        assert_eq!(
+            parse_proc_peak_rss_bytes("Name:\ttest\nVmHWM:\t2048 kB\n"),
+            Some(2 * 1024 * 1024)
+        );
+        assert_eq!(parse_proc_peak_rss_bytes("VmRSS:\t2048 kB\n"), None);
+        assert_eq!(parse_proc_peak_rss_bytes("VmHWM:\tnot-a-number kB\n"), None);
+    }
 }

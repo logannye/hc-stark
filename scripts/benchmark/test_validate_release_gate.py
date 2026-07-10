@@ -36,6 +36,10 @@ def fixtures(rows=1_048_576):
         "storage_device": "259:1:nvme0n1p1",
         "storage_is_rotational": False,
         "storage_is_nvme": True,
+        "storage_total_bytes": 1_000_000_000_000,
+        "storage_available_bytes": 500_000_000_000,
+        "scratch_directory_mode": 0o700,
+        "scratch_owned_by_runner": True,
         "dependency_profile": gate.PROFILE,
         "release_sha": "abc",
         "exact_command": ["hc-cli", "benchmark"],
@@ -164,6 +168,9 @@ def test_release_reports_require_the_same_fixed_host_session():
     candidate["logical_cpu_count"] = 16
     candidate["total_memory_bytes"] = 32 * 1024**3
     candidate["storage_is_nvme"] = False
+    candidate["storage_available_bytes"] = 499_999_999_999
+    candidate["scratch_directory_mode"] = 0o755
+    candidate["scratch_owned_by_runner"] = False
     failures = gate.validate_gate(
         "one-million",
         manifest,
@@ -175,5 +182,14 @@ def test_release_reports_require_the_same_fixed_host_session():
     assert "candidate release host must expose exactly 8 logical CPUs" in failures
     assert "candidate release host is not in the 16-GB memory class" in failures
     assert "candidate release scratch storage is not verified NVMe" in failures
+    assert (
+        "candidate release scratch storage must have at least 500 GB available"
+        in failures
+    )
+    assert "candidate release scratch directory must have mode 0700" in failures
+    assert (
+        "candidate release scratch directory is not owned by the benchmark runner"
+        in failures
+    )
     assert "baseline/candidate benchmark_session_id mismatch" in failures
     assert "baseline/candidate storage_device mismatch" in failures

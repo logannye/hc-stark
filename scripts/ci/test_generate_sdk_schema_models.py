@@ -10,6 +10,11 @@ def test_models_are_deterministic_and_check_detects_drift(tmp_path):
     assert "export interface ProofBundleV1" in typescript
     assert "export type UInt64 = number | bigint;" in typescript
     assert "public_values: Array<UInt64>;" in typescript
+    assert "from typing import Literal, TypedDict, Union" in python
+    assert "from typing import Any" not in python
+
+    unknown = generator.render_python({"Unknown": {"type": "mystery"}}, [], "digest")
+    assert "from typing import Any" in unknown
 
     python_path = tmp_path / "schema_models.py"
     typescript_path = tmp_path / "schema-models.ts"

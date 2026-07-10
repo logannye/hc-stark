@@ -139,6 +139,26 @@ test("shared report fixture rejects unknown fields", () => {
     ),
   );
   assert.throws(() => loadReport(path), ArtifactError);
+
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...report,
+      storage_available_bytes: 1000000000001,
+      storage_total_bytes: 1000000000000,
+    }),
+  );
+  assert.throws(() => loadReport(path), ArtifactError);
+
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...report,
+      scratch_directory_mode: 0o755,
+      scratch_owned_by_runner: false,
+    }),
+  );
+  assert.throws(() => loadReport(path), ArtifactError);
 });
 
 test("unknown fields and non-power-of-two rows fail closed", () => {

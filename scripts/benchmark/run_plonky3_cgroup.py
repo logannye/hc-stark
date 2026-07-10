@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -24,6 +25,7 @@ import uuid
 
 PROFILE = "tinyzkp-p3-goldilocks-v1"
 REQUIRED_CGROUP_CONTROLLERS = {"cpu", "io", "memory", "pids"}
+MIN_FIXED_HOST_SCRATCH_AVAILABLE_BYTES = 500_000_000_000
 
 
 def valid_resource_estimate(value: object) -> bool:
@@ -119,6 +121,17 @@ def process_rss_bytes(pid: int) -> int:
     return 0
 
 
+def authoritative_peak_rss(worker: dict[str, object], polled_peak: int) -> int:
+    worker_peak = worker.get("peak_rss_bytes")
+    if (
+        not isinstance(worker_peak, int)
+        or isinstance(worker_peak, bool)
+        or worker_peak <= 0
+    ):
+        return 0
+    return max(worker_peak, polled_peak)
+
+
 def write_control(path: Path, value: str) -> None:
     path.write_text(value, encoding="utf-8")
 
@@ -194,6 +207,14 @@ def total_memory_bytes() -> int:
     return page_size * page_count
 
 
+def benchmark_runner_uid() -> int:
+    if os.geteuid() == 0:
+        sudo_uid = os.environ.get("SUDO_UID", "")
+        if sudo_uid.isascii() and sudo_uid.isdecimal():
+            return int(sudo_uid)
+    return os.geteuid()
+
+
 def _block_characteristics(device_id: str) -> tuple[str, bool, bool]:
     link = Path("/sys/dev/block") / device_id
     if not link.exists():
@@ -234,8 +255,8 @@ def _block_characteristics(device_id: str) -> tuple[str, bool, bool]:
 def collect_host_metadata(scratch: Path) -> dict[str, object]:
     scratch.mkdir(parents=True, exist_ok=True)
     usage = shutil.disk_usage(scratch)
-    stat = scratch.stat()
-    device_id = f"{os.major(stat.st_dev)}:{os.minor(stat.st_dev)}"
+    scratch_stat = scratch.stat()
+    device_id = f"{os.major(scratch_stat.st_dev)}:{os.minor(scratch_stat.st_dev)}"
     backing, is_rotational, is_nvme = _block_characteristics(device_id)
     storage_device = f"{device_id}:{backing}"
     return {
@@ -245,11 +266,16 @@ def collect_host_metadata(scratch: Path) -> dict[str, object]:
         "operating_system": platform.platform(),
         "storage": (
             f"device={storage_device};rotational={int(is_rotational)};"
-            f"nvme={int(is_nvme)};total_bytes={usage.total}"
+            f"nvme={int(is_nvme)};total_bytes={usage.total};"
+            f"available_bytes={usage.free}"
         ),
         "storage_device": storage_device,
         "storage_is_rotational": is_rotational,
         "storage_is_nvme": is_nvme,
+        "storage_total_bytes": usage.total,
+        "storage_available_bytes": usage.free,
+        "scratch_directory_mode": stat.S_IMODE(scratch_stat.st_mode),
+        "scratch_owned_by_runner": scratch_stat.st_uid == benchmark_runner_uid(),
     }
 
 
@@ -264,6 +290,22 @@ def fixed_host_failures(metadata: dict[str, object]) -> list[str]:
         failures.append("release scratch storage must be non-rotational")
     if metadata.get("storage_is_nvme") is not True:
         failures.append("release scratch storage must be backed by NVMe")
+    total = metadata.get("storage_total_bytes")
+    available = metadata.get("storage_available_bytes")
+    if (
+        not isinstance(total, int)
+        or isinstance(total, bool)
+        or total < MIN_FIXED_HOST_SCRATCH_AVAILABLE_BYTES
+        or not isinstance(available, int)
+        or isinstance(available, bool)
+        or available < MIN_FIXED_HOST_SCRATCH_AVAILABLE_BYTES
+        or available > total
+    ):
+        failures.append("release scratch storage must have at least 500 GB available")
+    if metadata.get("scratch_directory_mode") != 0o700:
+        failures.append("release scratch directory must have mode 0700")
+    if metadata.get("scratch_owned_by_runner") is not True:
+        failures.append("release scratch directory must be owned by the benchmark runner")
     return failures
 
 
@@ -396,9 +438,12 @@ def run_one(
                 scratch_peak,
                 int(worker.get("prover_scratch_high_water_bytes", 0)),
             )
+            observed_rss_peak = authoritative_peak_rss(worker, observed_rss_peak)
 
         verification_succeeded = (
-            bool(worker.get("verification_succeeded")) and process.returncode == 0
+            bool(worker.get("verification_succeeded"))
+            and process.returncode == 0
+            and observed_rss_peak > 0
         )
         report = {
             "schema_version": 1,

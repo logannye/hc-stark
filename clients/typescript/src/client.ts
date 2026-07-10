@@ -205,6 +205,8 @@ export function validateReport(value: unknown): asserts value is BenchmarkReport
     "schema_version", "scope", "mode", "benchmark_session_id", "hardware",
     "logical_cpu_count", "total_memory_bytes", "operating_system", "storage",
     "storage_device", "storage_is_rotational", "storage_is_nvme",
+    "storage_total_bytes", "storage_available_bytes", "scratch_directory_mode",
+    "scratch_owned_by_runner",
     "release_sha", "dependency_profile", "exact_command", "normalized_manifest_path",
     "workload_manifest_digest_hex", "normalized_manifest_digest_hex", "preflight_estimate",
     "cpu_seconds", "wall_time_ms", "peak_rss_bytes", "scratch_high_water_bytes",
@@ -238,6 +240,13 @@ export function validateReport(value: unknown): asserts value is BenchmarkReport
     report.storage_device.length === 0 ||
     typeof report.storage_is_rotational !== "boolean" ||
     typeof report.storage_is_nvme !== "boolean" ||
+    !isPositiveU64(report.storage_total_bytes) ||
+    !isPositiveU64(report.storage_available_bytes) ||
+    BigInt(report.storage_available_bytes as UInt64) >
+      BigInt(report.storage_total_bytes as UInt64) ||
+    !Number.isSafeInteger(report.scratch_directory_mode) ||
+    report.scratch_directory_mode !== 0o700 ||
+    report.scratch_owned_by_runner !== true ||
     report.dependency_profile !== COMPATIBILITY_PROFILE ||
     report.verification_succeeded !== true ||
     report.exit_status !== 0 ||

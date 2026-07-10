@@ -39,6 +39,10 @@ def test_review_bundle_is_byte_deterministic(tmp_path):
         for command in one["reproduction_commands"]
     )
     assert sum("--require-fixed-host" in command for command in one["reproduction_commands"]) == 4
+    assert sum(
+        "fixed_host_preflight.py" in command
+        for command in one["reproduction_commands"]
+    ) == 1
     with zipfile.ZipFile(first) as archive:
         assert "review-manifest.json" in archive.namelist()
         assert "docs/security/threat_model.md" in archive.namelist()

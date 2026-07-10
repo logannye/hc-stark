@@ -96,7 +96,10 @@ serialized in canonical row order so thread count cannot change proof bytes.
 
 ## Evidence cadence
 
-The weekly fixed-host workflow runs both 1,048,576-row workloads. The
+The weekly fixed-host workflow runs both 1,048,576-row workloads. Before
+proving, it requires exactly eight logical CPUs, 16-GB-class RAM,
+non-rotational NVMe with at least 500 GB available, and a runner-owned
+mode-0700 scratch root. The
 16,777,216-row ceiling gate is manual/release-candidate work, not a weekly cost.
 An opt-in 134,217,728-row run is exploratory and can never satisfy or bypass a
 release gate. Every run gets a unique owner-only scratch directory and a
@@ -108,9 +111,11 @@ rotational, and NVMe facts are captured in every report. Release evidence is
 accepted only for the 8-vCPU/16-GB/NVMe host class, and baseline/candidate host
 facts must match exactly. Root-run fixed-host workflows always return the
 owner-only raw reports to the workflow account before validation/upload.
-`peak_rss_bytes` is sampled from the worker's Linux `/proc` status, while
-`cgroup_peak_bytes` records the cgroup-v2 enforcement value; the release gate
-uses the latter for cap compliance and the former for advertised RAM results.
+`peak_rss_bytes` uses the worker's Linux `VmHWM` after official verification,
+while interval polling remains a corroborating fallback. This prevents a
+short-lived allocation peak from escaping the report. `cgroup_peak_bytes`
+records the cgroup-v2 enforcement value; the release gate uses the latter for
+cap compliance and the former for advertised RAM results.
 The harness requires delegated `cpu`, `io`, `memory`, and `pids` controllers
 and activates them on its dedicated parent before starting a worker. Doctor
 failures still emit the complete estimate as a witness-free JSON event, so an

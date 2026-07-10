@@ -89,14 +89,28 @@
     "scope": {
       "type": "string"
     },
+    "scratch_directory_mode": {
+      "type": "integer",
+      "format": "uint32",
+      "maximum": 448,
+      "minimum": 448
+    },
     "scratch_high_water_bytes": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0
     },
+    "scratch_owned_by_runner": {
+      "type": "boolean"
+    },
     "storage": {
       "type": "string",
       "minLength": 1
+    },
+    "storage_available_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 1
     },
     "storage_device": {
       "type": "string",
@@ -107,6 +121,11 @@
     },
     "storage_is_rotational": {
       "type": "boolean"
+    },
+    "storage_total_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 1
     },
     "total_memory_bytes": {
       "type": "integer",
@@ -149,6 +168,10 @@
     "storage_device",
     "storage_is_rotational",
     "storage_is_nvme",
+    "storage_total_bytes",
+    "storage_available_bytes",
+    "scratch_directory_mode",
+    "scratch_owned_by_runner",
     "release_sha",
     "dependency_profile",
     "exact_command",

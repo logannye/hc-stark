@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict, Union
+from typing import Literal, TypedDict, Union
 
-RUST_SCHEMA_SET_SHA256 = "12900d249f6fb347d57e8f253d47b0fad816366575a7e7730a3bdc54beb38f62"
+RUST_SCHEMA_SET_SHA256 = "f4f643eef7032bf7b4e2ea990241c549aef9708870ed9e65f8db150036b55aae"
 
 BenchmarkModeModel = Literal['baseline', 'bounded']
 
@@ -96,11 +96,15 @@ class _BenchmarkReportV1ModelRequired(TypedDict):
     release_sha: str
     schema_version: int
     scope: str
+    scratch_directory_mode: int
     scratch_high_water_bytes: int
+    scratch_owned_by_runner: bool
     storage: str
+    storage_available_bytes: int
     storage_device: str
     storage_is_nvme: bool
     storage_is_rotational: bool
+    storage_total_bytes: int
     total_memory_bytes: int
     verification_succeeded: bool
     verification_time_ms: int

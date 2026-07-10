@@ -42,6 +42,17 @@ jobs:
         run: |
           sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-1m
           sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
+      - name: Validate fixed-host contract before proving
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p raw-reports
+          report=raw-reports/${{ matrix.workload }}-1m.host-preflight.json
+          reclaim_report() { sudo chown "$(id -u):$(id -g)" "$report" 2>/dev/null || true; }
+          trap reclaim_report EXIT
+          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/fixed_host_preflight.py \
+            --scratch-dir /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-1m \
+            --output "$report"
       - name: Measure baseline and bounded candidate
         env:
           HC_RELEASE_SHA: ${{ github.sha }}
@@ -94,6 +105,17 @@ jobs:
         run: |
           sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-16m
           sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
+      - name: Validate fixed-host contract before proving
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p raw-reports
+          report=raw-reports/${{ matrix.workload }}-16m.host-preflight.json
+          reclaim_report() { sudo chown "$(id -u):$(id -g)" "$report" 2>/dev/null || true; }
+          trap reclaim_report EXIT
+          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/fixed_host_preflight.py \
+            --scratch-dir /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-16m \
+            --output "$report"
       - name: Measure bounded ceiling mode
         env:
           HC_RELEASE_SHA: ${{ github.sha }}
@@ -142,6 +164,17 @@ jobs:
         run: |
           sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-128m
           sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
+      - name: Validate fixed-host contract before proving
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p raw-reports
+          report=raw-reports/${{ matrix.workload }}-128m.host-preflight.json
+          reclaim_report() { sudo chown "$(id -u):$(id -g)" "$report" 2>/dev/null || true; }
+          trap reclaim_report EXIT
+          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/fixed_host_preflight.py \
+            --scratch-dir /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-128m \
+            --output "$report"
       - name: Measure non-blocking 2^27-row candidate
         continue-on-error: true
         env:

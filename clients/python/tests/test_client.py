@@ -118,6 +118,19 @@ def test_shared_report_fixture_rejects_unknown_fields(tmp_path):
     with pytest.raises(ArtifactError):
         load_report(path)
 
+    raw = json.loads(fixture.read_text(encoding="utf-8"))
+    raw["storage_available_bytes"] = raw["storage_total_bytes"] + 1
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        load_report(path)
+
+    raw = json.loads(fixture.read_text(encoding="utf-8"))
+    raw["scratch_directory_mode"] = 0o755
+    raw["scratch_owned_by_runner"] = False
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        load_report(path)
+
 
 def test_unknown_version_and_non_power_of_two_rejected(tmp_path):
     manifest = WorkloadManifestV1.fibonacci(0, 1, 1000, policy(tmp_path))

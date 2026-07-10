@@ -203,21 +203,27 @@ def python_named(name: str, schema: dict) -> str:
 
 
 def render_python(definitions: dict[str, dict], roots: list[tuple[str, dict]], digest: str) -> str:
+    models: list[str] = []
+    for name in sorted(definitions):
+        models.extend((python_named(name, definitions[name]), ""))
+    for name, schema in roots:
+        if name not in definitions:
+            models.extend((python_named(name, schema), ""))
+    model_text = "\n".join(models)
+    typing_imports = [
+        name
+        for name in ("Any", "Literal", "TypedDict", "Union")
+        if re.search(rf"\b{name}\b", model_text)
+    ]
     blocks = [
         '"""Generated schema models. Do not edit by hand."""',
         "",
         "from __future__ import annotations",
         "",
-        "from typing import Any, Literal, TypedDict, Union",
-        "",
-        f'RUST_SCHEMA_SET_SHA256 = "{digest}"',
-        "",
     ]
-    for name in sorted(definitions):
-        blocks.extend((python_named(name, definitions[name]), ""))
-    for name, schema in roots:
-        if name not in definitions:
-            blocks.extend((python_named(name, schema), ""))
+    if typing_imports:
+        blocks.extend((f"from typing import {', '.join(typing_imports)}", ""))
+    blocks.extend((f'RUST_SCHEMA_SET_SHA256 = "{digest}"', "", *models))
     return "\n".join(blocks).rstrip() + "\n"
 
 

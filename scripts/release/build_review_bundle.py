@@ -168,6 +168,7 @@ def build_bundle(
         "reproduction_commands": [
             "cargo test -p hc-stream -p hc-plonky3 -p hc-cli --locked",
             "cargo build --release -p hc-cli --locked",
+            "sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/fixed_host_preflight.py --scratch-dir /var/lib/tinyzkp-bench/scratch/fibonacci-1m --output raw-reports/fixed-host-preflight.json",
             "sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/run_plonky3_cgroup.py --manifest examples/plonky3/fibonacci-1m.json --mode throughput --require-fixed-host --baseline-memory-cap 17179869184 --report raw-reports/fibonacci-1m.json",
             "sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/run_plonky3_cgroup.py --manifest examples/plonky3/poseidon2-1m.json --mode throughput --require-fixed-host --baseline-memory-cap 17179869184 --report raw-reports/poseidon2-1m.json",
             "sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/run_plonky3_cgroup.py --manifest examples/plonky3/fibonacci-16m.json --mode ceiling --require-fixed-host --report raw-reports/fibonacci-16m.json",

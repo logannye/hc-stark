@@ -64,6 +64,11 @@ with `fibonacci_` or `poseidon2_`: `manifest`, `candidate_report`, and
 `candidate_normalized_manifest`; the one-million gate also requires each
 workload's `baseline_report` and `baseline_normalized_manifest`. The gate
 recomputes every digest and permits normalization to change only `scratch_dir`.
+The fixed-host harness additionally records and enforces exactly eight logical
+CPUs, 16-GB-class RAM, non-rotational NVMe, at least 500 GB available before
+the run, and a runner-owned mode-0700 scratch root. Run
+`scripts/benchmark/fixed_host_preflight.py` before any expensive proof; the
+same facts are embedded in and revalidated from every `BenchmarkReportV1`.
 
 Independent reproduction is a separate release gate, not a metadata flag on
 TinyZKP's own benchmark. It requires a hashed `reproduction_record` plus both

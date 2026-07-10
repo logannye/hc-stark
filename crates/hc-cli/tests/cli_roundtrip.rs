@@ -376,4 +376,9 @@ fn benchmark_worker_reports_prover_scratch_high_water() {
     assert!(report["prover_scratch_high_water_bytes"]
         .as_u64()
         .is_some_and(|bytes| bytes > 0));
+    assert!(report["peak_rss_bytes"].as_u64().is_some());
+    #[cfg(target_os = "linux")]
+    assert!(report["peak_rss_bytes"]
+        .as_u64()
+        .is_some_and(|bytes| bytes > 0));
 }

@@ -17,6 +17,8 @@ REPORT_REQUIRED_FIELDS = {
     "schema_version", "scope", "mode", "benchmark_session_id", "hardware",
     "logical_cpu_count", "total_memory_bytes", "operating_system", "storage",
     "storage_device", "storage_is_rotational", "storage_is_nvme",
+    "storage_total_bytes", "storage_available_bytes", "scratch_directory_mode",
+    "scratch_owned_by_runner",
     "release_sha", "dependency_profile", "exact_command", "normalized_manifest_path",
     "workload_manifest_digest_hex", "normalized_manifest_digest_hex", "preflight_estimate",
     "cpu_seconds", "wall_time_ms", "peak_rss_bytes", "cgroup_peak_bytes", "scratch_high_water_bytes",
@@ -97,6 +99,26 @@ def validate_common(
             failures.append(f"{name} release scratch storage is rotational or unknown")
         if report.get("storage_is_nvme") is not True:
             failures.append(f"{name} release scratch storage is not verified NVMe")
+        storage_total = report.get("storage_total_bytes")
+        storage_available = report.get("storage_available_bytes")
+        if (
+            not isinstance(storage_total, int)
+            or isinstance(storage_total, bool)
+            or storage_total < 500_000_000_000
+            or not isinstance(storage_available, int)
+            or isinstance(storage_available, bool)
+            or storage_available < 500_000_000_000
+            or storage_available > storage_total
+        ):
+            failures.append(
+                f"{name} release scratch storage must have at least 500 GB available"
+            )
+        if report.get("scratch_directory_mode") != 0o700:
+            failures.append(f"{name} release scratch directory must have mode 0700")
+        if report.get("scratch_owned_by_runner") is not True:
+            failures.append(
+                f"{name} release scratch directory is not owned by the benchmark runner"
+            )
         if report.get("dependency_profile") != PROFILE:
             failures.append(f"{name} dependency profile mismatch")
         if report.get("workload_manifest_digest_hex") != expected_manifest_digest:
@@ -216,6 +238,10 @@ def validate_common(
             "storage_device",
             "storage_is_rotational",
             "storage_is_nvme",
+            "storage_total_bytes",
+            "storage_available_bytes",
+            "scratch_directory_mode",
+            "scratch_owned_by_runner",
         ):
             if baseline.get(field) != candidate.get(field):
                 failures.append(f"baseline/candidate {field} mismatch")

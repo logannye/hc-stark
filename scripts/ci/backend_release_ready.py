@@ -87,6 +87,10 @@ BENCHMARK_REPORT_REQUIRED_FIELDS = {
     "storage_device",
     "storage_is_rotational",
     "storage_is_nvme",
+    "storage_total_bytes",
+    "storage_available_bytes",
+    "scratch_directory_mode",
+    "scratch_owned_by_runner",
     "release_sha",
     "dependency_profile",
     "exact_command",
@@ -194,6 +198,16 @@ def valid_benchmark_report_envelope(value: object) -> bool:
         or not 0 < value["total_memory_bytes"] <= 2**64 - 1
         or not isinstance(value.get("storage_is_rotational"), bool)
         or not isinstance(value.get("storage_is_nvme"), bool)
+        or not isinstance(value.get("storage_total_bytes"), int)
+        or isinstance(value.get("storage_total_bytes"), bool)
+        or not 0 < value["storage_total_bytes"] <= 2**64 - 1
+        or not isinstance(value.get("storage_available_bytes"), int)
+        or isinstance(value.get("storage_available_bytes"), bool)
+        or not 0 < value["storage_available_bytes"] <= value["storage_total_bytes"]
+        or not isinstance(value.get("scratch_directory_mode"), int)
+        or isinstance(value.get("scratch_directory_mode"), bool)
+        or value["scratch_directory_mode"] != 0o700
+        or value.get("scratch_owned_by_runner") is not True
         or not isinstance(value.get("exact_command"), list)
         or not value.get("exact_command")
         or any(not isinstance(item, str) or not item for item in value["exact_command"])

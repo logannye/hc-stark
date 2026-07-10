@@ -244,6 +244,10 @@ class BenchmarkReportV1:
     storage_device: str
     storage_is_rotational: bool
     storage_is_nvme: bool
+    storage_total_bytes: int
+    storage_available_bytes: int
+    scratch_directory_mode: int
+    scratch_owned_by_runner: bool
     release_sha: str
     dependency_profile: str
     exact_command: list[str]
@@ -288,6 +292,14 @@ class BenchmarkReportV1:
             or self.total_memory_bytes == 0
             or not isinstance(self.storage_is_rotational, bool)
             or not isinstance(self.storage_is_nvme, bool)
+            or not _is_u64(self.storage_total_bytes)
+            or self.storage_total_bytes == 0
+            or not _is_u64(self.storage_available_bytes)
+            or self.storage_available_bytes == 0
+            or self.storage_available_bytes > self.storage_total_bytes
+            or not _is_u32(self.scratch_directory_mode)
+            or self.scratch_directory_mode != 0o700
+            or self.scratch_owned_by_runner is not True
             or self.verification_succeeded is not True
             or self.exit_status != 0
             or not self.normalized_manifest_path

@@ -71,7 +71,12 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
   baseline/candidate machine identity. Fixed-host workflows reclaim 0600 raw
   reports from the privileged harness before validation and artifact upload.
   Process RSS and cgroup charged-memory peak are separately measured and
-  validated rather than conflated.
+  validated rather than conflated. Linux `VmHWM` is captured by the worker
+  after verification so interval polling cannot miss a short-lived peak.
+  The host contract also requires at least 500 GB available on the verified
+  NVMe volume and a runner-owned mode-0700 scratch root. A standalone
+  fixed-host preflight runs before the expensive workflow steps, and the same
+  typed facts are embedded in each benchmark report.
 - Candidate and final release evidence use separate fail-closed gates. The
   candidate builder computes artifact hashes and rejects manual pass/digest
   fields; signing finalization verifies Sigstore before it can add the final
