@@ -8,6 +8,16 @@ const RATE_LIMIT_WINDOW_S = 600;   // 10-minute window
 const MAX_MESSAGE_LEN = 5000;
 const MAX_QUAL_FIELD_LEN = 160;
 
+const NO_EMAIL_CONTACT_METHODS = new Set([
+  "github",
+  "linkedin",
+  "signal",
+  "discord",
+  "telegram",
+  "matrix",
+  "phone",
+]);
+
 const VALID_CATEGORIES = new Set([
   "General Inquiry",
   "Bug Report",
@@ -35,6 +45,8 @@ const QUALIFICATION_FIELDS = [
   "technical_owner",
   "budget_owner",
   "timeline",
+  "contact_method",
+  "contact_handle",
   "consent",
 ];
 
@@ -117,11 +129,18 @@ export async function onRequestPost(context) {
       });
     }
 
-    if (!name || !email || !message) {
+    if (!name || !message) {
       return new Response(
-        JSON.stringify({ error: "name, email, and message are required" }),
+        JSON.stringify({ error: "name and message are required" }),
         { status: 400, headers: jsonHeaders }
       );
+    }
+
+    if (email && !email.includes("@")) {
+      return new Response(JSON.stringify({ error: "invalid email" }), {
+        status: 400,
+        headers: jsonHeaders,
+      });
     }
 
     if (
@@ -140,6 +159,16 @@ export async function onRequestPost(context) {
       ...(leadContext && typeof leadContext === "object" && !Array.isArray(leadContext) ? leadContext : {}),
       ...(qualification && typeof qualification === "object" && !Array.isArray(qualification) ? qualification : {}),
     });
+    const contactMethod = (safeQualification.contact_method || "").toLowerCase();
+    if (
+      safeCategory === "Design Partner" &&
+      (!NO_EMAIL_CONTACT_METHODS.has(contactMethod) || !safeQualification.contact_handle)
+    ) {
+      return new Response(
+        JSON.stringify({ error: "a supported no-email contact method and handle are required" }),
+        { status: 400, headers: jsonHeaders }
+      );
+    }
 
     const WEBHOOK_URL = context.env.WEBHOOK_BASE_URL || "https://webhook.tinyzkp.com";
     const resp = await fetch(`${WEBHOOK_URL}/send-contact`, {

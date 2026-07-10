@@ -182,6 +182,8 @@ async function main() {
                 logical_rows: "1048576",
                 current_memory: "OOM at 16 GiB",
                 target_ram: "2 GiB",
+                contact_method: "github",
+                contact_handle: "https://github.com/example",
                 consent: "twelve_month_retention",
                 secret: "must-not-forward",
               },
@@ -196,8 +198,51 @@ async function main() {
         const forwarded = JSON.parse(calls[0].init.body);
         assert.equal(forwarded.qualification.stack, "Plonky3 0.6.1");
         assert.equal(forwarded.qualification.consent, "twelve_month_retention");
+        assert.equal(forwarded.qualification.contact_method, "github");
+        assert.equal(forwarded.qualification.contact_handle, "https://github.com/example");
         assert.equal(forwarded.qualification.secret, undefined);
         assert.deepEqual(assets.calls, []);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+
+    {
+      const assets = assetsMock();
+      const originalFetch = globalThis.fetch;
+      const calls = [];
+      globalThis.fetch = async (input, init) => {
+        calls.push({ url: String(input), init });
+        return new Response(JSON.stringify({ ok: true, application_id: "eval_test" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      };
+      try {
+        const response = await worker.fetch(
+          new Request("https://tinyzkp.com/api/contact", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Origin: "https://tinyzkp.com" },
+            body: JSON.stringify({
+              name: "No Email Applicant",
+              email: "",
+              category: "Design Partner",
+              message: "Reproducible public workload",
+              qualification: {
+                contact_method: "github",
+                contact_handle: "https://github.com/example",
+                consent: "twelve_month_retention",
+              },
+            }),
+          }),
+          { ASSETS: assets, WEBHOOK_BASE_URL: "https://webhook.test", INTERNAL_SECRET: "internal" },
+          { waitUntil() {} },
+        );
+        assert.equal(response.status, 200);
+        assert.equal(calls.length, 1);
+        const forwarded = JSON.parse(calls[0].init.body);
+        assert.equal(forwarded.email, "");
+        assert.equal(forwarded.qualification.contact_method, "github");
       } finally {
         globalThis.fetch = originalFetch;
       }

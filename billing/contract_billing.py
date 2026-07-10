@@ -93,6 +93,15 @@ def validate_release_availability(request: BillingRequest) -> None:
         )
 
 
+def validate_sender_identity_gate() -> None:
+    """Prevent Stripe from sending under an unrelated business identity."""
+    if os.environ.get("TINYZKP_CONTRACT_SENDER_IDENTITY_CONFIRMED") != "1":
+        raise ValueError(
+            "contract billing is blocked until Stripe's customer-facing sender identity "
+            "is verified as TinyZKP"
+        )
+
+
 def plan(request: BillingRequest, offer: dict[str, Any]) -> dict[str, Any]:
     amount_dollars = offer_amount(offer)
     if request.action.startswith("evaluation-"):
@@ -256,6 +265,7 @@ def main() -> None:
         raise SystemExit("STRIPE_SECRET_KEY is required")
     account = stripe.Account.retrieve()
     verify_account(account, args.expected_account_id or "", args.expected_display_name or "")
+    validate_sender_identity_gate()
     validate_release_availability(request)
     if request.action.startswith("evaluation-"):
         validate_evaluation_history(request)

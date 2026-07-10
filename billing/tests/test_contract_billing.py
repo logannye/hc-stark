@@ -28,6 +28,15 @@ def test_evaluation_plan_is_half_and_never_checkout():
     assert summary["public_checkout"] is False
 
 
+def test_contract_billing_requires_verified_tinyzkp_sender_identity(monkeypatch):
+    monkeypatch.delenv("TINYZKP_CONTRACT_SENDER_IDENTITY_CONFIRMED", raising=False)
+    with pytest.raises(ValueError, match="sender identity"):
+        billing.validate_sender_identity_gate()
+
+    monkeypatch.setenv("TINYZKP_CONTRACT_SENDER_IDENTITY_CONFIRMED", "1")
+    billing.validate_sender_identity_gate()
+
+
 def test_delivery_requires_acceptance_evidence():
     with pytest.raises(ValueError, match="delivery_accepted_at"):
         request(action="evaluation-delivery").validate(billing.load_offers())

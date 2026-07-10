@@ -93,6 +93,19 @@ def check_billing_and_release() -> None:
     require("TINYZKP_ALLOW_LEGACY_METER_EVENTS" in text("billing/sync_usage.py"), "legacy meter events are not fail-closed")
     require('os.environ.get("CONTACT_TO_EMAIL", "hello@tinyzkp.com")' in text("billing/provision_tenant.py"), "contact recipient is not environment-configured")
     require('os.environ.get("TINYZKP_MAINTENANCE_MODE", "1")' in text("billing/provision_tenant.py"), "billing webhook maintenance mode is not fail-closed")
+    require(
+        'os.environ.get("TINYZKP_OUTBOUND_EMAIL_ENABLED", "0")' in text("billing/provision_tenant.py"),
+        "outbound email must be default-disabled during recovery",
+    )
+    for email_sender in ("billing/lifecycle_nudges.py", "billing/checkout_recovery.py"):
+        require(
+            'os.environ.get("TINYZKP_OUTBOUND_EMAIL_ENABLED", "0")' in text(email_sender),
+            f"{email_sender} must default outbound email to disabled",
+        )
+    require(
+        "TINYZKP_CONTRACT_SENDER_IDENTITY_CONFIRMED" in text("billing/contract_billing.py"),
+        "contract invoices must require a verified TinyZKP sender identity",
+    )
     caddy = text("deploy/hetzner/Caddyfile")
     for route in ("@stripe_webhook path /webhook", "@contact_intake path /send-contact", "@webhook_health path /health"):
         require(route in caddy, f"webhook proxy is missing allowlisted route: {route}")

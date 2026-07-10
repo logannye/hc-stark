@@ -5,6 +5,10 @@ recovery-period application acknowledgements. The public form returns the
 application ID and benchmark instructions synchronously and stores the record
 in an owner-only SQLite ledger.
 
+Applicants select a no-email reply channel (GitHub, LinkedIn, Signal, Discord,
+Telegram, Matrix, or phone/SMS). Work email is optional and must not be used for
+recovery-period follow-up. Use only the applicant-selected channel and handle.
+
 ## Review intake
 
 Run on the production host:
@@ -18,6 +22,8 @@ cd /opt/hc-stark
 
 The default list is contact-redacted. Use `--include-contact` only when the
 operator has a legitimate need to view the applicant's submitted contact data.
+Do not copy handles, phone numbers, or optional email addresses into the
+repository, issue tracker, benchmark reports, or review bundles.
 
 ## Retention
 
@@ -47,7 +53,9 @@ python3 billing/contract_billing.py evaluation-deposit \
 ```
 
 6. Apply only after exact Stripe account verification and explicit operator
-   authorization. Public Checkout remains disabled.
+   authorization. Public Checkout remains disabled. Do not finalize or send an
+   invoice until Stripe's customer-facing sender identity has been verified as
+   TinyZKP and does not use an unrelated business mailbox.
 
 No evaluation work starts until the signed agreement, paid deposit, frozen
 workload digest, acceptance matrix, and baseline host are all recorded.

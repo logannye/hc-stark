@@ -41,6 +41,7 @@ MAINTENANCE_MODE = os.environ.get("TINYZKP_MAINTENANCE_MODE", "1").strip().lower
     "no",
     "off",
 }
+OUTBOUND_EMAIL_ENABLED = os.environ.get("TINYZKP_OUTBOUND_EMAIL_ENABLED", "0").strip() == "1"
 
 API_KEYS_FILE = os.environ.get("HC_API_KEYS_FILE", "/opt/hc-stark/data/api_keys.txt")
 
@@ -118,6 +119,9 @@ def _build_welcome_message(email: str, tenant_id: str, api_key: str) -> MIMEMult
 
 def _send_welcome_email(email: str, tenant_id: str, api_key: str) -> bool:
     """Send welcome email with API key. Returns True on success."""
+    if not OUTBOUND_EMAIL_ENABLED or MAINTENANCE_MODE:
+        print("Outbound email disabled during backend recovery", file=sys.stderr)
+        return False
     if not SMTP_HOST:
         print("SMTP not configured, skipping email delivery", file=sys.stderr)
         return False
@@ -143,6 +147,9 @@ def _send_welcome_email(email: str, tenant_id: str, api_key: str) -> bool:
 
 def _send_magic_link_email(email: str, link: str) -> bool:
     """Send a magic login link email. Returns True on success."""
+    if not OUTBOUND_EMAIL_ENABLED or MAINTENANCE_MODE:
+        print("Outbound email disabled during backend recovery", file=sys.stderr)
+        return False
     if not SMTP_HOST:
         print("SMTP not configured, skipping magic link email", file=sys.stderr)
         return False
@@ -194,8 +201,20 @@ CONTACT_QUALIFICATION_FIELDS = (
     ("technical_owner", "Technical owner"),
     ("budget_owner", "Budget owner"),
     ("timeline", "Timeline"),
+    ("contact_method", "Preferred no-email contact method"),
+    ("contact_handle", "No-email contact handle / URL"),
     ("consent", "Retention consent"),
 )
+
+NO_EMAIL_CONTACT_METHODS = {
+    "github",
+    "linkedin",
+    "signal",
+    "discord",
+    "telegram",
+    "matrix",
+    "phone",
+}
 
 ATTRIBUTION_FIELDS = (
     "source",
@@ -268,6 +287,9 @@ def _send_contact_email(
     qualification: dict[str, str] | None = None,
 ) -> bool:
     """Forward a contact-form submission to the support inbox. Returns True on success."""
+    if not OUTBOUND_EMAIL_ENABLED or MAINTENANCE_MODE:
+        print("Outbound email disabled during backend recovery", file=sys.stderr)
+        return False
     if not SMTP_HOST:
         print("SMTP not configured, skipping contact email", file=sys.stderr)
         return False
@@ -307,6 +329,9 @@ def _send_contact_email(
 
 def _send_evaluation_ack(name: str, email: str) -> bool:
     """Acknowledge a scoped evaluation application without promising acceptance."""
+    if not OUTBOUND_EMAIL_ENABLED or MAINTENANCE_MODE:
+        print("Outbound email disabled during backend recovery", file=sys.stderr)
+        return False
     if not SMTP_HOST:
         return False
     body = (
@@ -926,12 +951,21 @@ def send_contact():
     message = _contact_string(data.get("message"), 5000)
     qualification = _sanitize_contact_qualification(data.get("qualification"))
 
-    if not name or not email or not message:
-        return flask.jsonify(error="name, email, and message are required"), 400
-    if "@" not in email or len(email) > 254 or len(name) > 200 or len(message) > 5000:
+    contact_method = qualification.get("contact_method", "").lower()
+    contact_handle = qualification.get("contact_handle", "")
+
+    if not name or not message:
+        return flask.jsonify(error="name and message are required"), 400
+    if email and ("@" not in email or len(email) > 254):
+        return flask.jsonify(error="invalid email"), 400
+    if len(name) > 200 or len(message) > 5000:
         return flask.jsonify(error="invalid input"), 400
     if category == "Design Partner" and qualification.get("consent") != "twelve_month_retention":
         return flask.jsonify(error="retention consent is required"), 400
+    if category == "Design Partner" and (
+        contact_method not in NO_EMAIL_CONTACT_METHODS or not contact_handle
+    ):
+        return flask.jsonify(error="a supported no-email contact method and handle are required"), 400
 
     valid_categories = {
         "General Inquiry",

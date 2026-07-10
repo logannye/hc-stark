@@ -248,3 +248,14 @@ def test_recovery_logs_do_not_print_email_or_stripe_session_id(tmp_path, monkeyp
     assert "cs_sensitive_session" not in output
     assert "recipient_ref" in output
     assert "session_ref" in output
+
+def test_checkout_recovery_email_is_disabled_by_default(monkeypatch):
+    monkeypatch.setattr(checkout_recovery, "SMTP_HOST", "smtp.example.test")
+    monkeypatch.setattr(checkout_recovery, "OUTBOUND_EMAIL_ENABLED", False)
+
+    class MustNotConnect:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("SMTP must not be used while outbound email is disabled")
+
+    monkeypatch.setattr(checkout_recovery.smtplib, "SMTP", MustNotConnect)
+    assert checkout_recovery.send_email("buyer@example.com", "Subject", "Body") is False

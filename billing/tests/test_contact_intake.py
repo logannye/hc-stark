@@ -154,6 +154,8 @@ def test_design_partner_intake_sends_no_email(monkeypatch):
                     "logical_rows": "1048576",
                     "current_memory": "OOM at 16 GiB",
                     "target_ram": "2 GiB",
+                    "contact_method": "signal",
+                    "contact_handle": "+15555550123",
                     "consent": "twelve_month_retention",
                 },
             },
@@ -162,6 +164,80 @@ def test_design_partner_intake_sends_no_email(monkeypatch):
     assert resp.status_code == 201
     assert resp.get_json()["application_id"] == "eval_no_email"
     assert outbound_calls == []
+
+
+def test_all_provisioning_email_paths_fail_closed_in_recovery(monkeypatch):
+    monkeypatch.setattr(provision_tenant, "OUTBOUND_EMAIL_ENABLED", False)
+    monkeypatch.setattr(provision_tenant, "MAINTENANCE_MODE", True)
+    monkeypatch.setattr(provision_tenant, "SMTP_HOST", "smtp.example.test")
+
+    class MustNotConnect:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("SMTP must not be used during backend recovery")
+
+    monkeypatch.setattr(provision_tenant.smtplib, "SMTP", MustNotConnect)
+
+    assert provision_tenant._send_welcome_email("buyer@example.com", "t_test", "tzk_test") is False
+    assert provision_tenant._send_magic_link_email("buyer@example.com", "https://example.test") is False
+    assert provision_tenant._send_contact_email("Buyer", "buyer@example.com", "Design Partner", "Message") is False
+    assert provision_tenant._send_evaluation_ack("Buyer", "buyer@example.com") is False
+
+
+def test_design_partner_intake_accepts_no_email_with_no_email_contact(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(provision_tenant, "INTERNAL_SECRET", SECRET)
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return "eval_no_email_address"
+
+    monkeypatch.setattr(provision_tenant.evaluation_store, "create_application", fake_create)
+    provision_tenant.app.config["TESTING"] = True
+    with provision_tenant.app.test_client() as client:
+        resp = client.post(
+            "/send-contact",
+            headers=HEADERS,
+            json={
+                "name": "Proving Lead",
+                "email": "",
+                "category": "Design Partner",
+                "message": "Public deterministic workload",
+                "qualification": {
+                    "company": "Example",
+                    "contact_method": "github",
+                    "contact_handle": "https://github.com/example",
+                    "consent": "twelve_month_retention",
+                },
+            },
+        )
+
+    assert resp.status_code == 201
+    assert captured["email"] == ""
+    assert captured["qualification"]["contact_method"] == "github"
+
+
+def test_design_partner_intake_requires_supported_no_email_contact(monkeypatch):
+    monkeypatch.setattr(provision_tenant, "INTERNAL_SECRET", SECRET)
+    provision_tenant.app.config["TESTING"] = True
+    with provision_tenant.app.test_client() as client:
+        resp = client.post(
+            "/send-contact",
+            headers=HEADERS,
+            json={
+                "name": "Proving Lead",
+                "email": "lead@example.com",
+                "category": "Design Partner",
+                "message": "Public deterministic workload",
+                "qualification": {
+                    "contact_method": "email",
+                    "contact_handle": "lead@example.com",
+                    "consent": "twelve_month_retention",
+                },
+            },
+        )
+
+    assert resp.status_code == 400
+    assert "no-email contact" in resp.get_json()["error"]
 
 
 def test_signed_legacy_checkout_is_ignored_in_maintenance(monkeypatch):
