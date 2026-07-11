@@ -1,4 +1,7 @@
 import hashlib
+import json
+from pathlib import Path
+import shutil
 import subprocess
 
 import pytest
@@ -36,6 +39,24 @@ def repository(tmp_path):
     (tmp_path / "src" / "lib.rs").write_text("pub fn value() -> u8 { 1 }\n")
     (tmp_path / "release" / "evidence").mkdir(parents=True)
     (tmp_path / "release" / "backend-v1-gates.json").write_text("{}\n")
+    executable = Path(shutil.which("git", path="/usr/bin:/bin:/usr/local/bin")).resolve()
+    (tmp_path / "release" / "release-trust-v1.json").write_text(
+        json.dumps(
+            {
+                "git": {
+                    "platforms": {
+                        identity._runtime_platform(): {
+                            "sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
+                            "version": subprocess.check_output(
+                                [str(executable), "--version"], text=True
+                            ).strip(),
+                        }
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     source = commit_all(tmp_path, "source")
     return source
 
