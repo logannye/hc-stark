@@ -12,6 +12,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
+import subprocess
 from typing import Any
 
 import stripe
@@ -23,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CATALOG_PATH = ROOT / "billing" / "public_beta_catalog.json"
 WRITE_GATE = "TINYZKP_ALLOW_BETA_CATALOG_WRITE"
 CATALOG_NAMESPACE = "tinyzkp_public_beta_v1"
+GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 def load_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
@@ -96,14 +99,57 @@ def checkout_parameters(
 def _authorization_ready(path: str | None) -> bool:
     if not path:
         return False
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    return (
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    release_sha = os.environ.get("HC_RELEASE_SHA", "")
+    public_ready = payload.get("status") == "ready"
+    dark_canary = (
+        payload.get("status") == "dark_canary"
+        and payload.get("purpose") == "stripe_live_canary"
+        and payload.get("public_activation") is False
+    )
+    if not (
         payload.get("schema_version") == 1
         and payload.get("release_channel") == "public_beta"
-        and payload.get("status") == "ready"
-        and isinstance(payload.get("release_sha"), str)
-        and len(payload["release_sha"]) >= 7
+        and (public_ready or dark_canary)
+        and GIT_SHA.fullmatch(release_sha) is not None
+        and payload.get("release_sha") == release_sha
+    ):
+        return False
+    bundle = os.environ.get("TINYZKP_BETA_CATALOG_AUTHORIZATION_BUNDLE", "")
+    identity = os.environ.get("TINYZKP_BETA_CATALOG_SIGNING_IDENTITY_REGEXP", "")
+    issuer = os.environ.get(
+        "TINYZKP_BETA_CATALOG_SIGNING_ISSUER",
+        "https://token.actions.githubusercontent.com",
     )
+    cosign = os.environ.get("TINYZKP_COSIGN_BIN", "/usr/local/bin/cosign")
+    if not bundle or not identity or not Path(bundle).is_file():
+        return False
+    try:
+        result = subprocess.run(
+            [
+                cosign,
+                "verify-blob",
+                "--bundle",
+                bundle,
+                "--certificate-identity-regexp",
+                identity,
+                "--certificate-oidc-issuer",
+                issuer,
+                path,
+            ],
+            env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
 
 
 def _all(page: Any) -> list[Any]:
@@ -121,9 +167,12 @@ def apply_catalog(catalog: dict[str, Any]) -> dict[str, dict[str, str]]:
     if not key or os.environ.get(WRITE_GATE) != "1":
         raise RuntimeError(f"STRIPE_SECRET_KEY and {WRITE_GATE}=1 are required")
     if "_live_" in key and not _authorization_ready(
-        os.environ.get("TINYZKP_PUBLIC_BETA_RELEASE_AUTHORIZATION")
+        os.environ.get("TINYZKP_BETA_CATALOG_AUTHORIZATION")
+        or os.environ.get("TINYZKP_PUBLIC_BETA_RELEASE_AUTHORIZATION")
     ):
-        raise RuntimeError("live catalog writes require a ready public-beta authorization")
+        raise RuntimeError(
+            "live catalog writes require a signed exact-SHA dark-canary or public-beta authorization"
+        )
     stripe.api_key = key
     stripe.api_version = STRIPE_API_VERSION
     account = stripe.Account.retrieve()

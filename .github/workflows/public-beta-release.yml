@@ -1,0 +1,83 @@
+name: Authorize paid public beta
+
+on:
+  workflow_dispatch:
+    inputs:
+      evidence_release_tag:
+        description: Private draft release containing public-beta-evidence.tar.gz
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: public-beta-authorization-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    env:
+      HC_RELEASE_SHA: ${{ github.sha }}
+      HC_RELEASE_REF: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - name: Require immutable current-main public-beta tag
+        run: |
+          test "${{ github.ref_type }}" = tag
+          case "$HC_RELEASE_REF" in public-beta-v*) ;; *) exit 2 ;; esac
+          test "$(git rev-parse "$HC_RELEASE_REF^{commit}")" = "$HC_RELEASE_SHA"
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$HC_RELEASE_SHA"
+      - name: Download and safely materialize private evidence
+        run: |
+          install -d -m 0700 "$RUNNER_TEMP/public-beta-evidence"
+          gh release download "${{ inputs.evidence_release_tag }}" \
+            --pattern public-beta-evidence.tar.gz \
+            --dir "$RUNNER_TEMP/public-beta-evidence"
+          python3 scripts/release/extract_public_beta_evidence.py \
+            --archive "$RUNNER_TEMP/public-beta-evidence/public-beta-evidence.tar.gz" \
+            --checkout "$GITHUB_WORKSPACE"
+      - name: Require ready exact-SHA evidence
+        run: |
+          install -d release-artifacts
+          python3 scripts/ci/public_beta_gate.py \
+            --evidence release-evidence/public-beta-evidence.json \
+            --release-sha "$HC_RELEASE_SHA" \
+            --output release-artifacts/public-beta-gate-result.json
+          python3 scripts/release/build_public_beta_authorization.py \
+            --evidence release-evidence/public-beta-evidence.json \
+            --release-sha "$HC_RELEASE_SHA" \
+            --output release-artifacts/public-beta-authorization.json
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+      - name: Sign and verify authorization
+        run: |
+          (cd release-artifacts && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          cosign sign-blob --yes --bundle release-artifacts/public-beta-authorization.sigstore.json release-artifacts/public-beta-authorization.json
+          cosign sign-blob --yes --bundle release-artifacts/SHA256SUMS.sigstore.json release-artifacts/SHA256SUMS
+          cosign verify-blob \
+            --bundle release-artifacts/public-beta-authorization.sigstore.json \
+            --certificate-identity-regexp '^https://github\.com/logannye/hc-stark/\.github/workflows/public-beta-release\.yml@refs/tags/public-beta-v[^/]+$' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            release-artifacts/public-beta-authorization.json
+      - uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
+        with:
+          subject-checksums: release-artifacts/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: public-beta-authorization-${{ github.sha }}
+          path: release-artifacts
+          if-no-files-found: error
+          retention-days: 90
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          draft: true
+          files: release-artifacts/*

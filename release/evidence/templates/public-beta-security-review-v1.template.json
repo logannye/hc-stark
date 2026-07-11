@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "release_channel": "public_beta",
+  "release_sha": "REPLACE_FULL_GIT_SHA",
+  "reviewed_at": "REPLACE_RFC3339_UTC",
+  "reviewer": "REPLACE_REVIEWER",
+  "threat_model_sha256": "REPLACE_SHA256",
+  "critical_findings_open": 0,
+  "high_findings_open": 0,
+  "findings": [],
+  "status": "blocked_until_reviewed"
+}
+

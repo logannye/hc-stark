@@ -92,10 +92,20 @@ PYTHONPATH=billing python3 billing/public_beta_catalog.py
 ```
 
 Test-mode creation requires the Stripe key, exact account ID/display name, and
-`TINYZKP_ALLOW_BETA_CATALOG_WRITE=1`. Live creation additionally requires a
-ready public-beta authorization file via
-`TINYZKP_PUBLIC_BETA_RELEASE_AUTHORIZATION`. The tool does not archive or alter
+`TINYZKP_ALLOW_BETA_CATALOG_WRITE=1`. Live creation requires either the ready
+public-beta authorization or the signed exact-SHA `dark_canary` authorization
+emitted by `public-beta-candidate.yml`. The latter permits only isolated live
+billing canaries and explicitly cannot activate public API mode. The tool
+verifies the Sigstore bundle before writing and does not archive or alter
 legacy products, subscriptions, or the unrelated Casino Coach catalog.
+
+Create the separate Customer Portal with
+`billing/configure_public_beta_portal.py --apply` and
+`TINYZKP_ALLOW_BETA_PORTAL_WRITE=1`. It reuses an exact matching active beta
+configuration, fails on policy drift or duplicates, and applies the same signed
+release-authorization requirement in live mode. Copy its `bpc_...` identifier
+to `TINYZKP_STRIPE_PORTAL_CONFIGURATION`; plan switching remains disabled and
+cancellation occurs only at the billing-period boundary.
 
 Use Checkout Sessions for subscriptions and one-time top-ups. Create Customer
 Portal sessions only for an authenticated tenant's Stripe customer. Grant
@@ -105,9 +115,9 @@ event/idempotency records. Never grant credits from the browser redirect.
 
 ## Evidence and release authorization
 
-Copy `release/public-beta-evidence.template.json` into the private release
-evidence workspace. Replace every empty gate with one or more repository-local,
-reviewed artifacts and their SHA-256 digests, then run:
+Copy `release/public-beta-evidence.template.json` into a private
+`release-evidence/` workspace. Replace every empty gate with one or more
+repository-local, reviewed artifacts and their SHA-256 digests, then run:
 
 ```sh
 python3 scripts/ci/public_beta_gate.py \
@@ -117,7 +127,11 @@ python3 scripts/ci/public_beta_gate.py \
 ```
 
 The gate fails if any artifact is missing, changed, outside the repository, or
-bound to another commit. Required evidence covers merged CI; official verifier
+bound to another commit. Package the workspace as
+`public-beta-evidence.tar.gz` with all paths rooted beneath
+`release-evidence/`. The authorization workflow safely extracts that private
+bundle and signs authorization for the unchanged candidate without rebuilding
+it. Required evidence covers merged CI; official verifier
 and proof-byte equality; 1M/16M fixed-host measurements; crash, corruption,
 disk-full, cancellation, and fuzz results; internal security review; SDK golden
 vectors; signed artifacts/SBOM/provenance; release identity; restore, queue, and

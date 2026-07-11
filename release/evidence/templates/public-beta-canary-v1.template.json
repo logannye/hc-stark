@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "release_channel": "public_beta",
+  "release_sha": "REPLACE_FULL_GIT_SHA",
+  "started_at": "REPLACE_RFC3339_UTC",
+  "completed_at": "REPLACE_AT_LEAST_24_HOURS_LATER",
+  "hourly_verified_proofs": [],
+  "cancellation_refund_exercises": [],
+  "live_billing_canaries": [
+    {"kind": "topup", "synthetic": true, "refunded": true, "excluded_from_revenue": true},
+    {"kind": "subscription", "synthetic": true, "cancelled": true, "refunded": true, "excluded_from_revenue": true}
+  ],
+  "verifier_failures": 0,
+  "unexplained_credit_differences": 0,
+  "stuck_leases": 0,
+  "unauthorized_artifact_accesses": 0,
+  "leaked_scratch_directories": 0,
+  "status": "blocked_until_completed"
+}
+

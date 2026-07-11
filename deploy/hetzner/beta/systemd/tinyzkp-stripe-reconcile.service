@@ -1,0 +1,11 @@
+[Unit]
+Description=TinyZKP Stripe public-beta reconciliation
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tinyzkp/deploy/hetzner/beta
+EnvironmentFile=/etc/tinyzkp/beta/compose.env
+ExecStart=/usr/bin/docker compose -f docker-compose.api.yml run --rm --no-deps --entrypoint /usr/local/bin/hc-beta-reconcile beta-api
+

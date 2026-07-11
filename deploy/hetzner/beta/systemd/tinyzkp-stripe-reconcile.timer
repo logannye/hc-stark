@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly TinyZKP Stripe reconciliation
+
+[Timer]
+OnCalendar=*-*-* 04:10:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+

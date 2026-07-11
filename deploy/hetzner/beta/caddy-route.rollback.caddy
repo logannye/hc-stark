@@ -1,0 +1,8 @@
+(tinyzkp_beta_write_backend) {
+  respond `{"error":{"code":"beta_writes_disabled","message":"New signup, checkout, uploads, and proving jobs are temporarily disabled"}}` 503
+}
+
+(tinyzkp_beta_read_backend) {
+  reverse_proxy 127.0.0.1:8090
+}
+

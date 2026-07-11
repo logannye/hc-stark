@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly TinyZKP PostgreSQL differential backup
+
+[Timer]
+OnCalendar=Mon..Sat *-*-* 02:15:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+

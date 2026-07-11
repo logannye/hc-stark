@@ -1,0 +1,24 @@
+name: tinyzkp-beta-worker
+
+services:
+  worker:
+    image: ${TINYZKP_BETA_WORKER_IMAGE:?set a digest-pinned beta worker image}
+    restart: unless-stopped
+    cpuset: "0-7"
+    mem_limit: 16g
+    mem_reservation: 16g
+    pids_limit: 4096
+    env_file:
+      - ${TINYZKP_WORKER_SECRET_DIR:?}/worker.env
+    environment:
+      TINYZKP_WORKER_SCRATCH: /scratch/tinyzkp
+      TINYZKP_WORKER_SLOTS: "4"
+    volumes:
+      - /srv/tinyzkp-scratch:/scratch
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=0700,uid=10001,gid=10001
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    network_mode: host
+

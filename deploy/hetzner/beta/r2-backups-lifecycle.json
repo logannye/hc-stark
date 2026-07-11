@@ -1,0 +1,12 @@
+{
+  "rules": [
+    {
+      "id": "tinyzkp-backups-abort-incomplete-24h",
+      "enabled": true,
+      "conditions": { "prefix": "" },
+      "abortMultipartUploadsTransition": {
+        "condition": { "type": "Age", "maxAge": 86400 }
+      }
+    }
+  ]
+}

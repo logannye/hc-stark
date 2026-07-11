@@ -1,0 +1,10 @@
+[Interface]
+Address = 10.77.0.1/30
+ListenPort = 51820
+PrivateKey = REPLACE_API_PRIVATE_KEY
+
+[Peer]
+PublicKey = REPLACE_WORKER_PUBLIC_KEY
+AllowedIPs = 10.77.0.2/32
+PersistentKeepalive = 25
+

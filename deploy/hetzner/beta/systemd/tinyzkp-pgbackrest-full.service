@@ -1,0 +1,11 @@
+[Unit]
+Description=TinyZKP PostgreSQL full backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tinyzkp/deploy/hetzner/beta
+EnvironmentFile=/etc/tinyzkp/beta/compose.env
+ExecStart=/usr/bin/docker compose -f docker-compose.api.yml exec -T postgres pgbackrest --stanza=tinyzkp-beta --type=full backup
+

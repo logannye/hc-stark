@@ -60,6 +60,18 @@ jobs:
       - name: fmt
         run: cargo fmt --all -- --check
 
+      - name: Paid public-beta control plane
+        run: |
+          cargo test --locked -p hc-beta-api -p hc-beta-worker
+          cargo check --locked -p hc-cli
+          python3 scripts/ci/public_beta_schema_check.py
+          python3 -m pytest \
+            scripts/ci/test_public_beta_schema_check.py \
+            scripts/ci/test_validate_public_beta_canary.py \
+            scripts/benchmark/test_customer_cubic8.py \
+            scripts/release/test_build_public_beta_authorization.py \
+            scripts/ci/test_beta_deployment_contract.py
+
       - name: Plonky3 backend recovery gate
         run: python3 scripts/ci/backend_recovery_gate.py
 
@@ -108,6 +120,10 @@ jobs:
           python3 -m pytest scripts/ci/test_production_launch_preflight.py
           python3 -m pytest scripts/ci/test_release_identity_check.py
           python3 -m pytest scripts/monitoring/test_backend_recovery_canary.py
+          python3 -m pytest scripts/load/test_run_public_beta_load.py
+          python3 -m pytest scripts/canary/test_run_public_beta_canary.py
+          python3 -m pytest scripts/release/test_build_dark_canary_authorization.py
+          python3 -m pytest scripts/release/test_extract_public_beta_evidence.py
 
       - name: backup restore checks
         run: |
@@ -227,6 +243,7 @@ jobs:
 
       - name: shell script syntax
         run: |
+          bash -n deploy/hetzner/beta/*.sh
           bash -n scripts/ci/reconciliation_invariants.sh
           python3 -m py_compile scripts/ci/production_launch_preflight.py
           python3 -m py_compile scripts/ci/release_identity_check.py
@@ -296,12 +313,14 @@ jobs:
           python3 -m py_compile billing/stripe_account_context_check.py
           python3 -m py_compile billing/stripe_revenue_ops_audit.py
           python3 -m py_compile billing/stripe_catalog_write_preflight.py
+          python3 -m py_compile billing/configure_public_beta_portal.py
           bash -n billing/backup.sh
           bash -n billing/setup_stripe_products.sh
           bash -n deploy/hetzner/install_billing_runtime.sh
           bash -n deploy/hetzner/deploy.sh
           bash -n deploy/hetzner/setup.sh
           bash -n deploy/hetzner/rollback.sh
+          bash -n deploy/hetzner/beta/configure-r2-lifecycle.sh
 
       - name: site JavaScript syntax
         run: |

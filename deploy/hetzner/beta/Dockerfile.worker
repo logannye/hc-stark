@@ -1,0 +1,16 @@
+FROM rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1 AS build
+ARG HC_RELEASE_SHA
+WORKDIR /src
+COPY . .
+RUN cargo build --locked --release -p hc-beta-worker
+
+FROM debian:12.11-slim@sha256:b1a741487078b369e78119849663d7f1a5341ef2768798f7b7406c4240f86aef
+ARG HC_RELEASE_SHA
+LABEL org.opencontainers.image.revision=$HC_RELEASE_SHA
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates coreutils \
+ && rm -rf /var/lib/apt/lists/*
+RUN useradd --system --uid 10001 --home /nonexistent --shell /usr/sbin/nologin tinyzkp
+COPY --from=build /src/target/release/hc-beta-worker /usr/local/bin/hc-beta-worker
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/hc-beta-worker"]
