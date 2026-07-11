@@ -163,14 +163,20 @@ python3 billing/agreement_gate.py build \
    customer, run the isolated invoice drill. This is the only command in this
    section that mutates Stripe, and it rejects every live key. It creates,
    finalizes, retrieves, and voids one $12,500 test invoice without calling the
-   send API or creating Checkout:
+   send API or creating Checkout. Set the two non-secret identity variables
+   below from the exact owner-reviewed `STRIPE_EXPECTED_ACCOUNT_ID` and
+   `STRIPE_EXPECTED_DISPLAY_NAME` values; do not assume the legal/dashboard
+   display name is `TinyZKP`:
 
 ```bash
+EXPECTED_STRIPE_ACCOUNT_ID=acct_REPLACE_FROM_REVIEWED_ENV
+EXPECTED_STRIPE_DASHBOARD_NAME='REPLACE_FROM_STRIPE_EXPECTED_DISPLAY_NAME'
+
 TINYZKP_ALLOW_STRIPE_TEST_DRILL_WRITE=1 \
 STRIPE_SECRET_KEY=sk_test_REPLACE \
 python3 billing/stripe_test_drill.py run \
-  --account-id acct_REPLACE \
-  --display-name 'TinyZKP' \
+  --account-id "$EXPECTED_STRIPE_ACCOUNT_ID" \
+  --display-name "$EXPECTED_STRIPE_DASHBOARD_NAME" \
   --customer-id cus_REPLACE \
   --drill-id AGREEMENT_ID-preinvoice \
   --release-sha FULL_40_HEX_RELEASE_SHA \
@@ -224,18 +230,20 @@ python3 billing/contract_billing.py evaluation-deposit \
   --qualification-document /secure/qualification-v1.json \
   --partner-preflight-document /secure/partner-preflight-v1.json \
   --stripe-test-drill-document /secure/stripe-test-drill-v1.json \
-  --expected-account-id acct_REPLACE \
-  --expected-display-name 'TinyZKP'
+  --expected-account-id "$EXPECTED_STRIPE_ACCOUNT_ID" \
+  --expected-display-name "$EXPECTED_STRIPE_DASHBOARD_NAME"
 ```
 
 8. Record the returned `plan_sha256`. Apply only after exact Stripe account
    verification and explicit operator authorization, passing that hash as
    `--expected-plan-sha256`. Any change to the offer, amount, customer, due
    date, contract hashes, or acceptance evidence changes the plan hash and
-   blocks the write. Public Checkout remains disabled. Do not finalize or send
-   an invoice until Stripe's customer-facing sender identity has been verified
-   as TinyZKP and does not use an unrelated business mailbox. The CLI verifies
-   the retrieved Stripe account has public business name `TinyZKP`, a
+   blocks the write. The exact dashboard/account identity above may be the
+   legal entity name; it is distinct from the public sender profile. Public
+   Checkout remains disabled. Do not finalize or send an invoice until
+   Stripe's customer-facing sender identity has been verified as TinyZKP and
+   does not use an unrelated business mailbox. The CLI separately verifies the
+   retrieved Stripe account has public business name `TinyZKP`, a
    `@tinyzkp.com` support email, and a `tinyzkp.com` support URL; the environment
    acknowledgement alone is insufficient. Evaluation invoices remain
    `auto_advance=false` after finalization and the CLI never invokes Stripe's

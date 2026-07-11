@@ -23,17 +23,28 @@ Current commercial operations are contract-only:
 Legacy containment is a two-stage reviewed operation:
 
 ```bash
+EXPECTED_STRIPE_ACCOUNT_ID=acct_REPLACE_FROM_REVIEWED_ENV
+EXPECTED_STRIPE_DASHBOARD_NAME='REPLACE_FROM_STRIPE_EXPECTED_DISPLAY_NAME'
+
 python3 billing/legacy_billing_containment.py \
-  --expected-account-id acct_REPLACE \
-  --expected-display-name TinyZKP \
-  --inventory-output /var/lib/tinyzkp-private/stripe/inventory.json
+  --expected-account-id "$EXPECTED_STRIPE_ACCOUNT_ID" \
+  --expected-display-name "$EXPECTED_STRIPE_DASHBOARD_NAME" \
+  --inventory-output /var/lib/tinyzkp-private/stripe/inventory.json \
+  --scope-template-output /var/lib/tinyzkp-private/stripe/scope.json
 ```
 
-An operator must create an exact-ID scope manifest bound to the reported
-`inventory_sha256`, preview the resulting action plan, and separately authorize
-the exact `plan_sha256`. No name or meter-event heuristic selects a write target.
-Customer subscription pauses additionally require a strict no-email
-notification/refund-or-credit ledger and exact open-invoice approvals.
+The two expected identity values must come from the owner-reviewed production
+configuration. The legal/dashboard display name is not assumed to be
+`TinyZKP`. The separate sender-profile gate requires public business name
+`TinyZKP`, an `@tinyzkp.com` support address, and an HTTPS `tinyzkp.com` support
+URL.
+
+An operator must populate only exact TinyZKP IDs in the generated,
+inventory-bound scope, preview the resulting action plan, and separately
+authorize the exact `plan_sha256`. No name or meter-event heuristic selects a
+write target. Customer subscription pauses additionally require a strict
+no-email notification/refund-or-credit ledger generated with
+`--notification-template-output` and exact open-invoice approvals.
 
 The legacy catalog scripts are test/research-only and reject live Stripe keys.
 Annual Certified/Fleet billing remains blocked until a hash-bound signed backend
@@ -63,5 +74,7 @@ Contract and order JSON also rejects exponent spellings, negative zero,
 trailing fractional zeroes, NaN/Infinity, duplicate keys, and booleans in
 integer fields so the hashed numeric terms have one accepted representation.
 
-The Stripe API is pinned to `2026-02-25.clover`. All customer-facing Stripe
-identity must say TinyZKP and must never use an unrelated business address.
+The Stripe API is pinned to `2026-02-25.clover`. The customer-facing public
+Stripe profile must say TinyZKP and must never use an unrelated business
+address; this does not rename or substitute for the exact legal/dashboard
+account identity.
