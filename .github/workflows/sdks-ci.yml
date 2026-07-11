@@ -3,14 +3,8 @@ name: SDKs CI
 on:
   push:
     branches: [main]
-    paths:
-      - "clients/**"
-      - ".github/workflows/sdks-ci.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "clients/**"
-      - ".github/workflows/sdks-ci.yml"
 
 jobs:
   python:
