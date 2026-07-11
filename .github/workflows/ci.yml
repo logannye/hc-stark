@@ -44,6 +44,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      - name: Containment monitoring contracts
+        run: |
+          bash -n scripts/monitoring/api_health_audit.sh scripts/monitoring/run_api_health_audit.sh deploy/macos/install_api_audit_launchagent.sh
+          python3 -m pytest scripts/ci/test_containment_health_audit.py
+          node deploy/uptime-probe/worker.test.mjs
+
       - name: fmt
         run: cargo fmt --all -- --check
 
