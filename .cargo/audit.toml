@@ -1,9 +1,9 @@
-# cargo-audit configuration. Mirrors deny.toml [advisories].ignore so
-# cargo-audit and cargo-deny share a single source of truth. When
-# adding/removing an advisory ignore, update both files.
+# cargo-audit configuration. It normally mirrors deny.toml, except for a
+# documented inactive-feature false positive that cargo-deny correctly omits
+# from its resolved feature graph.
 #
-# Rationale for each entry lives in deny.toml. Keep this file's
-# comments in sync with that one.
+# Shared advisory rationales live in deny.toml. Audit-only exceptions are
+# documented inline below.
 
 [advisories]
 ignore = [
@@ -12,4 +12,8 @@ ignore = [
   "RUSTSEC-2025-0055",  # tracing-subscriber 0.2.25 via ark-relations 0.4
   "RUSTSEC-2024-0388",  # derivative unmaintained, via arkworks
   "RUSTSEC-2024-0436",  # paste unmaintained, via arkworks
+  # sqlx 0.8's lockfile metadata lists its optional MySQL backend even though
+  # hc-beta-api compiles only the PostgreSQL feature set. `cargo tree -i rsa`
+  # is empty, so the vulnerable RSA code is not in any shipped binary.
+  "RUSTSEC-2023-0071",
 ]

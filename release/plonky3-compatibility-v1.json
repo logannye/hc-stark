@@ -3,7 +3,7 @@
   "profile_id": "tinyzkp-p3-goldilocks-v1",
   "release_status": "backend_recovery",
   "rust_toolchain": "1.95.0",
-  "cargo_lock_sha256": "bbd614a78a9ee8c531d7e6758708aa6d4929b60f99eac46dda941f6599c6a5e7",
+  "cargo_lock_sha256": "69f5e163151874abd6b298858e25ea89a1f3d91f93535dfb6d87e2a5d0ef3020",
   "upstream": {
     "repository": "https://github.com/Plonky3/Plonky3",
     "tag": "v0.6.1",

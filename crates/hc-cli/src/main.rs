@@ -92,6 +92,9 @@ enum Plonky3Command {
         policy: PathBuf,
         #[arg(long)]
         output: PathBuf,
+        /// Use the conventional in-memory prover for fixed-host comparison evidence.
+        #[arg(long, default_value_t = false)]
+        reference: bool,
     },
     /// Verify a declarative AIR proof with the official Plonky3 adapter.
     VerifyAir {
@@ -224,6 +227,7 @@ fn main() -> Result<()> {
                 public_inputs,
                 policy,
                 output,
+                reference,
             } => commands::plonky3::prove_air(
                 &air,
                 &trace_manifest,
@@ -231,6 +235,7 @@ fn main() -> Result<()> {
                 &public_inputs,
                 &policy,
                 &output,
+                reference,
             ),
             Plonky3Command::VerifyAir { bundle } => commands::plonky3::verify_air(&bundle),
             Plonky3Command::EstimateAir {

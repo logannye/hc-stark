@@ -92,6 +92,11 @@ FUZZ_TARGETS = {
     "scratch_artifact_header_v1",
     "checkpoint_identity_v2",
     "resume_checkpoint_v2",
+    "air_package_v1",
+    "trace_manifest_v1",
+    "hosted_proof_bundle_v1",
+    "zstd_trace_chunk_v1",
+    "beta_api_request_v1",
 }
 FUZZ_SMOKE_SEED_LIMIT = 16
 FUZZ_RELEASE_MIN_SECONDS = 60
@@ -2124,7 +2129,7 @@ def validate_partner_evidence(
         or adapter.get("profile") != "tinyzkp-p3-goldilocks-v1"
         or adapter.get("plonky3_version") != "0.6.1"
         or adapter.get("dependency_lock_sha256")
-        != "bbd614a78a9ee8c531d7e6758708aa6d4929b60f99eac46dda941f6599c6a5e7"
+        != "69f5e163151874abd6b298858e25ea89a1f3d91f93535dfb6d87e2a5d0ef3020"
         or adapter.get("release_sha") != release_sha
         or adapter.get("official_verification") is not True
         or adapter.get("bounded_equals_conventional") is not True

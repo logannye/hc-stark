@@ -19,6 +19,8 @@
      "crates/hc-vm",
     "crates/hc-sdk",
     "crates/hc-server",
+    "crates/hc-beta-api",
+    "crates/hc-beta-worker",
     "crates/hc-wasm",
     "crates/hc-workloads",
     "crates/hc-mcp",

@@ -20,6 +20,7 @@ hc-commit = { path = "../crates/hc-commit" }
 hc-hash = { path = "../crates/hc-hash" }
 hc-plonky3 = { path = "../crates/hc-plonky3" }
 hc-stream = { path = "../crates/hc-stream" }
+zstd = "0.13"
 
 [[bin]]
 name = "decode_proof_bytes"
@@ -108,5 +109,35 @@ doc = false
 [[bin]]
 name = "resume_checkpoint_v2"
 path = "fuzz_targets/resume_checkpoint_v2.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "air_package_v1"
+path = "fuzz_targets/air_package_v1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "trace_manifest_v1"
+path = "fuzz_targets/trace_manifest_v1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "hosted_proof_bundle_v1"
+path = "fuzz_targets/hosted_proof_bundle_v1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "zstd_trace_chunk_v1"
+path = "fuzz_targets/zstd_trace_chunk_v1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "beta_api_request_v1"
+path = "fuzz_targets/beta_api_request_v1.rs"
 test = false
 doc = false
