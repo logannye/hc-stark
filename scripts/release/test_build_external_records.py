@@ -451,7 +451,7 @@ def test_partner_capture_validates_machine_artifacts_before_hashing(
         "profile": MODULE.PROFILE,
         "plonky3_version": "0.6.1",
         "dependency_lock_sha256": (
-            "185f043a41c2457257c2e507db75c71d185d9307a1116d7cb1f4688d6de56d82"
+            "0da825cbb0d7e847c9d93a97a6cc1b014152df6c49bb94c1f5c9f8b921b1d1e2"
         ),
         "release_sha": release_sha,
         "official_verification": True,
