@@ -65,6 +65,8 @@ def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
     authorization = (ROOT / ".github/workflows/public-beta-release.yml").read_text()
     assert "docker buildx build --push" in candidate
     assert "build_dark_canary_authorization.py" in candidate
+    assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in candidate
+    assert "pip install pytest -r billing/requirements.txt" in candidate
     assert "extract_public_beta_evidence.py" in authorization
     assert "build_public_beta_authorization.py" in authorization
     assert "docker build" not in authorization
