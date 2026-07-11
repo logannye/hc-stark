@@ -40,10 +40,16 @@ def _git_anchor(root: Path) -> tuple[Path, str, str]:
         expected_version = anchor["version"]
     except (OSError, KeyError, TypeError, ValueError) as error:
         raise ValueError("Git is not anchored for this runner platform") from error
-    raw = shutil.which("git", path="/usr/bin:/bin:/usr/local/bin")
-    if raw is None:
+    configured = os.environ.get("TINYZKP_ANCHORED_GIT", "").strip()
+    if configured:
+        executable = Path(configured).resolve()
+    else:
+        raw = shutil.which("git", path="/usr/bin:/bin:/usr/local/bin")
+        if raw is None:
+            raise ValueError("anchored Git executable is unavailable")
+        executable = Path(raw).resolve()
+    if not executable.is_file():
         raise ValueError("anchored Git executable is unavailable")
-    executable = Path(raw).resolve()
     if (
         not isinstance(expected_sha256, str)
         or len(expected_sha256) != 64

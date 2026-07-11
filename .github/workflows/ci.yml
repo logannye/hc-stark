@@ -16,6 +16,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      - name: Materialize release-trust anchored Git
+        run: |
+          python3 scripts/ci/materialize_anchored_git.py \
+            --output "$RUNNER_TEMP/tinyzkp-anchored-git/git" \
+            --github-env "$GITHUB_ENV"
+
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
@@ -88,6 +94,7 @@ jobs:
         run: |
           python3 -m pytest scripts/ci/test_recovery_reconciliation_invariants.py
           python3 -m pytest scripts/ci/test_source_tree_identity.py
+          python3 -m pytest scripts/ci/test_materialize_anchored_git.py
           python3 -m pytest scripts/ci/test_backend_release_ready.py
           python3 -m pytest scripts/ci/test_backend_prerelease_ready.py
           python3 -m pytest scripts/release/test_finalize_signed_evidence.py
