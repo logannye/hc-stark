@@ -3,6 +3,44 @@
 
 BEGIN;
 
+ALTER TABLE tenants ALTER COLUMN email DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS beta_auth_identities (
+    provider TEXT NOT NULL CHECK (provider = 'github'),
+    provider_user_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+    provider_login TEXT NOT NULL,
+    verified_email TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (provider, provider_user_id),
+    UNIQUE (tenant_id, provider)
+);
+
+CREATE TABLE IF NOT EXISTS beta_oauth_states (
+    state_hash TEXT PRIMARY KEY CHECK (state_hash ~ '^[0-9a-f]{64}$'),
+    pkce_verifier_ciphertext BYTEA NOT NULL,
+    return_path TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS beta_api_keys (
+    api_key_id UUID PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+    key_hash TEXT NOT NULL UNIQUE CHECK (key_hash ~ '^[0-9a-f]{64}$'),
+    key_prefix TEXT NOT NULL,
+    label TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_used_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS beta_api_keys_active
+    ON beta_api_keys (key_hash)
+    WHERE revoked_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS beta_air_packages (
     air_package_id UUID PRIMARY KEY,
     tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
@@ -79,7 +117,11 @@ CREATE TABLE IF NOT EXISTS beta_proof_jobs (
         'cancelled','platform_failed','customer_failed'
     )),
     estimate_json JSONB NOT NULL,
+    public_inputs_json JSONB NOT NULL,
+    public_inputs_digest_hex TEXT NOT NULL CHECK (public_inputs_digest_hex ~ '^[0-9a-f]{64}$'),
     reserved_millicredits BIGINT NOT NULL CHECK (reserved_millicredits >= 0),
+    reserved_subscription_millicredits BIGINT NOT NULL CHECK (reserved_subscription_millicredits >= 0),
+    reserved_purchased_millicredits BIGINT NOT NULL CHECK (reserved_purchased_millicredits >= 0),
     settled_millicredits BIGINT CHECK (settled_millicredits >= 0),
     measured_cost_millicredits BIGINT CHECK (measured_cost_millicredits >= 0),
     lease_owner TEXT,
@@ -95,12 +137,44 @@ CREATE TABLE IF NOT EXISTS beta_proof_jobs (
     completed_at TIMESTAMPTZ,
     retention_expires_at TIMESTAMPTZ NOT NULL,
     cancelled_at TIMESTAMPTZ,
+    CHECK (reserved_millicredits = reserved_subscription_millicredits + reserved_purchased_millicredits),
     CHECK (status <> 'completed' OR (verification_succeeded AND settled_millicredits IS NOT NULL))
 );
 
-ALTER TABLE beta_credit_events
-    ADD CONSTRAINT beta_credit_events_job_fk
-    FOREIGN KEY (job_id) REFERENCES beta_proof_jobs(job_id) DEFERRABLE INITIALLY DEFERRED;
+CREATE TABLE IF NOT EXISTS beta_workers (
+    worker_id TEXT PRIMARY KEY,
+    credential_hash TEXT NOT NULL CHECK (credential_hash ~ '^[0-9a-f]{64}$'),
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    max_slots INTEGER NOT NULL CHECK (max_slots BETWEEN 1 AND 4),
+    free_scratch_bytes BIGINT NOT NULL DEFAULT 0 CHECK (free_scratch_bytes >= 0),
+    release_sha TEXT,
+    last_heartbeat_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS beta_stripe_events (
+    stripe_event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    payload_sha256 TEXT NOT NULL CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
+    payload_json JSONB NOT NULL,
+    stripe_created_at TIMESTAMPTZ NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processing_status TEXT NOT NULL CHECK (processing_status IN ('pending','processed','failed')),
+    processed_at TIMESTAMPTZ,
+    processing_error TEXT
+);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'beta_credit_events_job_fk'
+    ) THEN
+        ALTER TABLE beta_credit_events
+            ADD CONSTRAINT beta_credit_events_job_fk
+            FOREIGN KEY (job_id) REFERENCES beta_proof_jobs(job_id)
+            DEFERRABLE INITIALLY DEFERRED;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS beta_jobs_claimable
     ON beta_proof_jobs (created_at)
