@@ -231,6 +231,11 @@ def test_main_rejects_cargo_fuzz_version_skew(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
+        MODULE.evidence_runtime,
+        "rustup_tool_path",
+        lambda toolchain, name, **kwargs: Path(f"/tool/{name}"),
+    )
+    monkeypatch.setattr(
         MODULE,
         "tool_version",
         lambda command, environment=None: "cargo-fuzz 99.0.0",
