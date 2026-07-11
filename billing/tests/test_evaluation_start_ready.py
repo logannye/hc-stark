@@ -59,13 +59,18 @@ def acceptance_matrix():
 
 
 def evidence():
-    return billing.ContractEvidenceV1(
-        schema_version=1,
+    return billing.ContractEvidenceV2(
+        schema_version=2,
         agreement_id="eval-001",
         offer_id="founding_evaluation",
         stripe_customer_id="cus_test",
         agreement_sha256="a" * 64,
         scope_sha256="b" * 64,
+        agreement_gate_sha256="1" * 64,
+        qualification_sha256="2" * 64,
+        partner_preflight_sha256="3" * 64,
+        stripe_test_drill_sha256="4" * 64,
+        delivery_manifest_sha256=None,
         signed_at="2026-07-09T12:00:00Z",
         delivery_acceptance_sha256=None,
         delivery_accepted_at=None,
@@ -87,13 +92,18 @@ def request():
 
 
 def annual_request():
-    contract = billing.ContractEvidenceV1(
-        schema_version=1,
+    contract = billing.ContractEvidenceV2(
+        schema_version=2,
         agreement_id="annual-001",
         offer_id="tinyzkp_fleet_oem",
         stripe_customer_id="cus_test",
         agreement_sha256="a" * 64,
         scope_sha256="b" * 64,
+        agreement_gate_sha256=None,
+        qualification_sha256=None,
+        partner_preflight_sha256=None,
+        stripe_test_drill_sha256=None,
+        delivery_manifest_sha256=None,
         signed_at="2026-07-09T12:00:00Z",
         delivery_acceptance_sha256=None,
         delivery_accepted_at=None,
@@ -249,7 +259,7 @@ def test_evaluation_readiness_rejects_scope_swap_after_initial_verification(
     scope.write_text(json.dumps(original_scope), encoding="utf-8")
     agreement.chmod(0o600)
     scope.chmod(0o600)
-    bound = billing.ContractEvidenceV1(
+    bound = billing.ContractEvidenceV2(
         **{
             **billing.asdict(evidence()),
             "agreement_sha256": hashlib.sha256(agreement.read_bytes()).hexdigest(),
@@ -278,10 +288,12 @@ def test_evaluation_readiness_rejects_scope_swap_after_initial_verification(
             expected_display_name="TinyZKP",
         ),
     )
-    original_verify = billing.verify_contract_documents
-
     def verify_then_swap(*args, **kwargs):
-        original_verify(*args, **kwargs)
+        billing.validate_acceptance_matrix(
+            scope,
+            bound,
+            expected_sha256=bound.scope_sha256,
+        )
         changed = acceptance_matrix()
         changed["workload"]["logical_rows"] *= 1024
         scope.write_text(json.dumps(changed), encoding="utf-8")

@@ -1,5 +1,6 @@
 import pytest
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -17,12 +18,27 @@ def evidence(
     **overrides,
 ):
     values = {
-        "schema_version": 1,
+        "schema_version": 2,
         "agreement_id": agreement_id,
         "offer_id": offer_id,
         "stripe_customer_id": customer_id,
         "agreement_sha256": "a" * 64,
         "scope_sha256": "b" * 64,
+        "agreement_gate_sha256": "1" * 64
+        if action.startswith("evaluation-")
+        else None,
+        "qualification_sha256": "2" * 64
+        if action.startswith("evaluation-")
+        else None,
+        "partner_preflight_sha256": "3" * 64
+        if action.startswith("evaluation-")
+        else None,
+        "stripe_test_drill_sha256": "4" * 64
+        if action.startswith("evaluation-")
+        else None,
+        "delivery_manifest_sha256": "5" * 64
+        if action == "evaluation-delivery"
+        else None,
         "signed_at": "2026-07-09T12:00:00Z",
         "delivery_acceptance_sha256": "c" * 64
         if action == "evaluation-delivery"
@@ -41,7 +57,7 @@ def evidence(
         ),
     }
     values.update(overrides)
-    return billing.ContractEvidenceV1(**values)
+    return billing.ContractEvidenceV2(**values)
 
 
 def request(action="evaluation-deposit", offer_id="founding_evaluation", **overrides):
@@ -229,12 +245,17 @@ def test_delivery_requires_acceptance_evidence():
 def test_contract_evidence_requires_owner_only_exact_schema(tmp_path):
     path = tmp_path / "contract.json"
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "agreement_id": "eval-001",
         "offer_id": "founding_evaluation",
         "stripe_customer_id": "cus_test",
         "agreement_sha256": "a" * 64,
         "scope_sha256": "b" * 64,
+        "agreement_gate_sha256": "1" * 64,
+        "qualification_sha256": "2" * 64,
+        "partner_preflight_sha256": "3" * 64,
+        "stripe_test_drill_sha256": "4" * 64,
+        "delivery_manifest_sha256": None,
         "signed_at": "2026-07-09T12:00:00Z",
         "delivery_acceptance_sha256": None,
         "delivery_accepted_at": None,
@@ -297,6 +318,25 @@ def test_contract_evidence_template_has_exact_schema():
         (billing.ROOT / "commercial" / "contract-evidence.template.json").read_text()
     )
     assert set(template) == billing.CONTRACT_EVIDENCE_KEYS
+    annual = json.loads(
+        (
+            billing.ROOT
+            / "commercial"
+            / "annual-contract-evidence.template.json"
+        ).read_text()
+    )
+    assert set(annual) == billing.CONTRACT_EVIDENCE_KEYS
+    assert annual["schema_version"] == 2
+    assert all(
+        annual[field] is None
+        for field in (
+            "agreement_gate_sha256",
+            "qualification_sha256",
+            "partner_preflight_sha256",
+            "stripe_test_drill_sha256",
+            "delivery_manifest_sha256",
+        )
+    )
 
 
 def test_annual_order_template_has_exact_schema():
@@ -345,15 +385,7 @@ def test_contract_documents_are_owner_only_and_hash_bound(tmp_path):
         agreement_sha256=hashlib.sha256(agreement.read_bytes()).hexdigest(),
         scope_sha256=hashlib.sha256(scope.read_bytes()).hexdigest(),
     )
-    billing.verify_contract_documents(
-        bound,
-        "evaluation-deposit",
-        agreement_document=agreement,
-        scope_document=scope,
-        delivery_acceptance_document=None,
-    )
-    scope.write_bytes(b"changed scope")
-    with pytest.raises(ValueError, match="scope document does not match"):
+    with pytest.raises(ValueError, match="missing required commercial evidence"):
         billing.verify_contract_documents(
             bound,
             "evaluation-deposit",
@@ -361,9 +393,153 @@ def test_contract_documents_are_owner_only_and_hash_bound(tmp_path):
             scope_document=scope,
             delivery_acceptance_document=None,
         )
+    scope.write_bytes(b"changed scope")
+    with pytest.raises(ValueError, match="scope document does not match"):
+        billing.validate_acceptance_matrix(
+            scope,
+            bound,
+            expected_sha256=bound.scope_sha256,
+        )
     scope.chmod(0o644)
     with pytest.raises(ValueError, match="owner-only"):
         billing.private_document_sha256(scope, "scope document")
+
+
+def test_evaluation_contract_requires_exact_qualification_preflight_gate_and_test_drill(
+    tmp_path, monkeypatch
+):
+    def write_private(name, payload):
+        path = tmp_path / name
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        path.chmod(0o600)
+        return path, hashlib.sha256(path.read_bytes()).hexdigest()
+
+    agreement = tmp_path / "signed-agreement.pdf"
+    scope = tmp_path / "acceptance.json"
+    agreement.write_bytes(b"signed agreement")
+    scope.write_text(json.dumps(acceptance_matrix()), encoding="utf-8")
+    agreement.chmod(0o600)
+    scope.chmod(0o600)
+    qualification_payload = {
+        "application_id": "eval_001",
+        "reviewed_at": "2020-01-01T12:00:00Z",
+    }
+    qualification, qualification_sha = write_private(
+        "qualification.json", qualification_payload
+    )
+    preflight_payload = {
+        "application_id": "eval_001",
+        "checked_at": "2020-01-01T13:00:00Z",
+        "bound_inputs": {"qualification_evidence_sha256": qualification_sha},
+    }
+    preflight, preflight_sha = write_private("preflight.json", preflight_payload)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    signed_at = (now - timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    reviewed_at = (now - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    gate_payload = {
+        "schema_version": billing.agreement_gate.GATE_SCHEMA,
+        "status": "approved",
+        "agreement_id": "eval-001",
+        "offer_id": "founding_evaluation",
+        "form_id": "tinyzkp-evaluation-msa-sow",
+        "form_version": "1.0.0",
+        "form_profile_sha256": "6" * 64,
+        "approved_template_sha256": "7" * 64,
+        "counsel_approval_sha256": "8" * 64,
+        "agreement_source_sha256": "9" * 64,
+        "signed_agreement_sha256": hashlib.sha256(agreement.read_bytes()).hexdigest(),
+        "scope_sha256": hashlib.sha256(scope.read_bytes()).hexdigest(),
+        "qualification_sha256": qualification_sha,
+        "partner_preflight_sha256": preflight_sha,
+        "required_terms": {
+            field: True for field in billing.agreement_gate.REQUIRED_TERMS
+        },
+        "placeholders_absent": True,
+        "material_deviations_reviewed": True,
+        "approved_for_execution": True,
+        "execution_reviewed_by": "Outside Counsel",
+        "execution_reviewed_at": reviewed_at,
+    }
+    gate, gate_sha = write_private("agreement-gate.json", gate_payload)
+    drill_payload = {
+        "schema_version": billing.stripe_test_drill.SCHEMA_VERSION,
+        "status": "passed",
+        "stripe_api_version": billing.STRIPE_API_VERSION,
+        "stripe_sdk_version": "15.3.0",
+        "stripe_account_id": "acct_expected",
+        "stripe_display_name": "TinyZKP Test",
+        "stripe_customer_id": "cus_test_drill",
+        "stripe_invoice_id": "in_test_drill",
+        "drill_id": "drill-001",
+        "amount_cents": billing.stripe_test_drill.AMOUNT_CENTS,
+        "currency": "usd",
+        "collection_method": "send_invoice",
+        "days_until_due": 15,
+        "auto_advance": False,
+        "livemode": False,
+        "hosted_invoice_url_sha256": "a" * 64,
+        "created_status": "draft",
+        "finalized_status": "open",
+        "retrieved_status": "open",
+        "voided_status": "void",
+        "send_api_invoked": False,
+        "checkout_created": False,
+        "cleanup_complete": True,
+        "started_at": (now - timedelta(minutes=3)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "completed_at": reviewed_at,
+        "release_sha": "b" * 40,
+        "operation_digest": "c" * 64,
+    }
+    drill, drill_sha = write_private("stripe-test-drill.json", drill_payload)
+    bound = evidence(
+        agreement_sha256=gate_payload["signed_agreement_sha256"],
+        scope_sha256=gate_payload["scope_sha256"],
+        agreement_gate_sha256=gate_sha,
+        qualification_sha256=qualification_sha,
+        partner_preflight_sha256=preflight_sha,
+        stripe_test_drill_sha256=drill_sha,
+        signed_at=signed_at,
+    )
+    monkeypatch.setattr(
+        billing.agreement_gate.evaluation_qualification,
+        "validate_evidence",
+        lambda payload, compatibility: payload,
+    )
+    monkeypatch.setattr(
+        billing.agreement_gate.partner_preflight,
+        "validate_evidence",
+        lambda payload, compatibility: payload,
+        raising=False,
+    )
+    billing.verify_contract_documents(
+        bound,
+        "evaluation-deposit",
+        agreement_document=agreement,
+        scope_document=scope,
+        agreement_gate_document=gate,
+        qualification_document=qualification,
+        partner_preflight_document=preflight,
+        stripe_test_drill_document=drill,
+        expected_stripe_account_id="acct_expected",
+        expected_stripe_display_name="TinyZKP Test",
+        delivery_acceptance_document=None,
+    )
+    qualification.write_text('{"application_id":"eval_tampered"}', encoding="utf-8")
+    qualification.chmod(0o600)
+    with pytest.raises(ValueError, match="qualification does not match"):
+        billing.verify_contract_documents(
+            bound,
+            "evaluation-deposit",
+            agreement_document=agreement,
+            scope_document=scope,
+            agreement_gate_document=gate,
+            qualification_document=qualification,
+            partner_preflight_document=preflight,
+            stripe_test_drill_document=drill,
+            expected_stripe_account_id="acct_expected",
+            expected_stripe_display_name="TinyZKP Test",
+            delivery_acceptance_document=None,
+        )
 
 
 def test_acceptance_matrix_must_be_complete_and_semantically_safe(tmp_path):
@@ -580,7 +756,7 @@ def test_annual_amount_must_match_typed_countersigned_order(tmp_path):
     scope = tmp_path / "annual-order.json"
     scope.write_text(json.dumps(order), encoding="utf-8")
     scope.chmod(0o600)
-    bound = billing.ContractEvidenceV1(
+    bound = billing.ContractEvidenceV2(
         **{
             **billing.asdict(req.evidence),
             "scope_sha256": hashlib.sha256(scope.read_bytes()).hexdigest(),
@@ -598,7 +774,7 @@ def test_annual_amount_must_match_typed_countersigned_order(tmp_path):
     order["negotiated_annual_amount_cents"] = 15_000_001
     scope.write_text(json.dumps(order), encoding="utf-8")
     scope.chmod(0o600)
-    changed = billing.ContractEvidenceV1(
+    changed = billing.ContractEvidenceV2(
         **{
             **billing.asdict(bound),
             "scope_sha256": hashlib.sha256(scope.read_bytes()).hexdigest(),
@@ -884,6 +1060,10 @@ def test_founding_offer_is_limited_to_two_unique_agreements(monkeypatch):
                         agreement_id=agreement
                     ).evidence.digest(),
                     "tinyzkp_scope_sha256": "b" * 64,
+                    "tinyzkp_agreement_gate_sha256": "1" * 64,
+                    "tinyzkp_qualification_sha256": "2" * 64,
+                    "tinyzkp_partner_preflight_sha256": "3" * 64,
+                    "tinyzkp_test_drill_sha256": "4" * 64,
                 },
             }
             for agreement in ("eval-001", "eval-002")
@@ -953,6 +1133,10 @@ def paid_deposit_for_delivery(req):
             "tinyzkp_agreement_sha256": req.evidence.agreement_sha256,
             "tinyzkp_scope_sha256": req.evidence.scope_sha256,
             "tinyzkp_signed_at": req.evidence.signed_at,
+            "tinyzkp_agreement_gate_sha256": req.evidence.agreement_gate_sha256,
+            "tinyzkp_qualification_sha256": req.evidence.qualification_sha256,
+            "tinyzkp_partner_preflight_sha256": req.evidence.partner_preflight_sha256,
+            "tinyzkp_test_drill_sha256": req.evidence.stripe_test_drill_sha256,
         },
     }
 
@@ -970,6 +1154,10 @@ def paid_deposit_for_delivery(req):
         ("metadata", "tinyzkp_plan_sha256", "f" * 64),
         ("metadata", "tinyzkp_scope_sha256", "e" * 64),
         ("metadata", "tinyzkp_agreement_sha256", "d" * 64),
+        ("metadata", "tinyzkp_agreement_gate_sha256", "d" * 64),
+        ("metadata", "tinyzkp_qualification_sha256", "d" * 64),
+        ("metadata", "tinyzkp_partner_preflight_sha256", "d" * 64),
+        ("metadata", "tinyzkp_test_drill_sha256", "d" * 64),
     ],
 )
 def test_delivery_deposit_is_exactly_object_plan_amount_and_document_bound(
@@ -1052,6 +1240,10 @@ def test_existing_same_plan_invoice_is_reused_instead_of_recreated():
             "tinyzkp_plan_sha256": plan_sha256,
             "tinyzkp_contract_evidence_sha256": req.evidence.digest(),
             "tinyzkp_scope_sha256": req.evidence.scope_sha256,
+            "tinyzkp_agreement_gate_sha256": req.evidence.agreement_gate_sha256,
+            "tinyzkp_qualification_sha256": req.evidence.qualification_sha256,
+            "tinyzkp_partner_preflight_sha256": req.evidence.partner_preflight_sha256,
+            "tinyzkp_test_drill_sha256": req.evidence.stripe_test_drill_sha256,
         },
     }
     client = SimpleNamespace(
@@ -1621,6 +1813,7 @@ def test_apply_requires_exact_read_only_plan_hash_before_stripe(tmp_path, monkey
         "create_stripe_client",
         lambda key: (_ for _ in ()).throw(AssertionError("Stripe must not be reached")),
     )
+    monkeypatch.setattr(billing, "verify_contract_documents", lambda *args, **kwargs: None)
     with pytest.raises(SystemExit, match="exact preview plan SHA-256"):
         billing.main()
 
@@ -1717,6 +1910,7 @@ def test_apply_reuses_exact_existing_invoice_without_second_stripe_create(
         ),
     )
     monkeypatch.setattr(billing, "create_stripe_client", lambda key: client)
+    monkeypatch.setattr(billing, "verify_contract_documents", lambda *args, **kwargs: None)
     monkeypatch.setenv("TINYZKP_ALLOW_CONTRACT_BILLING_WRITE", "1")
     monkeypatch.setenv("TINYZKP_CONTRACT_SENDER_IDENTITY_CONFIRMED", "1")
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_placeholder")

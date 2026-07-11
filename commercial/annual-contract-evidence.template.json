@@ -1,0 +1,19 @@
+{
+  "schema_version": 2,
+  "agreement_id": "REPLACE_WITH_SAFE_AGREEMENT_ID",
+  "offer_id": "tinyzkp_certified",
+  "stripe_customer_id": "cus_REPLACE",
+  "agreement_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+  "scope_sha256": "REPLACE_WITH_ANNUAL_ORDER_SHA256",
+  "agreement_gate_sha256": null,
+  "qualification_sha256": null,
+  "partner_preflight_sha256": null,
+  "stripe_test_drill_sha256": null,
+  "delivery_manifest_sha256": null,
+  "signed_at": "REPLACE_WITH_FINAL_COUNTERSIGNATURE_RFC3339_UTC_Z_TIME",
+  "delivery_acceptance_sha256": null,
+  "delivery_accepted_at": null,
+  "deposit_invoice_id": null,
+  "deposit_plan_sha256": null,
+  "negotiated_annual_amount_cents": 6000000
+}

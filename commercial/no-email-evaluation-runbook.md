@@ -17,13 +17,95 @@ Run on the production host:
 cd /opt/hc-stark
 /var/lib/tinyzkp-runtime/billing-venv/bin/python billing/evaluation_intake.py list --status new
 /var/lib/tinyzkp-runtime/billing-venv/bin/python billing/evaluation_intake.py show eval_REPLACE --include-contact
-/var/lib/tinyzkp-runtime/billing-venv/bin/python billing/evaluation_intake.py set-status eval_REPLACE qualified
 ```
 
 The default list is contact-redacted. Use `--include-contact` only when the
 operator has a legitimate need to view the applicant's submitted contact data.
 Do not copy handles, phone numbers, or optional email addresses into the
 repository, issue tracker, benchmark reports, or review bundles.
+
+The SQLite workflow status is not qualification authority. Do not mark an
+application `qualified` or issue a proposal until both machine evidence files
+below exist and independently verify. A manually edited status value or JSON
+file is insufficient.
+
+## Issue EvaluationQualificationV1
+
+Install `commercial/evaluation-qualification-input.template.json` as mode
+`0600` inside an owner-only working directory and replace every placeholder.
+It contains no contact handle, email address, witness, credential, customer
+data, or private source. Record byte counts, never rounded GiB strings.
+
+For measured RSS, the recorded current peak must be at least 1.5 times the
+target ceiling. For OOM evidence, select `oom`, leave
+`current_peak_rss_bytes` null, and record the positive numeric cgroup or host
+limit in `oom_limit_bytes`; that limit must be at least the target ceiling.
+
+```bash
+python3 scripts/commercial/evaluation_qualification.py issue \
+  --input /secure/qualification-input.json \
+  --output /secure/qualification-v1.json
+
+python3 scripts/commercial/evaluation_qualification.py verify \
+  --input /secure/qualification-input.json \
+  --evidence /secure/qualification-v1.json
+```
+
+The tool requires Plonky3 0.6.1, `tinyzkp-p3-goldilocks-v1`, the
+`unmodified-p3-uni-stark-0.6.1` verifier, a deterministic non-sensitive
+generator at a full Git revision, a power-of-two row count, local NVMe scratch,
+confirmed technical and budget owners, a decision date, and the strict
+no-sensitive-data boundary. It reads no network resource and executes no
+supplied command. Its owner-only output is canonical JSON; preserve the
+reported SHA-256.
+
+## Run PartnerPreflightV1 before a proposal
+
+Qualification alone is not permission to propose work. Build the prospective
+adapter in a controlled local environment, capture its source as a regular
+archive or Git bundle, preserve the statically linked partner binary, prepare
+the workload specification and scratch policy from the tracked templates, and
+capture the complete `doctor` resource-estimate JSON. Calculate SHA-256 over
+the exact bytes of all six bound files plus the qualification input/evidence,
+then place those values in
+`commercial/partner-preflight-input.template.json`.
+Every private JSON, source archive, and binary supplied to either tool must be
+a regular non-symlink file owned by the invoking operator with no group or
+other permission bits; use mode `0600` for data and `0700` only when the bound
+binary itself must remain executable.
+
+```bash
+python3 scripts/commercial/partner_preflight.py issue \
+  --input /secure/partner-preflight-input.json \
+  --qualification-input /secure/qualification-input.json \
+  --qualification /secure/qualification-v1.json \
+  --workload-spec /secure/partner-workload-spec.json \
+  --adapter-source /secure/partner-adapter.bundle \
+  --adapter-artifact /secure/partner-adapter \
+  --resource-policy /secure/partner-resource-policy.json \
+  --resource-estimate /secure/partner-resource-estimate.json \
+  --output /secure/partner-preflight-v1.json
+
+python3 scripts/commercial/partner_preflight.py verify \
+  --evidence /secure/partner-preflight-v1.json \
+  --input /secure/partner-preflight-input.json \
+  --qualification-input /secure/qualification-input.json \
+  --qualification /secure/qualification-v1.json \
+  --workload-spec /secure/partner-workload-spec.json \
+  --adapter-source /secure/partner-adapter.bundle \
+  --adapter-artifact /secure/partner-adapter \
+  --resource-policy /secure/partner-resource-policy.json \
+  --resource-estimate /secure/partner-resource-estimate.json
+```
+
+PartnerPreflightV1 recomputes QualificationV1 from its original input; binds
+every supplied file by digest; requires the fixed workload and adapter
+revisions, argv-form build/baseline/bounded/official-verifier commands,
+`ResourceBoundedWorkloadV1`, scratch mode with retain-on-failure checkpoints,
+a fixed Linux x86-64 cgroup-v2 host, local NVMe, and estimates within both the
+resource policy and host capacity. It validates commands as evidence but never
+executes them. A proposal may reference only a verifying preflight evidence
+digest.
 
 ## Retention
 
@@ -47,10 +129,61 @@ account and data ownership.
 
 ## Contract and invoice handoff
 
-1. Have counsel approve `commercial/evaluation-sow.counsel-draft.md`.
+1. Have counsel replace and approve `commercial/evaluation-sow.counsel-draft.md`.
+   The tracked draft is deliberately unsendable. Record the approved template
+   and counsel approval hashes in an owner-only copy of
+   `commercial/agreement-form-profile.template.json`. After execution, build
+   the exact agreement gate:
+
+```bash
+python3 billing/agreement_gate.py build \
+  --profile /secure/agreement-form-profile.json \
+  --approved-template /secure/approved-evaluation-form.md \
+  --counsel-approval /secure/counsel-approval.pdf \
+  --agreement-source /secure/completed-agreement.md \
+  --signed-agreement /secure/signed-agreement.pdf \
+  --scope /secure/acceptance-matrix.json \
+  --qualification /secure/qualification-v1.json \
+  --partner-preflight /secure/partner-preflight-v1.json \
+  --agreement-id AGREEMENT_ID \
+  --offer-id founding_evaluation \
+  --execution-reviewed-by COUNSEL_REVIEWER_ID \
+  --execution-reviewed-at RFC3339_UTC_Z_TIME \
+  --material-deviations-reviewed \
+  --output /secure/agreement-gate-v1.json
+```
+
+   This rejects the tracked warning, unresolved bracketed terms, missing fee,
+   scope, data, IP, acceptance, retention, or signature clauses, unreviewed
+   deviations, and any document/hash mismatch. Counsel approval remains an
+   external prerequisite; the validator does not manufacture it.
 2. Freeze and hash a completed acceptance matrix.
 3. Obtain signatures outside the public site.
-4. Create a private contract-evidence record from the tracked template. Never
+4. On a positively identified Stripe **test-mode** account and disposable test
+   customer, run the isolated invoice drill. This is the only command in this
+   section that mutates Stripe, and it rejects every live key. It creates,
+   finalizes, retrieves, and voids one $12,500 test invoice without calling the
+   send API or creating Checkout:
+
+```bash
+TINYZKP_ALLOW_STRIPE_TEST_DRILL_WRITE=1 \
+STRIPE_SECRET_KEY=sk_test_REPLACE \
+python3 billing/stripe_test_drill.py run \
+  --account-id acct_REPLACE \
+  --display-name 'TinyZKP' \
+  --customer-id cus_REPLACE \
+  --drill-id AGREEMENT_ID-preinvoice \
+  --release-sha FULL_40_HEX_RELEASE_SHA \
+  --output /secure/stripe-test-drill-v1.json \
+  --apply
+
+python3 billing/stripe_test_drill.py verify \
+  --evidence /secure/stripe-test-drill-v1.json
+```
+
+   Never use a live key for this drill. Contract preview rejects evidence older
+   than 30 days or from a different account.
+5. Create a private `ContractEvidenceV2` record from the tracked template. Never
    put the completed record or contract documents in the repository:
 
 ```bash
@@ -60,12 +193,14 @@ install -m 600 commercial/contract-evidence.template.json \
 sha256sum SIGNED_AGREEMENT ACCEPTANCE_MATRIX
 ```
 
-   Fill the private record with those hashes, the canonical UTC signature
-   time, the exact offer/agreement IDs, and the exact Stripe customer ID. For a
-   delivery invoice, create a separate record that also includes the written
-   acceptance hash, canonical acceptance time, exact paid deposit invoice ID,
-   and the deposit invoice's `tinyzkp_plan_sha256` metadata value.
-5. Create or select the positively identified Stripe customer. Before apply,
+   Fill the private record with the agreement, scope, agreement-gate,
+   qualification, partner-preflight, and Stripe-test-drill hashes; canonical
+   signature time; exact offer/agreement IDs; and exact Stripe customer ID.
+   For delivery, create a separate record that also includes the complete
+   delivery-manifest hash, written-acceptance hash, canonical acceptance time,
+   exact paid deposit invoice ID, and deposit invoice
+   `tinyzkp_plan_sha256`.
+6. Create or select the positively identified Stripe customer. Before apply,
    its Stripe metadata must contain:
 
    - `tinyzkp_contract_customer=true`
@@ -75,7 +210,7 @@ sha256sum SIGNED_AGREEMENT ACCEPTANCE_MATRIX
    The customer must have the customer's contractual billing address. Do not
    use the founder's unrelated-business email address as the customer or sender
    address.
-6. Preview the $12,500 Founding Evaluation deposit:
+7. Preview the $12,500 Founding Evaluation deposit:
 
 ```bash
 python3 billing/contract_billing.py evaluation-deposit \
@@ -84,10 +219,16 @@ python3 billing/contract_billing.py evaluation-deposit \
   --agreement-id REPLACE \
   --contract-evidence /var/lib/tinyzkp-private/contracts/AGREEMENT_ID.json \
   --agreement-document SIGNED_AGREEMENT \
-  --scope-document ACCEPTANCE_MATRIX
+  --scope-document ACCEPTANCE_MATRIX \
+  --agreement-gate-document /secure/agreement-gate-v1.json \
+  --qualification-document /secure/qualification-v1.json \
+  --partner-preflight-document /secure/partner-preflight-v1.json \
+  --stripe-test-drill-document /secure/stripe-test-drill-v1.json \
+  --expected-account-id acct_REPLACE \
+  --expected-display-name 'TinyZKP'
 ```
 
-7. Record the returned `plan_sha256`. Apply only after exact Stripe account
+8. Record the returned `plan_sha256`. Apply only after exact Stripe account
    verification and explicit operator authorization, passing that hash as
    `--expected-plan-sha256`. Any change to the offer, amount, customer, due
    date, contract hashes, or acceptance evidence changes the plan hash and
@@ -105,11 +246,23 @@ The delivery command additionally requires the exact paid deposit invoice in
 Stripe. The object ID, customer, amount, currency, collection mode, document
 hashes, and recorded deposit plan must all match the delivery evidence; an
 open, draft, void, uncollectible, or edited deposit is insufficient. It also
-requires `--delivery-acceptance-document`; the CLI hashes all supplied private
-documents and refuses any mismatch with the owner-only evidence record.
+requires `--delivery-acceptance-document`, `--delivery-manifest-document`, and
+`--delivery-artifact-root`. Start from
+`commercial/evaluation-delivery-manifest.template.json`. The manifest binds the
+adapter revision, baseline/candidate `BenchmarkReportV1`, `ProofBundleV1`,
+official verifier result, raw measurements, reproduction instructions,
+limitations, recommendation, written acceptance, and deletion schedule. The
+CLI hashes and semantically checks every owner-only artifact and refuses any
+mismatch.
 
 No evaluation work starts until the signed agreement, paid deposit, frozen
 workload digest, acceptance matrix, and baseline host are all recorded.
+
+After payment, run `billing/evaluation_start_ready.py` with the same agreement,
+scope, agreement-gate, qualification, partner-preflight, and Stripe-test-drill
+arguments plus `--deposit-invoice-id`. It emits readiness only when the exact
+plan-bound deposit is fully paid. It sends no email and contains no customer
+contact data.
 
 ## Annual contract release authorization
 
@@ -164,8 +317,10 @@ the Stripe subscription write and stores it in Stripe metadata. Preview and
 write therefore fail closed when either file, mode, schema, status, signer,
 validator identity, configured hash, or release identity differs.
 
-For an annual order, set `negotiated_annual_amount_cents` in the owner-only
-contract evidence and complete an owner-only copy of
+For an annual order, start from
+`commercial/annual-contract-evidence.template.json`, set
+`negotiated_annual_amount_cents` in the owner-only contract evidence, and
+complete an owner-only copy of
 `commercial/annual-order.template.json`. Export that typed scope with the
 countersigned agreement; it binds the exact amount to the agreement digest,
 customer, Stripe Price/Product, term, and countersignature times. TinyZKP

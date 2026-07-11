@@ -26,7 +26,10 @@ from urllib.parse import urlparse
 
 import stripe
 
+import agreement_gate
+import evaluation_delivery_manifest
 from legacy_billing_containment import STRIPE_API_VERSION, verify_account
+import stripe_test_drill
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -106,6 +109,11 @@ CONTRACT_EVIDENCE_KEYS = {
     "stripe_customer_id",
     "agreement_sha256",
     "scope_sha256",
+    "agreement_gate_sha256",
+    "qualification_sha256",
+    "partner_preflight_sha256",
+    "stripe_test_drill_sha256",
+    "delivery_manifest_sha256",
     "signed_at",
     "delivery_acceptance_sha256",
     "delivery_accepted_at",
@@ -190,13 +198,18 @@ def canonical_timestamp(raw: str, field: str) -> str:
 
 
 @dataclass(frozen=True)
-class ContractEvidenceV1:
+class ContractEvidenceV2:
     schema_version: int
     agreement_id: str
     offer_id: str
     stripe_customer_id: str
     agreement_sha256: str
     scope_sha256: str
+    agreement_gate_sha256: str | None
+    qualification_sha256: str | None
+    partner_preflight_sha256: str | None
+    stripe_test_drill_sha256: str | None
+    delivery_manifest_sha256: str | None
     signed_at: str
     delivery_acceptance_sha256: str | None
     delivery_accepted_at: str | None
@@ -205,7 +218,7 @@ class ContractEvidenceV1:
     negotiated_annual_amount_cents: int | None
 
     @classmethod
-    def from_mapping(cls, payload: Any) -> "ContractEvidenceV1":
+    def from_mapping(cls, payload: Any) -> "ContractEvidenceV2":
         if not isinstance(payload, dict) or set(payload) != CONTRACT_EVIDENCE_KEYS:
             raise ValueError("contract evidence fields are missing or unknown")
         return cls(**payload)
@@ -214,9 +227,9 @@ class ContractEvidenceV1:
         if (
             not isinstance(self.schema_version, int)
             or isinstance(self.schema_version, bool)
-            or self.schema_version != 1
+            or self.schema_version != 2
         ):
-            raise ValueError("contract evidence schema_version must equal 1")
+            raise ValueError("contract evidence schema_version must equal 2")
         if not isinstance(self.agreement_id, str) or not AGREEMENT_ID.fullmatch(
             self.agreement_id
         ):
@@ -234,11 +247,35 @@ class ContractEvidenceV1:
             raw = getattr(self, field)
             if not isinstance(raw, str) or not HEX_SHA256.fullmatch(raw):
                 raise ValueError(f"contract evidence {field} must be lowercase SHA-256")
+        evaluation_fields = (
+            "agreement_gate_sha256",
+            "qualification_sha256",
+            "partner_preflight_sha256",
+            "stripe_test_drill_sha256",
+        )
+        if action in {"evaluation-deposit", "evaluation-delivery"}:
+            for field in evaluation_fields:
+                raw = getattr(self, field)
+                if not isinstance(raw, str) or not HEX_SHA256.fullmatch(raw):
+                    raise ValueError(
+                        f"evaluation contract evidence {field} must be lowercase SHA-256"
+                    )
+        elif any(getattr(self, field) is not None for field in evaluation_fields):
+            raise ValueError(
+                "evaluation qualification, preflight, agreement, and test-drill evidence "
+                "are valid only for evaluation contracts"
+            )
         canonical_timestamp(self.signed_at, "signed_at")
         signed_at = datetime.fromisoformat(self.signed_at.replace("Z", "+00:00"))
         if signed_at > datetime.now(timezone.utc) + timedelta(minutes=5):
             raise ValueError("signed_at cannot be in the future")
         if action == "evaluation-delivery":
+            if not isinstance(
+                self.delivery_manifest_sha256, str
+            ) or not HEX_SHA256.fullmatch(self.delivery_manifest_sha256):
+                raise ValueError(
+                    "delivery invoice requires delivery manifest SHA-256"
+                )
             if not isinstance(
                 self.delivery_acceptance_sha256, str
             ) or not HEX_SHA256.fullmatch(self.delivery_acceptance_sha256):
@@ -266,6 +303,8 @@ class ContractEvidenceV1:
                     "delivery invoice requires the exact paid deposit plan SHA-256"
                 )
         elif (
+            self.delivery_manifest_sha256 is not None
+            or
             self.delivery_acceptance_sha256 is not None
             or self.delivery_accepted_at is not None
             or self.deposit_invoice_id is not None
@@ -401,13 +440,13 @@ def load_private_json_document_with_digest(
     return payload, document.sha256
 
 
-def load_contract_evidence(path: Path) -> ContractEvidenceV1:
+def load_contract_evidence(path: Path) -> ContractEvidenceV2:
     payload, _ = load_private_json_document_with_digest(
         path,
         "contract evidence",
         max_bytes=MAX_EVIDENCE_BYTES,
     )
-    return ContractEvidenceV1.from_mapping(payload)
+    return ContractEvidenceV2.from_mapping(payload)
 
 
 def private_document_sha256(path: Path, label: str) -> str:
@@ -434,7 +473,7 @@ def _exact_keys(mapping: Any, keys: set[str], label: str) -> dict[str, Any]:
 
 def validate_acceptance_matrix(
     path: Path,
-    evidence: ContractEvidenceV1,
+    evidence: ContractEvidenceV2,
     *,
     expected_sha256: str | None = None,
 ) -> dict[str, Any]:
@@ -600,7 +639,7 @@ def validate_acceptance_matrix(
 
 def validate_annual_order(
     path: Path,
-    evidence: ContractEvidenceV1,
+    evidence: ContractEvidenceV2,
     *,
     stripe_price_id: str | None,
     stripe_product_id: str | None,
@@ -647,12 +686,20 @@ def validate_annual_order(
 
 
 def verify_contract_documents(
-    evidence: ContractEvidenceV1,
+    evidence: ContractEvidenceV2,
     action: str,
     *,
     agreement_document: Path,
     scope_document: Path,
     delivery_acceptance_document: Path | None,
+    agreement_gate_document: Path | None = None,
+    qualification_document: Path | None = None,
+    partner_preflight_document: Path | None = None,
+    stripe_test_drill_document: Path | None = None,
+    expected_stripe_account_id: str | None = None,
+    expected_stripe_display_name: str | None = None,
+    delivery_manifest_document: Path | None = None,
+    delivery_artifact_root: Path | None = None,
     stripe_price_id: str | None = None,
     stripe_product_id: str | None = None,
 ) -> None:
@@ -667,7 +714,130 @@ def verify_contract_documents(
             evidence,
             expected_sha256=evidence.scope_sha256,
         )
+        required_documents = {
+            "agreement gate": agreement_gate_document,
+            "qualification evidence": qualification_document,
+            "partner preflight evidence": partner_preflight_document,
+            "Stripe test drill evidence": stripe_test_drill_document,
+        }
+        missing = [label for label, path in required_documents.items() if path is None]
+        if missing:
+            raise ValueError(
+                "evaluation contract is missing required commercial evidence: "
+                + ", ".join(missing)
+            )
+        if not expected_stripe_account_id or not expected_stripe_display_name:
+            raise ValueError(
+                "evaluation contract requires the exact expected Stripe account identity"
+            )
+        gate_payload, gate_digest = load_private_json_document_with_digest(
+            agreement_gate_document or Path(""), "agreement gate"
+        )
+        qualification_payload, qualification_digest = (
+            load_private_json_document_with_digest(
+                qualification_document or Path(""), "qualification evidence"
+            )
+        )
+        preflight_payload, preflight_digest = load_private_json_document_with_digest(
+            partner_preflight_document or Path(""), "partner preflight evidence"
+        )
+        drill_payload, drill_digest = load_private_json_document_with_digest(
+            stripe_test_drill_document or Path(""), "Stripe test drill evidence"
+        )
+        agreement_gate.validate_gate(gate_payload)
+        compatibility = agreement_gate.evidence_common.compatibility_identity(
+            agreement_gate.evaluation_qualification.DEFAULT_COMPATIBILITY
+        )
+        qualification_checked = (
+            agreement_gate.evaluation_qualification.validate_evidence(
+                qualification_payload, compatibility
+            )
+        )
+        preflight_checked = agreement_gate.partner_preflight.validate_evidence(
+            preflight_payload, compatibility
+        )
+        stripe_test_drill.validate_evidence(drill_payload)
+        exact_digests = {
+            "agreement gate": (gate_digest, evidence.agreement_gate_sha256),
+            "qualification": (qualification_digest, evidence.qualification_sha256),
+            "partner preflight": (
+                preflight_digest,
+                evidence.partner_preflight_sha256,
+            ),
+            "Stripe test drill": (
+                drill_digest,
+                evidence.stripe_test_drill_sha256,
+            ),
+        }
+        for label, (actual, expected) in exact_digests.items():
+            if actual != expected:
+                raise ValueError(f"{label} does not match contract evidence")
+        expected_gate = {
+            "agreement_id": evidence.agreement_id,
+            "offer_id": evidence.offer_id,
+            "signed_agreement_sha256": evidence.agreement_sha256,
+            "scope_sha256": evidence.scope_sha256,
+            "qualification_sha256": qualification_digest,
+            "partner_preflight_sha256": preflight_digest,
+        }
+        if any(gate_payload.get(field) != expected for field, expected in expected_gate.items()):
+            raise ValueError(
+                "agreement gate does not bind the exact contract and commercial evidence"
+            )
+        gate_reviewed_at = datetime.fromisoformat(
+            gate_payload["execution_reviewed_at"].replace("Z", "+00:00")
+        )
+        signed_at = datetime.fromisoformat(evidence.signed_at.replace("Z", "+00:00"))
+        if gate_reviewed_at < signed_at:
+            raise ValueError("agreement execution review cannot precede signature")
+        for field, raw_timestamp in (
+            ("qualification reviewed_at", qualification_checked.get("reviewed_at")),
+            ("partner preflight checked_at", preflight_checked.get("checked_at")),
+        ):
+            timestamp = datetime.fromisoformat(
+                canonical_timestamp(str(raw_timestamp or ""), field).replace(
+                    "Z", "+00:00"
+                )
+            )
+            if timestamp > gate_reviewed_at:
+                raise ValueError(f"{field} cannot follow agreement execution review")
+        if (
+            qualification_checked.get("application_id")
+            != preflight_checked.get("application_id")
+            or value(preflight_checked.get("bound_inputs", {}), "qualification_evidence_sha256")
+            != qualification_digest
+        ):
+            raise ValueError(
+                "partner preflight does not bind the exact qualification evidence"
+            )
+        if (
+            drill_payload.get("stripe_account_id") != expected_stripe_account_id
+            or drill_payload.get("stripe_display_name")
+            != expected_stripe_display_name
+        ):
+            raise ValueError("Stripe test drill was run against a different account")
+        drill_completed = datetime.fromisoformat(
+            drill_payload["completed_at"].replace("Z", "+00:00")
+        )
+        if not timedelta(0) <= datetime.now(timezone.utc) - drill_completed <= timedelta(
+            days=30
+        ):
+            raise ValueError("Stripe test drill evidence must be no more than 30 days old")
     elif action == "annual-contract":
+        if any(
+            document is not None
+            for document in (
+                agreement_gate_document,
+                qualification_document,
+                partner_preflight_document,
+                stripe_test_drill_document,
+                delivery_manifest_document,
+                delivery_artifact_root,
+            )
+        ):
+            raise ValueError(
+                "evaluation commercial evidence is invalid for an annual contract"
+            )
         validate_annual_order(
             scope_document,
             evidence,
@@ -689,6 +859,48 @@ def verify_contract_documents(
             raise ValueError(
                 "delivery acceptance document does not match contract evidence"
             )
+        if delivery_manifest_document is None or delivery_artifact_root is None:
+            raise ValueError(
+                "delivery invoice requires the complete delivery manifest and artifact root"
+            )
+        delivery_payload, delivery_digest = evaluation_delivery_manifest.validate_manifest(
+            delivery_manifest_document, delivery_artifact_root
+        )
+        if delivery_digest != evidence.delivery_manifest_sha256:
+            raise ValueError("delivery manifest does not match contract evidence")
+        expected_delivery = {
+            "agreement_id": evidence.agreement_id,
+            "offer_id": evidence.offer_id,
+            "scope_sha256": evidence.scope_sha256,
+            "qualification_sha256": evidence.qualification_sha256,
+            "partner_preflight_sha256": evidence.partner_preflight_sha256,
+            "agreement_gate_sha256": evidence.agreement_gate_sha256,
+            "accepted_at": evidence.delivery_accepted_at,
+        }
+        if any(
+            delivery_payload.get(field) != expected
+            for field, expected in expected_delivery.items()
+        ):
+            raise ValueError(
+                "delivery manifest does not bind the exact contract and acceptance"
+            )
+        acceptance_descriptors = [
+            descriptor
+            for descriptor in delivery_payload["artifacts"]
+            if descriptor["name"] == "written_acceptance"
+        ]
+        if (
+            len(acceptance_descriptors) != 1
+            or acceptance_descriptors[0]["sha256"]
+            != evidence.delivery_acceptance_sha256
+        ):
+            raise ValueError(
+                "delivery manifest does not bind the written acceptance document"
+            )
+    elif delivery_manifest_document is not None or delivery_artifact_root is not None:
+        raise ValueError(
+            "delivery manifest evidence is valid only for a delivery invoice"
+        )
     elif delivery_acceptance_document is not None:
         raise ValueError(
             "delivery acceptance document is valid only for a delivery invoice"
@@ -702,7 +914,7 @@ class BillingRequest:
     customer_id: str
     agreement_id: str
     days_until_due: int
-    evidence: ContractEvidenceV1
+    evidence: ContractEvidenceV2
     stripe_price_id: str | None = None
     stripe_product_id: str | None = None
 
@@ -987,6 +1199,11 @@ def plan(
         "contract_evidence_sha256": request.evidence.digest(),
         "agreement_sha256": request.evidence.agreement_sha256,
         "scope_sha256": request.evidence.scope_sha256,
+        "agreement_gate_sha256": request.evidence.agreement_gate_sha256,
+        "qualification_sha256": request.evidence.qualification_sha256,
+        "partner_preflight_sha256": request.evidence.partner_preflight_sha256,
+        "stripe_test_drill_sha256": request.evidence.stripe_test_drill_sha256,
+        "delivery_manifest_sha256": request.evidence.delivery_manifest_sha256,
         "signed_at": request.evidence.signed_at,
         "delivery_acceptance_sha256": request.evidence.delivery_acceptance_sha256,
         "delivery_accepted_at": request.evidence.delivery_accepted_at,
@@ -1028,6 +1245,15 @@ def contract_metadata(
         "tinyzkp_signed_at": request.evidence.signed_at,
         "tinyzkp_plan_sha256": plan_sha256,
     }
+    for field, metadata_key in (
+        (request.evidence.agreement_gate_sha256, "tinyzkp_agreement_gate_sha256"),
+        (request.evidence.qualification_sha256, "tinyzkp_qualification_sha256"),
+        (request.evidence.partner_preflight_sha256, "tinyzkp_partner_preflight_sha256"),
+        (request.evidence.stripe_test_drill_sha256, "tinyzkp_test_drill_sha256"),
+        (request.evidence.delivery_manifest_sha256, "tinyzkp_delivery_manifest_sha256"),
+    ):
+        if field is not None:
+            metadata[metadata_key] = field
     if request.evidence.delivery_acceptance_sha256:
         metadata["tinyzkp_delivery_acceptance_sha256"] = (
             request.evidence.delivery_acceptance_sha256
@@ -1431,6 +1657,21 @@ def validate_reusable_invoice(
         == request.evidence.deposit_plan_sha256
         and value(metadata, "tinyzkp_delivery_acceptance_sha256")
         == request.evidence.delivery_acceptance_sha256
+        and value(metadata, "tinyzkp_delivery_manifest_sha256")
+        == request.evidence.delivery_manifest_sha256
+    )
+    evaluation_binding_matches = request.action not in {
+        "evaluation-deposit",
+        "evaluation-delivery",
+    } or (
+        value(metadata, "tinyzkp_agreement_gate_sha256")
+        == request.evidence.agreement_gate_sha256
+        and value(metadata, "tinyzkp_qualification_sha256")
+        == request.evidence.qualification_sha256
+        and value(metadata, "tinyzkp_partner_preflight_sha256")
+        == request.evidence.partner_preflight_sha256
+        and value(metadata, "tinyzkp_test_drill_sha256")
+        == request.evidence.stripe_test_drill_sha256
     )
     if (
         not stripe_object_id(invoice).startswith("in_")
@@ -1447,6 +1688,7 @@ def validate_reusable_invoice(
         or value(metadata, "tinyzkp_contract_evidence_sha256")
         != request.evidence.digest()
         or value(metadata, "tinyzkp_scope_sha256") != request.evidence.scope_sha256
+        or not evaluation_binding_matches
         or not delivery_binding_matches
     ):
         raise ValueError(
@@ -1480,6 +1722,14 @@ def validate_paid_deposit_for_delivery(
         != request.evidence.agreement_sha256
         or value(metadata, "tinyzkp_scope_sha256") != request.evidence.scope_sha256
         or value(metadata, "tinyzkp_signed_at") != request.evidence.signed_at
+        or value(metadata, "tinyzkp_agreement_gate_sha256")
+        != request.evidence.agreement_gate_sha256
+        or value(metadata, "tinyzkp_qualification_sha256")
+        != request.evidence.qualification_sha256
+        or value(metadata, "tinyzkp_partner_preflight_sha256")
+        != request.evidence.partner_preflight_sha256
+        or value(metadata, "tinyzkp_test_drill_sha256")
+        != request.evidence.stripe_test_drill_sha256
     ):
         raise ValueError(
             "delivery invoice requires the exact fully paid deposit bound in contract evidence"
@@ -2000,7 +2250,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--contract-evidence", type=Path, required=True)
     parser.add_argument("--agreement-document", type=Path, required=True)
     parser.add_argument("--scope-document", type=Path, required=True)
+    parser.add_argument("--agreement-gate-document", type=Path)
+    parser.add_argument("--qualification-document", type=Path)
+    parser.add_argument("--partner-preflight-document", type=Path)
+    parser.add_argument("--stripe-test-drill-document", type=Path)
     parser.add_argument("--delivery-acceptance-document", type=Path)
+    parser.add_argument("--delivery-manifest-document", type=Path)
+    parser.add_argument("--delivery-artifact-root", type=Path)
     parser.add_argument("--expected-plan-sha256")
     parser.add_argument(
         "--billing-ledger",
@@ -2031,7 +2287,15 @@ def main() -> None:
         args.action,
         agreement_document=args.agreement_document,
         scope_document=args.scope_document,
+        agreement_gate_document=getattr(args, "agreement_gate_document", None),
+        qualification_document=getattr(args, "qualification_document", None),
+        partner_preflight_document=getattr(args, "partner_preflight_document", None),
+        stripe_test_drill_document=getattr(args, "stripe_test_drill_document", None),
+        expected_stripe_account_id=args.expected_account_id,
+        expected_stripe_display_name=args.expected_display_name,
         delivery_acceptance_document=args.delivery_acceptance_document,
+        delivery_manifest_document=getattr(args, "delivery_manifest_document", None),
+        delivery_artifact_root=getattr(args, "delivery_artifact_root", None),
         stripe_price_id=args.stripe_price_id,
         stripe_product_id=args.stripe_product_id,
     )

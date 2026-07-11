@@ -1,0 +1,43 @@
+{
+  "schema_version": "tinyzkp-evaluation-delivery-v1",
+  "status": "complete",
+  "agreement_id": "REPLACE_ME",
+  "offer_id": "founding_evaluation",
+  "workload_manifest_digest_hex": "REPLACE_WITH_CANONICAL_BLAKE3_MANIFEST_DIGEST",
+  "scope_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+  "qualification_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+  "partner_preflight_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+  "agreement_gate_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+  "release_sha": "REPLACE_WITH_FULL_40_HEX_GIT_SHA",
+  "adapter_revision": "REPLACE_WITH_FULL_40_HEX_GIT_SHA",
+  "official_verifier_target": "unmodified-p3-uni-stark-0.6.1",
+  "artifacts": [
+    {"name":"workload_manifest","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"application/json"},
+    {"name":"adapter_artifact","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"application/octet-stream"},
+    {"name":"baseline_benchmark_report","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"application/json"},
+    {"name":"candidate_benchmark_report","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"application/json"},
+    {"name":"proof_bundle","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"application/json"},
+    {"name":"official_verification_report","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"application/json"},
+    {"name":"raw_measurements_archive","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"application/zstd"},
+    {"name":"reproduction_instructions","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"text/markdown"},
+    {"name":"known_limitations","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"text/markdown"},
+    {"name":"production_recommendation","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"text/markdown"},
+    {"name":"written_acceptance","relative_path":"REPLACE","sha256":"REPLACE_WITH_LOWERCASE_64_HEX","size_bytes":1,"media_type":"application/pdf"}
+  ],
+  "retention": {
+    "policy_id": "tinyzkp-evaluation-retention-v1",
+    "application_delete_by": "REPLACE_WITH_RFC3339_UTC_Z_TIME",
+    "artifact_retain_until": "REPLACE_WITH_RFC3339_UTC_Z_TIME",
+    "artifact_delete_by": "REPLACE_WITH_RFC3339_UTC_Z_TIME",
+    "deletion_owner": "REPLACE_ME"
+  },
+  "data_boundary": {
+    "witness_data_included": false,
+    "credentials_included": false,
+    "customer_personal_data_included": false,
+    "private_source_included": false
+  },
+  "prepared_by": "REPLACE_ME",
+  "completed_at": "REPLACE_WITH_RFC3339_UTC_Z_TIME",
+  "accepted_at": "REPLACE_WITH_RFC3339_UTC_Z_TIME"
+}

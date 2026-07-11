@@ -1,0 +1,40 @@
+{
+  "schema_version": "tinyzkp-evaluation-qualification-input-v1",
+  "application_id": "eval_REPLACE",
+  "reviewed_at": "2026-07-10T20:00:00Z",
+  "reviewer_id": "REPLACE_WITH_OPERATOR_ID",
+  "compatibility": {
+    "profile": "tinyzkp-p3-goldilocks-v1",
+    "plonky3_version": "0.6.1",
+    "expected_verifier": "unmodified-p3-uni-stark-0.6.1"
+  },
+  "workload": {
+    "workload_id": "REPLACE_WITH_SAFE_WORKLOAD_ID",
+    "description": "REPLACE_WITH_NON_SENSITIVE_WORKLOAD_DESCRIPTION",
+    "revision": "REPLACE_WITH_FULL_LOWERCASE_40_HEX_GIT_COMMIT",
+    "logical_rows": 1048576,
+    "generator_kind": "deterministic_non_sensitive",
+    "generator_reference": "REPLACE_WITH_PUBLIC_OR_NON_SENSITIVE_GENERATOR_REFERENCE",
+    "generator_sha256": "REPLACE_WITH_LOWERCASE_64_HEX"
+  },
+  "memory_constraint": {
+    "evidence_kind": "measured_rss",
+    "current_peak_rss_bytes": 3221225472,
+    "oom_limit_bytes": null,
+    "target_resident_bytes": 2147483648,
+    "available_scratch_bytes": 107374182400,
+    "scratch_medium": "local_nvme"
+  },
+  "owners": {
+    "technical_owner_confirmed": true,
+    "budget_owner_confirmed": true,
+    "decision_by": "2026-08-31"
+  },
+  "data_boundary": {
+    "public_or_non_sensitive_generator_only": true,
+    "witness_transfer_allowed": false,
+    "credentials_transfer_allowed": false,
+    "customer_data_transfer_allowed": false,
+    "proprietary_source_transfer_allowed": false
+  }
+}

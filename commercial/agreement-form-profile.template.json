@@ -1,0 +1,11 @@
+{
+  "schema_version": "tinyzkp-agreement-form-profile-v1",
+  "status": "REPLACE_WITH_COUNSEL_APPROVED",
+  "form_id": "tinyzkp-evaluation-msa-sow",
+  "form_version": "REPLACE_WITH_APPROVED_VERSION",
+  "approved_template_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+  "counsel_approval_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+  "approved_by": "REPLACE_WITH_COUNSEL_IDENTITY",
+  "approved_at": "REPLACE_WITH_RFC3339_UTC_Z_TIME",
+  "approval_scope": "evaluation-msa-sow-for-execution"
+}

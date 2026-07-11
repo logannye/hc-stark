@@ -82,6 +82,10 @@ def readiness_report(
         "contract_evidence_sha256": request.evidence.digest(),
         "agreement_sha256": request.evidence.agreement_sha256,
         "acceptance_matrix_sha256": request.evidence.scope_sha256,
+        "agreement_gate_sha256": request.evidence.agreement_gate_sha256,
+        "qualification_sha256": request.evidence.qualification_sha256,
+        "partner_preflight_sha256": request.evidence.partner_preflight_sha256,
+        "stripe_test_drill_sha256": request.evidence.stripe_test_drill_sha256,
         "deposit_plan_sha256": plan_sha256,
         "workload_manifest_sha256": workload["manifest_sha256"],
         "workload_revision": workload["revision"],
@@ -228,6 +232,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--contract-evidence", type=Path, required=True)
     parser.add_argument("--agreement-document", type=Path, required=True)
     parser.add_argument("--scope-document", type=Path, required=True)
+    parser.add_argument("--agreement-gate-document", type=Path)
+    parser.add_argument("--qualification-document", type=Path)
+    parser.add_argument("--partner-preflight-document", type=Path)
+    parser.add_argument("--stripe-test-drill-document", type=Path)
     parser.add_argument(
         "--expected-account-id", default=os.environ.get("STRIPE_EXPECTED_ACCOUNT_ID")
     )
@@ -248,6 +256,12 @@ def main(argv: list[str] | None = None) -> int:
         agreement_document=args.agreement_document,
         scope_document=args.scope_document,
         delivery_acceptance_document=None,
+        agreement_gate_document=getattr(args, "agreement_gate_document", None),
+        qualification_document=getattr(args, "qualification_document", None),
+        partner_preflight_document=getattr(args, "partner_preflight_document", None),
+        stripe_test_drill_document=getattr(args, "stripe_test_drill_document", None),
+        expected_stripe_account_id=args.expected_account_id,
+        expected_stripe_display_name=args.expected_display_name,
         stripe_price_id=args.stripe_price_id,
         stripe_product_id=args.stripe_product_id,
     )

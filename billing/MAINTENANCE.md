@@ -27,9 +27,12 @@ Stripe Invoicing; annual agreements use Billing subscriptions with
 
 Use `billing/contract_billing.py` to preview a deposit, delivery invoice, or
 annual `send_invoice` subscription. Its default is read-only. Every request is
-bound to an owner-only `ContractEvidenceV1` record containing the signed
+bound to an owner-only `ContractEvidenceV2` record containing the signed
 agreement and scope hashes, signature time, exact offer, agreement, and Stripe
-customer. Apply mode requires the exact read-only `plan_sha256`, exact Stripe
+customer. Evaluation records additionally bind `EvaluationQualificationV1`,
+`PartnerPreflightV1`, a counsel-approved agreement gate, and a fresh Stripe
+test-mode drill. Delivery records bind the complete artifact/retention manifest.
+Apply mode requires the exact read-only `plan_sha256`, exact Stripe
 account identity, a contract-tagged customer, and the
 `TINYZKP_ALLOW_CONTRACT_BILLING_WRITE=1` break-glass variable. Evaluation
 invoices are finalized with `auto_advance=false`; the CLI never calls Stripe's

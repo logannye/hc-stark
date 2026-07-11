@@ -1,0 +1,8 @@
+{
+  "mode": "scratch",
+  "max_resident_bytes": 2147483648,
+  "max_scratch_bytes": 85899345920,
+  "scratch_dir": "/var/lib/tinyzkp-evaluation/scratch",
+  "max_threads": 8,
+  "checkpoint_policy": "retain_on_failure"
+}

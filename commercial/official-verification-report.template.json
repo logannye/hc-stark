@@ -1,0 +1,16 @@
+{
+  "schema_version": "tinyzkp-official-verification-v1",
+  "verifier_target": "unmodified-p3-uni-stark-0.6.1",
+  "verification_succeeded": true,
+  "proof_bundle_sha256": "REPLACE_WITH_PROOF_BUNDLE_FILE_SHA256",
+  "proof_digest_hex": "REPLACE_WITH_PROOF_BUNDLE_PROOF_DIGEST_HEX",
+  "release_sha": "REPLACE_WITH_FULL_40_HEX_GIT_SHA",
+  "verified_at": "REPLACE_WITH_RFC3339_UTC_Z_TIME",
+  "exact_command": [
+    "hc-cli",
+    "plonky3",
+    "verify",
+    "--bundle",
+    "REPLACE_WITH_PROOF_BUNDLE_PATH"
+  ]
+}
