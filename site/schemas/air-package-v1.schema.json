@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AirPackageV1",
+  "type": "object",
+  "properties": {
+    "backend": {
+      "type": "string"
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AirConstraintV1"
+      }
+    },
+    "expected_verifier": {
+      "type": "string"
+    },
+    "expressions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AirExpressionV1"
+      }
+    },
+    "field": {
+      "type": "string"
+    },
+    "profile": {
+      "type": "string"
+    },
+    "public_value_count": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "trace_width": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "backend",
+    "profile",
+    "field",
+    "expected_verifier",
+    "trace_width",
+    "public_value_count",
+    "expressions",
+    "constraints"
+  ],
+  "$defs": {
+    "AirConstraintKindV1": {
+      "type": "string",
+      "enum": [
+        "transition",
+        "first_row",
+        "last_row"
+      ]
+    },
+    "AirConstraintV1": {
+      "type": "object",
+      "properties": {
+        "expression": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/AirConstraintKindV1"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "expression"
+      ]
+    },
+    "AirExpressionV1": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "constant"
+            },
+            "value": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 18446744069414584320,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "current"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "next"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "public"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "index"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "left": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "add"
+            },
+            "right": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "left",
+            "right"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "left": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "sub"
+            },
+            "right": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "left",
+            "right"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "left": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "mul"
+            },
+            "right": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "left",
+            "right"
+          ]
+        }
+      ]
+    }
+  }
+}

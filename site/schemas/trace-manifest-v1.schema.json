@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TraceManifestV1",
+  "type": "object",
+  "properties": {
+    "air_digest_hex": {
+      "type": "string"
+    },
+    "chunk_uncompressed_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "chunks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TraceChunkV1"
+      }
+    },
+    "compression": {
+      "type": "string"
+    },
+    "field_encoding": {
+      "type": "string"
+    },
+    "logical_rows": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "trace_digest_hex": {
+      "type": "string"
+    },
+    "trace_width": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "air_digest_hex",
+    "trace_digest_hex",
+    "logical_rows",
+    "trace_width",
+    "field_encoding",
+    "compression",
+    "chunk_uncompressed_bytes",
+    "chunks"
+  ],
+  "$defs": {
+    "TraceChunkV1": {
+      "type": "object",
+      "properties": {
+        "blake3_hex": {
+          "type": "string"
+        },
+        "compressed_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "index": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "uncompressed_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "compressed_bytes",
+        "uncompressed_bytes",
+        "blake3_hex"
+      ]
+    }
+  }
+}

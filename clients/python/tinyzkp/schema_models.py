@@ -4,7 +4,46 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict, Union
 
-RUST_SCHEMA_SET_SHA256 = "9348619fd9257d2c88625b31a7e1be55332337c129e88f95ac4f553dec2596e7"
+RUST_SCHEMA_SET_SHA256 = "b55ca8233029f4fac580d9790e8e7fad5f39c9fdfcd9bcb3cf9642b02219bc29"
+
+AirConstraintKindV1Model = Literal['transition', 'first_row', 'last_row']
+
+class AirConstraintV1Model(TypedDict):
+    expression: int
+    kind: AirConstraintKindV1Model
+
+class AirExpressionV1Variant1Model(TypedDict):
+    op: Literal['constant']
+    value: int
+
+class AirExpressionV1Variant2Model(TypedDict):
+    column: int
+    op: Literal['current']
+
+class AirExpressionV1Variant3Model(TypedDict):
+    column: int
+    op: Literal['next']
+
+class AirExpressionV1Variant4Model(TypedDict):
+    index: int
+    op: Literal['public']
+
+class AirExpressionV1Variant5Model(TypedDict):
+    left: int
+    op: Literal['add']
+    right: int
+
+class AirExpressionV1Variant6Model(TypedDict):
+    left: int
+    op: Literal['sub']
+    right: int
+
+class AirExpressionV1Variant7Model(TypedDict):
+    left: int
+    op: Literal['mul']
+    right: int
+
+AirExpressionV1Model = Union[AirExpressionV1Variant1Model, AirExpressionV1Variant2Model, AirExpressionV1Variant3Model, AirExpressionV1Variant4Model, AirExpressionV1Variant5Model, AirExpressionV1Variant6Model, AirExpressionV1Variant7Model]
 
 BenchmarkModeModel = Literal['baseline', 'bounded']
 
@@ -53,6 +92,12 @@ class ResourcePolicyV1Model(TypedDict):
     max_threads: int
     mode: ResourceModeModel
     scratch_dir: str
+
+class TraceChunkV1Model(TypedDict):
+    blake3_hex: str
+    compressed_bytes: int
+    index: int
+    uncompressed_bytes: int
 
 WorkloadIdModel = Literal['fibonacci', 'poseidon2_goldilocks']
 
@@ -114,3 +159,25 @@ class _BenchmarkReportV1ModelRequired(TypedDict):
 
 class BenchmarkReportV1Model(_BenchmarkReportV1ModelRequired, total=False):
     failure_diagnostic: Union[str, None]
+
+class AirPackageV1Model(TypedDict):
+    backend: str
+    constraints: list[AirConstraintV1Model]
+    expected_verifier: str
+    expressions: list[AirExpressionV1Model]
+    field: str
+    profile: str
+    public_value_count: int
+    schema_version: int
+    trace_width: int
+
+class TraceManifestV1Model(TypedDict):
+    air_digest_hex: str
+    chunk_uncompressed_bytes: int
+    chunks: list[TraceChunkV1Model]
+    compression: str
+    field_encoding: str
+    logical_rows: int
+    schema_version: int
+    trace_digest_hex: str
+    trace_width: int

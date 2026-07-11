@@ -12,6 +12,16 @@ pub const MAX_MANIFEST_JSON_BYTES: usize = 1024 * 1024;
 pub const MAX_BUNDLE_JSON_BYTES: usize = 96 * 1024 * 1024;
 pub const MAX_REPORT_JSON_BYTES: usize = 1024 * 1024;
 pub const MAX_PROOF_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_AIR_JSON_BYTES: usize = 4 * 1024 * 1024;
+pub const MAX_TRACE_MANIFEST_JSON_BYTES: usize = 8 * 1024 * 1024;
+pub const MAX_AIR_NODES: usize = 8192;
+pub const MAX_AIR_CONSTRAINTS: usize = 1024;
+pub const MAX_TRACE_WIDTH: u32 = 256;
+pub const MAX_TRACE_COMPRESSED_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+pub const MAX_TRACE_UNCOMPRESSED_BYTES: u64 = 32 * 1024 * 1024 * 1024;
+pub const MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES: u64 = 256 * 1024 * 1024;
+pub const MIN_CUSTOM_TRACE_ROWS: u64 = 1 << 10;
+pub const MAX_CUSTOM_TRACE_ROWS: u64 = 1 << 24;
 const MAX_PUBLIC_VALUES: usize = 1024;
 
 #[derive(Debug, thiserror::Error)]
@@ -20,6 +30,10 @@ pub enum ContractError {
     ProfileMismatch,
     #[error("invalid workload contract")]
     InvalidWorkload,
+    #[error("invalid declarative AIR contract")]
+    InvalidAir,
+    #[error("invalid trace contract")]
+    InvalidTrace,
     #[error("artifact exceeds its size limit")]
     SizeLimit,
     #[error("manifest digest mismatch")]
@@ -33,6 +47,222 @@ pub enum ContractError {
 }
 
 pub type Result<T> = std::result::Result<T, ContractError>;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AirExpressionV1 {
+    Constant {
+        #[schemars(range(max = 18446744069414584320u64))]
+        value: u64,
+    },
+    Current {
+        column: u32,
+    },
+    Next {
+        column: u32,
+    },
+    Public {
+        index: u32,
+    },
+    Add {
+        left: u32,
+        right: u32,
+    },
+    Sub {
+        left: u32,
+        right: u32,
+    },
+    Mul {
+        left: u32,
+        right: u32,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AirConstraintKindV1 {
+    Transition,
+    FirstRow,
+    LastRow,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AirConstraintV1 {
+    pub kind: AirConstraintKindV1,
+    pub expression: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AirPackageV1 {
+    pub schema_version: u32,
+    pub backend: String,
+    pub profile: String,
+    pub field: String,
+    pub expected_verifier: String,
+    pub trace_width: u32,
+    pub public_value_count: u32,
+    pub expressions: Vec<AirExpressionV1>,
+    pub constraints: Vec<AirConstraintV1>,
+}
+
+impl AirPackageV1 {
+    pub fn validate(&self) -> Result<()> {
+        if self.schema_version != 1
+            || self.backend != "plonky3"
+            || self.profile != COMPATIBILITY_PROFILE
+            || self.field != "goldilocks"
+            || self.expected_verifier != "p3_uni_stark_0.6.1"
+            || !(1..=MAX_TRACE_WIDTH).contains(&self.trace_width)
+            || self.public_value_count as usize > MAX_PUBLIC_VALUES
+            || self.expressions.is_empty()
+            || self.expressions.len() > MAX_AIR_NODES
+            || self.constraints.is_empty()
+            || self.constraints.len() > MAX_AIR_CONSTRAINTS
+        {
+            return Err(ContractError::InvalidAir);
+        }
+
+        let mut degrees = Vec::with_capacity(self.expressions.len());
+        for (position, expression) in self.expressions.iter().enumerate() {
+            let position = u32::try_from(position).map_err(|_| ContractError::InvalidAir)?;
+            let degree = match expression {
+                AirExpressionV1::Constant { value } if *value < GOLDILOCKS_MODULUS_U64 => 0,
+                AirExpressionV1::Current { column } | AirExpressionV1::Next { column }
+                    if *column < self.trace_width =>
+                {
+                    1
+                }
+                AirExpressionV1::Public { index } if *index < self.public_value_count => 0,
+                AirExpressionV1::Add { left, right } | AirExpressionV1::Sub { left, right } => {
+                    let (left_degree, right_degree) =
+                        prior_degrees(&degrees, position, *left, *right)?;
+                    left_degree.max(right_degree)
+                }
+                AirExpressionV1::Mul { left, right } => {
+                    let (left_degree, right_degree) =
+                        prior_degrees(&degrees, position, *left, *right)?;
+                    left_degree + right_degree
+                }
+                _ => return Err(ContractError::InvalidAir),
+            };
+            if degree > 3 {
+                return Err(ContractError::InvalidAir);
+            }
+            degrees.push(degree);
+        }
+        if self
+            .constraints
+            .iter()
+            .any(|constraint| constraint.expression as usize >= self.expressions.len())
+        {
+            return Err(ContractError::InvalidAir);
+        }
+        if canonical_json_bytes_v1(self)?.len() > MAX_AIR_JSON_BYTES {
+            return Err(ContractError::SizeLimit);
+        }
+        Ok(())
+    }
+
+    pub fn digest(&self) -> Result<[u8; 32]> {
+        self.validate()?;
+        Ok(*blake3::hash(&canonical_json_bytes_v1(self)?).as_bytes())
+    }
+}
+
+fn prior_degrees(degrees: &[u32], position: u32, left: u32, right: u32) -> Result<(u32, u32)> {
+    if left >= position || right >= position {
+        return Err(ContractError::InvalidAir);
+    }
+    Ok((degrees[left as usize], degrees[right as usize]))
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TraceChunkV1 {
+    pub index: u32,
+    pub compressed_bytes: u64,
+    pub uncompressed_bytes: u64,
+    pub blake3_hex: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TraceManifestV1 {
+    pub schema_version: u32,
+    pub air_digest_hex: String,
+    pub trace_digest_hex: String,
+    pub logical_rows: u64,
+    pub trace_width: u32,
+    pub field_encoding: String,
+    pub compression: String,
+    pub chunk_uncompressed_bytes: u64,
+    pub chunks: Vec<TraceChunkV1>,
+}
+
+impl TraceManifestV1 {
+    pub fn validate_for_air(&self, air: &AirPackageV1) -> Result<()> {
+        air.validate()?;
+        if self.schema_version != 1
+            || self.air_digest_hex != hex_lower(&air.digest()?)
+            || !is_lower_hex_digest(&self.trace_digest_hex)
+            || self.trace_width != air.trace_width
+            || self.logical_rows < MIN_CUSTOM_TRACE_ROWS
+            || self.logical_rows > MAX_CUSTOM_TRACE_ROWS
+            || !self.logical_rows.is_power_of_two()
+            || self.field_encoding != "goldilocks_u64_le"
+            || self.compression != "zstd"
+            || self.chunk_uncompressed_bytes == 0
+            || self.chunk_uncompressed_bytes > MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES
+            || self.chunk_uncompressed_bytes % 8 != 0
+            || self.chunks.is_empty()
+            || canonical_json_bytes_v1(self)?.len() > MAX_TRACE_MANIFEST_JSON_BYTES
+        {
+            return Err(ContractError::InvalidTrace);
+        }
+        let expected_uncompressed = self
+            .logical_rows
+            .checked_mul(u64::from(self.trace_width))
+            .and_then(|value| value.checked_mul(8))
+            .ok_or(ContractError::InvalidTrace)?;
+        let mut compressed_total = 0u64;
+        let mut uncompressed_total = 0u64;
+        let expected_chunk_count = expected_uncompressed.div_ceil(self.chunk_uncompressed_bytes);
+        if self.chunks.len() as u64 != expected_chunk_count {
+            return Err(ContractError::InvalidTrace);
+        }
+        for (index, chunk) in self.chunks.iter().enumerate() {
+            let expected_chunk_bytes = if index + 1 == self.chunks.len() {
+                expected_uncompressed
+                    - self.chunk_uncompressed_bytes * (self.chunks.len() as u64 - 1)
+            } else {
+                self.chunk_uncompressed_bytes
+            };
+            if chunk.index as usize != index
+                || chunk.compressed_bytes == 0
+                || chunk.uncompressed_bytes == 0
+                || chunk.uncompressed_bytes != expected_chunk_bytes
+                || !is_lower_hex_digest(&chunk.blake3_hex)
+            {
+                return Err(ContractError::InvalidTrace);
+            }
+            compressed_total = compressed_total
+                .checked_add(chunk.compressed_bytes)
+                .ok_or(ContractError::InvalidTrace)?;
+            uncompressed_total = uncompressed_total
+                .checked_add(chunk.uncompressed_bytes)
+                .ok_or(ContractError::InvalidTrace)?;
+        }
+        if compressed_total > MAX_TRACE_COMPRESSED_BYTES
+            || uncompressed_total > MAX_TRACE_UNCOMPRESSED_BYTES
+            || uncompressed_total != expected_uncompressed
+        {
+            return Err(ContractError::SizeLimit);
+        }
+        Ok(())
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -346,6 +576,14 @@ pub fn workload_manifest_schema() -> Schema {
     schema_for!(WorkloadManifestV1)
 }
 
+pub fn air_package_schema() -> Schema {
+    schema_for!(AirPackageV1)
+}
+
+pub fn trace_manifest_schema() -> Schema {
+    schema_for!(TraceManifestV1)
+}
+
 pub fn proof_bundle_schema() -> Schema {
     schema_for!(ProofBundleV1)
 }
@@ -508,6 +746,8 @@ mod tests {
     #[test]
     fn schemas_are_generated_from_rust_types() {
         for schema in [
+            air_package_schema(),
+            trace_manifest_schema(),
             workload_manifest_schema(),
             proof_bundle_schema(),
             benchmark_report_schema(),
@@ -518,6 +758,116 @@ mod tests {
                 "https://json-schema.org/draft/2020-12/schema"
             );
         }
+    }
+
+    fn customer_air() -> AirPackageV1 {
+        AirPackageV1 {
+            schema_version: 1,
+            backend: "plonky3".into(),
+            profile: COMPATIBILITY_PROFILE.into(),
+            field: "goldilocks".into(),
+            expected_verifier: "p3_uni_stark_0.6.1".into(),
+            trace_width: 1,
+            public_value_count: 0,
+            expressions: vec![
+                AirExpressionV1::Current { column: 0 },
+                AirExpressionV1::Next { column: 0 },
+                AirExpressionV1::Sub { left: 1, right: 0 },
+            ],
+            constraints: vec![AirConstraintV1 {
+                kind: AirConstraintKindV1::Transition,
+                expression: 2,
+            }],
+        }
+    }
+
+    #[test]
+    fn declarative_air_is_hash_bound_and_rejects_unsafe_graphs() {
+        let air = customer_air();
+        air.validate().unwrap();
+        assert_ne!(air.digest().unwrap(), [0; 32]);
+
+        let mut forward_reference = air.clone();
+        forward_reference.expressions[2] = AirExpressionV1::Add { left: 2, right: 0 };
+        assert!(matches!(
+            forward_reference.validate(),
+            Err(ContractError::InvalidAir)
+        ));
+
+        let mut degree_four = air;
+        degree_four.expressions = vec![
+            AirExpressionV1::Current { column: 0 },
+            AirExpressionV1::Mul { left: 0, right: 0 },
+            AirExpressionV1::Mul { left: 1, right: 0 },
+            AirExpressionV1::Mul { left: 2, right: 0 },
+        ];
+        degree_four.constraints[0].expression = 3;
+        assert!(matches!(
+            degree_four.validate(),
+            Err(ContractError::InvalidAir)
+        ));
+    }
+
+    #[test]
+    fn maximum_width_and_goldilocks_value_are_valid_customer_air_inputs() {
+        let air = AirPackageV1 {
+            schema_version: 1,
+            backend: "plonky3".into(),
+            profile: COMPATIBILITY_PROFILE.into(),
+            field: "goldilocks".into(),
+            expected_verifier: "p3_uni_stark_0.6.1".into(),
+            trace_width: MAX_TRACE_WIDTH,
+            public_value_count: 1,
+            expressions: vec![
+                AirExpressionV1::Current {
+                    column: MAX_TRACE_WIDTH - 1,
+                },
+                AirExpressionV1::Constant {
+                    value: GOLDILOCKS_MODULUS_U64 - 1,
+                },
+                AirExpressionV1::Sub { left: 0, right: 1 },
+            ],
+            constraints: vec![AirConstraintV1 {
+                kind: AirConstraintKindV1::FirstRow,
+                expression: 2,
+            }],
+        };
+        air.validate().unwrap();
+        assert_eq!(
+            hex_lower(&air.digest().unwrap()),
+            "794df3f5378ff97b9c2877bd1f01c8fbcf646a212981a9f2bd8cdd7147a4a454"
+        );
+    }
+
+    #[test]
+    fn trace_manifest_binds_air_shape_chunks_and_expanded_size() {
+        let air = customer_air();
+        let mut trace = TraceManifestV1 {
+            schema_version: 1,
+            air_digest_hex: hex_lower(&air.digest().unwrap()),
+            trace_digest_hex: "11".repeat(32),
+            logical_rows: MIN_CUSTOM_TRACE_ROWS,
+            trace_width: 1,
+            field_encoding: "goldilocks_u64_le".into(),
+            compression: "zstd".into(),
+            chunk_uncompressed_bytes: MIN_CUSTOM_TRACE_ROWS * 8,
+            chunks: vec![TraceChunkV1 {
+                index: 0,
+                compressed_bytes: 256,
+                uncompressed_bytes: MIN_CUSTOM_TRACE_ROWS * 8,
+                blake3_hex: "22".repeat(32),
+            }],
+        };
+        trace.validate_for_air(&air).unwrap();
+
+        trace.chunks[0].index = 1;
+        assert!(matches!(
+            trace.validate_for_air(&air),
+            Err(ContractError::InvalidTrace)
+        ));
+        trace.chunks[0].index = 0;
+        trace.chunks[0].uncompressed_bytes = MAX_TRACE_UNCOMPRESSED_BYTES + 1;
+        assert!(trace.validate_for_air(&air).is_err());
     }
 
     #[test]

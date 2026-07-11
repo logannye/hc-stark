@@ -60,6 +60,24 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum Plonky3Command {
+    /// Validate a declarative customer AIR and print its content digest.
+    ValidateAir {
+        #[arg(long)]
+        air: PathBuf,
+    },
+    /// Validate and package a flat Goldilocks trace into fixed-size Zstandard chunks.
+    PackTrace {
+        #[arg(long)]
+        air: PathBuf,
+        #[arg(long)]
+        trace: PathBuf,
+        #[arg(long)]
+        rows: u64,
+        #[arg(long)]
+        output_dir: PathBuf,
+        #[arg(long, default_value_t = 64 * 1024 * 1024)]
+        chunk_bytes: u64,
+    },
     Prove {
         #[arg(long)]
         manifest: PathBuf,
@@ -154,6 +172,20 @@ fn main() -> Result<()> {
             Ok(())
         }
         Commands::Plonky3 { command } => match command {
+            Plonky3Command::ValidateAir { air } => commands::plonky3::validate_air(&air),
+            Plonky3Command::PackTrace {
+                air,
+                trace,
+                rows,
+                output_dir,
+                chunk_bytes,
+            } => commands::plonky3::pack_trace(
+                &air,
+                &trace,
+                rows,
+                &output_dir,
+                chunk_bytes,
+            ),
             Plonky3Command::Prove { manifest, output } => {
                 commands::plonky3::prove(&manifest, &output)
             }

@@ -1,7 +1,10 @@
 use anyhow::{bail, Context, Result};
 use hc_plonky3::contracts::{
-    benchmark_report_schema, proof_bundle_schema, workload_manifest_schema, InputGeneratorV1,
-    ProofBundleV1, WorkloadId, WorkloadManifestV1, MAX_BUNDLE_JSON_BYTES, MAX_MANIFEST_JSON_BYTES,
+    air_package_schema, benchmark_report_schema, proof_bundle_schema, trace_manifest_schema,
+    workload_manifest_schema, AirPackageV1, InputGeneratorV1, ProofBundleV1, TraceChunkV1,
+    TraceManifestV1, WorkloadId, WorkloadManifestV1, MAX_AIR_JSON_BYTES, MAX_BUNDLE_JSON_BYTES,
+    MAX_CUSTOM_TRACE_ROWS, MAX_MANIFEST_JSON_BYTES, MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES,
+    MAX_TRACE_UNCOMPRESSED_BYTES, MIN_CUSTOM_TRACE_ROWS,
 };
 use hc_plonky3::{
     InternalProofBundle, ResourceBoundedUniStarkProver, WorkloadKind, COMPATIBILITY_PROFILE,
@@ -11,8 +14,111 @@ use hc_stream::{CheckpointManifestV2, ResourceEstimate, ResourcePolicyV1};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+
+pub fn validate_air(air_path: &Path) -> Result<()> {
+    let air: AirPackageV1 = read_json_limited(air_path, MAX_AIR_JSON_BYTES)?;
+    air.validate().map_err(anyhow::Error::msg)?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "schema_version": 1,
+            "valid": true,
+            "air_digest_hex": hex_lower(&air.digest().map_err(anyhow::Error::msg)?),
+            "trace_width": air.trace_width,
+            "public_value_count": air.public_value_count,
+            "constraint_count": air.constraints.len(),
+            "profile": air.profile,
+            "expected_verifier": air.expected_verifier,
+        }))?
+    );
+    Ok(())
+}
+
+pub fn pack_trace(
+    air_path: &Path,
+    trace_path: &Path,
+    logical_rows: u64,
+    output_dir: &Path,
+    chunk_uncompressed_bytes: u64,
+) -> Result<()> {
+    let air: AirPackageV1 = read_json_limited(air_path, MAX_AIR_JSON_BYTES)?;
+    air.validate().map_err(anyhow::Error::msg)?;
+    if !(MIN_CUSTOM_TRACE_ROWS..=MAX_CUSTOM_TRACE_ROWS).contains(&logical_rows)
+        || !logical_rows.is_power_of_two()
+    {
+        bail!("trace rows must be a power of two from 2^10 through 2^24");
+    }
+    if chunk_uncompressed_bytes == 0
+        || chunk_uncompressed_bytes > MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES
+        || chunk_uncompressed_bytes % 8 != 0
+    {
+        bail!("chunk bytes must be a nonzero multiple of 8 and at most 256 MiB");
+    }
+    let expected_bytes = logical_rows
+        .checked_mul(u64::from(air.trace_width))
+        .and_then(|value| value.checked_mul(8))
+        .context("trace size overflow")?;
+    if expected_bytes > MAX_TRACE_UNCOMPRESSED_BYTES {
+        bail!("expanded trace exceeds the 32 GiB beta limit");
+    }
+    let metadata = fs::symlink_metadata(trace_path)
+        .with_context(|| format!("stat {}", trace_path.display()))?;
+    if !metadata.file_type().is_file() || metadata.len() != expected_bytes {
+        bail!(
+            "trace must be a regular file containing exactly {expected_bytes} bytes of row-major Goldilocks u64 little-endian values"
+        );
+    }
+
+    fs::create_dir_all(output_dir)?;
+    let mut input = fs::File::open(trace_path)?;
+    let mut trace_hasher = blake3::Hasher::new();
+    let mut chunks = Vec::new();
+    let mut remaining = expected_bytes;
+    let mut index = 0u32;
+    while remaining > 0 {
+        let this_chunk = remaining.min(chunk_uncompressed_bytes);
+        let mut raw = vec![0u8; usize::try_from(this_chunk)?];
+        input.read_exact(&mut raw)?;
+        for encoded in raw.chunks_exact(8) {
+            let value = u64::from_le_bytes(encoded.try_into().expect("eight-byte chunk"));
+            if value >= hc_plonky3::GOLDILOCKS_MODULUS_U64 {
+                bail!("trace contains a noncanonical Goldilocks value in chunk {index}");
+            }
+        }
+        trace_hasher.update(&raw);
+        let compressed = zstd::stream::encode_all(raw.as_slice(), 3)?;
+        let chunk_name = format!("chunk-{index:06}.zst");
+        write_bytes_atomic(&output_dir.join(&chunk_name), &compressed)?;
+        chunks.push(TraceChunkV1 {
+            index,
+            compressed_bytes: compressed.len() as u64,
+            uncompressed_bytes: this_chunk,
+            blake3_hex: hex_lower(blake3::hash(&compressed).as_bytes()),
+        });
+        remaining -= this_chunk;
+        index = index.checked_add(1).context("too many trace chunks")?;
+    }
+    let manifest = TraceManifestV1 {
+        schema_version: 1,
+        air_digest_hex: hex_lower(&air.digest().map_err(anyhow::Error::msg)?),
+        trace_digest_hex: hex_lower(trace_hasher.finalize().as_bytes()),
+        logical_rows,
+        trace_width: air.trace_width,
+        field_encoding: "goldilocks_u64_le".into(),
+        compression: "zstd".into(),
+        chunk_uncompressed_bytes,
+        chunks,
+    };
+    manifest
+        .validate_for_air(&air)
+        .map_err(anyhow::Error::msg)?;
+    let manifest_path = output_dir.join("trace-manifest-v1.json");
+    write_json_atomic(&manifest_path, &manifest)?;
+    println!("{}", manifest_path.display());
+    Ok(())
+}
 
 pub fn prove(manifest_path: &Path, output: &Path) -> Result<()> {
     let manifest: WorkloadManifestV1 = read_json_limited(manifest_path, MAX_MANIFEST_JSON_BYTES)?;
@@ -245,6 +351,14 @@ pub fn export_schemas(output_dir: &Path) -> Result<()> {
         &output_dir.join("benchmark-report-v1.schema.json"),
         &benchmark_report_schema(),
     )?;
+    write_json_atomic(
+        &output_dir.join("air-package-v1.schema.json"),
+        &air_package_schema(),
+    )?;
+    write_json_atomic(
+        &output_dir.join("trace-manifest-v1.schema.json"),
+        &trace_manifest_schema(),
+    )?;
     println!("generated schemas in {}", output_dir.display());
     Ok(())
 }
@@ -386,6 +500,24 @@ fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     let mut file = options.open(&temp)?;
     serde_json::to_writer_pretty(&mut file, value)?;
     file.write_all(b"\n")?;
+    file.sync_all()?;
+    fs::rename(&temp, path)?;
+    Ok(())
+}
+
+fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+    let temp = temp_path(path);
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&temp)?;
+    file.write_all(bytes)?;
     file.sync_all()?;
     fs::rename(&temp, path)?;
     Ok(())

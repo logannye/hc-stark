@@ -63,6 +63,101 @@ fn write_fibonacci_manifest(dir: &std::path::Path) -> std::path::PathBuf {
     manifest
 }
 
+fn write_customer_air(dir: &std::path::Path) -> std::path::PathBuf {
+    let air = dir.join("air.json");
+    let payload = json!({
+        "schema_version": 1,
+        "backend": "plonky3",
+        "profile": "tinyzkp-p3-goldilocks-v1",
+        "field": "goldilocks",
+        "expected_verifier": "p3_uni_stark_0.6.1",
+        "trace_width": 1,
+        "public_value_count": 0,
+        "expressions": [
+            {"op": "current", "column": 0},
+            {"op": "next", "column": 0},
+            {"op": "sub", "left": 1, "right": 0}
+        ],
+        "constraints": [{"kind": "transition", "expression": 2}]
+    });
+    std::fs::write(&air, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
+    air
+}
+
+#[test]
+fn validates_air_and_packs_canonical_fixed_size_trace_chunks() {
+    let dir = tempdir().unwrap();
+    let air = write_customer_air(dir.path());
+    cargo_bin_cmd!("hc-cli")
+        .args(["plonky3", "validate-air", "--air", air.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"valid\": true"));
+
+    let trace = dir.path().join("trace.bin");
+    let mut bytes = Vec::with_capacity(1024 * 8);
+    for row in 0..1024u64 {
+        let value = if row == 1023 {
+            hc_plonky3::GOLDILOCKS_MODULUS_U64 - 1
+        } else {
+            row
+        };
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    std::fs::write(&trace, bytes).unwrap();
+    let packed = dir.path().join("packed");
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "pack-trace",
+            "--air",
+            air.to_str().unwrap(),
+            "--trace",
+            trace.to_str().unwrap(),
+            "--rows",
+            "1024",
+            "--output-dir",
+            packed.to_str().unwrap(),
+            "--chunk-bytes",
+            "4096",
+        ])
+        .assert()
+        .success();
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(packed.join("trace-manifest-v1.json")).unwrap())
+            .unwrap();
+    assert_eq!(manifest["chunk_uncompressed_bytes"], 4096);
+    assert_eq!(manifest["chunks"].as_array().unwrap().len(), 2);
+    assert!(packed.join("chunk-000000.zst").is_file());
+    assert!(packed.join("chunk-000001.zst").is_file());
+}
+
+#[test]
+fn pack_trace_rejects_noncanonical_field_values() {
+    let dir = tempdir().unwrap();
+    let air = write_customer_air(dir.path());
+    let trace = dir.path().join("trace.bin");
+    let mut bytes = vec![0u8; 1024 * 8];
+    bytes[..8].copy_from_slice(&hc_plonky3::GOLDILOCKS_MODULUS_U64.to_le_bytes());
+    std::fs::write(&trace, bytes).unwrap();
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "pack-trace",
+            "--air",
+            air.to_str().unwrap(),
+            "--trace",
+            trace.to_str().unwrap(),
+            "--rows",
+            "1024",
+            "--output-dir",
+            dir.path().join("packed").to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("noncanonical Goldilocks"));
+}
+
 #[test]
 fn production_generic_commands_fail_with_migration_guidance() {
     for command in ["prove", "verify"] {
