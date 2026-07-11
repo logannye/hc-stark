@@ -3,7 +3,7 @@ use crate::{
     error::ApiError,
     idempotency::{self, IdempotencyOutcome},
     models::{CheckoutRequest, PortalRequest, RedirectResponse},
-    stripe::{ReconciliationReport, StripeEvent, CATALOG_NAMESPACE},
+    stripe::{CheckoutSessionParams, ReconciliationReport, StripeEvent, CATALOG_NAMESPACE},
     AppState,
 };
 use axum::{
@@ -84,15 +84,15 @@ pub async fn checkout(
     };
     let session = state
         .stripe
-        .create_checkout(
-            &tenant.tenant_id,
-            &customer_id,
-            &request.sku,
-            operation,
-            &request.success_url,
-            &request.cancel_url,
-            request.synthetic_canary,
-        )
+        .create_checkout(CheckoutSessionParams {
+            tenant_id: &tenant.tenant_id,
+            customer_id: &customer_id,
+            sku: &request.sku,
+            operation_id: operation,
+            success_url: &request.success_url,
+            cancel_url: &request.cancel_url,
+            synthetic_canary: request.synthetic_canary,
+        })
         .await?;
     let response = RedirectResponse {
         id: session.id,
