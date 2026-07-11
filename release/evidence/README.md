@@ -271,6 +271,28 @@ or fuzz evidence. A missing or different committed anchor blocks the workflow
 while preserving the candidate artifact for review; the verifier never copies
 the freshly observed digest into trust.
 
+The non-Rust executables used by the six evidence gates are reviewed inputs as
+well. Run the capture tool under the exact fixed-host Python and PATH that will
+execute the gates:
+
+```bash
+HC_RELEASE_SHA="$(git rev-parse HEAD)" \
+  python3 scripts/release/gate_tool_anchor.py capture \
+    --output release/evidence/work/gate-tool-anchor-candidate.json
+
+HC_RELEASE_SHA="$(git rev-parse HEAD)" \
+  python3 scripts/release/gate_tool_anchor.py verify \
+    --candidate release/evidence/work/gate-tool-anchor-candidate.json
+```
+
+Capture derives the exact tool set from the frozen gate commands: `bash`,
+`python3`, `node`, and `wasm-pack`. The candidate is owner-only and always
+`unreviewed`; verification intentionally fails while the platform is absent
+from `gate_tools.platforms`. After independent reproduction, add only the
+reviewed platform-to-digest mapping in a separate trust commit. Verification
+requires exact equality, including the absence of extra tools, and never
+promotes freshly observed bytes into trust.
+
 Design-partner evidence requires three
 separately hashed roles: `adapter_result`, `resource_report`, and
 `acceptance_record`. All three are machine-readable and release-bound. The
