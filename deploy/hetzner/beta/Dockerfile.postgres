@@ -1,5 +1,5 @@
 FROM postgres:17.5-bookworm@sha256:fbcea1bd13b6a882cd6caa6b58db3ae5c102efe50ec625b3e2a5cbc50db5bfe4
 ARG PGBACKREST_VERSION=2.58.0-1.pgdg12+1
 RUN apt-get update \
- && apt-get install -y --no-install-recommends "pgbackrest=${PGBACKREST_VERSION}" \
+ && apt-get install -y --no-install-recommends ca-certificates "pgbackrest=${PGBACKREST_VERSION}" \
  && rm -rf /var/lib/apt/lists/*
