@@ -1,0 +1,553 @@
+use anyhow::{bail, Context};
+use hc_plonky3::{
+    contracts::{
+        AirPackageV1, AirProofBundleV1, HostedProofBundleV1, HostedResourceReportV1,
+        PublicInputsV1, TraceManifestV1,
+    },
+    prove_resource_bounded_observed_with_cancellation, UploadedTraceWorkload,
+};
+use hc_stream::{CheckpointPolicy, ResourceMode, ResourcePolicyV1};
+use reqwest::{Client, Method};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::{
+    fs,
+    io::AsyncWriteExt,
+    sync::{mpsc, Semaphore},
+};
+use uuid::Uuid;
+
+#[derive(Clone)]
+struct Config {
+    api_url: String,
+    worker_id: String,
+    credential: String,
+    release_sha: String,
+    scratch: PathBuf,
+    slots: usize,
+}
+
+#[derive(Clone)]
+struct Worker {
+    config: Arc<Config>,
+    http: Client,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct SignedUrl {
+    url: String,
+    headers: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct ChunkUrl {
+    index: u32,
+    upload: SignedUrl,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct Claim {
+    job_id: Uuid,
+    attempt: u32,
+    lease_epoch: u64,
+    air: AirPackageV1,
+    manifest: TraceManifestV1,
+    public_inputs: PublicInputsV1,
+    input_chunks: Vec<ChunkUrl>,
+}
+
+#[derive(Serialize)]
+struct ClaimRequest<'a> {
+    release_sha: &'a str,
+    free_scratch_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct HeartbeatRequest {
+    attempt: u32,
+    lease_epoch: u64,
+    free_scratch_bytes: u64,
+    progress: Option<Value>,
+    checkpoint_identity: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct HeartbeatResponse {
+    cancel_requested: bool,
+}
+
+#[derive(Serialize)]
+struct OutputRequest<'a> {
+    attempt: u32,
+    lease_epoch: u64,
+    content_length: u64,
+    blake3_hex: &'a str,
+}
+
+#[derive(Deserialize)]
+struct OutputResponse {
+    object_key: String,
+    upload: SignedUrl,
+}
+
+#[derive(Serialize)]
+struct CompleteRequest<'a> {
+    attempt: u32,
+    lease_epoch: u64,
+    object_key: &'a str,
+    content_length: u64,
+    blake3_hex: &'a str,
+}
+
+#[derive(Serialize)]
+struct FailureRequest<'a> {
+    attempt: u32,
+    lease_epoch: u64,
+    code: &'a str,
+    retryable: bool,
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .json()
+        .init();
+    let config = Arc::new(Config::from_env()?);
+    prepare_scratch(&config.scratch).await?;
+    let worker = Worker {
+        config: config.clone(),
+        http: Client::builder().timeout(Duration::from_secs(60)).build()?,
+    };
+    let slots = Arc::new(Semaphore::new(config.slots));
+    loop {
+        if slots.available_permits() == 0 {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        match worker.claim().await {
+            Ok(Some(claim)) => {
+                let permit = slots.clone().acquire_owned().await?;
+                let worker = worker.clone();
+                tokio::spawn(async move {
+                    let _permit = permit;
+                    if let Err(error) = worker.run_job(claim).await {
+                        tracing::error!(%error, "hosted proof job failed");
+                    }
+                });
+            }
+            Ok(None) => tokio::time::sleep(Duration::from_secs(2)).await,
+            Err(error) => {
+                tracing::warn!(%error, "lease claim failed");
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        }
+    }
+}
+
+impl Config {
+    fn from_env() -> anyhow::Result<Self> {
+        let slots = optional("TINYZKP_WORKER_SLOTS", "4").parse::<usize>()?;
+        if !(1..=4).contains(&slots) {
+            bail!("TINYZKP_WORKER_SLOTS must be between 1 and 4");
+        }
+        let release_sha = required("HC_RELEASE_SHA")?;
+        if release_sha.len() != 40 {
+            bail!("HC_RELEASE_SHA must be a full Git SHA");
+        }
+        Ok(Self {
+            api_url: required("TINYZKP_WORKER_API_URL")?
+                .trim_end_matches('/')
+                .to_owned(),
+            worker_id: required("TINYZKP_WORKER_ID")?,
+            credential: required("TINYZKP_WORKER_CREDENTIAL")?,
+            release_sha,
+            scratch: PathBuf::from(optional("TINYZKP_WORKER_SCRATCH", "/scratch/tinyzkp")),
+            slots,
+        })
+    }
+}
+
+impl Worker {
+    async fn claim(&self) -> anyhow::Result<Option<Claim>> {
+        self.json(
+            Method::POST,
+            "/internal/v1/leases/claim",
+            &ClaimRequest {
+                release_sha: &self.config.release_sha,
+                free_scratch_bytes: free_space(&self.config.scratch)?,
+            },
+        )
+        .await
+    }
+
+    async fn run_job(&self, claim: Claim) -> anyhow::Result<()> {
+        let job_dir = self.config.scratch.join(claim.job_id.to_string());
+        private_dir(&job_dir).await?;
+        let chunks_dir = job_dir.join("chunks");
+        private_dir(&chunks_dir).await?;
+        let result = self.execute(&claim, &job_dir, &chunks_dir).await;
+        if let Err(error) = &result {
+            let code = classify_error(error);
+            let action = if code == "cancelled" {
+                "cancelled"
+            } else {
+                "failure"
+            };
+            let endpoint = format!("/internal/v1/jobs/{}/{action}", claim.job_id);
+            let _ = self
+                .json::<_, Value>(
+                    Method::POST,
+                    &endpoint,
+                    &FailureRequest {
+                        attempt: claim.attempt,
+                        lease_epoch: claim.lease_epoch,
+                        code,
+                        retryable: matches!(code, "network" | "platform_io" | "prover_interrupted"),
+                    },
+                )
+                .await;
+        }
+        if let Err(error) = fs::remove_dir_all(&job_dir).await {
+            tracing::warn!(%error, path=%job_dir.display(), "scratch cleanup failed");
+        }
+        result
+    }
+
+    async fn execute(
+        &self,
+        claim: &Claim,
+        job_dir: &Path,
+        chunks_dir: &Path,
+    ) -> anyhow::Result<()> {
+        claim.air.validate().map_err(anyhow::Error::msg)?;
+        claim
+            .manifest
+            .validate_for_air(&claim.air)
+            .map_err(anyhow::Error::msg)?;
+        claim
+            .public_inputs
+            .validate_for_air(&claim.air)
+            .map_err(anyhow::Error::msg)?;
+        if claim.input_chunks.len() != claim.manifest.chunks.len() {
+            bail!("input chunk count mismatch");
+        }
+        let mut downloaded = 0u64;
+        for (expected, signed) in claim.manifest.chunks.iter().zip(&claim.input_chunks) {
+            if expected.index != signed.index {
+                bail!("input chunk order mismatch");
+            }
+            let path = chunks_dir.join(format!("chunk-{:06}.zst", expected.index));
+            download_exact(
+                &self.http,
+                &signed.upload,
+                &path,
+                expected.compressed_bytes,
+                &expected.blake3_hex,
+            )
+            .await?;
+            downloaded = downloaded.saturating_add(expected.compressed_bytes);
+        }
+        let workload = UploadedTraceWorkload::new(
+            claim.air.clone(),
+            claim.manifest.clone(),
+            claim.public_inputs.values.clone(),
+            chunks_dir,
+        )
+        .map_err(anyhow::Error::msg)?;
+        let policy = ResourcePolicyV1 {
+            mode: ResourceMode::Scratch,
+            max_resident_bytes: 2 * 1024 * 1024 * 1024,
+            max_scratch_bytes: free_space(&self.config.scratch)?.saturating_mul(70) / 100,
+            scratch_dir: job_dir.join("prover"),
+            max_threads: 2,
+            checkpoint_policy: CheckpointPolicy::RetainOnFailure,
+        };
+        private_dir(&policy.scratch_dir).await?;
+        let cancellation = hc_plonky3::CancellationToken::new();
+        let heartbeat_token = cancellation.clone();
+        let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<Value>();
+        let heartbeat_worker = self.clone();
+        let heartbeat_claim = (claim.job_id, claim.attempt, claim.lease_epoch);
+        let heartbeat = tokio::spawn(async move {
+            let mut latest = None;
+            loop {
+                while let Ok(progress) = progress_rx.try_recv() {
+                    latest = Some(progress);
+                }
+                tokio::time::sleep(Duration::from_secs(30)).await;
+                let endpoint = format!("/internal/v1/jobs/{}/heartbeat", heartbeat_claim.0);
+                let response = heartbeat_worker
+                    .json::<_, HeartbeatResponse>(
+                        Method::POST,
+                        &endpoint,
+                        &HeartbeatRequest {
+                            attempt: heartbeat_claim.1,
+                            lease_epoch: heartbeat_claim.2,
+                            free_scratch_bytes: free_space(&heartbeat_worker.config.scratch)
+                                .unwrap_or(0),
+                            progress: latest.take(),
+                            checkpoint_identity: None,
+                        },
+                    )
+                    .await;
+                match response {
+                    Ok(response) if response.cancel_requested => {
+                        heartbeat_token.cancel();
+                        break;
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(%error, "heartbeat failed; cancelling local prover");
+                        heartbeat_token.cancel();
+                        break;
+                    }
+                }
+            }
+        });
+        let started = Instant::now();
+        let air = claim.air.clone();
+        let manifest = claim.manifest.clone();
+        let public_inputs = claim.public_inputs.clone();
+        let proof = tokio::task::spawn_blocking(move || {
+            prove_resource_bounded_observed_with_cancellation(
+                &workload,
+                &policy,
+                cancellation,
+                |event| {
+                    let _ = progress_tx.send(json!({"event":format!("{event:?}")}));
+                },
+            )
+        })
+        .await
+        .context("prover task panicked")?;
+        heartbeat.abort();
+        let proof = proof.map_err(anyhow::Error::msg)?;
+        let proof_bundle = AirProofBundleV1::from_proof(
+            air,
+            manifest,
+            public_inputs,
+            proof,
+            self.config.release_sha.clone(),
+        )
+        .map_err(anyhow::Error::msg)?;
+        proof_bundle.verify().map_err(anyhow::Error::msg)?;
+        let wall_time_ms = started.elapsed().as_millis().max(1) as u64;
+        let scratch = directory_size(job_dir).await?;
+        let hosted = HostedProofBundleV1 {
+            schema_version: 1,
+            proof: proof_bundle,
+            resource_report: HostedResourceReportV1 {
+                peak_resident_bytes: peak_rss_bytes().unwrap_or(1),
+                scratch_high_water_bytes: scratch,
+                total_read_bytes: downloaded,
+                total_write_bytes: scratch,
+                wall_time_ms,
+            },
+            charge_millicredits: 0,
+            official_verification: true,
+        };
+        hosted.verify().map_err(anyhow::Error::msg)?;
+        let bytes = serde_json::to_vec(&hosted)?;
+        let digest = hex::encode(blake3::hash(&bytes).as_bytes());
+        let endpoint = format!("/internal/v1/jobs/{}/output-url", claim.job_id);
+        let output = self
+            .json::<_, OutputResponse>(
+                Method::POST,
+                &endpoint,
+                &OutputRequest {
+                    attempt: claim.attempt,
+                    lease_epoch: claim.lease_epoch,
+                    content_length: bytes.len() as u64,
+                    blake3_hex: &digest,
+                },
+            )
+            .await?;
+        upload_exact(&self.http, &output.upload, bytes).await?;
+        let endpoint = format!("/internal/v1/jobs/{}/complete", claim.job_id);
+        let _: Value = self
+            .json(
+                Method::POST,
+                &endpoint,
+                &CompleteRequest {
+                    attempt: claim.attempt,
+                    lease_epoch: claim.lease_epoch,
+                    object_key: &output.object_key,
+                    content_length: hosted_json_size(&hosted)?,
+                    blake3_hex: &digest,
+                },
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn json<T: Serialize + ?Sized, R: DeserializeOwned>(
+        &self,
+        method: Method,
+        path: &str,
+        body: &T,
+    ) -> anyhow::Result<R> {
+        self.http
+            .request(method, format!("{}{}", self.config.api_url, path))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.credential),
+            )
+            .header("x-tinyzkp-worker-id", &self.config.worker_id)
+            .json(body)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await
+            .map_err(Into::into)
+    }
+}
+
+async fn download_exact(
+    http: &Client,
+    signed: &SignedUrl,
+    path: &Path,
+    expected: u64,
+    digest: &str,
+) -> anyhow::Result<()> {
+    let mut request = http.get(&signed.url);
+    for (name, value) in &signed.headers {
+        request = request.header(name, value);
+    }
+    let mut response = request.send().await?.error_for_status()?;
+    if response.content_length() != Some(expected) {
+        bail!("input content length mismatch");
+    }
+    let temporary = path.with_extension("part");
+    let mut file = fs::File::create(&temporary).await?;
+    let mut total = 0u64;
+    let mut hasher = blake3::Hasher::new();
+    while let Some(chunk) = response.chunk().await? {
+        total = total.saturating_add(chunk.len() as u64);
+        if total > expected {
+            bail!("input chunk exceeded signed length");
+        }
+        hasher.update(&chunk);
+        file.write_all(&chunk).await?;
+    }
+    file.sync_all().await?;
+    if total != expected || hex::encode(hasher.finalize().as_bytes()) != digest {
+        bail!("input chunk digest mismatch");
+    }
+    fs::rename(temporary, path).await?;
+    Ok(())
+}
+
+async fn upload_exact(http: &Client, signed: &SignedUrl, bytes: Vec<u8>) -> anyhow::Result<()> {
+    let mut request = http.put(&signed.url);
+    for (name, value) in &signed.headers {
+        request = request.header(name, value);
+    }
+    request.body(bytes).send().await?.error_for_status()?;
+    Ok(())
+}
+
+async fn prepare_scratch(path: &Path) -> anyhow::Result<()> {
+    private_dir(path).await?;
+    Ok(())
+}
+
+async fn private_dir(path: &Path) -> anyhow::Result<()> {
+    fs::create_dir_all(path).await?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).await?;
+    }
+    Ok(())
+}
+
+fn free_space(path: &Path) -> anyhow::Result<u64> {
+    let output = std::process::Command::new("df")
+        .args(["-Pk", path.to_str().context("scratch path encoding")?])
+        .output()?;
+    if !output.status.success() {
+        bail!("df failed");
+    }
+    let line = String::from_utf8(output.stdout)?
+        .lines()
+        .last()
+        .context("df output missing")?
+        .to_owned();
+    let blocks = line
+        .split_whitespace()
+        .nth(3)
+        .context("df available blocks missing")?
+        .parse::<u64>()?;
+    Ok(blocks.saturating_mul(1024))
+}
+
+async fn directory_size(path: &Path) -> anyhow::Result<u64> {
+    let output = tokio::process::Command::new("du")
+        .args(["-sk", path.to_str().context("scratch path encoding")?])
+        .output()
+        .await?;
+    if !output.status.success() {
+        bail!("du failed");
+    }
+    let blocks = String::from_utf8(output.stdout)?
+        .split_whitespace()
+        .next()
+        .context("du output missing")?
+        .parse::<u64>()?;
+    Ok(blocks.saturating_mul(1024))
+}
+
+fn peak_rss_bytes() -> Option<u64> {
+    let text = std::fs::read_to_string("/proc/self/status").ok()?;
+    let kb = text.lines().find_map(|line| {
+        line.strip_prefix("VmHWM:")?
+            .split_whitespace()
+            .next()?
+            .parse::<u64>()
+            .ok()
+    })?;
+    Some(kb.saturating_mul(1024))
+}
+
+fn hosted_json_size(bundle: &HostedProofBundleV1) -> anyhow::Result<u64> {
+    Ok(serde_json::to_vec(bundle)?.len() as u64)
+}
+
+fn classify_error(error: &anyhow::Error) -> &'static str {
+    let message = error.to_string().to_lowercase();
+    if message.contains("cancel") {
+        "cancelled"
+    } else if message.contains("digest") || message.contains("shape") {
+        "invalid_customer_artifact"
+    } else if message.contains("http") || message.contains("network") {
+        "network"
+    } else if message.contains("space") || message.contains("io") {
+        "platform_io"
+    } else {
+        "prover_interrupted"
+    }
+}
+
+fn required(name: &str) -> anyhow::Result<String> {
+    let value = std::env::var(name).with_context(|| format!("{name} is required"))?;
+    if value.trim().is_empty() {
+        bail!("{name} is empty");
+    }
+    Ok(value.trim().to_owned())
+}
+
+fn optional(name: &str, default: &str) -> String {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| default.to_owned())
+}

@@ -6,21 +6,26 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA = ROOT / "crates" / "hc-server" / "sql" / "public_beta_pg.sql"
+SCHEMA = ROOT / "crates" / "hc-beta-api" / "migrations" / "0001_public_beta.sql"
 
 REQUIRED = (
     "beta_auth_identities",
     "PRIMARY KEY (provider, provider_user_id)",
     "beta_oauth_states",
     "pkce_verifier_ciphertext BYTEA NOT NULL",
+    "beta_sessions",
+    "beta_sandbox_grants",
     "beta_api_keys",
     "WHERE revoked_at IS NULL",
     "beta_idempotency_keys",
+    "beta_rate_limits",
     "PRIMARY KEY (tenant_id, operation, idempotency_key)",
     "beta_credit_accounts",
     "beta_credit_events",
     "UNIQUE (tenant_id, operation_key)",
     "beta_proof_jobs",
+    "lease_epoch",
+    "beta_job_attempts",
     "reserved_subscription_millicredits",
     "reserved_purchased_millicredits",
     "reserved_millicredits = reserved_subscription_millicredits + reserved_purchased_millicredits",
@@ -28,6 +33,10 @@ REQUIRED = (
     "beta_workers",
     "max_slots BETWEEN 1 AND 4",
     "beta_stripe_events",
+    "beta_billing_customers",
+    "beta_subscriptions",
+    "beta_reconciliation_runs",
+    "beta_retention_deletions",
     "processing_status IN ('pending','processed','failed')",
     "DEFERRABLE INITIALLY DEFERRED",
 )

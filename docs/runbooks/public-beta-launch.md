@@ -67,7 +67,7 @@ Before enabling any beta route:
 1. Provision a dedicated worker with 8 vCPU, 16 GiB RAM, and at least 1 TB of
    non-rotational NVMe. Do not place it on the web/billing host.
 2. Apply `crates/hc-server/sql/tenant_auth_pg.sql` and then
-   `crates/hc-server/sql/public_beta_pg.sql` to the shared PostgreSQL database.
+   `crates/hc-beta-api/migrations/0001_public_beta.sql` to the shared PostgreSQL database.
 3. Create a private Cloudflare R2 bucket. Upload grants must be scoped to one
    tenant, upload ID, object prefix, exact content length, checksum, and a short
    expiry. The API must never accept archive paths or executable payloads.

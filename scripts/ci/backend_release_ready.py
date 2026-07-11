@@ -92,6 +92,11 @@ FUZZ_TARGETS = {
     "scratch_artifact_header_v1",
     "checkpoint_identity_v2",
     "resume_checkpoint_v2",
+    "air_package_v1",
+    "trace_manifest_v1",
+    "hosted_proof_bundle_v1",
+    "zstd_trace_chunk_v1",
+    "beta_api_request_v1",
 }
 FUZZ_SMOKE_SEED_LIMIT = 16
 FUZZ_RELEASE_MIN_SECONDS = 60

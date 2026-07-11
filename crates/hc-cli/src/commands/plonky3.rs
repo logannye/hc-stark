@@ -46,6 +46,7 @@ pub fn prove_air(
     public_inputs_path: &Path,
     policy_path: &Path,
     output: &Path,
+    reference: bool,
 ) -> Result<()> {
     let air: AirPackageV1 = read_json_limited(air_path, MAX_AIR_JSON_BYTES)?;
     let trace_manifest: TraceManifestV1 =
@@ -67,17 +68,21 @@ pub fn prove_air(
         chunks_dir,
     )
     .map_err(anyhow::Error::msg)?;
-    let cancellation = hc_plonky3::CancellationToken::new();
-    let handler_token = cancellation.clone();
-    ctrlc::set_handler(move || handler_token.cancel())
-        .context("failed to install the prover cancellation handler")?;
-    let proof_bytes = prove_resource_bounded_observed_with_cancellation(
-        &workload,
-        &policy,
-        cancellation,
-        emit_backend_event,
-    )
-    .map_err(anyhow::Error::msg)?;
+    let proof_bytes = if reference {
+        hc_plonky3::prove_resource_reference(&workload).map_err(anyhow::Error::msg)?
+    } else {
+        let cancellation = hc_plonky3::CancellationToken::new();
+        let handler_token = cancellation.clone();
+        ctrlc::set_handler(move || handler_token.cancel())
+            .context("failed to install the prover cancellation handler")?;
+        prove_resource_bounded_observed_with_cancellation(
+            &workload,
+            &policy,
+            cancellation,
+            emit_backend_event,
+        )
+        .map_err(anyhow::Error::msg)?
+    };
     let bundle = AirProofBundleV1::from_proof(
         air,
         trace_manifest,
