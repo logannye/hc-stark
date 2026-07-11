@@ -21,6 +21,11 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "billing"))
+
+import backup_env_exec  # noqa: E402
+
+
 MAX_ENV_BYTES = 64 * 1024
 DATA_ASSIGNMENT = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
 RCLONE_REMOTE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*:.*$")
@@ -69,41 +74,63 @@ def load_env_file(path: pathlib.Path) -> dict[str, str]:
     return env
 
 
-def load_private_env_file(path: pathlib.Path) -> dict[str, str]:
-    """Read a production env without following links or evaluating shell code."""
+def read_private_file(
+    path: pathlib.Path,
+    *,
+    label: str,
+    max_bytes: int,
+    exact_mode_0600: bool = False,
+) -> bytes:
+    """Read one current-owner private regular file through an O_NOFOLLOW fd."""
 
-    if not hasattr(os, "O_NOFOLLOW"):
+    if max_bytes < 1:
+        raise ValueError("max_bytes must be positive")
+    absolute = path.absolute()
+    parent = absolute.parent
+    try:
+        parent_metadata = parent.lstat()
+        resolved_parent = parent.resolve(strict=True)
+    except OSError as error:
+        raise ProductionEnvError(f"{label} parent is unavailable or unsafe") from error
+    if (
+        parent.is_symlink()
+        or (os.geteuid() == 0 and resolved_parent != parent)
+        or not stat.S_ISDIR(parent_metadata.st_mode)
+        or parent_metadata.st_uid != os.geteuid()
+        or stat.S_IMODE(parent_metadata.st_mode) & 0o022
+    ):
         raise ProductionEnvError(
-            "production env loading requires O_NOFOLLOW support"
+            f"{label} parent must be a current-owner, non-writable, symlink-free directory"
         )
-    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise ProductionEnvError(f"{label} loading requires O_NOFOLLOW support")
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | os.O_NOFOLLOW
     try:
         descriptor = os.open(path, flags)
     except OSError as error:
         raise ProductionEnvError(
-            f"production env file is unavailable or unsafe: {path}"
+            f"{label} file is unavailable or unsafe: {path}"
         ) from error
 
     try:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode):
-            raise ProductionEnvError(
-                "production env file must be a regular non-symlink file"
-            )
+            raise ProductionEnvError(f"{label} file must be a regular non-symlink file")
+        if metadata.st_nlink != 1:
+            raise ProductionEnvError(f"{label} file must have exactly one hard link")
         if metadata.st_uid != os.geteuid():
-            raise ProductionEnvError(
-                "production env file must be owned by the current operator"
-            )
-        if stat.S_IMODE(metadata.st_mode) & 0o077:
-            raise ProductionEnvError(
-                "production env file must be owner-only (0600 or stricter)"
-            )
+            raise ProductionEnvError(f"{label} file must be owned by the current operator")
+        mode = stat.S_IMODE(metadata.st_mode)
+        if exact_mode_0600 and mode != 0o600:
+            raise ProductionEnvError(f"{label} file must have mode 0600")
+        if not exact_mode_0600 and mode & 0o077:
+            raise ProductionEnvError(f"{label} file must be owner-only (0600 or stricter)")
 
         content = bytearray()
-        while len(content) <= MAX_ENV_BYTES:
+        while len(content) <= max_bytes:
             chunk = os.read(
                 descriptor,
-                min(8192, MAX_ENV_BYTES + 1 - len(content)),
+                min(8192, max_bytes + 1 - len(content)),
             )
             if not chunk:
                 break
@@ -112,11 +139,26 @@ def load_private_env_file(path: pathlib.Path) -> dict[str, str]:
         os.close(descriptor)
 
     if not content:
-        raise ProductionEnvError("production env file is empty")
-    if len(content) > MAX_ENV_BYTES:
-        raise ProductionEnvError("production env file exceeds 64 KiB")
+        raise ProductionEnvError(f"{label} file is empty")
+    if len(content) > max_bytes:
+        limit = "64 KiB" if max_bytes == 64 * 1024 else f"{max_bytes} bytes"
+        raise ProductionEnvError(f"{label} file exceeds {limit}")
+    return bytes(content)
+
+
+def load_private_env_file(
+    path: pathlib.Path, *, exact_mode_0600: bool = False
+) -> dict[str, str]:
+    """Read a production env without following links or evaluating shell code."""
+
+    content = read_private_file(
+        path,
+        label="production env",
+        max_bytes=MAX_ENV_BYTES,
+        exact_mode_0600=exact_mode_0600,
+    )
     try:
-        text = bytes(content).decode("utf-8")
+        text = content.decode("utf-8")
     except UnicodeDecodeError as error:
         raise ProductionEnvError("production env file must be UTF-8") from error
     if "\x00" in text:
@@ -209,6 +251,22 @@ def _validate_rclone_remote(remote: str) -> str | None:
     if executable is None:
         return "HC_BACKUP_REMOTE requires rclone on the production host"
     try:
+        read_private_file(
+            backup_env_exec.FIXED_RCLONE_CONFIG,
+            label="rclone config",
+            max_bytes=64 * 1024,
+            exact_mode_0600=True,
+        )
+    except ProductionEnvError as error:
+        return f"fixed rclone config is unsafe: {error}"
+    probe_environment = {
+        "PATH": backup_env_exec.FIXED_PATH,
+        "LANG": "C",
+        "LC_ALL": "C",
+        "TZ": "UTC",
+        "RCLONE_CONFIG": str(backup_env_exec.FIXED_RCLONE_CONFIG),
+    }
+    try:
         result = subprocess.run(
             [executable, "lsd", "--max-depth", "1", remote],
             stdin=subprocess.DEVNULL,
@@ -216,6 +274,7 @@ def _validate_rclone_remote(remote: str) -> str | None:
             stderr=subprocess.DEVNULL,
             timeout=30,
             check=False,
+            env=probe_environment,
         )
     except subprocess.TimeoutExpired:
         return "HC_BACKUP_REMOTE read-only rclone probe timed out"
@@ -334,6 +393,85 @@ def _validate_private_store_path(raw: str, key: str) -> list[str]:
     if not owners or metadata.st_uid not in owners:
         failures.append(f"{key} has an unexpected owner")
     return failures
+
+
+def _validate_required_backup_source(path: pathlib.Path, label: str) -> list[str]:
+    failures: list[str] = []
+    try:
+        parent_metadata = path.parent.lstat()
+        metadata = path.lstat()
+    except OSError:
+        return [f"required backup source is missing: {label}"]
+    if path.parent.is_symlink() or not stat.S_ISDIR(parent_metadata.st_mode):
+        failures.append(f"required backup source parent is unsafe: {label}")
+    if parent_metadata.st_uid not in _allowed_private_owner_ids():
+        failures.append(f"required backup source parent has an unexpected owner: {label}")
+    if stat.S_IMODE(parent_metadata.st_mode) & 0o077:
+        failures.append(f"required backup source parent must be owner-only: {label}")
+    if path.is_symlink() or not stat.S_ISREG(metadata.st_mode):
+        failures.append(f"required backup source is not a regular file: {label}")
+    if metadata.st_nlink != 1:
+        failures.append(f"required backup source must have one hard link: {label}")
+    if metadata.st_uid not in _allowed_private_owner_ids():
+        failures.append(f"required backup source has an unexpected owner: {label}")
+    if stat.S_IMODE(metadata.st_mode) & 0o077:
+        failures.append(f"required backup source must be owner-only: {label}")
+    return failures
+
+
+def _validate_backup_source_semantics(
+    path: pathlib.Path, label: str, profile: str
+) -> list[str]:
+    try:
+        owner = path.lstat().st_uid
+        if profile == "api-keys":
+            helper_args = ("validate-api-keys", "--path", str(path))
+        else:
+            helper_args = (
+                "validate-sqlite",
+                "--path",
+                str(path),
+                "--profile",
+                profile,
+            )
+        if os.geteuid() == 0 and owner != 0:
+            result = subprocess.run(
+                (
+                    "/usr/sbin/runuser",
+                    "--user",
+                    "tinyzkp-billing",
+                    "--",
+                    "/usr/bin/env",
+                    "-i",
+                    f"PATH={backup_env_exec.FIXED_PATH}",
+                    "LANG=C",
+                    "LC_ALL=C",
+                    "TZ=UTC",
+                    "/usr/bin/python3",
+                    str(ROOT / "billing" / "backup_env_exec.py"),
+                    *helper_args,
+                ),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            if result.returncode != 0:
+                detail = result.stderr.strip()[-500:]
+                return [
+                    f"required backup source failed semantic validation: {label}"
+                    + (f" ({detail})" if detail else "")
+                ]
+        else:
+            if profile == "api-keys":
+                backup_env_exec.validate_api_key_source(path)
+            else:
+                backup_env_exec.validate_sqlite_source(path, profile)
+    except (OSError, subprocess.TimeoutExpired, backup_env_exec.BackupEnvError) as error:
+        return [f"required backup source failed semantic validation: {label} ({error})"]
+    return []
 
 
 def _validate_release_authorization(
@@ -506,6 +644,31 @@ def check_env(
             failures.append(
                 "evaluation and contract billing ledgers must use distinct paths"
             )
+        backup_data = pathlib.Path(
+            _value(env, "HC_BACKUP_DATA_DIR") or backup_env_exec.FIXED_DATA_ROOT
+        )
+        expected_evaluation = backup_data / "evaluation_applications.sqlite"
+        if pathlib.Path(_value(env, "HC_EVALUATION_STORE_PATH")) != expected_evaluation:
+            failures.append(
+                "HC_EVALUATION_STORE_PATH must match the required backup data store"
+            )
+        required_backup_sources = {
+            "tenant store": (backup_data / "tenant_store.sqlite", "tenant"),
+            "usage store": (backup_data / "usage.sqlite", "usage"),
+            "evaluation store": (expected_evaluation, "evaluation"),
+            "API key store": (backup_data / "api_keys.txt", "api-keys"),
+            "contract billing ledger": (
+                pathlib.Path(_value(env, "TINYZKP_CONTRACT_BILLING_LEDGER_PATH")),
+                "contract",
+            ),
+        }
+        for label, (path, profile) in required_backup_sources.items():
+            metadata_failures = _validate_required_backup_source(path, label)
+            failures.extend(metadata_failures)
+            if not metadata_failures:
+                failures.extend(
+                    _validate_backup_source_semantics(path, label, profile)
+                )
 
         annual_release_keys = RELEASE_AUTHORIZATION_KEYS
         configured_release_keys = {
@@ -535,6 +698,15 @@ def check_env(
         backup_remote = _value(env, "HC_BACKUP_REMOTE")
         backup_http_url = _value(env, "HC_BACKUP_HTTP_URL")
         backup_http_token_file = _value(env, "HC_BACKUP_HTTP_TOKEN_FILE")
+        backup_settings = {
+            key: env[key]
+            for key in backup_env_exec.BACKUP_KEYS
+            if key in env and env[key].strip()
+        }
+        try:
+            backup_env_exec.validate_backup_values(backup_settings, production=True)
+        except backup_env_exec.BackupEnvError as error:
+            failures.append(f"backup configuration is unsafe: {error}")
         if not backup_remote and not (backup_http_url and backup_http_token_file):
             failures.append(
                 "off-host backups require HC_BACKUP_REMOTE or both "
@@ -556,23 +728,47 @@ def check_env(
             remote_failure = _validate_rclone_remote(backup_remote)
             if remote_failure:
                 failures.append(remote_failure)
+        if check_host_python and os.geteuid() == 0:
+            try:
+                backup_env_exec.read_loader_token(
+                    backup_env_exec.FIXED_LOADER_TOKEN
+                )
+            except backup_env_exec.BackupEnvError as error:
+                failures.append(f"backup loader token is unsafe: {error}")
+            try:
+                staging = backup_env_exec.FIXED_STAGING_ROOT.lstat()
+                service_gid = pwd.getpwnam("tinyzkp-billing").pw_gid
+                if (
+                    backup_env_exec.FIXED_STAGING_ROOT.is_symlink()
+                    or not stat.S_ISDIR(staging.st_mode)
+                    or staging.st_uid != 0
+                    or staging.st_gid != service_gid
+                    or stat.S_IMODE(staging.st_mode) != 0o710
+                ):
+                    failures.append(
+                        "backup staging root must be root:tinyzkp-billing mode 0710"
+                    )
+            except (KeyError, OSError):
+                failures.append("backup staging root is unavailable or unsafe")
         if backup_http_token_file and check_host_python:
             token_path = pathlib.Path(backup_http_token_file)
             try:
-                token_metadata = token_path.lstat()
-            except OSError:
-                failures.append("HC_BACKUP_HTTP_TOKEN_FILE does not exist")
-            else:
-                if token_path.is_symlink() or not stat.S_ISREG(token_metadata.st_mode):
+                raw_token = read_private_file(
+                    token_path,
+                    label="HTTP backup token",
+                    max_bytes=1024,
+                    exact_mode_0600=True,
+                )
+                token = raw_token.decode("ascii").strip()
+                if (
+                    not 32 <= len(token) <= 512
+                    or re.fullmatch(r"[A-Za-z0-9._~-]+", token) is None
+                ):
                     failures.append(
-                        "HC_BACKUP_HTTP_TOKEN_FILE must be a regular non-symlink file"
+                        "HC_BACKUP_HTTP_TOKEN_FILE has invalid length or characters"
                     )
-                if stat.S_IMODE(token_metadata.st_mode) & 0o077:
-                    failures.append(
-                        "HC_BACKUP_HTTP_TOKEN_FILE must not be group/world accessible"
-                    )
-                if token_metadata.st_uid not in _allowed_private_owner_ids():
-                    failures.append("HC_BACKUP_HTTP_TOKEN_FILE has an unexpected owner")
+            except (OSError, UnicodeDecodeError, ProductionEnvError):
+                failures.append("HC_BACKUP_HTTP_TOKEN_FILE is unavailable or unsafe")
         if not _truthy(_value(env, "TINYZKP_MAINTENANCE_MODE")):
             failures.append(
                 "TINYZKP_MAINTENANCE_MODE=1 is required during backend recovery"

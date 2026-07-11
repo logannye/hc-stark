@@ -4,7 +4,7 @@
 set -euo pipefail
 
 REPO="${TINYZKP_REPO:-/opt/hc-stark}"
-PYTHON="${TINYZKP_PYTHON:-$REPO/.venv/bin/python}"
+PYTHON="${TINYZKP_PYTHON:-/var/lib/tinyzkp-runtime/billing-venv/bin/python}"
 ENV_FILE="${TINYZKP_ENV_FILE:-$REPO/.env}"
 RUN_CRON="${TINYZKP_VERIFY_GROWTH_RUN_CRON:-1}"
 

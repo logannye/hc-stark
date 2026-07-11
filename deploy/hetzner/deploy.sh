@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env -S -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C LC_ALL=C TZ=UTC TINYZKP_CLEAN_LAUNCH=1 /bin/bash --noprofile --norc
 # TinyZKP — one-shot production deploy for the Hetzner host.
 #
 # Deploys the maintenance API/MCP plus the host-level billing/contact webhook
@@ -10,18 +10,56 @@
 # /session/* 404'd and the account dashboard + magic-link key-hiding broke.
 #
 # Run as root from anywhere on the host:  /opt/hc-stark/deploy/hetzner/deploy.sh
+[[ ${TINYZKP_CLEAN_LAUNCH:-} == 1 ]] || {
+    /usr/bin/printf '%s\n' 'ERROR: invoke deploy.sh directly through its clean shebang' >&2
+    exit 1
+}
 set -euo pipefail
 
+PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH
+unset PYTHONPATH PYTHONHOME NODE_OPTIONS BASH_ENV ENV CDPATH GIT_DIR GIT_WORK_TREE \
+    GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM LD_PRELOAD DYLD_INSERT_LIBRARIES || true
+
 REPO="/opt/hc-stark"
-COMPOSE="docker compose -f docker-compose.yml -f deploy/hetzner/docker-compose.prod.yml"
+COMPOSE=(/usr/bin/docker compose -f docker-compose.yml -f deploy/hetzner/docker-compose.prod.yml)
 API_LOCAL="http://127.0.0.1:8080"
 WEBHOOK_LOCAL="http://127.0.0.1:5001"
+PREFLIGHT_EVIDENCE="/var/lib/tinyzkp-private/deploy/production-preflight.json"
+PAGES_BINDINGS_FILE="/var/lib/tinyzkp-private/deploy/pages-bindings.env"
+HOST_PYTHON="/var/lib/tinyzkp-runtime/billing-venv/bin/python"
+NODE_EXECUTABLE="/usr/bin/node"
+GIT_EXECUTABLE="/usr/bin/git"
+DEPLOYMENT_ID="tinyzkp-production-primary"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "ERROR: must run as root (needs systemctl + docker)." >&2
     exit 1
 fi
 cd "$REPO"
+
+RELEASE_SHA="$($GIT_EXECUTABLE rev-parse HEAD)"
+RELEASE_REF="$($GIT_EXECUTABLE rev-parse --abbrev-ref HEAD)"
+
+echo "==> [1/9] Verify and consume complete production preflight evidence"
+# Update the checkout to the reviewed origin/main SHA before creating the
+# aggregate evidence. deploy.sh intentionally performs no fetch, checkout, or
+# pull afterward because any source change would invalidate that evidence.
+scripts/ci/run_production_preflight.sh \
+    --verify-evidence "$PREFLIGHT_EVIDENCE" \
+    --consume-evidence \
+    --production \
+    --env-file "$REPO/.env" \
+    --pages-bindings-file "$PAGES_BINDINGS_FILE" \
+    --host-python "$HOST_PYTHON" \
+    --node-executable "$NODE_EXECUTABLE" \
+    --git-executable "$GIT_EXECUTABLE" \
+    --deployment-id "$DEPLOYMENT_ID" \
+    --expected-release-sha "$RELEASE_SHA"
+export HC_RELEASE_SHA="$RELEASE_SHA"
+export HC_RELEASE_REF="$RELEASE_REF"
+export HC_RELEASE_BUILD_URL="${HC_RELEASE_BUILD_URL:-}"
+echo "    preflight binds: $HC_RELEASE_SHA ($HC_RELEASE_REF)"
 
 sync_host_billing_services() {
     if ! getent group tinyzkp-billing >/dev/null; then
@@ -31,10 +69,21 @@ sync_host_billing_services() {
         useradd --system --gid tinyzkp-billing --home-dir /nonexistent \
             --shell /usr/sbin/nologin tinyzkp-billing
     fi
-    install -d -o tinyzkp-billing -g tinyzkp-billing -m 0700 /opt/hc-stark/data
-    chown -R tinyzkp-billing:tinyzkp-billing /opt/hc-stark/data
+    local service_uid service_gid
+    service_uid="$(id -u tinyzkp-billing)"
+    service_gid="$(id -g tinyzkp-billing)"
+    "$HOST_PYTHON" "$REPO/billing/backup_env_exec.py" \
+        ensure-service-data-root --path /opt/hc-stark/data \
+        --uid "$service_uid" --gid "$service_gid"
     install -d -o root -g root -m 0700 \
-        /var/lib/tinyzkp-private /var/lib/tinyzkp-private/billing
+        /var/lib/tinyzkp-private /var/lib/tinyzkp-private/billing \
+        /var/lib/tinyzkp-private/backup
+    install -d -o root -g tinyzkp-billing -m 0710 \
+        /var/lib/tinyzkp-backup-staging
+    install -d -o root -g root -m 0700 /opt/hc-stark/backups
+    local loader_token=/var/lib/tinyzkp-private/backup/loader-token
+    "$HOST_PYTHON" "$REPO/billing/backup_env_exec.py" \
+        validate-loader-token --path "$loader_token"
 
     rm -f /etc/cron.d/hc-backup
     cat > /etc/cron.d/hc-billing <<'CRON'
@@ -42,7 +91,7 @@ sync_host_billing_services() {
 # nudges, and growth automation are intentionally disabled. Contract invoices
 # are operator-created through the reviewed Stripe Invoicing workflow.
 0 2 * * * root /opt/hc-stark/billing/backup.sh >> /var/log/hc-backup.log 2>&1
-17 3 * * * tinyzkp-billing /bin/sh -c 'umask 077; exec /opt/hc-stark/.venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /opt/hc-stark/data/evaluation-retention.log 2>&1'
+17 3 * * * tinyzkp-billing /bin/sh -c 'umask 077; exec /var/lib/tinyzkp-runtime/billing-venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /opt/hc-stark/data/evaluation-retention.log 2>&1'
 CRON
     chmod 644 /etc/cron.d/hc-billing
 
@@ -56,7 +105,7 @@ Type=simple
 User=tinyzkp-billing
 Group=tinyzkp-billing
 WorkingDirectory=/opt/hc-stark/billing
-ExecStart=/opt/hc-stark/.venv/bin/gunicorn -w 2 -b 127.0.0.1:5001 provision_tenant:app
+ExecStart=/var/lib/tinyzkp-runtime/billing-venv/bin/gunicorn -w 2 -b 127.0.0.1:5001 provision_tenant:app
 Restart=on-failure
 RestartSec=5
 UMask=0077
@@ -74,35 +123,20 @@ UNIT
     systemctl daemon-reload
 }
 
-echo "==> [1/10] Pull latest main"
-git fetch --quiet origin main
-git checkout --quiet main
-git pull --ff-only origin main
-RELEASE_SHA="$(git rev-parse HEAD)"
-RELEASE_REF="$(git rev-parse --abbrev-ref HEAD)"
-export HC_RELEASE_SHA="$RELEASE_SHA"
-export HC_RELEASE_REF="$RELEASE_REF"
-export HC_RELEASE_BUILD_URL="${HC_RELEASE_BUILD_URL:-}"
-echo "    now at: $(git log -1 --pretty='%h %s')"
-echo "    release identity: $HC_RELEASE_SHA ($HC_RELEASE_REF)"
-
-echo "==> [2/10] Install/update host billing runtime"
-deploy/hetzner/install_billing_runtime.sh
-
-echo "==> [3/10] Sync host billing cron/systemd definitions"
+echo "==> [2/9] Sync host billing cron/systemd definitions"
 sync_host_billing_services
 
-echo "==> [4/10] Production deploy readiness"
-python3 scripts/ci/deploy_readiness_check.py \
+echo "==> [3/9] Production deploy readiness"
+"$HOST_PYTHON" scripts/ci/deploy_readiness_check.py \
     --env-file "$REPO/.env" \
     --production \
     --check-host-python \
-    --host-python "$REPO/.venv/bin/python"
+    --host-python "$HOST_PYTHON"
 
-echo "==> [5/10] Build containerized tiers"
-$COMPOSE build
+echo "==> [4/9] Reuse identity-bound maintenance container images"
+echo "    image was built and identity-bound by production preflight evidence"
 
-echo "==> [6/10] Confirm production image has no proving workers"
+echo "==> [5/9] Confirm production image has no proving workers"
 # The project path is fixed at /opt/hc-stark, so Compose tags this freshly
 # built service image as hc-stark-hc-server:latest. Do not resolve it through
 # `compose images` or `compose run`: both inspect the currently running
@@ -115,10 +149,10 @@ else
     exit 1
 fi
 
-echo "==> [7/10] Restart maintenance API and capability-only MCP"
-$COMPOSE up -d
+echo "==> [6/9] Restart maintenance API and capability-only MCP"
+"${COMPOSE[@]}" up -d --no-build
 
-echo "==> [8/10] Sync Caddy reverse-proxy config (host systemd) if changed"
+echo "==> [7/9] Sync Caddy reverse-proxy config (host systemd) if changed"
 # Caddy runs as a HOST systemd unit reading /etc/caddy/Caddyfile — NOT a compose
 # service and NOT the repo copy. A `git pull` updates deploy/hetzner/Caddyfile but
 # Caddy keeps serving the old config until it is copied + reloaded. (That gap left
@@ -147,10 +181,10 @@ else
     echo "    Caddy not a host systemd service (or repo Caddyfile missing) — skip"
 fi
 
-echo "==> [9/10] Restart host billing-webhook (systemd) so provision_tenant.py / tenant_store.py changes take effect"
+echo "==> [8/9] Restart host billing-webhook (systemd) so provision_tenant.py / tenant_store.py changes take effect"
 systemctl restart hc-billing-webhook
 
-echo "==> [10/10] Health checks"
+echo "==> [9/9] Health checks"
 sleep 5
 fail=0
 check() { # label url expected
@@ -205,7 +239,7 @@ fi
 if [ "$fail" -eq 0 ]; then
     echo "==> Host deploy complete — maintenance surfaces healthy."
     echo "    Deploy Cloudflare Pages from the same $RELEASE_SHA, then run:"
-    echo "    python3 scripts/ci/production_launch_preflight.py --production --env-file /opt/hc-stark/.env --pages-bindings-file /secure/pages-bindings.env --host-python /opt/hc-stark/.venv/bin/python --live --contact-readiness-secret-file /secure/internal-secret --expected-release-sha $RELEASE_SHA"
+    echo "    $HOST_PYTHON scripts/ci/production_launch_preflight.py --production --env-file /opt/hc-stark/.env --pages-bindings-file $PAGES_BINDINGS_FILE --host-python $HOST_PYTHON --node-executable $NODE_EXECUTABLE --git-executable $GIT_EXECUTABLE --deployment-id $DEPLOYMENT_ID --live --contact-readiness-secret-file /var/lib/tinyzkp-private/deploy/internal-secret --expected-release-sha $RELEASE_SHA"
 else
     echo "==> Deploy finished WITH FAILURES — investigate above." >&2
     exit 1

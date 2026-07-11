@@ -27,10 +27,11 @@ def test_billing_webhook_is_non_root_and_owner_only(relative):
         "NoNewPrivileges=true",
         "ProtectSystem=strict",
         "ReadWritePaths=/opt/hc-stark/data",
-        "install -d -o tinyzkp-billing -g tinyzkp-billing -m 0700 /opt/hc-stark/data",
+        "ensure-service-data-root --path /opt/hc-stark/data",
         "/var/lib/tinyzkp-private/billing",
     ):
         assert marker in text
+    assert "chown -R tinyzkp-billing" not in text
 
 
 def test_setup_and_deploy_install_one_canonical_backup_and_retention_schedule():
@@ -152,3 +153,49 @@ def test_documented_operator_can_open_root_owned_contract_ledger(tmp_path):
             "AND name = 'billing_operations'"
         ).fetchone()
     assert table == ("billing_operations",)
+
+
+def test_deploy_requires_complete_preflight_evidence_before_any_mutation():
+    deploy = (ROOT / "deploy" / "hetzner" / "deploy.sh").read_text(encoding="utf-8")
+    evidence_check = deploy.index("--verify-evidence")
+
+    assert 'PREFLIGHT_EVIDENCE="/var/lib/tinyzkp-private/deploy/production-preflight.json"' in deploy
+    assert 'PAGES_BINDINGS_FILE="/var/lib/tinyzkp-private/deploy/pages-bindings.env"' in deploy
+    commands = {line.strip() for line in deploy.splitlines() if line.strip()}
+    assert not any(line.startswith("git fetch") for line in commands)
+    assert not any(line.startswith("git checkout") for line in commands)
+    assert not any(line.startswith("git pull") for line in commands)
+    assert evidence_check < deploy.index("sync_host_billing_services() {")
+    assert "install_billing_runtime.sh" not in deploy
+    assert "--expected-release-sha \"$RELEASE_SHA\"" in deploy
+    assert "scripts/ci/run_production_preflight.sh" in deploy[:evidence_check]
+    assert "TINYZKP_CLEAN_LAUNCH=1" in deploy.splitlines()[0]
+    assert '"${COMPOSE[@]}" up -d --no-build' in deploy
+    assert '"${COMPOSE[@]}" build' not in deploy
+    assert "--consume-evidence" in deploy
+    assert deploy.index('PATH="/usr/sbin:/usr/bin:/sbin:/bin"') < evidence_check
+    assert 'install -d -o root -g root -m 0700 /opt/hc-stark/backups' in deploy
+
+
+def test_production_launchers_and_docker_context_fail_closed():
+    for relative in (
+        "deploy/hetzner/deploy.sh",
+        "deploy/hetzner/install_billing_runtime.sh",
+        "scripts/ci/run_production_preflight.sh",
+    ):
+        first = (ROOT / relative).read_text(encoding="utf-8").splitlines()[0]
+        assert "/usr/bin/env -S -i" in first
+        assert "TINYZKP_CLEAN_LAUNCH=1" in first
+    wrapper = (ROOT / "scripts/ci/run_production_preflight.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "PYTHONPYCACHEPREFIX" in wrapper
+    assert "ls-files --others --ignored" in wrapper
+    assert "ls-files -v" in wrapper
+    ignored = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+    assert ignored.startswith("*\n")
+    assert "!crates/**" in ignored
+    assert "**/__pycache__/" in ignored
+    gitignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "/data/" in gitignored
+    assert "/backups/" in gitignored

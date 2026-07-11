@@ -5,26 +5,43 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 import secrets
-import stat
 import sys
 import urllib.error
 import urllib.request
 from urllib.parse import urljoin
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ci"))
+from deploy_readiness_check import (  # noqa: E402
+    ProductionEnvError,
+    read_private_file,
+)
+
+
 def load_secret(path: Path) -> str:
-    if path.is_symlink() or not path.is_file():
-        raise RuntimeError("internal-secret file must be a regular non-symlink file")
-    if stat.S_IMODE(path.stat().st_mode) & 0o077:
-        raise RuntimeError("internal-secret file must be owner-only")
-    raw = path.read_bytes()
+    try:
+        raw = read_private_file(
+            path,
+            label="internal-secret",
+            max_bytes=4096,
+            exact_mode_0600=True,
+        )
+    except ProductionEnvError as error:
+        raise RuntimeError(str(error)) from error
     if not 16 <= len(raw) <= 4096:
         raise RuntimeError("internal-secret file length is invalid")
-    value = raw.decode("utf-8").strip()
-    if not value or "\n" in value or "\r" in value:
+    try:
+        value = raw.decode("utf-8").strip()
+    except UnicodeDecodeError as error:
+        raise RuntimeError("internal-secret file must be UTF-8") from error
+    if (
+        not value
+        or "\n" in value
+        or "\r" in value
+        or any(character.isspace() or ord(character) < 0x21 for character in value)
+    ):
         raise RuntimeError("internal-secret file contains an invalid value")
     return value
 

@@ -15,6 +15,8 @@ import re
 import sys
 import tomllib
 
+from deploy_readiness_check import ProductionEnvError, load_private_env_file
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SITE = ROOT / "site"
@@ -113,7 +115,16 @@ def placeholder(value: str) -> bool:
     )
 
 
-def load_bindings(path: pathlib.Path | None) -> dict[str, str]:
+def load_bindings(
+    path: pathlib.Path | None, *, production: bool = False
+) -> dict[str, str]:
+    if production:
+        if path is None:
+            raise ProductionEnvError(
+                "production Pages bindings require an explicit owner-only file"
+            )
+        return load_private_env_file(path, exact_mode_0600=True)
+
     env = {
         key: value
         for key, value in os.environ.items()
@@ -250,9 +261,9 @@ def main(argv: list[str]) -> int:
 
     if args.production:
         try:
-            bindings = load_bindings(args.bindings_file)
-        except FileNotFoundError as exc:
-            failures.append(f"bindings file not found: {exc.filename}")
+            bindings = load_bindings(args.bindings_file, production=True)
+        except (FileNotFoundError, ProductionEnvError) as exc:
+            failures.append(f"production Pages bindings are unsafe: {exc}")
         else:
             validate_production_bindings(bindings, failures)
 

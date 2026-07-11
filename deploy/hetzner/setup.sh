@@ -43,7 +43,7 @@ fi
 
 # ---- Directory structure ----
 echo "Setting up /opt/hc-stark..."
-mkdir -p /opt/hc-stark/{data,site}
+mkdir -p /opt/hc-stark/site
 
 # ---- Host billing Python runtime ----
 if [ -x /opt/hc-stark/deploy/hetzner/install_billing_runtime.sh ]; then
@@ -97,11 +97,11 @@ cat > "$CRON_FILE" <<'CRON'
 # TinyZKP backend recovery: no usage meter, checkout recovery, lifecycle,
 # outbound, or growth-automation jobs may run.
 0 2 * * * root /opt/hc-stark/billing/backup.sh >> /var/log/hc-backup.log 2>&1
-17 3 * * * tinyzkp-billing /bin/sh -c 'umask 077; exec /opt/hc-stark/.venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /opt/hc-stark/data/evaluation-retention.log 2>&1'
+17 3 * * * tinyzkp-billing /bin/sh -c 'umask 077; exec /var/lib/tinyzkp-runtime/billing-venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /opt/hc-stark/data/evaluation-retention.log 2>&1'
 CRON
 chmod 644 "$CRON_FILE"
 rm -f /etc/cron.d/hc-backup
-mkdir -p /opt/hc-stark/backups
+install -d -o root -g root -m 0700 /opt/hc-stark/backups
 
 # ---- Off-box backup (G13) — operator action required ----
 # Without this, the box is a single point of failure for all tenant/usage/key data.
@@ -110,7 +110,7 @@ mkdir -p /opt/hc-stark/backups
 #        apt-get install -y rclone
 #
 #   2. Configure a remote (Backblaze B2, S3, Hetzner Storage Box, SFTP, etc.):
-#        rclone config
+#        rclone config --config /var/lib/tinyzkp-private/backup/rclone.conf
 #
 #   3. Add HC_BACKUP_REMOTE to /opt/hc-stark/.env, e.g.:
 #        HC_BACKUP_REMOTE="b2:hc-stark-backups"
@@ -129,10 +129,28 @@ if ! id -u tinyzkp-billing >/dev/null 2>&1; then
     useradd --system --gid tinyzkp-billing --home-dir /nonexistent \
         --shell /usr/sbin/nologin tinyzkp-billing
 fi
-install -d -o tinyzkp-billing -g tinyzkp-billing -m 0700 /opt/hc-stark/data
-chown -R tinyzkp-billing:tinyzkp-billing /opt/hc-stark/data
+SERVICE_UID="$(id -u tinyzkp-billing)"
+SERVICE_GID="$(id -g tinyzkp-billing)"
+/usr/bin/python3 /opt/hc-stark/billing/backup_env_exec.py \
+    ensure-service-data-root --path /opt/hc-stark/data \
+    --uid "$SERVICE_UID" --gid "$SERVICE_GID"
 install -d -o root -g root -m 0700 \
-    /var/lib/tinyzkp-private /var/lib/tinyzkp-private/billing
+    /var/lib/tinyzkp-private \
+    /var/lib/tinyzkp-private/billing \
+    /var/lib/tinyzkp-private/deploy \
+    /var/lib/tinyzkp-private/deploy/consumed \
+    /var/lib/tinyzkp-private/backup
+install -d -o root -g tinyzkp-billing -m 0710 \
+    /var/lib/tinyzkp-backup-staging
+install -d -o root -g root -m 0700 /var/lib/tinyzkp-preflight-pycache
+BACKUP_LOADER_TOKEN=/var/lib/tinyzkp-private/backup/loader-token
+if [ ! -e "$BACKUP_LOADER_TOKEN" ]; then
+    /usr/bin/python3 /opt/hc-stark/billing/backup_env_exec.py \
+        create-loader-token --path "$BACKUP_LOADER_TOKEN"
+else
+    /usr/bin/python3 /opt/hc-stark/billing/backup_env_exec.py \
+        validate-loader-token --path "$BACKUP_LOADER_TOKEN"
+fi
 
 cat > /etc/systemd/system/hc-billing-webhook.service <<'UNIT'
 [Unit]
@@ -144,7 +162,7 @@ Type=simple
 User=tinyzkp-billing
 Group=tinyzkp-billing
 WorkingDirectory=/opt/hc-stark/billing
-ExecStart=/opt/hc-stark/.venv/bin/gunicorn -w 2 -b 127.0.0.1:5001 provision_tenant:app
+ExecStart=/var/lib/tinyzkp-runtime/billing-venv/bin/gunicorn -w 2 -b 127.0.0.1:5001 provision_tenant:app
 Restart=on-failure
 RestartSec=5
 UMask=0077
@@ -200,6 +218,6 @@ echo "  4. Create Cloudflare DNS records (see above)"
 echo "  5. systemctl start hc-stark"
 echo "  6. systemctl start hc-billing-webhook"
 echo "  7. Verify: curl https://api.tinyzkp.com/healthz"
-echo "  8. Off-box backup (G13): apt-get install rclone && rclone config"
+echo "  8. Off-box backup (G13): apt-get install rclone && rclone config --config /var/lib/tinyzkp-private/backup/rclone.conf"
 echo "     Then set HC_BACKUP_REMOTE in /opt/hc-stark/.env"
 echo "     See docs/runbooks/restore.md for restore procedure."

@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import sqlite3
 import sys
 import types
 
@@ -25,10 +26,38 @@ def _valid_production_env(tmp_path):
     billing_dir.chmod(0o700)
     evaluation = data_dir / "evaluation_applications.sqlite"
     ledger = billing_dir / "contract_billing.sqlite"
-    evaluation.write_bytes(b"sqlite-placeholder")
-    ledger.write_bytes(b"sqlite-placeholder")
-    evaluation.chmod(0o600)
-    ledger.chmod(0o600)
+    schemas = {
+        data_dir / "tenant_store.sqlite": """
+            CREATE TABLE tenants (tenant_id TEXT, api_key_hash TEXT, status TEXT, plan TEXT);
+            CREATE TABLE processed_events (event_id TEXT, processed_at_ms INTEGER);
+            CREATE TABLE magic_links (token_hash TEXT, tenant_id TEXT, expires_at_ms INTEGER);
+            CREATE TABLE sessions (token_hash TEXT, tenant_id TEXT, expires_at_ms INTEGER);
+        """,
+        data_dir / "usage.sqlite": """
+            CREATE TABLE usage_log (tenant_id TEXT, job_id TEXT, trace_length INTEGER, billed INTEGER);
+            CREATE TABLE verify_log (tenant_id TEXT, duration_ms INTEGER, completed_at_ms INTEGER);
+            CREATE TABLE failed_proofs (tenant_id TEXT, job_id TEXT, error TEXT, failed_at_ms INTEGER);
+        """,
+        evaluation: """
+            CREATE TABLE evaluation_applications (
+              application_id TEXT, status TEXT, retention_deadline TEXT,
+              qualification_json TEXT
+            );
+        """,
+        ledger: """
+            CREATE TABLE billing_operations (
+              operation_key TEXT, plan_sha256 TEXT, action TEXT, phase TEXT
+            );
+        """,
+    }
+    for path, schema in schemas.items():
+        with sqlite3.connect(path) as connection:
+            connection.executescript(schema)
+        path.chmod(0o600)
+    (data_dir / "api_keys.txt").write_text(
+        "tenant-a:tzk_live_key:standard\n", encoding="utf-8"
+    )
+    (data_dir / "api_keys.txt").chmod(0o600)
     return {
         "STRIPE_SECRET_KEY": LIVE_KEY,
         "STRIPE_WEBHOOK_SECRET": WEBHOOK_SECRET,
@@ -36,6 +65,7 @@ def _valid_production_env(tmp_path):
         "STRIPE_EXPECTED_ACCOUNT_ID": ACCOUNT_ID,
         "STRIPE_EXPECTED_DISPLAY_NAME": "LN Holdings",
         "HC_EVALUATION_STORE_PATH": str(evaluation),
+        "HC_BACKUP_DATA_DIR": str(data_dir),
         "TINYZKP_CONTRACT_BILLING_LEDGER_PATH": str(ledger),
         "HC_BACKUP_REMOTE": "r2-crypt:tinyzkp",
         "TINYZKP_MAINTENANCE_MODE": "1",
@@ -158,7 +188,7 @@ def test_private_production_env_rejects_wrong_owner(tmp_path, monkeypatch):
     actual_owner = env_file.stat().st_uid
     monkeypatch.setattr(readiness.os, "geteuid", lambda: actual_owner + 1)
 
-    with pytest.raises(readiness.ProductionEnvError, match="current operator"):
+    with pytest.raises(readiness.ProductionEnvError, match="current-owner|current operator"):
         readiness.load_private_env_file(env_file)
 
 
@@ -420,10 +450,11 @@ def test_production_mode_rejects_placeholder_secrets():
     assert "off-host backups require HC_BACKUP_REMOTE" in failures
 
 
-def test_production_mode_accepts_https_backup_ingest(tmp_path):
+def test_production_mode_accepts_https_backup_ingest(tmp_path, monkeypatch):
     token_file = tmp_path / "backup-token"
     token_file.write_text("a" * 64, encoding="utf-8")
     token_file.chmod(0o600)
+    monkeypatch.setattr(readiness.backup_env_exec, "FIXED_HTTP_TOKEN", token_file)
     env = _valid_production_env(tmp_path)
     env.pop("HC_BACKUP_REMOTE")
     env.update(
@@ -443,6 +474,12 @@ def test_production_host_rclone_probe_is_read_only_and_successful(
     tmp_path, monkeypatch
 ):
     env = _valid_production_env(tmp_path)
+    rclone_config = tmp_path / "rclone.conf"
+    rclone_config.write_text("[remote]\ntype = s3\n", encoding="utf-8")
+    rclone_config.chmod(0o600)
+    monkeypatch.setattr(
+        readiness.backup_env_exec, "FIXED_RCLONE_CONFIG", rclone_config
+    )
     calls = []
     monkeypatch.setattr(
         readiness.shutil,
@@ -476,6 +513,13 @@ def test_production_host_rclone_probe_is_read_only_and_successful(
                 "stderr": readiness.subprocess.DEVNULL,
                 "timeout": 30,
                 "check": False,
+                "env": {
+                    "PATH": readiness.backup_env_exec.FIXED_PATH,
+                    "LANG": "C",
+                    "LC_ALL": "C",
+                    "TZ": "UTC",
+                    "RCLONE_CONFIG": str(rclone_config),
+                },
             },
         )
     ]
@@ -496,6 +540,12 @@ def test_production_host_rejects_missing_rclone_for_configured_remote(
 
 def test_production_host_rejects_unusable_rclone_remote(tmp_path, monkeypatch):
     env = _valid_production_env(tmp_path)
+    rclone_config = tmp_path / "rclone.conf"
+    rclone_config.write_text("[remote]\ntype = s3\n", encoding="utf-8")
+    rclone_config.chmod(0o600)
+    monkeypatch.setattr(
+        readiness.backup_env_exec, "FIXED_RCLONE_CONFIG", rclone_config
+    )
     monkeypatch.setattr(
         readiness.shutil, "which", lambda _command: "/usr/local/bin/rclone"
     )
@@ -531,6 +581,52 @@ def test_production_host_rejects_local_path_as_backup_remote(tmp_path, monkeypat
     assert (
         "HC_BACKUP_REMOTE must name a configured rclone remote (name:path)"
         in failures
+    )
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        (
+            {"HC_BACKUP_RETENTION_DAYS": "1 -delete"},
+            "HC_BACKUP_RETENTION_DAYS must be an integer from 1 through 3650",
+        ),
+        (
+            {"HC_BACKUP_REMOTE": 'r2-crypt:tinyzkp/"--config'},
+            "HC_BACKUP_REMOTE is malformed",
+        ),
+    ],
+)
+def test_production_readiness_reuses_backup_value_validation(
+    tmp_path, updates, message
+):
+    env = _valid_production_env(tmp_path)
+    env.update(updates)
+
+    failures, _warnings = readiness.check_env(env, production=True)
+
+    assert any(
+        failure.startswith("backup configuration is unsafe:")
+        and message in failure
+        for failure in failures
+    )
+
+
+def test_production_readiness_rejects_credentialed_backup_url(tmp_path):
+    env = _valid_production_env(tmp_path)
+    env.pop("HC_BACKUP_REMOTE")
+    env.update(
+        {
+            "HC_BACKUP_HTTP_URL": "https://user@backup.example/v1",
+            "HC_BACKUP_HTTP_TOKEN_FILE": "/secure/token",
+            "HC_BACKUP_HTTP_RETENTION_CONFIRMED": "1",
+        }
+    )
+
+    failures, _warnings = readiness.check_env(env, production=True)
+
+    assert any(
+        "credential-free HTTPS base URL" in failure for failure in failures
     )
 
 

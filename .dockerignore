@@ -1,0 +1,17 @@
+*
+!Dockerfile
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!README.md
+!crates/
+!crates/**
+!docs/
+!docs/**
+!scripts/
+!scripts/**
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.so
+**/*.dylib

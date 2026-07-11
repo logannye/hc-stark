@@ -7,7 +7,7 @@
 set -euo pipefail
 
 REPO="${TINYZKP_REPO:-/opt/hc-stark}"
-PYTHON="${TINYZKP_PYTHON:-$REPO/.venv/bin/python}"
+PYTHON="${TINYZKP_PYTHON:-/var/lib/tinyzkp-runtime/billing-venv/bin/python}"
 SNAPSHOT_DIR="${TINYZKP_GROWTH_SNAPSHOT_DIR:-$REPO/data/growth_snapshots}"
 EXPERIMENT_LEDGER="${TINYZKP_GROWTH_EXPERIMENT_LEDGER:-$REPO/data/growth_experiment_ledger.json}"
 ENV_FILE="${TINYZKP_ENV_FILE:-$REPO/.env}"

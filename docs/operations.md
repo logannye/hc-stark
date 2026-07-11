@@ -67,11 +67,22 @@ reads:
 | `HC_TENANT_PG_REQUIRED` | `false` | If true, tenant-store mutations fail when the Postgres mirror write fails. Use during/after auth read cutover |
 
 On Hetzner, the host-level billing webhook and hourly billing cron run from
-`/opt/hc-stark/.venv`, installed by
-`deploy/hetzner/install_billing_runtime.sh` from `billing/requirements.txt`.
-The deploy script refreshes this virtualenv, rewrites the billing cron and
-`hc-billing-webhook.service` definitions to use it, and only then restarts the
-webhook.
+`/var/lib/tinyzkp-runtime/billing-venv`, installed by
+`deploy/hetzner/install_billing_runtime.sh` from the reviewed,
+hash-locked `billing/requirements.lock`.
+Run that installer as a separate operator preparation step before creating
+production preflight evidence. The deploy script never installs or changes
+runtime packages; it verifies the byte-bound, read-only virtualenv, rewrites
+the billing cron and `hc-billing-webhook.service` definitions to use it, and
+then restarts the webhook.
+
+The installer intentionally fails closed until a reviewed
+`billing/requirements.lock` (all transitive packages, including `pytest`, pinned
+with SHA-256 hashes) and a root-owned immutable offline wheelhouse exist at
+`/var/lib/tinyzkp-runtime/wheelhouse`. The external base Python/stdlib/shared
+library provenance and the preflight binding for backup token/config metadata
+remain production evidence blockers; do not issue launch evidence or describe
+this tree as deploy-ready until those identities are independently anchored.
 
 ### Shared prove worker (hc-job-worker)
 
@@ -139,14 +150,6 @@ python3 scripts/ci/production_launch_preflight.py
 python3 scripts/ci/server_card_check.py
 ```
 
-When the legacy research repo is checked out next to `hc-stark`, include it in
-the audit:
-
-```sh
-python3 scripts/ci/launch_gate_audit.py --require-legacy
-python3 scripts/ci/production_launch_preflight.py --require-legacy
-```
-
 For a production deploy rehearsal, run the aggregate preflight with the
 production env file and Cloudflare Pages binding file. This keeps local repo
 evidence, deploy-readiness policy, Pages configuration, Compose rendering,
@@ -154,31 +157,73 @@ backup/restore drift, package distribution surfaces, and the launch-gate audit
 under one operator command:
 
 ```sh
-python3 scripts/ci/production_launch_preflight.py \
-  --require-legacy \
+scripts/ci/run_production_preflight.sh \
   --production \
   --env-file /opt/hc-stark/.env \
-  --pages-bindings-file /secure/tinyzkp-pages.env \
+  --pages-bindings-file /var/lib/tinyzkp-private/deploy/pages-bindings.env \
   --check-host-python \
-  --host-python /opt/hc-stark/.venv/bin/python
+  --host-python /var/lib/tinyzkp-runtime/billing-venv/bin/python \
+  --node-executable /usr/bin/node \
+  --git-executable /usr/bin/git \
+  --deployment-id tinyzkp-production-primary \
+  --expected-release-sha "$(git rev-parse HEAD)" \
+  --evidence-output /var/lib/tinyzkp-private/deploy/production-preflight.json
 ```
 
-After API/MCP and Pages deploys finish, add `--live` before announcing the
-release. Add `--authenticated-smoke` when `TINYZKP_SMOKE_API_KEY` or
-`TINYZKP_AUDIT_API_KEY` is available and the prove/verify path should be
-exercised end to end.
+Run this from a clean `main` checkout whose `HEAD` equals the locally fetched
+remote `main` SHA at the reviewed GitHub URL. Before issuing evidence, run
+`deploy/hetzner/install_billing_runtime.sh`, then make every tracked file
+read-only (`git ls-files -z | xargs -0 chmod a-w`). The installer creates a
+non-symlink copied interpreter, validates its packages, and freezes the entire
+venv; deploy never reinstalls or changes it. The source checkout and private
+configuration must be root-owned and unavailable for group/world writes.
+Create `/var/lib/tinyzkp-preflight-pycache` as an empty root-owned mode-`0700`
+directory. Always invoke the wrapper directly; invoking it through `bash` is
+rejected because only its clean shebang can discard exported functions,
+dynamic-loader settings, Docker/Compose routing, proxies, and Python import
+state before any repository code runs.
 
-Live mode starts by reading Cloudflare Pages production secret names through
-`wrangler pages secret list --project-name tinyzkp`; it fails before public
-smoke tests if any required binding is missing, including
-`STRIPE_PRICE_ID_PILOT` for the paid Production Pilot checkout path.
+The host env, fixed Pages binding file, evidence file, and their parent
+directories must be owner-only; Pages bindings and evidence are mode `0600`.
+The aggregate gate compares the host and Pages
+`INTERNAL_SECRET` values without printing either value. Its short-lived
+evidence binds a random nonce, machine identity, deployment ID, fresh remote
+main SHA, immutable source, private configuration files, the full venv and
+installed package bytes, exact Git/Node executables, both locally built
+maintenance container IDs/full inspect digests, and every passing gate.
+
+`deploy/hetzner/deploy.sh` performs no fetch or pull after evidence creation.
+It verifies the artifact before changing the billing runtime, cron, systemd,
+containers, or Caddy:
+
+```sh
+deploy/hetzner/deploy.sh
+```
+
+Deploy atomically consumes the artifact before its first mutation and starts
+the already-attested images with `--no-build`. Success,
+failure, interruption, or retry therefore requires a newly run preflight and a
+new nonce; the artifact is root self-attestation, not a separate human approval.
+
+Hosted proving and authenticated proving smoke remain disabled. After API/MCP
+and Pages deploys finish, the public live canary is still blocked until a pinned,
+reviewed Wrangler/Node toolchain is provisioned outside the checkout and bound
+into production evidence; do not fall back to `npx` or an unpinned global tool.
 
 For coordinated API, MCP, and website releases, pin the expected deployed
 commit and require all three surfaces to report it before announcing:
 
 ```sh
-TINYZKP_EXPECT_RELEASE_SHA="$(git rev-parse HEAD)" \
-  python3 scripts/ci/production_launch_preflight.py --live
+CLOUDFLARE_API_TOKEN=REDACTED CLOUDFLARE_ACCOUNT_ID=REDACTED \
+scripts/ci/run_production_preflight.sh \
+  --production --live \
+  --env-file /opt/hc-stark/.env \
+  --pages-bindings-file /var/lib/tinyzkp-private/deploy/pages-bindings.env \
+  --host-python /var/lib/tinyzkp-runtime/billing-venv/bin/python \
+  --node-executable /usr/bin/node --git-executable /usr/bin/git \
+  --deployment-id tinyzkp-production-primary \
+  --contact-readiness-secret-file /var/lib/tinyzkp-private/deploy/internal-secret \
+  --expected-release-sha "$(/usr/bin/git rev-parse HEAD)"
 ```
 
 The API and MCP HTTP server report `HC_RELEASE_SHA` from `/version`. The Pages
@@ -199,10 +244,12 @@ This verifies that `backup.sh` still snapshots `tenant_store.sqlite`,
 `usage.sqlite`, `evaluation_applications.sqlite`, `api_keys.txt`, and private
 contract evidence/documents with restrictive permissions and off-box `rclone`
 support, and that the restore runbook still references current API, contract,
-and SQLite verification paths. The executable smoke test runs `backup.sh`
-against temporary SQLite databases using `HC_BACKUP_DATA_DIR`, `HC_BACKUP_DIR`,
-`HC_BACKUP_DATE`, and `HC_BACKUP_REMOTE_DATE` overrides, then validates that the
-snapshots are readable and permissioned for restore.
+and SQLite verification paths. The executable smoke test runs `backup.sh` as an
+unprivileged test user against temporary SQLite databases through the test-only
+loader contract, then validates the snapshots, current-run digest manifest,
+permissions, and restore data. Root production runs always use
+`/opt/hc-stark/.env`, `/opt/hc-stark/backups`, and the root-private loader token;
+environment overrides cannot redirect those paths.
 
 Production-grade recovery requires an off-box encrypted rclone remote. Configure
 the private Cloudflare R2 bucket `tinyzkp-prod-backups` through rclone crypt and
@@ -212,9 +259,21 @@ set:
 HC_BACKUP_REMOTE=tinyzkp-backups-crypt:prod-sqlite
 ```
 
+Store the reviewed rclone configuration at
+`/var/lib/tinyzkp-private/backup/rclone.conf`, owned by root with mode `0600`.
+Use `rclone --config /var/lib/tinyzkp-private/backup/rclone.conf ...` for every
+manual probe so operator checks and the backup runtime use the same config.
+
 After configuring credentials, run a production backup push and restore smoke.
 Do not describe the business as production-grade recoverable until the restore
 smoke succeeds.
+
+The Linux root backup integration is a fixed-host release gate, not covered by
+the unprivileged local smoke test. On the production-equivalent Linux host it
+must exercise writer quiescence, service-UID SQLite staging, root descriptor
+copies, every failure/signal cleanup path, service restart, manifest upload,
+and a scratch restore. Production launch must remain blocked until that run and
+its raw log are independently reviewed.
 
 ### Cloudflare Pages deploy gate
 
@@ -498,7 +557,7 @@ The host cron `/etc/cron.d/hc-billing` runs three billing-adjacent jobs, one
 daily GTM monitor, and one daily growth decision memo. Billing and GTM Python
 jobs run through `scripts/monitoring/host_cron_env.sh`, which sources
 `/opt/hc-stark/.env`, changes to `/opt/hc-stark`, and then execs
-`/opt/hc-stark/.venv/bin/python`:
+`/var/lib/tinyzkp-runtime/billing-venv/bin/python`:
 
 - `billing/sync_usage.py` hourly to report billable usage to Stripe.
 - `billing/lifecycle_nudges.py` hourly to send idempotent activation and
@@ -570,20 +629,10 @@ Historical backfill is available for `usage_log` and
 `failed_proofs`; `verify_log` is compare-only because it has no semantic
 idempotency key.
 
-Before and after flipping `HC_SERVER_PROVE_DISPATCH=shared`, run the focused
-cutover smoke test against the target environment:
-
-```bash
-TINYZKP_SMOKE_API=https://api.tinyzkp.com \
-TINYZKP_SMOKE_SITE=https://tinyzkp.com \
-TINYZKP_SMOKE_API_KEY=tzk_... \
-  scripts/monitoring/shared_dispatch_smoke.sh
-```
-
-This gate checks public lifecycle metadata, reconciliation site markers, a
-template prove, poll/download, inspect, verify, the cancel route, and `/usage`.
-Use `TINYZKP_SMOKE_PUBLIC_ONLY=1` only for unauthenticated website/API marker
-checks; it is not sufficient for a shared-worker cutover.
+Shared proving/worker cutover is historical research during backend recovery.
+Do not set `HC_SERVER_PROVE_DISPATCH=shared` or run authenticated proving smoke
+against production. The current wrapper-only maintenance canary verifies that
+proving, hosted verification, signup, and checkout remain unavailable.
 
 ## Deployment
 

@@ -1,5 +1,11 @@
 import argparse
+from datetime import datetime, timedelta, timezone
+import json
 import pathlib
+import shutil
+import stat
+import subprocess
+import sys
 
 import pytest
 
@@ -14,6 +20,9 @@ def args(**overrides):
         "pages_bindings_file": None,
         "check_host_python": False,
         "host_python": None,
+        "node_executable": None,
+        "git_executable": None,
+        "deployment_id": preflight.DEFAULT_DEPLOYMENT_ID,
         "live": False,
         "site_url": "https://tinyzkp.com",
         "api_url": "https://api.tinyzkp.com",
@@ -22,6 +31,10 @@ def args(**overrides):
         "contact_readiness_secret_file": "/secure/internal-secret",
         "expected_release_sha": None,
         "authenticated_smoke": False,
+        "evidence_output": None,
+        "verify_evidence": None,
+        "consume_evidence": False,
+        "json": False,
     }
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -79,6 +92,13 @@ def test_local_preflight_builds_fast_static_gate_sequence():
         ),
         ("python", "-m", "pytest", "scripts/commercial/test_validate_scorecard.py"),
         ("python", "scripts/ci/site_deploy_check.py"),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "scripts/ci/test_site_deploy_check.py",
+            "scripts/ci/test_production_secret_parity_check.py",
+        ),
         ("python", "-m", "pytest", "scripts/ci/test_cloudflare_pages_secret_check.py"),
         ("node", "scripts/ci/site_worker_dispatch_test.mjs"),
         ("python", "scripts/ci/compose_config_check.py"),
@@ -94,7 +114,7 @@ def test_production_adds_stricter_deploy_gates():
             pages_bindings_file="/secure/pages.env",
             env_file="/opt/hc-stark/.env",
             check_host_python=True,
-            host_python="/opt/hc-stark/.venv/bin/python",
+            host_python="/var/lib/tinyzkp-runtime/billing-venv/bin/python",
         ),
         python="python",
         node="node",
@@ -109,10 +129,10 @@ def test_production_adds_stricter_deploy_gates():
         "--production",
         "--check-host-python",
         "--host-python",
-        "/opt/hc-stark/.venv/bin/python",
+        "/var/lib/tinyzkp-runtime/billing-venv/bin/python",
     ) in commands(built)
     assert (
-        "/opt/hc-stark/.venv/bin/python",
+        "/var/lib/tinyzkp-runtime/billing-venv/bin/python",
         "billing/stripe_production_identity_check.py",
         "--env-file",
         "/opt/hc-stark/.env",
@@ -124,6 +144,14 @@ def test_production_adds_stricter_deploy_gates():
         "--bindings-file",
         "/secure/pages.env",
     ) in commands(built)
+    assert (
+        "python",
+        "scripts/ci/production_secret_parity_check.py",
+        "--host-env-file",
+        "/opt/hc-stark/.env",
+        "--pages-bindings-file",
+        "/secure/pages.env",
+    ) in commands(built)
 
 
 def test_production_build_always_enables_host_checks():
@@ -133,7 +161,7 @@ def test_production_build_always_enables_host_checks():
             pages_bindings_file="/secure/pages.env",
             env_file="/opt/hc-stark/.env",
             check_host_python=False,
-            host_python="/opt/hc-stark/.venv/bin/python",
+            host_python="/var/lib/tinyzkp-runtime/billing-venv/bin/python",
         ),
         python="python",
         node="node",
@@ -147,7 +175,7 @@ def test_production_build_always_enables_host_checks():
         "--production",
         "--check-host-python",
         "--host-python",
-        "/opt/hc-stark/.venv/bin/python",
+        "/var/lib/tinyzkp-runtime/billing-venv/bin/python",
     ) in commands(built)
 
 
@@ -170,7 +198,7 @@ def test_live_steps_are_opt_in_and_use_recovery_canary():
             live=True,
             production=True,
             pages_bindings_file="/secure/pages.env",
-            host_python="/opt/hc-stark/.venv/bin/python",
+            host_python="/var/lib/tinyzkp-runtime/billing-venv/bin/python",
         ),
         python="python",
         node="node",
@@ -206,7 +234,7 @@ def test_expected_release_sha_adds_live_release_identity_check():
             live=True,
             production=True,
             pages_bindings_file="/secure/pages.env",
-            host_python="/opt/hc-stark/.venv/bin/python",
+            host_python="/var/lib/tinyzkp-runtime/billing-venv/bin/python",
             expected_release_sha="abc123",
             site_url="https://site.example",
             api_url="https://api.example",
@@ -289,6 +317,33 @@ def test_run_step_reports_missing_command():
     assert result.error
 
 
+def test_production_step_environment_drops_language_and_loader_injection(
+    tmp_path, monkeypatch
+):
+    script = tmp_path / "environment.py"
+    script.write_text(
+        "import json, os; print(json.dumps(dict(os.environ), sort_keys=True))\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYTHONPATH", "/attacker")
+    monkeypatch.setenv("PYTHONHOME", "/attacker")
+    monkeypatch.setenv("NODE_OPTIONS", "--require=/attacker")
+    monkeypatch.setenv("LD_PRELOAD", "/attacker.so")
+
+    result = preflight.run_step(
+        preflight.Step("env", (sys.executable, str(script))),
+        root=tmp_path,
+        production=True,
+    )
+    environment = json.loads(result.stdout)
+    assert result.status == "PASS"
+    assert environment["PATH"] == preflight.TRUSTED_SYSTEM_PATH
+    for forbidden in ("PYTHONPATH", "PYTHONHOME", "NODE_OPTIONS", "LD_PRELOAD"):
+        assert forbidden not in environment
+    with pytest.raises(preflight.EvidenceError, match="forbidden environment"):
+        preflight.production_subprocess_environment({"NODE_OPTIONS": "--inspect"})
+
+
 def test_live_cli_requires_expected_release_sha(monkeypatch):
     monkeypatch.delenv("TINYZKP_EXPECT_RELEASE_SHA", raising=False)
     with pytest.raises(SystemExit) as exc:
@@ -317,3 +372,360 @@ def test_production_cli_requires_explicit_existing_host_python(tmp_path):
             ]
         )
     assert missing.value.code == 2
+
+
+def _production_evidence_fixture(tmp_path, monkeypatch):
+    tmp_path.chmod(0o700)
+    env_file = tmp_path / "host.env"
+    pages_file = tmp_path / "pages.env"
+    internal_secret = "TinyZKP-Internal-Secret-0123456789"
+    env_file.write_text(f"INTERNAL_SECRET={internal_secret}\n", encoding="utf-8")
+    pages_file.write_text(f"INTERNAL_SECRET={internal_secret}\n", encoding="utf-8")
+    env_file.chmod(0o600)
+    pages_file.chmod(0o600)
+    release_sha = "a" * 40
+    configured = args(
+        production=True,
+        env_file=str(env_file),
+        pages_bindings_file=str(pages_file),
+        host_python=sys.executable,
+        node_executable=sys.executable,
+        git_executable=sys.executable,
+        expected_release_sha=release_sha,
+        contact_readiness_secret_file=None,
+    )
+    monkeypatch.setattr(
+        preflight,
+        "source_identity",
+        lambda _root, _git, _remote=preflight.EXPECTED_REMOTE_URL: (
+            release_sha,
+            "main",
+            True,
+            True,
+            preflight.EXPECTED_REMOTE_URL,
+            release_sha,
+        ),
+    )
+    monkeypatch.setattr(
+        preflight, "validate_immutable_source_materialization", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_regular_file_digest",
+        lambda path, **_kwargs: (str(pathlib.Path(path).resolve()), "b" * 64),
+    )
+    monkeypatch.setattr(
+        preflight,
+        "venv_identity",
+        lambda _path: {
+            "venv_root": "/reviewed/venv",
+            "venv_identity_sha256": "c" * 64,
+            "venv_file_count": 10,
+            "venv_package_count": 4,
+        },
+    )
+    monkeypatch.setattr(preflight, "stable_host_identity", lambda *_args: "d" * 64)
+    monkeypatch.setattr(
+        preflight,
+        "container_image_identity",
+        lambda: (
+            {
+                "hc-stark-hc-server:latest": "sha256:" + "e" * 64,
+                "hc-stark-hc-mcp:latest": "sha256:" + "f" * 64,
+            },
+            "9" * 64,
+        ),
+    )
+    steps = preflight.build_steps(configured, python=sys.executable, node="node")
+    results = [
+        preflight.StepResult(
+            step.name,
+            "PASS",
+            step.command,
+            returncode=0,
+        )
+        for step in steps
+    ]
+    now = datetime(2026, 7, 10, 20, 0, tzinfo=timezone.utc)
+    return configured, results, now
+
+
+def test_complete_production_evidence_round_trip(tmp_path, monkeypatch):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    evidence = tmp_path / "preflight.json"
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    assert "TinyZKP-Internal-Secret-0123456789" not in json.dumps(payload)
+    preflight.atomic_write_evidence(evidence, payload)
+
+    report = preflight.verify_evidence(evidence, configured, now=now)
+
+    assert report == {
+        "schema_version": 1,
+        "status": "pass",
+        "release_sha": "a" * 40,
+        "fresh": True,
+        "inputs_unchanged": True,
+        "complete_gate_set": True,
+        "container_images_sha256": "9" * 64,
+        "container_image_ids": {
+            "hc-stark-hc-server:latest": "sha256:" + "e" * 64,
+            "hc-stark-hc-mcp:latest": "sha256:" + "f" * 64,
+        },
+    }
+    assert evidence.stat().st_mode & 0o777 == 0o600
+
+    payload["gate_results"][0]["returncode"] = False
+    preflight.atomic_write_evidence(evidence, payload)
+    with pytest.raises(preflight.EvidenceError, match="non-passing gate"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_production_evidence_rejects_stale_changed_and_incomplete_inputs(
+    tmp_path, monkeypatch
+):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    evidence = tmp_path / "preflight.json"
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    preflight.atomic_write_evidence(evidence, payload)
+
+    with pytest.raises(preflight.EvidenceError, match="stale"):
+        preflight.verify_evidence(
+            evidence,
+            configured,
+            now=now + preflight.EVIDENCE_MAX_AGE + timedelta(seconds=1),
+        )
+
+    pages = pathlib.Path(configured.pages_bindings_file)
+    pages.write_text("INTERNAL_SECRET=" + "b" * 32 + "\n", encoding="utf-8")
+    pages.chmod(0o600)
+    with pytest.raises(preflight.EvidenceError, match="inputs changed"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+    pages.write_text(
+        "INTERNAL_SECRET=TinyZKP-Internal-Secret-0123456789\n",
+        encoding="utf-8",
+    )
+    pages.chmod(0o600)
+    payload["gate_results"] = payload["gate_results"][:-1]
+    preflight.atomic_write_evidence(evidence, payload)
+    with pytest.raises(preflight.EvidenceError, match="complete gate set"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_production_evidence_rejects_duplicate_json_symlink_and_bad_mode(
+    tmp_path, monkeypatch
+):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    evidence = tmp_path / "preflight.json"
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    preflight.atomic_write_evidence(evidence, payload)
+
+    encoded = json.dumps(payload, separators=(",", ":"))
+    evidence.write_text(
+        encoded[:-1] + ',"status":"pass"}',
+        encoding="utf-8",
+    )
+    evidence.chmod(0o600)
+    with pytest.raises(preflight.EvidenceError, match="duplicates"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+    evidence.unlink()
+    target = tmp_path / "target.json"
+    target.write_text(json.dumps(payload), encoding="utf-8")
+    target.chmod(0o600)
+    evidence.symlink_to(target)
+    with pytest.raises(preflight.EvidenceError, match="unavailable or unsafe"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+    evidence.unlink()
+    evidence.write_text(json.dumps(payload), encoding="utf-8")
+    evidence.chmod(0o400)
+    with pytest.raises(preflight.EvidenceError, match="mode 0600"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_atomic_evidence_requires_owner_only_parent(tmp_path):
+    tmp_path.chmod(0o755)
+    with pytest.raises(preflight.EvidenceError, match="parent must be current-owner-only"):
+        preflight.atomic_write_evidence(
+            tmp_path / "preflight.json",
+            preflight.placeholder_evidence("in_progress", "a" * 40),
+        )
+
+
+def test_evidence_requires_published_main_and_rejects_in_progress_artifact(
+    tmp_path, monkeypatch
+):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        preflight,
+        "source_identity",
+        lambda _root, _git, _remote=preflight.EXPECTED_REMOTE_URL: (
+            "a" * 40,
+            "main",
+            True,
+            False,
+            preflight.EXPECTED_REMOTE_URL,
+            "a" * 40,
+        ),
+    )
+    with pytest.raises(preflight.EvidenceError, match="origin/main"):
+        preflight.build_pass_evidence(configured, results, now=now)
+
+    evidence = tmp_path / "preflight.json"
+    preflight.atomic_write_evidence(
+        evidence,
+        preflight.placeholder_evidence("in_progress", "a" * 40),
+    )
+    with pytest.raises(preflight.EvidenceError, match="completed passing"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_source_identity_requires_clean_published_main(tmp_path):
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@invalid.example"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "TinyZKP test"],
+        cwd=repository,
+        check=True,
+    )
+    (repository / "tracked").write_text("one\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked"], cwd=repository, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "test"], cwd=repository, check=True)
+    subprocess.run(["git", "remote", "add", "origin", str(repository)], cwd=repository, check=True)
+
+    git_executable = pathlib.Path(
+        subprocess.run(
+            ["which", "git"], text=True, capture_output=True, check=True
+        ).stdout.strip()
+    )
+    release_sha, branch, clean, published, remote_url, remote_sha = preflight.source_identity(
+        repository, git_executable, str(repository)
+    )
+    assert preflight.RELEASE_SHA.fullmatch(release_sha)
+    assert (branch, clean, published) == ("main", True, True)
+    assert (remote_url, remote_sha) == (str(repository), release_sha)
+
+    (repository / "tracked").write_text("changed\n", encoding="utf-8")
+    assert preflight.source_identity(repository, git_executable, str(repository))[2] is False
+
+
+def test_source_identity_ignores_repo_local_remote_rewrites(tmp_path):
+    repository = tmp_path / "repo"
+    fake = tmp_path / "fake"
+    for path, value in ((repository, "reviewed\n"), (fake, "fake\n")):
+        path.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=path, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@invalid.example"],
+            cwd=path,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "TinyZKP test"],
+            cwd=path,
+            check=True,
+        )
+        (path / "tracked").write_text(value, encoding="utf-8")
+        subprocess.run(["git", "add", "tracked"], cwd=path, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "test"], cwd=path, check=True)
+
+    expected_remote = str(repository)
+    subprocess.run(
+        ["git", "remote", "add", "origin", expected_remote],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", f"url.{fake}.insteadOf", expected_remote],
+        cwd=repository,
+        check=True,
+    )
+    git_executable = pathlib.Path(shutil.which("git") or "/usr/bin/git")
+
+    release_sha, _branch, _clean, published, remote_url, remote_sha = (
+        preflight.source_identity(repository, git_executable, expected_remote)
+    )
+    assert published is True
+    assert remote_url == expected_remote
+    assert remote_sha == release_sha
+
+
+def test_git_metadata_rejects_group_writable_config(tmp_path):
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repository, check=True)
+    config = repository / ".git" / "config"
+    original_mode = stat.S_IMODE(config.stat().st_mode)
+    config.chmod(0o664)
+    try:
+        with pytest.raises(preflight.EvidenceError, match="unsafe entry"):
+            preflight.validate_git_metadata(repository)
+    finally:
+        config.chmod(original_mode)
+
+
+def test_venv_identity_hashes_all_files_and_rejects_symlinks(tmp_path):
+    venv = tmp_path / ".venv"
+    (venv / "bin").mkdir(parents=True)
+    site = venv / "lib" / "python3.12" / "site-packages"
+    dist = site / "demo-1.0.dist-info"
+    dist.mkdir(parents=True)
+    python = venv / "bin" / "python"
+    python.write_bytes(pathlib.Path(shutil.which("true") or "/usr/bin/true").read_bytes())
+    (venv / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
+    metadata = dist / "METADATA"
+    record = dist / "RECORD"
+    metadata.write_text("Name: demo\nVersion: 1.0\n", encoding="utf-8")
+    record.write_text(
+        "demo-1.0.dist-info/METADATA,,\n"
+        "demo-1.0.dist-info/RECORD,,\n",
+        encoding="utf-8",
+    )
+    for directory in (venv, venv / "bin", venv / "lib", site.parent, site, dist):
+        directory.chmod(0o555)
+    python.chmod(0o555)
+    for path in (venv / "pyvenv.cfg", metadata, record):
+        path.chmod(0o444)
+
+    identity = preflight.venv_identity(python)
+    assert identity["venv_package_count"] == 1
+    assert identity["venv_file_count"] == 4
+
+    python.chmod(0o755)
+    with pytest.raises(preflight.EvidenceError, match="immutable private copy"):
+        preflight.venv_identity(python)
+    for directory in (dist, site, site.parent, venv / "lib", venv / "bin", venv):
+        directory.chmod(0o755)
+
+
+def test_evidence_consumption_is_one_time(tmp_path, monkeypatch):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    evidence = tmp_path / "preflight.json"
+    consumed = tmp_path / "consumed"
+    consumed.mkdir(mode=0o700)
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    preflight.atomic_write_evidence(evidence, payload)
+
+    report = preflight.consume_evidence(
+        evidence,
+        configured,
+        now=now,
+        consumption_dir=consumed,
+    )
+    assert report["consumed"] is True
+    assert not evidence.exists()
+    assert (consumed / f"{payload['nonce']}.claim").is_file()
+    with pytest.raises((preflight.EvidenceError, preflight.ProductionEnvError)):
+        preflight.consume_evidence(
+            evidence,
+            configured,
+            now=now,
+            consumption_dir=consumed,
+        )

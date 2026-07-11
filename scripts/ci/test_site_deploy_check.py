@@ -1,5 +1,7 @@
 import pathlib
 
+import pytest
+
 import site_deploy_check as check
 
 
@@ -62,3 +64,59 @@ def test_load_bindings_reports_missing_file(tmp_path):
         assert str(missing) in str(exc)
     else:
         raise AssertionError("missing bindings file did not raise")
+
+
+def _private_pages_bindings(tmp_path, content="INTERNAL_SECRET=private-value\n"):
+    path = tmp_path / "pages-private.env"
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o600)
+    return path
+
+
+def test_production_pages_bindings_use_strict_all_key_data_parser(tmp_path):
+    path = _private_pages_bindings(
+        tmp_path,
+        "INTERNAL_SECRET=private-value\nWEBHOOK_BASE_URL=https://webhook.tinyzkp.com\n",
+    )
+
+    assert check.load_bindings(path, production=True) == {
+        "INTERNAL_SECRET": "private-value",
+        "WEBHOOK_BASE_URL": "https://webhook.tinyzkp.com",
+    }
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ("INTERNAL_SECRET=one\nINTERNAL_SECRET=two\n", "duplicated"),
+        ("export INTERNAL_SECRET=value\n", "data-only KEY=value"),
+        ("source /tmp/not-data\n", "data-only KEY=value"),
+        ("INTERNAL_SECRET=" + "a" * (64 * 1024) + "\n", "exceeds 64 KiB"),
+    ],
+)
+def test_production_pages_bindings_reject_duplicates_shell_and_oversize(
+    tmp_path, content, message
+):
+    path = _private_pages_bindings(tmp_path, content)
+    with pytest.raises(check.ProductionEnvError, match=message):
+        check.load_bindings(path, production=True)
+
+
+def test_production_pages_bindings_reject_mode_symlink_and_wrong_owner(
+    tmp_path, monkeypatch
+):
+    target = _private_pages_bindings(tmp_path)
+    target.chmod(0o400)
+    with pytest.raises(check.ProductionEnvError, match="mode 0600"):
+        check.load_bindings(target, production=True)
+
+    target.chmod(0o600)
+    symlink = tmp_path / "pages-link.env"
+    symlink.symlink_to(target)
+    with pytest.raises(check.ProductionEnvError, match="unavailable or unsafe"):
+        check.load_bindings(symlink, production=True)
+
+    actual_owner = target.stat().st_uid
+    monkeypatch.setattr(check.os, "geteuid", lambda: actual_owner + 1)
+    with pytest.raises(check.ProductionEnvError, match="current-owner|current operator"):
+        check.load_bindings(target, production=True)

@@ -15,9 +15,9 @@ Run on the production host:
 
 ```bash
 cd /opt/hc-stark
-.venv/bin/python billing/evaluation_intake.py list --status new
-.venv/bin/python billing/evaluation_intake.py show eval_REPLACE --include-contact
-.venv/bin/python billing/evaluation_intake.py set-status eval_REPLACE qualified
+/var/lib/tinyzkp-runtime/billing-venv/bin/python billing/evaluation_intake.py list --status new
+/var/lib/tinyzkp-runtime/billing-venv/bin/python billing/evaluation_intake.py show eval_REPLACE --include-contact
+/var/lib/tinyzkp-runtime/billing-venv/bin/python billing/evaluation_intake.py set-status eval_REPLACE qualified
 ```
 
 The default list is contact-redacted. Use `--include-contact` only when the
@@ -30,8 +30,8 @@ repository, issue tracker, benchmark reports, or review bundles.
 Preview and apply the twelve-month purge:
 
 ```bash
-.venv/bin/python billing/evaluation_intake.py purge-expired
-.venv/bin/python billing/evaluation_intake.py purge-expired --apply
+/var/lib/tinyzkp-runtime/billing-venv/bin/python billing/evaluation_intake.py purge-expired
+/var/lib/tinyzkp-runtime/billing-venv/bin/python billing/evaluation_intake.py purge-expired --apply
 ```
 
 The evaluation database is included in the encrypted/private off-host backup

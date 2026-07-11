@@ -1,19 +1,62 @@
 import json
-import stat
 
 import pytest
 
 import contact_intake_readiness as readiness
+import deploy_readiness_check as private_files
 
 
 def test_secret_file_must_be_owner_only(tmp_path):
     secret = tmp_path / "secret"
     secret.write_text("a" * 32)
     secret.chmod(0o644)
-    with pytest.raises(RuntimeError, match="owner-only"):
+    with pytest.raises(RuntimeError, match="mode 0600"):
         readiness.load_secret(secret)
     secret.chmod(0o600)
     assert readiness.load_secret(secret) == "a" * 32
+
+
+def test_secret_file_rejects_symlink_directory_and_wrong_owner(tmp_path, monkeypatch):
+    secret = tmp_path / "secret"
+    secret.write_text("a" * 32, encoding="utf-8")
+    secret.chmod(0o600)
+    symlink = tmp_path / "secret-link"
+    symlink.symlink_to(secret)
+
+    with pytest.raises(RuntimeError, match="unavailable or unsafe"):
+        readiness.load_secret(symlink)
+    with pytest.raises(RuntimeError, match="regular non-symlink"):
+        readiness.load_secret(tmp_path)
+
+    actual_owner = secret.stat().st_uid
+    monkeypatch.setattr(private_files.os, "geteuid", lambda: actual_owner + 1)
+    with pytest.raises(RuntimeError, match="current-owner|current operator"):
+        readiness.load_secret(secret)
+
+
+def test_secret_file_rejects_oversize_control_and_noncanonical_mode(tmp_path):
+    secret = tmp_path / "secret"
+    secret.write_bytes(b"a" * 4097)
+    secret.chmod(0o600)
+    with pytest.raises(RuntimeError, match="exceeds 4096 bytes"):
+        readiness.load_secret(secret)
+
+    secret.write_bytes(b"a" * 20 + b"\n" + b"b" * 20)
+    with pytest.raises(RuntimeError, match="invalid value"):
+        readiness.load_secret(secret)
+
+    secret.write_bytes(b"a" * 20 + b"\x00" + b"b" * 20)
+    with pytest.raises(RuntimeError, match="invalid value"):
+        readiness.load_secret(secret)
+
+    secret.write_bytes(b"a" * 20 + b"\xff" + b"b" * 20)
+    with pytest.raises(RuntimeError, match="must be UTF-8"):
+        readiness.load_secret(secret)
+
+    secret.write_bytes(b"a" * 32)
+    secret.chmod(0o400)
+    with pytest.raises(RuntimeError, match="mode 0600"):
+        readiness.load_secret(secret)
 
 
 def test_run_submits_and_cleans_no_pii_probe(monkeypatch):
