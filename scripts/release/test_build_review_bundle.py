@@ -117,11 +117,16 @@ def test_review_bundle_is_commit_bound_and_byte_deterministic(tmp_path, monkeypa
         in command
         for command in one["reproduction_commands"]
     )
-    assert sum("--require-fixed-host" in command for command in one["reproduction_commands"]) == 4
     assert sum(
-        "fixed_host_preflight.py" in command
+        "run_fixed_host_release_matrix.py" in command
         for command in one["reproduction_commands"]
     ) == 1
+    assert not any(
+        "run_plonky3_cgroup.py" in command
+        or "fixed_host_preflight.py" in command
+        or "validate_release_gate.py" in command
+        for command in one["reproduction_commands"]
+    )
     with zipfile.ZipFile(first) as archive:
         assert "review-manifest.json" in archive.namelist()
         assert "scripts/ci/source_tree_identity.py" in archive.namelist()

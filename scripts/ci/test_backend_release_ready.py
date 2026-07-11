@@ -62,6 +62,17 @@ def test_final_gate_rebinds_review_bundle_to_exact_candidate_artifacts(
     one = []
     ten = []
     observed = []
+    matrix = descriptor("matrix_manifest")
+    one.append(matrix)
+    ten.append(dict(matrix))
+    observed.append(
+        {
+            "origin": "artifact",
+            "evidence_category": "raw-reports",
+            "evidence_role": "fixed_host_matrix_manifest",
+            "source_sha256": digest,
+        }
+    )
     for workload in ("fibonacci", "poseidon2"):
         for mode in ("baseline", "candidate"):
             role = f"{workload}_{mode}_report"
@@ -126,7 +137,7 @@ def test_final_gate_rebinds_review_bundle_to_exact_candidate_artifacts(
     assert gate.validate_review_execution_bindings(
         gates, "a" * 40, root=tmp_path
     ) == []
-    one[0]["sha256"] = "b" * 64
+    one[1]["sha256"] = "b" * 64
     assert any(
         "does not contain exact candidate evidence" in failure
         for failure in gate.validate_review_execution_bindings(
@@ -139,6 +150,262 @@ def source_release_sha():
     return subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=gate.ROOT, text=True
     ).strip()
+
+
+def resource_matrix_fixture(tmp_path):
+    release_sha = "a" * 40
+    source_digest = "b" * 64
+    stable_host = {
+        "hardware": "fixed-host; logical_cpus=8",
+        "logical_cpu_count": 8,
+        "total_memory_bytes": 16 * 1024**3,
+        "operating_system": "Linux-fixed",
+        "storage_device": "259:1:nvme0n1p1",
+        "storage_is_rotational": False,
+        "storage_is_nvme": True,
+        "storage_total_bytes": 1_000_000_000_000,
+    }
+    gates = {
+        "one_million_row_resource_gate": {"artifacts": []},
+        "ten_million_row_resource_gate": {"artifacts": []},
+    }
+    entries = []
+
+    def evidence_artifact(gate_name, role, payload):
+        path = tmp_path / gate_name / f"{role}.json"
+        digest = write_json(path, payload)
+        descriptor = {
+            "role": role,
+            "path": path.relative_to(tmp_path).as_posix(),
+            "sha256": digest,
+        }
+        gates[gate_name]["artifacts"].append(descriptor)
+        return path, descriptor
+
+    for entry_id, specification in gate.RESOURCE_MATRIX_ENTRIES.items():
+        gate_name = specification["evidence_gate"]
+        prefix = specification["prefix"]
+        source_path, source_descriptor = evidence_artifact(
+            gate_name,
+            f"{prefix}_manifest",
+            {
+                "workload_id": specification["workload"],
+                "logical_rows": specification["logical_rows"],
+            },
+        )
+        matrix_artifacts = []
+        expected_paths = gate._matrix_artifact_paths(
+            specification["stem"], baseline=specification["baseline"]
+        )
+        bindings = {
+            "candidate_report": f"{prefix}_candidate_report",
+            "candidate_manifest": f"{prefix}_candidate_normalized_manifest",
+        }
+        if specification["baseline"]:
+            bindings.update(
+                {
+                    "baseline_report": f"{prefix}_baseline_report",
+                    "baseline_manifest": f"{prefix}_baseline_normalized_manifest",
+                }
+            )
+        for matrix_role, evidence_role in bindings.items():
+            payload = (
+                {**stable_host, "release_sha": release_sha}
+                if matrix_role.endswith("report")
+                else {"normalized": True, "entry_id": entry_id}
+            )
+            path, descriptor = evidence_artifact(gate_name, evidence_role, payload)
+            matrix_artifacts.append(
+                {
+                    "role": matrix_role,
+                    "path": expected_paths[matrix_role],
+                    "sha256": descriptor["sha256"],
+                    "size_bytes": path.stat().st_size,
+                    "mode": 0o600,
+                }
+            )
+        for matrix_role, path in expected_paths.items():
+            if matrix_role not in bindings:
+                matrix_artifacts.append(
+                    {
+                        "role": matrix_role,
+                        "path": path,
+                        "sha256": "c" * 64,
+                        "size_bytes": 0,
+                        "mode": 0o600,
+                    }
+                )
+        entries.append(
+            {
+                "entry_id": entry_id,
+                "workload": specification["workload"],
+                "logical_rows": specification["logical_rows"],
+                "mode": specification["mode"],
+                "gate": specification["gate"],
+                "manifest_path": specification["manifest_path"],
+                "manifest_sha256": source_descriptor["sha256"],
+                "status": "complete",
+                "attempts": 1,
+                "artifacts": matrix_artifacts,
+                "last_error": None,
+                "completed_at": "2026-07-10T00:00:00+00:00",
+            }
+        )
+
+    matrix = {
+        "schema_version": 1,
+        "kind": "tinyzkp_fixed_host_release_matrix_v1",
+        "release_sha": release_sha,
+        "source_tree_sha256": source_digest,
+        "profile": "tinyzkp-p3-goldilocks-v1",
+        "plonky3_version": "0.6.1",
+        "source_root": str(tmp_path),
+        "cli_path": str(tmp_path / "hc-cli"),
+        "cli_sha256": "d" * 64,
+        "cli_identity": {
+            "service": "cli",
+            "package_version": "0.1.0",
+            "release_sha": release_sha,
+            "release_ref": None,
+            "backend": "plonky3",
+            "plonky3_version": "0.6.1",
+            "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
+            "dependency_lock_sha256": "e" * 64,
+        },
+        "output_dir": str(tmp_path / "reports"),
+        "scratch_root": str(tmp_path / "scratch"),
+        "cgroup_parent": str(tmp_path / "cgroup"),
+        "created_at": "2026-07-10T00:00:00+00:00",
+        "updated_at": "2026-07-10T01:00:00+00:00",
+        "status": "local_matrix_complete_external_gates_pending",
+        "fixed_host_evidence_eligible": True,
+        "stable_host_identity": stable_host,
+        "local_matrix_gates_passed": True,
+        "release_eligible": False,
+        "authority": {
+            "may_approve_backend_release": False,
+            "may_provision_or_mutate_infrastructure": False,
+            "may_publish_or_upload_evidence": False,
+        },
+        "external_gates": {
+            "independent_reproduction": "required_external",
+            "plonky3_specialist_review": "required_external",
+            "implementation_review": "required_external",
+            "design_partner_acceptance": "required_external",
+            "signed_release_assembly": "required_external",
+        },
+        "entries": entries,
+        "last_error": None,
+        "completed_at": "2026-07-10T01:00:00+00:00",
+    }
+    matrix_path = tmp_path / "fixed-host-release-matrix-v1.json"
+
+    def persist_matrix():
+        digest = write_json(matrix_path, matrix)
+        descriptor = {
+            "role": "matrix_manifest",
+            "path": matrix_path.relative_to(tmp_path).as_posix(),
+            "sha256": digest,
+        }
+        for value in gates.values():
+            value["artifacts"] = [
+                item
+                for item in value["artifacts"]
+                if item.get("role") != "matrix_manifest"
+            ]
+            value["artifacts"].insert(0, dict(descriptor))
+
+    persist_matrix()
+    return release_sha, source_digest, gates, matrix, persist_matrix
+
+
+def test_resource_matrix_binds_exact_first_party_evidence_and_denies_authority(
+    tmp_path,
+):
+    release_sha, source_digest, gates, matrix, persist = resource_matrix_fixture(
+        tmp_path
+    )
+    assert gate.validate_resource_matrix_binding(
+        gates, release_sha, source_digest, root=tmp_path
+    ) == []
+
+    matrix["release_eligible"] = True
+    persist()
+    failures = gate.validate_resource_matrix_binding(
+        gates, release_sha, source_digest, root=tmp_path
+    )
+    assert "fixed-host matrix completion or source identity is invalid" in failures
+
+    matrix["release_eligible"] = False
+    matrix["external_gates"]["independent_reproduction"] = "satisfied"
+    persist()
+    failures = gate.validate_resource_matrix_binding(
+        gates, release_sha, source_digest, root=tmp_path
+    )
+    assert "fixed-host matrix may not satisfy external gates" in failures
+
+    matrix["external_gates"]["independent_reproduction"] = "required_external"
+    matrix["entries"][0]["artifacts"][0]["sha256"] = "f" * 64
+    persist()
+    failures = gate.validate_resource_matrix_binding(
+        gates, release_sha, source_digest, root=tmp_path
+    )
+    assert any("does not bind exact evidence" in failure for failure in failures)
+
+
+def test_resource_matrix_rejects_source_cli_and_cross_host_skew(tmp_path):
+    release_sha, source_digest, gates, matrix, persist = resource_matrix_fixture(
+        tmp_path
+    )
+    matrix["source_tree_sha256"] = "0" * 64
+    persist()
+    failures = gate.validate_resource_matrix_binding(
+        gates, release_sha, source_digest, root=tmp_path
+    )
+    assert "fixed-host matrix completion or source identity is invalid" in failures
+
+    matrix["source_tree_sha256"] = source_digest
+    matrix["cli_identity"]["release_sha"] = "0" * 40
+    persist()
+    failures = gate.validate_resource_matrix_binding(
+        gates, release_sha, source_digest, root=tmp_path
+    )
+    assert "fixed-host matrix CLI identity is incomplete or skewed" in failures
+
+    matrix["cli_identity"]["release_sha"] = release_sha
+    report_descriptor = next(
+        item
+        for item in gates["one_million_row_resource_gate"]["artifacts"]
+        if item["role"] == "fibonacci_candidate_report"
+    )
+    report_path = tmp_path / report_descriptor["path"]
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["hardware"] = "different-fixed-host"
+    report_descriptor["sha256"] = write_json(report_path, report)
+    entry = next(item for item in matrix["entries"] if item["entry_id"] == "fibonacci_1m")
+    matrix_report = next(
+        item for item in entry["artifacts"] if item["role"] == "candidate_report"
+    )
+    matrix_report["sha256"] = report_descriptor["sha256"]
+    matrix_report["size_bytes"] = report_path.stat().st_size
+    persist()
+    failures = gate.validate_resource_matrix_binding(
+        gates, release_sha, source_digest, root=tmp_path
+    )
+    assert any("report host identity mismatch" in failure for failure in failures)
+
+
+def test_resource_matrix_is_mandatory_in_both_first_party_gates(tmp_path):
+    release_sha, source_digest, gates, _, _ = resource_matrix_fixture(tmp_path)
+    gates["ten_million_row_resource_gate"]["artifacts"] = [
+        item
+        for item in gates["ten_million_row_resource_gate"]["artifacts"]
+        if item["role"] != "matrix_manifest"
+    ]
+    failures = gate.validate_resource_matrix_binding(
+        gates, release_sha, source_digest, root=tmp_path
+    )
+    assert "fixed-host matrix manifest is required by both resource gates" in failures
 
 
 def runtime_identity(release_sha, *, fuzz=False):

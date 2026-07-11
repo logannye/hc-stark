@@ -271,6 +271,28 @@ or fuzz evidence. A missing or different committed anchor blocks the workflow
 while preserving the candidate artifact for review; the verifier never copies
 the freshly observed digest into trust.
 
+The non-Rust executables used by the six evidence gates are reviewed inputs as
+well. Run the capture tool under the exact fixed-host Python and PATH that will
+execute the gates:
+
+```bash
+HC_RELEASE_SHA="$(git rev-parse HEAD)" \
+  python3 scripts/release/gate_tool_anchor.py capture \
+    --output release/evidence/work/gate-tool-anchor-candidate.json
+
+HC_RELEASE_SHA="$(git rev-parse HEAD)" \
+  python3 scripts/release/gate_tool_anchor.py verify \
+    --candidate release/evidence/work/gate-tool-anchor-candidate.json
+```
+
+Capture derives the exact tool set from the frozen gate commands: `bash`,
+`python3`, `node`, and `wasm-pack`. The candidate is owner-only and always
+`unreviewed`; verification intentionally fails while the platform is absent
+from `gate_tools.platforms`. After independent reproduction, add only the
+reviewed platform-to-digest mapping in a separate trust commit. Verification
+requires exact equality, including the absence of extra tools, and never
+promotes freshly observed bytes into trust.
+
 Design-partner evidence requires three
 separately hashed roles: `adapter_result`, `resource_report`, and
 `acceptance_record`. All three are machine-readable and release-bound. The
@@ -279,19 +301,79 @@ official-verification and bounded/conventional results, witness-data policy,
 and the SHA-256 digests of the adapter and resource artifacts. Customer witness
 data must never appear in any evidence file.
 
-Generate the externally owned machine records without hand-copying digests:
+External truth is captured in two stages. Copy one of the tracked, deliberately
+incomplete templates, have the named external party complete it, validate its
+referenced evidence, and then capture the canonical claim:
 
 ```bash
-python3 scripts/release/build_external_records.py review-ledger --help
-python3 scripts/release/build_external_records.py reproduction --help
-python3 scripts/release/build_external_records.py partner-acceptance --help
+python3 scripts/release/build_external_records.py template \
+  --kind plonky3_specialist_review \
+  --output release/evidence/work/plonky3-specialist-input.json
+python3 scripts/release/build_external_records.py validate-input \
+  --input release/evidence/work/plonky3-specialist-input.json
+python3 scripts/release/build_external_records.py capture \
+  --input release/evidence/work/plonky3-specialist-input.json \
+  --output release/evidence/work/plonky3-specialist-ledger.json
 ```
 
-The reproduction command validates all four fixed-host workload gates before
-writing its record. Partner acceptance validates the adapter and resource
-artifacts before preserving the record. Review-ledger generation permits open
-findings so remediation can proceed, but requires `--review-bundle` and an
-exact canonical source commit and refuses a bundle/source mismatch. The final
-release gate still rejects every unresolved critical/high item. Specialist
-generation also requires `--security-assessment <json>`; the builder validates
-the pinned Plonky3/FRI parameters before the reviewer-signed ledger is written.
+`release/evidence/work/` is intentionally ignored except for its guard file;
+completed inputs and returned signatures stay out of Git. Move only the
+validated, sanitized claims and release artifacts into their final evidence
+paths. Partner and acceptance IDs must be opaque `partner-<hex>` and
+`acceptance-<hex>` tokens. Completed input files must be owned by the invoking
+operator, have one hard link, and grant no group/other permissions (for
+example, `chmod 600 <input>`).
+
+The available kinds are `plonky3_specialist_review`,
+`implementation_review`, `independent_reproduction`, and
+`design_partner_acceptance`. The committed templates contain placeholders,
+false conclusions, and `completion_status: incomplete`; both `validate-input`
+and `capture` reject them unchanged. `capture` emits an owner-only **unsigned**
+claim and never asserts, signs, or enrolls a reviewer on anyone's behalf. The
+external signer must sign those exact claim bytes. Validate the detached
+signature and the complete release semantics on the fixed Linux evidence host:
+
+```bash
+python3 scripts/release/build_external_records.py validate-signed \
+  --input release/evidence/work/plonky3-specialist-input.json \
+  --claim release/evidence/work/plonky3-specialist-ledger.json \
+  --signature release/evidence/work/plonky3-specialist-ledger.sigstore.json
+```
+
+Input, artifact, claim, and signature bytes are copied from held
+`O_NOFOLLOW` descriptors into an owner-only validation snapshot. Single-link
+identity and size/time metadata must remain unchanged before and after every
+read; path replacement, symlinks, hard links, or concurrent mutation fail
+closed. Final release validation independently reopens and rehashes the
+promoted artifacts.
+
+The typed `review-ledger`, `reproduction`, and `partner-acceptance` commands
+remain capture aliases, but accept only `--input` and `--output`; raw CLI flags
+cannot manufacture an external conclusion. Independent reproduction validates
+both workloads at both fixed-host gates before capture. Partner capture
+validates the adapter and bounded resource report before hashing them. Review
+capture permits open findings or a negative specialist conclusion so
+remediation can be recorded, while `validate-signed` and the final release gate
+still reject unresolved critical/high findings or missing production approval.
+Review inputs bind the exact deterministic bundle and canonical source commit.
+
+Detached verification reads `external_signers` from the exact candidate
+commit's `release/release-trust-v1.json`. Each allowlist entry has exactly these
+four fields:
+
+```json
+{
+  "id": "reviewed-opaque-signer-id",
+  "purposes": ["review:plonky3_specialist"],
+  "certificate_identity_regexp": "reviewed-certificate-identity-regexp",
+  "oidc_issuer": "reviewed-OIDC-issuer"
+}
+```
+
+The only supported purpose strings are `review:plonky3_specialist`,
+`review:implementation`, `independent_reproduction`, and
+`partner_acceptance`. Enrolling or changing a signer is a separate reviewed
+source commit. Template creation, validation, and capture never edit the trust
+allowlist, create a signature, or copy a freshly observed signer into trust.
+Keep partner identifiers opaque and never place customer witness data, private
+source, credentials, or contact details in any template or evidence artifact.

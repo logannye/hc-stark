@@ -31,3 +31,17 @@ def test_reviewed_action_count_rejects_tags_wrong_sha_and_wrong_version_comment(
         )
         == 0
     )
+
+
+def test_fixed_host_release_workflow_requires_single_matrix_controller():
+    workflow = invariants.text(".github/workflows/benches.yml")
+    assert invariants.fixed_host_workflow_failures(workflow) == []
+
+    weakened = workflow.replace(
+        "scripts/benchmark/run_fixed_host_release_matrix.py",
+        "scripts/benchmark/run_plonky3_cgroup.py",
+    )
+    failures = invariants.fixed_host_workflow_failures(weakened)
+    assert any(
+        "run_fixed_host_release_matrix.py" in failure for failure in failures
+    )

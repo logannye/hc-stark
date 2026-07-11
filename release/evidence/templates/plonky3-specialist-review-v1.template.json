@@ -1,0 +1,37 @@
+{
+  "artifact_paths": {
+    "review_bundle": "release/evidence/REPLACE_WITH_REVIEW_BUNDLE.zip",
+    "review_report": "release/evidence/REPLACE_WITH_SPECIALIST_REVIEW_REPORT.pdf"
+  },
+  "completed_at": "REPLACE_WITH_RFC3339_UTC_TIME",
+  "completion_status": "incomplete",
+  "findings": [],
+  "record_type": "plonky3_specialist_review",
+  "release_sha": "REPLACE_WITH_FULL_SOURCE_RELEASE_SHA",
+  "reviewer": "REPLACE_WITH_INDEPENDENT_REVIEWER_IDENTITY",
+  "reviewer_independent": false,
+  "schema_version": 1,
+  "security_assessment": {
+    "analysis_summary": "REPLACE_WITH_REVIEWER_ANALYSIS",
+    "challenger_capacity_reviewed": false,
+    "commit_proof_of_work_bits": 0,
+    "conjectured_soundness_reviewed": false,
+    "duplicate_query_probability_reviewed": false,
+    "fri_constructor": "FriParameters::new_benchmark",
+    "limitations": [
+      "REPLACE_WITH_REVIEWER_LIMITATION_OR_RESIDUAL_ASSUMPTION"
+    ],
+    "log_blowup": 1,
+    "log_final_poly_len": 0,
+    "max_log_arity": 1,
+    "minimum_security_bits": 0,
+    "num_queries": 100,
+    "plonky3_version": "0.6.1",
+    "production_use_approved": false,
+    "profile_id": "tinyzkp-p3-goldilocks-v1",
+    "proven_soundness_reviewed": false,
+    "query_proof_of_work_bits": 16,
+    "schema_version": 1
+  },
+  "signer_id": "REPLACE_WITH_ALLOWLISTED_EXTERNAL_SIGNER_ID"
+}

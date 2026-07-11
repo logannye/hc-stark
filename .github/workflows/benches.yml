@@ -5,6 +5,11 @@ on:
     - cron: "0 3 * * 0"
   workflow_dispatch:
     inputs:
+      release_matrix:
+        description: "Run the complete stable-host-bound 1M/16M release matrix"
+        required: false
+        default: false
+        type: boolean
       exploratory_128m:
         description: "Run the non-blocking 2^27-row exploratory workloads"
         required: false
@@ -19,6 +24,7 @@ env:
 
 jobs:
   one-million-rows:
+    if: github.event_name == 'schedule' || !inputs.release_matrix
     # Release evidence must come from the labeled 8-vCPU/16-GB NVMe host, not a
     # variable GitHub-hosted runner. The job remains queued until that host is
     # deliberately provisioned and online.
@@ -84,7 +90,7 @@ jobs:
           if-no-files-found: warn
 
   sixteen-million-row-ceiling:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && !inputs.release_matrix
     runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
     timeout-minutes: 1440
     strategy:
@@ -144,8 +150,57 @@ jobs:
           path: raw-reports/*.json
           if-no-files-found: warn
 
+  backend-release-matrix:
+    # This is the only workflow path intended to create first-party resource
+    # evidence for a backend release. It binds all four gates to one source,
+    # CLI, storage device, and fixed host. Independent reproduction remains a
+    # separate externally signed release gate.
+    if: github.event_name == 'workflow_dispatch' && inputs.release_matrix
+    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
+    timeout-minutes: 4320
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - name: Install benchmark validator dependencies
+        run: |
+          python3 -m venv .benchmark-venv
+          .benchmark-venv/bin/python -m pip install -r scripts/benchmark/requirements.txt
+      - name: Build release-identity-bound CLI
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+          HC_RELEASE_REF: ${{ github.ref }}
+        run: cargo build --release -p hc-cli --locked
+      - name: Prepare owner-only local scratch and delegated cgroup parent
+        run: |
+          for workload in fibonacci-1m poseidon2-1m fibonacci-16m poseidon2-16m; do
+            sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" "/var/lib/tinyzkp-bench/scratch/$workload"
+          done
+          sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
+          install -d -m 0700 raw-reports/fixed-host-release-matrix
+      - name: Run or resume complete local release matrix
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          report_owner="$(id -u):$(id -g)"
+          reclaim_reports() { sudo chown -R "$report_owner" raw-reports/fixed-host-release-matrix || true; }
+          trap reclaim_reports EXIT
+          sudo --preserve-env=HC_RELEASE_SHA .benchmark-venv/bin/python scripts/benchmark/run_fixed_host_release_matrix.py \
+            --release-sha "${{ github.sha }}" \
+            --hc-cli target/release/hc-cli \
+            --output-dir raw-reports/fixed-host-release-matrix
+      - name: Upload stable-host-bound local evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: plonky3-backend-release-matrix-${{ github.sha }}
+          path: raw-reports/fixed-host-release-matrix/
+          if-no-files-found: error
+
   exploratory-128m-ceiling:
-    if: github.event_name == 'workflow_dispatch' && inputs.exploratory_128m
+    if: github.event_name == 'workflow_dispatch' && inputs.exploratory_128m && !inputs.release_matrix
     runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
     timeout-minutes: 2880
     strategy:

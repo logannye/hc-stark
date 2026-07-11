@@ -1,0 +1,16 @@
+{
+  "artifact_paths": {
+    "review_bundle": "release/evidence/REPLACE_WITH_REVIEW_BUNDLE.zip",
+    "review_report": "release/evidence/REPLACE_WITH_IMPLEMENTATION_REVIEW_REPORT.pdf"
+  },
+  "completed_at": "REPLACE_WITH_RFC3339_UTC_TIME",
+  "completion_status": "incomplete",
+  "findings": [],
+  "record_type": "implementation_review",
+  "release_sha": "REPLACE_WITH_FULL_SOURCE_RELEASE_SHA",
+  "reviewer": "REPLACE_WITH_INDEPENDENT_REVIEWER_IDENTITY",
+  "reviewer_independent": false,
+  "schema_version": 1,
+  "security_assessment": null,
+  "signer_id": "REPLACE_WITH_ALLOWLISTED_EXTERNAL_SIGNER_ID"
+}
