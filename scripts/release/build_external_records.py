@@ -713,7 +713,7 @@ def record_from_artifact_snapshot(
         or adapter.get("profile") != PROFILE
         or adapter.get("plonky3_version") != "0.6.1"
         or adapter.get("dependency_lock_sha256")
-        != "f2f3afd6c14ae54a7875495c90258f2ff18f6da51fdf26eed43bc72cc365cada"
+        != "69f5e163151874abd6b298858e25ea89a1f3d91f93535dfb6d87e2a5d0ef3020"
         or adapter.get("release_sha") != release_sha
         or adapter.get("official_verification") is not True
         or adapter.get("bounded_equals_conventional") is not True
