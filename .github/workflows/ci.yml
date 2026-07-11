@@ -313,6 +313,7 @@ jobs:
           python3 -m py_compile billing/stripe_account_context_check.py
           python3 -m py_compile billing/stripe_revenue_ops_audit.py
           python3 -m py_compile billing/stripe_catalog_write_preflight.py
+          python3 -m py_compile billing/configure_public_beta_portal.py
           bash -n billing/backup.sh
           bash -n billing/setup_stripe_products.sh
           bash -n deploy/hetzner/install_billing_runtime.sh

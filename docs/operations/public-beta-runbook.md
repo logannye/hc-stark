@@ -5,6 +5,7 @@ Production remains in containment until the signed `public_beta` authorization m
 ## External prerequisites
 
 1. Create a GitHub OAuth app with callback `https://api.tinyzkp.com/v1/auth/github/callback` and record the client ID and secret in the owner-only API environment file. The callback must use the API hostname; `https://tinyzkp.com/v1/auth/github/callback` is not valid for the beta API.
+2. Preview `billing/configure_public_beta_portal.py`, then apply it in Stripe test mode with `TINYZKP_ALLOW_BETA_PORTAL_WRITE=1`. Record the returned configuration ID as `TINYZKP_STRIPE_PORTAL_CONFIGURATION`. The beta Portal permits invoice history, payment-method updates, and cancellation at period end, while plan switching remains disabled. Live application is release-authorization gated.
 2. Create private R2 artifact and backup buckets. Disable public access. Issue separate artifact and backup credentials with no cross-bucket permissions.
 3. Apply 24-hour lifecycle rules to incomplete uploads and traces. Proof deletion remains driven by the database’s 7/30/90-day retention queue.
 4. Provision a Debian 12 worker with mirrored NVMe providing at least 1 TB usable. Mount `/srv/tinyzkp-scratch` with `noexec,nodev,nosuid` and mode `0700` owned by UID 10001.

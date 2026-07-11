@@ -99,6 +99,14 @@ billing canaries and explicitly cannot activate public API mode. The tool
 verifies the Sigstore bundle before writing and does not archive or alter
 legacy products, subscriptions, or the unrelated Casino Coach catalog.
 
+Create the separate Customer Portal with
+`billing/configure_public_beta_portal.py --apply` and
+`TINYZKP_ALLOW_BETA_PORTAL_WRITE=1`. It reuses an exact matching active beta
+configuration, fails on policy drift or duplicates, and applies the same signed
+release-authorization requirement in live mode. Copy its `bpc_...` identifier
+to `TINYZKP_STRIPE_PORTAL_CONFIGURATION`; plan switching remains disabled and
+cancellation occurs only at the billing-period boundary.
+
 Use Checkout Sessions for subscriptions and one-time top-ups. Create Customer
 Portal sessions only for an authenticated tenant's Stripe customer. Grant
 monthly credits only after `invoice.paid`; freeze new paid work after
