@@ -29,6 +29,7 @@ def test_worker_has_exact_release_resource_envelope_and_no_database_secret():
     service = text("systemd/tinyzkp-beta-worker.service")
     assert 'cpuset: "0-7"' in compose
     assert "mem_limit: 16g" in compose
+    assert "memswap_limit: 16g" in compose
     assert 'restart: "no"' in compose
     assert "network_mode: host" in compose
     assert "no-new-privileges:true" in compose
@@ -82,6 +83,12 @@ def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
     assert "build_public_beta_authorization.py" in authorization
     assert "docker build" not in authorization
     assert "workflow_dispatch" in candidate and "workflow_dispatch" in authorization
+
+
+def test_container_context_includes_every_cargo_workspace_member():
+    dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+    assert "!crates/**" in dockerignore
+    assert "!examples/partner-adapter/**" in dockerignore
 
 
 def test_r2_lifecycle_prefixes_separate_inputs_bundles_and_backups():
