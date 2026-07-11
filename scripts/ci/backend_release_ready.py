@@ -76,6 +76,7 @@ CRASH_INTEGRITY_CASES = {
     "saved_artifact_reuse",
     "corrupt_artifact_and_stale_identity",
     "cancellation_retention",
+    "sigterm_checkpoint_resume",
     "truncation_and_checksum",
     "path_traversal",
     "symlink_rejection",
@@ -119,6 +120,10 @@ CRASH_INTEGRITY_TESTS = {
         "hc-plonky3",
         "bounded_prover::tests::cancellation_retains_only_an_explicitly_resumable_checkpoint",
     ),
+    "sigterm_checkpoint_resume": (
+        "hc-cli",
+        "sigterm_retains_resumable_checkpoint_and_resume_is_byte_identical",
+    ),
     "truncation_and_checksum": (
         "hc-stream",
         "tests::scratch_matrix_round_trips_and_detects_corruption",
@@ -135,6 +140,26 @@ CRASH_INTEGRITY_TESTS = {
         "hc-plonky3",
         "bounded_prover::tests::disk_full_failure_retains_a_resumable_checkpoint",
     ),
+}
+PROFILE_SECURITY_ASSESSMENT_KEYS = {
+    "schema_version",
+    "profile_id",
+    "plonky3_version",
+    "fri_constructor",
+    "log_blowup",
+    "log_final_poly_len",
+    "max_log_arity",
+    "num_queries",
+    "commit_proof_of_work_bits",
+    "query_proof_of_work_bits",
+    "conjectured_soundness_reviewed",
+    "proven_soundness_reviewed",
+    "duplicate_query_probability_reviewed",
+    "challenger_capacity_reviewed",
+    "minimum_security_bits",
+    "production_use_approved",
+    "analysis_summary",
+    "limitations",
 }
 BENCHMARK_REPORT_REQUIRED_FIELDS = {
     "schema_version",
@@ -495,15 +520,12 @@ def expected_crash_command(
         if spec is None:
             return None
         package, test_name = spec
-    command = [
-        cargo_executable,
-        "test",
-        "-p",
-        package,
-        "--lib",
-        "--release",
-        "--locked",
-    ]
+    command = [cargo_executable, "test", "-p", package]
+    if package == "hc-cli":
+        command.extend(["--test", "cli_roundtrip"])
+    else:
+        command.append("--lib")
+    command.extend(["--release", "--locked"])
     if package == "hc-plonky3":
         command.extend(["--features", "fault-injection"])
     command.extend([test_name, "--", "--exact", "--nocapture"])
@@ -1009,11 +1031,12 @@ def validate_review(
         "source_tree_sha256",
         "review_report_sha256",
         "findings",
+        "security_assessment",
         "signer_id",
     }
     if (
         set(ledger) != expected_ledger_keys
-        or not exact_int(ledger.get("schema_version"), 1)
+        or not exact_int(ledger.get("schema_version"), 2)
         or ledger.get("release_sha") != release_sha
         or ledger.get("profile") != "tinyzkp-p3-goldilocks-v1"
         or ledger.get("review_scope") != expected_scope
@@ -1034,6 +1057,15 @@ def validate_review(
         failures.append(
             "review evidence is incomplete, bundle-skewed, or release-skewed"
         )
+    security_assessment = ledger.get("security_assessment")
+    if expected_scope == "plonky3_specialist":
+        failures.extend(
+            validate_profile_security_assessment(
+                security_assessment, require_production_approval=True
+            )
+        )
+    elif security_assessment is not None:
+        failures.append("implementation review must not assert profile security approval")
     findings = ledger.get("findings")
     if not isinstance(findings, list):
         return failures + ["review finding ledger is missing"]
@@ -1080,6 +1112,45 @@ def validate_review(
         )
     )
     return failures
+
+
+def validate_profile_security_assessment(
+    value: object, *, require_production_approval: bool
+) -> list[str]:
+    failure = "Plonky3 specialist profile-security assessment is missing or incomplete"
+    if not isinstance(value, dict) or set(value) != PROFILE_SECURITY_ASSESSMENT_KEYS:
+        return [failure]
+    limitations = value.get("limitations")
+    if (
+        not exact_int(value.get("schema_version"), 1)
+        or value.get("profile_id") != "tinyzkp-p3-goldilocks-v1"
+        or value.get("plonky3_version") != "0.6.1"
+        or value.get("fri_constructor") != "FriParameters::new_benchmark"
+        or not exact_int(value.get("log_blowup"), 1)
+        or not exact_int(value.get("log_final_poly_len"), 0)
+        or not exact_int(value.get("max_log_arity"), 1)
+        or not exact_int(value.get("num_queries"), 100)
+        or not exact_int(value.get("commit_proof_of_work_bits"), 0)
+        or not exact_int(value.get("query_proof_of_work_bits"), 16)
+        or value.get("conjectured_soundness_reviewed") is not True
+        or value.get("proven_soundness_reviewed") is not True
+        or value.get("duplicate_query_probability_reviewed") is not True
+        or value.get("challenger_capacity_reviewed") is not True
+        or not exact_int(value.get("minimum_security_bits"))
+        or not 0 <= value.get("minimum_security_bits", -1) <= 256
+        or not isinstance(value.get("production_use_approved"), bool)
+        or not bounded_string(value.get("analysis_summary"), maximum=4096)
+        or not isinstance(limitations, list)
+        or not 1 <= len(limitations) <= 16
+        or any(not bounded_string(item, maximum=1024) for item in limitations)
+    ):
+        return [failure]
+    if require_production_approval and (
+        value.get("production_use_approved") is not True
+        or value.get("minimum_security_bits", 0) <= 0
+    ):
+        return ["Plonky3 specialist did not approve the frozen profile for production use"]
+    return []
 
 
 def valid_disk_full_contract(
@@ -2053,7 +2124,7 @@ def validate_partner_evidence(
         or adapter.get("profile") != "tinyzkp-p3-goldilocks-v1"
         or adapter.get("plonky3_version") != "0.6.1"
         or adapter.get("dependency_lock_sha256")
-        != "7a3e859e9d457006e38737f418fdf16f0e538977c23bf9882b4225d43b3db455"
+        != "185f043a41c2457257c2e507db75c71d185d9307a1116d7cb1f4688d6de56d82"
         or adapter.get("release_sha") != release_sha
         or adapter.get("official_verification") is not True
         or adapter.get("bounded_equals_conventional") is not True

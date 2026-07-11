@@ -245,6 +245,7 @@ def test_release_matrix_names_every_durable_phase_and_integrity_case():
         "saved_artifact_reuse",
         "corrupt_artifact_and_stale_identity",
         "cancellation_retention",
+        "sigterm_checkpoint_resume",
         "truncation_and_checksum",
         "path_traversal",
         "symlink_rejection",

@@ -641,7 +641,7 @@ def test_review_risk_acceptance_cannot_waive_a_high_finding(tmp_path):
     write_json(
         ledger,
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "release_sha": "abc",
             "profile": "tinyzkp-p3-goldilocks-v1",
             "review_scope": "implementation",
@@ -660,6 +660,7 @@ def test_review_risk_acceptance_cannot_waive_a_high_finding(tmp_path):
                     "reviewer_verified": True,
                 }
             ],
+            "security_assessment": None,
             "signer_id": metadata["signer_id"],
         },
     )
@@ -716,7 +717,7 @@ def test_manual_passed_boolean_and_unresolved_high_finding_fail(tmp_path):
             ledger_digest = write_json(
                 ledger,
                 {
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "release_sha": "abc",
                     "profile": "tinyzkp-p3-goldilocks-v1",
                     "review_scope": scope,
@@ -727,15 +728,39 @@ def test_manual_passed_boolean_and_unresolved_high_finding_fail(tmp_path):
                     "review_manifest_sha256": manifest_digest,
                     "source_tree_sha256": "d" * 64,
                     "review_report_sha256": digest,
-                        "findings": [
+                    "findings": [
                         {
                             "id": "HIGH-1",
                             "severity": "high",
                             "status": "open",
                             "reviewer_verified": False,
                         }
-                        ],
-                        "signer_id": metadata["signer_id"],
+                    ],
+                    "security_assessment": (
+                        {
+                            "schema_version": 1,
+                            "profile_id": "tinyzkp-p3-goldilocks-v1",
+                            "plonky3_version": "0.6.1",
+                            "fri_constructor": "FriParameters::new_benchmark",
+                            "log_blowup": 1,
+                            "log_final_poly_len": 0,
+                            "max_log_arity": 1,
+                            "num_queries": 100,
+                            "commit_proof_of_work_bits": 0,
+                            "query_proof_of_work_bits": 16,
+                            "conjectured_soundness_reviewed": True,
+                            "proven_soundness_reviewed": True,
+                            "duplicate_query_probability_reviewed": True,
+                            "challenger_capacity_reviewed": True,
+                            "minimum_security_bits": 96,
+                            "production_use_approved": True,
+                            "analysis_summary": "Frozen profile assessed.",
+                            "limitations": ["Documented FRI assumptions apply."],
+                        }
+                        if scope == "plonky3_specialist"
+                        else None
+                    ),
+                    "signer_id": metadata["signer_id"],
                 },
             )
             artifacts = [
@@ -1385,7 +1410,7 @@ def test_partner_evidence_requires_typed_adapter_report_and_acceptance(tmp_path)
             "mode": "compare",
             "profile": "tinyzkp-p3-goldilocks-v1",
             "plonky3_version": "0.6.1",
-            "dependency_lock_sha256": "7a3e859e9d457006e38737f418fdf16f0e538977c23bf9882b4225d43b3db455",
+            "dependency_lock_sha256": "185f043a41c2457257c2e507db75c71d185d9307a1116d7cb1f4688d6de56d82",
             "release_sha": "abc",
             "official_verification": True,
             "bounded_equals_conventional": True,

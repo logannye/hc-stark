@@ -62,6 +62,11 @@ INTEGRITY_CASES = (
         "bounded_prover::tests::cancellation_retains_only_an_explicitly_resumable_checkpoint",
     ),
     (
+        "sigterm_checkpoint_resume",
+        "hc-cli",
+        "sigterm_retains_resumable_checkpoint_and_resume_is_byte_identical",
+    ),
+    (
         "truncation_and_checksum",
         "hc-stream",
         "tests::scratch_matrix_round_trips_and_detects_corruption",
@@ -329,7 +334,11 @@ def run_case(
     environment: dict[str, str] | None = None,
     timeout_seconds: int = 900,
 ) -> dict[str, object]:
-    command = [cargo_executable, "test", "-p", package, "--lib"]
+    command = [cargo_executable, "test", "-p", package]
+    if package == "hc-cli":
+        command.extend(["--test", "cli_roundtrip"])
+    else:
+        command.append("--lib")
     if release:
         command.append("--release")
     command.extend(["--locked"])

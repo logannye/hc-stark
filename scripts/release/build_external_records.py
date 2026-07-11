@@ -181,10 +181,11 @@ def review_ledger(
     source_tree_sha256: str,
     report: Path,
     findings: list[dict[str, object]],
+    security_assessment: dict[str, object] | None,
     signer_id: str,
 ) -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "release_sha": release_sha,
         "profile": PROFILE,
         "review_scope": scope,
@@ -196,6 +197,7 @@ def review_ledger(
         "source_tree_sha256": source_tree_sha256,
         "review_report_sha256": sha256(report),
         "findings": findings,
+        "security_assessment": security_assessment,
         "signer_id": signer_id,
     }
 
@@ -285,6 +287,20 @@ def build_review(args: argparse.Namespace) -> None:
     findings_path = safe_file(args.findings)
     report = safe_file(args.review_report)
     findings = validate_findings(strict_json.loads(findings_path.read_bytes()))
+    security_assessment: dict[str, object] | None = None
+    if args.scope == "plonky3_specialist":
+        if args.security_assessment is None:
+            raise ValueError("Plonky3 specialist review requires --security-assessment")
+        assessment_path = safe_file(args.security_assessment)
+        candidate = strict_json.loads(assessment_path.read_bytes())
+        failures = release_gate.validate_profile_security_assessment(
+            candidate, require_production_approval=False
+        )
+        if failures:
+            raise ValueError(failures[0])
+        security_assessment = candidate
+    elif args.security_assessment is not None:
+        raise ValueError("implementation review must not include --security-assessment")
     record = review_ledger(
         release_sha=release_sha,
         scope=args.scope,
@@ -295,6 +311,7 @@ def build_review(args: argparse.Namespace) -> None:
         source_tree_sha256=source_tree_sha256,
         report=report,
         findings=findings,
+        security_assessment=security_assessment,
         signer_id=nonempty(args.signer_id, "signer ID"),
     )
     output = safe_output(args.output)
@@ -344,6 +361,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--review-bundle", type=Path, required=True)
     review.add_argument("--review-report", type=Path, required=True)
     review.add_argument("--findings", type=Path, required=True)
+    review.add_argument("--security-assessment", type=Path)
     review.add_argument("--output", type=Path, required=True)
 
     partner = commands.add_parser("partner-acceptance")

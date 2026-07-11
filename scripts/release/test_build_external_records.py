@@ -54,12 +54,14 @@ def test_review_ledger_hashes_report_and_validates_findings(tmp_path):
         source_tree_sha256="b" * 64,
         report=report,
         findings=findings,
+        security_assessment=None,
         signer_id="review-signer",
     )
     assert ledger["review_report_sha256"] == hashlib.sha256(report.read_bytes()).hexdigest()
     assert ledger["review_bundle_sha256"] == hashlib.sha256(bundle.read_bytes()).hexdigest()
     assert ledger["review_manifest_sha256"] == "a" * 64
     assert ledger["source_tree_sha256"] == "b" * 64
+    assert ledger["security_assessment"] is None
 
 
 def test_review_record_builder_rejects_skew_and_binds_exact_bundle(tmp_path, monkeypatch):
@@ -121,6 +123,7 @@ def test_review_record_builder_rejects_skew_and_binds_exact_bundle(tmp_path, mon
         review_bundle=bundle,
         review_report=report,
         findings=findings,
+        security_assessment=None,
         output=output,
     )
     MODULE.build_review(args)
@@ -141,6 +144,41 @@ def test_review_record_builder_rejects_skew_and_binds_exact_bundle(tmp_path, mon
         assert "incomplete or release-skewed" in str(error)
     else:
         raise AssertionError("source-skewed review bundle was accepted")
+
+
+def test_specialist_security_assessment_binds_exact_frozen_fri_profile():
+    assessment = {
+        "schema_version": 1,
+        "profile_id": MODULE.PROFILE,
+        "plonky3_version": "0.6.1",
+        "fri_constructor": "FriParameters::new_benchmark",
+        "log_blowup": 1,
+        "log_final_poly_len": 0,
+        "max_log_arity": 1,
+        "num_queries": 100,
+        "commit_proof_of_work_bits": 0,
+        "query_proof_of_work_bits": 16,
+        "conjectured_soundness_reviewed": True,
+        "proven_soundness_reviewed": True,
+        "duplicate_query_probability_reviewed": True,
+        "challenger_capacity_reviewed": True,
+        "minimum_security_bits": 96,
+        "production_use_approved": True,
+        "analysis_summary": "Independent assessment of the frozen profile.",
+        "limitations": ["Security bound depends on the documented FRI assumptions."],
+    }
+    assert MODULE.release_gate.validate_profile_security_assessment(
+        assessment, require_production_approval=True
+    ) == []
+    assessment["query_proof_of_work_bits"] = 15
+    assert MODULE.release_gate.validate_profile_security_assessment(
+        assessment, require_production_approval=True
+    ) == ["Plonky3 specialist profile-security assessment is missing or incomplete"]
+    assessment["query_proof_of_work_bits"] = 16
+    assessment["production_use_approved"] = False
+    assert MODULE.release_gate.validate_profile_security_assessment(
+        assessment, require_production_approval=True
+    ) == ["Plonky3 specialist did not approve the frozen profile for production use"]
 
 
 def test_partner_acceptance_hashes_only_artifacts_and_atomic_output_is_private(tmp_path):

@@ -187,7 +187,13 @@ is not sufficient.
 
 Each external review requires separately hashed `review_bundle`,
 `review_report`, and `remediation_ledger` roles. The ledger is
-release/profile/scope-bound and uses stable finding IDs.
+release/profile/scope-bound and uses stable finding IDs. A Plonky3 specialist
+ledger additionally requires a signed `security_assessment` for the exact
+`FriParameters::new_benchmark` values. It records separate consideration of
+conjectured and proven FRI bounds, duplicate-query probability, and challenger
+capacity, plus the reviewer's minimum-bit conclusion, limitations, and explicit
+production-use decision. Missing or negative approval blocks release; an
+implementation-review ledger must leave this field null.
 `review_bundle_sha256`, `review_manifest_sha256`, and `source_tree_sha256` bind
 the reviewer to the deterministic bundle, its embedded manifest, and the exact
 candidate source tree; `review_report_sha256` binds the resulting report bytes.
@@ -265,4 +271,6 @@ writing its record. Partner acceptance validates the adapter and resource
 artifacts before preserving the record. Review-ledger generation permits open
 findings so remediation can proceed, but requires `--review-bundle` and an
 exact canonical source commit and refuses a bundle/source mismatch. The final
-release gate still rejects every unresolved critical/high item.
+release gate still rejects every unresolved critical/high item. Specialist
+generation also requires `--security-assessment <json>`; the builder validates
+the pinned Plonky3/FRI parameters before the reviewer-signed ledger is written.
