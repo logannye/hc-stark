@@ -15,6 +15,8 @@ def test_api_database_and_object_storage_are_fail_closed():
     assert "127.0.0.1:8090:8090" in compose
     assert "10.77.0.1:8091:8091" in compose
     assert "internal: true" in compose
+    assert "networks: [database, egress]" in compose
+    assert compose.count("networks: [database, egress]") == 1
     assert "TINYZKP_BETA_SECRET_DIR" in compose
     assert "@sha256:53d98b3174b0842c475b9842fb0a733b2d9f7ec9da834ec42252aa553f48c628" in compose
     assert "ports:" not in compose.split("postgres:", 1)[1].split("pgbouncer:", 1)[0]
