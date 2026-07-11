@@ -93,11 +93,17 @@ def _validate_ancestor_chain(path: pathlib.Path) -> None:
             raise WorkspaceError(
                 "workspace output parent chain must already exist"
             ) from error
+        mode = stat.S_IMODE(metadata.st_mode)
+        writable_by_others = bool(mode & 0o022)
+        protected_shared_root = (
+            metadata.st_uid == 0
+            and bool(mode & stat.S_ISVTX)
+        )
         if (
             current.is_symlink()
             or not stat.S_ISDIR(metadata.st_mode)
             or metadata.st_uid not in allowed_owners
-            or stat.S_IMODE(metadata.st_mode) & 0o022
+            or (writable_by_others and not protected_shared_root)
         ):
             raise WorkspaceError(
                 "workspace path ancestors must be root/owner-controlled, "
