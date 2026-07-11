@@ -177,11 +177,11 @@ impl ObjectStore {
 }
 
 pub fn upload_object_key(tenant_id: &str, upload_id: uuid::Uuid, index: u32) -> String {
-    format!("tenants/{tenant_id}/uploads/{upload_id}/chunks/{index:06}.zst")
+    format!("uploads/{tenant_id}/{upload_id}/chunks/{index:06}.zst")
 }
 
 pub fn bundle_object_key(tenant_id: &str, job_id: uuid::Uuid) -> String {
-    format!("tenants/{tenant_id}/jobs/{job_id}/bundle.json")
+    format!("bundles/{tenant_id}/{job_id}/bundle.json")
 }
 
 #[cfg(test)]
@@ -193,8 +193,11 @@ mod tests {
         let id = uuid::Uuid::nil();
         assert_eq!(
             upload_object_key("tenant", id, 7),
-            "tenants/tenant/uploads/00000000-0000-0000-0000-000000000000/chunks/000007.zst"
+            "uploads/tenant/00000000-0000-0000-0000-000000000000/chunks/000007.zst"
         );
-        assert!(!bundle_object_key("tenant", id).contains(".."));
+        assert_eq!(
+            bundle_object_key("tenant", id),
+            "bundles/tenant/00000000-0000-0000-0000-000000000000/bundle.json"
+        );
     }
 }
