@@ -52,5 +52,8 @@ else
   done
   chown 10001:10001 /srv/tinyzkp-scratch
   chmod 0700 /srv/tinyzkp-scratch
+  install -o root -g root -m 0644 "$SOURCE/systemd/tinyzkp-beta-worker.service" /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable tinyzkp-beta-worker.service
   echo "Worker files installed. Start only after WireGuard reaches 10.77.0.1:8091."
 fi

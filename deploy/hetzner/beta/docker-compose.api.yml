@@ -26,7 +26,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
-    networks: [database]
+    networks: [database, egress]
     security_opt: ["no-new-privileges:true"]
 
   pgbouncer:
@@ -65,7 +65,7 @@ services:
       - "10.77.0.1:8091:8091"
     volumes:
       - ${TINYZKP_BETA_SECRET_DIR:?}/release:/run/secrets:ro
-    networks: [database]
+    networks: [database, egress]
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=0700,uid=10001,gid=10001
@@ -78,3 +78,4 @@ volumes:
 networks:
   database:
     internal: true
+  egress:

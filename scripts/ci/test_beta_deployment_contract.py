@@ -15,6 +15,10 @@ def test_api_database_and_object_storage_are_fail_closed():
     assert "127.0.0.1:8090:8090" in compose
     assert "10.77.0.1:8091:8091" in compose
     assert "internal: true" in compose
+    assert "networks: [database, egress]" in compose
+    # The API needs GitHub/Stripe/R2 and PostgreSQL needs R2 for WAL archiving;
+    # PgBouncer remains database-only and no database port is published.
+    assert compose.count("networks: [database, egress]") == 2
     assert "TINYZKP_BETA_SECRET_DIR" in compose
     assert "@sha256:53d98b3174b0842c475b9842fb0a733b2d9f7ec9da834ec42252aa553f48c628" in compose
     assert "ports:" not in compose.split("postgres:", 1)[1].split("pgbouncer:", 1)[0]
@@ -22,11 +26,16 @@ def test_api_database_and_object_storage_are_fail_closed():
 
 def test_worker_has_exact_release_resource_envelope_and_no_database_secret():
     compose = text("docker-compose.worker.yml")
+    service = text("systemd/tinyzkp-beta-worker.service")
     assert 'cpuset: "0-7"' in compose
     assert "mem_limit: 16g" in compose
+    assert 'restart: "no"' in compose
     assert "network_mode: host" in compose
     assert "no-new-privileges:true" in compose
     assert "DATABASE" not in compose and "STRIPE" not in compose and "AWS_" not in compose
+    assert "StartLimitBurst=5" in service
+    assert "Restart=on-failure" in service
+    assert "--abort-on-container-exit --exit-code-from worker" in service
 
 
 def test_backup_and_rollback_contracts_are_tracked():
@@ -66,6 +75,7 @@ def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
     assert "docker buildx build --push" in candidate
     assert "build_dark_canary_authorization.py" in candidate
     assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in candidate
+    assert "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c" in candidate
     assert "pip install pytest -r billing/requirements.txt" in candidate
     assert "components: rustfmt, clippy" in candidate
     assert "extract_public_beta_evidence.py" in authorization
