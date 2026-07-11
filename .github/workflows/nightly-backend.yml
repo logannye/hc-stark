@@ -30,6 +30,16 @@ jobs:
           cargo +nightly-2026-04-15 fetch \
             --manifest-path fuzz/Cargo.toml \
             --locked
+      - name: Install exact cargo-fuzz
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Capture and enforce reviewed cargo-fuzz executable
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          python3 scripts/release/fuzz_tool_anchor.py capture \
+            --output raw-reports/cargo-fuzz-anchor-candidate.json
+          python3 scripts/release/fuzz_tool_anchor.py verify \
+            --candidate raw-reports/cargo-fuzz-anchor-candidate.json
       - name: Randomized proof equality through 2^18
         run: cargo test -p hc-plonky3 --release --locked nightly_proof_equality_through_configured_power_of_two -- --ignored --nocapture
       - name: Scratch preflight calibration across powers of two
@@ -40,8 +50,6 @@ jobs:
             scripts/release/run_crash_matrix_disk_full.sh \
               raw-reports/crash-matrix.json \
               raw-reports/crash-logs
-      - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --version 0.13.2 --locked
       - name: Parser and recovery fuzz smoke
         env:
           HC_RELEASE_SHA: ${{ github.sha }}

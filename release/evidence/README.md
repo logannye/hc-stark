@@ -250,6 +250,27 @@ to `0.13.2` and the fuzz compiler/toolchain to
 update. Short or disk-full-free diagnostics require explicit `--partial`;
 incomplete runs exit nonzero by default and can never set the release-eligible
 field.
+
+The cargo-fuzz executable itself is also a reviewed input. On the fixed Linux
+evidence host, capture its candidate identity after installing the exact
+version:
+
+```bash
+HC_RELEASE_SHA="$(git rev-parse HEAD)" \
+  python3 scripts/release/fuzz_tool_anchor.py capture \
+    --output raw-reports/cargo-fuzz-anchor-candidate.json
+```
+
+The candidate always says `status: unreviewed` and cannot authorize an
+evidence run. An independent reviewer must reproduce it and deliberately add
+the approved host/digest pair under
+`toolchains.fuzz.cargo_fuzz_executables` in
+`release/release-trust-v1.json` in a separate reviewed commit. The nightly
+workflow then runs `fuzz_tool_anchor.py verify` before proof equality, crash,
+or fuzz evidence. A missing or different committed anchor blocks the workflow
+while preserving the candidate artifact for review; the verifier never copies
+the freshly observed digest into trust.
+
 Design-partner evidence requires three
 separately hashed roles: `adapter_result`, `resource_report`, and
 `acceptance_record`. All three are machine-readable and release-bound. The

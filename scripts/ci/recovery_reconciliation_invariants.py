@@ -5,12 +5,27 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import sys
 import tomllib
+
+import check_pinned_actions
 
 
 ROOT = Path(__file__).resolve().parents[2]
 FAILURES: list[str] = []
+
+
+def reviewed_action_count(
+    workflow: str, repository: str, revision: str, version_comment: str
+) -> int:
+    """Count exact SHA-pinned action uses with the reviewed major-version comment."""
+
+    reference = re.compile(
+        rf"(?m)^\s*(?:-\s*)?uses:\s*{re.escape(repository)}@"
+        rf"{re.escape(revision)}\s+#\s*{re.escape(version_comment)}\s*$"
+    )
+    return len(reference.findall(workflow))
 
 
 def require(condition: bool, message: str) -> None:
@@ -92,9 +107,18 @@ def main() -> int:
         "cargo build --locked",
         "tinyzkp-backend.spdx.json",
         "cosign sign-blob",
-        "actions/attest@v4",
     ):
         require(marker in release_workflow, f"release workflow lost integrity control: {marker}")
+    require(
+        reviewed_action_count(
+            release_workflow,
+            "actions/attest",
+            check_pinned_actions.ACTION_ALLOWLIST["actions/attest"],
+            "v4",
+        )
+        == 2,
+        "release workflow must retain both reviewed SHA-pinned actions/attest v4 steps",
+    )
 
     require(
         "test_build_external_records.py" in workflow,
@@ -112,6 +136,7 @@ def main() -> int:
     evidence_builder = text("scripts/release/build_candidate_evidence.py")
     release_validator = text("scripts/ci/backend_release_ready.py")
     fuzz_runner = text("scripts/release/run_fuzz_smoke.py")
+    fuzz_anchor = text("scripts/release/fuzz_tool_anchor.py")
     require(
         '"crash_resume_and_corruption_suite": [' in evidence_builder
         and '"crash_matrix"' in evidence_builder
@@ -149,6 +174,14 @@ def main() -> int:
         "harden_tree",
     ):
         require(marker in fuzz_runner, f"bounded fuzz smoke lost control: {marker}")
+    for marker in (
+        '"status": "unreviewed"',
+        '"review_required": True',
+        "cargo_fuzz_anchor",
+        "require_trusted_digest",
+        "write_json_atomic",
+    ):
+        require(marker in fuzz_anchor, f"cargo-fuzz anchor workflow lost control: {marker}")
     nightly_workflow = text(".github/workflows/nightly-backend.yml")
     require(
         "cargo install cargo-fuzz --version 0.13.2 --locked" in nightly_workflow,
@@ -159,8 +192,23 @@ def main() -> int:
         "cargo +nightly-2026-04-15 fetch",
         "--manifest-path fuzz/Cargo.toml",
         "run_crash_matrix_disk_full.sh",
+        "fuzz_tool_anchor.py capture",
+        "fuzz_tool_anchor.py verify",
     ):
         require(marker in nightly_workflow, f"nightly evidence workflow lost control: {marker}")
+    try:
+        capture_position = nightly_workflow.index("fuzz_tool_anchor.py capture")
+        verify_position = nightly_workflow.index("fuzz_tool_anchor.py verify")
+        expensive_position = nightly_workflow.index(
+            "Randomized proof equality through 2^18"
+        )
+    except ValueError:
+        pass
+    else:
+        require(
+            capture_position < verify_position < expensive_position,
+            "nightly does not fail closed on cargo-fuzz trust before expensive evidence",
+        )
 
     preliminary_sbom = text("scripts/release/build_preliminary_sbom.py")
     review_bundle = text("scripts/release/build_review_bundle.py")

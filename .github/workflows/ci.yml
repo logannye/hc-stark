@@ -79,6 +79,7 @@ jobs:
 
       - name: launch gate audit
         run: |
+          python3 -m pytest scripts/ci/test_recovery_reconciliation_invariants.py
           python3 -m pytest scripts/ci/test_source_tree_identity.py
           python3 -m pytest scripts/ci/test_backend_release_ready.py
           python3 -m pytest scripts/ci/test_backend_prerelease_ready.py
@@ -182,6 +183,7 @@ jobs:
           python3 -m pytest scripts/release/test_build_external_records.py -q
           python3 -m pytest scripts/release/test_external_signature_gate.py -q
           python3 -m pytest scripts/release/test_evidence_runtime.py -q
+          python3 -m pytest scripts/release/test_fuzz_tool_anchor.py -q
           python3 -m pytest scripts/release/test_run_fuzz_smoke.py -q
           python3 -m pytest scripts/release/test_run_crash_matrix.py -q
           python3 -m pytest scripts/release/test_run_evidenced_command.py -q
@@ -233,6 +235,7 @@ jobs:
           python3 -m py_compile scripts/release/verify_sdk_release_versions.py
           python3 -m py_compile scripts/release/verify_sdk_backend_compatibility.py
           python3 -m py_compile scripts/release/evidence_runtime.py
+          python3 -m py_compile scripts/release/fuzz_tool_anchor.py
           python3 -m py_compile scripts/release/run_fuzz_smoke.py
           python3 -m py_compile scripts/release/run_crash_matrix.py
           python3 -m py_compile scripts/release/run_evidenced_command.py

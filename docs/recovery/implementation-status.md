@@ -54,6 +54,10 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
   records the compatibility profile and exact Rust identity, and cargo-fuzz is
   pinned to `0.13.2` in the runner and nightly workflow.
   Full-corpus campaigns remain separate long-running evidence.
+- The exact cargo-fuzz capture tool emits an owner-only, explicitly unreviewed
+  platform candidate without changing trust. Nightly execution verifies that
+  candidate against a separately committed digest before any expensive test;
+  it fails closed while the Linux runner digest remains unreviewed.
 - Rust artifact contracts, JSON Schema generation, proof packaging, strict size
   limits, and a cgroup-v2 benchmark harness are present. Replacement Rust,
   Python, TypeScript, and local-verification WASM contracts share golden
@@ -129,6 +133,8 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
 - 1M, 10M, or 100M full-pipeline release measurements;
 - 4× RAM / 3× time acceptance at 1M or ≤2 GiB at 10M;
 - external Plonky3 specialist review or independent implementation review;
+- independently reviewed Linux cargo-fuzz executable digest for the fixed
+  evidence host;
 - independent report reproduction, signed release, final artifact SBOM, or
   compatibility publication;
 - external design-partner integration or paid evaluation conversion;
