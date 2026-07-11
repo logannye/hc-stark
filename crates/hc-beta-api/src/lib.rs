@@ -54,8 +54,14 @@ impl AppState {
             .acquire_timeout(Duration::from_secs(5))
             .after_connect(|connection, _| {
                 Box::pin(async move {
-                    sqlx::query("SET statement_timeout = '10s'; SET lock_timeout = '3s';")
-                        .execute(connection)
+                    // PgBouncer's transaction pooling and PostgreSQL's extended
+                    // query protocol reject multiple commands in one prepared
+                    // statement. Keep each connection setting independent.
+                    sqlx::query("SET statement_timeout = '10s'")
+                        .execute(&mut *connection)
+                        .await?;
+                    sqlx::query("SET lock_timeout = '3s'")
+                        .execute(&mut *connection)
                         .await?;
                     Ok(())
                 })
