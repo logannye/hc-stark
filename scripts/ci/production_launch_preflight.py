@@ -30,10 +30,15 @@ from dataclasses import dataclass, field
 
 from deploy_readiness_check import (
     ProductionEnvError,
+    backup_env_exec,
     load_private_env_file,
+    parse_private_env_bytes,
     read_private_file,
     reject_conflicting_inherited_environment,
 )
+from cloudflare_toolchain_check import validate_runtime as cloudflare_toolchain_identity
+import fixed_host_backup_evidence
+import runtime_lock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -49,7 +54,7 @@ FIXED_PAGES_BINDINGS_PATH = pathlib.Path(
 FIXED_MACHINE_ID_PATH = pathlib.Path("/etc/machine-id")
 FIXED_CONSUMPTION_DIR = FIXED_EVIDENCE_PATH.parent / "consumed"
 DEFAULT_DEPLOYMENT_ID = "tinyzkp-production-primary"
-EVIDENCE_SCHEMA = "tinyzkp-production-preflight-evidence-v1"
+EVIDENCE_SCHEMA = "tinyzkp-production-preflight-evidence-v7"
 EVIDENCE_MAX_BYTES = 256 * 1024
 EVIDENCE_MAX_AGE = timedelta(minutes=30)
 RELEASE_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -72,6 +77,17 @@ EVIDENCE_KEYS = {
     "deployment_id",
     "host_env_sha256",
     "pages_bindings_sha256",
+    "backup_loader_token_sha256",
+    "backup_transport_kind",
+    "backup_transport_secret_path",
+    "backup_transport_secret_sha256",
+    "production_runtime_identity_sha256",
+    "production_runtime_file_count",
+    "production_runtime_byte_count",
+    "fixed_host_backup_evidence_identity_sha256",
+    "fixed_host_backup_subject_sha256",
+    "fixed_host_backup_run_id",
+    "private_gate_input_snapshot_sha256",
     "host_python_realpath",
     "host_python_sha256",
     "venv_root",
@@ -80,6 +96,18 @@ EVIDENCE_KEYS = {
     "venv_package_count",
     "node_realpath",
     "node_sha256",
+    "node_version",
+    "cloudflare_toolchain_profile_id",
+    "cloudflare_toolchain_profile_sha256",
+    "cloudflare_package_lock_sha256",
+    "cloudflare_materialization_sha256",
+    "wrangler_version",
+    "wrangler_install_root",
+    "wrangler_entrypoint_realpath",
+    "wrangler_entrypoint_sha256",
+    "wrangler_tree_sha256",
+    "wrangler_file_count",
+    "wrangler_total_bytes",
     "git_realpath",
     "git_sha256",
     "container_images_sha256",
@@ -118,6 +146,12 @@ def build_steps(
         raise ValueError(
             "production preflight requires the explicit production host Python interpreter"
         )
+    if args.production and not args.node_executable:
+        raise ValueError("production preflight requires the explicit pinned Node executable")
+    if args.production and not args.wrangler_entrypoint:
+        raise ValueError(
+            "production preflight requires the explicit pinned Wrangler entrypoint"
+        )
     deploy_readiness_cmd = [
         python,
         "scripts/ci/deploy_readiness_check.py",
@@ -130,6 +164,18 @@ def build_steps(
         deploy_readiness_cmd.append("--check-host-python")
     if args.host_python:
         deploy_readiness_cmd.extend(["--host-python", args.host_python])
+
+    cloudflare_toolchain_cmd = (python, "scripts/ci/cloudflare_toolchain_check.py")
+    if args.production:
+        cloudflare_toolchain_cmd = (
+            python,
+            "scripts/ci/cloudflare_toolchain_check.py",
+            "--runtime",
+            "--node-executable",
+            args.node_executable,
+            "--wrangler-entrypoint",
+            args.wrangler_entrypoint,
+        )
 
     backup_test_command = (python, "-m", "pytest", "billing/tests/test_backup_script.py")
     if args.production:
@@ -157,11 +203,24 @@ def build_steps(
         ),
         Step("launch gate audit", (python, "scripts/ci/launch_gate_audit.py")),
         Step(
+            "billing runtime dependency metadata",
+            (python, "billing/runtime_lock.py", "verify-metadata"),
+        ),
+        Step(
             "backup/restore drift check", (python, "scripts/ci/backup_restore_check.py")
         ),
         Step(
             "backup execution and retention tests",
             backup_test_command,
+        ),
+        Step(
+            "fixed-host backup evidence policy tests",
+            (
+                python,
+                "-m",
+                "pytest",
+                "scripts/ci/test_fixed_host_backup_evidence.py",
+            ),
         ),
         Step("static site route check", (python, "scripts/ci/site_route_check.py")),
         Step(
@@ -244,7 +303,12 @@ def build_steps(
                 "-m",
                 "pytest",
                 "scripts/ci/test_cloudflare_pages_secret_check.py",
+                "scripts/ci/test_cloudflare_toolchain_check.py",
             ),
+        ),
+        Step(
+            "pinned Cloudflare production toolchain",
+            cloudflare_toolchain_cmd,
         ),
         Step(
             "Cloudflare Pages worker dispatch check",
@@ -264,6 +328,50 @@ def build_steps(
     if args.production:
         steps.extend(
             [
+                Step(
+                    "complete production host runtime identity",
+                    (
+                        "/usr/bin/python3",
+                        "billing/runtime_lock.py",
+                        "verify-production-runtime",
+                        "--venv-root",
+                        str(pathlib.Path(args.host_python).parent.parent),
+                        "--node-binary",
+                        args.node_executable,
+                    ),
+                ),
+                Step(
+                    "sealed billing runtime wheelhouse",
+                    (
+                        "/usr/bin/python3",
+                        "billing/runtime_lock.py",
+                        "verify-wheelhouse",
+                        "--wheelhouse",
+                        "/var/lib/tinyzkp-runtime/wheelhouse",
+                        "--production-permissions",
+                    ),
+                ),
+                Step(
+                    "installed billing runtime closure",
+                    (
+                        args.host_python,
+                        "billing/runtime_lock.py",
+                        "verify-installed",
+                    ),
+                ),
+                Step(
+                    "reviewed fixed-host backup and restore evidence",
+                    (
+                        "/usr/bin/python3",
+                        "scripts/ci/fixed_host_backup_evidence.py",
+                        "--expected-release-sha",
+                        args.expected_release_sha or "0" * 40,
+                        "--expected-deployment-id",
+                        args.deployment_id,
+                        "--machine-id-file",
+                        str(FIXED_MACHINE_ID_PATH),
+                    ),
+                ),
                 Step(
                     "host and Pages secret parity",
                     (
@@ -324,7 +432,14 @@ def build_steps(
             [
                 Step(
                     "Cloudflare Pages live secret inventory check",
-                    (python, "scripts/ci/cloudflare_pages_secret_check.py"),
+                    (
+                        python,
+                        "scripts/ci/cloudflare_pages_secret_check.py",
+                        "--node-executable",
+                        args.node_executable,
+                        "--wrangler-entrypoint",
+                        args.wrangler_entrypoint,
+                    ),
                     env=cloudflare_environment,
                     timeout_secs=60,
                 ),
@@ -532,21 +647,83 @@ def _sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
-def _private_input_digests(
-    env_file: pathlib.Path, pages_bindings_file: pathlib.Path
-) -> tuple[str, str]:
+def _backup_private_input_identity(env_file: pathlib.Path) -> dict[str, str]:
+    """Bind private backup capabilities that live outside the deployment env.
+
+    The env digest binds the selected transport and its public destination. The
+    loader capability plus rclone credential bytes are separate files read
+    by the eventual cron process, so a deploy claim must also become invalid if
+    any of those bytes change after preflight.
+    """
+
+    try:
+        configured = load_private_env_file(env_file)
+        return _backup_private_input_identity_from_config(configured)
+    except ProductionEnvError as error:
+        raise EvidenceError("private backup capability is unavailable or unsafe") from error
+
+
+def _backup_private_input_identity_from_config(
+    configured: dict[str, str],
+) -> dict[str, str]:
+    try:
+        loader_raw = read_private_file(
+            backup_env_exec.FIXED_LOADER_TOKEN,
+            label="backup loader token",
+            max_bytes=128,
+            exact_mode_0600=True,
+        )
+        remote = configured.get("HC_BACKUP_REMOTE", "").strip()
+        http_url = configured.get("HC_BACKUP_HTTP_URL", "").strip()
+        http_token_file = configured.get("HC_BACKUP_HTTP_TOKEN_FILE", "").strip()
+        if remote and not http_url and not http_token_file:
+            kind = "rclone"
+            secret_path = backup_env_exec.FIXED_RCLONE_CONFIG
+            max_bytes = 256 * 1024
+        else:
+            raise EvidenceError(
+                "production backup evidence requires exactly one encrypted rclone credential"
+            )
+        secret_raw = read_private_file(
+            secret_path,
+            label=f"{kind} backup credential",
+            max_bytes=max_bytes,
+            exact_mode_0600=True,
+        )
+    except ProductionEnvError as error:
+        raise EvidenceError("private backup capability is unavailable or unsafe") from error
+    return {
+        "backup_loader_token_sha256": _sha256(loader_raw),
+        "backup_transport_kind": kind,
+        "backup_transport_secret_path": str(secret_path),
+        "backup_transport_secret_sha256": _sha256(secret_raw),
+    }
+
+
+def _private_gate_input_snapshot(args: argparse.Namespace) -> dict[str, str]:
     host_raw = read_private_file(
-        env_file,
+        pathlib.Path(args.env_file),
         label="production env",
         max_bytes=64 * 1024,
     )
     pages_raw = read_private_file(
-        pages_bindings_file,
+        pathlib.Path(args.pages_bindings_file),
         label="production Pages bindings",
         max_bytes=64 * 1024,
         exact_mode_0600=True,
     )
-    return _sha256(host_raw), _sha256(pages_raw)
+    configured = parse_private_env_bytes(host_raw)
+    return {
+        "host_env_sha256": _sha256(host_raw),
+        "pages_bindings_sha256": _sha256(pages_raw),
+        **_backup_private_input_identity_from_config(configured),
+    }
+
+
+def _identity_snapshot_sha256(snapshot: dict[str, object]) -> str:
+    return _sha256(
+        json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    )
 
 
 def _regular_file_digest(
@@ -591,6 +768,91 @@ def _regular_file_digest(
     finally:
         os.close(descriptor)
     return str(real_path), digest.hexdigest()
+
+
+def _cloudflare_evidence_identity(args: argparse.Namespace) -> dict[str, object]:
+    identity = cloudflare_toolchain_identity(
+        pathlib.Path(args.node_executable), pathlib.Path(args.wrangler_entrypoint)
+    )
+    expected_keys = {
+        "profile_id",
+        "profile_sha256",
+        "package_lock_sha256",
+        "materialization_sha256",
+        "node_version",
+        "wrangler_version",
+        "node_realpath",
+        "node_sha256",
+        "wrangler_install_root",
+        "wrangler_entrypoint_realpath",
+        "wrangler_entrypoint_sha256",
+        "wrangler_tree_sha256",
+        "wrangler_file_count",
+        "wrangler_total_bytes",
+    }
+    if set(identity) != expected_keys:
+        raise EvidenceError("Cloudflare toolchain identity is incomplete")
+    return {
+        "cloudflare_toolchain_profile_id": identity["profile_id"],
+        "cloudflare_toolchain_profile_sha256": identity["profile_sha256"],
+        "cloudflare_package_lock_sha256": identity["package_lock_sha256"],
+        "cloudflare_materialization_sha256": identity["materialization_sha256"],
+        "node_version": identity["node_version"],
+        "node_realpath": identity["node_realpath"],
+        "node_sha256": identity["node_sha256"],
+        "wrangler_version": identity["wrangler_version"],
+        "wrangler_install_root": identity["wrangler_install_root"],
+        "wrangler_entrypoint_realpath": identity["wrangler_entrypoint_realpath"],
+        "wrangler_entrypoint_sha256": identity["wrangler_entrypoint_sha256"],
+        "wrangler_tree_sha256": identity["wrangler_tree_sha256"],
+        "wrangler_file_count": identity["wrangler_file_count"],
+        "wrangler_total_bytes": identity["wrangler_total_bytes"],
+    }
+
+
+def _production_runtime_evidence_identity(
+    args: argparse.Namespace,
+) -> dict[str, object]:
+    try:
+        identity = runtime_lock.verify_production_runtime_identity(
+            runtime_lock.DEFAULT_HOST_PROVENANCE,
+            runtime_lock.DEFAULT_PROFILE,
+            venv_root=pathlib.Path(args.host_python).parent.parent,
+            node_binary=pathlib.Path(args.node_executable),
+        )
+    except (OSError, subprocess.TimeoutExpired, runtime_lock.RuntimeLockError) as error:
+        raise EvidenceError("complete production host runtime identity is invalid") from error
+    return {
+        "production_runtime_identity_sha256": identity.identity_sha256,
+        "production_runtime_file_count": identity.file_count,
+        "production_runtime_byte_count": identity.byte_count,
+    }
+
+
+def _fixed_host_backup_evidence_identity(
+    args: argparse.Namespace,
+    *,
+    machine_id_path: pathlib.Path = FIXED_MACHINE_ID_PATH,
+) -> dict[str, object]:
+    expected_release_sha = str(args.expected_release_sha or "")
+    try:
+        report = fixed_host_backup_evidence.validate_evidence(
+            expected_release_sha=expected_release_sha,
+            expected_host_identity_sha256=stable_host_identity(machine_id_path),
+            expected_deployment_id=args.deployment_id,
+            machine_id_file=machine_id_path,
+        )
+    except (OSError, fixed_host_backup_evidence.EvidenceError) as error:
+        raise EvidenceError("fixed-host backup evidence is invalid") from error
+    return {
+        "fixed_host_backup_evidence_identity_sha256": report[
+            "evidence_identity_sha256"
+        ],
+        "fixed_host_backup_subject_sha256": report[
+            "subject_artifact_set_sha256"
+        ],
+        "fixed_host_backup_run_id": report["run_id"],
+    }
 
 
 def container_image_identity() -> tuple[dict[str, str], str]:
@@ -1090,6 +1352,17 @@ def placeholder_evidence(status: str, expected_release_sha: str) -> dict[str, ob
         "deployment_id": "",
         "host_env_sha256": "",
         "pages_bindings_sha256": "",
+        "backup_loader_token_sha256": "",
+        "backup_transport_kind": "",
+        "backup_transport_secret_path": "",
+        "backup_transport_secret_sha256": "",
+        "production_runtime_identity_sha256": "",
+        "production_runtime_file_count": 0,
+        "production_runtime_byte_count": 0,
+        "fixed_host_backup_evidence_identity_sha256": "",
+        "fixed_host_backup_subject_sha256": "",
+        "fixed_host_backup_run_id": "",
+        "private_gate_input_snapshot_sha256": "",
         "host_python_realpath": "",
         "host_python_sha256": "",
         "venv_root": "",
@@ -1098,6 +1371,18 @@ def placeholder_evidence(status: str, expected_release_sha: str) -> dict[str, ob
         "venv_package_count": 0,
         "node_realpath": "",
         "node_sha256": "",
+        "node_version": "",
+        "cloudflare_toolchain_profile_id": "",
+        "cloudflare_toolchain_profile_sha256": "",
+        "cloudflare_package_lock_sha256": "",
+        "cloudflare_materialization_sha256": "",
+        "wrangler_version": "",
+        "wrangler_install_root": "",
+        "wrangler_entrypoint_realpath": "",
+        "wrangler_entrypoint_sha256": "",
+        "wrangler_tree_sha256": "",
+        "wrangler_file_count": 0,
+        "wrangler_total_bytes": 0,
         "git_realpath": "",
         "git_sha256": "",
         "container_images_sha256": "",
@@ -1113,11 +1398,11 @@ def build_pass_evidence(
     now: datetime | None = None,
     root: pathlib.Path = ROOT,
     machine_id_path: pathlib.Path = FIXED_MACHINE_ID_PATH,
+    issuance_input_snapshot: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if any(result.status != "PASS" or result.returncode != 0 for result in results):
         raise EvidenceError("production preflight did not pass every aggregate gate")
     git_path = pathlib.Path(args.git_executable)
-    node_path = pathlib.Path(args.node_executable)
     host_python_path = pathlib.Path(args.host_python)
     validate_immutable_source_materialization(root, git_path)
     (
@@ -1136,8 +1421,17 @@ def build_pass_evidence(
         raise EvidenceError("production preflight evidence requires a clean source tree")
     if not published_origin_main:
         raise EvidenceError("production preflight evidence requires HEAD to equal origin/main")
-    host_env_sha256, pages_bindings_sha256 = _private_input_digests(
-        pathlib.Path(args.env_file), pathlib.Path(args.pages_bindings_file)
+    final_private_snapshot = _private_gate_input_snapshot(args)
+    if (
+        issuance_input_snapshot is not None
+        and final_private_snapshot != issuance_input_snapshot
+    ):
+        raise EvidenceError(
+            "private production inputs changed while aggregate gates were running"
+        )
+    production_runtime = _production_runtime_evidence_identity(args)
+    fixed_host_backup = _fixed_host_backup_evidence_identity(
+        args, machine_id_path=machine_id_path
     )
     host_python_realpath, host_python_sha256 = _regular_file_digest(
         host_python_path,
@@ -1145,9 +1439,7 @@ def build_pass_evidence(
         reject_symlink=True,
     )
     runtime = venv_identity(host_python_path)
-    node_realpath, node_sha256 = _regular_file_digest(
-        node_path, label="Node executable", reject_symlink=True
-    )
+    cloudflare_runtime = _cloudflare_evidence_identity(args)
     git_realpath, git_sha256 = _regular_file_digest(
         git_path, label="Git executable", reject_symlink=True
     )
@@ -1167,13 +1459,16 @@ def build_pass_evidence(
         "nonce": secrets.token_hex(32),
         "host_identity_sha256": stable_host_identity(machine_id_path),
         "deployment_id": args.deployment_id,
-        "host_env_sha256": host_env_sha256,
-        "pages_bindings_sha256": pages_bindings_sha256,
+        **final_private_snapshot,
+        "private_gate_input_snapshot_sha256": _identity_snapshot_sha256(
+            final_private_snapshot
+        ),
+        **production_runtime,
+        **fixed_host_backup,
         "host_python_realpath": host_python_realpath,
         "host_python_sha256": host_python_sha256,
         **runtime,
-        "node_realpath": node_realpath,
-        "node_sha256": node_sha256,
+        **cloudflare_runtime,
         "git_realpath": git_realpath,
         "git_sha256": git_sha256,
         "container_images_sha256": container_images_sha256,
@@ -1187,12 +1482,13 @@ def validate_evidence_issuance_inputs(
     *,
     root: pathlib.Path = ROOT,
     machine_id_path: pathlib.Path = FIXED_MACHINE_ID_PATH,
-) -> None:
+) -> dict[str, str]:
     git_path = pathlib.Path(args.git_executable)
-    node_path = pathlib.Path(args.node_executable)
     host_python_path = pathlib.Path(args.host_python)
     _regular_file_digest(git_path, label="Git executable", reject_symlink=True)
-    _regular_file_digest(node_path, label="Node executable", reject_symlink=True)
+    _cloudflare_evidence_identity(args)
+    _production_runtime_evidence_identity(args)
+    _fixed_host_backup_evidence_identity(args, machine_id_path=machine_id_path)
     _regular_file_digest(host_python_path, label="host Python", reject_symlink=True)
     venv_identity(host_python_path)
     validate_immutable_source_materialization(root, git_path)
@@ -1206,10 +1502,9 @@ def validate_evidence_issuance_inputs(
         or not published
     ):
         raise EvidenceError("evidence issuance requires the current clean published main")
-    _private_input_digests(
-        pathlib.Path(args.env_file), pathlib.Path(args.pages_bindings_file)
-    )
+    private_snapshot = _private_gate_input_snapshot(args)
     stable_host_identity(machine_id_path)
+    return private_snapshot
 
 
 def atomic_write_evidence(path: pathlib.Path, payload: dict[str, object]) -> None:
@@ -1412,7 +1707,6 @@ def verify_evidence(
     if RELEASE_SHA.fullmatch(expected_release_sha) is None:
         raise EvidenceError("expected deployment release SHA is not canonical")
     git_path = pathlib.Path(args.git_executable)
-    node_path = pathlib.Path(args.node_executable)
     host_python_path = pathlib.Path(args.host_python)
     validate_immutable_source_materialization(root, git_path)
     (
@@ -1436,8 +1730,10 @@ def verify_evidence(
 
     configured = load_private_env_file(pathlib.Path(args.env_file))
     reject_conflicting_inherited_environment(configured, dict(os.environ))
-    host_env_sha256, pages_bindings_sha256 = _private_input_digests(
-        pathlib.Path(args.env_file), pathlib.Path(args.pages_bindings_file)
+    private_snapshot = _private_gate_input_snapshot(args)
+    production_runtime = _production_runtime_evidence_identity(args)
+    fixed_host_backup = _fixed_host_backup_evidence_identity(
+        args, machine_id_path=machine_id_path
     )
     host_python_realpath, host_python_sha256 = _regular_file_digest(
         host_python_path,
@@ -1445,16 +1741,25 @@ def verify_evidence(
         reject_symlink=True,
     )
     runtime = venv_identity(host_python_path)
-    node_realpath, node_sha256 = _regular_file_digest(
-        node_path, label="Node executable", reject_symlink=True
-    )
+    cloudflare_runtime = _cloudflare_evidence_identity(args)
     git_realpath, git_sha256 = _regular_file_digest(
         git_path, label="Git executable", reject_symlink=True
     )
     container_image_ids, container_images_sha256 = container_image_identity()
     if (
-        payload.get("host_env_sha256") != host_env_sha256
-        or payload.get("pages_bindings_sha256") != pages_bindings_sha256
+        any(payload.get(key) != value for key, value in private_snapshot.items())
+        or payload.get("private_gate_input_snapshot_sha256")
+        != _identity_snapshot_sha256(private_snapshot)
+        or type(payload.get("production_runtime_file_count")) is not int
+        or type(payload.get("production_runtime_byte_count")) is not int
+        or any(
+            payload.get(key) != value
+            for key, value in production_runtime.items()
+        )
+        or any(
+            payload.get(key) != value
+            for key, value in fixed_host_backup.items()
+        )
         or payload.get("host_python_realpath") != host_python_realpath
         or payload.get("host_python_sha256") != host_python_sha256
         or payload.get("venv_root") != runtime["venv_root"]
@@ -1464,8 +1769,9 @@ def verify_evidence(
         or payload.get("venv_file_count") != runtime["venv_file_count"]
         or type(payload.get("venv_package_count")) is not int
         or payload.get("venv_package_count") != runtime["venv_package_count"]
-        or payload.get("node_realpath") != node_realpath
-        or payload.get("node_sha256") != node_sha256
+        or type(payload.get("wrangler_file_count")) is not int
+        or type(payload.get("wrangler_total_bytes")) is not int
+        or any(payload.get(key) != value for key, value in cloudflare_runtime.items())
         or payload.get("git_realpath") != git_realpath
         or payload.get("git_sha256") != git_sha256
         or payload.get("container_images_sha256") != container_images_sha256
@@ -1568,6 +1874,10 @@ def main(argv: list[str]) -> int:
         help="Absolute reviewed Node executable used by production JavaScript gates",
     )
     parser.add_argument(
+        "--wrangler-entrypoint",
+        help="Absolute reviewed local Wrangler entrypoint used by Cloudflare production gates",
+    )
+    parser.add_argument(
         "--git-executable",
         help="Absolute reviewed Git executable used for source and remote identity",
     )
@@ -1662,6 +1972,11 @@ def main(argv: list[str]) -> int:
                 or not os.access(executable, os.X_OK)
             ):
                 parser.error(f"{option} must be an existing executable absolute path")
+        if not args.wrangler_entrypoint:
+            parser.error("--production requires --wrangler-entrypoint")
+        wrangler_entrypoint = pathlib.Path(args.wrangler_entrypoint)
+        if not wrangler_entrypoint.is_absolute() or not wrangler_entrypoint.is_file():
+            parser.error("--wrangler-entrypoint must be an existing regular absolute path")
         if DEPLOYMENT_ID.fullmatch(args.deployment_id or "") is None:
             parser.error("--deployment-id is invalid")
     if args.evidence_output and (
@@ -1727,9 +2042,10 @@ def main(argv: list[str]) -> int:
         print(json.dumps(report, sort_keys=True))
         return 0
 
+    issuance_input_snapshot: dict[str, str] | None = None
     if args.evidence_output:
         try:
-            validate_evidence_issuance_inputs(args)
+            issuance_input_snapshot = validate_evidence_issuance_inputs(args)
             create_evidence_exclusive(
                 args.evidence_output,
                 placeholder_evidence("in_progress", args.expected_release_sha),
@@ -1754,7 +2070,11 @@ def main(argv: list[str]) -> int:
             else:
                 atomic_write_evidence(
                     args.evidence_output,
-                    build_pass_evidence(args, results),
+                    build_pass_evidence(
+                        args,
+                        results,
+                        issuance_input_snapshot=issuance_input_snapshot,
+                    ),
                 )
         except (EvidenceError, ProductionEnvError, OSError) as error:
             evidence_failure = str(error)

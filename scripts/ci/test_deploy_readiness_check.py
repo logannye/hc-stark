@@ -261,6 +261,7 @@ def test_deploy_release_identity_exports_are_execution_scoped(tmp_path, monkeypa
     monkeypatch.setenv("HC_RELEASE_SHA", "a" * 40)
     monkeypatch.setenv("HC_RELEASE_REF", "main")
     monkeypatch.setenv("HC_RELEASE_BUILD_URL", "https://github.example/run/1")
+    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
 
     loaded = readiness.merged_env(env_file, production=True)
 
@@ -450,7 +451,9 @@ def test_production_mode_rejects_placeholder_secrets():
     assert "off-host backups require HC_BACKUP_REMOTE" in failures
 
 
-def test_production_mode_accepts_https_backup_ingest(tmp_path, monkeypatch):
+def test_production_mode_rejects_https_backup_without_matching_fixed_host_drill(
+    tmp_path, monkeypatch
+):
     token_file = tmp_path / "backup-token"
     token_file.write_text("a" * 64, encoding="utf-8")
     token_file.chmod(0o600)
@@ -467,7 +470,10 @@ def test_production_mode_accepts_https_backup_ingest(tmp_path, monkeypatch):
     failures, _warnings = readiness.check_env(
         env, production=True, check_host_python=True
     )
-    assert failures == []
+    assert (
+        "production backup evidence currently requires encrypted rclone; "
+        "HTTP backup ingest is not release-authorized"
+    ) in failures
 
 
 def test_production_host_rclone_probe_is_read_only_and_successful(

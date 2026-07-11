@@ -167,6 +167,12 @@ require_file scripts/ci/compose_config_check.py
 require_file scripts/ci/launch_gate_audit.py
 require_file scripts/ci/production_launch_preflight.py
 require_file scripts/ci/cloudflare_pages_secret_check.py
+require_file scripts/ci/cloudflare_toolchain_check.py
+require_file scripts/ci/materialize_cloudflare_toolchain.py
+require_file scripts/ci/fixed_host_backup_evidence.py
+require_file scripts/ci/test_fixed_host_backup_evidence.py
+require_file release/cloudflare-production-toolchain-v1.json
+require_file toolchains/cloudflare/package-lock.json
 require_file scripts/ci/release_identity_check.py
 require_file scripts/ci/offer_metadata_check.py
 require_file scripts/ci/receipt_share_contract_check.py
@@ -194,6 +200,14 @@ require_file scripts/ci/server_card_check.py
 require_file scripts/ci/backup_restore_check.py
 require_file scripts/ci/deploy_readiness_check.py
 require_file deploy/hetzner/install_billing_runtime.sh
+require_file billing/RUNTIME.md
+require_file billing/host-runtime-provenance.json
+require_file billing/requirements-bootstrap.lock
+require_file billing/requirements.lock
+require_file billing/runtime-profile.json
+require_file billing/runtime_lock.py
+require_file billing/tests/test_runtime_lock.py
+require_file billing/wheelhouse-manifest.json
 
 require_contains site/research.html "One company, one thesis: space-efficient proving." "research page states the unified thesis"
 require_contains site/research.html "space-efficient-zero-knowledge-proofs" "research page names the legacy repo"
@@ -418,6 +432,8 @@ require_contains scripts/monitoring/daily_growth_decision.py "growth_experiment_
 require_contains scripts/monitoring/daily_growth_decision.py "safe_action_queue" "daily growth decision emits a safe action queue"
 require_contains scripts/monitoring/daily_growth_decision.py "requires_explicit_approval" "daily growth decision preserves explicit-approval guardrails"
 require_contains .github/workflows/ci.yml "deploy/hetzner/install_billing_runtime.sh" "CI syntax-checks billing runtime installer"
+require_contains .github/workflows/ci.yml "billing/tests/test_runtime_lock.py" "CI runs billing runtime lock tests"
+require_contains .github/workflows/ci.yml "billing/runtime_lock.py" "CI syntax-checks billing runtime verifier"
 require_contains .github/workflows/ci.yml "scripts/ci/site_route_check.py" "CI checks static site routes"
 require_contains .github/workflows/ci.yml "scripts/ci/test_site_route_check.py" "CI tests static site route policy"
 require_contains .github/workflows/ci.yml "test_analytics_attribution.mjs" "CI tests analytics attribution handoff"
@@ -429,6 +445,8 @@ require_contains .github/workflows/ci.yml "scripts/ci/production_launch_prefligh
 require_contains .github/workflows/ci.yml "scripts/ci/test_production_launch_preflight.py" "CI tests production launch preflight"
 require_contains .github/workflows/ci.yml "scripts/ci/test_release_identity_check.py" "CI tests release identity policy"
 require_contains .github/workflows/ci.yml "cloudflare_pages_secret_check.py" "CI syntax-checks live Cloudflare secret checker"
+require_contains .github/workflows/ci.yml "cloudflare_toolchain_check.py" "CI validates pinned Cloudflare toolchain"
+require_contains .github/workflows/ci.yml "test_cloudflare_toolchain_check.py" "CI tests pinned Cloudflare toolchain policy"
 require_contains .github/workflows/ci.yml "scripts/ci/offer_metadata_check.py" "CI checks agent-readable offer metadata"
 require_contains .github/workflows/ci.yml "scripts/ci/receipt_share_contract_check.py" "CI checks receipt-share contract"
 require_contains .github/workflows/ci.yml "scripts/ci/badge_embed_check.py" "CI checks badge embed contract"
@@ -798,6 +816,10 @@ require_contains deploy/hetzner/Dockerfile.billing "tenant_auth_pg.sql" "billing
 require_contains deploy/hetzner/install_billing_runtime.sh "billing/requirements.txt" "billing runtime installer uses pinned requirements file"
 require_contains deploy/hetzner/install_billing_runtime.sh "venv --copies" "billing runtime installer copies the reviewed interpreter"
 require_contains deploy/hetzner/install_billing_runtime.sh "chmod 0444" "billing runtime installer freezes installed files before evidence"
+require_contains deploy/hetzner/install_billing_runtime.sh "verify-host-provenance" "billing runtime installer enforces host provenance"
+require_contains deploy/hetzner/install_billing_runtime.sh "--production-permissions" "billing runtime installer verifies sealed wheel permissions"
+require_contains billing/host-runtime-provenance.json '"status": "unconfigured"' "host runtime provenance remains fail-closed before review"
+require_contains billing/runtime-profile.json '"profile_id": "tinyzkp-billing-debian12-x86_64-cpython311-v1"' "billing runtime profile is pinned"
 require_contains deploy/hetzner/deploy.sh "deploy_readiness_check.py" "Hetzner deploy runs readiness gate"
 require_no_regex deploy/hetzner/deploy.sh "install_billing_runtime\\.sh" "Hetzner deploy never mutates the evidenced billing runtime"
 require_contains deploy/hetzner/deploy.sh "--host-python \"\$HOST_PYTHON\"" "Hetzner deploy readiness checks external billing virtualenv"

@@ -20,7 +20,8 @@ def args(**overrides):
         "pages_bindings_file": None,
         "check_host_python": False,
         "host_python": None,
-        "node_executable": None,
+        "node_executable": "/reviewed/node",
+        "wrangler_entrypoint": "/reviewed/cloudflare/node_modules/wrangler/bin/wrangler.js",
         "git_executable": None,
         "deployment_id": preflight.DEFAULT_DEPLOYMENT_ID,
         "live": False,
@@ -53,8 +54,15 @@ def test_local_preflight_builds_fast_static_gate_sequence():
         ("python", "scripts/ci/server_card_check.py"),
         ("python", "scripts/ci/plonky3_compatibility_gate.py"),
         ("python", "scripts/ci/launch_gate_audit.py"),
+        ("python", "billing/runtime_lock.py", "verify-metadata"),
         ("python", "scripts/ci/backup_restore_check.py"),
         ("python", "-m", "pytest", "billing/tests/test_backup_script.py"),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "scripts/ci/test_fixed_host_backup_evidence.py",
+        ),
         ("python", "scripts/ci/site_route_check.py"),
         ("python", "-m", "pytest", "scripts/ci/test_site_route_check.py"),
         (
@@ -99,7 +107,14 @@ def test_local_preflight_builds_fast_static_gate_sequence():
             "scripts/ci/test_site_deploy_check.py",
             "scripts/ci/test_production_secret_parity_check.py",
         ),
-        ("python", "-m", "pytest", "scripts/ci/test_cloudflare_pages_secret_check.py"),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "scripts/ci/test_cloudflare_pages_secret_check.py",
+            "scripts/ci/test_cloudflare_toolchain_check.py",
+        ),
+        ("python", "scripts/ci/cloudflare_toolchain_check.py"),
         ("node", "scripts/ci/site_worker_dispatch_test.mjs"),
         ("python", "scripts/ci/compose_config_check.py"),
         ("python", "-m", "pytest", "scripts/ci/test_billing_service_hardening.py"),
@@ -121,6 +136,38 @@ def test_production_adds_stricter_deploy_gates():
     )
 
     assert ("python", "scripts/ci/launch_gate_audit.py") in commands(built)
+    assert (
+        "/usr/bin/python3",
+        "billing/runtime_lock.py",
+        "verify-production-runtime",
+        "--venv-root",
+        "/var/lib/tinyzkp-runtime/billing-venv",
+        "--node-binary",
+        "/reviewed/node",
+    ) in commands(built)
+    assert (
+        "/usr/bin/python3",
+        "billing/runtime_lock.py",
+        "verify-wheelhouse",
+        "--wheelhouse",
+        "/var/lib/tinyzkp-runtime/wheelhouse",
+        "--production-permissions",
+    ) in commands(built)
+    assert (
+        "/var/lib/tinyzkp-runtime/billing-venv/bin/python",
+        "billing/runtime_lock.py",
+        "verify-installed",
+    ) in commands(built)
+    assert (
+        "/usr/bin/python3",
+        "scripts/ci/fixed_host_backup_evidence.py",
+        "--expected-release-sha",
+        "0" * 40,
+        "--expected-deployment-id",
+        preflight.DEFAULT_DEPLOYMENT_ID,
+        "--machine-id-file",
+        "/etc/machine-id",
+    ) in commands(built)
     assert (
         "python",
         "scripts/ci/deploy_readiness_check.py",
@@ -151,6 +198,15 @@ def test_production_adds_stricter_deploy_gates():
         "/opt/hc-stark/.env",
         "--pages-bindings-file",
         "/secure/pages.env",
+    ) in commands(built)
+    assert (
+        "python",
+        "scripts/ci/cloudflare_toolchain_check.py",
+        "--runtime",
+        "--node-executable",
+        "/reviewed/node",
+        "--wrangler-entrypoint",
+        "/reviewed/cloudflare/node_modules/wrangler/bin/wrangler.js",
     ) in commands(built)
 
 
@@ -215,7 +271,14 @@ def test_live_steps_are_opt_in_and_use_recovery_canary():
         "--mcp-url",
         "https://mcp.tinyzkp.com",
     )
-    assert ("python", "scripts/ci/cloudflare_pages_secret_check.py") in commands(built)
+    assert (
+        "python",
+        "scripts/ci/cloudflare_pages_secret_check.py",
+        "--node-executable",
+        "/reviewed/node",
+        "--wrangler-entrypoint",
+        "/reviewed/cloudflare/node_modules/wrangler/bin/wrangler.js",
+    ) in commands(built)
     assert (
         "python",
         "scripts/monitoring/contact_intake_readiness.py",
@@ -390,6 +453,7 @@ def _production_evidence_fixture(tmp_path, monkeypatch):
         pages_bindings_file=str(pages_file),
         host_python=sys.executable,
         node_executable=sys.executable,
+        wrangler_entrypoint=str(pathlib.Path(sys.executable).resolve()),
         git_executable=sys.executable,
         expected_release_sha=release_sha,
         contact_readiness_secret_file=None,
@@ -425,6 +489,54 @@ def _production_evidence_fixture(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(preflight, "stable_host_identity", lambda *_args: "d" * 64)
+    monkeypatch.setattr(
+        preflight,
+        "_backup_private_input_identity_from_config",
+        lambda _configured: {
+            "backup_loader_token_sha256": "6" * 64,
+            "backup_transport_kind": "rclone",
+            "backup_transport_secret_path": "/secure/rclone.conf",
+            "backup_transport_secret_sha256": "7" * 64,
+        },
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_production_runtime_evidence_identity",
+        lambda _args: {
+            "production_runtime_identity_sha256": "0" * 64,
+            "production_runtime_file_count": 250,
+            "production_runtime_byte_count": 12_500_000,
+        },
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_fixed_host_backup_evidence_identity",
+        lambda _args, **_kwargs: {
+            "fixed_host_backup_evidence_identity_sha256": "1" * 64,
+            "fixed_host_backup_subject_sha256": "2" * 64,
+            "fixed_host_backup_run_id": "3" * 32,
+        },
+    )
+    monkeypatch.setattr(
+        preflight,
+        "cloudflare_toolchain_identity",
+        lambda _node, _wrangler: {
+            "profile_id": "tinyzkp-cloudflare-production-v1",
+            "profile_sha256": "1" * 64,
+            "package_lock_sha256": "2" * 64,
+            "materialization_sha256": "a" * 64,
+            "node_version": "v24.18.0",
+            "wrangler_version": "4.85.0",
+            "node_realpath": "/reviewed/node",
+            "node_sha256": "3" * 64,
+            "wrangler_install_root": "/reviewed/cloudflare/node_modules",
+            "wrangler_entrypoint_realpath": "/reviewed/cloudflare/node_modules/wrangler/bin/wrangler.js",
+            "wrangler_entrypoint_sha256": "4" * 64,
+            "wrangler_tree_sha256": "5" * 64,
+            "wrangler_file_count": 100,
+            "wrangler_total_bytes": 1000,
+        },
+    )
     monkeypatch.setattr(
         preflight,
         "container_image_identity",
@@ -478,6 +590,189 @@ def test_complete_production_evidence_round_trip(tmp_path, monkeypatch):
     preflight.atomic_write_evidence(evidence, payload)
     with pytest.raises(preflight.EvidenceError, match="non-passing gate"):
         preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_production_evidence_rejects_changed_wrangler_tree(tmp_path, monkeypatch):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    evidence = tmp_path / "preflight.json"
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    preflight.atomic_write_evidence(evidence, payload)
+    original = preflight.cloudflare_toolchain_identity(
+        pathlib.Path(configured.node_executable),
+        pathlib.Path(configured.wrangler_entrypoint),
+    )
+    changed = {**original, "wrangler_tree_sha256": "8" * 64}
+    monkeypatch.setattr(
+        preflight, "cloudflare_toolchain_identity", lambda _node, _wrangler: changed
+    )
+
+    with pytest.raises(preflight.EvidenceError, match="inputs changed"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_production_evidence_rejects_changed_cloudflare_materialization(
+    tmp_path, monkeypatch
+):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    evidence = tmp_path / "preflight.json"
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    preflight.atomic_write_evidence(evidence, payload)
+    original = preflight.cloudflare_toolchain_identity(
+        pathlib.Path(configured.node_executable),
+        pathlib.Path(configured.wrangler_entrypoint),
+    )
+    changed = {**original, "materialization_sha256": "b" * 64}
+    monkeypatch.setattr(
+        preflight, "cloudflare_toolchain_identity", lambda _node, _wrangler: changed
+    )
+
+    with pytest.raises(preflight.EvidenceError, match="inputs changed"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_production_evidence_rejects_changed_backup_credential(
+    tmp_path, monkeypatch
+):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    evidence = tmp_path / "preflight.json"
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    preflight.atomic_write_evidence(evidence, payload)
+    monkeypatch.setattr(
+        preflight,
+        "_backup_private_input_identity_from_config",
+        lambda _configured: {
+            "backup_loader_token_sha256": "6" * 64,
+            "backup_transport_kind": "rclone",
+            "backup_transport_secret_path": "/secure/rclone.conf",
+            "backup_transport_secret_sha256": "8" * 64,
+        },
+    )
+
+    with pytest.raises(preflight.EvidenceError, match="inputs changed"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_evidence_rejects_private_input_rotation_while_gates_run(
+    tmp_path, monkeypatch
+):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    initial = preflight._private_gate_input_snapshot(configured)
+    monkeypatch.setattr(
+        preflight,
+        "_backup_private_input_identity_from_config",
+        lambda _configured: {
+            "backup_loader_token_sha256": "6" * 64,
+            "backup_transport_kind": "rclone",
+            "backup_transport_secret_path": "/secure/rclone.conf",
+            "backup_transport_secret_sha256": "8" * 64,
+        },
+    )
+
+    with pytest.raises(preflight.EvidenceError, match="changed while aggregate gates"):
+        preflight.build_pass_evidence(
+            configured,
+            results,
+            now=now,
+            issuance_input_snapshot=initial,
+        )
+
+
+def test_production_evidence_rejects_changed_host_runtime_identity(
+    tmp_path, monkeypatch
+):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    evidence = tmp_path / "preflight.json"
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    preflight.atomic_write_evidence(evidence, payload)
+    monkeypatch.setattr(
+        preflight,
+        "_production_runtime_evidence_identity",
+        lambda _args: {
+            "production_runtime_identity_sha256": "f" * 64,
+            "production_runtime_file_count": 250,
+            "production_runtime_byte_count": 12_500_000,
+        },
+    )
+
+    with pytest.raises(preflight.EvidenceError, match="inputs changed"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_production_evidence_rejects_changed_fixed_host_backup_evidence(
+    tmp_path, monkeypatch
+):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    evidence = tmp_path / "preflight.json"
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    preflight.atomic_write_evidence(evidence, payload)
+    monkeypatch.setattr(
+        preflight,
+        "_fixed_host_backup_evidence_identity",
+        lambda _args, **_kwargs: {
+            "fixed_host_backup_evidence_identity_sha256": "4" * 64,
+            "fixed_host_backup_subject_sha256": "2" * 64,
+            "fixed_host_backup_run_id": "3" * 32,
+        },
+    )
+
+    with pytest.raises(preflight.EvidenceError, match="inputs changed"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_backup_private_input_identity_binds_rclone_and_rejects_http(
+    tmp_path, monkeypatch
+):
+    tmp_path.chmod(0o700)
+    env_file = tmp_path / "host.env"
+    loader = tmp_path / "loader-token"
+    rclone = tmp_path / "rclone.conf"
+    http_token = tmp_path / "http-ingest-token"
+    for path, content in (
+        (loader, "a" * 64 + "\n"),
+        (rclone, "[offbox]\ntype = s3\n"),
+        (http_token, "b" * 64 + "\n"),
+    ):
+        path.write_text(content, encoding="ascii")
+        path.chmod(0o600)
+    monkeypatch.setattr(preflight.backup_env_exec, "FIXED_LOADER_TOKEN", loader)
+    monkeypatch.setattr(preflight.backup_env_exec, "FIXED_RCLONE_CONFIG", rclone)
+    monkeypatch.setattr(preflight.backup_env_exec, "FIXED_HTTP_TOKEN", http_token)
+
+    env_file.write_text("HC_BACKUP_REMOTE=offbox:tinyzkp\n", encoding="utf-8")
+    env_file.chmod(0o600)
+    rclone_identity = preflight._backup_private_input_identity(env_file)
+    assert rclone_identity == {
+        "backup_loader_token_sha256": preflight._sha256(loader.read_bytes()),
+        "backup_transport_kind": "rclone",
+        "backup_transport_secret_path": str(rclone),
+        "backup_transport_secret_sha256": preflight._sha256(rclone.read_bytes()),
+    }
+
+    pages = tmp_path / "pages.env"
+    pages.write_text("INTERNAL_SECRET=fixture\n", encoding="utf-8")
+    pages.chmod(0o600)
+    original_loader = preflight.load_private_env_file
+    monkeypatch.setattr(
+        preflight,
+        "load_private_env_file",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("snapshot must parse the already-read env bytes")
+        ),
+    )
+    snapshot = preflight._private_gate_input_snapshot(
+        argparse.Namespace(env_file=str(env_file), pages_bindings_file=str(pages))
+    )
+    assert snapshot["backup_transport_kind"] == "rclone"
+    monkeypatch.setattr(preflight, "load_private_env_file", original_loader)
+
+    env_file.write_text(
+        "HC_BACKUP_HTTP_URL=https://backup.example/tinyzkp\n"
+        f"HC_BACKUP_HTTP_TOKEN_FILE={http_token}\n",
+        encoding="utf-8",
+    )
+    env_file.chmod(0o600)
+    with pytest.raises(preflight.EvidenceError, match="encrypted rclone"):
+        preflight._backup_private_input_identity(env_file)
 
 
 def test_production_evidence_rejects_stale_changed_and_incomplete_inputs(

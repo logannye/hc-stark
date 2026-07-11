@@ -76,13 +76,22 @@ runtime packages; it verifies the byte-bound, read-only virtualenv, rewrites
 the billing cron and `hc-billing-webhook.service` definitions to use it, and
 then restarts the webhook.
 
-The installer intentionally fails closed until a reviewed
-`billing/requirements.lock` (all transitive packages, including `pytest`, pinned
-with SHA-256 hashes) and a root-owned immutable offline wheelhouse exist at
-`/var/lib/tinyzkp-runtime/wheelhouse`. The external base Python/stdlib/shared
-library provenance and the preflight binding for backup token/config metadata
-remain production evidence blockers; do not issue launch evidence or describe
-this tree as deploy-ready until those identities are independently anchored.
+The repository now pins one dependency profile only: Debian 12 x86-64,
+`/usr/bin` CPython 3.11, and `manylinux2014_x86_64` wheels. Exact direct roots,
+the exact active transitive closure, the bootstrap pip wheel, target profile,
+and all 23 wheel identities are separately hash-bound. The installer verifies
+wheel structure and dependency closure, builds offline in a fixed staging
+directory, and restores the prior runtime on failure.
+
+This does not by itself authorize production. The committed
+`billing/host-runtime-provenance.json` deliberately remains `unconfigured` and
+the installer fails until an independently reproduced inventory of the fixed
+host interpreter, standard library, loader tool, and recursively resolved
+shared libraries is reviewed and committed. See
+`billing/RUNTIME.md` for wheel materialization, host capture, review,
+installation, and rollback commands. Production preflight must also bind that
+reviewed source file and the resulting immutable venv before deploy evidence
+can be issued.
 
 ### Shared prove worker (hc-job-worker)
 
@@ -163,7 +172,8 @@ scripts/ci/run_production_preflight.sh \
   --pages-bindings-file /var/lib/tinyzkp-private/deploy/pages-bindings.env \
   --check-host-python \
   --host-python /var/lib/tinyzkp-runtime/billing-venv/bin/python \
-  --node-executable /usr/bin/node \
+  --node-executable /var/lib/tinyzkp-runtime/node-v24.18.0-linux-x64/bin/node \
+  --wrangler-entrypoint /var/lib/tinyzkp-runtime/cloudflare-toolchain/node_modules/wrangler/bin/wrangler.js \
   --git-executable /usr/bin/git \
   --deployment-id tinyzkp-production-primary \
   --expected-release-sha "$(git rev-parse HEAD)" \
@@ -172,9 +182,42 @@ scripts/ci/run_production_preflight.sh \
 
 Run this from a clean `main` checkout whose `HEAD` equals the locally fetched
 remote `main` SHA at the reviewed GitHub URL. Before issuing evidence, run
-`deploy/hetzner/install_billing_runtime.sh`, then make every tracked file
-read-only (`git ls-files -z | xargs -0 chmod a-w`). The installer creates a
-non-symlink copied interpreter, validates its packages, and freezes the entire
+`deploy/hetzner/install_billing_runtime.sh`, then materialize the reviewed
+JavaScript toolchain outside the checkout:
+
+```sh
+/var/lib/tinyzkp-runtime/billing-venv/bin/python \
+  scripts/ci/materialize_cloudflare_toolchain.py --download
+
+/var/lib/tinyzkp-runtime/billing-venv/bin/python \
+  scripts/ci/cloudflare_toolchain_check.py --runtime \
+  --node-executable /var/lib/tinyzkp-runtime/node-v24.18.0-linux-x64/bin/node \
+  --wrangler-entrypoint /var/lib/tinyzkp-runtime/cloudflare-toolchain/node_modules/wrangler/bin/wrangler.js
+```
+
+To pre-fetch the Node artifact, download the exact archive named in
+`release/cloudflare-production-toolchain-v1.json`, transfer it without
+extracting it, and use `--archive /owner-only/path/node-v24.18.0-linux-x64.tar.xz`
+instead of `--download`. This is not a fully offline install: `npm ci` still
+fetches the exact Wrangler dependency tarballs from `registry.npmjs.org` and
+verifies every lockfile SHA-512 integrity value. The static gate rejects linked,
+file, Git, non-HTTPS, non-registry, noncanonical, or integrity-free lock entries.
+Wrangler's required dependency graph declares install scripts in `esbuild`,
+`workerd`, and `sharp` (plus optional `fsevents`); their exact versions and
+integrities are explicit in the profile's metadata allowlist. That allowlist
+does not authorize execution; scripts are never run.
+The materializer verifies the official archive and
+Node binary hashes, uses the archive's pinned npm 11.16.0 only as a build-time
+input, and runs `npm ci --ignore-scripts`. It retains only the reviewed Node
+binary plus the complete locked Wrangler dependency tree, removes npm PATH
+shims, rejects remaining links, and freezes the retained bytes read-only. It
+refuses existing destinations; there is no in-place update mode. Neither
+`node_modules` nor any other generated runtime byte is written into the Git
+checkout.
+
+Then make every tracked file read-only
+(`git ls-files -z | xargs -0 chmod a-w`). The billing runtime installer creates
+a non-symlink copied interpreter, validates its packages, and freezes the entire
 venv; deploy never reinstalls or changes it. The source checkout and private
 configuration must be root-owned and unavailable for group/world writes.
 Create `/var/lib/tinyzkp-preflight-pycache` as an empty root-owned mode-`0700`
@@ -189,8 +232,16 @@ The aggregate gate compares the host and Pages
 `INTERNAL_SECRET` values without printing either value. Its short-lived
 evidence binds a random nonce, machine identity, deployment ID, fresh remote
 main SHA, immutable source, private configuration files, the full venv and
-installed package bytes, exact Git/Node executables, both locally built
-maintenance container IDs/full inspect digests, and every passing gate.
+installed package bytes, exact Git/Node executables, the reviewed Node release
+artifact, the full Wrangler install tree and package lock, both locally built
+maintenance container IDs/full inspect digests, the deterministic
+profile/lock-to-installed-tree materialization attestation, the backup loader capability and
+selected off-host transport credential by SHA-256 (never raw secret bytes), and
+the canonical identity of the Debian base runtime, complete billing virtualenv,
+pinned Node executable, and their recursive ELF dependency closure. Every
+passing gate is included. Rotating a backup credential or changing any bound
+runtime byte after preflight intentionally invalidates the short-lived deploy
+claim.
 
 `deploy/hetzner/deploy.sh` performs no fetch or pull after evidence creation.
 It verifies the artifact before changing the billing runtime, cron, systemd,
@@ -220,7 +271,9 @@ scripts/ci/run_production_preflight.sh \
   --env-file /opt/hc-stark/.env \
   --pages-bindings-file /var/lib/tinyzkp-private/deploy/pages-bindings.env \
   --host-python /var/lib/tinyzkp-runtime/billing-venv/bin/python \
-  --node-executable /usr/bin/node --git-executable /usr/bin/git \
+  --node-executable /var/lib/tinyzkp-runtime/node-v24.18.0-linux-x64/bin/node \
+  --wrangler-entrypoint /var/lib/tinyzkp-runtime/cloudflare-toolchain/node_modules/wrangler/bin/wrangler.js \
+  --git-executable /usr/bin/git \
   --deployment-id tinyzkp-production-primary \
   --contact-readiness-secret-file /var/lib/tinyzkp-private/deploy/internal-secret \
   --expected-release-sha "$(/usr/bin/git rev-parse HEAD)"
@@ -264,6 +317,10 @@ Store the reviewed rclone configuration at
 Use `rclone --config /var/lib/tinyzkp-private/backup/rclone.conf ...` for every
 manual probe so operator checks and the backup runtime use the same config.
 
+HTTP backup ingest remains implemented for non-production testing but is not
+release-authorized: the fixed-host drill and production preflight currently
+prove only the encrypted rclone path.
+
 After configuring credentials, run a production backup push and restore smoke.
 Do not describe the business as production-grade recoverable until the restore
 smoke succeeds.
@@ -275,6 +332,41 @@ copies, every failure/signal cleanup path, service restart, manifest upload,
 and a scratch restore. Production launch must remain blocked until that run and
 its raw log are independently reviewed.
 
+#### Fixed-host backup evidence
+
+`scripts/ci/fixed_host_backup_evidence.py` is a verify-only gate; it never runs
+a backup, performs a restore, or manufactures passing evidence. It reads the
+canonical bundle at
+`/var/lib/tinyzkp-private/backup/fixed-host-evidence/bundle.json`, the files
+listed beneath `/var/lib/tinyzkp-private/backup/fixed-host-evidence/raw/`, and
+the independent review at
+`/var/lib/tinyzkp-private/backup/fixed-host-evidence/review.json`. Invoke it on
+the fixed Linux host with all three expected identities:
+
+```sh
+/var/lib/tinyzkp-runtime/billing-venv/bin/python \
+  scripts/ci/fixed_host_backup_evidence.py \
+  --expected-release-sha "$RELEASE_SHA" \
+  --expected-host-identity-sha256 "$HOST_IDENTITY_SHA256" \
+  --expected-deployment-id tinyzkp-production-primary
+```
+
+The host digest is derived from the root-controlled `/etc/machine-id`; the
+explicit host digest above is an optional additional comparison. Use
+`--machine-id-file` only for an independently controlled fixed-host identity
+file. Successful verification returns a deterministic
+`evidence_identity_sha256` over the bundle, independent review, and complete
+raw-artifact descriptor set so a later release gate can bind the same bytes.
+
+The bundle must bind the exact release, host, deployment, backup manifest,
+off-host readback, restored semantic results, service transitions, and every
+raw artifact by size and SHA-256. The separate review must bind the complete
+bundle and raw-artifact set, identify an independent reviewer, and record a
+passing disposition. Evidence older than 30 days fails closed. Ordinary local
+CI can unit-test this policy, but it cannot create or pass fixed-host evidence:
+the reviewed bundle, raw artifacts, host identity, private ownership boundary,
+and independent review must come from the production-equivalent Linux drill.
+
 ### Cloudflare Pages deploy gate
 
 Run the site deploy preflight before every Pages deploy:
@@ -282,6 +374,7 @@ Run the site deploy preflight before every Pages deploy:
 ```sh
 python3 scripts/ci/site_deploy_check.py
 python3 scripts/ci/site_deploy_check.py --production --bindings-file /secure/tinyzkp-pages.env
+python3 scripts/ci/cloudflare_toolchain_check.py
 node scripts/ci/site_worker_dispatch_test.mjs
 node scripts/ci/test_analytics_attribution.mjs
 ```
@@ -289,8 +382,8 @@ node scripts/ci/test_analytics_attribution.mjs
 The static mode verifies `site/wrangler.toml`, the Advanced Mode `_worker.js`
 route table, every Pages API function handler, and classified Cloudflare
 bindings. Production mode also checks that the expected Pages bindings/secrets
-are present: `INTERNAL_SECRET`, Stripe secret/price IDs, and
-`TINYZKP_DEMO_API_KEY`. The worker dispatch test imports the real `_worker.js`
+are exact: `INTERNAL_SECRET` is present, while legacy Stripe, demo, and any
+other unused secrets are absent. The worker dispatch test imports the real `_worker.js`
 module with mocked Pages assets/cache APIs and verifies API dispatch, method
 405s, static asset passthrough, extensionless `.html` fallback, and baseline browser security headers on static and API responses.
 The analytics attribution test simulates browser CTA clicks and verifies that

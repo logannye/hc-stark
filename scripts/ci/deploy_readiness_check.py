@@ -157,6 +157,12 @@ def load_private_env_file(
         max_bytes=MAX_ENV_BYTES,
         exact_mode_0600=exact_mode_0600,
     )
+    return parse_private_env_bytes(content)
+
+
+def parse_private_env_bytes(content: bytes) -> dict[str, str]:
+    """Parse bytes already read from one trusted production-env descriptor."""
+
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -711,6 +717,11 @@ def check_env(
             failures.append(
                 "off-host backups require HC_BACKUP_REMOTE or both "
                 "HC_BACKUP_HTTP_URL and HC_BACKUP_HTTP_TOKEN_FILE"
+            )
+        if backup_http_url or backup_http_token_file:
+            failures.append(
+                "production backup evidence currently requires encrypted rclone; "
+                "HTTP backup ingest is not release-authorized"
             )
         if bool(backup_http_url) != bool(backup_http_token_file):
             failures.append(

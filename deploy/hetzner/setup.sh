@@ -1,9 +1,27 @@
-#!/usr/bin/env bash
+#!/usr/bin/env -S -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C LC_ALL=C TZ=UTC TINYZKP_CLEAN_LAUNCH=1 /bin/bash --noprofile --norc
 # TinyZKP — Hetzner server provisioning (idempotent).
-# Run as root on a fresh Debian 12 / Ubuntu 22.04+ box.
+# Run as root on the reviewed Debian 12 x86-64 host. Ubuntu and non-x86-64
+# hosts are not compatible with the pinned billing-runtime profile.
+[[ ${TINYZKP_CLEAN_LAUNCH:-} == 1 ]] || {
+  /usr/bin/printf '%s\n' 'ERROR: invoke setup.sh directly through its clean shebang' >&2
+  exit 1
+}
 set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+unset PYTHONPATH PYTHONHOME NODE_OPTIONS BASH_ENV ENV CDPATH GIT_DIR GIT_WORK_TREE \
+  LD_PRELOAD DYLD_INSERT_LIBRARIES HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY \
+  http_proxy https_proxy all_proxy no_proxy || true
 
 echo "==> TinyZKP server setup"
+
+OS_ID="$(/usr/bin/sed -n 's/^ID=//p' /usr/lib/os-release | /usr/bin/tr -d '\"' | /usr/bin/head -n 1)"
+OS_VERSION_ID="$(/usr/bin/sed -n 's/^VERSION_ID=//p' /usr/lib/os-release | /usr/bin/tr -d '\"' | /usr/bin/head -n 1)"
+if [ "$OS_ID" != debian ] || [ "$OS_VERSION_ID" != 12 ] \
+    || [ "$(/usr/bin/dpkg --print-architecture)" != amd64 ]; then
+  echo "ERROR: TinyZKP production provisioning requires Debian 12 amd64." >&2
+  exit 1
+fi
 
 # ---- Docker ----
 if ! command -v docker &>/dev/null; then
@@ -45,12 +63,13 @@ fi
 echo "Setting up /opt/hc-stark..."
 mkdir -p /opt/hc-stark/site
 
-# ---- Host billing Python runtime ----
-if [ -x /opt/hc-stark/deploy/hetzner/install_billing_runtime.sh ]; then
-  /opt/hc-stark/deploy/hetzner/install_billing_runtime.sh
-else
-  echo "NOTICE: /opt/hc-stark/deploy/hetzner/install_billing_runtime.sh not found yet; run it after copying the repo."
-fi
+# ---- Host runtime preparation ----
+# Generic bootstrap cannot authorize release-bound runtime bytes. Installation
+# waits for the independently reviewed host-provenance record and exact offline
+# wheelhouse described in billing/RUNTIME.md.
+install -d -o root -g root -m 0755 /var/lib/tinyzkp-runtime
+install -d -o root -g root -m 0700 /var/lib/tinyzkp-runtime/wheelhouse
+echo "NOTICE: populate and review the exact wheelhouse, then run install_billing_runtime.sh explicitly."
 
 # ---- Firewall ----
 if command -v ufw &>/dev/null; then

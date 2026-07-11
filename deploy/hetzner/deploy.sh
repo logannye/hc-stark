@@ -28,7 +28,8 @@ WEBHOOK_LOCAL="http://127.0.0.1:5001"
 PREFLIGHT_EVIDENCE="/var/lib/tinyzkp-private/deploy/production-preflight.json"
 PAGES_BINDINGS_FILE="/var/lib/tinyzkp-private/deploy/pages-bindings.env"
 HOST_PYTHON="/var/lib/tinyzkp-runtime/billing-venv/bin/python"
-NODE_EXECUTABLE="/usr/bin/node"
+NODE_EXECUTABLE="/var/lib/tinyzkp-runtime/node-v24.18.0-linux-x64/bin/node"
+WRANGLER_ENTRYPOINT="/var/lib/tinyzkp-runtime/cloudflare-toolchain/node_modules/wrangler/bin/wrangler.js"
 GIT_EXECUTABLE="/usr/bin/git"
 DEPLOYMENT_ID="tinyzkp-production-primary"
 
@@ -53,6 +54,7 @@ scripts/ci/run_production_preflight.sh \
     --pages-bindings-file "$PAGES_BINDINGS_FILE" \
     --host-python "$HOST_PYTHON" \
     --node-executable "$NODE_EXECUTABLE" \
+    --wrangler-entrypoint "$WRANGLER_ENTRYPOINT" \
     --git-executable "$GIT_EXECUTABLE" \
     --deployment-id "$DEPLOYMENT_ID" \
     --expected-release-sha "$RELEASE_SHA"
@@ -239,7 +241,7 @@ fi
 if [ "$fail" -eq 0 ]; then
     echo "==> Host deploy complete — maintenance surfaces healthy."
     echo "    Deploy Cloudflare Pages from the same $RELEASE_SHA, then run:"
-    echo "    $HOST_PYTHON scripts/ci/production_launch_preflight.py --production --env-file /opt/hc-stark/.env --pages-bindings-file $PAGES_BINDINGS_FILE --host-python $HOST_PYTHON --node-executable $NODE_EXECUTABLE --git-executable $GIT_EXECUTABLE --deployment-id $DEPLOYMENT_ID --live --contact-readiness-secret-file /var/lib/tinyzkp-private/deploy/internal-secret --expected-release-sha $RELEASE_SHA"
+    echo "    scripts/ci/run_production_preflight.sh --production --env-file /opt/hc-stark/.env --pages-bindings-file $PAGES_BINDINGS_FILE --host-python $HOST_PYTHON --node-executable $NODE_EXECUTABLE --wrangler-entrypoint $WRANGLER_ENTRYPOINT --git-executable $GIT_EXECUTABLE --deployment-id $DEPLOYMENT_ID --live --contact-readiness-secret-file /var/lib/tinyzkp-private/deploy/internal-secret --expected-release-sha $RELEASE_SHA"
 else
     echo "==> Deploy finished WITH FAILURES — investigate above." >&2
     exit 1

@@ -93,8 +93,10 @@ jobs:
       - name: Cloudflare Pages deploy check
         run: |
           python3 scripts/ci/site_deploy_check.py
+          python3 scripts/ci/cloudflare_toolchain_check.py
           python3 -m pytest scripts/ci/test_site_deploy_check.py
           python3 -m pytest scripts/ci/test_cloudflare_pages_secret_check.py
+          python3 -m pytest scripts/ci/test_cloudflare_toolchain_check.py
           node scripts/ci/site_worker_dispatch_test.mjs
 
       - name: Docker Compose config checks
@@ -122,6 +124,8 @@ jobs:
           python3 -m pytest billing/tests/test_stripe_account_context_check.py
           python3 -m pytest billing/tests/test_stripe_catalog_write_preflight.py
           python3 -m pytest billing/tests/test_stripe_revenue_ops_audit.py
+          python3 -m pytest billing/tests/test_runtime_lock.py
+          python3 -m pytest scripts/ci/test_fixed_host_backup_evidence.py
 
       - name: Python SDK checks
         run: |
@@ -148,12 +152,16 @@ jobs:
           python3 -m py_compile scripts/ci/plonky3_compatibility_gate.py
           python3 -m py_compile scripts/ci/backend_release_ready.py
           python3 -m py_compile scripts/ci/cloudflare_pages_secret_check.py
+          python3 -m py_compile scripts/ci/cloudflare_toolchain_check.py
+          python3 -m py_compile scripts/ci/materialize_cloudflare_toolchain.py
+          python3 -m py_compile scripts/ci/fixed_host_backup_evidence.py
           python3 -m py_compile scripts/monitoring/backend_recovery_canary.py
           python3 -m py_compile billing/legacy_billing_containment.py
           python3 -m py_compile billing/configure_contract_portal.py
           python3 -m py_compile billing/contract_billing.py
           python3 -m py_compile billing/evaluation_store.py
           python3 -m py_compile billing/evaluation_intake.py
+          python3 -m py_compile billing/runtime_lock.py
           python3 -m py_compile scripts/commercial/render_offers.py
           python3 -m py_compile scripts/benchmark/validate_release_gate.py
           bash -n scripts/monitoring/api_health_audit.sh
