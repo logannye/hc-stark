@@ -1,5 +1,10 @@
 # TinyZKP GTM and Distribution Plan
 
+> **Archived recovery-era material — do not execute, publish, submit, or use
+> for outreach.** It documents the retired self-serve agent/receipt business.
+> Current commercial operations prohibit email outreach and public checkout;
+> follow `commercial/no-email-evaluation-runbook.md` instead.
+
 > Purpose: turn TinyZKP from a polished developer site into a self-reinforcing
 > distribution and revenue system for human buyers and AI-agent evaluators.
 >

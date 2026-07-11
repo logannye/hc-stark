@@ -81,6 +81,16 @@ def main() -> int:
         "host setup reinstalls checkout recovery",
     )
     archived_marketing = {
+        "marketing/README.md": (
+            "Archived recovery-era material — do not execute, publish, submit, or use",
+            "no email outreach",
+            "commercial/no-email-evaluation-runbook.md",
+        ),
+        "marketing/GTM_DISTRIBUTION_PLAN.md": (
+            "Archived recovery-era material — do not execute, publish, submit, or use",
+            "prohibit email outreach and public checkout",
+            "commercial/no-email-evaluation-runbook.md",
+        ),
         "marketing/USER_INTERVIEWS.md": (
             "Archived recovery-era material — do not execute.",
             "no-email commercial policy",
@@ -106,6 +116,22 @@ def main() -> int:
         require(
             "galenhealth" not in lowered,
             f"other-business identity remains in {relative}",
+        )
+    retired_growth_artifacts = (
+        "scripts/ci/badge_embed_check.py",
+        "scripts/ci/openai_chatgpt_app_check.py",
+        "scripts/ci/package_distribution_check.py",
+        "scripts/ci/receipt_share_contract_check.py",
+        "scripts/ci/seo_conversion_check.py",
+        "scripts/monitoring/daily_growth_decision.py",
+        "scripts/monitoring/daily_growth_decision_cron.sh",
+        "scripts/monitoring/gtm_growth_monitor.py",
+        "scripts/monitoring/verify_growth_data_wiring.sh",
+    )
+    for relative in retired_growth_artifacts:
+        require(
+            not (ROOT / relative).exists(),
+            f"retired self-serve growth artifact was restored: {relative}",
         )
     require(
         "tinyzkp/hc-server:${HC_IMAGE_TAG:-local}" in compose

@@ -500,159 +500,14 @@ publishing or updating a live listing, run the online monitor without
 `--offline`; it checks canonical TinyZKP MCP/offer assets plus every `active`
 directory target with a `listing_url`.
 
-### GTM growth monitor
+### Archived self-serve growth surfaces
 
-Run the aggregate growth monitor for one revenue-facing view of distribution
-contracts, source-tagged CTAs, package surfaces, MCP submission drafts, launch
-assets, and local revenue attribution:
-
-```sh
-python3 scripts/monitoring/gtm_growth_monitor.py --offline
-```
-
-On the Hetzner host this runs daily from `/etc/cron.d/hc-billing` through
-`scripts/monitoring/host_cron_env.sh`, so `/opt/hc-stark/.env` is loaded before
-the monitor reads production stores. It writes to `/var/log/hc-gtm-growth.log`.
-Use `--live` after a deploy to add
-non-mutating public checks for the site, playground, verifier, signup page,
-well-known agent assets, API health, MCP version, and invalid-email signup /
-checkout endpoint behavior, plus PyPI, npm, and crates.io package registry
-availability. Use strict mode for production alerting once the self-serve
-funnel should be generating revenue:
-
-```sh
-python3 scripts/monitoring/gtm_growth_monitor.py \
-  --offline \
-  --tenant-db /opt/hc-stark/data/tenant_store.sqlite \
-  --usage-db /opt/hc-stark/data/usage.sqlite \
-  --strict-revenue \
-  --min-activated-accounts 1 \
-  --min-paid-accounts 1 \
-  --min-paid-proofs 1 \
-  --min-total-proofs 1
-```
-
-The JSON form is safe for dashboards and omits tenant email addresses:
-
-```sh
-python3 scripts/monitoring/gtm_growth_monitor.py --offline --json
-```
-
-### Daily growth decision memo
-
-Run the daily decision layer after the GTM growth monitor to persist a
-non-repo snapshot, evaluate yesterday's experiment, and print today's selected
-growth experiment with an implementation policy:
-
-```sh
-python3 scripts/monitoring/daily_growth_decision.py \
-  --tenant-db /opt/hc-stark/data/tenant_store.sqlite \
-  --usage-db /opt/hc-stark/data/usage.sqlite
-```
-
-Production cron runs `scripts/monitoring/daily_growth_decision_cron.sh`. The
-wrapper sources `/opt/hc-stark/.env`, requires non-empty tenant and usage
-stores, writes the normal snapshot, and scans the memo plus latest snapshot and
-experiment ledger for emails, Stripe object IDs, Checkout URLs, and
-API-key-like values. It includes live Stripe Checkout metrics only when
-`TINYZKP_GROWTH_STRIPE_CHECKOUT=1` is set with a trusted account source. For
-production, prefer API-key validation:
-
-```bash
-TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME="LN Holdings" \
-TINYZKP_STRIPE_ACCOUNT_SOURCE=api \
-TINYZKP_STRIPE_API_KEY_ENV=STRIPE_SECRET_KEY \
-python3 billing/stripe_account_context_check.py --account-source api
-```
-
-Then configure the host with
-`TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE=api`,
-`TINYZKP_GROWTH_STRIPE_API_KEY_ENV=STRIPE_SECRET_KEY`, and
-`TINYZKP_GROWTH_STRIPE_CHECKOUT=1`. CLI profiles are still supported for
-operator/catalog setup via `TINYZKP_GROWTH_STRIPE_PROJECT_NAME` or
-`TINYZKP_STRIPE_PROJECT_NAME`, but verify that profile first with
-`billing/stripe_account_context_check.py`. The trusted Stripe account display
-name is `LN Holdings`, the legal Stripe account used for TinyZKP revenue
-automation.
-
-Snapshots are written to `/opt/hc-stark/data/growth_snapshots/YYYY-MM-DD.json`
-by default. They contain aggregate adoption, activation, paid-customer,
-revenue, source, and pipeline counts only; emails, Stripe object IDs, checkout
-URLs, and API-key-like values are redacted from JSON and Markdown output. Use
-`--stripe-checkout --stripe-account-source api --stripe-api-key-env STRIPE_SECRET_KEY`
-only after `billing/stripe_account_context_check.py --account-source api`
-verifies the API key belongs to `LN Holdings`.
-
-The daily decision also writes a no-PII experiment ledger at
-`/opt/hc-stark/data/growth_experiment_ledger.json` by default. The ledger
-deduplicates by date and stores the selected experiment, prior experiment
-evaluation, implementation policy, scorecard, and funnel stage that is blocking
-revenue. It is the durable handoff that lets the next day's memo decide whether
-to keep, revert, iterate, or escalate the prior day's action.
-
-After each production deploy, verify the data wiring on the host:
-
-```bash
-cd /opt/hc-stark
-bash scripts/monitoring/verify_growth_data_wiring.sh
-tail -50 /var/log/hc-daily-growth-decision.log
-```
-
-The verifier fails if `/opt/hc-stark/data/tenant_store.sqlite` or
-`/opt/hc-stark/data/usage.sqlite` is missing or empty, runs
-`gtm_growth_monitor.py` against those exact paths, syntax-checks the cron
-wrapper, runs the daily growth cron, confirms a snapshot exists under
-`/opt/hc-stark/data/growth_snapshots`, confirms
-`growth_experiment_ledger.json` exists, and expects
-`daily_growth_decision_redaction_scan=ok`.
-
-The memo includes a business-copilot autonomy policy and safe action queue.
-Allowed daily actions are read-only production checks, non-repo aggregate
-snapshot/ledger writes, repo-local no-PII product/docs/instrumentation changes,
-focused tests, PR preparation, and public/no-PII GTM follow-up. Explicit
-operator approval is still required before customer/prospect messaging, private
-contact use, spend, Stripe/catalog/customer mutations, production env changes,
-merge/deploy, live checkout/session creation, live payment activity, or
-Postgres/shared-worker/billing read cutovers.
-
-The Codex daily automation should run this command around 10:15
-America/Los_Angeles, after the 09:45 production GTM cron, and report the
-scorecard, what is working, whether yesterday's experiment worked, the main
-bottleneck, the selected experiment, implementation status, and any data gaps.
-It may implement small safe repo-local or public/no-PII experiments and run
-focused tests. It must report blockers instead of sending customer messages,
-using private contact data, spending money, changing Stripe/catalog state, or
-modifying production behavior without explicit approval.
-
-### Receipt share contract gate
-
-Run the receipt-share contract check before changing `/try`, `/verify`,
-agent-readable metadata, or receipt-share CTAs:
-
-```sh
-python3 scripts/ci/receipt_share_contract_check.py
-python3 -m pytest scripts/ci/test_receipt_share_contract_check.py
-```
-
-This validates the public `#proof=` fragment contract, `source=receipt_share`
-attribution, share-link size ceiling, data-boundary language, analytics event
-allowlist, and discovery links from `llms.txt`, `robots.txt`, and
-`discovery.json`.
-
-### Badge embed contract gate
-
-Run the badge embed check before changing `/badges`, badge snippets in recipes,
-the badge SVG, `llms.txt`, `robots.txt`, `discovery.json`, or integration
-metadata:
-
-```sh
-python3 scripts/ci/badge_embed_check.py
-python3 -m pytest scripts/ci/test_badge_embed_check.py
-```
-
-This validates the public `/.well-known/tinyzkp-badge.json` contract,
-source-tagged verifier embed template, SVG dimensions, transparent-receipt
-data boundaries, and discovery links for agents and crawlers.
+The former agent-offer, receipt-sharing, badge, self-serve package funnel,
+growth-monitor, and daily-growth cron paths are intentionally absent during
+backend recovery. Do not reinstall them or use their historical commands.
+Containment operations use `production_launch_preflight.py`, the no-email
+evaluation runbook, and the canonical cron in
+`deploy/hetzner/hc-billing.cron`.
 
 ### Manual distribution asset gate
 
@@ -666,54 +521,6 @@ python3 -m pytest scripts/ci/test_manual_distribution_assets_check.py
 
 This blocks stale MCP tool names, outdated pricing/verification claims, and
 bare TinyZKP conversion URLs that would lose source attribution.
-
-### OpenAI ChatGPT app prototype
-
-The ChatGPT app prototype uses the existing hosted MCP server plus a noindex
-widget resource:
-
-- App submission metadata: `marketing/openai_chatgpt_app_submission.json`
-- Prototype plan: `marketing/OPENAI_CHATGPT_APP_PROTOTYPE.md`
-- Widget: `site/apps/tinyzkp-receipt-widget.html`
-
-Before editing those assets or submitting for review, run:
-
-```sh
-python3 scripts/ci/openai_chatgpt_app_check.py
-python3 -m pytest scripts/ci/test_openai_chatgpt_app_check.py
-```
-
-The checker validates the streamable MCP endpoint, source-tagged ChatGPT signup
-URL, privacy/terms links, human-confirmation requirement, review test prompts,
-and MCP Apps bridge markers in the widget.
-
-### Package distribution gate
-
-Run the package distribution check before publishing SDK, CLI, WASM verifier,
-or MCP package/readme changes:
-
-```sh
-python3 scripts/ci/package_distribution_check.py
-python3 -m pytest scripts/ci/test_package_distribution_check.py
-```
-
-This validates that PyPI, npm, crates.io, CLI, WASM verifier, and MCP README
-surfaces preserve source-tagged signup, verifier, limits, and agent-offer
-links, and that package metadata keeps registry attribution markers.
-
-### SEO conversion gate
-
-Run the SEO conversion check before changing priority acquisition pages,
-comparison pages, integration pages, `llms.txt`, or the sitemap:
-
-```sh
-python3 scripts/ci/seo_conversion_check.py
-python3 -m pytest scripts/ci/test_seo_conversion_check.py
-```
-
-This validates that the priority SEO pages are present in both `sitemap.xml`
-and `llms.txt`, have basic crawlable metadata, and preserve at least one
-source-tagged, tracked CTA into the TinyZKP funnel.
 
 ### GTM revenue report
 
@@ -731,56 +538,13 @@ The report groups by stored attribution source, medium, and platform. It does
 not print email addresses. Use `--json` when feeding the summary into a BI
 dashboard or scheduled internal digest.
 
-### Billing cron and lifecycle nudges
+### Billing cron during recovery
 
-The host cron `/etc/cron.d/hc-billing` runs three billing-adjacent jobs, one
-daily GTM monitor, and one daily growth decision memo. Billing and GTM Python
-jobs run through `scripts/monitoring/host_cron_env.sh`, which sources
-`/opt/hc-stark/.env`, changes to `/opt/hc-stark`, and then execs
-`/var/lib/tinyzkp-runtime/billing-venv/bin/python`:
-
-- `billing/sync_usage.py` hourly to report billable usage to Stripe.
-- `billing/lifecycle_nudges.py` hourly to send idempotent activation and
-  upgrade nudges after signup, first proof, free-quota threshold events, and
-  14-day idle win-back windows.
-- `billing/checkout_recovery.py` hourly to inspect open Stripe Checkout
-  Sessions and send idempotent recovery links for paid checkouts that were
-  started but not completed, including both self-serve subscription Sessions and
-  one-time Production Pilot payment Sessions.
-- `scripts/monitoring/gtm_growth_monitor.py --offline` daily to log GTM
-  distribution health, source-tagged surfaces, revenue attribution, lifecycle
-  ledgers, and checkout recovery counts.
-- `scripts/monitoring/daily_growth_decision_cron.sh` daily, after the GTM
-  monitor, to persist aggregate growth snapshots, evaluate the prior
-  experiment, produce the next experiment plus implementation policy, and fail
-  closed if output redaction fails.
-
-Lifecycle nudges and checkout recovery use the same SMTP environment as the
-webhook, but they default to dry-run/no-send. Set
-`TINYZKP_CUSTOMER_EMAILS_ENABLED=1` only after lifecycle/recovery copy review
-and SPF/DKIM/DMARC checks pass. Each sent lifecycle nudge is recorded in
-`tenant_store.lifecycle_emails` by `(tenant_id, kind)`, and each checkout
-recovery is recorded in `tenant_store.checkout_recovery_emails` by Stripe
-Checkout Session ID, so cron retries do not resend the same email.
-Lifecycle dry-run and failure logs use stable `recipient_ref` hashes instead of
-raw email addresses; checkout recovery logs also use stable recipient and
-session refs instead of Stripe object IDs or checkout URLs.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `STRIPE_SECRET_KEY` | required | Stripe API key |
-| `TINYZKP_CUSTOMER_EMAILS_ENABLED` | `0` | Customer lifecycle/recovery email kill switch. Anything other than an affirmative value keeps cron in dry-run/no-send mode |
-| `TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE` | `cli` | Stripe checkout source for daily growth cron: `api` validates `STRIPE_SECRET_KEY`; `cli` validates a named Stripe CLI profile |
-| `TINYZKP_GROWTH_STRIPE_API_KEY_ENV` | `STRIPE_SECRET_KEY` | Env var read when `TINYZKP_GROWTH_STRIPE_ACCOUNT_SOURCE=api` |
-| `TINYZKP_STRIPE_EXPECTED_DISPLAY_NAME` | `LN Holdings` | Required Stripe account display-name substring for revenue automation |
-| `TINYZKP_GROWTH_SNAPSHOT_DIR` | `/opt/hc-stark/data/growth_snapshots` | Non-repo daily aggregate snapshot directory used by the growth decision cron |
-| `TINYZKP_GROWTH_EXPERIMENT_LEDGER` | `/opt/hc-stark/data/growth_experiment_ledger.json` | No-PII daily experiment ledger used to score prior actions and compound the business loop |
-| `HC_USAGE_SOURCE` | `sqlite` | Billing usage source: `sqlite` or `postgres`. `postgres` uses `HC_SERVER_PG_URL` and `psql` |
-| `HC_USAGE_DB_PATH` | `/opt/hc-stark/data/usage.sqlite` | SQLite usage log path |
-| `HC_SERVER_PG_URL` | required when `HC_USAGE_SOURCE=postgres` | Postgres connection string for billing reads and `billed=1` updates |
-| `STRIPE_METER_EVENT_NAME` | `proof_usage` | Stripe Meter event name |
-| `HC_UNBILLED_ALERT_HOURS` | `12` | Alert if unbilled rows are older than this — must stay below Stripe's ~24h Meter-event dedup window |
-| `ALERT_WEBHOOK_URL` | (none) | Slack/Discord webhook for billing alerts |
+The canonical `/etc/cron.d/hc-billing` source is
+`deploy/hetzner/hc-billing.cron`. It runs only the encrypted backup and
+evaluation-application retention jobs. Legacy usage-meter emission, lifecycle
+email, checkout recovery, and growth automation remain disabled. Contract
+invoices are operator-created through the reviewed Stripe Invoicing workflow.
 
 ### Postgres migration helper (usage_pg_tools.py)
 
@@ -926,16 +690,6 @@ python3 billing/stripe_checkout_monitor.py \
   --account-source api \
   --stripe-api-key-env STRIPE_SECRET_KEY \
   --lookback-hours 168
-```
-
-To include live Checkout state in the aggregate GTM monitor:
-
-```bash
-python3 scripts/monitoring/gtm_growth_monitor.py \
-  --offline \
-  --stripe-checkout \
-  --stripe-account-source api \
-  --stripe-api-key-env STRIPE_SECRET_KEY
 ```
 
 To sync aggregate Stripe checkout evidence into the no-PII pipeline ledger and
