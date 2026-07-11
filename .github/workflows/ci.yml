@@ -71,6 +71,7 @@ jobs:
       - name: Plonky3 cgroup harness unit tests
         run: |
           python3 -m pytest scripts/benchmark/test_fixed_host_preflight.py -q
+          python3 -m pytest scripts/benchmark/test_run_fixed_host_release_matrix.py -q
           python3 -m pytest scripts/benchmark/test_run_plonky3_cgroup.py -q
           python3 -m pytest scripts/benchmark/test_validate_release_gate.py -q
 
@@ -226,6 +227,7 @@ jobs:
           python3 -m py_compile billing/evaluation_intake.py
           python3 -m py_compile scripts/commercial/render_offers.py
           python3 -m py_compile scripts/benchmark/fixed_host_preflight.py
+          python3 -m py_compile scripts/benchmark/run_fixed_host_release_matrix.py
           python3 -m py_compile scripts/benchmark/validate_release_gate.py
           python3 -m py_compile scripts/release/build_preliminary_sbom.py
           python3 -m py_compile scripts/release/build_review_bundle.py

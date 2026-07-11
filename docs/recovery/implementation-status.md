@@ -86,6 +86,13 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
   NVMe volume and a runner-owned mode-0700 scratch root. A standalone
   fixed-host preflight runs before the expensive workflow steps, and the same
   typed facts are embedded in each benchmark report.
+- The blocking first-party resource run now has one resumable fixed-host matrix
+  controller. It binds both workloads at 1M and 16M to one clean commit,
+  embedded CLI identity, storage device, and host identity; seals a mode-0600
+  artifact inventory; and revalidates digests and gate semantics before
+  skipping completed work. Its terminal state explicitly remains ineligible
+  for release because independent reproduction and the external gates cannot
+  be satisfied by the first-party controller.
 - Candidate and final release evidence use separate fail-closed gates. The
   candidate builder computes artifact hashes and rejects manual pass/digest
   fields; signing finalization verifies Sigstore before it can add the final

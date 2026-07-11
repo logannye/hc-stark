@@ -37,6 +37,35 @@ def text(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def fixed_host_workflow_failures(workflow: str) -> list[str]:
+    failures: list[str] = []
+    expected_counts = {
+        "--require-fixed-host": 3,
+        "trap reclaim_reports EXIT": 4,
+        "--expected-release-sha": 2,
+        "scripts/benchmark/run_fixed_host_release_matrix.py": 1,
+        "if: github.event_name == 'workflow_dispatch' && inputs.release_matrix": 1,
+    }
+    for marker, expected in expected_counts.items():
+        if workflow.count(marker) != expected:
+            failures.append(
+                f"fixed-host workflow must contain {expected} exact occurrence(s): {marker}"
+            )
+    for marker in (
+        "release_matrix:",
+        "HC_RELEASE_SHA: ${{ github.sha }}",
+        "plonky3-backend-release-matrix-${{ github.sha }}",
+        "raw-reports/fixed-host-release-matrix/",
+    ):
+        if marker not in workflow:
+            failures.append(f"fixed-host release matrix lost control: {marker}")
+    if workflow.count("!inputs.release_matrix") != 3:
+        failures.append(
+            "fragmented telemetry/exploratory jobs are not suppressed during the release matrix"
+        )
+    return failures
+
+
 def main() -> int:
     gates = json.loads(text("release/backend-v1-gates.json"))
     require(gates["status"] == "blocked", "backend release must remain blocked")
@@ -232,18 +261,8 @@ def main() -> int:
             require(marker in source, f"{label} lost private atomic output: {marker}")
 
     benches_workflow = text(".github/workflows/benches.yml")
-    require(
-        benches_workflow.count("--require-fixed-host") == 3,
-        "fixed-host workflows do not fail closed on machine/storage class",
-    )
-    require(
-        benches_workflow.count("trap reclaim_reports EXIT") == 3,
-        "root-run fixed-host reports are not returned to the workflow owner",
-    )
-    require(
-        benches_workflow.count("--expected-release-sha") == 2,
-        "blocking fixed-host validators do not bind reports to the workflow SHA",
-    )
+    for failure in fixed_host_workflow_failures(benches_workflow):
+        require(False, failure)
 
     for workflow_path in (
         ".github/workflows/publish-backend-crates.yml",
