@@ -1,0 +1,81 @@
+name: Release paid public beta
+
+on:
+  push:
+    tags:
+      - "public-beta-v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: public-beta-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      HC_RELEASE_SHA: ${{ github.sha }}
+      HC_RELEASE_REF: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - name: Require immutable public-beta tag and ready evidence
+        run: |
+          test "${{ github.ref_type }}" = tag
+          case "$HC_RELEASE_REF" in public-beta-v*) ;; *) exit 1 ;; esac
+          test "$(git rev-parse "$HC_RELEASE_REF^{commit}")" = "$HC_RELEASE_SHA"
+          python3 scripts/ci/public_beta_gate.py --evidence release/public-beta-evidence.json --release-sha "$HC_RELEASE_SHA"
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.95.0"
+      - name: Build locked public-beta binaries
+        run: cargo build --locked --release -p hc-beta-api -p hc-beta-worker -p hc-cli --bins
+      - name: Build digestable OCI archives
+        run: |
+          install -d release-artifacts
+          docker buildx build --build-arg HC_RELEASE_SHA --file deploy/hetzner/beta/Dockerfile.api --output type=oci,dest=release-artifacts/hc-beta-api.oci.tar .
+          docker buildx build --build-arg HC_RELEASE_SHA --file deploy/hetzner/beta/Dockerfile.worker --output type=oci,dest=release-artifacts/hc-beta-worker.oci.tar .
+          docker buildx build --file deploy/hetzner/beta/Dockerfile.postgres --output type=oci,dest=release-artifacts/tinyzkp-postgres.oci.tar .
+          install -m 0755 target/release/hc-cli release-artifacts/hc-cli-linux-x86_64
+          install -m 0755 target/release/hc-beta-api release-artifacts/hc-beta-api-linux-x86_64
+          install -m 0755 target/release/hc-beta-worker release-artifacts/hc-beta-worker-linux-x86_64
+      - name: Build exact release authorization
+        run: |
+          python3 scripts/release/build_public_beta_authorization.py \
+            --evidence release/public-beta-evidence.json \
+            --release-sha "$HC_RELEASE_SHA" \
+            --output release-artifacts/public-beta-authorization.json
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: release-artifacts
+          format: spdx-json
+          output-file: release-artifacts/public-beta.spdx.json
+      - name: Create checksums
+        working-directory: release-artifacts
+        run: find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+      - name: Sign and verify release authorization and checksums
+        run: |
+          cosign sign-blob --yes --bundle release-artifacts/public-beta-authorization.sigstore.json release-artifacts/public-beta-authorization.json
+          cosign sign-blob --yes --bundle release-artifacts/SHA256SUMS.sigstore.json release-artifacts/SHA256SUMS
+          cosign verify-blob \
+            --bundle release-artifacts/public-beta-authorization.sigstore.json \
+            --certificate-identity-regexp '^https://github\.com/logannye/hc-stark/\.github/workflows/public-beta-release\.yml@refs/tags/public-beta-v[^/]+$' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            release-artifacts/public-beta-authorization.json
+      - uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
+        with:
+          subject-checksums: release-artifacts/SHA256SUMS
+      - name: Publish draft release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          draft: true
+          files: release-artifacts/*

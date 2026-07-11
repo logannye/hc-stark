@@ -1,0 +1,8 @@
+(tinyzkp_beta_write_backend) {
+  respond `{"error":{"code":"protocol_upgrade","message":"TinyZKP hosted proving is disabled during backend recovery"}}` 503
+}
+
+(tinyzkp_beta_read_backend) {
+  respond `{"error":{"code":"protocol_upgrade","message":"TinyZKP public beta is not active"}}` 503
+}
+

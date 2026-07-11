@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly TinyZKP retention sweep
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target
+

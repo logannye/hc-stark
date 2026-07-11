@@ -60,6 +60,18 @@ jobs:
       - name: fmt
         run: cargo fmt --all -- --check
 
+      - name: Paid public-beta control plane
+        run: |
+          cargo test --locked -p hc-beta-api -p hc-beta-worker
+          cargo check --locked -p hc-cli
+          python3 scripts/ci/public_beta_schema_check.py
+          python3 -m pytest \
+            scripts/ci/test_public_beta_schema_check.py \
+            scripts/ci/test_validate_public_beta_canary.py \
+            scripts/benchmark/test_customer_cubic8.py \
+            scripts/release/test_build_public_beta_authorization.py \
+            scripts/ci/test_beta_deployment_contract.py
+
       - name: Plonky3 backend recovery gate
         run: python3 scripts/ci/backend_recovery_gate.py
 
@@ -227,6 +239,7 @@ jobs:
 
       - name: shell script syntax
         run: |
+          bash -n deploy/hetzner/beta/*.sh
           bash -n scripts/ci/reconciliation_invariants.sh
           python3 -m py_compile scripts/ci/production_launch_preflight.py
           python3 -m py_compile scripts/ci/release_identity_check.py

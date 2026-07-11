@@ -1,0 +1,80 @@
+name: tinyzkp-public-beta
+
+services:
+  postgres:
+    image: ${TINYZKP_POSTGRES_IMAGE:?set a digest-pinned custom PostgreSQL image}
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 4g
+    shm_size: 512m
+    environment:
+      POSTGRES_DB: tinyzkp_beta
+      POSTGRES_USER: tinyzkp_beta
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+    volumes:
+      - beta-postgres:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ${TINYZKP_BETA_SECRET_DIR:?}/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ${TINYZKP_BETA_SECRET_DIR:?}/postgres_password:/run/secrets/postgres_password:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tinyzkp_beta -d tinyzkp_beta"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [database]
+    security_opt: ["no-new-privileges:true"]
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.24.1-p0@sha256:53d98b3174b0842c475b9842fb0a733b2d9f7ec9da834ec42252aa553f48c628
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ${TINYZKP_BETA_SECRET_DIR:?}/pgbouncer.env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: tinyzkp_beta
+      DB_NAME: tinyzkp_beta
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "100"
+      DEFAULT_POOL_SIZE: "20"
+      AUTH_TYPE: scram-sha-256
+    networks: [database]
+    security_opt: ["no-new-privileges:true"]
+
+  beta-api:
+    image: ${TINYZKP_BETA_API_IMAGE:?set a digest-pinned beta API image}
+    restart: unless-stopped
+    depends_on:
+      pgbouncer:
+        condition: service_started
+    env_file:
+      - ${TINYZKP_BETA_SECRET_DIR:?}/beta-api.env
+    environment:
+      TINYZKP_BETA_PUBLIC_BIND: 0.0.0.0:8090
+      TINYZKP_BETA_WORKER_BIND: 0.0.0.0:8091
+    ports:
+      - "127.0.0.1:8090:8090"
+      - "10.77.0.1:8091:8091"
+    volumes:
+      - ${TINYZKP_BETA_SECRET_DIR:?}/release:/run/secrets:ro
+    networks: [database]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=0700,uid=10001,gid=10001
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  beta-postgres:
+
+networks:
+  database:
+    internal: true
