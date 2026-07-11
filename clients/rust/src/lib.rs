@@ -1,447 +1,328 @@
-//! Async HTTP client for the TinyZKP proving API.
+//! Local artifact SDK for TinyZKP's resource-bounded Plonky3 backend.
 //!
-//! # Usage
-//!
-//! ```rust,ignore
-//! use tinyzkp::{HcClient, TemplateProveOptions};
-//! use serde_json::json;
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<(), tinyzkp::Error> {
-//!     let client = HcClient::new("https://api.tinyzkp.com")
-//!         .with_api_key("tzk_...");
-//!
-//!     // Prove via a template (recommended).
-//!     let job_id = client
-//!         .prove_template(
-//!             "accumulator_step",
-//!             json!({ "initial": 1000, "final": 1045, "deltas": [10, 20, 15] }),
-//!             TemplateProveOptions::default(),
-//!         )
-//!         .await?;
-//!
-//!     // Poll until ready.
-//!     let proof = client.wait_for_proof(&job_id, None).await?;
-//!
-//!     // Verify (always free).
-//!     let result = client.verify(&proof, true).await?;
-//!     assert!(result.ok);
-//!     Ok(())
-//! }
-//! ```
+//! This package deliberately contains no hosted proving, polling, template,
+//! receipt, or remote-verification client. It constructs and validates the
+//! versioned local artifacts and can invoke a pinned `hc-cli` binary.
 
-use std::time::Duration;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitStatus};
 
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-
-// ---- Types ----
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ProofBytes {
-    pub version: u32,
-    pub bytes: Vec<u8>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct VerifyResult {
-    pub ok: bool,
-    #[serde(default)]
-    pub error: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct ProveRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub program: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub workload_id: Option<String>,
-    pub initial_acc: u64,
-    pub final_acc: u64,
-    pub block_size: usize,
-    pub fri_final_poly_size: usize,
-    pub query_count: usize,
-    pub lde_blowup_factor: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub zk_mask_degree: Option<usize>,
-}
-
-impl Default for ProveRequest {
-    fn default() -> Self {
-        Self {
-            program: None,
-            workload_id: None,
-            initial_acc: 0,
-            final_acc: 0,
-            block_size: 2,
-            fri_final_poly_size: 2,
-            query_count: 30,
-            lde_blowup_factor: 2,
-            zk_mask_degree: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct TemplateProveOptions {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub zk: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub block_size: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fri_final_poly_size: Option<usize>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TemplateSummary {
-    pub id: String,
-    #[serde(default)]
-    pub summary: String,
-    #[serde(default)]
-    pub tags: Vec<String>,
-    #[serde(default)]
-    pub cost_category: String,
-    #[serde(default = "default_backend")]
-    pub backend: String,
-    #[serde(default = "default_lifecycle")]
-    pub lifecycle: String,
-}
-
-fn default_backend() -> String {
-    "vm".to_string()
-}
-
-fn default_lifecycle() -> String {
-    "live".to_string()
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct TemplateListResponse {
-    pub templates: Vec<TemplateSummary>,
-    pub count: usize,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct ProveSubmitResponse {
-    job_id: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "status", rename_all = "lowercase")]
-pub enum ProveJobStatus {
-    Pending,
-    Running,
-    Succeeded { proof: ProofBytes },
-    Failed { error: String },
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct VerifyRequest<'a> {
-    proof: &'a ProofBytes,
-    allow_legacy_v2: bool,
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct TemplateProveBody {
-    params: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    zk: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    block_size: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    fri_final_poly_size: Option<usize>,
-}
-
-// ---- Errors ----
+pub use hc_plonky3::contracts::{
+    canonical_json_bytes_v1, BenchmarkMode, BenchmarkReportV1, InputGeneratorV1, ProofBundleV1,
+    ReleaseProvenanceV1, WorkloadId, WorkloadManifestV1, MAX_BUNDLE_JSON_BYTES,
+    MAX_MANIFEST_JSON_BYTES, MAX_PROOF_BYTES, MAX_REPORT_JSON_BYTES,
+};
+pub use hc_plonky3::{
+    ResourceBoundedUniStarkProver, ResourceBoundedWorkload, WorkloadKind, COMPATIBILITY_PROFILE,
+    PLONKY3_VERSION,
+};
+pub use hc_stream::{CheckpointPolicy, ResourceMode, ResourcePolicyV1};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("HTTP {status}: {message}")]
-    Http { status: u16, message: String },
-    #[error("request failed: {0}")]
-    Request(#[from] reqwest::Error),
-    #[error("prove job failed: {0}")]
-    ProveFailed(String),
-    #[error("prove job timed out after {0:?}")]
-    Timeout(Duration),
+    #[error("artifact exceeds its {limit} byte limit: {actual} bytes")]
+    SizeLimit { limit: usize, actual: u64 },
+    #[error("artifact JSON is invalid: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("artifact validation failed: {0}")]
+    Validation(String),
+    #[error("CLI invocation failed with status {0}")]
+    Cli(ExitStatus),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
-// ---- Poll options ----
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug)]
-pub struct PollOptions {
-    pub interval: Duration,
-    pub timeout: Duration,
+pub struct ManifestBuilder {
+    workload_id: WorkloadId,
+    input_generator: InputGeneratorV1,
+    logical_rows: u64,
+    resource_policy: ResourcePolicyV1,
 }
 
-impl Default for PollOptions {
-    fn default() -> Self {
+impl ManifestBuilder {
+    pub fn fibonacci(
+        initial_a: u64,
+        initial_b: u64,
+        logical_rows: u64,
+        resource_policy: ResourcePolicyV1,
+    ) -> Self {
         Self {
-            interval: Duration::from_secs(1),
-            timeout: Duration::from_secs(300),
+            workload_id: WorkloadId::Fibonacci,
+            input_generator: InputGeneratorV1::Fibonacci {
+                initial_a,
+                initial_b,
+            },
+            logical_rows,
+            resource_policy,
         }
     }
-}
 
-// ---- Client ----
-
-pub struct HcClient {
-    base_url: String,
-    client: reqwest::Client,
-}
-
-/// Friendly alias matching the marketing name.
-pub type TinyZKP = HcClient;
-
-impl HcClient {
-    pub fn new(base_url: &str) -> Self {
+    pub fn poseidon2(logical_rows: u64, resource_policy: ResourcePolicyV1) -> Self {
         Self {
-            base_url: base_url.trim_end_matches('/').to_string(),
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()
-                .expect("client build"),
+            workload_id: WorkloadId::Poseidon2Goldilocks,
+            input_generator: InputGeneratorV1::Poseidon2 { seed: 0 },
+            logical_rows,
+            resource_policy,
         }
     }
 
-    /// Set the Bearer API key. Returns a new client; previous client is consumed.
-    pub fn with_api_key(self, api_key: &str) -> Self {
-        let mut headers = reqwest::header::HeaderMap::new();
-        let val = format!("Bearer {api_key}");
-        headers.insert(
-            reqwest::header::AUTHORIZATION,
-            reqwest::header::HeaderValue::from_str(&val).expect("valid header value"),
-        );
-        Self {
-            base_url: self.base_url,
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(30))
-                .default_headers(headers)
-                .build()
-                .expect("client build"),
-        }
-    }
-
-    /// Override the default 30s request timeout.
-    pub fn with_timeout(self, timeout: Duration) -> Self {
-        Self {
-            base_url: self.base_url,
-            client: reqwest::Client::builder()
-                .timeout(timeout)
-                .build()
-                .expect("client build"),
-        }
-    }
-
-    async fn handle<T: for<'de> Deserialize<'de>>(
-        resp: reqwest::Response,
-    ) -> Result<T, Error> {
-        if !resp.status().is_success() {
-            let status = resp.status().as_u16();
-            let message = resp.text().await.unwrap_or_default();
-            return Err(Error::Http { status, message });
-        }
-        Ok(resp.json().await?)
-    }
-
-    /// Check server health.
-    pub async fn healthz(&self) -> bool {
-        self.client
-            .get(format!("{}/healthz", self.base_url))
-            .send()
-            .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
-    }
-
-    /// List all available proof templates (no auth required).
-    pub async fn templates(&self) -> Result<Vec<TemplateSummary>, Error> {
-        let resp = self
-            .client
-            .get(format!("{}/templates", self.base_url))
-            .send()
-            .await?;
-        let parsed: TemplateListResponse = Self::handle(resp).await?;
-        Ok(parsed.templates)
-    }
-
-    /// Get full template info including parameter schema (no auth required).
-    pub async fn template(&self, template_id: &str) -> Result<Value, Error> {
-        let resp = self
-            .client
-            .get(format!("{}/templates/{}", self.base_url, template_id))
-            .send()
-            .await?;
-        Self::handle(resp).await
-    }
-
-    /// Verify a proof. Always free; never charges your usage.
-    pub async fn verify(
-        &self,
-        proof: &ProofBytes,
-        allow_legacy_v2: bool,
-    ) -> Result<VerifyResult, Error> {
-        let body = VerifyRequest { proof, allow_legacy_v2 };
-        let resp = self
-            .client
-            .post(format!("{}/verify", self.base_url))
-            .json(&body)
-            .send()
-            .await?;
-        Self::handle(resp).await
-    }
-
-    /// Submit a raw prove job and return the job_id.
-    pub async fn prove(&self, req: ProveRequest) -> Result<String, Error> {
-        let resp = self
-            .client
-            .post(format!("{}/prove", self.base_url))
-            .json(&req)
-            .send()
-            .await?;
-        let body: ProveSubmitResponse = Self::handle(resp).await?;
-        Ok(body.job_id)
-    }
-
-    /// Submit a prove job using a named template. Returns the job_id.
-    pub async fn prove_template(
-        &self,
-        template_id: &str,
-        params: Value,
-        options: TemplateProveOptions,
-    ) -> Result<String, Error> {
-        let body = TemplateProveBody {
-            params,
-            zk: options.zk,
-            block_size: options.block_size,
-            fri_final_poly_size: options.fri_final_poly_size,
+    pub fn build(self) -> Result<WorkloadManifestV1> {
+        let manifest = WorkloadManifestV1 {
+            schema_version: 1,
+            workload_id: self.workload_id,
+            backend: "plonky3".into(),
+            profile: COMPATIBILITY_PROFILE.into(),
+            input_generator: self.input_generator,
+            logical_rows: self.logical_rows,
+            deterministic_seed: 0,
+            resource_policy: self.resource_policy,
+            expected_verifier: "p3_uni_stark_0.6.1".into(),
         };
-        let resp = self
-            .client
-            .post(format!("{}/prove/template/{}", self.base_url, template_id))
-            .json(&body)
-            .send()
-            .await?;
-        let parsed: ProveSubmitResponse = Self::handle(resp).await?;
-        Ok(parsed.job_id)
+        manifest
+            .validate()
+            .map_err(|error| Error::Validation(error.to_string()))?;
+        Ok(manifest)
     }
+}
 
-    /// Get the status of a prove job.
-    pub async fn prove_status(&self, job_id: &str) -> Result<ProveJobStatus, Error> {
-        let resp = self
-            .client
-            .get(format!("{}/prove/{}", self.base_url, job_id))
-            .send()
-            .await?;
-        Self::handle(resp).await
-    }
+pub fn manifest_digest(manifest: &WorkloadManifestV1) -> Result<[u8; 32]> {
+    manifest
+        .digest()
+        .map_err(|error| Error::Validation(error.to_string()))
+}
 
-    /// Poll a prove job until it completes; return the proof on success.
-    pub async fn wait_for_proof(
-        &self,
-        job_id: &str,
-        options: Option<PollOptions>,
-    ) -> Result<ProofBytes, Error> {
-        let opts = options.unwrap_or_default();
-        let deadline = tokio::time::Instant::now() + opts.timeout;
+pub fn verify_bundle(bundle: &ProofBundleV1) -> Result<()> {
+    bundle
+        .verify()
+        .map_err(|error| Error::Validation(error.to_string()))
+}
 
-        loop {
-            let status = self.prove_status(job_id).await?;
-            match status {
-                ProveJobStatus::Succeeded { proof } => return Ok(proof),
-                ProveJobStatus::Failed { error } => return Err(Error::ProveFailed(error)),
-                _ => {}
-            }
-            if tokio::time::Instant::now() >= deadline {
-                return Err(Error::Timeout(opts.timeout));
-            }
-            tokio::time::sleep(opts.interval).await;
+pub fn load_manifest(path: impl AsRef<Path>) -> Result<WorkloadManifestV1> {
+    let manifest: WorkloadManifestV1 = read_json_limited(path, MAX_MANIFEST_JSON_BYTES)?;
+    manifest
+        .validate()
+        .map_err(|error| Error::Validation(error.to_string()))?;
+    Ok(manifest)
+}
+
+pub fn load_bundle(path: impl AsRef<Path>) -> Result<ProofBundleV1> {
+    let bundle: ProofBundleV1 = read_json_limited(path, MAX_BUNDLE_JSON_BYTES)?;
+    bundle
+        .verify()
+        .map_err(|error| Error::Validation(error.to_string()))?;
+    Ok(bundle)
+}
+
+pub fn load_report(path: impl AsRef<Path>) -> Result<BenchmarkReportV1> {
+    let report: BenchmarkReportV1 = read_json_limited(path, MAX_REPORT_JSON_BYTES)?;
+    report
+        .validate()
+        .map_err(|error| Error::Validation(error.to_string()))?;
+    Ok(report)
+}
+
+pub fn write_manifest(path: impl AsRef<Path>, manifest: &WorkloadManifestV1) -> Result<()> {
+    manifest
+        .validate()
+        .map_err(|error| Error::Validation(error.to_string()))?;
+    write_json(path, manifest)
+}
+
+#[derive(Clone, Debug)]
+pub struct Cli {
+    binary: PathBuf,
+}
+
+impl Cli {
+    pub fn new(binary: impl Into<PathBuf>) -> Self {
+        Self {
+            binary: binary.into(),
         }
     }
+
+    pub fn prove(&self, manifest: impl AsRef<Path>, output: impl AsRef<Path>) -> Result<()> {
+        self.run([
+            "plonky3",
+            "prove",
+            "--manifest",
+            path_arg(manifest.as_ref())?,
+            "--output",
+            path_arg(output.as_ref())?,
+        ])
+    }
+
+    pub fn resume(&self, checkpoint: impl AsRef<Path>, output: impl AsRef<Path>) -> Result<()> {
+        self.run([
+            "plonky3",
+            "resume",
+            "--checkpoint",
+            path_arg(checkpoint.as_ref())?,
+            "--output",
+            path_arg(output.as_ref())?,
+        ])
+    }
+
+    pub fn verify(&self, bundle: impl AsRef<Path>) -> Result<()> {
+        self.run(["plonky3", "verify", "--bundle", path_arg(bundle.as_ref())?])
+    }
+
+    fn run<const N: usize>(&self, arguments: [&str; N]) -> Result<()> {
+        let status = Command::new(&self.binary).args(arguments).status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(Error::Cli(status))
+        }
+    }
+}
+
+fn path_arg(path: &Path) -> Result<&str> {
+    path.to_str()
+        .ok_or_else(|| Error::Validation("CLI paths must be valid UTF-8".into()))
+}
+
+fn read_json_limited<T: DeserializeOwned>(path: impl AsRef<Path>, limit: usize) -> Result<T> {
+    let path = path.as_ref();
+    let metadata = fs::metadata(path)?;
+    if metadata.len() > limit as u64 {
+        return Err(Error::SizeLimit {
+            limit,
+            actual: metadata.len(),
+        });
+    }
+    Ok(serde_json::from_slice(&fs::read(path)?)?)
+}
+
+fn write_json<T: Serialize>(path: impl AsRef<Path>, value: &T) -> Result<()> {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let bytes = serde_json::to_vec_pretty(value)?;
+    fs::write(path, bytes)?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn prove_request_default() {
-        let req = ProveRequest::default();
-        assert_eq!(req.block_size, 2);
-        assert_eq!(req.query_count, 30);
-        assert!(req.program.is_none());
-    }
-
-    #[test]
-    fn prove_request_serializes() {
-        let req = ProveRequest {
-            program: Some(vec!["add 1".into()]),
-            initial_acc: 5,
-            final_acc: 6,
-            ..Default::default()
-        };
-        let json = serde_json::to_string(&req).unwrap();
-        assert!(json.contains("\"initial_acc\":5"));
-        assert!(json.contains("\"program\":[\"add 1\"]"));
-        assert!(!json.contains("zk_mask_degree"));
-    }
-
-    #[test]
-    fn template_options_omits_none() {
-        let opts = TemplateProveOptions::default();
-        let json = serde_json::to_string(&opts).unwrap();
-        assert_eq!(json, "{}");
-    }
-
-    #[test]
-    fn template_options_includes_set_fields() {
-        let opts = TemplateProveOptions {
-            zk: Some(true),
-            block_size: Some(8),
-            fri_final_poly_size: None,
-        };
-        let json = serde_json::to_string(&opts).unwrap();
-        assert!(json.contains("\"zk\":true"));
-        assert!(json.contains("\"block_size\":8"));
-        assert!(!json.contains("fri_final_poly_size"));
-    }
-
-    #[test]
-    fn job_status_deserialize_pending() {
-        let json = r#"{"status":"pending"}"#;
-        let status: ProveJobStatus = serde_json::from_str(json).unwrap();
-        assert!(matches!(status, ProveJobStatus::Pending));
-    }
-
-    #[test]
-    fn job_status_deserialize_failed() {
-        let json = r#"{"status":"failed","error":"oom"}"#;
-        let status: ProveJobStatus = serde_json::from_str(json).unwrap();
-        match status {
-            ProveJobStatus::Failed { error } => assert_eq!(error, "oom"),
-            _ => panic!("expected Failed"),
+    fn policy(root: &Path) -> ResourcePolicyV1 {
+        ResourcePolicyV1 {
+            mode: ResourceMode::Scratch,
+            max_resident_bytes: 128 * 1024 * 1024,
+            max_scratch_bytes: 2 * 1024 * 1024 * 1024,
+            scratch_dir: root.into(),
+            max_threads: 1,
+            checkpoint_policy: CheckpointPolicy::RetainOnFailure,
         }
     }
 
     #[test]
-    fn job_status_deserialize_succeeded() {
-        let json = r#"{"status":"succeeded","proof":{"version":3,"bytes":[1,2,3]}}"#;
-        let status: ProveJobStatus = serde_json::from_str(json).unwrap();
-        match status {
-            ProveJobStatus::Succeeded { proof } => {
-                assert_eq!(proof.version, 3);
-                assert_eq!(proof.bytes, vec![1, 2, 3]);
-            }
-            _ => panic!("expected Succeeded"),
-        }
+    fn builder_produces_valid_canonical_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = ManifestBuilder::fibonacci(0, 1, 1024, policy(dir.path()))
+            .build()
+            .unwrap();
+        assert_eq!(
+            manifest_digest(&manifest).unwrap(),
+            manifest.digest().unwrap()
+        );
+        assert!(!canonical_json_bytes_v1(&manifest).unwrap().is_empty());
     }
 
     #[test]
-    fn template_summary_defaults_backend() {
-        let json = r#"{"id":"accumulator_step","summary":"x"}"#;
-        let t: TemplateSummary = serde_json::from_str(json).unwrap();
-        assert_eq!(t.backend, "vm");
-        assert_eq!(t.lifecycle, "live");
-        assert!(t.tags.is_empty());
+    fn shared_manifest_vector_matches_core_digest() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-vectors/plonky3/fibonacci-16.manifest.json");
+        let manifest = load_manifest(path).unwrap();
+        assert_eq!(
+            manifest_digest(&manifest).unwrap(),
+            [
+                0x9d, 0x13, 0x16, 0x02, 0xe2, 0x74, 0x28, 0xca, 0x29, 0x0c, 0x5c, 0xa8,
+                0x7d, 0x54, 0x3d, 0x08, 0x58, 0x73, 0x84, 0x0e, 0x4d, 0xba, 0x22, 0xdd,
+                0x3d, 0x80, 0x74, 0x94, 0x5e, 0x57, 0xef, 0xcd,
+            ]
+        );
+    }
+
+    #[test]
+    fn maximum_goldilocks_manifest_matches_cross_language_digest() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-vectors/plonky3/fibonacci-max-field.manifest.json");
+        let manifest = load_manifest(path).unwrap();
+        assert_eq!(
+            manifest_digest(&manifest).unwrap(),
+            [
+                0xd6, 0x6d, 0x86, 0x84, 0x41, 0x13, 0x7e, 0x6d, 0xb9, 0x64, 0xad, 0xd9,
+                0xd7, 0xe4, 0xa2, 0x16, 0x4c, 0xa3, 0xa7, 0x22, 0xc6, 0x6e, 0x73, 0xcb,
+                0xf0, 0x6c, 0x2a, 0x57, 0x6e, 0xfe, 0xe6, 0x53,
+            ]
+        );
+    }
+
+    #[test]
+    fn builder_rejects_noncanonical_goldilocks_inputs() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(ManifestBuilder::fibonacci(
+            hc_plonky3::GOLDILOCKS_MODULUS_U64,
+            0,
+            16,
+            policy(dir.path()),
+        )
+        .build()
+        .is_err());
+        ManifestBuilder::fibonacci(
+            hc_plonky3::GOLDILOCKS_MODULUS_U64 - 1,
+            0,
+            16,
+            policy(dir.path()),
+        )
+        .build()
+        .unwrap();
+    }
+
+    #[test]
+    fn shared_bundle_fixture_rejects_truncation_and_dependency_skew() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-vectors/plonky3/fibonacci-16.bundle.json");
+        let bundle = load_bundle(&path).unwrap();
+        verify_bundle(&bundle).unwrap();
+
+        let source = fs::read(&path).unwrap();
+        let mut truncated: serde_json::Value = serde_json::from_slice(&source).unwrap();
+        let proof = truncated["proof_base64url"].as_str().unwrap();
+        truncated["proof_base64url"] = proof[..proof.len() - 1].into();
+        let dir = tempfile::tempdir().unwrap();
+        let truncated_path = dir.path().join("truncated.json");
+        fs::write(&truncated_path, serde_json::to_vec(&truncated).unwrap()).unwrap();
+        assert!(load_bundle(truncated_path).is_err());
+
+        let mut skewed: serde_json::Value = serde_json::from_slice(&source).unwrap();
+        skewed["provenance"]["dependency_profile"] = "unreviewed-profile".into();
+        let skewed_path = dir.path().join("skewed.json");
+        fs::write(&skewed_path, serde_json::to_vec(&skewed).unwrap()).unwrap();
+        assert!(load_bundle(skewed_path).is_err());
+    }
+
+    #[test]
+    fn shared_report_fixture_rejects_unknown_fields() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-vectors/plonky3/benchmark-report-v1.json");
+        let report = load_report(&path).unwrap();
+        assert_eq!(report.mode, BenchmarkMode::Bounded);
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        value["unbound_metric"] = 1.into();
+        let dir = tempfile::tempdir().unwrap();
+        let mutated = dir.path().join("report.json");
+        fs::write(&mutated, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert!(load_report(mutated).is_err());
     }
 }

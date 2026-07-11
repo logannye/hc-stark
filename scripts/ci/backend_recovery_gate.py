@@ -24,43 +24,127 @@ def text(path: str) -> str:
 
 def check_public_contract() -> None:
     pricing = json.loads(text("site/pricing.json"))
-    require(pricing["service_status"] == "backend_recovery", "site pricing must report backend_recovery")
-    for field in ("hosted_proving_available", "hosted_verification_available", "account_creation_enabled", "checkout_enabled"):
+    require(
+        pricing["service_status"] == "backend_recovery",
+        "site pricing must report backend_recovery",
+    )
+    for field in (
+        "hosted_proving_available",
+        "hosted_verification_available",
+        "account_creation_enabled",
+        "checkout_enabled",
+    ):
         require(pricing[field] is False, f"site pricing must keep {field}=false")
-    require(pricing["stripe_policy"]["api_version"] == "2026-02-25.clover", "Stripe API version must be pinned")
+    require(
+        pricing["stripe_policy"]["api_version"] == "2026-02-25.clover",
+        "Stripe API version must be pinned",
+    )
 
-    indexed = ["index.html", "engine.html", "benchmarks.html", "plonky3.html", "security.html", "docs.html", "pricing.html", "status.html"]
-    forbidden = ("proof.version", "Protocol v9", "StatementV1", "ReceiptV2", "$20K", "$36K", "$75K", "$5,000/month", "at least 70%")
+    indexed = [
+        "index.html",
+        "engine.html",
+        "benchmarks.html",
+        "plonky3.html",
+        "security.html",
+        "docs.html",
+        "pricing.html",
+        "status.html",
+    ]
+    forbidden = (
+        "proof.version",
+        "Protocol v9",
+        "StatementV1",
+        "ReceiptV2",
+        "$20K",
+        "$36K",
+        "$75K",
+        "$5,000/month",
+        "at least 70%",
+    )
     for page in indexed:
         body = text(f"site/{page}")
-        require("/status" in body and "/contact" in body, f"{page} must expose Status and Contact navigation")
+        require(
+            "/status" in body and "/contact" in body,
+            f"{page} must expose Status and Contact navigation",
+        )
         for claim in forbidden:
             require(claim not in body, f"{page} contains retired claim {claim!r}")
 
     worker = text("site/_worker.js")
-    for route in ("/compute", "/receipts", "/try", "/signup", "/pilot", "/platform-rollout"):
-        require(route in worker, f"worker is missing retired-route handling for {route}")
-    for route in ("/api/create-checkout", "/api/create-free-account", "/api/create-pilot-checkout", "/api/demo-prove"):
+    for route in (
+        "/compute",
+        "/receipts",
+        "/try",
+        "/signup",
+        "/pilot",
+        "/platform-rollout",
+    ):
+        require(
+            route in worker, f"worker is missing retired-route handling for {route}"
+        )
+    for route in (
+        "/api/create-checkout",
+        "/api/create-free-account",
+        "/api/create-pilot-checkout",
+        "/api/demo-prove",
+    ):
         require(route in worker, f"worker is missing maintenance denial for {route}")
 
     openapi = json.loads(text("site/openapi.json"))
-    require(set(openapi["paths"]) == {"/healthz", "/version", "/v1/capabilities"}, "maintenance OpenAPI exposes unsupported paths")
+    require(
+        set(openapi["paths"]) == {"/healthz", "/version", "/v1/capabilities"},
+        "maintenance OpenAPI exposes unsupported paths",
+    )
 
 
 def check_server_and_mcp() -> None:
     server = text("crates/hc-server/src/maintenance.rs")
     server_cargo = text("crates/hc-server/Cargo.toml")
-    require("maintenance_mode: true" in server, "server maintenance must be compile-time default on")
-    require('route("/v1/capabilities", get(capabilities))' in server, "capabilities route is missing")
-    for route in ('route("/v1/inputs"', 'route("/v1/quotes"', 'route("/v1/proofs"', 'route("/v1/verify"'):
-        require(route not in server, f"production router exposes retired route marker {route}")
-    require('service_status: "backend_recovery"' in server, "server capabilities do not report backend recovery")
-    require('plonky3_version: "0.6.1"' in server, "server capabilities do not pin Plonky3")
-    require("legacy_statement_unbound" in server, "legacy hosted verification must fail closed")
-    require('path = "src/maintenance.rs"' in server_cargo, "production server library is not maintenance-only")
-    require("autobins = false" in server_cargo, "legacy worker binaries can still be auto-discovered")
-    require("hc-worker" not in text("Dockerfile"), "production image still contains a legacy proving worker")
-    require("hc-job-worker" not in text("Dockerfile"), "production image still contains a legacy queue worker")
+    require(
+        "maintenance_mode: true" in server,
+        "server maintenance must be compile-time default on",
+    )
+    require(
+        'route("/v1/capabilities", get(capabilities))' in server,
+        "capabilities route is missing",
+    )
+    for route in (
+        'route("/v1/inputs"',
+        'route("/v1/quotes"',
+        'route("/v1/proofs"',
+        'route("/v1/verify"',
+    ):
+        require(
+            route not in server,
+            f"production router exposes retired route marker {route}",
+        )
+    require(
+        'service_status: "backend_recovery"' in server,
+        "server capabilities do not report backend recovery",
+    )
+    require(
+        'plonky3_version: "0.6.1"' in server, "server capabilities do not pin Plonky3"
+    )
+    require(
+        "legacy_statement_unbound" in server,
+        "legacy hosted verification must fail closed",
+    )
+    require(
+        'path = "src/maintenance.rs"' in server_cargo,
+        "production server library is not maintenance-only",
+    )
+    require(
+        "autobins = false" in server_cargo,
+        "legacy worker binaries can still be auto-discovered",
+    )
+    require(
+        "hc-worker" not in text("Dockerfile"),
+        "production image still contains a legacy proving worker",
+    )
+    require(
+        "hc-job-worker" not in text("Dockerfile"),
+        "production image still contains a legacy queue worker",
+    )
     workspace = tomllib.loads(text("Cargo.toml"))
     package_version = workspace["workspace"]["package"]["version"]
     require(
@@ -70,9 +154,51 @@ def check_server_and_mcp() -> None:
 
     mcp = text("crates/hc-mcp/src/lib.rs")
     discovery = text("crates/hc-mcp/src/tools/discovery.rs")
-    require('PRODUCTION_TOOL_NAMES: &[&str] = &["get_capabilities"]' in mcp, "MCP production discovery is not capability-only")
-    require('"service_status": "backend_recovery"' in discovery, "MCP capabilities do not report backend recovery")
-    require('"proving": false' in discovery and '"verification": false' in discovery, "MCP execution features must be false")
+    require(
+        'PRODUCTION_TOOL_NAMES: &[&str] = &["get_capabilities"]' in mcp,
+        "MCP production discovery is not capability-only",
+    )
+    require(
+        '"service_status": "backend_recovery"' in discovery,
+        "MCP capabilities do not report backend recovery",
+    )
+    require(
+        '"proving": false' in discovery and '"verification": false' in discovery,
+        "MCP execution features must be false",
+    )
+    registry = json.loads(text("server.json"))
+    require(
+        "backend recovery" in registry.get("description", "").lower(),
+        "official MCP registry metadata omits recovery",
+    )
+    require(
+        registry.get("remotes", [{}])[0].get("headers") == [],
+        "official MCP registry still requests credentials",
+    )
+    require(
+        registry.get("remotes", [{}])[0].get("url") == "https://mcp.tinyzkp.com/mcp",
+        "official MCP registry endpoint is not the capability-only transport",
+    )
+    package_card = json.loads(text("crates/hc-mcp/mcp.json"))
+    require(
+        {tool.get("name") for tool in package_card.get("tools", [])}
+        == {"get_capabilities"},
+        "packaged MCP metadata is not capability-only",
+    )
+    require(
+        package_card.get("service_status") == "backend_recovery",
+        "packaged MCP metadata omits recovery",
+    )
+    server_card = json.loads(text("deploy/server-card.json"))
+    require(
+        {tool.get("name") for tool in server_card.get("tools", [])}
+        == {"get_capabilities"},
+        "MCP directory card is not capability-only",
+    )
+    require(
+        server_card.get("metadata", {}).get("service_status") == "backend_recovery",
+        "MCP directory card does not report backend recovery",
+    )
 
 
 def check_billing_and_release() -> None:
@@ -87,34 +213,198 @@ def check_billing_and_release() -> None:
             not (ROOT / "site/functions/api" / retired_function).exists(),
             f"retired Pages function still deploys: {retired_function}",
         )
-    require("MAINTENANCE_DISABLED_API_ROUTES" in worker, "worker lacks maintenance route denials")
-    require('const ROUTES = { "/api/contact": contact };' in worker, "worker deploys more than evaluation intake")
-    require("TINYZKP_ALLOW_LEGACY_BILLING_WRITE" in text("billing/setup_stripe_products.sh"), "legacy Stripe catalog writes are not fail-closed")
-    require("TINYZKP_ALLOW_LEGACY_METER_EVENTS" in text("billing/sync_usage.py"), "legacy meter events are not fail-closed")
-    require('os.environ.get("CONTACT_TO_EMAIL", "hello@tinyzkp.com")' in text("billing/provision_tenant.py"), "contact recipient is not environment-configured")
-    require('os.environ.get("TINYZKP_MAINTENANCE_MODE", "1")' in text("billing/provision_tenant.py"), "billing webhook maintenance mode is not fail-closed")
+    require(
+        "MAINTENANCE_DISABLED_API_ROUTES" in worker,
+        "worker lacks maintenance route denials",
+    )
+    require(
+        'const ROUTES = { "/api/contact": contact };' in worker,
+        "worker deploys more than evaluation intake",
+    )
+    require(
+        "TINYZKP_ALLOW_LEGACY_BILLING_WRITE"
+        in text("billing/setup_stripe_products.sh"),
+        "legacy Stripe catalog writes are not fail-closed",
+    )
+    require(
+        "TINYZKP_ALLOW_LEGACY_RESEARCH_CATALOG"
+        in text("billing/setup_stripe_v2_pricing.sh")
+        and '"_live_"' in text("billing/setup_stripe_v2_pricing.sh"),
+        "legacy v2 Stripe catalog script is not test-only and live-key-blocked",
+    )
+    require(
+        "TINYZKP_ALLOW_LEGACY_TEST_CHECKOUT" in text("billing/create_checkout.py")
+        and '"_live_"' in text("billing/create_checkout.py"),
+        "legacy Checkout helper is not test-only and live-key-blocked",
+    )
+    require(
+        "TINYZKP_ALLOW_LEGACY_METER_EVENTS" in text("billing/sync_usage.py"),
+        "legacy meter events are not fail-closed",
+    )
+    require(
+        'os.environ.get("CONTACT_TO_EMAIL", "hello@tinyzkp.com")'
+        in text("billing/provision_tenant.py"),
+        "contact recipient is not environment-configured",
+    )
+    require(
+        'os.environ.get("TINYZKP_MAINTENANCE_MODE", "1")'
+        in text("billing/provision_tenant.py"),
+        "billing webhook maintenance mode is not fail-closed",
+    )
+    require(
+        'os.environ.get("TINYZKP_OUTBOUND_EMAIL_ENABLED", "0")'
+        in text("billing/provision_tenant.py"),
+        "outbound email must be default-disabled during recovery",
+    )
+    for email_sender in ("billing/lifecycle_nudges.py", "billing/checkout_recovery.py"):
+        require(
+            'os.environ.get("TINYZKP_OUTBOUND_EMAIL_ENABLED", "0")'
+            in text(email_sender),
+            f"{email_sender} must default outbound email to disabled",
+        )
+    require(
+        "backend recovery forbids outbound email configuration"
+        in text("scripts/ci/deploy_readiness_check.py"),
+        "production preflight must reject outbound email configuration",
+    )
+    require(
+        "TINYZKP_CONTRACT_SENDER_IDENTITY_CONFIRMED"
+        in text("billing/contract_billing.py"),
+        "contract invoices must require a verified TinyZKP sender identity",
+    )
+    require(
+        "stripe==15.3.0" in text("billing/requirements.txt"),
+        "Stripe Python SDK must remain pinned to the reviewed stable release",
+    )
+    contract_billing = text("billing/contract_billing.py")
+    require(
+        "tinyzkp-annual-order-v1" in text("commercial/annual-order.template.json"),
+        "typed countersigned annual order template is missing",
+    )
+    for marker, message in (
+        ("ContractEvidenceV2", "contract invoices are not bound to signed evidence"),
+        (
+            "agreement_gate_sha256",
+            "evaluation invoices are not bound to approved agreement-form evidence",
+        ),
+        (
+            "stripe_test_drill_sha256",
+            "evaluation invoices are not bound to a test-mode billing drill",
+        ),
+        (
+            "delivery_manifest_sha256",
+            "delivery invoices are not bound to the complete artifact manifest",
+        ),
+        ("expected_plan_sha256", "contract apply does not bind the read-only plan"),
+        (
+            "verify_contract_documents",
+            "contract evidence hashes are not checked against documents",
+        ),
+        ("validate_contract_customer", "contract customer identity is not verified"),
+        (
+            "validate_customer_facing_sender_identity",
+            "Stripe customer-facing identity is not verified",
+        ),
+        (
+            "validate_paid_deposit_for_delivery",
+            "delivery billing does not require its exact fully paid deposit",
+        ),
+        (
+            "tinyzkp_plan_sha256",
+            "Stripe contract objects are not bound to the approved plan",
+        ),
+        (
+            "verify_release_authorization_signature",
+            "annual billing does not cryptographically verify release authorization",
+        ),
+        (
+            "RELEASE_AUTHORIZATION_BUNDLE_SHA_ENV",
+            "annual billing does not bind the release authorization Sigstore bundle",
+        ),
+        (
+            "tinyzkp_backend_authorization_sha256",
+            "annual Stripe metadata does not bind the backend authorization",
+        ),
+        (
+            "backend release authorization changed after annual contract preview",
+            "annual billing does not revalidate the previewed release before write",
+        ),
+        (
+            "validate_annual_order",
+            "annual negotiated amount is not bound to a typed countersigned order",
+        ),
+        (
+            "reserve_billing_operation",
+            "contract writes do not use an atomic durable reservation",
+        ),
+        (
+            "--reconcile-stripe-object-id",
+            "interrupted Stripe writes lack fail-closed object reconciliation",
+        ),
+        (
+            "validate_canonical_json_numbers",
+            "contract inputs do not enforce canonical numeric encoding",
+        ),
+        (
+            "validate_annual_history",
+            "annual billing does not reject conflicting subscriptions",
+        ),
+        (
+            "stripe.StripeClient",
+            "contract billing does not use the current Stripe client",
+        ),
+    ):
+        require(marker in contract_billing, message)
+    readiness = text("billing/evaluation_start_ready.py")
+    for marker, message in (
+        (
+            "validate_paid_annual_entitlement",
+            "annual service is not gated on its paid initial invoice",
+        ),
+        (
+            '"readiness_kind": "annual_entitlement"',
+            "annual entitlement does not emit machine-checkable readiness",
+        ),
+        (
+            'billing.value(invoice, "status") == "paid"',
+            "annual entitlement readiness does not require a paid invoice",
+        ),
+    ):
+        require(marker in readiness, message)
+    deploy_readiness = text("scripts/ci/deploy_readiness_check.py")
+    require(
+        "_validate_release_authorization" in deploy_readiness
+        and "contract_billing.validate_release_availability" in deploy_readiness,
+        "production preflight does not run the authoritative signed release authorization validator",
+    )
     caddy = text("deploy/hetzner/Caddyfile")
-    for route in ("@stripe_webhook path /webhook", "@contact_intake path /send-contact", "@webhook_health path /health"):
+    for route in (
+        "@stripe_webhook path /webhook",
+        "@contact_intake path /send-contact",
+        "@contact_readiness path /contact-readiness",
+        "@webhook_health path /health",
+    ):
         require(route in caddy, f"webhook proxy is missing allowlisted route: {route}")
-    for retired_route in ("/provision-free", "/rotate", "/send-magic-link", "/verify-magic-link"):
-        require(retired_route not in caddy, f"webhook proxy exposes retired account route: {retired_route}")
-    require("respond 404" in caddy, "webhook proxy does not fail closed for unknown routes")
+    for retired_route in (
+        "/provision-free",
+        "/rotate",
+        "/send-magic-link",
+        "/verify-magic-link",
+    ):
+        require(
+            retired_route not in caddy,
+            f"webhook proxy exposes retired account route: {retired_route}",
+        )
+    require(
+        "respond 404" in caddy, "webhook proxy does not fail closed for unknown routes"
+    )
 
     release = json.loads(text("release/backend-v1-gates.json"))
     require(release["status"] == "blocked", "backend v1 must remain blocked during recovery")
-    for gate_name in (
-        "one_million_row_resource_gate",
-        "ten_million_row_resource_gate",
-        "deterministic_cross_mode_proofs",
-        "crash_resume_and_corruption_suite",
-        "plonky3_specialist_review",
-        "implementation_review_no_high_findings",
-        "external_design_partner_integration",
-        "replacement_sdk_contracts",
-        "signed_release_sbom_and_checksums",
-        "api_mcp_site_cli_identity_match",
-    ):
-        require(not release["gates"][gate_name]["passed"], f"unearned release gate is marked passed: {gate_name}")
+    require(release.get("schema_version") == 2, "backend release gate config is not evidence-derived v2")
+    require("gates" not in release, "backend release config still trusts manual gate booleans")
+    evidence_path = ROOT / release.get("evidence_manifest", "")
+    require(not evidence_path.exists(), "release evidence manifest exists during explicitly blocked recovery")
 
 
 def main() -> int:

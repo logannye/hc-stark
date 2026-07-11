@@ -1,0 +1,180 @@
+{
+  "requirements_path": "release/python/sdk-evidence-requirements-linux-x86_64-cp312-v1.txt",
+  "schema_version": 1,
+  "target": {
+    "abi": "cp312",
+    "architecture": "x86_64",
+    "implementation": "cpython",
+    "libc": "glibc>=2.17",
+    "platform": "manylinux_2_17_x86_64",
+    "python_version": "3.12"
+  },
+  "wheels": [
+    {
+      "bytes": 383851,
+      "distribution": "blake3",
+      "filename": "blake3-1.0.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "requires_dist": [
+        "typing-extensions>=4.6.0 ; python_full_version < '3.12'"
+      ],
+      "requires_python": ">=3.8",
+      "sha256": "bcd56a7a972c4185070f7042ccc20166927eec3c0f98b8405f375d007b604a0b",
+      "tags": [
+        "cp312-cp312-manylinux_2_17_x86_64",
+        "cp312-cp312-manylinux2014_x86_64"
+      ],
+      "url": "https://files.pythonhosted.org/packages/f6/10/e9907f5b86410d5071982aaf05d149ca4d4fd8acab7e77eebbc9a333c7b4/blake3-1.0.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "version": "1.0.9"
+    },
+    {
+      "bytes": 75794,
+      "distribution": "hatchling",
+      "filename": "hatchling-1.27.0-py3-none-any.whl",
+      "requires_dist": [
+        "packaging>=24.2",
+        "pathspec>=0.10.1",
+        "pluggy>=1.0.0",
+        "tomli>=1.2.2; python_version < '3.11'",
+        "trove-classifiers"
+      ],
+      "requires_python": ">=3.8",
+      "sha256": "d3a2f3567c4f926ea39849cdf924c7e99e6686c9c8e288ae1037c8fa2a5d937b",
+      "tags": [
+        "py3-none-any"
+      ],
+      "url": "https://files.pythonhosted.org/packages/08/e7/ae38d7a6dfba0533684e0b2136817d667588ae3ec984c1a4e5df5eb88482/hatchling-1.27.0-py3-none-any.whl",
+      "version": "1.27.0"
+    },
+    {
+      "bytes": 7484,
+      "distribution": "iniconfig",
+      "filename": "iniconfig-2.3.0-py3-none-any.whl",
+      "requires_dist": [],
+      "requires_python": ">=3.10",
+      "sha256": "f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12",
+      "tags": [
+        "py3-none-any"
+      ],
+      "url": "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl",
+      "version": "2.3.0"
+    },
+    {
+      "bytes": 100195,
+      "distribution": "packaging",
+      "filename": "packaging-26.2-py3-none-any.whl",
+      "requires_dist": [],
+      "requires_python": ">=3.8",
+      "sha256": "5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e",
+      "tags": [
+        "py3-none-any"
+      ],
+      "url": "https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl",
+      "version": "26.2"
+    },
+    {
+      "bytes": 57328,
+      "distribution": "pathspec",
+      "filename": "pathspec-1.1.1-py3-none-any.whl",
+      "requires_dist": [
+        "hyperscan >=0.7 ; extra == \"hyperscan\"",
+        "typing-extensions >=4 ; extra == \"optional\"",
+        "google-re2 >=1.1 ; extra == \"re2\""
+      ],
+      "requires_python": ">=3.9",
+      "sha256": "a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189",
+      "tags": [
+        "py3-none-any"
+      ],
+      "url": "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl",
+      "version": "1.1.1"
+    },
+    {
+      "bytes": 1752557,
+      "distribution": "pip",
+      "filename": "pip-25.2-py3-none-any.whl",
+      "requires_dist": [],
+      "requires_python": ">=3.9",
+      "sha256": "6d67a2b4e7f14d8b31b8b52648866fa717f45a1eb70e83002f4331d07e953717",
+      "tags": [
+        "py3-none-any"
+      ],
+      "url": "https://files.pythonhosted.org/packages/b7/3f/945ef7ab14dc4f9d7f40288d2df998d1837ee0888ec3659c813487572faa/pip-25.2-py3-none-any.whl",
+      "version": "25.2"
+    },
+    {
+      "bytes": 20538,
+      "distribution": "pluggy",
+      "filename": "pluggy-1.6.0-py3-none-any.whl",
+      "requires_dist": [
+        "pre-commit; extra == \"dev\"",
+        "tox; extra == \"dev\"",
+        "pytest; extra == \"testing\"",
+        "pytest-benchmark; extra == \"testing\"",
+        "coverage; extra == \"testing\""
+      ],
+      "requires_python": ">=3.9",
+      "sha256": "e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746",
+      "tags": [
+        "py3-none-any"
+      ],
+      "url": "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl",
+      "version": "1.6.0"
+    },
+    {
+      "bytes": 1231151,
+      "distribution": "pygments",
+      "filename": "pygments-2.20.0-py3-none-any.whl",
+      "requires_dist": [
+        "colorama>=0.4.6; extra == 'windows-terminal'"
+      ],
+      "requires_python": ">=3.9",
+      "sha256": "81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176",
+      "tags": [
+        "py3-none-any"
+      ],
+      "url": "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl",
+      "version": "2.20.0"
+    },
+    {
+      "bytes": 365750,
+      "distribution": "pytest",
+      "filename": "pytest-8.4.2-py3-none-any.whl",
+      "requires_dist": [
+        "colorama>=0.4; sys_platform == \"win32\"",
+        "exceptiongroup>=1; python_version < \"3.11\"",
+        "iniconfig>=1",
+        "packaging>=20",
+        "pluggy<2,>=1.5",
+        "pygments>=2.7.2",
+        "tomli>=1; python_version < \"3.11\"",
+        "argcomplete; extra == \"dev\"",
+        "attrs>=19.2; extra == \"dev\"",
+        "hypothesis>=3.56; extra == \"dev\"",
+        "mock; extra == \"dev\"",
+        "requests; extra == \"dev\"",
+        "setuptools; extra == \"dev\"",
+        "xmlschema; extra == \"dev\""
+      ],
+      "requires_python": ">=3.9",
+      "sha256": "872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79",
+      "tags": [
+        "py3-none-any"
+      ],
+      "url": "https://files.pythonhosted.org/packages/a8/a4/20da314d277121d6534b3a980b29035dcd51e6744bd79075a6ce8fa4eb8d/pytest-8.4.2-py3-none-any.whl",
+      "version": "8.4.2"
+    },
+    {
+      "bytes": 14211,
+      "distribution": "trove-classifiers",
+      "filename": "trove_classifiers-2026.6.1.19-py3-none-any.whl",
+      "requires_dist": [],
+      "requires_python": null,
+      "sha256": "ab4c4ec93cc4a4e7815fa759906e05e6bb3f2fbd92ea0f897288c6a43efd15b3",
+      "tags": [
+        "py3-none-any"
+      ],
+      "url": "https://files.pythonhosted.org/packages/7c/a4/81502f486f01db95bc8320646a8a12511f5e556cb63d5e224d91816605c4/trove_classifiers-2026.6.1.19-py3-none-any.whl",
+      "version": "2026.6.1.19"
+    }
+  ]
+}

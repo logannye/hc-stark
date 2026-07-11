@@ -1,15 +1,15 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.27.0"]
 build-backend = "hatchling.build"
 
 [project]
 name = "tinyzkp"
-version = "0.1.1"
-description = "Python client for TinyZKP proof receipts — generate, poll, and verify STARK state transitions"
+version = "0.2.0.dev0"
+description = "Local artifact SDK for TinyZKP's resource-bounded Plonky3 backend"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
-keywords = ["zk", "stark", "zero-knowledge", "proof", "cryptography", "receipt", "verification", "ai-agent", "audit-log"]
+keywords = ["zk", "stark", "plonky3", "proof", "artifact", "verification"]
 authors = [{ name = "TinyZKP", email = "support@tinyzkp.com" }]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -22,18 +22,16 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Security :: Cryptography",
 ]
-dependencies = ["httpx>=0.25"]
+dependencies = ["blake3==1.0.9"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "pytest-asyncio>=0.23", "respx>=0.20"]
-test = ["pytest>=7", "pytest-asyncio>=0.23", "respx>=0.20"]
+dev = ["pytest==8.4.2"]
+test = ["pytest==8.4.2"]
 
 [project.urls]
 Homepage = "https://tinyzkp.com?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=learn"
 Documentation = "https://tinyzkp.com/docs?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=docs"
-"Get API Key" = "https://tinyzkp.com/signup?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=api_key"
-"Verify Receipt" = "https://tinyzkp.com/verify?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=verify_receipt"
-"Pricing and Limits" = "https://tinyzkp.com/limits?source=pypi_tinyzkp&medium=package_registry&platform=pypi&intent=limits"
+Security = "https://tinyzkp.com/security"
 Repository = "https://github.com/logannye/hc-stark"
 Issues = "https://github.com/logannye/hc-stark/issues"
 

@@ -1,0 +1,39 @@
+{
+  "schema_version": "tinyzkp-partner-preflight-input-v1",
+  "preflight_id": "preflight_REPLACE",
+  "application_id": "eval_REPLACE",
+  "checked_at": "2026-07-10T21:00:00Z",
+  "operator_id": "REPLACE_WITH_OPERATOR_ID",
+  "inputs": {
+    "qualification_input_file_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+    "qualification_evidence_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+    "workload_spec_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+    "adapter_source_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+    "adapter_artifact_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+    "resource_policy_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+    "resource_estimate_sha256": "REPLACE_WITH_LOWERCASE_64_HEX"
+  },
+  "adapter": {
+    "crate_name": "REPLACE_WITH_STATIC_ADAPTER_CRATE",
+    "source_revision": "REPLACE_WITH_FULL_LOWERCASE_40_HEX_GIT_COMMIT",
+    "api": "ResourceBoundedWorkloadV1",
+    "artifact_kind": "statically_linked_partner_binary"
+  },
+  "commands": {
+    "build": ["cargo", "build", "--locked", "--release", "-p", "REPLACE_CRATE"],
+    "conventional": ["REPLACE_BINARY", "benchmark", "--mode", "baseline"],
+    "bounded": ["REPLACE_BINARY", "benchmark", "--mode", "bounded"],
+    "verify": ["REPLACE_BINARY", "verify", "--official"]
+  },
+  "host": {
+    "host_id": "REPLACE_WITH_FIXED_HOST_ID",
+    "host_fingerprint_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+    "operating_system": "linux",
+    "architecture": "x86_64",
+    "logical_cpus": 8,
+    "resident_capacity_bytes": 17179869184,
+    "available_scratch_bytes": 107374182400,
+    "scratch_medium": "local_nvme",
+    "cgroup_v2": true
+  }
+}

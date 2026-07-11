@@ -1,0 +1,29 @@
+{
+  "packages": [
+    "blake3==1.0.9",
+    "hatchling==1.27.0",
+    "iniconfig==2.3.0",
+    "packaging==26.2",
+    "pathspec==1.1.1",
+    "pip==25.2",
+    "pluggy==1.6.0",
+    "pygments==2.20.0",
+    "pytest==8.4.2",
+    "trove-classifiers==2026.6.1.19"
+  ],
+  "pyproject_path": "clients/python/pyproject.toml",
+  "pyproject_sha256": "dfecadd7beafb95cfe9a8ea86527b01fae6df6f4c255bf177fbeb79822a50f8e",
+  "requirements_path": "release/python/sdk-evidence-requirements-linux-x86_64-cp312-v1.txt",
+  "requirements_sha256": "497c0070463f853336687ce64103e9126e26bf30cc682f71e1e825f8c4b861f1",
+  "schema_version": 1,
+  "target": {
+    "abi": "cp312",
+    "architecture": "x86_64",
+    "implementation": "cpython",
+    "libc": "glibc>=2.17",
+    "platform": "manylinux_2_17_x86_64",
+    "python_version": "3.12"
+  },
+  "wheelhouse_manifest_path": "release/python/sdk-evidence-wheelhouse-linux-x86_64-cp312-v1.json",
+  "wheelhouse_manifest_sha256": "0c7c9a797d76933d375434f026bd811eddd856bfe816a88547159a743fe31e60"
+}

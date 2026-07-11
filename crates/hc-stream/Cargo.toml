@@ -5,14 +5,23 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 description = "Versioned resource policy, matrix storage, and recovery contracts for TinyZKP"
+repository = "https://github.com/logannye/hc-stark"
+homepage = "https://tinyzkp.com"
+documentation = "https://docs.rs/hc-stream"
+readme = "README.md"
 
 [dependencies]
 blake3.workspace = true
-fs2 = "0.4"
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+fs2 = "0.4"
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "=1.1.2", features = ["fs", "process"] }
 
 [dev-dependencies]
 tempfile = "3"

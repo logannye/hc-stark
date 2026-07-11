@@ -12,35 +12,88 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 REQUIRED_MARKERS = {
     "billing/backup.sh": (
-        "tenant_store.sqlite usage.sqlite",
+        "tenant_store.sqlite usage.sqlite evaluation_applications.sqlite",
         "api_keys.txt",
-        "HC_BACKUP_ENV_FILE",
+        "LOADER_TOKEN_FILE",
+        "TINYZKP_BACKUP_LOCK_HELD",
         "HC_BACKUP_DATA_DIR",
-        "HC_BACKUP_DATE",
-        "HC_BACKUP_REMOTE_DATE",
+        "TINYZKP_BACKUP_TEST_DATE",
+        "TINYZKP_BACKUP_TEST_REMOTE_DATE",
         "HC_BACKUP_RETENTION_DAYS",
-        "sqlite3 \"$src\" \".backup '$dest'\"",
+        "HC_CONTRACT_DATA_DIR",
+        "TINYZKP_CONTRACT_BILLING_LEDGER_PATH",
+        '"$SCRIPT_DIR/backup_env_exec.py" snapshot',
         "umask 077",
-        "chmod 700 \"$BACKUP_DIR\"",
-        "chmod 600 \"$dest\"",
-        "install -m 600",
+        "validate-layout",
+        "create-manifest",
+        "verify-manifest",
+        "contracts_${DATE}.tar.gz",
+        "contract_billing_${DATE}.sqlite",
+        "validate_private_contract_dir.py",
         "HC_BACKUP_REMOTE",
-        "rclone copy",
+        '"$RCLONE_BIN" copyto',
+        '"$RCLONE_BIN" delete',
+        "HC_BACKUP_HTTP_RETENTION_CONFIRMED",
         "on-disk backup ONLY",
+        "backup_env_exec.py",
+        '"$SCRIPT_DIR/backup_env_exec.py" prune',
+        "OFFBOX_FAILED=1",
+    ),
+    "billing/backup_env_exec.py": (
+        "O_NOFOLLOW",
+        "must be owner-only",
+        "must be owned by the current operator",
+        "data-only KEY=value assignment",
+        "BACKUP_KEYS",
+        "validate_backup_values",
+        "environment_for_backup",
+        "FIXED_BACKUP_LOCK",
+        "acquire_backup_lock",
+        "fcntl.flock",
+        "FIXED_RCLONE_CONFIG",
+        "read_http_token",
+        "snapshot_source",
+        "create_backup_manifest",
+        "verify_backup_manifest",
+        "validate_backup_layout",
+        "prune_backup_artifacts",
+        "BACKUP_ARTIFACT",
+        "os.execve",
+    ),
+    "billing/validate_private_contract_dir.py": (
+        "contract directory contains a symlink",
+        "contract directory is not owner-only",
+        "contract directory contains a special file",
+        "followlinks=False",
     ),
     "docs/runbooks/restore.md": (
         "tenant_store_<YYYYMMDD_HHMMSS>.sqlite",
         "usage_<YYYYMMDD_HHMMSS>.sqlite",
+        "evaluation_applications_<YYYYMMDD_HHMMSS>.sqlite",
+        "contract_billing_<YYYYMMDD_HHMMSS>.sqlite",
         "api_keys_<YYYYMMDD_HHMMSS>.txt",
+        "contracts_<YYYYMMDD_HHMMSS>.tar.gz",
+        "manifest_<YYYYMMDD_HHMMSS>.json",
         "systemctl stop hc-stark",
         "systemctl stop hc-billing-webhook",
         "tenant_store_${TS}.sqlite",
         "usage_${TS}.sqlite",
+        "evaluation_applications_${TS}.sqlite",
+        "contract_billing_${TS}.sqlite",
         "api_keys_${TS}.txt",
+        "contracts_${TS}.tar.gz",
         "api_health_audit.sh",
         "https://api.tinyzkp.com/usage",
         "SELECT count(*) FROM tenants;",
         "SELECT count(*) FROM usage_log;",
+        "SELECT count(*) FROM evaluation_applications;",
+        "SELECT count(*) FROM billing_operations;",
+        "/var/lib/tinyzkp-private/contracts",
+        "/var/lib/tinyzkp-private/billing/contract_billing.sqlite",
+        "restore-artifact",
+        "read-remote",
+        "verify-manifest",
+        "--config /var/lib/tinyzkp-private/backup/rclone.conf",
     ),
     "billing/tenant_store.py": (
         "CREATE TABLE IF NOT EXISTS tenants",
@@ -53,17 +106,40 @@ REQUIRED_MARKERS = {
         "CREATE TABLE IF NOT EXISTS verify_log",
         "CREATE TABLE IF NOT EXISTS failed_proofs",
     ),
-    "deploy/hetzner/setup.sh": (
-        "BACKUP_CRON_LINE",
+    "deploy/hetzner/hc-billing.cron": (
         "/opt/hc-stark/billing/backup.sh",
-        "HC_BACKUP_REMOTE",
+        "evaluation_intake.py",
+        "purge-expired --apply",
+    ),
+    "deploy/hetzner/deployment_transaction.py": (
+        '"cron": REPO / "deploy/hetzner/hc-billing.cron"',
+        '"cron": pathlib.Path("/etc/cron.d/hc-billing")',
+        "_snapshot_configs",
+        "_restore_configs",
+    ),
+    "deploy/hetzner/setup.sh": (
+        "RELEASE AUTHORITY: NONE",
+        "/var/lib/tinyzkp-private/backup",
+        "/opt/hc-stark/backups",
+        "create-loader-token",
     ),
 }
 
 FORBIDDEN_MARKERS = {
+    "billing/backup.sh": (
+        '. "${HC_BACKUP_ENV_FILE',
+        "shellcheck source",
+    ),
     "docs/runbooks/restore.md": (
         "/v1/ping",
         "usage_events",
+        "source /opt/hc-stark/.env",
+    ),
+    "deploy/hetzner/setup.sh": (
+        "/etc/cron.d/hc-billing",
+        "systemctl start",
+        "systemctl enable",
+        "apt-get install",
     ),
 }
 
@@ -77,15 +153,21 @@ def check_file(root: pathlib.Path, rel: str, markers: tuple[str, ...]) -> list[s
     if not path.is_file():
         return [f"missing {rel}"]
     text = read(root, rel)
-    return [f"{rel} missing marker: {marker}" for marker in markers if marker not in text]
+    return [
+        f"{rel} missing marker: {marker}" for marker in markers if marker not in text
+    ]
 
 
-def check_forbidden(root: pathlib.Path, rel: str, markers: tuple[str, ...]) -> list[str]:
+def check_forbidden(
+    root: pathlib.Path, rel: str, markers: tuple[str, ...]
+) -> list[str]:
     path = root / rel
     if not path.is_file():
         return []
     text = read(root, rel)
-    return [f"{rel} contains stale marker: {marker}" for marker in markers if marker in text]
+    return [
+        f"{rel} contains stale marker: {marker}" for marker in markers if marker in text
+    ]
 
 
 def check(root: pathlib.Path) -> list[str]:

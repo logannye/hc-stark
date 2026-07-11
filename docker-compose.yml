@@ -1,5 +1,6 @@
 services:
   hc-server:
+    image: tinyzkp/hc-server:${HC_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: Dockerfile
@@ -29,6 +30,7 @@ services:
     stop_grace_period: 30s
 
   hc-mcp:
+    image: tinyzkp/hc-mcp:${HC_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: Dockerfile

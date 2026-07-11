@@ -1,0 +1,38 @@
+{
+  "artifact_paths": {
+    "one_million_fibonacci_baseline_normalized_manifest": "release/evidence/REPLACE_WITH_INDEPENDENT_ONE_MILLION_FIBONACCI_BASELINE_NORMALIZED_MANIFEST.json",
+    "one_million_fibonacci_baseline_report": "release/evidence/REPLACE_WITH_INDEPENDENT_ONE_MILLION_FIBONACCI_BASELINE_REPORT.json",
+    "one_million_fibonacci_candidate_normalized_manifest": "release/evidence/REPLACE_WITH_INDEPENDENT_ONE_MILLION_FIBONACCI_CANDIDATE_NORMALIZED_MANIFEST.json",
+    "one_million_fibonacci_candidate_report": "release/evidence/REPLACE_WITH_INDEPENDENT_ONE_MILLION_FIBONACCI_CANDIDATE_REPORT.json",
+    "one_million_fibonacci_manifest": "release/evidence/REPLACE_WITH_INDEPENDENT_ONE_MILLION_FIBONACCI_MANIFEST.json",
+    "one_million_poseidon2_baseline_normalized_manifest": "release/evidence/REPLACE_WITH_INDEPENDENT_ONE_MILLION_POSEIDON2_BASELINE_NORMALIZED_MANIFEST.json",
+    "one_million_poseidon2_baseline_report": "release/evidence/REPLACE_WITH_INDEPENDENT_ONE_MILLION_POSEIDON2_BASELINE_REPORT.json",
+    "one_million_poseidon2_candidate_normalized_manifest": "release/evidence/REPLACE_WITH_INDEPENDENT_ONE_MILLION_POSEIDON2_CANDIDATE_NORMALIZED_MANIFEST.json",
+    "one_million_poseidon2_candidate_report": "release/evidence/REPLACE_WITH_INDEPENDENT_ONE_MILLION_POSEIDON2_CANDIDATE_REPORT.json",
+    "one_million_poseidon2_manifest": "release/evidence/REPLACE_WITH_INDEPENDENT_ONE_MILLION_POSEIDON2_MANIFEST.json",
+    "ten_million_fibonacci_candidate_normalized_manifest": "release/evidence/REPLACE_WITH_INDEPENDENT_TEN_MILLION_FIBONACCI_CANDIDATE_NORMALIZED_MANIFEST.json",
+    "ten_million_fibonacci_candidate_report": "release/evidence/REPLACE_WITH_INDEPENDENT_TEN_MILLION_FIBONACCI_CANDIDATE_REPORT.json",
+    "ten_million_fibonacci_manifest": "release/evidence/REPLACE_WITH_INDEPENDENT_TEN_MILLION_FIBONACCI_MANIFEST.json",
+    "ten_million_poseidon2_candidate_normalized_manifest": "release/evidence/REPLACE_WITH_INDEPENDENT_TEN_MILLION_POSEIDON2_CANDIDATE_NORMALIZED_MANIFEST.json",
+    "ten_million_poseidon2_candidate_report": "release/evidence/REPLACE_WITH_INDEPENDENT_TEN_MILLION_POSEIDON2_CANDIDATE_REPORT.json",
+    "ten_million_poseidon2_manifest": "release/evidence/REPLACE_WITH_INDEPENDENT_TEN_MILLION_POSEIDON2_MANIFEST.json"
+  },
+  "completed_at": "REPLACE_WITH_RFC3339_UTC_TIME",
+  "completion_status": "incomplete",
+  "gates": [
+    "one-million",
+    "ten-million"
+  ],
+  "independent": false,
+  "official_verification": false,
+  "organization": "REPLACE_WITH_INDEPENDENT_ORGANIZATION",
+  "record_type": "independent_reproduction",
+  "release_sha": "REPLACE_WITH_FULL_SOURCE_RELEASE_SHA",
+  "reproducer": "REPLACE_WITH_REPRODUCER_IDENTITY",
+  "schema_version": 1,
+  "signer_id": "REPLACE_WITH_ALLOWLISTED_EXTERNAL_SIGNER_ID",
+  "workloads": [
+    "fibonacci",
+    "poseidon2_goldilocks"
+  ]
+}

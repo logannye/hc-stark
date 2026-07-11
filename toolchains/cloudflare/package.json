@@ -1,0 +1,12 @@
+{
+  "name": "tinyzkp-cloudflare-production-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Exact local Wrangler dependency used by TinyZKP production preflight",
+  "engines": {
+    "node": "24.18.0"
+  },
+  "devDependencies": {
+    "wrangler": "4.85.0"
+  }
+}

@@ -39,6 +39,7 @@ def test_create_is_durable_owner_only_and_redacted_by_default(tmp_path):
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     records = evaluation_store.list_applications(path=path)
     assert records[0]["application_id"] == application_id
+    assert records[0]["category"] == "Design Partner"
     assert records[0]["company"] == "Example ZK"
     assert "email" not in records[0]
     assert "message" not in records[0]
@@ -77,3 +78,48 @@ def test_invalid_status_fails_closed(tmp_path):
         assert "invalid status" in str(exc)
     else:
         raise AssertionError("invalid status must be rejected")
+
+
+def test_store_rejects_symlink_database(tmp_path):
+    target = tmp_path / "target.sqlite"
+    target.write_bytes(b"not a database")
+    linked = tmp_path / "applications.sqlite"
+    linked.symlink_to(target)
+
+    try:
+        evaluation_store.open_db(linked)
+    except PermissionError as exc:
+        assert "must not be a symlink" in str(exc)
+    else:
+        raise AssertionError("symlink evaluation store must be rejected")
+
+
+def test_store_repairs_and_verifies_private_directory_mode(tmp_path):
+    private = tmp_path / "private"
+    private.mkdir(mode=0o755)
+    path = private / "applications.sqlite"
+    _create(path)
+
+    assert stat.S_IMODE(private.stat().st_mode) == 0o700
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_readiness_probe_is_verified_and_deleted_without_contact_data(tmp_path):
+    path = tmp_path / "applications.sqlite"
+    nonce = "probe_0123456789abcdef"
+    application_id = evaluation_store.create_application(
+        name="TinyZKP readiness probe",
+        email="",
+        category="General Inquiry",
+        message=f"TinyZKP automated contact readiness probe {nonce}",
+        qualification={
+            "intent": "automated_readiness_probe",
+            "contact_method": "github",
+            "contact_handle": "https://tinyzkp.com/status",
+            "consent": "twelve_month_retention",
+        },
+        path=path,
+    )
+    assert not evaluation_store.consume_readiness_probe(application_id, "probe_wrong", path=path)
+    assert evaluation_store.consume_readiness_probe(application_id, nonce, path=path)
+    assert evaluation_store.get_application(application_id, path=path) is None

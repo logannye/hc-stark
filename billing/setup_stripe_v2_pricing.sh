@@ -16,7 +16,17 @@
 
 set -euo pipefail
 
+if [[ "${TINYZKP_ALLOW_LEGACY_RESEARCH_CATALOG:-0}" != "1" ]]; then
+  echo "ERROR: legacy v2 self-serve catalog creation is disabled during backend recovery." >&2
+  echo "This script is test/research-only and must not be used for TinyZKP live operations." >&2
+  exit 64
+fi
+
 STRIPE_KEY="${STRIPE_SECRET_KEY:?STRIPE_SECRET_KEY required (sk_live_... or sk_test_...)}"
+if [[ "$STRIPE_KEY" == *"_live_"* ]]; then
+  echo "ERROR: legacy v2 catalog creation refuses every live-mode Stripe key." >&2
+  exit 64
+fi
 API="https://api.stripe.com/v1"
 auth=(-u "${STRIPE_KEY}:")
 

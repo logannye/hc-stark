@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "start": 7,
+  "logical_rows": 1024,
+  "resource_policy": {
+    "mode": "scratch",
+    "max_resident_bytes": 536870912,
+    "max_scratch_bytes": 8589934592,
+    "scratch_dir": "/tmp/tinyzkp-partner-evaluation",
+    "max_threads": 1,
+    "checkpoint_policy": "delete_on_success"
+  }
+}

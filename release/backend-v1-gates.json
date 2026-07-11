@@ -1,20 +1,7 @@
 {
+  "schema_version": 2,
   "release": "tinyzkp-plonky3-backend-v1",
   "status": "blocked",
-  "gates": {
-    "clean_release_source": {"passed": false, "evidence": ""},
-    "plonky3_dependency_profile_pinned": {"passed": true, "evidence": "release/plonky3-compatibility-v1.json and scripts/ci/plonky3_compatibility_gate.py"},
-    "official_verifier_fibonacci": {"passed": true, "evidence": "hc-plonky3 prover::tests::fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier"},
-    "official_verifier_poseidon2": {"passed": true, "evidence": "hc-plonky3 prover::tests::poseidon2_proof_is_accepted_by_unmodified_plonky3_verifier"},
-    "deterministic_cross_mode_proofs": {"passed": false, "evidence": "Prototype proof-byte equality and DFT differential coverage pass, but the production scratch pipeline is incomplete; this gate stays blocked until trace, quotient, MMCS, FRI, openings, and resume all preserve the same official proof bytes."},
-    "one_million_row_resource_gate": {"passed": false, "evidence": ""},
-    "ten_million_row_resource_gate": {"passed": false, "evidence": ""},
-    "crash_resume_and_corruption_suite": {"passed": false, "evidence": ""},
-    "plonky3_specialist_review": {"passed": false, "evidence": ""},
-    "implementation_review_no_high_findings": {"passed": false, "evidence": ""},
-    "external_design_partner_integration": {"passed": false, "evidence": ""},
-    "replacement_sdk_contracts": {"passed": false, "evidence": "Legacy hosted-proof clients remain tested for maintenance compatibility but cannot be republished until replaced with Plonky3 artifact contracts."},
-    "signed_release_sbom_and_checksums": {"passed": false, "evidence": ""},
-    "api_mcp_site_cli_identity_match": {"passed": false, "evidence": ""}
-  }
+  "evidence_manifest": "release/evidence/backend-v1-evidence.json",
+  "policy": "Every gate is derived from hashed artifacts and typed metadata. Candidate evidence binds a source commit and stable source-tree digest; signed finalization binds the evidence-only release commit. Manual passed booleans are rejected."
 }

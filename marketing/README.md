@@ -1,5 +1,11 @@
 # TinyZKP Marketing & Launch Assets
 
+> **Archived recovery-era material — do not execute, publish, submit, or use
+> for outreach.** These files describe the retired agent/receipt/self-serve
+> product. TinyZKP currently permits no email outreach and no public checkout.
+> Use `commercial/no-email-evaluation-runbook.md` and applicant-selected
+> no-email reply channels for the bounded evaluation program.
+
 This directory holds **drafts** of customer-acquisition assets ready to publish or send. Nothing in here is auto-deployed — every file is a copy/paste artifact for the founder to send manually after final review.
 
 ## Live state (as of launch)

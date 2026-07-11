@@ -1,20 +1,23 @@
 [package]
 name = "tinyzkp"
-version = "0.1.1"
+version = "0.2.0-dev.0"
 edition = "2021"
 rust-version = "1.77"
 license = "MIT"
-description = "Rust client for TinyZKP proof receipts"
-keywords = ["zk", "stark", "zero-knowledge", "proof", "api"]
-categories = ["cryptography", "api-bindings"]
+description = "Local artifact SDK for TinyZKP's resource-bounded Plonky3 backend"
+keywords = ["zk", "stark", "plonky3", "proof", "artifact"]
+categories = ["cryptography"]
 homepage = "https://tinyzkp.com?source=crates_tinyzkp&medium=package_registry&platform=crates_io&intent=learn"
 documentation = "https://tinyzkp.com/docs?source=crates_tinyzkp&medium=package_registry&platform=crates_io&intent=docs"
 repository = "https://github.com/logannye/hc-stark"
 readme = "README.md"
 
 [dependencies]
-reqwest = { version = "0.12", features = ["json"] }
+hc-plonky3 = { version = "0.1.0", path = "../../crates/hc-plonky3" }
+hc-stream = { version = "0.1.0", path = "../../crates/hc-stream" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
-tokio = { version = "1", features = ["time"] }
+
+[dev-dependencies]
+tempfile = "3"

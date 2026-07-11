@@ -1,8 +1,11 @@
 # @tinyzkp/verify
 
-Client-side WASM verifier for TinyZKP STARK receipts. Use it when a browser,
-wallet, dashboard, or agent UI needs local verification without calling the
-TinyZKP API.
+Local WebAssembly verification for official Plonky3 `ProofBundleV1` artifacts.
+The package verifies in the caller's browser and does not call a TinyZKP API.
+It contains no proving, receipt, account, billing, or hosted-verification API.
+
+Backend v1 proves transparent verifiable computation. It does not claim
+zero-knowledge or witness privacy.
 
 ## Install
 
@@ -10,30 +13,24 @@ TinyZKP API.
 npm install @tinyzkp/verify
 ```
 
-## Quick Start
+## Verify a bundle
 
 ```javascript
-import init, { verify_json } from "@tinyzkp/verify";
+import init, { verify_bundle, version } from "@tinyzkp/verify";
 
 await init();
+const bundleJson = await fetch("/proof-bundle.json").then((response) => response.text());
+const result = verify_bundle(bundleJson);
 
-const proofJson = await fetch("/proof.json").then((res) => res.text());
-const result = verify_json(proofJson);
-console.log(result.ok);
+if (!result.ok) throw new Error(result.error);
+console.log(version());
 ```
 
-## When to use it
+The verifier rejects unknown schema versions, malformed or oversized proof
+encoding, manifest/proof digest mismatches, dependency-profile skew, mutated
+public values, and proofs rejected by the unmodified Plonky3 0.6.1 verifier.
 
-Use this package for free local verification. To generate new receipts, get a
-free API key at
-[tinyzkp.com/signup](https://tinyzkp.com/signup?source=npm_wasm_verifier&medium=package_registry&platform=npm&intent=api_key).
-
-Default receipts are transparent. Do not put secrets, raw customer data, or
-credentials into receipt parameters.
-
-## Distribution Links
-
-- [Generate receipts with an API key](https://tinyzkp.com/signup?source=npm_wasm_verifier&medium=package_registry&platform=npm&intent=api_key)
-- [Verify a receipt in the browser](https://tinyzkp.com/verify?source=npm_wasm_verifier&medium=package_registry&platform=npm&intent=verify_receipt)
-- [Pricing and limits](https://tinyzkp.com/limits?source=npm_wasm_verifier&medium=package_registry&platform=npm&intent=limits)
-- [Agent-readable offers](https://tinyzkp.com/.well-known/tinyzkp-offers.json?source=npm_wasm_verifier&medium=package_registry&platform=npm&intent=agent_offer)
+See [documentation](https://tinyzkp.com/docs),
+[security status](https://tinyzkp.com/security), and
+[backend status](https://tinyzkp.com/status). Package publication remains
+blocked until the backend release gate passes.

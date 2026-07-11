@@ -1,0 +1,68 @@
+name: Nightly Plonky3 backend stress
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof-equality-crash-and-fuzz:
+    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
+    timeout-minutes: 720
+    env:
+      TINYZKP_NIGHTLY_MAX_LOG: "18"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.95.0"
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "nightly-2026-04-15"
+          components: rust-src
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - name: Warm exact locked dependencies before offline evidence runs
+        run: |
+          cargo fetch --locked
+          cargo +nightly-2026-04-15 fetch \
+            --manifest-path fuzz/Cargo.toml \
+            --locked
+      - name: Install exact cargo-fuzz
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Capture and enforce reviewed cargo-fuzz executable
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          python3 scripts/release/fuzz_tool_anchor.py capture \
+            --output raw-reports/cargo-fuzz-anchor-candidate.json
+          python3 scripts/release/fuzz_tool_anchor.py verify \
+            --candidate raw-reports/cargo-fuzz-anchor-candidate.json
+      - name: Randomized proof equality through 2^18
+        run: cargo test -p hc-plonky3 --release --locked nightly_proof_equality_through_configured_power_of_two -- --ignored --nocapture
+      - name: Scratch preflight calibration across powers of two
+        run: cargo test -p hc-plonky3 --release --locked bounded_prover::tests::scratch_estimates_track_multiple_release_scale_powers -- --exact --ignored --nocapture
+      - name: Complete machine-readable checkpoint crash rotation
+        run: |
+          HC_RELEASE_SHA="${{ github.sha }}" \
+            scripts/release/run_crash_matrix_disk_full.sh \
+              raw-reports/crash-matrix.json \
+              raw-reports/crash-logs
+      - name: Parser and recovery fuzz smoke
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          python3 scripts/release/run_fuzz_smoke.py \
+            --seconds 60 \
+            --rss-limit-mb 2048 \
+            --output raw-reports/fuzz-smoke.json \
+            --log-dir raw-reports/fuzz-logs
+      - name: Upload crash/fuzz logs and summaries
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: plonky3-fuzz-smoke-${{ github.sha }}
+          path: raw-reports/
+          if-no-files-found: warn

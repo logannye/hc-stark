@@ -1,0 +1,17 @@
+{
+  "acceptance_id": "REPLACE_WITH_OPAQUE_ACCEPTANCE_ID",
+  "accepted_at": "REPLACE_WITH_RFC3339_UTC_TIME",
+  "artifact_paths": {
+    "adapter_result": "release/evidence/REPLACE_WITH_PARTNER_ADAPTER_RESULT.json",
+    "resource_report": "release/evidence/REPLACE_WITH_PARTNER_RESOURCE_REPORT.json"
+  },
+  "bounded_equals_conventional": false,
+  "completion_status": "incomplete",
+  "official_verification": false,
+  "partner_id": "REPLACE_WITH_OPAQUE_PARTNER_ID",
+  "record_type": "design_partner_acceptance",
+  "release_sha": "REPLACE_WITH_FULL_SOURCE_RELEASE_SHA",
+  "schema_version": 1,
+  "signer_id": "REPLACE_WITH_ALLOWLISTED_EXTERNAL_SIGNER_ID",
+  "witness_data_committed": false
+}

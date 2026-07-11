@@ -1,0 +1,18 @@
+{
+  "schema_version": "tinyzkp-partner-workload-spec-v1",
+  "workload_id": "REPLACE_WITH_QUALIFIED_WORKLOAD_ID",
+  "revision": "REPLACE_WITH_QUALIFIED_FULL_LOWERCASE_40_HEX_GIT_COMMIT",
+  "logical_rows": 1048576,
+  "generator_kind": "deterministic_non_sensitive",
+  "generator_sha256": "REPLACE_WITH_QUALIFIED_LOWERCASE_64_HEX",
+  "profile": "tinyzkp-p3-goldilocks-v1",
+  "plonky3_version": "0.6.1",
+  "expected_verifier": "unmodified-p3-uni-stark-0.6.1",
+  "data_boundary": {
+    "public_or_non_sensitive_generator_only": true,
+    "witness_transfer_allowed": false,
+    "credentials_transfer_allowed": false,
+    "customer_data_transfer_allowed": false,
+    "proprietary_source_transfer_allowed": false
+  }
+}

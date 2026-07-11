@@ -13,6 +13,7 @@ import json
 import os
 import secrets
 import sqlite3
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -33,45 +34,66 @@ def _path(path: str | os.PathLike[str] | None = None) -> Path:
     return Path(path or os.environ.get("HC_EVALUATION_STORE_PATH", DEFAULT_PATH))
 
 
+def _require_owner_only(path: Path, mode: int, *, kind: str) -> None:
+    path.chmod(mode)
+    info = path.stat(follow_symlinks=False)
+    if stat.S_IMODE(info.st_mode) != mode:
+        raise PermissionError(f"{kind} permissions must be {mode:o}: {path}")
+    if hasattr(os, "geteuid") and info.st_uid != os.geteuid():
+        raise PermissionError(f"{kind} must be owned by the service user: {path}")
+
+
+def _prepare_private_path(db_path: Path) -> None:
+    parent = db_path.parent
+    if parent.exists() and parent.is_symlink():
+        raise PermissionError(f"evaluation store directory must not be a symlink: {parent}")
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if not parent.is_dir():
+        raise PermissionError(f"evaluation store parent is not a directory: {parent}")
+    _require_owner_only(parent, 0o700, kind="evaluation store directory")
+
+    if db_path.is_symlink():
+        raise PermissionError(f"evaluation store must not be a symlink: {db_path}")
+    if db_path.exists() and not db_path.is_file():
+        raise PermissionError(f"evaluation store must be a regular file: {db_path}")
+
+
 def open_db(path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
     db_path = _path(path)
-    db_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    try:
-        db_path.parent.chmod(0o700)
-    except OSError:
-        pass
+    _prepare_private_path(db_path)
 
     conn = sqlite3.connect(db_path, timeout=10)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS evaluation_applications (
-            application_id TEXT PRIMARY KEY,
-            submitted_at TEXT NOT NULL,
-            retention_deadline TEXT NOT NULL,
-            status TEXT NOT NULL CHECK (
-                status IN ('new', 'qualified', 'declined', 'contracting', 'closed')
-            ),
-            name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            category TEXT NOT NULL,
-            message TEXT NOT NULL,
-            qualification_json TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_evaluation_status_submitted "
-        "ON evaluation_applications(status, submitted_at)"
-    )
-    conn.commit()
     try:
-        db_path.chmod(0o600)
-    except OSError:
-        pass
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS evaluation_applications (
+                application_id TEXT PRIMARY KEY,
+                submitted_at TEXT NOT NULL,
+                retention_deadline TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (
+                    status IN ('new', 'qualified', 'declined', 'contracting', 'closed')
+                ),
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                category TEXT NOT NULL,
+                message TEXT NOT NULL,
+                qualification_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_evaluation_status_submitted "
+            "ON evaluation_applications(status, submitted_at)"
+        )
+        conn.commit()
+        _require_owner_only(db_path, 0o600, kind="evaluation store")
+    except Exception:
+        conn.close()
+        raise
     return conn
 
 
@@ -124,6 +146,7 @@ def _record(row: sqlite3.Row, *, include_contact: bool) -> dict[str, Any]:
         "submitted_at": row["submitted_at"],
         "retention_deadline": row["retention_deadline"],
         "status": row["status"],
+        "category": row["category"],
         "company": qualification.get("company", ""),
         "stack": qualification.get("stack", ""),
         "workload": qualification.get("workload", ""),
@@ -136,7 +159,6 @@ def _record(row: sqlite3.Row, *, include_contact: bool) -> dict[str, Any]:
             {
                 "name": row["name"],
                 "email": row["email"],
-                "category": row["category"],
                 "message": row["message"],
                 "qualification": qualification,
             }
@@ -223,3 +245,41 @@ def purge_expired(
             (cutoff,),
         )
     return cursor.rowcount
+
+
+def consume_readiness_probe(
+    application_id: str,
+    nonce: str,
+    *,
+    path: str | os.PathLike[str] | None = None,
+) -> bool:
+    """Verify and delete one non-PII end-to-end intake probe."""
+    if not application_id.startswith("eval_") or not nonce.startswith("probe_"):
+        return False
+    expected_message = f"TinyZKP automated contact readiness probe {nonce}"
+    with open_db(path) as conn:
+        row = conn.execute(
+            "SELECT name, category, message, qualification_json "
+            "FROM evaluation_applications WHERE application_id = ?",
+            (application_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        try:
+            qualification = json.loads(row["qualification_json"])
+        except json.JSONDecodeError:
+            return False
+        if (
+            row["name"] != "TinyZKP readiness probe"
+            or row["category"] != "General Inquiry"
+            or row["message"] != expected_message
+            or qualification.get("intent") != "automated_readiness_probe"
+            or qualification.get("contact_method") != "github"
+            or qualification.get("contact_handle") != "https://tinyzkp.com/status"
+        ):
+            return False
+        cursor = conn.execute(
+            "DELETE FROM evaluation_applications WHERE application_id = ?",
+            (application_id,),
+        )
+    return cursor.rowcount == 1

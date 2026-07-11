@@ -6,6 +6,9 @@
 .DS_Store
 .logs/
 /logs/
+/data/
+/backups/
+/.venv/
 
 # AI coding assistant pin files (per-machine, not project source)
 skills-lock.json
@@ -17,7 +20,11 @@ clients/python/.venv*/
 clients/python/dist/
 clients/python/*.egg-info/
 clients/python/.pytest_cache/
-clients/rust/Cargo.lock
+
+# Local cargo-fuzz state (CI publishes explicit machine-readable summaries).
+/fuzz/artifacts/
+/fuzz/corpus/
+/fuzz/target/
 
 # Local secrets / state
 billing/.stripe_ids.json

@@ -1,5 +1,9 @@
 # TinyZKP Website Launch Implementation Plan
 
+> **Archived:** This pre-recovery plan is not an operating runbook. Do not use
+> a founder or unrelated-business mailbox for TinyZKP communications. Current
+> recovery operations use the persisted no-email evaluation intake.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Ship a launch-ready website at tinyzkp.com with signup, docs, and contact pages — deployed via Cloudflare Pages with two Pages Functions for checkout and contact form submission.
@@ -129,14 +133,14 @@ This function receives form submissions and sends email via MailChannels (free f
 ```js
 // site/functions/api/contact.js
 //
-// Receives contact form submissions and emails them to logan@galenhealth.org
+// Historical example only; unrelated-business recipient removed.
 // via the MailChannels API (free from Cloudflare Workers).
 //
 // No secrets required — MailChannels authorizes based on the Worker's domain.
 // DNS setup: add a TXT record `_mailchannels.tinyzkp.com` with value
 // `v=mc1 cfid=<your-pages-project>.pages.dev` to authorize sending.
 
-const RECIPIENT = "logan@galenhealth.org";
+const RECIPIENT = "UNRELATED_BUSINESS_EMAIL_DO_NOT_USE";
 
 export async function onRequestPost(context) {
   const corsHeaders = {
@@ -354,7 +358,7 @@ Changes:
    - "API Reference" → `https://api.tinyzkp.com/docs` (external)
    - "Contact" → `/contact`
    - "Get API Key" → `/signup` (styled as a small CTA button in the nav)
-3. **Footer**: Update contact email from `support@tinyzkp.com` to `logan@galenhealth.org`. Add links to `/docs` and `/contact`.
+3. **Footer**: Historical email instruction removed; use the current no-email intake. Add links to `/docs` and `/contact`.
 4. **Copyright**: Update year to 2025-2026 or just 2026.
 5. **Success banner**: Add a hidden banner at the top that shows when URL contains `?checkout=success`. Text: "Account created! Check your email for your API key." Green background, dismissible.
 6. **Pricing section CTA**: Add a "Get API Key" button below the pricing grid linking to `/signup`.
@@ -567,7 +571,7 @@ curl -s https://api.tinyzkp.com/usage -H "Authorization: Bearer tzk_..."
 
 1. Visit `/contact`
 2. Fill form, submit
-3. Verify `logan@galenhealth.org` receives the email
+3. Historical email verification removed; verify the current persisted no-email intake instead
 
 **Step 5: Docs and navigation**
 

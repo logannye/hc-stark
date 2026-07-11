@@ -1,116 +1,189 @@
-"""Unit tests for the TinyZKP Python client.
-
-These hit a respx mock — no live API required.
-"""
-
 from __future__ import annotations
 
-import httpx
+import json
+from pathlib import Path
+
 import pytest
-import respx
+from blake3 import blake3
 
 from tinyzkp import (
-    HcClient,
-    HcClientError,
-    HcClientSync,
-    ProofBytes,
-    TemplateSummary,
+    AirBuilder,
+    ArtifactError,
+    ResourcePolicyV1,
+    WorkloadManifestV1,
+    canonical_json_v1,
+    canonical_digest_hex,
+    decode_base64url,
+    load_bundle,
+    load_manifest,
+    load_report,
 )
 
 
-@pytest.mark.asyncio
-async def test_async_healthz_ok():
-    with respx.mock(base_url="https://api.example.com") as mock:
-        mock.get("/healthz").mock(return_value=httpx.Response(200))
-        async with HcClient("https://api.example.com") as client:
-            assert await client.healthz() is True
+def test_air_builder_matches_rust_maximum_width_golden_vector():
+    builder = AirBuilder(trace_width=256, public_value_count=1)
+    current = builder.current(255)
+    maximum = builder.constant(0xFFFF_FFFF_0000_0000)
+    constraint = builder.sub(current, maximum)
+    builder.constrain("first_row", constraint)
+    package = builder.build()
+    assert canonical_digest_hex(package) == (
+        "794df3f5378ff97b9c2877bd1f01c8fbcf646a212981a9f2bd8cdd7147a4a454"
+    )
 
 
-@pytest.mark.asyncio
-async def test_async_templates_list():
-    payload = {
-        "count": 1,
-        "templates": [
-            {
-                "id": "accumulator_step",
-                "summary": "Prove an additive state transition",
-                "tags": ["arithmetic"],
-                "cost_category": "small",
-                "backend": "vm",
-                "lifecycle": "live",
-            }
-        ],
-    }
-    with respx.mock(base_url="https://api.example.com") as mock:
-        mock.get("/templates").mock(return_value=httpx.Response(200, json=payload))
-        async with HcClient("https://api.example.com") as client:
-            templates = await client.templates()
-            assert len(templates) == 1
-            assert isinstance(templates[0], TemplateSummary)
-            assert templates[0].id == "accumulator_step"
-            assert templates[0].backend == "vm"
-            assert templates[0].lifecycle == "live"
+def test_air_builder_rejects_forward_reference_and_degree_four():
+    builder = AirBuilder(trace_width=1)
+    column = builder.current(0)
+    square = builder.mul(column, column)
+    cube = builder.mul(square, column)
+    degree_four = builder.mul(cube, column)
+    builder.constrain("transition", degree_four)
+    with pytest.raises(ArtifactError, match="degree"):
+        builder.build()
 
 
-@pytest.mark.asyncio
-async def test_async_prove_template_returns_job_id():
-    payload = {"job_id": "prf_abc123"}
-    with respx.mock(base_url="https://api.example.com") as mock:
-        route = mock.post("/prove/template/accumulator_step").mock(
-            return_value=httpx.Response(200, json=payload)
-        )
-        async with HcClient("https://api.example.com", api_key="tzk_test") as client:
-            job_id = await client.prove_template(
-                "accumulator_step",
-                params={"initial": 1000, "final": 1045, "deltas": [10, 20, 15]},
-            )
-            assert job_id == "prf_abc123"
-            assert route.called
-            req = route.calls.last.request
-            assert req.headers["authorization"] == "Bearer tzk_test"
+def policy(tmp_path) -> ResourcePolicyV1:
+    return ResourcePolicyV1(
+        mode="scratch",
+        max_resident_bytes=128 * 1024 * 1024,
+        max_scratch_bytes=2 * 1024 * 1024 * 1024,
+        scratch_dir=str(tmp_path),
+        max_threads=1,
+        checkpoint_policy="retain_on_failure",
+    )
 
 
-@pytest.mark.asyncio
-async def test_async_verify_ok():
-    payload = {"ok": True}
-    with respx.mock(base_url="https://api.example.com") as mock:
-        mock.post("/verify").mock(return_value=httpx.Response(200, json=payload))
-        async with HcClient("https://api.example.com") as client:
-            result = await client.verify(ProofBytes(version=3, bytes=b"\x01\x02"))
-            assert result.ok
+def test_canonical_json_golden_vector():
+    value = {"z": [3, {"b": True, "a": "value"}], "a": 1}
+    encoded = canonical_json_v1(value)
+    assert encoded == b'{"a":1,"z":[3,{"a":"value","b":true}]}'
+    assert blake3(encoded).hexdigest() == (
+        "75cb2762f02e1cf0c67805150ce6179cf7f05e6eb28e5353d5923dcccbf7598c"
+    )
 
 
-@pytest.mark.asyncio
-async def test_async_error_raises_hc_client_error():
-    with respx.mock(base_url="https://api.example.com") as mock:
-        mock.post("/verify").mock(return_value=httpx.Response(429, text="rate limited"))
-        async with HcClient("https://api.example.com") as client:
-            with pytest.raises(HcClientError) as exc:
-                await client.verify(ProofBytes(version=3, bytes=b""))
-            assert exc.value.status_code == 429
+def test_manifest_round_trip_and_digest(tmp_path):
+    manifest = WorkloadManifestV1.fibonacci(0, 1, 1024, policy(tmp_path))
+    manifest.validate()
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest.to_dict()), encoding="utf-8")
+    loaded = load_manifest(path)
+    assert loaded == manifest
+    assert loaded.digest_hex() == manifest.digest_hex()
 
 
-def test_sync_healthz_ok():
-    with respx.mock(base_url="https://api.example.com") as mock:
-        mock.get("/healthz").mock(return_value=httpx.Response(200))
-        with HcClientSync("https://api.example.com") as client:
-            assert client.healthz() is True
+def test_shared_manifest_vector_matches_rust_digest():
+    root = Path(__file__).resolve().parents[3]
+    manifest = load_manifest(root / "test-vectors/plonky3/fibonacci-16.manifest.json")
+    assert manifest.digest_hex() == (
+        "9d131602e27428ca290c5ca87d543d085873840e4dba22dd3d8074945e57efcd"
+    )
 
 
-def test_sync_prove_template_returns_job_id():
-    payload = {"job_id": "prf_sync"}
-    with respx.mock(base_url="https://api.example.com") as mock:
-        mock.post("/prove/template/accumulator_step").mock(
-            return_value=httpx.Response(200, json=payload)
-        )
-        with HcClientSync("https://api.example.com", api_key="tzk_test") as client:
-            job_id = client.prove_template(
-                "accumulator_step",
-                params={"initial": 1000, "final": 1045, "deltas": [10, 20, 15]},
-            )
-            assert job_id == "prf_sync"
+def test_maximum_goldilocks_manifest_matches_rust_digest():
+    root = Path(__file__).resolve().parents[3]
+    manifest = load_manifest(
+        root / "test-vectors/plonky3/fibonacci-max-field.manifest.json"
+    )
+    assert manifest.input_generator["initial_a"] == 18446744069414584320
+    assert manifest.digest_hex() == (
+        "d66d868441137e6db964add9d7e4a2164ca3a722c66e73cbf06c2a576efee653"
+    )
 
 
-def test_proof_bytes_roundtrip():
-    p = ProofBytes(version=3, bytes=b"\xde\xad\xbe\xef")
-    assert ProofBytes.from_dict(p.to_dict()) == p
+def test_fibonacci_manifest_rejects_noncanonical_goldilocks_inputs(tmp_path):
+    maximum = 0xFFFF_FFFF_0000_0000
+    WorkloadManifestV1.fibonacci(maximum, 0, 16, policy(tmp_path)).validate()
+    with pytest.raises(ArtifactError):
+        WorkloadManifestV1.fibonacci(maximum + 1, 0, 16, policy(tmp_path)).validate()
+
+
+def test_shared_bundle_fixture_and_fail_closed_mutations(tmp_path):
+    root = Path(__file__).resolve().parents[3]
+    fixture = root / "test-vectors/plonky3/fibonacci-16.bundle.json"
+    bundle = load_bundle(fixture)
+    assert bundle.provenance["dependency_profile"] == "tinyzkp-p3-goldilocks-v1"
+
+    raw = json.loads(fixture.read_text(encoding="utf-8"))
+    raw["proof_base64url"] = raw["proof_base64url"][:-1]
+    truncated = tmp_path / "truncated.json"
+    truncated.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        load_bundle(truncated)
+
+    raw = json.loads(fixture.read_text(encoding="utf-8"))
+    raw["provenance"]["dependency_profile"] = "unreviewed-profile"
+    skewed = tmp_path / "skewed.json"
+    skewed.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        load_bundle(skewed)
+
+    raw = json.loads(fixture.read_text(encoding="utf-8"))
+    raw["unknown"] = True
+    unknown = tmp_path / "unknown.json"
+    unknown.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        load_bundle(unknown)
+
+
+def test_shared_report_fixture_rejects_unknown_fields(tmp_path):
+    root = Path(__file__).resolve().parents[3]
+    fixture = root / "test-vectors/plonky3/benchmark-report-v1.json"
+    assert load_report(fixture).mode == "bounded"
+    raw = json.loads(fixture.read_text(encoding="utf-8"))
+    raw["unbound_metric"] = 1
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        load_report(path)
+
+    raw = json.loads(fixture.read_text(encoding="utf-8"))
+    raw["benchmark_session_id"] = "not-a-session"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        load_report(path)
+
+    raw = json.loads(fixture.read_text(encoding="utf-8"))
+    raw["total_memory_bytes"] = 1 << 64
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        load_report(path)
+
+    raw = json.loads(fixture.read_text(encoding="utf-8"))
+    raw["storage_available_bytes"] = raw["storage_total_bytes"] + 1
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        load_report(path)
+
+    raw = json.loads(fixture.read_text(encoding="utf-8"))
+    raw["scratch_directory_mode"] = 0o755
+    raw["scratch_owned_by_runner"] = False
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        load_report(path)
+
+
+def test_unknown_version_and_non_power_of_two_rejected(tmp_path):
+    manifest = WorkloadManifestV1.fibonacci(0, 1, 1000, policy(tmp_path))
+    with pytest.raises(ArtifactError):
+        manifest.validate()
+
+
+def test_canonical_json_rejects_float():
+    with pytest.raises(ArtifactError):
+        canonical_json_v1({"value": 1.5})
+
+
+def test_uint64_boundaries_reject_booleans_and_overflow(tmp_path):
+    manifest = WorkloadManifestV1.fibonacci(True, 1, 16, policy(tmp_path))
+    with pytest.raises(ArtifactError):
+        manifest.validate()
+    with pytest.raises(ArtifactError):
+        canonical_json_v1({"value": 1 << 64})
+
+
+def test_base64url_requires_canonical_unpadded_encoding():
+    assert decode_base64url("AQID") == b"\x01\x02\x03"
+    with pytest.raises(ArtifactError):
+        decode_base64url("AQID=")

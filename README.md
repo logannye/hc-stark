@@ -30,12 +30,14 @@ The differentiating layer is prover-side infrastructure:
 - Linux cgroup-v2 measurement from fresh process creation through verification;
 - release provenance, compatibility locking, and fail-closed publication gates.
 
-The current implementation is a compatibility prototype, not the completed
-bounded-memory pipeline. Plonky3 `0.6.1` still hands the DFT an owned
-`RowMajorMatrix`, trace generation is not yet streamed, the DFT is blockwise
-radix-2 rather than the planned tiled four-step transform, and MMCS, quotient,
-FRI, and challenger checkpoint recovery are not yet external-memory. These
-limits are intentionally reflected by blocked release gates.
+The resource-bounded pipeline is implemented locally: trace and quotient
+generation, four-step transforms, MMCS, openings, and FRI use durable bounded
+stores, and typed checkpoints preserve the official challenger state for
+byte-identical resume. Plonky3 `0.6.1` still hands its generic DFT trait an
+owned `RowMajorMatrix`; TinyZKP's bounded orchestration therefore uses the
+separate block-matrix entry point. The implementation remains pre-production
+until fixed-host resource evidence, independent reviews, and an external
+design-partner integration satisfy the machine release gates.
 
 Standalone TinyZKP protocols, legacy receipts, recursion, zkML, zkVM, IPA,
 Spartan, KZG, and rollup prototypes are research only. Legacy CLI access
@@ -92,9 +94,10 @@ cargo run -p hc-cli -- plonky3 prove \
 cargo run -p hc-cli -- plonky3 verify --bundle /tmp/fibonacci.proof.json
 ```
 
-`hc-cli plonky3 resume` currently validates the checkpoint envelope and then
-fails closed because deterministic Plonky3 challenger continuation is not yet
-implemented. It will not silently restart and label that behavior as resume.
+`hc-cli plonky3 resume` validates every checkpoint identity and durable
+artifact, restores the official challenger state, and continues from the last
+completed phase. Crash/resume tests require the resulting proof bytes to match
+an uninterrupted run exactly.
 
 Generic `prove` and `verify` commands return migration guidance. Historical
 reproduction is available only in an offline research build:

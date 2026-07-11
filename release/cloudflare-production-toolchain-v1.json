@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "profile_id": "tinyzkp-cloudflare-production-v1",
+  "release_status": "backend_recovery",
+  "platform": {
+    "os": "linux",
+    "architecture": "x86_64"
+  },
+  "node": {
+    "version": "v24.18.0",
+    "production_path": "/var/lib/tinyzkp-runtime/node-v24.18.0-linux-x64/bin/node",
+    "archive_url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-x64.tar.xz",
+    "archive_sha256": "55aa7153f9d88f28d765fcdad5ae6945b5c0f98a36881703817e4c450fa76742",
+    "binary_sha256": "41a74efb34cbde5c7632cdac0cf8bd1a14d0b8d73dc1e82755014d9a9ce70f5c",
+    "bundled_npm_version": "11.16.0"
+  },
+  "wrangler": {
+    "package": "wrangler",
+    "version": "4.85.0",
+    "production_install_root": "/var/lib/tinyzkp-runtime/cloudflare-toolchain/node_modules",
+    "entrypoint": "wrangler/bin/wrangler.js"
+  },
+  "package_manifest_path": "toolchains/cloudflare/package.json",
+  "package_lock_path": "toolchains/cloudflare/package-lock.json",
+  "package_lock_sha256": "2cd7cc3c8c42edb15f90756738100a28265686894d6febc48db74ed352dc1199",
+  "install_script_metadata_allowlist": [
+    {
+      "package": "esbuild",
+      "version": "0.27.3",
+      "integrity": "sha512-8VwMnyGCONIs6cWue2IdpHxHnAjzxnw2Zr7MkVxB2vjmQ2ivqGFb4LEG3SMnv0Gb2F/G/2yA8zUaiL1gywDCCg=="
+    },
+    {
+      "package": "fsevents",
+      "version": "2.3.3",
+      "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="
+    },
+    {
+      "package": "sharp",
+      "version": "0.34.5",
+      "integrity": "sha512-Ou9I5Ft9WNcCbXrU9cMgPBcCK8LiwLqcbywW3t4oDV37n1pzpuNLsYiAV8eODnjbtQlSDwZ2cUEeQz4E54Hltg=="
+    },
+    {
+      "package": "workerd",
+      "version": "1.20260424.1",
+      "integrity": "sha512-oKsB0Xo/mfkYMdSACoS06XZg09VUK4rXwHfF/1t3P++sMbwzf4UHQvMO57+zxpEB2nVrY/ZkW0bYFGq4GdAFSQ=="
+    }
+  ]
+}

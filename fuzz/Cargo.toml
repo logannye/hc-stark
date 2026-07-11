@@ -9,13 +9,17 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+blake3 = "=1.8.2"
 serde_json = "1.0"
+tempfile = "3"
 
 hc-sdk = { path = "../crates/hc-sdk" }
 hc-verifier = { path = "../crates/hc-verifier" }
 hc-core = { path = "../crates/hc-core" }
 hc-commit = { path = "../crates/hc-commit" }
 hc-hash = { path = "../crates/hc-hash" }
+hc-plonky3 = { path = "../crates/hc-plonky3" }
+hc-stream = { path = "../crates/hc-stream" }
 
 [[bin]]
 name = "decode_proof_bytes"
@@ -50,5 +54,59 @@ doc = false
 [[bin]]
 name = "malformed_proof"
 path = "fuzz_targets/malformed_proof.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "workload_manifest_v1"
+path = "fuzz_targets/workload_manifest_v1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "proof_bundle_v1"
+path = "fuzz_targets/proof_bundle_v1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "plonky3_proof_bytes_v1"
+path = "fuzz_targets/plonky3_proof_bytes_v1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "checkpoint_manifest_v2"
+path = "fuzz_targets/checkpoint_manifest_v2.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "challenger_snapshot_v1"
+path = "fuzz_targets/challenger_snapshot_v1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "benchmark_report_v1"
+path = "fuzz_targets/benchmark_report_v1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "scratch_artifact_header_v1"
+path = "fuzz_targets/scratch_artifact_header_v1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "checkpoint_identity_v2"
+path = "fuzz_targets/checkpoint_identity_v2.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "resume_checkpoint_v2"
+path = "fuzz_targets/resume_checkpoint_v2.rs"
 test = false
 doc = false

@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "package_json_path": "clients/typescript/package.json",
+  "package_lock_path": "clients/typescript/package-lock.json",
+  "packages": [
+    {
+      "name": "@noble/hashes",
+      "version": "1.8.0",
+      "filename": "noble-hashes-1.8.0.tgz",
+      "archive_root": "package",
+      "url": "https://registry.npmjs.org/@noble/hashes/-/hashes-1.8.0.tgz",
+      "bytes": 155326,
+      "sha256": "e8a765d92c04faaccba8776411c5038cb195f812ee629fce07e1d2e6aec80ea0",
+      "integrity": "sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A=="
+    },
+    {
+      "name": "@types/json-bigint",
+      "version": "1.0.4",
+      "filename": "types-json-bigint-1.0.4.tgz",
+      "archive_root": "json-bigint",
+      "url": "https://registry.npmjs.org/@types/json-bigint/-/json-bigint-1.0.4.tgz",
+      "bytes": 1756,
+      "sha256": "db8cf27c1451764add18846ccd5e7207c356a034ce01d271095d144aedee8d9b",
+      "integrity": "sha512-ydHooXLbOmxBbubnA7Eh+RpBzuaIiQjh8WGJYQB50JFGFrdxW7JzVlyEV7fAXw0T2sqJ1ysTneJbiyNLqZRAag=="
+    },
+    {
+      "name": "@types/node",
+      "version": "20.19.39",
+      "filename": "types-node-20.19.39.tgz",
+      "archive_root": "node v20.19",
+      "url": "https://registry.npmjs.org/@types/node/-/node-20.19.39.tgz",
+      "bytes": 417609,
+      "sha256": "55785f37e1cf3b84c06a6704e157a018a5ea800423fb9f813d619357673f782a",
+      "integrity": "sha512-orrrD74MBUyK8jOAD/r0+lfa1I2MO6I+vAkmAWzMYbCcgrN4lCrmK52gRFQq/JRxfYPfonkr4b0jcY7Olqdqbw=="
+    },
+    {
+      "name": "bignumber.js",
+      "version": "9.3.1",
+      "filename": "bignumber.js-9.3.1.tgz",
+      "archive_root": "package",
+      "url": "https://registry.npmjs.org/bignumber.js/-/bignumber.js-9.3.1.tgz",
+      "bytes": 79843,
+      "sha256": "f5a943ea290e66f64cb9adaaed2ff1b7c4ee02a4cca9d709d9c9c6c222512e82",
+      "integrity": "sha512-Ko0uX15oIUS7wJ3Rb30Fs6SkVbLmPBAKdlm7q9+ak9bbIeFf0MwuBsQV6z7+X768/cHsfg+WlysDWJcmthjsjQ=="
+    },
+    {
+      "name": "json-bigint",
+      "version": "1.0.0",
+      "filename": "json-bigint-1.0.0.tgz",
+      "archive_root": "package",
+      "url": "https://registry.npmjs.org/json-bigint/-/json-bigint-1.0.0.tgz",
+      "bytes": 11238,
+      "sha256": "4c4f502953cfb36cfe1c6c4989676bf9b76899a253237fc0220814b88ff903b6",
+      "integrity": "sha512-SiPv/8VpZuWbvLSMtTDU8hEfrZWg/mH/nV/b4o0CYbSxu1UIQPLdwKOCIyLQX+VIPO5vrLX3i8qtqFyhdPSUSQ=="
+    },
+    {
+      "name": "typescript",
+      "version": "5.9.3",
+      "filename": "typescript-5.9.3.tgz",
+      "archive_root": "package",
+      "url": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+      "bytes": 4377468,
+      "sha256": "10e108c9cf7d5f2879053dff18515fb405abf2ccef63eaaf017d9c571687a1d3",
+      "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="
+    },
+    {
+      "name": "undici-types",
+      "version": "6.21.0",
+      "filename": "undici-types-6.21.0.tgz",
+      "archive_root": "package",
+      "url": "https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz",
+      "bytes": 21020,
+      "sha256": "cfa1a9a5e18988850e548f4f6b629c58da32dc32bebb116e58ea301e516fd16d",
+      "integrity": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="
+    }
+  ]
+}

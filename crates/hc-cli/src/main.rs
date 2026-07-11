@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 mod commands;
@@ -60,6 +60,24 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum Plonky3Command {
+    /// Validate a declarative customer AIR and print its content digest.
+    ValidateAir {
+        #[arg(long)]
+        air: PathBuf,
+    },
+    /// Validate and package a flat Goldilocks trace into fixed-size Zstandard chunks.
+    PackTrace {
+        #[arg(long)]
+        air: PathBuf,
+        #[arg(long)]
+        trace: PathBuf,
+        #[arg(long)]
+        rows: u64,
+        #[arg(long)]
+        output_dir: PathBuf,
+        #[arg(long, default_value_t = 64 * 1024 * 1024)]
+        chunk_bytes: u64,
+    },
     Prove {
         #[arg(long)]
         manifest: PathBuf,
@@ -77,8 +95,14 @@ enum Plonky3Command {
         bundle: PathBuf,
     },
     Doctor {
-        #[arg(long)]
-        policy: PathBuf,
+        #[arg(
+            long,
+            conflicts_with = "manifest",
+            required_unless_present = "manifest"
+        )]
+        policy: Option<PathBuf>,
+        #[arg(long, conflicts_with = "policy", required_unless_present = "policy")]
+        manifest: Option<PathBuf>,
     },
 }
 
@@ -87,13 +111,26 @@ enum BenchmarkCommand {
     Plonky3 {
         #[arg(long)]
         manifest: PathBuf,
-        #[arg(long, default_value = "conventional")]
-        baseline: String,
-        #[arg(long, default_value = "bounded")]
-        candidate: String,
+        #[arg(long, value_enum, default_value_t = BenchmarkModeArg::Throughput)]
+        mode: BenchmarkModeArg,
         #[arg(long)]
         report: PathBuf,
     },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum BenchmarkModeArg {
+    Throughput,
+    Ceiling,
+}
+
+impl BenchmarkModeArg {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Throughput => "throughput",
+            Self::Ceiling => "ceiling",
+        }
+    }
 }
 
 #[cfg(feature = "legacy-research")]
@@ -114,10 +151,7 @@ enum LegacyResearchCommand {
 fn main() -> Result<()> {
     match Cli::parse().command {
         Commands::Release => {
-            let release_sha = std::env::var("HC_RELEASE_SHA")
-                .ok()
-                .filter(|value| !value.is_empty())
-                .or_else(|| option_env!("HC_RELEASE_SHA").map(ToString::to_string));
+            let release_sha = hc_plonky3::release_identity();
             let release_ref = std::env::var("HC_RELEASE_REF")
                 .ok()
                 .filter(|value| !value.is_empty())
@@ -132,11 +166,26 @@ fn main() -> Result<()> {
                     "backend": "plonky3",
                     "plonky3_version": hc_plonky3::PLONKY3_VERSION,
                     "compatibility_profile": hc_plonky3::COMPATIBILITY_PROFILE,
+                    "dependency_lock_sha256": hc_plonky3::DEPENDENCY_LOCK_SHA256,
                 }))?
             );
             Ok(())
         }
         Commands::Plonky3 { command } => match command {
+            Plonky3Command::ValidateAir { air } => commands::plonky3::validate_air(&air),
+            Plonky3Command::PackTrace {
+                air,
+                trace,
+                rows,
+                output_dir,
+                chunk_bytes,
+            } => commands::plonky3::pack_trace(
+                &air,
+                &trace,
+                rows,
+                &output_dir,
+                chunk_bytes,
+            ),
             Plonky3Command::Prove { manifest, output } => {
                 commands::plonky3::prove(&manifest, &output)
             }
@@ -144,20 +193,16 @@ fn main() -> Result<()> {
                 commands::plonky3::resume(&checkpoint, &output)
             }
             Plonky3Command::Verify { bundle } => commands::plonky3::verify(&bundle),
-            Plonky3Command::Doctor { policy } => commands::plonky3::doctor(&policy),
+            Plonky3Command::Doctor { policy, manifest } => {
+                commands::plonky3::doctor(policy.as_deref(), manifest.as_deref())
+            }
         },
         Commands::Benchmark { command } => match command {
             BenchmarkCommand::Plonky3 {
                 manifest,
-                baseline,
-                candidate,
+                mode,
                 report,
-            } => commands::plonky3::benchmark_guidance(
-                &manifest,
-                &baseline,
-                &candidate,
-                &report,
-            ),
+            } => commands::plonky3::benchmark_guidance(&manifest, mode.as_str(), &report),
         },
         Commands::Schema { output_dir } => commands::plonky3::export_schemas(&output_dir),
         Commands::Prove | Commands::Verify => bail!(
