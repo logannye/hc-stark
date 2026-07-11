@@ -46,6 +46,9 @@ PINNED_ARTIFACT_DEPENDENCIES = {
     "rayon",
     "serde",
     "serde_json",
+    "zstd",
+    "zstd-safe",
+    "zstd-sys",
 }
 
 
@@ -383,7 +386,11 @@ def compatibility_identity(path: Path) -> dict[str, str]:
         raise EvidenceError(
             "compatibility artifact dependency set is incomplete or unknown"
         )
-    if manifest.get("validated_workloads") != ["fibonacci", "poseidon2_goldilocks"]:
+    if manifest.get("validated_workloads") != [
+        "fibonacci",
+        "poseidon2_goldilocks",
+        "declarative_air_v1",
+    ]:
         raise EvidenceError(
             "compatibility validated_workloads differs from the frozen profile"
         )
