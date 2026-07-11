@@ -15,7 +15,22 @@ const SECURITY_HEADERS = {
 };
 
 const CANONICAL_HOST = "tinyzkp.com";
-const TYPO_HOSTS = new Set(["www.tinyzkp.com", "tny" + "zkp.com", "www.tny" + "zkp.com"]);
+const PUBLIC_EXTENSIONLESS_PATHS = new Set([
+  "/", "/engine", "/benchmarks", "/plonky3", "/security", "/docs",
+  "/pricing", "/status", "/contact", "/privacy", "/terms", "/requests",
+]);
+const SITE_ASSET_MANIFEST_PATHS = [
+  "/index.html",
+  "/contact.html",
+  "/requests.html",
+  "/security.html",
+  "/privacy.html",
+  "/terms.html",
+  "/status.html",
+  "/.well-known/security.txt",
+  "/pricing.json",
+  "/openapi.json",
+];
 
 const PERMANENT_REDIRECTS = new Map([
   ["/account", "/status"],
@@ -43,6 +58,7 @@ const GONE_PREFIXES = [
 const GONE_ASSETS = new Set([
   "/mcp.json", "/evaluation.json", "/enterprise.json", "/platform-rollout.json",
   "/changelog.json", "/fit.json", "/integrations.json", "/limits.json",
+  "/.well-known/mcp/server-card.json",
   "/.well-known/tinyzkp-badge.json", "/.well-known/tinyzkp-offers.json",
   "/.well-known/tinyzkp-receipt-share.json", "/pilot-preview.jpg",
 ]);
@@ -70,7 +86,6 @@ function withSecurityHeaders(response) {
 function canonicalHostRedirect(url) {
   const host = url.hostname.toLowerCase();
   if (host === CANONICAL_HOST && url.protocol === "https:") return null;
-  if (host !== CANONICAL_HOST && !TYPO_HOSTS.has(host)) return null;
   const target = new URL(url);
   target.protocol = "https:";
   target.hostname = CANONICAL_HOST;
@@ -118,23 +133,55 @@ function protocolUpgradeResponse() {
   }), { status: 503, headers: { "Content-Type": "application/json" } });
 }
 
-function releaseInfo(env) {
+async function sha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function siteAssetManifest(env) {
+  const assets = [];
+  for (const path of SITE_ASSET_MANIFEST_PATHS) {
+    const response = await env.ASSETS.fetch(new Request(new URL(path, "https://tinyzkp.com")));
+    if (response.status !== 200) {
+      return { complete: false, sha256: null, assets: [], error: `${path} returned ${response.status}` };
+    }
+    const bytes = await response.arrayBuffer();
+    assets.push({ path, bytes: bytes.byteLength, sha256: await sha256Hex(bytes) });
+  }
+  const canonical = new TextEncoder().encode(JSON.stringify(assets));
+  return { complete: true, sha256: await sha256Hex(canonical), assets };
+}
+
+async function releaseInfo(env) {
+  const assetManifest = await siteAssetManifest(env);
   return {
     service: "site",
     package_version: "0.1.0",
     release_sha: envString(env, "TINYZKP_RELEASE_SHA") || envString(env, "CF_PAGES_COMMIT_SHA"),
     release_ref: envString(env, "TINYZKP_RELEASE_REF") || envString(env, "CF_PAGES_BRANCH"),
     build_url: envString(env, "TINYZKP_RELEASE_BUILD_URL") || envString(env, "CF_PAGES_URL"),
+    asset_manifest_complete: assetManifest.complete,
+    asset_manifest_sha256: assetManifest.sha256,
   };
 }
 
 async function fetchStaticAsset(request, env, url) {
+  const lastSegment = url.pathname.split("/").pop() || "";
+  if (
+    new Set(["GET", "HEAD"]).has(request.method)
+    && !lastSegment.includes(".")
+    && !PUBLIC_EXTENSIONLESS_PATHS.has(url.pathname)
+  ) {
+    return withSecurityHeaders(new Response("not found", {
+      status: 404,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    }));
+  }
   const direct = await env.ASSETS.fetch(request);
   if (direct.status !== 404) return withSecurityHeaders(direct);
   if (!new Set(["GET", "HEAD"]).has(request.method) || url.pathname === "/" || url.pathname.startsWith("/api/")) {
     return withSecurityHeaders(direct);
   }
-  const lastSegment = url.pathname.split("/").pop() || "";
   if (lastSegment.includes(".")) return withSecurityHeaders(direct);
   const htmlUrl = new URL(url);
   htmlUrl.pathname = `${url.pathname}.html`;
@@ -150,7 +197,7 @@ export default {
     if (retired) return withSecurityHeaders(retired);
 
     if (url.pathname === "/api/release" && request.method === "GET") {
-      return withSecurityHeaders(new Response(JSON.stringify(releaseInfo(env)), {
+      return withSecurityHeaders(new Response(JSON.stringify(await releaseInfo(env)), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }));

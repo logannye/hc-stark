@@ -1,6 +1,8 @@
 {
-  "_comment": "Single source of truth for TinyZKP pricing + plan limits. Read by parity tests in both crates/hc-server/src/usage_log.rs and billing/tests/test_pricing_parity.py — drift between either Rust or Python and this file fails CI. Edit this file FIRST when changing pricing; the parity tests will fail loudly until both sides catch up.",
-  "_plan_visibility": "Stripe self-serve checkout exposes Free, Developer, Pro, Scale, and Compute. Pro is the public $79/mo rung using the old Team economics (25% off, 8 inflight, 300 RPM, $2,500/mo cap). 'team' is retained only as a legacy/admin alias to 'pro' and must not be advertised as a storefront plan.",
+  "_comment": "LEGACY-RESEARCH-ONLY rate/limit fixture retained for offline compatibility tests. It is not a current offer source and must never drive checkout, invoicing, metering, ARR, or pipeline. Current commercial offers live in site/pricing.json.",
+  "service_status": "legacy_research_only",
+  "writes_enabled": false,
+  "_plan_visibility": "Free, Developer, Pro, Scale, Compute, Team, and Production Pilot are retired. Public checkout and usage billing remain disabled during Plonky3 backend recovery.",
   "billing_meters": {
     "_comment": "Declares which Stripe meter each plan bills through. sync_usage.py and parity tests enforce this mapping. 'compute' tenants are metered by raw trace steps via trace_step_usage ($0.50/1M steps); all other plans use proof_usage (discounted cents-per-proof). The monthly_cap_cents on the compute plan is a coarse safety bound only — real billing is the step meter.",
     "compute": "trace_step_usage",

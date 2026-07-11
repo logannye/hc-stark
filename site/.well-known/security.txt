@@ -1,4 +1,5 @@
-Contact: mailto:logan@tinyzkp.com
+Contact: https://tinyzkp.com/requests?intent=security
+Expires: 2027-07-10T00:00:00Z
 Policy: https://tinyzkp.com/security
 Preferred-Languages: en
 Canonical: https://tinyzkp.com/.well-known/security.txt

@@ -98,7 +98,9 @@ def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
 def load_pricing_model(path: Path = PRICING_PATH) -> PricingModel:
     with path.open(encoding="utf-8") as handle:
         pricing = json.load(handle)
-    plans = pricing.get("plans") if isinstance(pricing, dict) else []
+    if isinstance(pricing, dict) and pricing.get("service_status") == "backend_recovery":
+        return PricingModel({}, [], Decimal("0"), 0)
+    plans = (pricing.get("plans") or []) if isinstance(pricing, dict) else []
     base_monthly_by_plan = {
         str(plan.get("id", "")).lower(): int(plan.get("base_monthly") or 0)
         for plan in plans
@@ -302,7 +304,9 @@ def report_markdown(groups: list[SourceSummary], *, generated_ms: int | None = N
     total_usage_revenue_cents = sum(group.estimated_usage_revenue_cents for group in groups)
     total_compute_trace_steps = sum(group.compute_trace_steps for group in groups)
     rows = [
-        "# TinyZKP GTM Revenue Report",
+        "# TinyZKP Legacy Account Activity Report",
+        "",
+        "> Historical account/proof activity only. This is not contracted ARR, cash, or pipeline value during backend recovery.",
         "",
         f"Generated: {_fmt_date(generated_ms)} UTC",
         "",

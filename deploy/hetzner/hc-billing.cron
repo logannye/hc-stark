@@ -1,0 +1,5 @@
+# TinyZKP backend recovery: legacy usage meters, checkout recovery, lifecycle
+# nudges, and growth automation are intentionally disabled. Contract invoices
+# are operator-created through the reviewed Stripe Invoicing workflow.
+0 2 * * * root /opt/hc-stark/billing/backup.sh >> /var/log/hc-backup.log 2>&1
+17 3 * * * tinyzkp-billing /bin/sh -c 'umask 077; exec /var/lib/tinyzkp-runtime/billing-venv/bin/python /opt/hc-stark/billing/evaluation_intake.py --db /opt/hc-stark/data/evaluation_applications.sqlite purge-expired --apply >> /opt/hc-stark/data/evaluation-retention.log 2>&1'

@@ -52,6 +52,11 @@ webhook.tinyzkp.com {
     reverse_proxy 127.0.0.1:5001
   }
 
+  @contact_readiness path /contact-readiness
+  handle @contact_readiness {
+    reverse_proxy 127.0.0.1:5001
+  }
+
   @webhook_health path /health
   handle @webhook_health {
     reverse_proxy 127.0.0.1:5001

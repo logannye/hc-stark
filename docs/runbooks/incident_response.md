@@ -144,9 +144,12 @@ python3 billing/usage_pg_tools.py compare --since-ms "$DUAL_WRITE_START_MS"
 ## Rollback
 
 - Website rollback: redeploy previous Cloudflare Pages deployment.
-- API rollback: use the Hetzner deploy logs to identify the previous good git
-  revision, then redeploy that revision only if fixing forward is slower than
-  user impact allows.
+- API/MCP rollback during an active failed deployment: use only
+  `/opt/hc-stark/deploy/hetzner/rollback.sh <prior-known-containment-40-char-sha>`.
+  The helper accepts only the exact immutable release recorded before the
+  transaction. If there is no prior known-containment release, it stops every
+  backend surface instead of restoring legacy v5/v7 service. Never edit the
+  transaction ledger or deploy an arbitrary previous git revision.
 - Billing rollback: never simply restore a DB without reconciling Stripe events
   emitted during the incident window.
 - Protocol/verifier rollback: requires a security note when bad proofs may have

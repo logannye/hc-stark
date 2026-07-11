@@ -32,6 +32,7 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
 SMTP_FROM = os.environ.get("SMTP_FROM", "noreply@tinyzkp.com")
+OUTBOUND_EMAIL_ENABLED = os.environ.get("TINYZKP_OUTBOUND_EMAIL_ENABLED", "0").strip() == "1"
 
 ZERO_PROOF_DELAY_MS = 24 * 60 * 60 * 1000
 IDLE_WINBACK_DELAY_MS = 14 * 24 * 60 * 60 * 1000
@@ -237,6 +238,9 @@ def nudge_for_tenant(
 
 
 def send_email(to_email: str, subject: str, body: str) -> bool:
+    if not OUTBOUND_EMAIL_ENABLED:
+        print("Outbound email disabled", file=sys.stderr)
+        return False
     if not SMTP_HOST:
         print("SMTP not configured, skipping lifecycle email", file=sys.stderr)
         return False

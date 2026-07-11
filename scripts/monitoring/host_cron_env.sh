@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO="${TINYZKP_REPO:-/opt/hc-stark}"
-PYTHON="${TINYZKP_PYTHON:-$REPO/.venv/bin/python}"
+PYTHON="${TINYZKP_PYTHON:-/var/lib/tinyzkp-runtime/billing-venv/bin/python}"
 ENV_FILE="${TINYZKP_ENV_FILE:-$REPO/.env}"
 
 if [ "$#" -lt 1 ]; then

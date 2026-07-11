@@ -105,3 +105,11 @@ def test_json_ld_urls_extracts_only_local_urls():
         "/docs",
         "https://www.tinyzkp.com/security",
     ]
+
+
+def test_public_site_uses_no_listed_email_contact():
+    assert check.validate_no_public_email() == []
+    security_txt = (check.SITE / ".well-known" / "security.txt").read_text(encoding="utf-8")
+    assert "Contact: https://" in security_txt
+    assert "Expires:" in security_txt
+    assert "mailto:" not in security_txt.lower()

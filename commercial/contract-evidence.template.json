@@ -1,0 +1,19 @@
+{
+  "schema_version": 2,
+  "agreement_id": "REPLACE_WITH_SAFE_AGREEMENT_ID",
+  "offer_id": "founding_evaluation",
+  "stripe_customer_id": "cus_REPLACE",
+  "agreement_sha256": "REPLACE_WITH_LOWERCASE_64_HEX",
+  "scope_sha256": "REPLACE_WITH_ACCEPTANCE_MATRIX_OR_ORDER_FORM_SHA256",
+  "agreement_gate_sha256": "REPLACE_WITH_AGREEMENT_GATE_SHA256_FOR_EVALUATIONS_OR_NULL",
+  "qualification_sha256": "REPLACE_WITH_QUALIFICATION_SHA256_FOR_EVALUATIONS_OR_NULL",
+  "partner_preflight_sha256": "REPLACE_WITH_PARTNER_PREFLIGHT_SHA256_FOR_EVALUATIONS_OR_NULL",
+  "stripe_test_drill_sha256": "REPLACE_WITH_STRIPE_TEST_DRILL_SHA256_FOR_EVALUATIONS_OR_NULL",
+  "delivery_manifest_sha256": null,
+  "signed_at": "REPLACE_WITH_RFC3339_UTC_Z_TIME",
+  "delivery_acceptance_sha256": null,
+  "delivery_accepted_at": null,
+  "deposit_invoice_id": null,
+  "deposit_plan_sha256": null,
+  "negotiated_annual_amount_cents": null
+}

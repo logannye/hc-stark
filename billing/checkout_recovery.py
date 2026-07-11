@@ -36,6 +36,7 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
 SMTP_FROM = os.environ.get("SMTP_FROM", "noreply@tinyzkp.com")
+OUTBOUND_EMAIL_ENABLED = os.environ.get("TINYZKP_OUTBOUND_EMAIL_ENABLED", "0").strip() == "1"
 
 RECOVERY_DELAY_HOURS = float(os.environ.get("CHECKOUT_RECOVERY_DELAY_HOURS", "3"))
 RECOVERY_LOOKBACK_HOURS = float(os.environ.get("CHECKOUT_RECOVERY_LOOKBACK_HOURS", "48"))
@@ -238,6 +239,9 @@ def recovery_from_session(session: object) -> CheckoutRecovery | None:
 
 
 def send_email(to_email: str, subject: str, body: str) -> bool:
+    if not OUTBOUND_EMAIL_ENABLED:
+        print("Outbound email disabled", file=sys.stderr)
+        return False
     if not SMTP_HOST:
         print("SMTP not configured, skipping checkout recovery email", file=sys.stderr)
         return False

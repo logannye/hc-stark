@@ -1,0 +1,14 @@
+{
+  "schema_version": "tinyzkp-annual-order-v1",
+  "agreement_id": "REPLACE_WITH_SAFE_AGREEMENT_ID",
+  "offer_id": "tinyzkp_certified",
+  "stripe_customer_id": "cus_REPLACE",
+  "signed_agreement_sha256": "REPLACE_WITH_COUNTERSIGNED_AGREEMENT_SHA256",
+  "negotiated_annual_amount_cents": 6000000,
+  "currency": "usd",
+  "billing_interval": "year",
+  "stripe_price_id": "price_REPLACE",
+  "stripe_product_id": "prod_REPLACE",
+  "customer_countersigned_at": "REPLACE_WITH_RFC3339_UTC_Z_TIME",
+  "tinyzkp_countersigned_at": "REPLACE_WITH_FINAL_RFC3339_UTC_Z_TIME"
+}

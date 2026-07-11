@@ -42,7 +42,7 @@ PUBLIC_HTML = {
     "status.html",
     "contact.html",
 }
-LEGAL_HTML = {"privacy.html", "terms.html"}
+LEGAL_HTML = {"privacy.html", "terms.html", "requests.html"}
 PERMANENTLY_REDIRECTED_ROUTES = {
     "/account",
     "/welcome",
@@ -77,6 +77,12 @@ GONE_ROUTE_PREFIXES = {
     "/templates",
     "/vendor",
 }
+PUBLIC_EMAIL_RE = re.compile(
+    r"(?:mailto:|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})",
+    re.IGNORECASE,
+)
+OBFUSCATED_EMAIL_MARKERS = ("__cf_email__", "/cdn-cgi/l/email-protection")
+PUBLIC_TEXT_SUFFIXES = {".html", ".js", ".json", ".txt", ".xml"}
 
 
 @dataclass(frozen=True)
@@ -413,6 +419,44 @@ def validate_robots_txt() -> list[str]:
     return []
 
 
+def validate_no_public_email() -> list[str]:
+    """Require public web contact to use HTTPS/non-email channels only."""
+    failures: list[str] = []
+    for path in sorted(SITE.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES:
+            continue
+        relative_parts = path.relative_to(SITE).parts
+        if any(part.startswith(".") and part != ".well-known" for part in relative_parts):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            match = PUBLIC_EMAIL_RE.search(line)
+            if match:
+                failures.append(
+                    f"{display_path(path)}:{line_number}: public email contact is forbidden: {match.group(0)!r}"
+                )
+            for marker in OBFUSCATED_EMAIL_MARKERS:
+                if marker in line.lower():
+                    failures.append(
+                        f"{display_path(path)}:{line_number}: obfuscated public email contact is forbidden: {marker!r}"
+                    )
+
+    security_txt = SITE / ".well-known" / "security.txt"
+    if not security_txt.is_file():
+        failures.append("site/.well-known/security.txt is missing")
+        return failures
+    lines = [line.strip() for line in security_txt.read_text(encoding="utf-8").splitlines()]
+    contacts = [line.removeprefix("Contact:").strip() for line in lines if line.startswith("Contact:")]
+    if not contacts:
+        failures.append("site/.well-known/security.txt must contain an HTTPS Contact field")
+    for contact in contacts:
+        if not contact.startswith("https://"):
+            failures.append("site/.well-known/security.txt Contact fields must use HTTPS")
+    if not any(line.startswith("Expires:") for line in lines):
+        failures.append("site/.well-known/security.txt must contain an Expires field")
+    return failures
+
+
 def display_path(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
 
@@ -424,6 +468,7 @@ def main() -> int:
     failures: list[str] = []
     failures.extend(route_table_failures)
     failures.extend(validate_robots_txt())
+    failures.extend(validate_no_public_email())
     sitemap_records, sitemap_failures = sitemap_url_records()
     failures.extend(sitemap_failures)
 

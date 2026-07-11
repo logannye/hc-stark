@@ -16,8 +16,10 @@ CANCEL_URL = os.environ.get("CHECKOUT_CANCEL_URL", "https://tinyzkp.com?checkout
 
 
 def main() -> None:
-    if (stripe.api_key or "").startswith("sk_live_"):
+    if "_live_" in (stripe.api_key or ""):
         raise SystemExit("legacy self-serve Checkout is disabled during the Plonky3 backend recovery")
+    if os.environ.get("TINYZKP_ALLOW_LEGACY_TEST_CHECKOUT", "").strip() != "1":
+        raise SystemExit("legacy Checkout requires TINYZKP_ALLOW_LEGACY_TEST_CHECKOUT=1 in test mode")
     if not stripe.api_key or not PRICE_ID:
         raise SystemExit("STRIPE_SECRET_KEY and STRIPE_PRICE_ID are required for test-mode checkout")
     session = stripe.checkout.Session.create(

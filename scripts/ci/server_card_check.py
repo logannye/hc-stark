@@ -13,18 +13,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 CARD = ROOT / "deploy" / "server-card.json"
 CARGO_TOML = ROOT / "Cargo.toml"
 
-EXPECTED_TOOLS = {
-    "describe_template",
-    "get_capabilities",
-    "get_proof",
-    "get_proof_summary",
-    "list_templates",
-    "list_workloads",
-    "poll_job",
-    "prove_template",
-    "prove_workload",
-    "verify_proof",
-}
+EXPECTED_TOOLS = {"get_capabilities"}
 
 FORBIDDEN_PUBLIC_TEMPLATE_MARKERS = {
     "range_proof",
@@ -79,10 +68,16 @@ def validate_card(card: dict[str, object]) -> list[str]:
         )
 
     description = str(metadata.get("description", ""))
-    if "accumulator_step available now" not in description:
-        failures.append("metadata.description must state accumulator_step is available now")
-    if "No trusted setup" not in description:
-        failures.append("metadata.description must preserve transparent/no-trusted-setup positioning")
+    if metadata.get("service_status") != "backend_recovery":
+        failures.append("metadata.service_status must be backend_recovery")
+    for unavailable_claim in (
+        "Hosted proving",
+        "hosted verification",
+        "account creation",
+        "public checkout",
+    ):
+        if unavailable_claim.lower() not in description.lower():
+            failures.append(f"metadata.description must disclose unavailable {unavailable_claim}")
     if metadata.get("homepage") != "https://tinyzkp.com":
         failures.append("metadata.homepage must be https://tinyzkp.com")
     if metadata.get("documentation") != "https://tinyzkp.com/docs":
@@ -92,15 +87,17 @@ def validate_card(card: dict[str, object]) -> list[str]:
 
     if auth.get("required") is not False:
         failures.append("authentication.required must be false for the public MCP lane")
-    auth_description = str(auth.get("description", ""))
-    auth_description_lower = auth_description.lower()
-    if "optional bearer token" not in auth_description_lower or "public lane" not in auth_description_lower:
-        failures.append("authentication.description must describe optional Bearer and public lane behavior")
+    if auth.get("schemes") != []:
+        failures.append("authentication.schemes must be empty during recovery")
 
     properties = config_schema.get("properties") if isinstance(config_schema.get("properties"), dict) else {}
-    api_key = properties.get("apiKey") if isinstance(properties.get("apiKey"), dict) else {}
-    if "https://tinyzkp.com/signup" not in str(api_key.get("description", "")):
-        failures.append("configSchema.apiKey.description must link to signup")
+    if properties:
+        failures.append("configSchema.properties must be empty during recovery")
+
+    availability = card.get("availability") if isinstance(card.get("availability"), dict) else {}
+    for field in ("proving", "verification", "accounts", "checkout"):
+        if availability.get(field) is not False:
+            failures.append(f"availability.{field} must be false")
 
     serialized = json.dumps(card).lower()
     leaked = sorted(marker for marker in FORBIDDEN_PUBLIC_TEMPLATE_MARKERS if marker in serialized)

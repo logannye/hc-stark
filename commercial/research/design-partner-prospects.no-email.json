@@ -1,0 +1,354 @@
+{
+  "schema_version": 1,
+  "generated_on": "2026-07-10",
+  "status": "research_only_blocked_until_live_no_email_canary",
+  "policy": {
+    "contact_scope": "organization_level_public_routes_only",
+    "personal_names_collected": false,
+    "personal_emails_collected": false,
+    "messages_sent": false,
+    "outreach_blocker": "live_no_email_canary",
+    "permitted_routes": [
+      "github_discussions",
+      "github_issues"
+    ],
+    "prohibited_actions": [
+      "collect_personal_contact_details",
+      "send_messages_before_live_no_email_canary",
+      "open_unsolicited_sales_issues",
+      "treat_research_as_pipeline_value"
+    ]
+  },
+  "prospects": [
+    {
+      "rank": 1,
+      "id": "plonky3",
+      "company_project": "Plonky3 / Polygon Labs",
+      "public_repo": "https://github.com/Plonky3/Plonky3",
+      "repository_observed": {
+        "date_checked": "2026-07-10",
+        "archived": false,
+        "updated_at": "2026-07-10T20:58:40Z"
+      },
+      "evidence": {
+        "signal": "direct_plonky3_use",
+        "url": "https://github.com/Plonky3/Plonky3/blob/6b6a3b4d40fca2187d368c9dc1fca417c84ae8c3/README.md",
+        "title": "Plonky3 README: STARK zkVM toolkit and production virtual-memory tuning",
+        "date_checked": "2026-07-10",
+        "summary": "The upstream project says Plonky3 mainly powers STARK-based zkVMs and documents production virtual-memory tradeoffs for repeated proofs.",
+        "supporting_urls": []
+      },
+      "fit_hypothesis": "Upstream alignment on fallible block-readable matrices and caller-supplied storage could make TinyZKP's bounded backend useful across the Plonky3 ecosystem; this is primarily an integration and standards relationship, not an assumed customer sale.",
+      "qualification_gaps": [
+        "Whether upstream maintainers want a storage-interface RFC for the pinned compatibility line",
+        "Which reference workload and memory ceiling would be considered representative",
+        "Whether exact proof-byte equivalence is required by upstream consumers",
+        "Whether any organization has budget for sponsored integration or independent reproduction"
+      ],
+      "public_non_email_route": {
+        "kind": "github_discussions",
+        "url": "https://github.com/Plonky3/Plonky3/discussions",
+        "use_policy": "Use only after the live no-email canary for an organization-level technical discussion; no unsolicited sales pitch."
+      },
+      "status": "research_only_blocked_until_live_no_email_canary"
+    },
+    {
+      "rank": 2,
+      "id": "sp1",
+      "company_project": "SP1 / Succinct",
+      "public_repo": "https://github.com/succinctlabs/sp1",
+      "repository_observed": {
+        "date_checked": "2026-07-10",
+        "archived": false,
+        "updated_at": "2026-07-10T18:27:44Z"
+      },
+      "evidence": {
+        "signal": "direct_plonky3_use",
+        "url": "https://github.com/succinctlabs/sp1/blob/46ea61f0a72cde58bc7fb77ff911fb2db5fb5920/README.md#acknowledgements",
+        "title": "SP1 README: prover powered by Plonky3",
+        "date_checked": "2026-07-10",
+        "summary": "The project README states that the SP1 prover is powered by the Plonky3 toolkit.",
+        "supporting_urls": []
+      },
+      "fit_hypothesis": "A deterministic bounded-RAM CPU path could be evaluated for SP1 workloads that exceed conventional host memory, while preserving the project's existing proof and verifier contracts.",
+      "qualification_gaps": [
+        "The active Plonky3 fork and dependency versions in the target release",
+        "Whether the relevant constraint is CPU RAM, accelerator memory, or distributed capacity",
+        "A reproducible non-sensitive workload with current peak RSS or OOM evidence",
+        "Whether a bounded CPU backend fits the current prover architecture and commercial roadmap"
+      ],
+      "public_non_email_route": {
+        "kind": "github_discussions",
+        "url": "https://github.com/succinctlabs/sp1/discussions",
+        "use_policy": "Use only after the live no-email canary for an organization-level technical discussion; no unsolicited sales pitch."
+      },
+      "status": "research_only_blocked_until_live_no_email_canary"
+    },
+    {
+      "rank": 3,
+      "id": "openvm",
+      "company_project": "OpenVM",
+      "public_repo": "https://github.com/openvm-org/openvm",
+      "repository_observed": {
+        "date_checked": "2026-07-10",
+        "archived": false,
+        "updated_at": "2026-07-10T21:06:07Z"
+      },
+      "evidence": {
+        "signal": "direct_plonky3_use",
+        "url": "https://github.com/openvm-org/openvm/blob/a34a90b54839e247fdf305feec4ec9e78383fb9a/README.md#acknowledgements",
+        "title": "OpenVM README: STARK backend and circuit interfaces built on Plonky3",
+        "date_checked": "2026-07-10",
+        "summary": "The project README states that its STARK backend and circuit-writing interfaces are built on Plonky3.",
+        "supporting_urls": [
+          "https://github.com/openvm-org/stark-backend"
+        ]
+      },
+      "fit_hypothesis": "OpenVM's modular STARK backend is a strong technical match for measuring scratch-backed matrices, DFTs, commitments, and recovery against a real customizable zkVM workload.",
+      "qualification_gaps": [
+        "The exact backend and Plonky3 revisions required for a partner build",
+        "Current whole-process RSS and the phase that determines peak memory",
+        "A workload that can be shared as a deterministic non-sensitive generator",
+        "Whether official verification and proof-byte equality are sufficient acceptance criteria"
+      ],
+      "public_non_email_route": {
+        "kind": "github_issues",
+        "url": "https://github.com/openvm-org/openvm/issues",
+        "use_policy": "Use only after the live no-email canary and only for a repository-relevant technical RFC permitted by project policy; never open an unsolicited sales issue."
+      },
+      "status": "research_only_blocked_until_live_no_email_canary"
+    },
+    {
+      "rank": 4,
+      "id": "valida",
+      "company_project": "Valida",
+      "public_repo": "https://github.com/valida-xyz/valida",
+      "repository_observed": {
+        "date_checked": "2026-07-10",
+        "archived": false,
+        "updated_at": "2026-07-10T17:50:53Z"
+      },
+      "evidence": {
+        "signal": "direct_plonky3_use",
+        "url": "https://github.com/valida-xyz/valida/blob/5058de8573e239eb1985c8ee8a1cf1b0d0f873c2/README.md#backend",
+        "title": "Valida README: Plonky3 STARK backend and explicit prover-performance goals",
+        "date_checked": "2026-07-10",
+        "summary": "Valida states that it uses Plonky3 for the STARK IOP and cryptographic operations, and that prover performance and reduced trace overhead are design goals.",
+        "supporting_urls": []
+      },
+      "fit_hypothesis": "Valida's direct Plonky3 backend and explicit trace-efficiency goals make it a plausible reference integration for comparing conventional and bounded-memory proving.",
+      "qualification_gaps": [
+        "The supported Plonky3 fork and compatibility expectations",
+        "Current maximum practical trace size and measured peak RSS",
+        "Whether continuations already address the same operational bottleneck",
+        "A representative workload, host profile, target RAM ceiling, and purchasing path"
+      ],
+      "public_non_email_route": {
+        "kind": "github_discussions",
+        "url": "https://github.com/valida-xyz/valida/discussions",
+        "use_policy": "Use only after the live no-email canary for an organization-level technical discussion; no unsolicited sales pitch."
+      },
+      "status": "research_only_blocked_until_live_no_email_canary"
+    },
+    {
+      "rank": 5,
+      "id": "powdr",
+      "company_project": "Powdr",
+      "public_repo": "https://github.com/powdr-labs/powdr",
+      "repository_observed": {
+        "date_checked": "2026-07-10",
+        "archived": false,
+        "updated_at": "2026-07-08T10:30:56Z"
+      },
+      "evidence": {
+        "signal": "direct_plonky3_use",
+        "url": "https://github.com/Plonky3/awesome-plonky3/blob/14303793c7017a9bbcadefbb0706f4fdb5003425/README.md#zkvms",
+        "title": "Official Plonky3 ecosystem list: Powdr supports a Plonky3 proving backend",
+        "date_checked": "2026-07-10",
+        "summary": "The Plonky3 organization's ecosystem list identifies Powdr as a zkVM toolkit supporting Plonky3, and the current Powdr tree contains Plonky3 field integration code.",
+        "supporting_urls": [
+          "https://github.com/powdr-labs/powdr/blob/14b3e3053062c8bb510499cbe07763d5065e1f01/number/src/plonky3_macros.rs"
+        ]
+      },
+      "fit_hypothesis": "Powdr's multi-backend architecture could provide a controlled workload for comparing a bounded Plonky3 path against another supported backend without inventing a new proof protocol.",
+      "qualification_gaps": [
+        "Whether the Plonky3 backend remains active and production-relevant in the current tree",
+        "The proving interface where caller-supplied storage could be integrated",
+        "Measured memory pressure for a reproducible Powdr workload",
+        "Whether backend benchmarking or integration work has an organizational sponsor"
+      ],
+      "public_non_email_route": {
+        "kind": "github_issues",
+        "url": "https://github.com/powdr-labs/powdr/issues",
+        "use_policy": "Use only after the live no-email canary and only for a repository-relevant technical RFC permitted by project policy; never open an unsolicited sales issue."
+      },
+      "status": "research_only_blocked_until_live_no_email_canary"
+    },
+    {
+      "rank": 6,
+      "id": "pico",
+      "company_project": "Pico / Brevis",
+      "public_repo": "https://github.com/brevis-network/pico",
+      "repository_observed": {
+        "date_checked": "2026-07-10",
+        "archived": false,
+        "updated_at": "2026-05-12T12:21:50Z"
+      },
+      "evidence": {
+        "signal": "direct_plonky3_use",
+        "url": "https://github.com/brevis-network/pico/blob/22b0aae6321c1f63c72aafd0b506b5f45b91ffb1/README.md#acknowledgements",
+        "title": "Pico README: proving backend based on Plonky3",
+        "date_checked": "2026-07-10",
+        "summary": "The project README states that Pico's proving backend is based on Plonky3 and extends its modularity to the zkVM layer.",
+        "supporting_urls": []
+      },
+      "fit_hypothesis": "Pico's configurable Plonky3-based backend could exercise TinyZKP's resource-policy layer across multiple fields or proving configurations while retaining official verification.",
+      "qualification_gaps": [
+        "The active Plonky3 dependency and supported proof configurations",
+        "Which workloads are constrained by resident memory rather than accelerator capacity",
+        "A reproducible generator, conventional baseline, and target storage host",
+        "Whether the backend can accept fallible scratch-backed matrix access without protocol changes"
+      ],
+      "public_non_email_route": {
+        "kind": "github_issues",
+        "url": "https://github.com/brevis-network/pico/issues",
+        "use_policy": "Use only after the live no-email canary and only for a repository-relevant technical RFC permitted by project policy; never open an unsolicited sales issue."
+      },
+      "status": "research_only_blocked_until_live_no_email_canary"
+    },
+    {
+      "rank": 7,
+      "id": "ziren",
+      "company_project": "Ziren / Project ZKM",
+      "public_repo": "https://github.com/ProjectZKM/Ziren",
+      "repository_observed": {
+        "date_checked": "2026-07-10",
+        "archived": false,
+        "updated_at": "2026-06-18T20:40:24Z"
+      },
+      "evidence": {
+        "signal": "direct_plonky3_use",
+        "url": "https://github.com/ProjectZKM/Ziren/blob/88e0521b82d3ed4c28005fbe220066c8ec76b31a/README.md#acknowledgements",
+        "title": "Ziren README: proving backend based on Plonky3",
+        "date_checked": "2026-07-10",
+        "summary": "The project README states directly that the Ziren proving backend is based on Plonky3.",
+        "supporting_urls": []
+      },
+      "fit_hypothesis": "Ziren is a direct Plonky3 zkVM integration where a bounded-memory evaluation could measure whether deterministic SSD scratch expands feasible trace sizes on ordinary CPU hosts.",
+      "qualification_gaps": [
+        "The current backend version and whether its verifier target is compatible with the frozen profile",
+        "Whole-process peak RSS, wall time, and the dominant memory phase",
+        "A non-sensitive input generator and required logical row range",
+        "Available NVMe capacity and whether CPU ceiling mode is operationally valuable"
+      ],
+      "public_non_email_route": {
+        "kind": "github_issues",
+        "url": "https://github.com/ProjectZKM/Ziren/issues",
+        "use_policy": "Use only after the live no-email canary and only for a repository-relevant technical RFC permitted by project policy; never open an unsolicited sales issue."
+      },
+      "status": "research_only_blocked_until_live_no_email_canary"
+    },
+    {
+      "rank": 8,
+      "id": "scroll-zkvm-prover",
+      "company_project": "Scroll zkVM Prover",
+      "public_repo": "https://github.com/scroll-tech/zkvm-prover",
+      "repository_observed": {
+        "date_checked": "2026-07-10",
+        "archived": false,
+        "updated_at": "2026-07-05T16:23:48Z"
+      },
+      "evidence": {
+        "signal": "direct_plonky3_use_via_openvm",
+        "url": "https://github.com/scroll-tech/zkvm-prover/blob/5de3d673b78880c0c65756845b502b6cadf079a9/README.md#overview",
+        "title": "Scroll zkVM Prover README: complete OpenVM-based rollup prover",
+        "date_checked": "2026-07-10",
+        "summary": "Scroll documents a complete prover for OpenVM-based rollup circuits; OpenVM documents that its STARK backend and circuit interfaces are built on Plonky3.",
+        "supporting_urls": [
+          "https://github.com/openvm-org/openvm/blob/a34a90b54839e247fdf305feec4ec9e78383fb9a/README.md#acknowledgements"
+        ]
+      },
+      "fit_hypothesis": "This is a realistic rollup workload for testing whether bounded storage and checkpoint recovery improve deployment capacity without changing OpenVM or Scroll verifier behavior.",
+      "qualification_gaps": [
+        "The pinned OpenVM and transitive Plonky3 revisions used by the target prover release",
+        "Whether peak memory occurs in the Plonky3 STARK layer or surrounding aggregation",
+        "A shareable circuit and input generator with a reproducible conventional baseline",
+        "Whether private witness handling requires an on-premises evaluation kit"
+      ],
+      "public_non_email_route": {
+        "kind": "github_issues",
+        "url": "https://github.com/scroll-tech/zkvm-prover/issues",
+        "use_policy": "Use only after the live no-email canary and only for a repository-relevant technical RFC permitted by project policy; never open an unsolicited sales issue."
+      },
+      "status": "research_only_blocked_until_live_no_email_canary"
+    },
+    {
+      "rank": 9,
+      "id": "sphinx",
+      "company_project": "Sphinx / Argument Computer",
+      "public_repo": "https://github.com/argumentcomputer/sphinx",
+      "repository_observed": {
+        "date_checked": "2026-07-10",
+        "archived": false,
+        "updated_at": "2026-01-27T09:30:46Z"
+      },
+      "evidence": {
+        "signal": "direct_plonky3_use",
+        "url": "https://github.com/argumentcomputer/sphinx/blob/8a39b951e3ea520e295b693ad38bff6b43a2630c/README.md#acknowledgements",
+        "title": "Sphinx README and manifest: Plonky3 powers the STARK system",
+        "date_checked": "2026-07-10",
+        "summary": "The README says Plonky3 powers much of the system, and the pinned workspace manifest directly lists core Plonky3 AIR, DFT, commitment, FRI, matrix, and uni-STARK crates.",
+        "supporting_urls": [
+          "https://github.com/argumentcomputer/sphinx/blob/8a39b951e3ea520e295b693ad38bff6b43a2630c/Cargo.toml"
+        ]
+      },
+      "fit_hypothesis": "Sphinx's broad direct use of Plonky3 components makes it suitable for identifying the smallest storage abstraction that can support a real zkVM without forking the verifier.",
+      "qualification_gaps": [
+        "Whether the observed development branch represents an actively supported deployment target",
+        "The exact Plonky3 crate revisions and local prover modifications",
+        "A reproducible workload showing a memory ceiling or OOM",
+        "A technical and budget owner for a bounded-memory evaluation"
+      ],
+      "public_non_email_route": {
+        "kind": "github_issues",
+        "url": "https://github.com/argumentcomputer/sphinx/issues",
+        "use_policy": "Use only after the live no-email canary and only for a repository-relevant technical RFC permitted by project policy; never open an unsolicited sales issue."
+      },
+      "status": "research_only_blocked_until_live_no_email_canary"
+    },
+    {
+      "rank": 10,
+      "id": "risc-zero",
+      "company_project": "RISC Zero",
+      "public_repo": "https://github.com/risc0/risc0",
+      "repository_observed": {
+        "date_checked": "2026-07-10",
+        "archived": false,
+        "updated_at": "2026-07-10T17:50:11Z"
+      },
+      "evidence": {
+        "signal": "public_memory_pressure",
+        "url": "https://github.com/risc0/risc0/issues/1462",
+        "title": "RISC Zero issue 1462: out-of-memory error while proving with CUDA",
+        "date_checked": "2026-07-10",
+        "summary": "The active repository has an open public issue reporting an out-of-memory failure during accelerated proving and asking for memory requirements or alternatives.",
+        "supporting_urls": [
+          "https://github.com/risc0/risc0"
+        ]
+      },
+      "fit_hypothesis": "The public OOM report validates resource predictability as a zkVM concern, but RISC Zero is a lower-priority fit because TinyZKP's current production target is Plonky3 and the reported failure is accelerator-specific.",
+      "qualification_gaps": [
+        "Whether the historical OOM remains representative of a current supported release",
+        "Whether the bottleneck is accelerator memory, host memory, or a fixed implementation defect",
+        "Whether a CPU scratch-backed approach could preserve the official proof and verifier contracts",
+        "Whether non-Plonky3 adapter work would be funded and separately scoped"
+      ],
+      "public_non_email_route": {
+        "kind": "github_discussions",
+        "url": "https://github.com/risc0/risc0/discussions",
+        "use_policy": "Use only after the live no-email canary for an organization-level technical discussion; no unsolicited sales pitch."
+      },
+      "status": "research_only_blocked_until_live_no_email_canary"
+    }
+  ]
+}

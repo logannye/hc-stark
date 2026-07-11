@@ -41,6 +41,7 @@ MAINTENANCE_MODE = os.environ.get("TINYZKP_MAINTENANCE_MODE", "1").strip().lower
     "no",
     "off",
 }
+OUTBOUND_EMAIL_ENABLED = os.environ.get("TINYZKP_OUTBOUND_EMAIL_ENABLED", "0").strip() == "1"
 
 API_KEYS_FILE = os.environ.get("HC_API_KEYS_FILE", "/opt/hc-stark/data/api_keys.txt")
 
@@ -118,6 +119,9 @@ def _build_welcome_message(email: str, tenant_id: str, api_key: str) -> MIMEMult
 
 def _send_welcome_email(email: str, tenant_id: str, api_key: str) -> bool:
     """Send welcome email with API key. Returns True on success."""
+    if not OUTBOUND_EMAIL_ENABLED or MAINTENANCE_MODE:
+        print("Outbound email disabled during backend recovery", file=sys.stderr)
+        return False
     if not SMTP_HOST:
         print("SMTP not configured, skipping email delivery", file=sys.stderr)
         return False
@@ -143,6 +147,9 @@ def _send_welcome_email(email: str, tenant_id: str, api_key: str) -> bool:
 
 def _send_magic_link_email(email: str, link: str) -> bool:
     """Send a magic login link email. Returns True on success."""
+    if not OUTBOUND_EMAIL_ENABLED or MAINTENANCE_MODE:
+        print("Outbound email disabled during backend recovery", file=sys.stderr)
+        return False
     if not SMTP_HOST:
         print("SMTP not configured, skipping magic link email", file=sys.stderr)
         return False
@@ -194,7 +201,34 @@ CONTACT_QUALIFICATION_FIELDS = (
     ("technical_owner", "Technical owner"),
     ("budget_owner", "Budget owner"),
     ("timeline", "Timeline"),
+    ("contact_method", "Preferred no-email contact method"),
+    ("contact_handle", "No-email contact handle / URL"),
     ("consent", "Retention consent"),
+)
+
+NO_EMAIL_CONTACT_METHODS = {
+    "github",
+    "linkedin",
+    "signal",
+    "discord",
+    "telegram",
+    "matrix",
+    "phone",
+}
+
+DESIGN_PARTNER_REQUIRED_FIELDS = (
+    "company",
+    "stack",
+    "workload",
+    "logical_rows",
+    "current_memory",
+    "target_ram",
+    "scratch",
+    "verifier_target",
+    "data_sensitivity",
+    "technical_owner",
+    "budget_owner",
+    "timeline",
 )
 
 ATTRIBUTION_FIELDS = (
@@ -268,6 +302,9 @@ def _send_contact_email(
     qualification: dict[str, str] | None = None,
 ) -> bool:
     """Forward a contact-form submission to the support inbox. Returns True on success."""
+    if not OUTBOUND_EMAIL_ENABLED or MAINTENANCE_MODE:
+        print("Outbound email disabled during backend recovery", file=sys.stderr)
+        return False
     if not SMTP_HOST:
         print("SMTP not configured, skipping contact email", file=sys.stderr)
         return False
@@ -307,6 +344,9 @@ def _send_contact_email(
 
 def _send_evaluation_ack(name: str, email: str) -> bool:
     """Acknowledge a scoped evaluation application without promising acceptance."""
+    if not OUTBOUND_EMAIL_ENABLED or MAINTENANCE_MODE:
+        print("Outbound email disabled during backend recovery", file=sys.stderr)
+        return False
     if not SMTP_HOST:
         return False
     body = (
@@ -465,6 +505,8 @@ def _handle_pilot_payment_completed(
 
 def _handle_checkout_completed(event: dict) -> tuple[str, int]:
     """Handle checkout.session.completed — provision new tenant."""
+    if MAINTENANCE_MODE:
+        return "checkout disabled during backend recovery", 200
     conn = tenant_store.open_db()
 
     event_id = event["id"]
@@ -926,22 +968,34 @@ def send_contact():
     message = _contact_string(data.get("message"), 5000)
     qualification = _sanitize_contact_qualification(data.get("qualification"))
 
-    if not name or not email or not message:
-        return flask.jsonify(error="name, email, and message are required"), 400
-    if "@" not in email or len(email) > 254 or len(name) > 200 or len(message) > 5000:
-        return flask.jsonify(error="invalid input"), 400
-    if category == "Design Partner" and qualification.get("consent") != "twelve_month_retention":
-        return flask.jsonify(error="retention consent is required"), 400
+    contact_method = qualification.get("contact_method", "").lower()
+    contact_handle = qualification.get("contact_handle", "")
 
+    if not name or not message:
+        return flask.jsonify(error="name and message are required"), 400
+    if email and ("@" not in email or len(email) > 254):
+        return flask.jsonify(error="invalid email"), 400
+    if len(name) > 200 or len(message) > 5000:
+        return flask.jsonify(error="invalid input"), 400
     valid_categories = {
         "General Inquiry",
         "Bug Report",
         "Feature Request",
         "Design Partner",
+        "Security Report",
+        "Privacy Request",
         "Billing",
         "Enterprise",
     }
     safe_category = category if category in valid_categories else "General Inquiry"
+    if safe_category == "Design Partner":
+        missing = [field for field in DESIGN_PARTNER_REQUIRED_FIELDS if not qualification.get(field)]
+        if missing:
+            return flask.jsonify(error=f"missing evaluation fields: {', '.join(missing)}"), 400
+    if qualification.get("consent") != "twelve_month_retention":
+        return flask.jsonify(error="retention acknowledgement is required"), 400
+    if contact_method not in NO_EMAIL_CONTACT_METHODS or not contact_handle:
+        return flask.jsonify(error="a supported no-email contact method and handle are required"), 400
 
     try:
         application_id = evaluation_store.create_application(
@@ -955,16 +1009,39 @@ def send_contact():
         print(f"ERROR: Failed to persist evaluation application: {exc}", file=sys.stderr)
         return flask.jsonify(error="application storage unavailable"), 503
 
-    return flask.jsonify(
-        ok=True,
-        application_id=application_id,
-        benchmark_url="https://tinyzkp.com/benchmarks",
-        benchmark_command=(
-            "hc-cli benchmark plonky3 --manifest workload.json "
-            "--baseline conventional --candidate bounded --report report.json"
-        ),
-        next_action="Save this application ID and prepare a non-sensitive reproducible manifest.",
-    ), 201
+    response = {
+        "ok": True,
+        "application_id": application_id,
+        "next_action": "Save this request ID; TinyZKP will reply through the selected no-email channel.",
+    }
+    if safe_category == "Design Partner":
+        response.update(
+            benchmark_url="https://tinyzkp.com/benchmarks",
+            benchmark_command=(
+                "hc-cli benchmark plonky3 --manifest workload.json "
+                "--baseline conventional --candidate bounded --report report.json"
+            ),
+            next_action="Save this application ID and prepare a non-sensitive reproducible manifest.",
+        )
+    return flask.jsonify(**response), 201
+
+
+@app.route("/contact-readiness", methods=["POST"])
+def contact_readiness():
+    """Reconcile and delete a no-PII probe submitted through Cloudflare."""
+    if not _require_internal_secret():
+        return flask.jsonify(error="unauthorized"), 403
+    data = flask.request.get_json(silent=True) or {}
+    application_id = _contact_string(data.get("application_id"), 64)
+    nonce = _contact_string(data.get("nonce"), 80)
+    try:
+        consumed = evaluation_store.consume_readiness_probe(application_id, nonce)
+    except (OSError, sqlite3.Error) as exc:
+        print(f"ERROR: Contact readiness storage check failed: {exc}", file=sys.stderr)
+        return flask.jsonify(error="application storage unavailable"), 503
+    if not consumed:
+        return flask.jsonify(error="readiness probe not found or mismatched"), 409
+    return flask.jsonify(ok=True, stored=True, cleaned=True), 200
 
 
 @app.route("/verify-magic-link", methods=["POST"])

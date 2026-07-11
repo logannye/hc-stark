@@ -8,11 +8,23 @@ const RATE_LIMIT_WINDOW_S = 600;   // 10-minute window
 const MAX_MESSAGE_LEN = 5000;
 const MAX_QUAL_FIELD_LEN = 160;
 
+const NO_EMAIL_CONTACT_METHODS = new Set([
+  "github",
+  "linkedin",
+  "signal",
+  "discord",
+  "telegram",
+  "matrix",
+  "phone",
+]);
+
 const VALID_CATEGORIES = new Set([
   "General Inquiry",
   "Bug Report",
   "Feature Request",
   "Design Partner",
+  "Security Report",
+  "Privacy Request",
   "Billing",
   "Enterprise",
 ]);
@@ -35,7 +47,24 @@ const QUALIFICATION_FIELDS = [
   "technical_owner",
   "budget_owner",
   "timeline",
+  "contact_method",
+  "contact_handle",
   "consent",
+];
+
+const DESIGN_PARTNER_REQUIRED_FIELDS = [
+  "company",
+  "stack",
+  "workload",
+  "logical_rows",
+  "current_memory",
+  "target_ram",
+  "scratch",
+  "verifier_target",
+  "data_sensitivity",
+  "technical_owner",
+  "budget_owner",
+  "timeline",
 ];
 
 async function checkRateLimit(ip) {
@@ -117,11 +146,18 @@ export async function onRequestPost(context) {
       });
     }
 
-    if (!name || !email || !message) {
+    if (!name || !message) {
       return new Response(
-        JSON.stringify({ error: "name, email, and message are required" }),
+        JSON.stringify({ error: "name and message are required" }),
         { status: 400, headers: jsonHeaders }
       );
+    }
+
+    if (email && !email.includes("@")) {
+      return new Response(JSON.stringify({ error: "invalid email" }), {
+        status: 400,
+        headers: jsonHeaders,
+      });
     }
 
     if (
@@ -140,6 +176,30 @@ export async function onRequestPost(context) {
       ...(leadContext && typeof leadContext === "object" && !Array.isArray(leadContext) ? leadContext : {}),
       ...(qualification && typeof qualification === "object" && !Array.isArray(qualification) ? qualification : {}),
     });
+    const contactMethod = (safeQualification.contact_method || "").toLowerCase();
+    if (safeCategory === "Design Partner") {
+      const missing = DESIGN_PARTNER_REQUIRED_FIELDS.filter((field) => !safeQualification[field]);
+      if (missing.length) {
+        return new Response(JSON.stringify({ error: `missing evaluation fields: ${missing.join(", ")}` }), {
+          status: 400,
+          headers: jsonHeaders,
+        });
+      }
+    }
+    if (
+      !NO_EMAIL_CONTACT_METHODS.has(contactMethod) || !safeQualification.contact_handle
+    ) {
+      return new Response(
+        JSON.stringify({ error: "a supported no-email contact method and handle are required" }),
+        { status: 400, headers: jsonHeaders }
+      );
+    }
+    if (safeQualification.consent !== "twelve_month_retention") {
+      return new Response(JSON.stringify({ error: "retention acknowledgement is required" }), {
+        status: 400,
+        headers: jsonHeaders,
+      });
+    }
 
     const WEBHOOK_URL = context.env.WEBHOOK_BASE_URL || "https://webhook.tinyzkp.com";
     const resp = await fetch(`${WEBHOOK_URL}/send-contact`, {
@@ -160,7 +220,7 @@ export async function onRequestPost(context) {
     if (!resp.ok) {
       const errBody = await resp.json().catch(() => ({}));
       console.error("Contact webhook error:", resp.status, errBody);
-      return new Response(JSON.stringify({ error: errBody.error || "Failed to send message. Please try again in a few minutes." }), {
+      return new Response(JSON.stringify({ error: errBody.error || "Failed to store application. Please try again in a few minutes." }), {
         status: 502,
         headers: jsonHeaders,
       });

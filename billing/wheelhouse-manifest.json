@@ -1,0 +1,194 @@
+{
+  "artifacts": [
+    {
+      "filename": "pip-25.3-py3-none-any.whl",
+      "name": "pip",
+      "role": "bootstrap",
+      "sha256": "9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd",
+      "size": 1778622,
+      "version": "25.3"
+    },
+    {
+      "filename": "blinker-1.9.0-py3-none-any.whl",
+      "name": "blinker",
+      "role": "runtime",
+      "sha256": "ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc",
+      "size": 8458,
+      "version": "1.9.0"
+    },
+    {
+      "filename": "certifi-2026.6.17-py3-none-any.whl",
+      "name": "certifi",
+      "role": "runtime",
+      "sha256": "2227dcbaafe0d2f59279d1762ddddc37783ed4354594f194ffc31d20f41fc3db",
+      "size": 133289,
+      "version": "2026.6.17"
+    },
+    {
+      "filename": "charset_normalizer-3.4.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "name": "charset-normalizer",
+      "role": "runtime",
+      "sha256": "04ce310cb89c15df659582aee80a0603788732a5e017d5bd5c81158106ce249c",
+      "size": 221276,
+      "version": "3.4.9"
+    },
+    {
+      "filename": "click-8.4.2-py3-none-any.whl",
+      "name": "click",
+      "role": "runtime",
+      "sha256": "e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76",
+      "size": 119243,
+      "version": "8.4.2"
+    },
+    {
+      "filename": "flask-3.1.2-py3-none-any.whl",
+      "name": "flask",
+      "role": "runtime",
+      "sha256": "ca1d8112ec8a6158cc29ea4858963350011b5c846a414cdb7a954aa9e967d03c",
+      "size": 103308,
+      "version": "3.1.2"
+    },
+    {
+      "filename": "gunicorn-22.0.0-py3-none-any.whl",
+      "name": "gunicorn",
+      "role": "runtime",
+      "sha256": "350679f91b24062c86e386e198a15438d53a7a8207235a78ba1b53df4c4378d9",
+      "size": 84443,
+      "version": "22.0.0"
+    },
+    {
+      "filename": "idna-3.18-py3-none-any.whl",
+      "name": "idna",
+      "role": "runtime",
+      "sha256": "7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2",
+      "size": 65455,
+      "version": "3.18"
+    },
+    {
+      "filename": "iniconfig-2.3.0-py3-none-any.whl",
+      "name": "iniconfig",
+      "role": "runtime",
+      "sha256": "f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12",
+      "size": 7484,
+      "version": "2.3.0"
+    },
+    {
+      "filename": "itsdangerous-2.2.0-py3-none-any.whl",
+      "name": "itsdangerous",
+      "role": "runtime",
+      "sha256": "c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef",
+      "size": 16234,
+      "version": "2.2.0"
+    },
+    {
+      "filename": "jinja2-3.1.6-py3-none-any.whl",
+      "name": "jinja2",
+      "role": "runtime",
+      "sha256": "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67",
+      "size": 134899,
+      "version": "3.1.6"
+    },
+    {
+      "filename": "markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "name": "markupsafe",
+      "role": "runtime",
+      "sha256": "0bf2a864d67e76e5c9a34dc26ec616a66b9888e25e7b9460e1c76d3293bd9dbf",
+      "size": 22940,
+      "version": "3.0.3"
+    },
+    {
+      "filename": "packaging-26.2-py3-none-any.whl",
+      "name": "packaging",
+      "role": "runtime",
+      "sha256": "5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e",
+      "size": 100195,
+      "version": "26.2"
+    },
+    {
+      "filename": "pluggy-1.6.0-py3-none-any.whl",
+      "name": "pluggy",
+      "role": "runtime",
+      "sha256": "e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746",
+      "size": 20538,
+      "version": "1.6.0"
+    },
+    {
+      "filename": "psycopg-3.2.10-py3-none-any.whl",
+      "name": "psycopg",
+      "role": "runtime",
+      "sha256": "ab5caf09a9ec42e314a21f5216dbcceac528e0e05142e42eea83a3b28b320ac3",
+      "size": 206586,
+      "version": "3.2.10"
+    },
+    {
+      "filename": "psycopg_binary-3.2.10-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "name": "psycopg-binary",
+      "role": "runtime",
+      "sha256": "1b29285474e3339d0840e1b5079fdb0481914108f92ec62de0c87ae333c60b24",
+      "size": 4413805,
+      "version": "3.2.10"
+    },
+    {
+      "filename": "pygments-2.20.0-py3-none-any.whl",
+      "name": "pygments",
+      "role": "runtime",
+      "sha256": "81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176",
+      "size": 1231151,
+      "version": "2.20.0"
+    },
+    {
+      "filename": "pytest-8.4.2-py3-none-any.whl",
+      "name": "pytest",
+      "role": "runtime",
+      "sha256": "872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79",
+      "size": 365750,
+      "version": "8.4.2"
+    },
+    {
+      "filename": "requests-2.34.2-py3-none-any.whl",
+      "name": "requests",
+      "role": "runtime",
+      "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
+      "size": 73075,
+      "version": "2.34.2"
+    },
+    {
+      "filename": "stripe-15.3.0-py3-none-any.whl",
+      "name": "stripe",
+      "role": "runtime",
+      "sha256": "99c427d306d9348123e73da3f4f2cae0a5732cac9b703155dba0418e32d3cf1c",
+      "size": 2172165,
+      "version": "15.3.0"
+    },
+    {
+      "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+      "name": "typing-extensions",
+      "role": "runtime",
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "size": 45571,
+      "version": "4.16.0"
+    },
+    {
+      "filename": "urllib3-2.7.0-py3-none-any.whl",
+      "name": "urllib3",
+      "role": "runtime",
+      "sha256": "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897",
+      "size": 131087,
+      "version": "2.7.0"
+    },
+    {
+      "filename": "werkzeug-3.1.8-py3-none-any.whl",
+      "name": "werkzeug",
+      "role": "runtime",
+      "sha256": "63a77fb8892bf28ebc3178683445222aa500e48ebad5ec77b0ad80f8726b1f50",
+      "size": 226459,
+      "version": "3.1.8"
+    }
+  ],
+  "bootstrap_lock_sha256": "e69fdbf4d7d0dd14790b81c7215b8e98012cb5942fce611716f344e399188d22",
+  "lock_sha256": "68ab3f2d8be7c9be5838de7ddc3c8b30ab432c25bf3b23594021191d054cf97b",
+  "profile_id": "tinyzkp-billing-debian12-x86_64-cpython311-v1",
+  "profile_sha256": "f0284466dd63a4884733f83b45a6a5774dab6d6e31770f8cc6f056f7a841b7f4",
+  "requirements_sha256": "5219b1151b654b7969f53ba09a4bff1c9d1478536bb819d119ba385f50936b1a",
+  "schema_version": 1
+}

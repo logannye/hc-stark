@@ -1,0 +1,12 @@
+{
+  "selected_mode": "scratch",
+  "available_scratch_bytes": 107374182400,
+  "memory_selection_threshold_bytes": 1503238553,
+  "estimate": {
+    "peak_resident_bytes": 1900000000,
+    "scratch_high_water_bytes": 80000000000,
+    "total_read_bytes": 200000000000,
+    "total_write_bytes": 160000000000,
+    "phases": []
+  }
+}

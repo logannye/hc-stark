@@ -114,6 +114,7 @@ def test_lifecycle_dry_run_logs_recipient_ref_not_email(tmp_path, monkeypatch, c
 
 def test_lifecycle_send_failure_warning_redacts_email(monkeypatch, capsys):
     monkeypatch.setattr(lifecycle_nudges, "SMTP_HOST", "smtp.example.test")
+    monkeypatch.setattr(lifecycle_nudges, "OUTBOUND_EMAIL_ENABLED", True)
 
     class ExplodingSMTP:
         def __init__(self, host, port):
@@ -129,6 +130,18 @@ def test_lifecycle_send_failure_warning_redacts_email(monkeypatch, capsys):
     assert "recipient_ref=email_" in error
     assert "[redacted-email]" in error
     assert "[redacted-id]" in error
+
+
+def test_lifecycle_email_is_disabled_by_default(monkeypatch):
+    monkeypatch.setattr(lifecycle_nudges, "SMTP_HOST", "smtp.example.test")
+    monkeypatch.setattr(lifecycle_nudges, "OUTBOUND_EMAIL_ENABLED", False)
+
+    class MustNotConnect:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("SMTP must not be used while outbound email is disabled")
+
+    monkeypatch.setattr(lifecycle_nudges.smtplib, "SMTP", MustNotConnect)
+    assert lifecycle_nudges.send_email("buyer@example.com", "Subject", "Body") is False
 
 
 def test_sent_lifecycle_nudges_are_marked_and_not_repeated(tmp_path, monkeypatch):
