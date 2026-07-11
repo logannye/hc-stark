@@ -73,11 +73,22 @@ def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
 
 def test_r2_lifecycle_prefixes_separate_inputs_bundles_and_backups():
     artifacts = json.loads(text("r2-artifacts-lifecycle.json"))
-    by_id = {rule["ID"]: rule for rule in artifacts["Rules"]}
-    assert by_id["tinyzkp-beta-uploads-24h"]["Filter"]["Prefix"] == "uploads/"
-    assert by_id["tinyzkp-beta-uploads-24h"]["Expiration"]["Days"] == 1
+    by_id = {rule["id"]: rule for rule in artifacts["rules"]}
+    uploads = by_id["tinyzkp-beta-uploads-24h"]
+    assert uploads["conditions"]["prefix"] == "uploads/"
+    assert uploads["deleteObjectsTransition"]["condition"] == {
+        "type": "Age",
+        "maxAge": 86400,
+    }
+    assert uploads["abortMultipartUploadsTransition"]["condition"] == {
+        "type": "Age",
+        "maxAge": 86400,
+    }
     bundles = by_id["tinyzkp-beta-bundles-90d-maximum"]
-    assert bundles["Filter"]["Prefix"] == "bundles/"
-    assert bundles["Expiration"]["Days"] == 90
+    assert bundles["conditions"]["prefix"] == "bundles/"
+    assert bundles["deleteObjectsTransition"]["condition"] == {
+        "type": "Age",
+        "maxAge": 7776000,
+    }
     backups = json.loads(text("r2-backups-lifecycle.json"))
-    assert all("Expiration" not in rule for rule in backups["Rules"])
+    assert all("deleteObjectsTransition" not in rule for rule in backups["rules"])
