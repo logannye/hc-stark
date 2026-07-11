@@ -6,6 +6,9 @@
 !README.md
 !crates/
 !crates/**
+!examples/
+!examples/partner-adapter/
+!examples/partner-adapter/**
 !docs/
 !docs/**
 !scripts/

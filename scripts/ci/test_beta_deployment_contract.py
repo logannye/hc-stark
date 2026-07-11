@@ -84,6 +84,12 @@ def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
     assert "workflow_dispatch" in candidate and "workflow_dispatch" in authorization
 
 
+def test_container_context_includes_every_cargo_workspace_member():
+    dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+    assert "!crates/**" in dockerignore
+    assert "!examples/partner-adapter/**" in dockerignore
+
+
 def test_r2_lifecycle_prefixes_separate_inputs_bundles_and_backups():
     artifacts = json.loads(text("r2-artifacts-lifecycle.json"))
     by_id = {rule["id"]: rule for rule in artifacts["rules"]}
