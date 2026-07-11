@@ -153,7 +153,7 @@ pub fn pack_trace(
     }
     if chunk_uncompressed_bytes == 0
         || chunk_uncompressed_bytes > MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES
-        || chunk_uncompressed_bytes % 8 != 0
+        || !chunk_uncompressed_bytes.is_multiple_of(8)
     {
         bail!("chunk bytes must be a nonzero multiple of 8 and at most 256 MiB");
     }

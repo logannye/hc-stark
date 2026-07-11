@@ -148,7 +148,7 @@ impl UploadedTraceWorkload {
             return Err(WorkloadError::InvalidShape);
         }
         let row_bytes = u64::from(manifest.trace_width) * 8;
-        if manifest.chunk_uncompressed_bytes % row_bytes != 0 {
+        if !manifest.chunk_uncompressed_bytes.is_multiple_of(row_bytes) {
             return Err(WorkloadError::InvalidShape);
         }
         let chunks_dir = chunks_dir.into();
