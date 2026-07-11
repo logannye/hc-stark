@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "release_channel": "public_beta",
+  "release_sha": "REPLACE_WITH_FULL_COMMIT_SHA",
+  "generated_at": "REPLACE_WITH_RFC3339_UTC",
+  "gates": {
+    "clean_merged_ci": [],
+    "official_verifier_equivalence": [],
+    "fixed_host_1m": [],
+    "fixed_host_16m": [],
+    "fault_and_fuzz": [],
+    "internal_security": [],
+    "sdk_golden_vectors": [],
+    "signed_supply_chain": [],
+    "release_identity": [],
+    "recovery_and_billing_replay": [],
+    "advertised_concurrency_load": [],
+    "production_canary_24h": []
+  }
+}
