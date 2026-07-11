@@ -115,6 +115,7 @@ def test_test_execution_rejects_zero_or_different_tests():
     parsed = MODULE.parse_test_execution(payload, MODULE.PHASE_TEST[1])
     assert MODULE.test_execution_passed(parsed)
     assert parsed["exact_test_occurrences"] == 1
+    assert parsed["result_summaries_after_exact_test"] == 1
     assert not MODULE.test_execution_passed(
         {**parsed, "exact_test_occurrences": True}
     )
@@ -125,6 +126,16 @@ def test_test_execution_rejects_zero_or_different_tests():
     assert not MODULE.test_execution_passed(
         MODULE.parse_test_execution(duplicate_summary, MODULE.PHASE_TEST[1])
     )
+
+    child_summary = (
+        "test child ... ok\n"
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; "
+        "0 filtered out; finished in 0.10s\n"
+    ).encode()
+    nested = MODULE.parse_test_execution(child_summary + payload, MODULE.PHASE_TEST[1])
+    assert nested["result_summary_count"] == 2
+    assert nested["result_summaries_after_exact_test"] == 1
+    assert MODULE.test_execution_passed(nested)
 
 
 def test_partial_matrix_expects_no_descriptor_bound_release_tools():

@@ -112,12 +112,19 @@ def parse_test_execution(payload: bytes, test_name: str) -> dict[str, object]:
     exact_test = re.compile(
         rb"(?m)^test " + re.escape(test_name.encode("utf-8")) + rb" \.\.\. ok$"
     )
+    exact_matches = list(exact_test.finditer(payload))
     results = list(TEST_RESULT.finditer(payload))
+    summaries_after_exact_test = (
+        sum(result.start() > exact_matches[0].end() for result in results)
+        if len(exact_matches) == 1
+        else 0
+    )
     final = results[-1].groups() if results else None
     return {
         "test_name": test_name,
-        "exact_test_occurrences": len(exact_test.findall(payload)),
+        "exact_test_occurrences": len(exact_matches),
         "result_summary_count": len(results),
+        "result_summaries_after_exact_test": summaries_after_exact_test,
         "result_status": final[0].decode("ascii") if final else None,
         "passed_tests": int(final[1]) if final else None,
         "failed_tests": int(final[2]) if final else None,
@@ -133,7 +140,9 @@ def test_execution_passed(value: object) -> bool:
         and type(value.get("exact_test_occurrences")) is int
         and value.get("exact_test_occurrences") == 1
         and type(value.get("result_summary_count")) is int
-        and value.get("result_summary_count") == 1
+        and value.get("result_summary_count", 0) >= 1
+        and type(value.get("result_summaries_after_exact_test")) is int
+        and value.get("result_summaries_after_exact_test") == 1
         and value.get("result_status") == "ok"
         and type(value.get("passed_tests")) is int
         and value.get("passed_tests") == 1
