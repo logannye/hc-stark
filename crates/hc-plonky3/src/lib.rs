@@ -10,6 +10,7 @@ mod bounded_pcs;
 mod bounded_prover;
 mod checkpoint;
 pub mod contracts;
+mod declarative;
 mod dft;
 mod fri;
 mod mmcs;
@@ -37,6 +38,9 @@ pub use bounded_prover::{
 };
 pub use checkpoint::{
     ChallengerSnapshotError, ChallengerSnapshotV1, ProfileChallenger, ProfilePermutation,
+};
+pub use declarative::{
+    estimate_declarative_statement, verify_declarative_proof, DeclarativeAir, UploadedTraceWorkload,
 };
 pub use dft::{GoldilocksWord, ResourceBoundedDft, ResourceBoundedMatrix, ScratchPlonky3Matrix};
 pub use fri::{

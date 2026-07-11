@@ -18,14 +18,14 @@ import {
 } from "../dist/esm/client.js";
 
 test("AIR builder matches the Rust maximum-width golden vector", () => {
-  const builder = new AirBuilder(256, 1);
+  const builder = new AirBuilder(256, ["expected"]);
   const current = builder.current(255);
   const maximum = builder.constant(0xffff_ffff_0000_0000n);
   const constraint = builder.sub(current, maximum);
   builder.constrain("first_row", constraint);
   assert.equal(
     canonicalDigestHex(builder.build()),
-    "794df3f5378ff97b9c2877bd1f01c8fbcf646a212981a9f2bd8cdd7147a4a454",
+    "6886efd9315d23e967964ab8ca67e635558cf89c245c7fa787ae35ef05543fbc",
   );
 });
 
@@ -37,6 +37,16 @@ test("AIR builder rejects degree-four graphs", () => {
   const degreeFour = builder.mul(cube, column);
   builder.constrain("transition", degreeFour);
   assert.throws(() => builder.build(), /degree exceeds three/);
+});
+
+test("AIR builder rejects duplicate public names and next-row boundaries", () => {
+  const duplicate = new AirBuilder(1, ["value", "value"]);
+  duplicate.constrain("transition", duplicate.current(0));
+  assert.throws(() => duplicate.build(), /public input layout/);
+
+  const boundary = new AirBuilder(1);
+  boundary.constrain("last_row", boundary.next(0));
+  assert.throws(() => boundary.build(), /next row/);
 });
 
 const policy = {

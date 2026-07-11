@@ -17,6 +17,9 @@ SCHEMA_FILES = (
     "benchmark-report-v1.schema.json",
     "air-package-v1.schema.json",
     "trace-manifest-v1.schema.json",
+    "public-inputs-v1.schema.json",
+    "air-proof-bundle-v1.schema.json",
+    "hosted-proof-bundle-v1.schema.json",
 )
 MODEL_NAMES = {
     "PhaseEstimate": "PhaseEstimateV1",

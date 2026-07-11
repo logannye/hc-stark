@@ -27,10 +27,11 @@
     "profile": {
       "type": "string"
     },
-    "public_value_count": {
-      "type": "integer",
-      "format": "uint32",
-      "minimum": 0
+    "public_inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PublicInputSlotV1"
+      }
     },
     "schema_version": {
       "type": "integer",
@@ -51,7 +52,7 @@
     "field",
     "expected_verifier",
     "trace_width",
-    "public_value_count",
+    "public_inputs",
     "expressions",
     "constraints"
   ],
@@ -236,6 +237,21 @@
             "right"
           ]
         }
+      ]
+    },
+    "PublicInputSlotV1": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
       ]
     }
   }

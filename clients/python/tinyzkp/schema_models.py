@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict, Union
 
-RUST_SCHEMA_SET_SHA256 = "b55ca8233029f4fac580d9790e8e7fad5f39c9fdfcd9bcb3cf9642b02219bc29"
+RUST_SCHEMA_SET_SHA256 = "51c8c1110224f9249b1da38e22599dec3c8d0b5a2565c76e75f059ccccc9a67a"
 
 AirConstraintKindV1Model = Literal['transition', 'first_row', 'last_row']
 
@@ -45,9 +45,39 @@ class AirExpressionV1Variant7Model(TypedDict):
 
 AirExpressionV1Model = Union[AirExpressionV1Variant1Model, AirExpressionV1Variant2Model, AirExpressionV1Variant3Model, AirExpressionV1Variant4Model, AirExpressionV1Variant5Model, AirExpressionV1Variant6Model, AirExpressionV1Variant7Model]
 
+class AirPackageV1Model(TypedDict):
+    backend: str
+    constraints: list[AirConstraintV1Model]
+    expected_verifier: str
+    expressions: list[AirExpressionV1Model]
+    field: str
+    profile: str
+    public_inputs: list[PublicInputSlotV1Model]
+    schema_version: int
+    trace_width: int
+
+class AirProofBundleV1Model(TypedDict):
+    air: AirPackageV1Model
+    air_digest_hex: str
+    proof_base64url: str
+    proof_digest_hex: str
+    provenance: ReleaseProvenanceV1Model
+    public_inputs: PublicInputsV1Model
+    public_inputs_digest_hex: str
+    schema_version: int
+    trace_manifest: TraceManifestV1Model
+    trace_manifest_digest_hex: str
+
 BenchmarkModeModel = Literal['baseline', 'bounded']
 
 CheckpointPolicyModel = Literal['disabled', 'delete_on_success', 'retain_on_failure']
+
+class HostedResourceReportV1Model(TypedDict):
+    peak_resident_bytes: int
+    scratch_high_water_bytes: int
+    total_read_bytes: int
+    total_write_bytes: int
+    wall_time_ms: int
 
 class InputGeneratorV1FibonacciModel(TypedDict):
     initial_a: int
@@ -68,6 +98,14 @@ class PhaseEstimateV1Model(TypedDict):
     phase: str
     read_bytes: int
     write_bytes: int
+
+class PublicInputSlotV1Model(TypedDict):
+    name: str
+
+class PublicInputsV1Model(TypedDict):
+    air_digest_hex: str
+    schema_version: int
+    values: list[int]
 
 class ReleaseProvenanceV1Model(TypedDict):
     dependency_profile: str
@@ -98,6 +136,17 @@ class TraceChunkV1Model(TypedDict):
     compressed_bytes: int
     index: int
     uncompressed_bytes: int
+
+class TraceManifestV1Model(TypedDict):
+    air_digest_hex: str
+    chunk_uncompressed_bytes: int
+    chunks: list[TraceChunkV1Model]
+    compression: str
+    field_encoding: str
+    logical_rows: int
+    schema_version: int
+    trace_digest_hex: str
+    trace_width: int
 
 WorkloadIdModel = Literal['fibonacci', 'poseidon2_goldilocks']
 
@@ -160,24 +209,9 @@ class _BenchmarkReportV1ModelRequired(TypedDict):
 class BenchmarkReportV1Model(_BenchmarkReportV1ModelRequired, total=False):
     failure_diagnostic: Union[str, None]
 
-class AirPackageV1Model(TypedDict):
-    backend: str
-    constraints: list[AirConstraintV1Model]
-    expected_verifier: str
-    expressions: list[AirExpressionV1Model]
-    field: str
-    profile: str
-    public_value_count: int
+class HostedProofBundleV1Model(TypedDict):
+    charge_millicredits: int
+    official_verification: bool
+    proof: AirProofBundleV1Model
+    resource_report: HostedResourceReportV1Model
     schema_version: int
-    trace_width: int
-
-class TraceManifestV1Model(TypedDict):
-    air_digest_hex: str
-    chunk_uncompressed_bytes: int
-    chunks: list[TraceChunkV1Model]
-    compression: str
-    field_encoding: str
-    logical_rows: int
-    schema_version: int
-    trace_digest_hex: str
-    trace_width: int

@@ -1,4 +1,5 @@
 use assert_cmd::cargo::cargo_bin_cmd;
+use hc_plonky3::contracts::AirPackageV1;
 #[cfg(unix)]
 use hc_plonky3::contracts::{ProofBundleV1, WorkloadManifestV1};
 use hc_plonky3::{CancellationToken, ResourceBoundedUniStarkProver, WorkloadKind};
@@ -34,7 +35,7 @@ fn release_identity_is_machine_readable_and_profile_pinned() {
     assert_eq!(payload["compatibility_profile"], "tinyzkp-p3-goldilocks-v1");
     assert_eq!(
         payload["dependency_lock_sha256"],
-        "0da825cbb0d7e847c9d93a97a6cc1b014152df6c49bb94c1f5c9f8b921b1d1e2"
+        "bbd614a78a9ee8c531d7e6758708aa6d4929b60f99eac46dda941f6599c6a5e7"
     );
 }
 
@@ -72,7 +73,7 @@ fn write_customer_air(dir: &std::path::Path) -> std::path::PathBuf {
         "field": "goldilocks",
         "expected_verifier": "p3_uni_stark_0.6.1",
         "trace_width": 1,
-        "public_value_count": 0,
+        "public_inputs": [],
         "expressions": [
             {"op": "current", "column": 0},
             {"op": "next", "column": 0},
@@ -156,6 +157,109 @@ fn pack_trace_rejects_noncanonical_field_values() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("noncanonical Goldilocks"));
+}
+
+#[test]
+fn declarative_air_cli_proves_estimates_and_officially_verifies() {
+    let dir = tempdir().unwrap();
+    let air_path = write_customer_air(dir.path());
+    let air: AirPackageV1 = serde_json::from_slice(&std::fs::read(&air_path).unwrap()).unwrap();
+    let air_digest: String = air
+        .digest()
+        .unwrap()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let trace = dir.path().join("constant-trace.bin");
+    std::fs::write(&trace, vec![0u8; 1024 * 8]).unwrap();
+    let packed = dir.path().join("packed-proof");
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "pack-trace",
+            "--air",
+            air_path.to_str().unwrap(),
+            "--trace",
+            trace.to_str().unwrap(),
+            "--rows",
+            "1024",
+            "--output-dir",
+            packed.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    let public_inputs = dir.path().join("public-inputs.json");
+    std::fs::write(
+        &public_inputs,
+        serde_json::to_vec_pretty(&json!({
+            "schema_version": 1,
+            "air_digest_hex": air_digest,
+            "values": []
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let policy = dir.path().join("policy.json");
+    std::fs::write(
+        &policy,
+        serde_json::to_vec_pretty(&json!({
+            "mode": "scratch",
+            "max_resident_bytes": 134217728,
+            "max_scratch_bytes": 2147483648u64,
+            "scratch_dir": dir.path().join("scratch"),
+            "max_threads": 1,
+            "checkpoint_policy": "delete_on_success"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let trace_manifest = packed.join("trace-manifest-v1.json");
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "estimate-air",
+            "--air",
+            air_path.to_str().unwrap(),
+            "--trace-manifest",
+            trace_manifest.to_str().unwrap(),
+            "--public-inputs",
+            public_inputs.to_str().unwrap(),
+            "--policy",
+            policy.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("peak_resident_bytes"));
+    let bundle = dir.path().join("air-proof-bundle.json");
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "prove-air",
+            "--air",
+            air_path.to_str().unwrap(),
+            "--trace-manifest",
+            trace_manifest.to_str().unwrap(),
+            "--chunks-dir",
+            packed.to_str().unwrap(),
+            "--public-inputs",
+            public_inputs.to_str().unwrap(),
+            "--policy",
+            policy.to_str().unwrap(),
+            "--output",
+            bundle.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "verify-air",
+            "--bundle",
+            bundle.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("official p3-uni-stark verifier"));
 }
 
 #[test]
@@ -544,6 +648,11 @@ fn schemas_are_exported_from_rust_contracts() {
         "workload-manifest-v1.schema.json",
         "proof-bundle-v1.schema.json",
         "benchmark-report-v1.schema.json",
+        "air-package-v1.schema.json",
+        "trace-manifest-v1.schema.json",
+        "public-inputs-v1.schema.json",
+        "air-proof-bundle-v1.schema.json",
+        "hosted-proof-bundle-v1.schema.json",
     ] {
         assert!(dir.path().join(file).is_file());
     }

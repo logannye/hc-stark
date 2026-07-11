@@ -1,14 +1,17 @@
 use anyhow::{bail, Context, Result};
 use hc_plonky3::contracts::{
-    air_package_schema, benchmark_report_schema, proof_bundle_schema, trace_manifest_schema,
-    workload_manifest_schema, AirPackageV1, InputGeneratorV1, ProofBundleV1, TraceChunkV1,
-    TraceManifestV1, WorkloadId, WorkloadManifestV1, MAX_AIR_JSON_BYTES, MAX_BUNDLE_JSON_BYTES,
-    MAX_CUSTOM_TRACE_ROWS, MAX_MANIFEST_JSON_BYTES, MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES,
+    air_package_schema, air_proof_bundle_schema, benchmark_report_schema,
+    hosted_proof_bundle_schema, proof_bundle_schema, public_inputs_schema, trace_manifest_schema,
+    workload_manifest_schema, AirPackageV1, AirProofBundleV1, InputGeneratorV1, ProofBundleV1,
+    PublicInputsV1, TraceChunkV1, TraceManifestV1, WorkloadId, WorkloadManifestV1,
+    MAX_AIR_BUNDLE_JSON_BYTES, MAX_AIR_JSON_BYTES, MAX_BUNDLE_JSON_BYTES, MAX_CUSTOM_TRACE_ROWS,
+    MAX_MANIFEST_JSON_BYTES, MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES, MAX_TRACE_MANIFEST_JSON_BYTES,
     MAX_TRACE_UNCOMPRESSED_BYTES, MIN_CUSTOM_TRACE_ROWS,
 };
 use hc_plonky3::{
-    InternalProofBundle, ResourceBoundedUniStarkProver, WorkloadKind, COMPATIBILITY_PROFILE,
-    PLONKY3_VERSION,
+    estimate_declarative_statement, prove_resource_bounded_observed_with_cancellation,
+    InternalProofBundle, ResourceBoundedUniStarkProver, UploadedTraceWorkload, WorkloadKind,
+    COMPATIBILITY_PROFILE, PLONKY3_VERSION,
 };
 use hc_stream::{CheckpointManifestV2, ResourceEstimate, ResourcePolicyV1};
 use serde::de::DeserializeOwned;
@@ -27,10 +30,108 @@ pub fn validate_air(air_path: &Path) -> Result<()> {
             "valid": true,
             "air_digest_hex": hex_lower(&air.digest().map_err(anyhow::Error::msg)?),
             "trace_width": air.trace_width,
-            "public_value_count": air.public_value_count,
+            "public_value_count": air.public_inputs.len(),
             "constraint_count": air.constraints.len(),
             "profile": air.profile,
             "expected_verifier": air.expected_verifier,
+        }))?
+    );
+    Ok(())
+}
+
+pub fn prove_air(
+    air_path: &Path,
+    trace_manifest_path: &Path,
+    chunks_dir: &Path,
+    public_inputs_path: &Path,
+    policy_path: &Path,
+    output: &Path,
+) -> Result<()> {
+    let air: AirPackageV1 = read_json_limited(air_path, MAX_AIR_JSON_BYTES)?;
+    let trace_manifest: TraceManifestV1 =
+        read_json_limited(trace_manifest_path, MAX_TRACE_MANIFEST_JSON_BYTES)?;
+    let public_inputs: PublicInputsV1 =
+        read_json_limited(public_inputs_path, MAX_MANIFEST_JSON_BYTES)?;
+    let policy: ResourcePolicyV1 = read_json_limited(policy_path, MAX_MANIFEST_JSON_BYTES)?;
+    air.validate().map_err(anyhow::Error::msg)?;
+    trace_manifest
+        .validate_for_air(&air)
+        .map_err(anyhow::Error::msg)?;
+    public_inputs
+        .validate_for_air(&air)
+        .map_err(anyhow::Error::msg)?;
+    let workload = UploadedTraceWorkload::new(
+        air.clone(),
+        trace_manifest.clone(),
+        public_inputs.values.clone(),
+        chunks_dir,
+    )
+    .map_err(anyhow::Error::msg)?;
+    let cancellation = hc_plonky3::CancellationToken::new();
+    let handler_token = cancellation.clone();
+    ctrlc::set_handler(move || handler_token.cancel())
+        .context("failed to install the prover cancellation handler")?;
+    let proof_bytes = prove_resource_bounded_observed_with_cancellation(
+        &workload,
+        &policy,
+        cancellation,
+        emit_backend_event,
+    )
+    .map_err(anyhow::Error::msg)?;
+    let bundle = AirProofBundleV1::from_proof(
+        air,
+        trace_manifest,
+        public_inputs,
+        proof_bytes,
+        hc_plonky3::release_identity(),
+    )
+    .map_err(anyhow::Error::msg)?;
+    write_json_atomic(output, &bundle)?;
+    println!("{}", output.display());
+    Ok(())
+}
+
+pub fn verify_air(bundle_path: &Path) -> Result<()> {
+    let bundle: AirProofBundleV1 = read_json_limited(bundle_path, MAX_AIR_BUNDLE_JSON_BYTES)?;
+    bundle.verify().map_err(anyhow::Error::msg)?;
+    println!("declarative AIR proof accepted by the official p3-uni-stark verifier");
+    Ok(())
+}
+
+pub fn estimate_air(
+    air_path: &Path,
+    trace_manifest_path: &Path,
+    public_inputs_path: &Path,
+    policy_path: &Path,
+) -> Result<()> {
+    let air: AirPackageV1 = read_json_limited(air_path, MAX_AIR_JSON_BYTES)?;
+    let trace_manifest: TraceManifestV1 =
+        read_json_limited(trace_manifest_path, MAX_TRACE_MANIFEST_JSON_BYTES)?;
+    let public_inputs: PublicInputsV1 =
+        read_json_limited(public_inputs_path, MAX_MANIFEST_JSON_BYTES)?;
+    let policy: ResourcePolicyV1 = read_json_limited(policy_path, MAX_MANIFEST_JSON_BYTES)?;
+    trace_manifest
+        .validate_for_air(&air)
+        .map_err(anyhow::Error::msg)?;
+    public_inputs
+        .validate_for_air(&air)
+        .map_err(anyhow::Error::msg)?;
+    let estimate = estimate_declarative_statement(
+        air,
+        trace_manifest.logical_rows,
+        &public_inputs.values,
+        &policy,
+    )
+    .map_err(anyhow::Error::msg)?;
+    let preflight = policy
+        .preflight_for_mode(hc_stream::ExecutionMode::Scratch, estimate.clone())
+        .map_err(anyhow::Error::msg)?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "schema_version": 1,
+            "estimate": estimate,
+            "preflight": preflight,
         }))?
     );
     Ok(())
@@ -60,6 +161,11 @@ pub fn pack_trace(
         .checked_mul(u64::from(air.trace_width))
         .and_then(|value| value.checked_mul(8))
         .context("trace size overflow")?;
+    let row_bytes = u64::from(air.trace_width) * 8;
+    let chunk_uncompressed_bytes = chunk_uncompressed_bytes - chunk_uncompressed_bytes % row_bytes;
+    if chunk_uncompressed_bytes == 0 {
+        bail!("chunk bytes must hold at least one complete trace row");
+    }
     if expected_bytes > MAX_TRACE_UNCOMPRESSED_BYTES {
         bail!("expanded trace exceeds the 32 GiB beta limit");
     }
@@ -358,6 +464,18 @@ pub fn export_schemas(output_dir: &Path) -> Result<()> {
     write_json_atomic(
         &output_dir.join("trace-manifest-v1.schema.json"),
         &trace_manifest_schema(),
+    )?;
+    write_json_atomic(
+        &output_dir.join("public-inputs-v1.schema.json"),
+        &public_inputs_schema(),
+    )?;
+    write_json_atomic(
+        &output_dir.join("air-proof-bundle-v1.schema.json"),
+        &air_proof_bundle_schema(),
+    )?;
+    write_json_atomic(
+        &output_dir.join("hosted-proof-bundle-v1.schema.json"),
+        &hosted_proof_bundle_schema(),
     )?;
     println!("generated schemas in {}", output_dir.display());
     Ok(())
