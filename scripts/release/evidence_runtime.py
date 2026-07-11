@@ -213,7 +213,7 @@ def open_private_output(root: Path, path: Path, *, mode: int = 0o600) -> int:
     )
 
 
-def private_file_identity(descriptor: int) -> tuple[int, int]:
+def private_file_identity(descriptor: int) -> tuple[int, int, int, int, int]:
     details = os.fstat(descriptor)
     if (
         not stat.S_ISREG(details.st_mode)
@@ -221,13 +221,19 @@ def private_file_identity(descriptor: int) -> tuple[int, int]:
         or details.st_nlink != 1
     ):
         raise ValueError("open evidence file is unsafe")
-    return details.st_dev, details.st_ino
+    return (
+        details.st_dev,
+        details.st_ino,
+        details.st_ctime_ns,
+        details.st_mtime_ns,
+        details.st_size,
+    )
 
 
 def read_private_output(
     root: Path,
     path: Path,
-    expected_identity: tuple[int, int],
+    expected_identity: tuple[int, int, int, int, int],
     *,
     max_bytes: int = 256 * 1024 * 1024,
 ) -> bytes:
