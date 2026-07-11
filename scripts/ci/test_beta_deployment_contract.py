@@ -46,6 +46,7 @@ def test_backup_and_rollback_contracts_are_tracked():
     rollback = text("caddy-route.rollback.caddy")
     assert "archive_mode = on" in postgres and "archive-push" in postgres
     assert "PGBACKREST_VERSION=2.58.0-1.pgdg12+1" in postgres_image
+    assert "--no-install-recommends ca-certificates" in postgres_image
     assert "repo1-cipher-type=aes-256-cbc" in backup
     assert "pg1-database=tinyzkp_beta" in backup
     assert "pg1-user=tinyzkp_beta" in backup
