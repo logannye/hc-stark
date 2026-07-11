@@ -10,8 +10,8 @@ publish = false
 aes-gcm = "0.10"
 anyhow = "1.0"
 async-trait = "0.1"
-aws-config = { version = "1.8", features = ["behavior-version-latest"] }
-aws-sdk-s3 = "1.115"
+aws-config = { version = "1.9", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "1.138", default-features = false, features = ["default-https-client", "rt-tokio"] }
 axum = { version = "0.7", features = ["macros"] }
 base64 = "0.22"
 blake3.workspace = true
