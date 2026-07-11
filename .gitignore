@@ -17,7 +17,6 @@ clients/python/.venv*/
 clients/python/dist/
 clients/python/*.egg-info/
 clients/python/.pytest_cache/
-clients/rust/Cargo.lock
 
 # Local cargo-fuzz state (CI publishes explicit machine-readable summaries).
 /fuzz/artifacts/
