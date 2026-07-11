@@ -1,6 +1,7 @@
 name = "tinyzkp-uptime-probe"
 main = "worker.js"
 compatibility_date = "2026-01-01"
+compatibility_flags = ["global_fetch_strictly_public"]
 
 # Probe every 2 minutes (cron is UTC). A confirmed failure pages within ~2 min
 # instead of "whenever the daily Mac audit next runs".
