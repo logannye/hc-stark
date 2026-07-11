@@ -21,6 +21,7 @@ MAX_MANIFEST_JSON_BYTES = 1024 * 1024
 MAX_BUNDLE_JSON_BYTES = 96 * 1024 * 1024
 MAX_REPORT_JSON_BYTES = 1024 * 1024
 MAX_U64 = (1 << 64) - 1
+GOLDILOCKS_MODULUS = 0xFFFF_FFFF_0000_0001
 MIN_I64 = -(1 << 63)
 
 
@@ -142,6 +143,11 @@ class WorkloadManifestV1:
         for field in expected_generator_keys - {"kind"}:
             if not _is_u64(self.input_generator[field]):
                 raise ArtifactError("input generator integer exceeds uint64")
+        if self.workload_id == "fibonacci" and any(
+            self.input_generator[field] >= GOLDILOCKS_MODULUS
+            for field in ("initial_a", "initial_b")
+        ):
+            raise ArtifactError("Fibonacci inputs must be canonical Goldilocks elements")
         if self.workload_id == "poseidon2_goldilocks" and self.input_generator.get(
             "seed"
         ) != 0:

@@ -32,6 +32,8 @@ jobs:
             --locked
       - name: Randomized proof equality through 2^18
         run: cargo test -p hc-plonky3 --release --locked nightly_proof_equality_through_configured_power_of_two -- --ignored --nocapture
+      - name: Scratch preflight calibration across powers of two
+        run: cargo test -p hc-plonky3 --release --locked bounded_prover::tests::scratch_estimates_track_multiple_release_scale_powers -- --exact --ignored --nocapture
       - name: Complete machine-readable checkpoint crash rotation
         run: |
           HC_RELEASE_SHA="${{ github.sha }}" \

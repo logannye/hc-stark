@@ -268,6 +268,27 @@ mod tests {
     }
 
     #[test]
+    fn builder_rejects_noncanonical_goldilocks_inputs() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(ManifestBuilder::fibonacci(
+            hc_plonky3::GOLDILOCKS_MODULUS_U64,
+            0,
+            16,
+            policy(dir.path()),
+        )
+        .build()
+        .is_err());
+        ManifestBuilder::fibonacci(
+            hc_plonky3::GOLDILOCKS_MODULUS_U64 - 1,
+            0,
+            16,
+            policy(dir.path()),
+        )
+        .build()
+        .unwrap();
+    }
+
+    #[test]
     fn shared_bundle_fixture_rejects_truncation_and_dependency_skew() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-vectors/plonky3/fibonacci-16.bundle.json");

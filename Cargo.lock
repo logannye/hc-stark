@@ -1501,6 +1501,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "fs2",
+ "rustix",
  "schemars",
  "serde",
  "serde_json",

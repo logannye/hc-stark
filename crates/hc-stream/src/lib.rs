@@ -9,13 +9,17 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::fs::{self, File, OpenOptions};
+#[cfg(any(not(unix), test))]
+use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
 use std::path::{Component, Path, PathBuf};
 
 const STORE_MAGIC: &[u8; 8] = b"TZMATV1\0";
 const STORE_HEADER_LEN: u64 = 8 + 8 + 8 + 8;
+/// On-disk bytes preceding every [`ScratchMatrixStore`] payload.
+pub const SCRATCH_STORE_HEADER_BYTES: u64 = STORE_HEADER_LEN;
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 const MAX_CHALLENGER_STATE_BYTES: usize = 64 * 1024;
 const MAX_RESUME_PAYLOAD_BYTES: usize = 64 * 1024;
@@ -583,6 +587,7 @@ pub struct ScratchMatrixStore<T> {
     rows: u64,
     columns: usize,
     digest: Option<ArtifactDigest>,
+    stable_identity: Option<StableFileIdentity>,
     _marker: PhantomData<T>,
 }
 
@@ -618,14 +623,14 @@ impl<T: CanonicalElement> ScratchMatrixStore<T> {
             rows,
             columns,
             digest: None,
+            stable_identity: None,
             _marker: PhantomData,
         })
     }
 
     pub fn reopen(path: impl AsRef<Path>, expected: ArtifactDigest) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
-        reject_symlink(&path)?;
-        let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
+        let (mut file, opened_identity) = secure_open_existing_file(&path, true)?;
         let expected_payload = expected
             .rows
             .checked_mul(expected.columns as u64)
@@ -645,12 +650,14 @@ impl<T: CanonicalElement> ScratchMatrixStore<T> {
         if actual != expected {
             return Err(StreamError::Corrupt("artifact checksum mismatch"));
         }
+        ensure_held_file_stable(&file, &opened_identity)?;
         Ok(Self {
             path,
             file,
             rows: expected.rows,
             columns: expected.columns,
             digest: Some(expected),
+            stable_identity: Some(opened_identity),
             _marker: PhantomData,
         })
     }
@@ -670,6 +677,9 @@ impl<T: CanonicalElement> BlockMatrix<T> for ScratchMatrixStore<T> {
     }
 
     fn read_rows(&self, row_start: u64, row_count: usize, output: &mut [T]) -> Result<()> {
+        if let Some(identity) = &self.stable_identity {
+            ensure_held_file_stable(&self.file, identity)?;
+        }
         let (_, _, expected) = checked_row_range(self.rows, self.columns, row_start, row_count)?;
         if output.len() != expected {
             return Err(StreamError::OutOfBounds);
@@ -687,6 +697,9 @@ impl<T: CanonicalElement> BlockMatrix<T> for ScratchMatrixStore<T> {
         for (slot, chunk) in output.iter_mut().zip(bytes.chunks_exact(T::WIDTH)) {
             *slot = T::decode(chunk)?;
         }
+        if let Some(identity) = &self.stable_identity {
+            ensure_held_file_stable(&self.file, identity)?;
+        }
         Ok(())
     }
 
@@ -698,6 +711,9 @@ impl<T: CanonicalElement> BlockMatrix<T> for ScratchMatrixStore<T> {
         column_count: usize,
         output: &mut [T],
     ) -> Result<()> {
+        if let Some(identity) = &self.stable_identity {
+            ensure_held_file_stable(&self.file, identity)?;
+        }
         let expected = checked_tile_len(
             self.rows,
             self.columns,
@@ -731,6 +747,9 @@ impl<T: CanonicalElement> BlockMatrix<T> for ScratchMatrixStore<T> {
             {
                 *slot = T::decode(chunk)?;
             }
+        }
+        if let Some(identity) = &self.stable_identity {
+            ensure_held_file_stable(&self.file, identity)?;
         }
         Ok(())
     }
@@ -811,11 +830,18 @@ impl<T: CanonicalElement> MatrixStore<T> for ScratchMatrixStore<T> {
 
     fn finalize(&mut self) -> Result<ArtifactDigest> {
         if let Some(digest) = self.digest {
+            if let Some(identity) = &self.stable_identity {
+                ensure_held_file_stable(&self.file, identity)?;
+            }
             return Ok(digest);
         }
         self.file.sync_all()?;
         let digest = digest_payload::<T>(&mut self.file, self.rows, self.columns)?;
         self.digest = Some(digest);
+        #[cfg(unix)]
+        {
+            self.stable_identity = Some(stable_file_identity(&self.file)?);
+        }
         Ok(digest)
     }
 
@@ -1011,16 +1037,23 @@ impl CheckpointManifestV2 {
 
     pub fn read(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        reject_symlink(path)?;
-        let metadata = fs::metadata(path)?;
-        if metadata.len() > MAX_MANIFEST_BYTES {
+        let (mut file, opened_identity) = secure_open_existing_file(path, false)?;
+        if opened_identity.len > MAX_MANIFEST_BYTES {
             return Err(StreamError::ResourceLimit {
                 resource: "checkpoint manifest",
-                required: metadata.len(),
+                required: opened_identity.len,
                 cap: MAX_MANIFEST_BYTES,
             });
         }
-        let manifest: Self = serde_json::from_slice(&fs::read(path)?)?;
+        let mut bytes = Vec::with_capacity(opened_identity.len as usize);
+        file.read_to_end(&mut bytes)?;
+        if bytes.len() as u64 != opened_identity.len {
+            return Err(StreamError::Corrupt(
+                "checkpoint length changed while reading",
+            ));
+        }
+        ensure_held_file_stable(&file, &opened_identity)?;
+        let manifest: Self = serde_json::from_slice(&bytes)?;
         manifest.validate_structure()?;
         Ok(manifest)
     }
@@ -1043,8 +1076,7 @@ impl CheckpointManifestV2 {
 /// only needs the immutable header and payload digest.
 pub fn validate_scratch_artifact(path: impl AsRef<Path>, expected: ArtifactDigest) -> Result<()> {
     let path = path.as_ref();
-    reject_symlink(path)?;
-    let mut file = File::open(path)?;
+    let (mut file, opened_identity) = secure_open_existing_file(path, false)?;
     if read_header(&mut file)? != (expected.rows, expected.columns, expected.element_width) {
         return Err(StreamError::Corrupt("artifact header mismatch"));
     }
@@ -1052,6 +1084,7 @@ pub fn validate_scratch_artifact(path: impl AsRef<Path>, expected: ArtifactDiges
     if actual != expected {
         return Err(StreamError::Corrupt("artifact checksum mismatch"));
     }
+    ensure_held_file_stable(&file, &opened_identity)?;
     Ok(())
 }
 
@@ -1255,15 +1288,206 @@ fn ensure_private_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(unix))]
 fn create_private_file(path: &Path) -> Result<File> {
     let mut options = OpenOptions::new();
     options.create_new(true).read(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
     Ok(options.open(path)?)
+}
+
+#[cfg(unix)]
+fn create_private_file(path: &Path) -> Result<File> {
+    use rustix::fs::{openat, Mode, OFlags};
+
+    let (directory, file_name) = open_parent_directory(path)?;
+    let descriptor = openat(
+        &directory,
+        file_name,
+        OFlags::CREATE
+            | OFlags::EXCL
+            | OFlags::RDWR
+            | OFlags::NOFOLLOW
+            | OFlags::CLOEXEC
+            | OFlags::NONBLOCK,
+        Mode::RUSR | Mode::WUSR,
+    )
+    .map_err(|error| StreamError::Io(error.into()))?;
+    let file = File::from(descriptor);
+    stable_file_identity(&file)?;
+    Ok(file)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct StableFileIdentity {
+    len: u64,
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    #[cfg(unix)]
+    mode: u32,
+    #[cfg(unix)]
+    links: u64,
+    #[cfg(unix)]
+    owner: u32,
+    #[cfg(unix)]
+    modified_seconds: i64,
+    #[cfg(unix)]
+    modified_nanoseconds: i64,
+    #[cfg(unix)]
+    changed_seconds: i64,
+    #[cfg(unix)]
+    changed_nanoseconds: i64,
+}
+
+/// Open an existing scratch file through descriptor-relative, no-follow
+/// traversal and prove that two independent traversals reached the same inode.
+/// The returned descriptor, rather than the pathname, is used for all reads.
+#[cfg(unix)]
+fn secure_open_existing_file(path: &Path, writable: bool) -> Result<(File, StableFileIdentity)> {
+    secure_open_existing_file_with(path, writable, || {})
+}
+
+#[cfg(unix)]
+fn secure_open_existing_file_with(
+    path: &Path,
+    writable: bool,
+    between_opens: impl FnOnce(),
+) -> Result<(File, StableFileIdentity)> {
+    let first = open_existing_file_once(path, writable)?;
+    let first_identity = stable_file_identity(&first)?;
+    between_opens();
+    let second = open_existing_file_once(path, writable)?;
+    let second_identity = stable_file_identity(&second)?;
+    if first_identity != second_identity {
+        return Err(StreamError::UnsafePath);
+    }
+    Ok((first, first_identity))
+}
+
+#[cfg(unix)]
+fn open_existing_file_once(path: &Path, writable: bool) -> Result<File> {
+    use rustix::fs::{openat, Mode, OFlags};
+
+    let (directory, file_name) = open_parent_directory(path)?;
+    let access = if writable {
+        OFlags::RDWR
+    } else {
+        OFlags::RDONLY
+    };
+    let descriptor = openat(
+        &directory,
+        file_name,
+        access | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
+        Mode::empty(),
+    )
+    .map_err(|_| StreamError::UnsafePath)?;
+    let file = File::from(descriptor);
+    stable_file_identity(&file)?;
+    Ok(file)
+}
+
+#[cfg(unix)]
+fn open_parent_directory(path: &Path) -> Result<(rustix::fd::OwnedFd, std::ffi::OsString)> {
+    use rustix::fs::{openat, Mode, OFlags, CWD};
+    use std::ffi::OsString;
+
+    let normalized = platform_no_follow_path(path);
+    let path = normalized.as_path();
+    if path.as_os_str().is_empty() {
+        return Err(StreamError::UnsafePath);
+    }
+    let mut names = Vec::<OsString>::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(name) => names.push(name.to_os_string()),
+            Component::CurDir | Component::RootDir => {}
+            Component::ParentDir | Component::Prefix(_) => return Err(StreamError::UnsafePath),
+        }
+    }
+    let file_name = names.pop().ok_or(StreamError::UnsafePath)?;
+    let directory_flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
+    let mut directory = openat(
+        CWD,
+        if path.is_absolute() { "/" } else { "." },
+        directory_flags,
+        Mode::empty(),
+    )
+    .map_err(|_| StreamError::UnsafePath)?;
+    for name in names {
+        directory = openat(&directory, name, directory_flags, Mode::empty())
+            .map_err(|_| StreamError::UnsafePath)?;
+    }
+    Ok((directory, file_name))
+}
+
+#[cfg(unix)]
+fn platform_no_follow_path(path: &Path) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    if path.is_absolute() {
+        let first = path.components().find_map(|component| match component {
+            Component::Normal(value) => value.to_str(),
+            _ => None,
+        });
+        // macOS defines these root-level compatibility links as part of the
+        // sealed system layout. Resolve only those fixed prefixes before the
+        // component-by-component O_NOFOLLOW traversal; arbitrary symlinks are
+        // never canonicalized or followed.
+        if matches!(first, Some("var" | "tmp" | "etc")) {
+            if let Ok(relative) = path.strip_prefix("/") {
+                return Path::new("/private").join(relative);
+            }
+        }
+    }
+    path.to_path_buf()
+}
+
+#[cfg(unix)]
+fn stable_file_identity(file: &File) -> Result<StableFileIdentity> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = file.metadata()?;
+    let identity = StableFileIdentity {
+        len: metadata.len(),
+        device: metadata.dev(),
+        inode: metadata.ino(),
+        mode: metadata.mode(),
+        links: metadata.nlink(),
+        owner: metadata.uid(),
+        modified_seconds: metadata.mtime(),
+        modified_nanoseconds: metadata.mtime_nsec(),
+        changed_seconds: metadata.ctime(),
+        changed_nanoseconds: metadata.ctime_nsec(),
+    };
+    if !metadata.is_file()
+        || identity.links != 1
+        || identity.owner != rustix::process::geteuid().as_raw()
+        || identity.mode & 0o077 != 0
+    {
+        return Err(StreamError::UnsafePath);
+    }
+    Ok(identity)
+}
+
+#[cfg(unix)]
+fn ensure_held_file_stable(file: &File, expected: &StableFileIdentity) -> Result<()> {
+    if &stable_file_identity(file)? != expected {
+        return Err(StreamError::Corrupt("file changed while held open"));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn secure_open_existing_file(_path: &Path, _writable: bool) -> Result<(File, StableFileIdentity)> {
+    // Production scratch/checkpoint recovery requires openat/O_NOFOLLOW-style
+    // descriptor semantics. Unsupported targets fail closed rather than
+    // silently falling back to a pathname check followed by a racy open.
+    Err(StreamError::UnsafePath)
+}
+
+#[cfg(not(unix))]
+fn ensure_held_file_stable(_file: &File, _expected: &StableFileIdentity) -> Result<()> {
+    Err(StreamError::UnsafePath)
 }
 
 fn reject_symlink(path: &Path) -> Result<()> {
@@ -1560,6 +1784,175 @@ mod tests {
         symlink(&real, &linked_artifact).unwrap();
         assert!(matches!(
             ScratchMatrixStore::<u64>::reopen(&linked_artifact, digest),
+            Err(StreamError::UnsafePath)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn final_file_hardlinks_are_rejected_by_all_artifact_readers() {
+        let dir = tempdir().unwrap();
+        let mut store =
+            ScratchMatrixStore::<u64>::create(dir.path(), "original.bin", 1, 1).unwrap();
+        store.write_rows(0, 1, &[17]).unwrap();
+        let digest = store.finalize().unwrap();
+        let original = store.path().to_path_buf();
+        let alias = dir.path().join("alias.bin");
+        fs::hard_link(&original, &alias).unwrap();
+
+        assert!(matches!(
+            store.read_rows(0, 1, &mut [0]),
+            Err(StreamError::UnsafePath)
+        ));
+        drop(store);
+        assert!(matches!(
+            ScratchMatrixStore::<u64>::reopen(&original, digest),
+            Err(StreamError::UnsafePath)
+        ));
+        assert!(matches!(
+            validate_scratch_artifact(&original, digest),
+            Err(StreamError::UnsafePath)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replacement_between_secure_opens_is_rejected() {
+        let dir = tempdir().unwrap();
+        let mut victim = ScratchMatrixStore::<u64>::create(dir.path(), "victim.bin", 1, 1).unwrap();
+        victim.write_rows(0, 1, &[23]).unwrap();
+        victim.finalize().unwrap();
+        let victim_path = victim.path().to_path_buf();
+        drop(victim);
+
+        let mut replacement =
+            ScratchMatrixStore::<u64>::create(dir.path(), "replacement.bin", 1, 1).unwrap();
+        replacement.write_rows(0, 1, &[29]).unwrap();
+        replacement.finalize().unwrap();
+        let replacement_path = replacement.path().to_path_buf();
+        drop(replacement);
+
+        let saved_path = dir.path().join("saved-victim.bin");
+        let result = secure_open_existing_file_with(&victim_path, false, || {
+            fs::rename(&victim_path, &saved_path).unwrap();
+            fs::rename(&replacement_path, &victim_path).unwrap();
+        });
+        assert!(matches!(result, Err(StreamError::UnsafePath)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn held_descriptor_stays_on_verified_inode_after_path_replacement() {
+        use std::os::unix::fs::MetadataExt;
+
+        let dir = tempdir().unwrap();
+        let mut original = ScratchMatrixStore::<u64>::create(dir.path(), "held.bin", 1, 1).unwrap();
+        original.write_rows(0, 1, &[31]).unwrap();
+        let original_digest = original.finalize().unwrap();
+        let original_path = original.path().to_path_buf();
+        drop(original);
+
+        let mut replacement =
+            ScratchMatrixStore::<u64>::create(dir.path(), "new.bin", 1, 1).unwrap();
+        replacement.write_rows(0, 1, &[37]).unwrap();
+        replacement.finalize().unwrap();
+        let replacement_path = replacement.path().to_path_buf();
+        drop(replacement);
+
+        let (mut held, identity) = secure_open_existing_file(&original_path, false).unwrap();
+        let held_inode = held.metadata().unwrap().ino();
+        let saved_path = dir.path().join("saved-held.bin");
+        fs::rename(&original_path, &saved_path).unwrap();
+        fs::rename(&replacement_path, &original_path).unwrap();
+
+        assert_eq!(held.metadata().unwrap().ino(), held_inode);
+        assert_ne!(fs::metadata(&original_path).unwrap().ino(), held_inode);
+        assert_eq!(read_header(&mut held).unwrap(), (1, 1, u64::WIDTH));
+        assert_eq!(
+            digest_payload::<u64>(&mut held, 1, 1).unwrap(),
+            original_digest
+        );
+        assert!(matches!(
+            ensure_held_file_stable(&held, &identity),
+            Err(StreamError::Corrupt("file changed while held open"))
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_in_any_parent_component_is_rejected() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let real_parent = dir.path().join("real-parent");
+        let nested = real_parent.join("nested");
+        fs::create_dir_all(&nested).unwrap();
+        let mut store = ScratchMatrixStore::<u64>::create(&nested, "trace.bin", 1, 1).unwrap();
+        store.write_rows(0, 1, &[41]).unwrap();
+        let digest = store.finalize().unwrap();
+        drop(store);
+
+        let linked_parent = dir.path().join("linked-parent");
+        symlink(&real_parent, &linked_parent).unwrap();
+        let through_link = linked_parent.join("nested").join("trace.bin");
+        assert!(matches!(
+            ScratchMatrixStore::<u64>::reopen(&through_link, digest),
+            Err(StreamError::UnsafePath)
+        ));
+        assert!(matches!(
+            validate_scratch_artifact(&through_link, digest),
+            Err(StreamError::UnsafePath)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn checkpoint_and_artifact_readers_reject_unsafe_file_modes() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let mut store = ScratchMatrixStore::<u64>::create(dir.path(), "trace.bin", 1, 1).unwrap();
+        store.write_rows(0, 1, &[43]).unwrap();
+        let digest = store.finalize().unwrap();
+        let artifact_path = store.path().to_path_buf();
+        drop(store);
+
+        let manifest = CheckpointManifestV2 {
+            schema_version: 2,
+            backend_hash: [1; 32],
+            profile_hash: [2; 32],
+            release_hash: [3; 32],
+            dependency_lock_hash: [4; 32],
+            workload_hash: [5; 32],
+            input_hash: [6; 32],
+            resource_policy_hash: [7; 32],
+            completed_phase: PipelinePhaseV1::Trace,
+            challenger_state: vec![8, 9],
+            resume_payload: br#"{"workload":"mode-test"}"#.to_vec(),
+            artifacts: vec![CheckpointArtifactV2 {
+                kind: PipelineArtifactKindV1::Trace,
+                ordinal: None,
+                relative_path: PathBuf::from("trace.bin"),
+                digest,
+            }],
+        };
+        let manifest_path = dir.path().join("checkpoint.json");
+        manifest.write_atomic(&manifest_path).unwrap();
+
+        fs::set_permissions(&artifact_path, fs::Permissions::from_mode(0o640)).unwrap();
+        assert!(matches!(
+            validate_scratch_artifact(&artifact_path, digest),
+            Err(StreamError::UnsafePath)
+        ));
+        assert!(matches!(
+            manifest.validate_artifacts(dir.path()),
+            Err(StreamError::UnsafePath)
+        ));
+        fs::set_permissions(&artifact_path, fs::Permissions::from_mode(0o600)).unwrap();
+
+        fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(matches!(
+            CheckpointManifestV2::read(&manifest_path),
             Err(StreamError::UnsafePath)
         ));
     }

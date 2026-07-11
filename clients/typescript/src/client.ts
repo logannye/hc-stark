@@ -34,6 +34,7 @@ export const MAX_MANIFEST_JSON_BYTES = 1024 * 1024;
 export const MAX_BUNDLE_JSON_BYTES = 96 * 1024 * 1024;
 export const MAX_REPORT_JSON_BYTES = 1024 * 1024;
 const MAX_U64 = (1n << 64n) - 1n;
+const GOLDILOCKS_MODULUS = 0xffff_ffff_0000_0001n;
 const MIN_I64 = -(1n << 63n);
 const LOSSLESS_JSON = JSONbigFactory({
   useNativeBigInt: true,
@@ -136,7 +137,9 @@ export function validateManifest(value: unknown): asserts value is WorkloadManif
     if (
       generator.kind !== "fibonacci" ||
       !isU64(generator.initial_a) ||
-      !isU64(generator.initial_b)
+      !isU64(generator.initial_b) ||
+      BigInt(generator.initial_a) >= GOLDILOCKS_MODULUS ||
+      BigInt(generator.initial_b) >= GOLDILOCKS_MODULUS
     ) {
       throw new ArtifactError("invalid Fibonacci input generator");
     }

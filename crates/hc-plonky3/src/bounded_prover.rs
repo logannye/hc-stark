@@ -19,10 +19,10 @@ use crate::workloads::{
     FibonacciWorkload, Poseidon2Workload, ResourceBoundedWorkload, WorkloadError,
 };
 use hc_stream::{
-    cleanup_job_directory, BlockMatrix, CheckpointArtifactV2, CheckpointIdentityV2,
+    cleanup_job_directory, ArtifactDigest, BlockMatrix, CheckpointArtifactV2, CheckpointIdentityV2,
     CheckpointManifestV2, CheckpointPolicy, ExecutionMode, MatrixStore, MemoryMatrix,
     PhaseEstimate, PipelineArtifactKindV1, PipelinePhaseV1, PreflightReport, ResourceEstimate,
-    ResourcePolicyV1, ScratchMatrixStore, StreamError,
+    ResourcePolicyV1, ScratchMatrixStore, StreamError, SCRATCH_STORE_HEADER_BYTES,
 };
 use p3_air::symbolic::{AirLayout, SymbolicAirBuilder};
 use p3_air::{Air, BaseAir};
@@ -49,6 +49,26 @@ use std::sync::Arc;
 
 static PROVER_JOB_COUNTER: AtomicU64 = AtomicU64::new(0);
 const FRI_CANCELLED_SENTINEL: &str = "tinyzkp-prover-cancelled";
+// Structural upper envelope for the frozen `postcard-1.1.3` proof. A u64 can
+// occupy ten LEB128 bytes, each Merkle digest has four Goldilocks words, and
+// the profile fixes 100 queries. Summed FRI authentication depths are
+// triangular (the log-squared term); the three linear path/opening families
+// cover trace, quotient, and folded-layer data. The fixed envelope covers caps,
+// challenges, length prefixes, and the final polynomial.
+const PROFILE_FRI_QUERY_COUNT: u64 = 100;
+const MAX_POSTCARD_U64_BYTES: u64 = 10;
+const PROFILE_DIGEST_WORDS: u64 = 4;
+const PROFILE_PROOF_LOG_SQUARED_BYTES: u64 =
+    PROFILE_FRI_QUERY_COUNT * PROFILE_DIGEST_WORDS * MAX_POSTCARD_U64_BYTES / 2;
+const PROFILE_PROOF_LOG_BYTES: u64 =
+    PROFILE_FRI_QUERY_COUNT * PROFILE_DIGEST_WORDS * MAX_POSTCARD_U64_BYTES * 3;
+const PROFILE_PROOF_FIXED_BYTES: u64 = 16 * 1024;
+const PROFILE_PROOF_TRACE_COLUMN_BYTES: u64 = PROFILE_FRI_QUERY_COUNT * MAX_POSTCARD_U64_BYTES;
+const PROFILE_PROOF_EXTRA_QUOTIENT_CHUNK_BYTES: u64 =
+    PROFILE_FRI_QUERY_COUNT * 2 * MAX_POSTCARD_U64_BYTES;
+const MAX_CHALLENGER_SNAPSHOT_BYTES: usize = 8 + 8 * 8 + 2 + 8 * 8 + 32;
+const MAX_ARTIFACT_PATH_COUNTER: &str = "18446744073709551615";
+const MAX_ARTIFACT_PATH_PID: &str = "4294967295";
 
 #[derive(Debug, thiserror::Error)]
 pub enum BoundedProverError {
@@ -211,11 +231,16 @@ pub fn estimate_builtin_manifest(
         {
             Ok(crate::prover::conventional_pipeline_estimate(rows, 180, 2))
         }
-        crate::contracts::WorkloadId::Fibonacci => {
-            estimate_air_pipeline(&crate::FibonacciAir, 3, rows, &manifest.resource_policy)
-        }
+        crate::contracts::WorkloadId::Fibonacci => estimate_air_pipeline(
+            &crate::FibonacciAir,
+            "fibonacci",
+            3,
+            rows,
+            &manifest.resource_policy,
+        ),
         crate::contracts::WorkloadId::Poseidon2Goldilocks => estimate_air_pipeline(
             &crate::poseidon2_goldilocks_air(),
+            "poseidon2_goldilocks",
             0,
             rows,
             &manifest.resource_policy,
@@ -273,11 +298,18 @@ where
     if workload.public_values().len() != air.num_public_values() {
         return Err(BoundedProverError::UnsupportedProfile);
     }
-    estimate_air_pipeline(&air, air.num_public_values(), rows, policy)
+    estimate_air_pipeline(
+        &air,
+        workload.identity().id,
+        air.num_public_values(),
+        rows,
+        policy,
+    )
 }
 
 fn estimate_air_pipeline<A>(
     air: &A,
+    workload_id: &str,
     public_values: usize,
     rows: usize,
     policy: &ResourcePolicyV1,
@@ -303,36 +335,72 @@ where
     let quotient_bytes = rows.saturating_mul(quotient_chunks).saturating_mul(16);
     let quotient_lde_bytes = lde_rows.saturating_mul(quotient_chunks).saturating_mul(16);
     let one_input_leaf = lde_rows.saturating_mul(32);
-    let one_input_tree = lde_rows
-        .saturating_mul(2)
-        .saturating_sub(1)
-        .saturating_mul(32);
+    let one_input_tree = merkle_payload_bytes(lde_rows);
     let input_mmcs_bytes = one_input_tree.saturating_mul(2);
-    // All FRI source vectors and their authentication trees remain durable
-    // until queries are answered. Across binary folds their geometric sums
-    // approach 64 and 128 bytes per logical row respectively.
-    let fri_vector_bytes = rows.saturating_mul(64);
+    // Every retained extension-field FRI vector has lengths 2N, N, ..., 2.
+    // Its exact payload is (4N - 2) elements at 16 bytes each. FRI Merkle
+    // trees start at N leaves and halve through 2; summing each full binary
+    // tree gives the exact payload below.
+    let fri_vector_bytes = rows.saturating_mul(4).saturating_sub(2).saturating_mul(16);
     let opening_layer_bytes = fri_vector_bytes / 2;
-    let fri_mmcs_bytes = rows.saturating_mul(128);
+    let fri_mmcs_bytes = fri_mmcs_payload_bytes(rows);
     let durable_core = trace_lde_bytes
         .saturating_add(quotient_lde_bytes)
         .saturating_add(input_mmcs_bytes);
+    let proof_bytes = estimated_profile_proof_bytes(rows, width as u64, quotient_chunks);
+    let log_rows = rows.trailing_zeros() as u64;
+    let max_store_count = 1u64
+        .saturating_add(quotient_chunks)
+        .saturating_add(merkle_store_count(lde_rows).saturating_mul(2))
+        .saturating_add(log_rows.saturating_add(1))
+        .saturating_add(fri_mmcs_store_count(log_rows))
+        .saturating_add(1);
+    let store_headers = max_store_count.saturating_mul(SCRATCH_STORE_HEADER_BYTES);
+    let checkpoint_atomic_bytes = estimated_atomic_checkpoint_bytes(
+        policy,
+        workload_id,
+        rows,
+        width,
+        public_values,
+        quotient_chunks,
+        !air.main_next_row_columns().is_empty(),
+        proof_bytes,
+    )?;
+    // Atomic checkpoint replacement temporarily keeps the previous manifest
+    // beside the fully-synced replacement. Store headers and both manifests
+    // are therefore included in every candidate phase peak rather than hidden
+    // in a row-linear calibration factor.
+    let phase_metadata_bytes = store_headers.saturating_add(checkpoint_atomic_bytes);
     let fri_peak = durable_core
         .saturating_add(fri_vector_bytes)
-        .saturating_add(fri_mmcs_bytes);
+        .saturating_add(fri_mmcs_bytes)
+        .saturating_add(phase_metadata_bytes);
+    // Once FRI query openings have been assembled, the FRI MMCS trees are
+    // released. The retained LDEs, input MMCS trees, all FRI vectors, and the
+    // serialized proof artifact remain live through the proof checkpoint.
+    let proof_checkpoint_peak = durable_core
+        .saturating_add(fri_vector_bytes)
+        .saturating_add(proof_bytes)
+        .saturating_add(phase_metadata_bytes);
     // Caller input plus padded coefficients and the two active four-step DFT
     // matrices. Quotient transforms additionally coexist with the trace tree,
     // raw/interleaved chunks, and already completed chunk LDEs.
-    let trace_transform_peak = rows.saturating_mul(width as u64).saturating_mul(56);
-    let quotient_transform_peak = rows.saturating_mul(
-        16u64
-            .saturating_mul(width as u64)
-            .saturating_add(64u64.saturating_mul(quotient_chunks))
-            .saturating_add(192),
-    );
+    let trace_transform_peak = rows
+        .saturating_mul(width as u64)
+        .saturating_mul(56)
+        .saturating_add(phase_metadata_bytes);
+    let quotient_transform_peak = rows
+        .saturating_mul(
+            16u64
+                .saturating_mul(width as u64)
+                .saturating_add(64u64.saturating_mul(quotient_chunks))
+                .saturating_add(192),
+        )
+        .saturating_add(phase_metadata_bytes);
     let scratch_high_water_bytes = fri_peak
         .max(trace_transform_peak)
-        .max(quotient_transform_peak);
+        .max(quotient_transform_peak)
+        .max(proof_checkpoint_peak);
 
     let dft = ResourceBoundedDft::new(policy.clone())?;
     let trace_dft = dft.estimate_scratch((rows as usize).saturating_mul(2), width, false)?;
@@ -395,6 +463,11 @@ where
             read_bytes: fri_vector_bytes.saturating_add(fri_mmcs_bytes),
             write_bytes: fri_vector_bytes.saturating_add(fri_mmcs_bytes),
         },
+        PhaseEstimate {
+            phase: "proof_assembly".into(),
+            read_bytes: 0,
+            write_bytes: proof_bytes,
+        },
     ];
     Ok(ResourceEstimate {
         peak_resident_bytes,
@@ -403,6 +476,199 @@ where
         total_write_bytes: phases.iter().map(|phase| phase.write_bytes).sum(),
         phases,
     })
+}
+
+fn estimated_profile_proof_bytes(rows: u64, trace_width: u64, quotient_chunks: u64) -> u64 {
+    let log_rows = rows.trailing_zeros() as u64;
+    PROFILE_PROOF_LOG_SQUARED_BYTES
+        .saturating_mul(log_rows.saturating_mul(log_rows))
+        .saturating_add(PROFILE_PROOF_LOG_BYTES.saturating_mul(log_rows))
+        .saturating_add(PROFILE_PROOF_FIXED_BYTES)
+        .saturating_add(PROFILE_PROOF_TRACE_COLUMN_BYTES.saturating_mul(trace_width))
+        .saturating_add(
+            PROFILE_PROOF_EXTRA_QUOTIENT_CHUNK_BYTES
+                .saturating_mul(quotient_chunks.saturating_sub(1)),
+        )
+}
+
+fn merkle_payload_bytes(leaves: u64) -> u64 {
+    leaves
+        .saturating_mul(2)
+        .saturating_sub(1)
+        .saturating_mul(32)
+}
+
+fn merkle_store_count(leaves: u64) -> u64 {
+    u64::from(leaves.trailing_zeros()).saturating_add(1)
+}
+
+fn fri_mmcs_payload_bytes(rows: u64) -> u64 {
+    let mut leaves = rows;
+    let mut total = 0u64;
+    while leaves >= 2 {
+        total = total.saturating_add(merkle_payload_bytes(leaves));
+        leaves /= 2;
+    }
+    total
+}
+
+fn fri_mmcs_store_count(log_rows: u64) -> u64 {
+    // Trees have N, N/2, ..., 2 leaves. A tree with 2^k leaves owns k + 1
+    // scratch stores, so the total is sum(k + 1), k=1..log2(N).
+    log_rows
+        .saturating_mul(log_rows.saturating_add(1))
+        .saturating_div(2)
+        .saturating_add(log_rows)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn estimated_atomic_checkpoint_bytes(
+    policy: &ResourcePolicyV1,
+    workload_id: &str,
+    rows: u64,
+    trace_width: usize,
+    public_value_count: usize,
+    quotient_chunks: u64,
+    has_trace_next: bool,
+    proof_bytes: u64,
+) -> Result<u64> {
+    let fri_rounds = rows.trailing_zeros() as usize;
+    let quotient_chunks =
+        usize::try_from(quotient_chunks).map_err(|_| BoundedProverError::UnsupportedProfile)?;
+    let maximum = u64::MAX;
+    let fri_state = FriResumeStateV1 {
+        trace_local: vec![[maximum; 2]; trace_width],
+        trace_next: has_trace_next.then(|| vec![[maximum; 2]; trace_width]),
+        quotient_chunks: vec![vec![[maximum; 2]]; quotient_chunks],
+        commitments: vec![vec![[maximum; 4]]; fri_rounds],
+        commit_pow_witnesses: vec![maximum; fri_rounds],
+        log_arities: vec![u8::MAX; fri_rounds],
+    };
+    let descriptor = ResumeDescriptorV1 {
+        schema_version: 1,
+        workload_id: workload_id.into(),
+        workload_version: u32::MAX,
+        logical_rows: rows,
+        public_values: vec![maximum; public_value_count],
+        resource_policy: policy.clone(),
+        trace_commitment: Some(vec![[maximum; 4]]),
+        quotient_commitment: Some(vec![[maximum; 4]]),
+        fri_state: Some(fri_state),
+    };
+    let resume_payload = serde_json::to_vec(&descriptor)
+        .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
+
+    let lde_rows = rows.saturating_mul(2);
+    let mut artifacts = Vec::with_capacity(
+        1usize
+            .saturating_add(quotient_chunks)
+            .saturating_add(fri_rounds)
+            .saturating_add(2),
+    );
+    artifacts.push(sizing_artifact(
+        PipelineArtifactKindV1::TraceLde,
+        None,
+        lde_rows,
+        trace_width,
+        8,
+        "dft",
+        "dft-a.bin",
+    ));
+    for ordinal in 0..quotient_chunks {
+        artifacts.push(sizing_artifact(
+            PipelineArtifactKindV1::QuotientLde,
+            Some(ordinal as u32),
+            lde_rows,
+            2,
+            8,
+            "dft",
+            "dft-a.bin",
+        ));
+    }
+    let mut fri_len = lde_rows;
+    for ordinal in 0..=fri_rounds {
+        artifacts.push(sizing_artifact(
+            PipelineArtifactKindV1::FriLayer,
+            Some(ordinal as u32),
+            fri_len,
+            2,
+            8,
+            "fri-layer",
+            "fri-layer.bin",
+        ));
+        fri_len = (fri_len / 2).max(1);
+    }
+
+    let identity_hash = [u8::MAX; 32];
+    let challenger_state = vec![u8::MAX; MAX_CHALLENGER_SNAPSHOT_BYTES];
+    let previous = CheckpointManifestV2 {
+        schema_version: 2,
+        backend_hash: identity_hash,
+        profile_hash: identity_hash,
+        release_hash: identity_hash,
+        dependency_lock_hash: identity_hash,
+        workload_hash: identity_hash,
+        input_hash: identity_hash,
+        resource_policy_hash: identity_hash,
+        completed_phase: if fri_rounds == 0 {
+            PipelinePhaseV1::Openings
+        } else {
+            PipelinePhaseV1::FriLayer {
+                layer: fri_rounds.saturating_sub(1) as u32,
+            }
+        },
+        challenger_state: challenger_state.clone(),
+        resume_payload: resume_payload.clone(),
+        artifacts: artifacts.clone(),
+    };
+    artifacts.push(sizing_artifact(
+        PipelineArtifactKindV1::ProofBundle,
+        None,
+        proof_bytes,
+        1,
+        1,
+        "proof",
+        "proof-bundle.bin",
+    ));
+    let replacement = CheckpointManifestV2 {
+        completed_phase: PipelinePhaseV1::ProofAssembly,
+        challenger_state,
+        resume_payload,
+        artifacts,
+        ..previous.clone()
+    };
+    let previous_bytes = serde_json::to_vec_pretty(&previous)
+        .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?
+        .len() as u64;
+    let replacement_bytes = serde_json::to_vec_pretty(&replacement)
+        .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?
+        .len() as u64;
+    Ok(previous_bytes.saturating_add(replacement_bytes))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sizing_artifact(
+    kind: PipelineArtifactKindV1,
+    ordinal: Option<u32>,
+    rows: u64,
+    columns: usize,
+    element_width: usize,
+    directory_prefix: &str,
+    file_name: &str,
+) -> CheckpointArtifactV2 {
+    CheckpointArtifactV2 {
+        kind,
+        ordinal,
+        relative_path: PathBuf::from(format!(
+            "artifacts/{directory_prefix}-{MAX_ARTIFACT_PATH_PID}-{MAX_ARTIFACT_PATH_COUNTER}/{file_name}"
+        )),
+        digest: ArtifactDigest {
+            rows,
+            columns,
+            element_width,
+            blake3: [u8::MAX; 32],
+        },
+    }
 }
 
 /// Hook used at durable phase boundaries. Release binaries always use
@@ -520,7 +786,13 @@ where
     if expected_public_values.len() != air.num_public_values() {
         return Err(BoundedProverError::UnsupportedProfile);
     }
-    let full_estimate = estimate_air_pipeline(&air, air.num_public_values(), rows, policy)?;
+    let full_estimate = estimate_air_pipeline(
+        &air,
+        workload.identity().id,
+        air.num_public_values(),
+        rows,
+        policy,
+    )?;
     observe(&ProverEventV1::ResourceEstimate {
         estimate: full_estimate.clone(),
     });
@@ -2005,6 +2277,7 @@ where
     let air = workload.air();
     let estimate = estimate_air_pipeline(
         &air,
+        &descriptor.workload_id,
         descriptor.public_values.len(),
         rows,
         &descriptor.resource_policy,
@@ -2591,6 +2864,8 @@ mod tests {
     use super::*;
     use crate::{FibonacciWorkload, Poseidon2Workload};
     use hc_stream::{CheckpointPolicy, ResourceMode};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
+    use std::sync::Arc;
     use std::sync::Mutex;
 
     #[derive(Default)]
@@ -2612,6 +2887,82 @@ mod tests {
             scratch_dir: root.to_path_buf(),
             max_threads: 1,
             checkpoint_policy: CheckpointPolicy::DeleteOnSuccess,
+        }
+    }
+
+    fn assert_scratch_estimate_tracks_measured_peak<W>(workload: &W)
+    where
+        W: ResourceBoundedWorkload,
+        W::Air: BaseAir<Val>
+            + Air<SymbolicAirBuilder<Val>>
+            + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    {
+        let dir = tempfile::tempdir().unwrap();
+        let selected_policy = policy(dir.path());
+        let estimate = estimate_resource_bounded_workload(workload, &selected_policy).unwrap();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let measured_peak = Arc::new(AtomicU64::new(0));
+        let monitor_root = dir.path().to_path_buf();
+        let monitor_stopped = stopped.clone();
+        let monitor_peak = measured_peak.clone();
+        let monitor = std::thread::spawn(move || {
+            while !monitor_stopped.load(AtomicOrdering::Acquire) {
+                monitor_peak.fetch_max(directory_bytes(&monitor_root), AtomicOrdering::AcqRel);
+                std::thread::yield_now();
+            }
+            monitor_peak.fetch_max(directory_bytes(&monitor_root), AtomicOrdering::AcqRel);
+        });
+        let phase_peak = Arc::new(AtomicU64::new(0));
+        let observed_phase_peak = phase_peak.clone();
+        let proof = prove_resource_bounded_observed(workload, &selected_policy, move |event| {
+            if let ProverEventV1::Phase { resource_usage, .. } = event {
+                observed_phase_peak.fetch_max(resource_usage.scratch_bytes, AtomicOrdering::AcqRel);
+            }
+        })
+        .unwrap();
+        stopped.store(true, AtomicOrdering::Release);
+        monitor.join().unwrap();
+        let actual = measured_peak.load(AtomicOrdering::Acquire);
+        eprintln!(
+            "scratch-calibration workload={} rows={} estimate={} measured={} phase_peak={} proof={}",
+            workload.identity().id,
+            workload.rows(),
+            estimate.scratch_high_water_bytes,
+            actual,
+            phase_peak.load(AtomicOrdering::Acquire),
+            proof.len(),
+        );
+        let difference = estimate.scratch_high_water_bytes.abs_diff(actual);
+        assert!(
+            difference <= estimate.scratch_high_water_bytes.div_ceil(10),
+            "scratch estimate {} differs from measured peak {} by more than 10%",
+            estimate.scratch_high_water_bytes,
+            actual,
+        );
+    }
+
+    #[test]
+    fn full_pipeline_scratch_estimates_track_small_measured_peaks() {
+        assert_scratch_estimate_tracks_measured_peak(&FibonacciWorkload {
+            initial_a: 0,
+            initial_b: 1,
+            logical_rows: 1 << 10,
+        });
+        assert_scratch_estimate_tracks_measured_peak(&Poseidon2Workload {
+            logical_rows: 1 << 10,
+        });
+    }
+
+    #[test]
+    #[ignore = "nightly release-mode calibration across multiple powers of two"]
+    fn scratch_estimates_track_multiple_release_scale_powers() {
+        for logical_rows in [1 << 10, 1 << 12, 1 << 14] {
+            assert_scratch_estimate_tracks_measured_peak(&FibonacciWorkload {
+                initial_a: 0,
+                initial_b: 1,
+                logical_rows,
+            });
+            assert_scratch_estimate_tracks_measured_peak(&Poseidon2Workload { logical_rows });
         }
     }
 
@@ -2756,6 +3107,46 @@ mod tests {
         assert!(saw_estimate);
         assert_eq!(phases.first(), Some(&PipelinePhaseV1::QuotientLde));
         assert_eq!(phases.last(), Some(&PipelinePhaseV1::ProofAssembly));
+        let expected = prove_resource_reference(&workload).unwrap();
+        assert_eq!(resumed.proof_bytes, expected);
+    }
+
+    #[test]
+    fn maximum_canonical_fibonacci_input_resumes_to_identical_proof_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let workload = FibonacciWorkload {
+            initial_a: crate::GOLDILOCKS_MODULUS_U64 - 1,
+            initial_b: 0,
+            logical_rows: 16,
+        };
+        let mut resumable = policy(dir.path());
+        resumable.checkpoint_policy = CheckpointPolicy::RetainOnFailure;
+        let cancellation = CancellationToken::new();
+        let observer_token = cancellation.clone();
+        let result = prove_resource_bounded_observed_with_cancellation(
+            &workload,
+            &resumable,
+            cancellation,
+            move |event| {
+                if matches!(
+                    event,
+                    ProverEventV1::Phase {
+                        phase: PipelinePhaseV1::TraceCommitment,
+                        ..
+                    }
+                ) {
+                    observer_token.cancel();
+                }
+            },
+        );
+        assert!(matches!(result, Err(BoundedProverError::Cancelled)));
+        let checkpoint = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .map(|entry| entry.path().join("checkpoint.json"))
+            .find(|path| path.is_file())
+            .unwrap();
+        let resumed = resume_resource_bounded(&checkpoint).unwrap();
         let expected = prove_resource_reference(&workload).unwrap();
         assert_eq!(resumed.proof_bytes, expected);
     }

@@ -51,7 +51,8 @@ pub use opening::{
 };
 pub use prover::{
     release_identity, BackendError, InternalProofBundle, ResourceBoundedUniStarkProver,
-    WorkloadKind, COMPATIBILITY_PROFILE, DEPENDENCY_LOCK_SHA256, PLONKY3_VERSION,
+    WorkloadKind, COMPATIBILITY_PROFILE, DEPENDENCY_LOCK_SHA256, GOLDILOCKS_MODULUS_U64,
+    PLONKY3_VERSION,
 };
 pub use quotient::{build_quotient_chunk_ldes, stream_quotient_values, StreamedQuotientError};
 pub use workloads::{

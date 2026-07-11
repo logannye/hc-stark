@@ -188,6 +188,11 @@ impl ResourceBoundedWorkload for FibonacciWorkload {
         store: &mut S,
         block_rows: usize,
     ) -> WorkloadResult<GeneratedTraceV1> {
+        if self.initial_a >= crate::GOLDILOCKS_MODULUS_U64
+            || self.initial_b >= crate::GOLDILOCKS_MODULUS_U64
+        {
+            return Err(WorkloadError::InvalidShape);
+        }
         validate_trace_target(store, self.logical_rows, FIBONACCI_COLUMNS, block_rows)?;
         let rows = usize::try_from(self.logical_rows).map_err(|_| WorkloadError::InvalidShape)?;
         let block_rows = block_rows.min(rows);

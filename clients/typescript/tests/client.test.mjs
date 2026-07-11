@@ -75,6 +75,14 @@ test("full Goldilocks values load losslessly and match the Rust digest", () => {
   assert.throws(() => canonicalJsonV1({ value: 1n << 64n }), ArtifactError);
 });
 
+test("Fibonacci manifests reject noncanonical Goldilocks inputs", () => {
+  assert.doesNotThrow(() => fibonacciManifest(0xffff_ffff_0000_0000n, 0, 16, policy));
+  assert.throws(
+    () => fibonacciManifest(0xffff_ffff_0000_0001n, 0, 16, policy),
+    ArtifactError,
+  );
+});
+
 test("bundle public values remain lossless across canonical file loading", () => {
   const fixture = new URL(
     "../../../test-vectors/plonky3/fibonacci-16.bundle.json",

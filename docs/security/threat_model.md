@@ -42,6 +42,11 @@ Relevant goals are:
   payload digests. Owner-only paths, non-symlink checks, safe relative paths,
   preallocation, atomic manifests, and fail-closed reopen validation are
   required.
+- On Unix, scratch and checkpoint readers traverse every path component with
+  descriptor-relative `openat`/`O_NOFOLLOW`, require an owner-only,
+  single-link regular file, compare two independently opened identities, and
+  read only through the held descriptor. Unsupported non-Unix resume targets
+  fail closed instead of falling back to a path-check/open sequence.
 - `CheckpointManifestV2` binds backend, profile, release, dependency lock,
   workload, input, resource policy, phase, transcript state, and every resume
   artifact. The Poseidon2 permutation is reconstructed rather than serialized.
@@ -62,8 +67,10 @@ Relevant goals are:
   generation through verified proof assembly. The machine-readable matrix also
   covers real disk-full recovery, chunk truncation/corruption, stale identity,
   path traversal, symlinks, and cancellation retention. Independent fixed-host
-  reproduction, SIGTERM, and power-loss simulation remain release evidence
-  gates.
+  reproduction remains a release-evidence gate. The machine-readable crash
+  matrix sends a real SIGTERM to the CLI, resumes its retained checkpoint, and
+  requires proof-byte equality. Controlled-host power-loss simulation remains
+  an outstanding validation item and is not represented by this matrix.
 - Fixed-host 1M throughput and 2²⁴-row ceiling reports have not yet been
   independently reproduced. Reports bind comparison subprocesses with one
   session ID and record typed CPU, memory, block-device, rotational, and NVMe

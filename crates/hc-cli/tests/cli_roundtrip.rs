@@ -1,9 +1,23 @@
 use assert_cmd::cargo::cargo_bin_cmd;
+#[cfg(unix)]
+use hc_plonky3::contracts::{ProofBundleV1, WorkloadManifestV1};
 use hc_plonky3::{CancellationToken, ResourceBoundedUniStarkProver, WorkloadKind};
 use hc_stream::{CheckpointPolicy, ResourceMode, ResourcePolicyV1};
 use predicates::prelude::*;
 use serde_json::json;
+#[cfg(unix)]
+use std::io::{BufRead, BufReader, Read};
+#[cfg(unix)]
+use std::process::{Command, Stdio};
 use tempfile::tempdir;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn kill(pid: i32, signal: i32) -> i32;
+}
+
+#[cfg(unix)]
+const SIGTERM: i32 = 15;
 
 #[test]
 fn release_identity_is_machine_readable_and_profile_pinned() {
@@ -20,7 +34,7 @@ fn release_identity_is_machine_readable_and_profile_pinned() {
     assert_eq!(payload["compatibility_profile"], "tinyzkp-p3-goldilocks-v1");
     assert_eq!(
         payload["dependency_lock_sha256"],
-        "7a3e859e9d457006e38737f418fdf16f0e538977c23bf9882b4225d43b3db455"
+        "185f043a41c2457257c2e507db75c71d185d9307a1116d7cb1f4688d6de56d82"
     );
 }
 
@@ -231,6 +245,93 @@ fn plonky3_resume_cli_consumes_a_durable_checkpoint() {
         !job.exists(),
         "successful resume must clean durable artifacts"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn sigterm_retains_resumable_checkpoint_and_resume_is_byte_identical() {
+    let dir = tempdir().unwrap();
+    let manifest = write_fibonacci_manifest(dir.path());
+    let mut payload: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    payload["logical_rows"] = json!(4096);
+    payload["resource_policy"]["checkpoint_policy"] = json!("retain_on_failure");
+    std::fs::write(&manifest, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
+    let interrupted_output = dir.path().join("interrupted-bundle.json");
+
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin!("hc-cli"))
+        .args([
+            "plonky3",
+            "prove",
+            "--manifest",
+            manifest.to_str().unwrap(),
+            "--output",
+            interrupted_output.to_str().unwrap(),
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stderr = child.stderr.take().unwrap();
+    let mut reader = BufReader::new(stderr);
+    let mut captured = String::new();
+    let checkpoint = loop {
+        let mut line = String::new();
+        assert_ne!(reader.read_line(&mut line).unwrap(), 0, "{captured}");
+        captured.push_str(&line);
+        let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) else {
+            continue;
+        };
+        if event["event"] == "phase" && event["phase"] == "trace" {
+            let path = event["checkpoint_path"].as_str().unwrap();
+            break std::path::PathBuf::from(path);
+        }
+    };
+
+    // The CLI installs its signal handler before entering the prover. Sending
+    // SIGTERM after the first durable phase therefore exercises the real
+    // operator cancellation path, not the in-process test cancellation token.
+    let signal_result = unsafe { kill(child.id() as i32, SIGTERM) };
+    assert_eq!(signal_result, 0);
+    let status = child.wait().unwrap();
+    reader.read_to_string(&mut captured).unwrap();
+    assert!(!status.success(), "{captured}");
+    assert!(
+        captured.contains("\"event\":\"prove_cancelled\""),
+        "{captured}"
+    );
+    assert!(checkpoint.is_file());
+    assert!(!interrupted_output.exists());
+
+    let resumed_output = dir.path().join("resumed-bundle.json");
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "resume",
+            "--checkpoint",
+            checkpoint.to_str().unwrap(),
+            "--output",
+            resumed_output.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    let resumed: ProofBundleV1 =
+        serde_json::from_slice(&std::fs::read(&resumed_output).unwrap()).unwrap();
+    resumed.verify().unwrap();
+
+    let typed_manifest: WorkloadManifestV1 =
+        serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    let reference = ResourceBoundedUniStarkProver::prove_reference(
+        WorkloadKind::Fibonacci {
+            initial_a: 0,
+            initial_b: 1,
+        },
+        typed_manifest.logical_rows,
+    )
+    .unwrap();
+    let reference =
+        ProofBundleV1::from_internal(typed_manifest, reference, "sigterm-test").unwrap();
+    assert_eq!(resumed.proof_base64url, reference.proof_base64url);
 }
 
 #[test]

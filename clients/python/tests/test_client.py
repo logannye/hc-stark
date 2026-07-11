@@ -67,6 +67,13 @@ def test_maximum_goldilocks_manifest_matches_rust_digest():
     )
 
 
+def test_fibonacci_manifest_rejects_noncanonical_goldilocks_inputs(tmp_path):
+    maximum = 0xFFFF_FFFF_0000_0000
+    WorkloadManifestV1.fibonacci(maximum, 0, 16, policy(tmp_path)).validate()
+    with pytest.raises(ArtifactError):
+        WorkloadManifestV1.fibonacci(maximum + 1, 0, 16, policy(tmp_path)).validate()
+
+
 def test_shared_bundle_fixture_and_fail_closed_mutations(tmp_path):
     root = Path(__file__).resolve().parents[3]
     fixture = root / "test-vectors/plonky3/fibonacci-16.bundle.json"

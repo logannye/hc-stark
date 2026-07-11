@@ -1,6 +1,6 @@
 use crate::{
     InternalProofBundle, ResourceBoundedUniStarkProver, WorkloadKind, COMPATIBILITY_PROFILE,
-    PLONKY3_VERSION,
+    GOLDILOCKS_MODULUS_U64, PLONKY3_VERSION,
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -44,9 +44,18 @@ pub enum WorkloadId {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum InputGeneratorV1 {
-    Fibonacci { initial_a: u64, initial_b: u64 },
-    Poseidon2 { seed: u64 },
-    Digest { blake3_hex: String },
+    Fibonacci {
+        #[schemars(range(max = 18446744069414584320u64))]
+        initial_a: u64,
+        #[schemars(range(max = 18446744069414584320u64))]
+        initial_b: u64,
+    },
+    Poseidon2 {
+        seed: u64,
+    },
+    Digest {
+        blake3_hex: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -77,8 +86,15 @@ impl WorkloadManifestV1 {
             return Err(ContractError::ProfileMismatch);
         }
         match (&self.workload_id, &self.input_generator) {
-            (WorkloadId::Fibonacci, InputGeneratorV1::Fibonacci { .. })
-                if self.deterministic_seed == 0 =>
+            (
+                WorkloadId::Fibonacci,
+                InputGeneratorV1::Fibonacci {
+                    initial_a,
+                    initial_b,
+                },
+            ) if self.deterministic_seed == 0
+                && *initial_a < GOLDILOCKS_MODULUS_U64
+                && *initial_b < GOLDILOCKS_MODULUS_U64 =>
             {
                 Ok(())
             }
@@ -548,6 +564,26 @@ mod tests {
             hex_lower(&manifest.digest().unwrap()),
             "d66d868441137e6db964add9d7e4a2164ca3a722c66e73cbf06c2a576efee653"
         );
+    }
+
+    #[test]
+    fn fibonacci_manifest_rejects_noncanonical_field_inputs() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut value = manifest(dir.path());
+        value.input_generator = InputGeneratorV1::Fibonacci {
+            initial_a: GOLDILOCKS_MODULUS_U64,
+            initial_b: 0,
+        };
+        assert!(matches!(
+            value.validate(),
+            Err(ContractError::InvalidWorkload)
+        ));
+
+        value.input_generator = InputGeneratorV1::Fibonacci {
+            initial_a: GOLDILOCKS_MODULUS_U64 - 1,
+            initial_b: 0,
+        };
+        value.validate().unwrap();
     }
 
     #[test]

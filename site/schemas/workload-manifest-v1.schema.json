@@ -66,11 +66,13 @@
             "initial_a": {
               "type": "integer",
               "format": "uint64",
+              "maximum": 18446744069414584320,
               "minimum": 0
             },
             "initial_b": {
               "type": "integer",
               "format": "uint64",
+              "maximum": 18446744069414584320,
               "minimum": 0
             },
             "kind": {

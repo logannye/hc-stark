@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict, Union
 
-RUST_SCHEMA_SET_SHA256 = "f4f643eef7032bf7b4e2ea990241c549aef9708870ed9e65f8db150036b55aae"
+RUST_SCHEMA_SET_SHA256 = "9348619fd9257d2c88625b31a7e1be55332337c129e88f95ac4f553dec2596e7"
 
 BenchmarkModeModel = Literal['baseline', 'bounded']
 

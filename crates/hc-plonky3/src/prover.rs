@@ -22,8 +22,12 @@ use serde::{Deserialize, Serialize};
 
 pub const PLONKY3_VERSION: &str = "0.6.1";
 pub const COMPATIBILITY_PROFILE: &str = "tinyzkp-p3-goldilocks-v1";
+/// Canonical Goldilocks inputs are integers in `[0, p)`. Accepting arbitrary
+/// `u64` values would make distinct manifests collapse to the same public
+/// field element and would lose the original input across checkpoint resume.
+pub const GOLDILOCKS_MODULUS_U64: u64 = 0xffff_ffff_0000_0001;
 pub const DEPENDENCY_LOCK_SHA256: &str =
-    "7a3e859e9d457006e38737f418fdf16f0e538977c23bf9882b4225d43b3db455";
+    "185f043a41c2457257c2e507db75c71d185d9307a1116d7cb1f4688d6de56d82";
 
 /// Resolve the running release identity. Certified builds use their embedded
 /// identity; development builds may supply an explicit operator identity.
@@ -133,6 +137,7 @@ impl ResourceBoundedUniStarkProver {
 
     pub fn prove(&self, workload: WorkloadKind, logical_rows: u64) -> Result<InternalProofBundle> {
         let rows = validate_rows(logical_rows)?;
+        validate_workload(&workload)?;
         match workload {
             WorkloadKind::Fibonacci {
                 initial_a,
@@ -170,6 +175,7 @@ impl ResourceBoundedUniStarkProver {
         Observe: FnMut(&crate::ProverEventV1),
     {
         let rows = validate_rows(logical_rows)?;
+        validate_workload(&workload)?;
         if cancellation.is_cancelled() {
             return Err(BackendError::Bounded(crate::BoundedProverError::Cancelled));
         }
@@ -239,6 +245,7 @@ impl ResourceBoundedUniStarkProver {
 
     pub fn verify(bundle: &InternalProofBundle) -> Result<()> {
         bundle.validate_envelope()?;
+        validate_workload(&bundle.workload)?;
         let rows = validate_rows(bundle.logical_rows)?;
         let config = make_config(Radix2DitParallel::<Val>::default());
         match bundle.workload {
@@ -280,6 +287,7 @@ impl ResourceBoundedUniStarkProver {
         logical_rows: u64,
     ) -> Result<InternalProofBundle> {
         let rows = validate_rows(logical_rows)?;
+        validate_workload(&workload)?;
         match workload {
             WorkloadKind::Fibonacci {
                 initial_a,
@@ -478,6 +486,17 @@ fn validate_rows(rows: u64) -> Result<usize> {
     Ok(rows)
 }
 
+fn validate_workload(workload: &WorkloadKind) -> Result<()> {
+    match workload {
+        WorkloadKind::Fibonacci {
+            initial_a,
+            initial_b,
+        } if *initial_a < GOLDILOCKS_MODULUS_U64 && *initial_b < GOLDILOCKS_MODULUS_U64 => Ok(()),
+        WorkloadKind::Poseidon2 => Ok(()),
+        WorkloadKind::Fibonacci { .. } => Err(BackendError::InvalidWorkload),
+    }
+}
+
 fn bundle(
     workload: WorkloadKind,
     rows: usize,
@@ -601,6 +620,24 @@ mod tests {
         assert_eq!(bounded.proof_bytes, reference.proof_bytes);
         assert_eq!(bounded.public_values[0], MAX_GOLDILOCKS);
         ResourceBoundedUniStarkProver::verify(&bounded).unwrap();
+    }
+
+    #[test]
+    fn noncanonical_fibonacci_inputs_are_rejected_before_proving_or_verification() {
+        let dir = tempfile::tempdir().unwrap();
+        let workload = WorkloadKind::Fibonacci {
+            initial_a: GOLDILOCKS_MODULUS_U64,
+            initial_b: 0,
+        };
+        let prover = ResourceBoundedUniStarkProver::new(policy(dir.path())).unwrap();
+        assert!(matches!(
+            prover.prove(workload.clone(), 16),
+            Err(BackendError::InvalidWorkload)
+        ));
+        assert!(matches!(
+            ResourceBoundedUniStarkProver::prove_reference(workload, 16),
+            Err(BackendError::InvalidWorkload)
+        ));
     }
 
     #[test]
