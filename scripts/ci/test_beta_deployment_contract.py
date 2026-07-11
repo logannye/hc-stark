@@ -41,10 +41,14 @@ def test_worker_has_exact_release_resource_envelope_and_no_database_secret():
 
 def test_backup_and_rollback_contracts_are_tracked():
     postgres = text("postgresql.conf")
+    postgres_image = text("Dockerfile.postgres")
     backup = text("pgbackrest.conf.example")
     rollback = text("caddy-route.rollback.caddy")
     assert "archive_mode = on" in postgres and "archive-push" in postgres
+    assert "PGBACKREST_VERSION=2.58.0-1.pgdg12+1" in postgres_image
     assert "repo1-cipher-type=aes-256-cbc" in backup
+    assert "pg1-database=tinyzkp_beta" in backup
+    assert "pg1-user=tinyzkp_beta" in backup
     assert "repo1-retention-full=4" in backup and "repo1-retention-diff=30" in backup
     assert "beta_writes_disabled" in rollback
     assert "reverse_proxy 127.0.0.1:8090" in rollback
