@@ -20,6 +20,12 @@
       "darwin-arm64": {
         "sha256": "3e7d30871a9740446f33a907b14d28f10ebe6d4e1c146a4c0788308f573a6609",
         "version": "git version 2.50.1 (Apple Git-155)"
+      },
+      "linux-x86_64": {
+        "package_sha256": "5446b1f6c6f9f058e7b22413b650a45b527c979eb2276d33f46570265ee5eb35",
+        "package_url": "https://snapshot.debian.org/archive/debian-security/20250126T153144Z/pool/updates/main/g/git/git_2.39.5-0%2Bdeb12u2_amd64.deb",
+        "sha256": "00c84136d8294294580daa32f25b3e83ddb8341e9b5b70722e4c9a973ba5f749",
+        "version": "git version 2.39.5"
       }
     }
   },
