@@ -3,7 +3,7 @@
   "profile_id": "tinyzkp-p3-goldilocks-v1",
   "release_status": "backend_recovery",
   "rust_toolchain": "1.95.0",
-  "cargo_lock_sha256": "0da825cbb0d7e847c9d93a97a6cc1b014152df6c49bb94c1f5c9f8b921b1d1e2",
+  "cargo_lock_sha256": "bbd614a78a9ee8c531d7e6758708aa6d4929b60f99eac46dda941f6599c6a5e7",
   "upstream": {
     "repository": "https://github.com/Plonky3/Plonky3",
     "tag": "v0.6.1",
@@ -43,9 +43,12 @@
     {"name":"rand","version":"0.10.2","checksum":"c7f5fa3a058cd35567ef9bfa5e75732bee0f9e4c55fa90477bef2dfcdbc4be80"},
     {"name":"rayon","version":"1.11.0","checksum":"368f01d005bf8fd9b1206fb6fa653e6c4a81ceb1466406b81792d87c5677a58f"},
     {"name":"serde","version":"1.0.228","checksum":"9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"},
-    {"name":"serde_json","version":"1.0.145","checksum":"402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"}
+    {"name":"serde_json","version":"1.0.145","checksum":"402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"},
+    {"name":"zstd","version":"0.13.3","checksum":"e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"},
+    {"name":"zstd-safe","version":"7.2.4","checksum":"8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"},
+    {"name":"zstd-sys","version":"2.0.16+zstd.1.5.7","checksum":"91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"}
   ],
-  "validated_workloads": ["fibonacci", "poseidon2_goldilocks"],
+  "validated_workloads": ["fibonacci", "poseidon2_goldilocks", "declarative_air_v1"],
   "known_limits": [
     "The Plonky3 0.6.1 TwoAdicSubgroupDft trait owns its input RowMajorMatrix.",
     "TinyZKP uses local pinned prover orchestration so block-readable stores do not change upstream proof types or verification.",

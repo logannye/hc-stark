@@ -1,0 +1,448 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AirProofBundleV1",
+  "type": "object",
+  "properties": {
+    "air": {
+      "$ref": "#/$defs/AirPackageV1"
+    },
+    "air_digest_hex": {
+      "type": "string"
+    },
+    "proof_base64url": {
+      "type": "string"
+    },
+    "proof_digest_hex": {
+      "type": "string"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ReleaseProvenanceV1"
+    },
+    "public_inputs": {
+      "$ref": "#/$defs/PublicInputsV1"
+    },
+    "public_inputs_digest_hex": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "trace_manifest": {
+      "$ref": "#/$defs/TraceManifestV1"
+    },
+    "trace_manifest_digest_hex": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "air",
+    "air_digest_hex",
+    "trace_manifest",
+    "trace_manifest_digest_hex",
+    "public_inputs",
+    "public_inputs_digest_hex",
+    "proof_base64url",
+    "proof_digest_hex",
+    "provenance"
+  ],
+  "$defs": {
+    "AirConstraintKindV1": {
+      "type": "string",
+      "enum": [
+        "transition",
+        "first_row",
+        "last_row"
+      ]
+    },
+    "AirConstraintV1": {
+      "type": "object",
+      "properties": {
+        "expression": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/AirConstraintKindV1"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "expression"
+      ]
+    },
+    "AirExpressionV1": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "constant"
+            },
+            "value": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 18446744069414584320,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "current"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "next"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "public"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "index"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "left": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "add"
+            },
+            "right": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "left",
+            "right"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "left": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "sub"
+            },
+            "right": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "left",
+            "right"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "left": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "mul"
+            },
+            "right": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "left",
+            "right"
+          ]
+        }
+      ]
+    },
+    "AirPackageV1": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AirConstraintV1"
+          }
+        },
+        "expected_verifier": {
+          "type": "string"
+        },
+        "expressions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AirExpressionV1"
+          }
+        },
+        "field": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "public_inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PublicInputSlotV1"
+          }
+        },
+        "schema_version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "trace_width": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "backend",
+        "profile",
+        "field",
+        "expected_verifier",
+        "trace_width",
+        "public_inputs",
+        "expressions",
+        "constraints"
+      ]
+    },
+    "PublicInputSlotV1": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "PublicInputsV1": {
+      "type": "object",
+      "properties": {
+        "air_digest_hex": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "air_digest_hex",
+        "values"
+      ]
+    },
+    "ReleaseProvenanceV1": {
+      "type": "object",
+      "properties": {
+        "dependency_profile": {
+          "type": "string"
+        },
+        "proof_serializer": {
+          "type": "string"
+        },
+        "prover_version": {
+          "type": "string"
+        },
+        "release_sha": {
+          "type": "string"
+        },
+        "verifier_version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "prover_version",
+        "verifier_version",
+        "release_sha",
+        "dependency_profile",
+        "proof_serializer"
+      ]
+    },
+    "TraceChunkV1": {
+      "type": "object",
+      "properties": {
+        "blake3_hex": {
+          "type": "string"
+        },
+        "compressed_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "index": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "uncompressed_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "compressed_bytes",
+        "uncompressed_bytes",
+        "blake3_hex"
+      ]
+    },
+    "TraceManifestV1": {
+      "type": "object",
+      "properties": {
+        "air_digest_hex": {
+          "type": "string"
+        },
+        "chunk_uncompressed_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "chunks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TraceChunkV1"
+          }
+        },
+        "compression": {
+          "type": "string"
+        },
+        "field_encoding": {
+          "type": "string"
+        },
+        "logical_rows": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "schema_version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "trace_digest_hex": {
+          "type": "string"
+        },
+        "trace_width": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "air_digest_hex",
+        "trace_digest_hex",
+        "logical_rows",
+        "trace_width",
+        "field_encoding",
+        "compression",
+        "chunk_uncompressed_bytes",
+        "chunks"
+      ]
+    }
+  }
+}

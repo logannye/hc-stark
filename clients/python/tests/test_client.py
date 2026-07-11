@@ -21,14 +21,14 @@ from tinyzkp import (
 
 
 def test_air_builder_matches_rust_maximum_width_golden_vector():
-    builder = AirBuilder(trace_width=256, public_value_count=1)
+    builder = AirBuilder(trace_width=256, public_inputs=["expected"])
     current = builder.current(255)
     maximum = builder.constant(0xFFFF_FFFF_0000_0000)
     constraint = builder.sub(current, maximum)
     builder.constrain("first_row", constraint)
     package = builder.build()
     assert canonical_digest_hex(package) == (
-        "794df3f5378ff97b9c2877bd1f01c8fbcf646a212981a9f2bd8cdd7147a4a454"
+        "6886efd9315d23e967964ab8ca67e635558cf89c245c7fa787ae35ef05543fbc"
     )
 
 
@@ -41,6 +41,18 @@ def test_air_builder_rejects_forward_reference_and_degree_four():
     builder.constrain("transition", degree_four)
     with pytest.raises(ArtifactError, match="degree"):
         builder.build()
+
+
+def test_air_builder_rejects_duplicate_public_names_and_next_row_boundaries():
+    duplicate = AirBuilder(trace_width=1, public_inputs=["value", "value"])
+    duplicate.constrain("transition", duplicate.current(0))
+    with pytest.raises(ArtifactError, match="public input"):
+        duplicate.build()
+
+    boundary = AirBuilder(trace_width=1)
+    boundary.constrain("last_row", boundary.next(0))
+    with pytest.raises(ArtifactError, match="next row"):
+        boundary.build()
 
 
 def policy(tmp_path) -> ResourcePolicyV1:

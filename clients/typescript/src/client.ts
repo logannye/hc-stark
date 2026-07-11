@@ -9,8 +9,11 @@ import type {
   AirConstraintV1,
   AirExpressionV1,
   AirPackageV1,
+  AirProofBundleV1,
   BenchmarkReportV1,
   ProofBundleV1,
+  HostedProofBundleV1,
+  PublicInputsV1,
   ResourcePolicyV1,
   UInt64,
   WorkloadManifestV1,
@@ -21,12 +24,15 @@ export type {
   AirConstraintV1,
   AirExpressionV1,
   AirPackageV1,
+  AirProofBundleV1,
   BenchmarkMode,
   BenchmarkReportV1,
   CheckpointPolicy,
   InputGeneratorV1,
   PhaseEstimateV1,
   ProofBundleV1,
+  HostedProofBundleV1,
+  PublicInputsV1,
   ReleaseProvenanceV1,
   ResourceEstimateV1,
   ResourceMode,
@@ -64,7 +70,7 @@ export class AirBuilder {
 
   constructor(
     public readonly traceWidth: number,
-    public readonly publicValueCount = 0,
+    public readonly publicInputs: string[] = [],
   ) {}
 
   private push(expression: AirExpressionV1): number {
@@ -92,7 +98,7 @@ export class AirBuilder {
       field: "goldilocks",
       expected_verifier: "p3_uni_stark_0.6.1",
       trace_width: this.traceWidth,
-      public_value_count: this.publicValueCount,
+      public_inputs: this.publicInputs.map((name) => ({ name })),
       expressions: [...this.expressions],
       constraints: [...this.constraints],
     };
@@ -105,18 +111,29 @@ export function validateAirPackage(value: unknown): asserts value is AirPackageV
   const air = object(value, "AIR package");
   exactKeys(air, [
     "schema_version", "backend", "profile", "field", "expected_verifier",
-    "trace_width", "public_value_count", "expressions", "constraints",
+    "trace_width", "public_inputs", "expressions", "constraints",
   ]);
   if (
     air.schema_version !== 1 || air.backend !== "plonky3" ||
     air.profile !== COMPATIBILITY_PROFILE || air.field !== "goldilocks" ||
     air.expected_verifier !== "p3_uni_stark_0.6.1" ||
     !Number.isSafeInteger(air.trace_width) || (air.trace_width as number) < 1 ||
-    (air.trace_width as number) > 256 || !Number.isSafeInteger(air.public_value_count) ||
-    (air.public_value_count as number) < 0 || (air.public_value_count as number) > 1024 ||
+    (air.trace_width as number) > 256 || !Array.isArray(air.public_inputs) ||
+    air.public_inputs.length > 1024 ||
     !Array.isArray(air.expressions) || air.expressions.length < 1 || air.expressions.length > 8192 ||
     !Array.isArray(air.constraints) || air.constraints.length < 1 || air.constraints.length > 1024
   ) throw new ArtifactError("invalid AIR profile or bounds");
+
+  const publicNames = new Set<string>();
+  for (const value of air.public_inputs) {
+    const slot = object(value, "public input slot");
+    exactKeys(slot, ["name"]);
+    if (typeof slot.name !== "string" || !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(slot.name) ||
+        publicNames.has(slot.name)) {
+      throw new ArtifactError("invalid public input layout");
+    }
+    publicNames.add(slot.name);
+  }
 
   const degrees: number[] = [];
   for (let position = 0; position < air.expressions.length; position += 1) {
@@ -133,7 +150,7 @@ export function validateAirPackage(value: unknown): asserts value is AirPackageV
     } else if (op === "public") {
       exactKeys(expression, ["op", "index"]);
       degree = Number.isSafeInteger(expression.index) && (expression.index as number) >= 0 &&
-        (expression.index as number) < (air.public_value_count as number) ? 0 : 4;
+        (expression.index as number) < air.public_inputs.length ? 0 : 4;
     } else if (op === "add" || op === "sub" || op === "mul") {
       exactKeys(expression, ["op", "left", "right"]);
       const left = expression.left as number;
@@ -154,6 +171,22 @@ export function validateAirPackage(value: unknown): asserts value is AirPackageV
         !Number.isSafeInteger(constraint.expression) || (constraint.expression as number) < 0 ||
         (constraint.expression as number) >= air.expressions.length) {
       throw new ArtifactError("invalid AIR constraint");
+    }
+    if (constraint.kind !== "transition") {
+      const pending = [constraint.expression as number];
+      const seen = new Set<number>();
+      while (pending.length > 0) {
+        const index = pending.pop() as number;
+        if (seen.has(index)) continue;
+        seen.add(index);
+        const expression = air.expressions[index] as AirExpressionV1;
+        if (expression.op === "next") {
+          throw new ArtifactError("boundary constraints cannot reference the next row");
+        }
+        if (expression.op === "add" || expression.op === "sub" || expression.op === "mul") {
+          pending.push(expression.left, expression.right);
+        }
+      }
     }
   }
   if (canonicalJsonV1(air).length > 4 * 1024 * 1024) {
@@ -464,6 +497,32 @@ export class Cli {
 
   validateAir(air: string): void {
     this.run(["plonky3", "validate-air", "--air", air]);
+  }
+
+  proveAir(
+    air: string,
+    traceManifest: string,
+    chunksDir: string,
+    publicInputs: string,
+    policy: string,
+    output: string,
+  ): void {
+    this.run([
+      "plonky3", "prove-air", "--air", air, "--trace-manifest", traceManifest,
+      "--chunks-dir", chunksDir, "--public-inputs", publicInputs,
+      "--policy", policy, "--output", output,
+    ]);
+  }
+
+  verifyAir(bundle: string): void {
+    this.run(["plonky3", "verify-air", "--bundle", bundle]);
+  }
+
+  estimateAir(air: string, traceManifest: string, publicInputs: string, policy: string): void {
+    this.run([
+      "plonky3", "estimate-air", "--air", air, "--trace-manifest", traceManifest,
+      "--public-inputs", publicInputs, "--policy", policy,
+    ]);
   }
 
   packTrace(air: string, trace: string, rows: number, outputDir: string, chunkBytes = 64 * 1024 * 1024): void {

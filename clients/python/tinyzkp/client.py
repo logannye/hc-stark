@@ -11,7 +11,7 @@ import json
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from blake3 import blake3
 
@@ -35,9 +35,9 @@ class ArtifactError(ValueError):
 class AirBuilder:
     """Build the beta's declarative degree-3 AIR without executable callbacks."""
 
-    def __init__(self, trace_width: int, public_value_count: int = 0) -> None:
+    def __init__(self, trace_width: int, public_inputs: Optional[list[str]] = None) -> None:
         self.trace_width = trace_width
-        self.public_value_count = public_value_count
+        self.public_inputs = list(public_inputs or [])
         self.expressions: list[dict[str, Any]] = []
         self.constraints: list[dict[str, Any]] = []
 
@@ -77,7 +77,7 @@ class AirBuilder:
             "field": "goldilocks",
             "expected_verifier": "p3_uni_stark_0.6.1",
             "trace_width": self.trace_width,
-            "public_value_count": self.public_value_count,
+            "public_inputs": [{"name": name} for name in self.public_inputs],
             "expressions": list(self.expressions),
             "constraints": list(self.constraints),
         }
@@ -88,11 +88,11 @@ class AirBuilder:
 def validate_air_package(value: Any) -> None:
     if not isinstance(value, dict) or set(value) != {
         "schema_version", "backend", "profile", "field", "expected_verifier",
-        "trace_width", "public_value_count", "expressions", "constraints",
+        "trace_width", "public_inputs", "expressions", "constraints",
     }:
         raise ArtifactError("AIR fields do not match AirPackageV1")
     width = value["trace_width"]
-    public_count = value["public_value_count"]
+    public_inputs = value["public_inputs"]
     expressions = value["expressions"]
     constraints = value["constraints"]
     if (
@@ -102,11 +102,25 @@ def validate_air_package(value: Any) -> None:
         or value["field"] != "goldilocks"
         or value["expected_verifier"] != "p3_uni_stark_0.6.1"
         or not isinstance(width, int) or isinstance(width, bool) or not 1 <= width <= MAX_TRACE_WIDTH
-        or not isinstance(public_count, int) or isinstance(public_count, bool) or not 0 <= public_count <= 1024
+        or not isinstance(public_inputs, list) or len(public_inputs) > 1024
         or not isinstance(expressions, list) or not 1 <= len(expressions) <= MAX_AIR_NODES
         or not isinstance(constraints, list) or not 1 <= len(constraints) <= MAX_AIR_CONSTRAINTS
     ):
         raise ArtifactError("invalid AIR profile or bounds")
+    public_names = []
+    for slot in public_inputs:
+        if not isinstance(slot, dict) or set(slot) != {"name"} or not isinstance(slot["name"], str):
+            raise ArtifactError("invalid public input layout")
+        name = slot["name"]
+        if (
+            not 1 <= len(name.encode("ascii", errors="ignore")) <= 64
+            or not name[0].isalpha()
+            or not all(character.isascii() and (character.isalnum() or character == "_") for character in name)
+            or name in public_names
+        ):
+            raise ArtifactError("invalid public input layout")
+        public_names.append(name)
+    public_count = len(public_names)
     degrees: list[int] = []
     for position, expression in enumerate(expressions):
         if not isinstance(expression, dict) or not isinstance(expression.get("op"), str):
@@ -141,6 +155,19 @@ def validate_air_package(value: Any) -> None:
             or not 0 <= constraint["expression"] < len(expressions)
         ):
             raise ArtifactError("invalid AIR constraint")
+        if constraint["kind"] != "transition":
+            pending = [constraint["expression"]]
+            seen: set[int] = set()
+            while pending:
+                index = pending.pop()
+                if index in seen:
+                    continue
+                seen.add(index)
+                expression = expressions[index]
+                if expression["op"] == "next":
+                    raise ArtifactError("boundary constraints cannot reference the next row")
+                if expression["op"] in {"add", "sub", "mul"}:
+                    pending.extend([expression["left"], expression["right"]])
     if len(canonical_json_v1(value)) > 4 * 1024 * 1024:
         raise ArtifactError("AIR exceeds the 4 MiB limit")
 
@@ -467,6 +494,38 @@ class Cli:
 
     def validate_air(self, air: str | Path) -> None:
         self._run("plonky3", "validate-air", "--air", air)
+
+    def prove_air(
+        self,
+        air: str | Path,
+        trace_manifest: str | Path,
+        chunks_dir: str | Path,
+        public_inputs: str | Path,
+        policy: str | Path,
+        output: str | Path,
+    ) -> None:
+        self._run(
+            "plonky3", "prove-air", "--air", air,
+            "--trace-manifest", trace_manifest, "--chunks-dir", chunks_dir,
+            "--public-inputs", public_inputs, "--policy", policy,
+            "--output", output,
+        )
+
+    def verify_air(self, bundle: str | Path) -> None:
+        self._run("plonky3", "verify-air", "--bundle", bundle)
+
+    def estimate_air(
+        self,
+        air: str | Path,
+        trace_manifest: str | Path,
+        public_inputs: str | Path,
+        policy: str | Path,
+    ) -> None:
+        self._run(
+            "plonky3", "estimate-air", "--air", air,
+            "--trace-manifest", trace_manifest, "--public-inputs", public_inputs,
+            "--policy", policy,
+        )
 
     def pack_trace(
         self,

@@ -36,8 +36,29 @@ hc-cli plonky3 pack-trace \
 
 The CLI rejects noncanonical field elements, wrong expanded lengths, unsafe
 row counts, and unsupported AIR shapes before any upload. Hosted submission
-must also require an official small local proof once the generic declarative
-AIR lowering is implemented.
+requires an official 1,024-row local proof for the same AIR digest. Estimate,
+prove, and verify it with:
+
+```sh
+hc-cli plonky3 estimate-air \
+  --air air-package-v1.json \
+  --trace-manifest packed-trace/trace-manifest-v1.json \
+  --public-inputs public-inputs-v1.json \
+  --policy resource-policy-v1.json
+
+hc-cli plonky3 prove-air \
+  --air air-package-v1.json \
+  --trace-manifest packed-trace/trace-manifest-v1.json \
+  --chunks-dir packed-trace \
+  --public-inputs public-inputs-v1.json \
+  --policy resource-policy-v1.json \
+  --output air-proof-bundle-v1.json
+
+hc-cli plonky3 verify-air --bundle air-proof-bundle-v1.json
+```
+
+Public-input names are declared by the AIR; canonical Goldilocks values are
+supplied separately in slot order and hash-bound into each proof bundle.
 
 ## Data and worker prerequisites
 

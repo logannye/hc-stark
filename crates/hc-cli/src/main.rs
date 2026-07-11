@@ -78,6 +78,37 @@ enum Plonky3Command {
         #[arg(long, default_value_t = 64 * 1024 * 1024)]
         chunk_bytes: u64,
     },
+    /// Prove a validated declarative AIR against a packed trace.
+    ProveAir {
+        #[arg(long)]
+        air: PathBuf,
+        #[arg(long)]
+        trace_manifest: PathBuf,
+        #[arg(long)]
+        chunks_dir: PathBuf,
+        #[arg(long)]
+        public_inputs: PathBuf,
+        #[arg(long)]
+        policy: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Verify a declarative AIR proof with the official Plonky3 adapter.
+    VerifyAir {
+        #[arg(long)]
+        bundle: PathBuf,
+    },
+    /// Estimate and preflight a declarative AIR proof.
+    EstimateAir {
+        #[arg(long)]
+        air: PathBuf,
+        #[arg(long)]
+        trace_manifest: PathBuf,
+        #[arg(long)]
+        public_inputs: PathBuf,
+        #[arg(long)]
+        policy: PathBuf,
+    },
     Prove {
         #[arg(long)]
         manifest: PathBuf,
@@ -185,6 +216,33 @@ fn main() -> Result<()> {
                 rows,
                 &output_dir,
                 chunk_bytes,
+            ),
+            Plonky3Command::ProveAir {
+                air,
+                trace_manifest,
+                chunks_dir,
+                public_inputs,
+                policy,
+                output,
+            } => commands::plonky3::prove_air(
+                &air,
+                &trace_manifest,
+                &chunks_dir,
+                &public_inputs,
+                &policy,
+                &output,
+            ),
+            Plonky3Command::VerifyAir { bundle } => commands::plonky3::verify_air(&bundle),
+            Plonky3Command::EstimateAir {
+                air,
+                trace_manifest,
+                public_inputs,
+                policy,
+            } => commands::plonky3::estimate_air(
+                &air,
+                &trace_manifest,
+                &public_inputs,
+                &policy,
             ),
             Plonky3Command::Prove { manifest, output } => {
                 commands::plonky3::prove(&manifest, &output)

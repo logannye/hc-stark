@@ -1,12 +1,13 @@
 use crate::{
-    InternalProofBundle, ResourceBoundedUniStarkProver, WorkloadKind, COMPATIBILITY_PROFILE,
-    GOLDILOCKS_MODULUS_U64, PLONKY3_VERSION,
+    verify_declarative_proof, InternalProofBundle, ResourceBoundedUniStarkProver, WorkloadKind,
+    COMPATIBILITY_PROFILE, GOLDILOCKS_MODULUS_U64, PLONKY3_VERSION,
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use hc_stream::{ResourceEstimate, ResourcePolicyV1};
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 pub const MAX_MANIFEST_JSON_BYTES: usize = 1024 * 1024;
 pub const MAX_BUNDLE_JSON_BYTES: usize = 96 * 1024 * 1024;
@@ -14,6 +15,7 @@ pub const MAX_REPORT_JSON_BYTES: usize = 1024 * 1024;
 pub const MAX_PROOF_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_AIR_JSON_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_TRACE_MANIFEST_JSON_BYTES: usize = 8 * 1024 * 1024;
+pub const MAX_AIR_BUNDLE_JSON_BYTES: usize = 104 * 1024 * 1024;
 pub const MAX_AIR_NODES: usize = 8192;
 pub const MAX_AIR_CONSTRAINTS: usize = 1024;
 pub const MAX_TRACE_WIDTH: u32 = 256;
@@ -95,6 +97,16 @@ pub struct AirConstraintV1 {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct PublicInputSlotV1 {
+    #[schemars(
+        length(min = 1, max = 64),
+        regex(pattern = "^[A-Za-z][A-Za-z0-9_]{0,63}$")
+    )]
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct AirPackageV1 {
     pub schema_version: u32,
     pub backend: String,
@@ -102,7 +114,7 @@ pub struct AirPackageV1 {
     pub field: String,
     pub expected_verifier: String,
     pub trace_width: u32,
-    pub public_value_count: u32,
+    pub public_inputs: Vec<PublicInputSlotV1>,
     pub expressions: Vec<AirExpressionV1>,
     pub constraints: Vec<AirConstraintV1>,
 }
@@ -115,12 +127,18 @@ impl AirPackageV1 {
             || self.field != "goldilocks"
             || self.expected_verifier != "p3_uni_stark_0.6.1"
             || !(1..=MAX_TRACE_WIDTH).contains(&self.trace_width)
-            || self.public_value_count as usize > MAX_PUBLIC_VALUES
+            || self.public_inputs.len() > MAX_PUBLIC_VALUES
             || self.expressions.is_empty()
             || self.expressions.len() > MAX_AIR_NODES
             || self.constraints.is_empty()
             || self.constraints.len() > MAX_AIR_CONSTRAINTS
         {
+            return Err(ContractError::InvalidAir);
+        }
+        let mut public_names = HashSet::with_capacity(self.public_inputs.len());
+        if self.public_inputs.iter().any(|slot| {
+            !valid_public_input_name(&slot.name) || !public_names.insert(slot.name.as_str())
+        }) {
             return Err(ContractError::InvalidAir);
         }
 
@@ -134,7 +152,11 @@ impl AirPackageV1 {
                 {
                     1
                 }
-                AirExpressionV1::Public { index } if *index < self.public_value_count => 0,
+                AirExpressionV1::Public { index }
+                    if (*index as usize) < self.public_inputs.len() =>
+                {
+                    0
+                }
                 AirExpressionV1::Add { left, right } | AirExpressionV1::Sub { left, right } => {
                     let (left_degree, right_degree) =
                         prior_degrees(&degrees, position, *left, *right)?;
@@ -159,6 +181,13 @@ impl AirPackageV1 {
         {
             return Err(ContractError::InvalidAir);
         }
+        for constraint in &self.constraints {
+            if constraint.kind != AirConstraintKindV1::Transition
+                && expression_uses_next(&self.expressions, constraint.expression as usize)
+            {
+                return Err(ContractError::InvalidAir);
+            }
+        }
         if canonical_json_bytes_v1(self)?.len() > MAX_AIR_JSON_BYTES {
             return Err(ContractError::SizeLimit);
         }
@@ -169,6 +198,38 @@ impl AirPackageV1 {
         self.validate()?;
         Ok(*blake3::hash(&canonical_json_bytes_v1(self)?).as_bytes())
     }
+}
+
+fn valid_public_input_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 64
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1..]
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+}
+
+fn expression_uses_next(expressions: &[AirExpressionV1], root: usize) -> bool {
+    let mut stack = vec![root];
+    let mut visited = vec![false; expressions.len()];
+    while let Some(index) = stack.pop() {
+        if visited[index] {
+            continue;
+        }
+        visited[index] = true;
+        match expressions[index] {
+            AirExpressionV1::Next { .. } => return true,
+            AirExpressionV1::Add { left, right }
+            | AirExpressionV1::Sub { left, right }
+            | AirExpressionV1::Mul { left, right } => {
+                stack.push(left as usize);
+                stack.push(right as usize);
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 fn prior_degrees(degrees: &[u32], position: u32, left: u32, right: u32) -> Result<(u32, u32)> {
@@ -215,7 +276,7 @@ impl TraceManifestV1 {
             || self.compression != "zstd"
             || self.chunk_uncompressed_bytes == 0
             || self.chunk_uncompressed_bytes > MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES
-            || self.chunk_uncompressed_bytes % 8 != 0
+            || !self.chunk_uncompressed_bytes.is_multiple_of(8)
             || self.chunks.is_empty()
             || canonical_json_bytes_v1(self)?.len() > MAX_TRACE_MANIFEST_JSON_BYTES
         {
@@ -261,6 +322,40 @@ impl TraceManifestV1 {
             return Err(ContractError::SizeLimit);
         }
         Ok(())
+    }
+
+    pub fn digest(&self) -> Result<[u8; 32]> {
+        Ok(*blake3::hash(&canonical_json_bytes_v1(self)?).as_bytes())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PublicInputsV1 {
+    pub schema_version: u32,
+    pub air_digest_hex: String,
+    pub values: Vec<u64>,
+}
+
+impl PublicInputsV1 {
+    pub fn validate_for_air(&self, air: &AirPackageV1) -> Result<()> {
+        air.validate()?;
+        if self.schema_version != 1
+            || self.air_digest_hex != hex_lower(&air.digest()?)
+            || self.values.len() != air.public_inputs.len()
+            || self
+                .values
+                .iter()
+                .any(|value| *value >= GOLDILOCKS_MODULUS_U64)
+        {
+            return Err(ContractError::InvalidAir);
+        }
+        Ok(())
+    }
+
+    pub fn digest(&self, air: &AirPackageV1) -> Result<[u8; 32]> {
+        self.validate_for_air(air)?;
+        Ok(*blake3::hash(&canonical_json_bytes_v1(self)?).as_bytes())
     }
 }
 
@@ -381,6 +476,139 @@ pub struct ProofBundleV1 {
     pub proof_digest_hex: String,
     pub public_values: Vec<u64>,
     pub provenance: ReleaseProvenanceV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AirProofBundleV1 {
+    pub schema_version: u32,
+    pub air: AirPackageV1,
+    pub air_digest_hex: String,
+    pub trace_manifest: TraceManifestV1,
+    pub trace_manifest_digest_hex: String,
+    pub public_inputs: PublicInputsV1,
+    pub public_inputs_digest_hex: String,
+    pub proof_base64url: String,
+    pub proof_digest_hex: String,
+    pub provenance: ReleaseProvenanceV1,
+}
+
+impl AirProofBundleV1 {
+    pub fn from_proof(
+        air: AirPackageV1,
+        trace_manifest: TraceManifestV1,
+        public_inputs: PublicInputsV1,
+        proof_bytes: Vec<u8>,
+        release_sha: impl Into<String>,
+    ) -> Result<Self> {
+        trace_manifest.validate_for_air(&air)?;
+        public_inputs.validate_for_air(&air)?;
+        if proof_bytes.len() > MAX_PROOF_BYTES {
+            return Err(ContractError::SizeLimit);
+        }
+        let air_digest = air.digest()?;
+        let trace_manifest_digest = trace_manifest.digest()?;
+        let public_inputs_digest = public_inputs.digest(&air)?;
+        let proof_digest = *blake3::hash(&proof_bytes).as_bytes();
+        let bundle = Self {
+            schema_version: 1,
+            air,
+            air_digest_hex: hex_lower(&air_digest),
+            trace_manifest,
+            trace_manifest_digest_hex: hex_lower(&trace_manifest_digest),
+            public_inputs,
+            public_inputs_digest_hex: hex_lower(&public_inputs_digest),
+            proof_base64url: URL_SAFE_NO_PAD.encode(&proof_bytes),
+            proof_digest_hex: hex_lower(&proof_digest),
+            provenance: ReleaseProvenanceV1 {
+                prover_version: PLONKY3_VERSION.into(),
+                verifier_version: PLONKY3_VERSION.into(),
+                release_sha: release_sha.into(),
+                dependency_profile: COMPATIBILITY_PROFILE.into(),
+                proof_serializer: "postcard-1.1.3".into(),
+            },
+        };
+        bundle.verify()?;
+        Ok(bundle)
+    }
+
+    pub fn verify(&self) -> Result<()> {
+        if canonical_json_bytes_v1(self)?.len() > MAX_AIR_BUNDLE_JSON_BYTES
+            || self.schema_version != 1
+            || self.provenance.prover_version != PLONKY3_VERSION
+            || self.provenance.verifier_version != PLONKY3_VERSION
+            || self.provenance.dependency_profile != COMPATIBILITY_PROFILE
+            || self.provenance.proof_serializer != "postcard-1.1.3"
+            || self.provenance.release_sha.is_empty()
+            || self.provenance.release_sha.len() > 128
+        {
+            return Err(ContractError::ProfileMismatch);
+        }
+        self.trace_manifest.validate_for_air(&self.air)?;
+        self.public_inputs.validate_for_air(&self.air)?;
+        if self.air_digest_hex != hex_lower(&self.air.digest()?)
+            || self.trace_manifest_digest_hex != hex_lower(&self.trace_manifest.digest()?)
+            || self.public_inputs_digest_hex != hex_lower(&self.public_inputs.digest(&self.air)?)
+        {
+            return Err(ContractError::ManifestDigestMismatch);
+        }
+        let proof_bytes = URL_SAFE_NO_PAD
+            .decode(&self.proof_base64url)
+            .map_err(|_| ContractError::ProofEncoding)?;
+        if proof_bytes.len() > MAX_PROOF_BYTES
+            || URL_SAFE_NO_PAD.encode(&proof_bytes) != self.proof_base64url
+            || self.proof_digest_hex != hex_lower(blake3::hash(&proof_bytes).as_bytes())
+        {
+            return Err(ContractError::ProofEncoding);
+        }
+        verify_declarative_proof(
+            self.air.clone(),
+            self.trace_manifest.logical_rows,
+            &self.public_inputs.values,
+            &proof_bytes,
+        )
+        .map_err(|error| ContractError::Verification(error.to_string()))
+    }
+
+    pub fn verify_local_registration_proof(&self) -> Result<()> {
+        if self.trace_manifest.logical_rows != MIN_CUSTOM_TRACE_ROWS {
+            return Err(ContractError::InvalidTrace);
+        }
+        self.verify()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HostedResourceReportV1 {
+    pub peak_resident_bytes: u64,
+    pub scratch_high_water_bytes: u64,
+    pub total_read_bytes: u64,
+    pub total_write_bytes: u64,
+    pub wall_time_ms: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HostedProofBundleV1 {
+    pub schema_version: u32,
+    pub proof: AirProofBundleV1,
+    pub resource_report: HostedResourceReportV1,
+    pub charge_millicredits: u64,
+    pub official_verification: bool,
+}
+
+impl HostedProofBundleV1 {
+    pub fn verify(&self) -> Result<()> {
+        if self.schema_version != 1
+            || !self.official_verification
+            || self.resource_report.peak_resident_bytes == 0
+            || self.resource_report.wall_time_ms == 0
+        {
+            return Err(ContractError::ProfileMismatch);
+        }
+        self.proof.verify()
+    }
 }
 
 impl ProofBundleV1 {
@@ -584,6 +812,18 @@ pub fn trace_manifest_schema() -> Schema {
     schema_for!(TraceManifestV1)
 }
 
+pub fn public_inputs_schema() -> Schema {
+    schema_for!(PublicInputsV1)
+}
+
+pub fn air_proof_bundle_schema() -> Schema {
+    schema_for!(AirProofBundleV1)
+}
+
+pub fn hosted_proof_bundle_schema() -> Schema {
+    schema_for!(HostedProofBundleV1)
+}
+
 pub fn proof_bundle_schema() -> Schema {
     schema_for!(ProofBundleV1)
 }
@@ -768,7 +1008,7 @@ mod tests {
             field: "goldilocks".into(),
             expected_verifier: "p3_uni_stark_0.6.1".into(),
             trace_width: 1,
-            public_value_count: 0,
+            public_inputs: vec![],
             expressions: vec![
                 AirExpressionV1::Current { column: 0 },
                 AirExpressionV1::Next { column: 0 },
@@ -817,7 +1057,9 @@ mod tests {
             field: "goldilocks".into(),
             expected_verifier: "p3_uni_stark_0.6.1".into(),
             trace_width: MAX_TRACE_WIDTH,
-            public_value_count: 1,
+            public_inputs: vec![PublicInputSlotV1 {
+                name: "expected".into(),
+            }],
             expressions: vec![
                 AirExpressionV1::Current {
                     column: MAX_TRACE_WIDTH - 1,
@@ -835,8 +1077,27 @@ mod tests {
         air.validate().unwrap();
         assert_eq!(
             hex_lower(&air.digest().unwrap()),
-            "794df3f5378ff97b9c2877bd1f01c8fbcf646a212981a9f2bd8cdd7147a4a454"
+            "6886efd9315d23e967964ab8ca67e635558cf89c245c7fa787ae35ef05543fbc"
         );
+
+        let mut duplicate = air.clone();
+        duplicate.public_inputs.push(PublicInputSlotV1 {
+            name: "expected".into(),
+        });
+        assert!(matches!(
+            duplicate.validate(),
+            Err(ContractError::InvalidAir)
+        ));
+
+        let mut unsafe_boundary = air;
+        unsafe_boundary
+            .expressions
+            .push(AirExpressionV1::Next { column: 0 });
+        unsafe_boundary.constraints[0].expression = (unsafe_boundary.expressions.len() - 1) as u32;
+        assert!(matches!(
+            unsafe_boundary.validate(),
+            Err(ContractError::InvalidAir)
+        ));
     }
 
     #[test]
