@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -39,7 +40,10 @@ def repository(tmp_path):
     (tmp_path / "src" / "lib.rs").write_text("pub fn value() -> u8 { 1 }\n")
     (tmp_path / "release" / "evidence").mkdir(parents=True)
     (tmp_path / "release" / "backend-v1-gates.json").write_text("{}\n")
-    executable = Path(shutil.which("git", path="/usr/bin:/bin:/usr/local/bin")).resolve()
+    configured = os.environ.get("TINYZKP_ANCHORED_GIT", "").strip()
+    executable = Path(
+        configured or shutil.which("git", path="/usr/bin:/bin:/usr/local/bin")
+    ).resolve()
     (tmp_path / "release" / "release-trust-v1.json").write_text(
         json.dumps(
             {
