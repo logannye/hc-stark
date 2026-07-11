@@ -61,7 +61,8 @@ sudo /usr/bin/python3 billing/runtime_lock.py capture-host-provenance \
 
 The capture inventories every regular file under `/usr/lib/python3.11`, the
 real interpreter, `/usr/bin/bash`, `/usr/bin/ldd`, `/usr/lib/os-release`, and
-the recursively resolved shared-library dependency graph. Schema v2 binds each
+the pinned-review verifier `/usr/bin/openssl`, plus the recursively resolved
+shared-library dependency graph. Schema v2 binds each
 file's root ownership, group, mode, unique-link count, content digest, and the
 digest of its complete root-owned, non-writable, symlink-free parent chain.
 Directory/file symlinks in the standard library, missing libraries, unexpected
@@ -127,6 +128,36 @@ production, exercise and retain raw evidence for two concurrent invocations,
 failure and HUP/INT/TERM at venv creation, both rename boundaries, final-path
 verification, successful rollback, and retry. Independently review that drill
 with the host-provenance and fixed-host backup evidence.
+
+The machine gate consumes one canonical artifact assembled from the raw case
+reports and logs. The raw observation document must use
+`tinyzkp-installer-drill-observations-v1` and contain the exact ordered case set
+printed by `scripts/ci/installer_drill_evidence.py`: initial success,
+concurrency, injected failure at all four transaction boundaries, and
+HUP/INT/TERM at every boundary. Each case binds command/stdout/stderr hashes,
+exit codes, before/after runtime identities, cleanup, lock reacquisition,
+rollback, and deterministic retry.
+
+```sh
+/usr/bin/python3 scripts/ci/installer_drill_evidence.py required-cases
+
+/usr/bin/python3 scripts/ci/installer_drill_evidence.py capture \
+  --observations /root/tinyzkp-installer-drill/observations.json \
+  --raw-dir /root/tinyzkp-installer-drill/raw \
+  --output /var/lib/tinyzkp-private/deploy/installer-drill-evidence.json
+
+/usr/bin/python3 scripts/ci/installer_drill_evidence.py verify \
+  --expected-release-sha "$(/usr/bin/git rev-parse HEAD)" \
+  --expected-deployment-id tinyzkp-production-primary
+```
+
+`release/operator-evidence-reviewers-v1.json` requires an Ed25519 signature for
+`installer_drill`. Its reviewer list deliberately starts empty, so production
+remains blocked until an authorized external reviewer key is pinned in a
+reviewed source change. Capture may write an explicitly `unreviewed` candidate
+for handoff, but production verification rejects it. Once reviewed, preflight
+binds the complete drill artifact, full-file identity, subject hash, run ID,
+and approved signature status.
 
 The dependency and host-runtime checks address the Python host service only.
 They do not replace container signing, release identity parity, backup restore

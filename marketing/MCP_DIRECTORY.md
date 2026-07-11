@@ -1,5 +1,10 @@
 # Anthropic MCP Directory Submission
 
+> **Archived recovery-era material — do not submit or use for outreach.** The
+> public MCP proving surface and directory campaign are disabled during backend
+> recovery. Any future reviewer contact must use the current HTTPS/no-email
+> request flow and pass the live recovery canary first.
+
 This is the canonical packet for submitting **TinyZKP** to the Anthropic MCP / connector directory. It is structured to mirror the actual fields the submission form asks for, per https://claude.com/docs/connectors/building/submission.
 
 > **Form to use:** "MCP directory submission form" (remote MCP, since `mcp.tinyzkp.com` is internet-hosted). The Desktop Extension form is **not** the right one for us — `hc-mcp-stdio` ships as a binary, not as an `.mcpb` bundle.
@@ -154,7 +159,8 @@ docker exec hc-stark-hc-server-1 hc-admin issue-key \
     --quota-override 5000
 ```
 
-**Email contact for the reviewer:** logan@tinyzkp.com
+**Reviewer contact:** use `https://tinyzkp.com/requests?intent=general` and the
+applicant-selected non-email reply channel.
 
 ---
 

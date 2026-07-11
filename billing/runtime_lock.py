@@ -898,6 +898,7 @@ def _base_runtime_paths() -> tuple[set[pathlib.Path], dict[pathlib.Path, str]]:
         pathlib.Path("/usr/bin/bash"): "loader_tool",
         pathlib.Path("/usr/bin/python3.11"): "interpreter",
         pathlib.Path("/usr/bin/ldd"): "loader_tool",
+        pathlib.Path("/usr/bin/openssl"): "loader_tool",
         pathlib.Path("/usr/lib/os-release"): "os_release",
     }
     stdlib = pathlib.Path("/usr/lib/python3.11")

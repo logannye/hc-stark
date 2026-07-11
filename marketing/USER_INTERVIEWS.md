@@ -1,5 +1,11 @@
 # User-interview pipeline
 
+> **Archived recovery-era material — do not execute.** This playbook predates
+> TinyZKP's no-email commercial policy. Do not query tenant email addresses,
+> send the sample outreach below, or use any founder mailbox. Current intake
+> and follow-up must use the applicant-selected non-email channel described in
+> `commercial/no-email-evaluation-runbook.md`.
+
 Goal: 5 interviews in 14 days. Output: a synthesis doc that locks in the next two
 quarters of product priorities (templates, SDK shape, billing/quota knobs, MCP
 ergonomics).
@@ -31,7 +37,7 @@ mint, what makes them upgrade from free, and what makes them churn. Five
    M2 follow-up below.
 4. **Inbound contact-form submissions.** Already self-selected. Highest reply rate.
 
-### Outreach email (verbatim)
+### Archived outreach example (do not send)
 
 Subject: `Quick chat about TinyZKP? (15 min, on me)`
 
@@ -52,7 +58,7 @@ Calendar link: [Cal.com / Calendly URL]
 
 Thanks for the early signup —
 Logan
-logan@tinyzkp.com
+[historical sender address removed]
 ```
 
 **Send rules:**

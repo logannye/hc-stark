@@ -86,6 +86,7 @@ jobs:
           python3 -m pytest scripts/commercial/test_render_offers.py
           python3 scripts/commercial/validate_scorecard.py commercial/monthly-scorecard.example.json
           python3 -m pytest scripts/commercial/test_validate_scorecard.py
+          python3 -m pytest scripts/commercial/test_evaluation_qualification.py scripts/commercial/test_partner_preflight.py
           python3 scripts/ci/site_route_check.py
           python3 -m pytest scripts/ci/test_site_route_check.py
           node scripts/ci/test_analytics_attribution.mjs
@@ -97,6 +98,7 @@ jobs:
           python3 -m pytest scripts/ci/test_site_deploy_check.py
           python3 -m pytest scripts/ci/test_cloudflare_pages_secret_check.py
           python3 -m pytest scripts/ci/test_cloudflare_toolchain_check.py
+          python3 -m pytest scripts/deploy/test_cloudflare_pages_release.py
           node scripts/ci/site_worker_dispatch_test.mjs
 
       - name: Docker Compose config checks
@@ -119,6 +121,10 @@ jobs:
           python3 -m pytest billing/tests/test_contact_intake.py
           python3 -m pytest billing/tests/test_evaluation_store.py
           python3 -m pytest billing/tests/test_contract_billing.py
+          python3 -m pytest billing/tests/test_evaluation_start_ready.py
+          python3 -m pytest billing/tests/test_agreement_gate.py
+          python3 -m pytest billing/tests/test_evaluation_delivery_manifest.py
+          python3 -m pytest billing/tests/test_stripe_test_drill.py
           python3 -m pytest billing/tests/test_configure_contract_portal.py
           python3 -m pytest billing/tests/test_legacy_billing_containment.py
           python3 -m pytest billing/tests/test_stripe_account_context_check.py
@@ -126,6 +132,10 @@ jobs:
           python3 -m pytest billing/tests/test_stripe_revenue_ops_audit.py
           python3 -m pytest billing/tests/test_runtime_lock.py
           python3 -m pytest scripts/ci/test_fixed_host_backup_evidence.py
+          python3 -m pytest scripts/ci/test_installer_drill_evidence.py
+          python3 -m pytest scripts/ci/test_legacy_billing_containment_status.py
+          python3 -m pytest scripts/ci/test_billing_service_hardening.py
+          python3 -m pytest deploy/hetzner/test_deployment_transaction.py
 
       - name: Python SDK checks
         run: |
@@ -155,14 +165,25 @@ jobs:
           python3 -m py_compile scripts/ci/cloudflare_toolchain_check.py
           python3 -m py_compile scripts/ci/materialize_cloudflare_toolchain.py
           python3 -m py_compile scripts/ci/fixed_host_backup_evidence.py
+          python3 -m py_compile scripts/ci/installer_drill_evidence.py
+          python3 -m py_compile scripts/ci/legacy_billing_containment_status.py
+          python3 -m py_compile deploy/hetzner/deployment_transaction.py
           python3 -m py_compile scripts/monitoring/backend_recovery_canary.py
           python3 -m py_compile billing/legacy_billing_containment.py
           python3 -m py_compile billing/configure_contract_portal.py
           python3 -m py_compile billing/contract_billing.py
+          python3 -m py_compile billing/evaluation_start_ready.py
+          python3 -m py_compile billing/agreement_gate.py
+          python3 -m py_compile billing/evaluation_delivery_manifest.py
+          python3 -m py_compile billing/stripe_test_drill.py
           python3 -m py_compile billing/evaluation_store.py
           python3 -m py_compile billing/evaluation_intake.py
           python3 -m py_compile billing/runtime_lock.py
           python3 -m py_compile scripts/commercial/render_offers.py
+          python3 -m py_compile scripts/commercial/evidence_common.py
+          python3 -m py_compile scripts/commercial/evaluation_qualification.py
+          python3 -m py_compile scripts/commercial/partner_preflight.py
+          python3 -m py_compile scripts/deploy/cloudflare_pages_release.py
           python3 -m py_compile scripts/benchmark/validate_release_gate.py
           bash -n scripts/monitoring/api_health_audit.sh
           bash -n scripts/monitoring/host_cron_env.sh
@@ -174,6 +195,7 @@ jobs:
           bash -n deploy/hetzner/install_billing_runtime.sh
           bash -n deploy/hetzner/deploy.sh
           bash -n deploy/hetzner/setup.sh
+          bash -n deploy/hetzner/rollback.sh
 
       - name: site JavaScript syntax
         run: |

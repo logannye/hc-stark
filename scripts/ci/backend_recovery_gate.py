@@ -282,7 +282,19 @@ def check_billing_and_release() -> None:
         "typed countersigned annual order template is missing",
     )
     for marker, message in (
-        ("ContractEvidenceV1", "contract invoices are not bound to signed evidence"),
+        ("ContractEvidenceV2", "contract invoices are not bound to signed evidence"),
+        (
+            "agreement_gate_sha256",
+            "evaluation invoices are not bound to approved agreement-form evidence",
+        ),
+        (
+            "stripe_test_drill_sha256",
+            "evaluation invoices are not bound to a test-mode billing drill",
+        ),
+        (
+            "delivery_manifest_sha256",
+            "delivery invoices are not bound to the complete artifact manifest",
+        ),
         ("expected_plan_sha256", "contract apply does not bind the read-only plan"),
         (
             "verify_contract_documents",

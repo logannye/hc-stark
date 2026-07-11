@@ -38,6 +38,8 @@ from deploy_readiness_check import (
 )
 from cloudflare_toolchain_check import validate_runtime as cloudflare_toolchain_identity
 import fixed_host_backup_evidence
+import installer_drill_evidence
+import legacy_billing_containment_status
 import runtime_lock
 
 
@@ -54,7 +56,7 @@ FIXED_PAGES_BINDINGS_PATH = pathlib.Path(
 FIXED_MACHINE_ID_PATH = pathlib.Path("/etc/machine-id")
 FIXED_CONSUMPTION_DIR = FIXED_EVIDENCE_PATH.parent / "consumed"
 DEFAULT_DEPLOYMENT_ID = "tinyzkp-production-primary"
-EVIDENCE_SCHEMA = "tinyzkp-production-preflight-evidence-v7"
+EVIDENCE_SCHEMA = "tinyzkp-production-preflight-evidence-v8"
 EVIDENCE_MAX_BYTES = 256 * 1024
 EVIDENCE_MAX_AGE = timedelta(minutes=30)
 RELEASE_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -87,6 +89,15 @@ EVIDENCE_KEYS = {
     "fixed_host_backup_evidence_identity_sha256",
     "fixed_host_backup_subject_sha256",
     "fixed_host_backup_run_id",
+    "installer_drill_evidence_identity_sha256",
+    "installer_drill_subject_sha256",
+    "installer_drill_run_id",
+    "installer_drill_review_status",
+    "legacy_billing_containment_required",
+    "legacy_billing_status_identity_sha256",
+    "legacy_billing_status_subject_sha256",
+    "legacy_billing_current_inventory_sha256",
+    "legacy_billing_status_observed_at",
     "private_gate_input_snapshot_sha256",
     "host_python_realpath",
     "host_python_sha256",
@@ -114,7 +125,15 @@ EVIDENCE_KEYS = {
     "container_image_ids",
     "gate_results",
 }
-PRODUCTION_IMAGE_NAMES = ("hc-stark-hc-server:latest", "hc-stark-hc-mcp:latest")
+
+
+def production_image_names(release_sha: str) -> tuple[str, str]:
+    if RELEASE_SHA.fullmatch(release_sha) is None:
+        raise EvidenceError("production image release tag is not canonical")
+    return (
+        f"tinyzkp/hc-server:{release_sha}",
+        f"tinyzkp/hc-mcp:{release_sha}",
+    )
 
 
 @dataclass(frozen=True)
@@ -147,7 +166,9 @@ def build_steps(
             "production preflight requires the explicit production host Python interpreter"
         )
     if args.production and not args.node_executable:
-        raise ValueError("production preflight requires the explicit pinned Node executable")
+        raise ValueError(
+            "production preflight requires the explicit pinned Node executable"
+        )
     if args.production and not args.wrangler_entrypoint:
         raise ValueError(
             "production preflight requires the explicit pinned Wrangler entrypoint"
@@ -177,7 +198,12 @@ def build_steps(
             args.wrangler_entrypoint,
         )
 
-    backup_test_command = (python, "-m", "pytest", "billing/tests/test_backup_script.py")
+    backup_test_command = (
+        python,
+        "-m",
+        "pytest",
+        "billing/tests/test_backup_script.py",
+    )
     if args.production:
         backup_test_command = (
             "/usr/sbin/runuser",
@@ -220,6 +246,16 @@ def build_steps(
                 "-m",
                 "pytest",
                 "scripts/ci/test_fixed_host_backup_evidence.py",
+            ),
+        ),
+        Step(
+            "installer and legacy containment evidence policy tests",
+            (
+                python,
+                "-m",
+                "pytest",
+                "scripts/ci/test_installer_drill_evidence.py",
+                "scripts/ci/test_legacy_billing_containment_status.py",
             ),
         ),
         Step("static site route check", (python, "scripts/ci/site_route_check.py")),
@@ -280,7 +316,14 @@ def build_steps(
         ),
         Step(
             "commercial scorecard policy tests",
-            (python, "-m", "pytest", "scripts/commercial/test_validate_scorecard.py"),
+            (
+                python,
+                "-m",
+                "pytest",
+                "scripts/commercial/test_validate_scorecard.py",
+                "scripts/commercial/test_evaluation_qualification.py",
+                "scripts/commercial/test_partner_preflight.py",
+            ),
         ),
         Step(
             "Cloudflare Pages static deploy check",
@@ -307,6 +350,15 @@ def build_steps(
             ),
         ),
         Step(
+            "Cloudflare Pages release transaction adversarial tests",
+            (
+                python,
+                "-m",
+                "pytest",
+                "scripts/deploy/test_cloudflare_pages_release.py",
+            ),
+        ),
+        Step(
             "pinned Cloudflare production toolchain",
             cloudflare_toolchain_cmd,
         ),
@@ -321,6 +373,10 @@ def build_steps(
         Step(
             "billing service hardening tests",
             (python, "-m", "pytest", "scripts/ci/test_billing_service_hardening.py"),
+        ),
+        Step(
+            "transactional deployment tests",
+            (python, "-m", "pytest", "deploy/hetzner/test_deployment_transaction.py"),
         ),
         Step("deploy readiness check", tuple(deploy_readiness_cmd)),
     ]
@@ -373,6 +429,20 @@ def build_steps(
                     ),
                 ),
                 Step(
+                    "billing runtime installer crash and rollback evidence",
+                    (
+                        "/usr/bin/python3",
+                        "scripts/ci/installer_drill_evidence.py",
+                        "verify",
+                        "--expected-release-sha",
+                        args.expected_release_sha or "0" * 40,
+                        "--expected-deployment-id",
+                        args.deployment_id,
+                        "--machine-id-file",
+                        str(FIXED_MACHINE_ID_PATH),
+                    ),
+                ),
+                Step(
                     "host and Pages secret parity",
                     (
                         python,
@@ -405,6 +475,23 @@ def build_steps(
                 ),
             ]
         )
+        if args.require_legacy:
+            steps.append(
+                Step(
+                    "fresh read-only legacy billing containment status",
+                    (
+                        "/usr/bin/python3",
+                        "scripts/ci/legacy_billing_containment_status.py",
+                        "verify",
+                        "--env-file",
+                        args.env_file,
+                        "--expected-release-sha",
+                        args.expected_release_sha or "0" * 40,
+                        "--expected-deployment-id",
+                        args.deployment_id,
+                    ),
+                )
+            )
         if args.evidence_output or args.verify_evidence:
             steps.append(
                 Step(
@@ -418,6 +505,7 @@ def build_steps(
                         "deploy/hetzner/docker-compose.prod.yml",
                         "build",
                     ),
+                    env={"HC_IMAGE_TAG": args.expected_release_sha or "0" * 40},
                     timeout_secs=1800,
                 )
             )
@@ -511,7 +599,9 @@ def _tail(text: str, limit: int = 4000) -> str:
     return text[-limit:]
 
 
-def production_subprocess_environment(extra: dict[str, str] | None = None) -> dict[str, str]:
+def production_subprocess_environment(
+    extra: dict[str, str] | None = None,
+) -> dict[str, str]:
     environment = {
         "PATH": TRUSTED_SYSTEM_PATH,
         "HOME": "/nonexistent",
@@ -637,9 +727,13 @@ def _strict_json_object(raw: bytes) -> dict[str, object]:
             ),
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise EvidenceError("production preflight evidence must be strict UTF-8 JSON") from error
+        raise EvidenceError(
+            "production preflight evidence must be strict UTF-8 JSON"
+        ) from error
     if not isinstance(payload, dict):
-        raise EvidenceError("production preflight evidence must contain one JSON object")
+        raise EvidenceError(
+            "production preflight evidence must contain one JSON object"
+        )
     return payload
 
 
@@ -660,7 +754,9 @@ def _backup_private_input_identity(env_file: pathlib.Path) -> dict[str, str]:
         configured = load_private_env_file(env_file)
         return _backup_private_input_identity_from_config(configured)
     except ProductionEnvError as error:
-        raise EvidenceError("private backup capability is unavailable or unsafe") from error
+        raise EvidenceError(
+            "private backup capability is unavailable or unsafe"
+        ) from error
 
 
 def _backup_private_input_identity_from_config(
@@ -691,7 +787,9 @@ def _backup_private_input_identity_from_config(
             exact_mode_0600=True,
         )
     except ProductionEnvError as error:
-        raise EvidenceError("private backup capability is unavailable or unsafe") from error
+        raise EvidenceError(
+            "private backup capability is unavailable or unsafe"
+        ) from error
     return {
         "backup_loader_token_sha256": _sha256(loader_raw),
         "backup_transport_kind": kind,
@@ -821,7 +919,9 @@ def _production_runtime_evidence_identity(
             node_binary=pathlib.Path(args.node_executable),
         )
     except (OSError, subprocess.TimeoutExpired, runtime_lock.RuntimeLockError) as error:
-        raise EvidenceError("complete production host runtime identity is invalid") from error
+        raise EvidenceError(
+            "complete production host runtime identity is invalid"
+        ) from error
     return {
         "production_runtime_identity_sha256": identity.identity_sha256,
         "production_runtime_file_count": identity.file_count,
@@ -848,17 +948,82 @@ def _fixed_host_backup_evidence_identity(
         "fixed_host_backup_evidence_identity_sha256": report[
             "evidence_identity_sha256"
         ],
-        "fixed_host_backup_subject_sha256": report[
-            "subject_artifact_set_sha256"
-        ],
+        "fixed_host_backup_subject_sha256": report["subject_artifact_set_sha256"],
         "fixed_host_backup_run_id": report["run_id"],
     }
 
 
-def container_image_identity() -> tuple[dict[str, str], str]:
+def _installer_drill_evidence_identity(
+    args: argparse.Namespace,
+    *,
+    machine_id_path: pathlib.Path = FIXED_MACHINE_ID_PATH,
+) -> dict[str, object]:
+    expected_release_sha = str(args.expected_release_sha or "")
+    try:
+        report = installer_drill_evidence.validate_evidence(
+            installer_drill_evidence.FIXED_EVIDENCE,
+            expected_release_sha=expected_release_sha,
+            expected_host_identity_sha256=stable_host_identity(machine_id_path),
+            expected_deployment_id=args.deployment_id,
+            machine_id_file=machine_id_path,
+        )
+    except (OSError, installer_drill_evidence.EvidenceError) as error:
+        raise EvidenceError(
+            "billing runtime installer drill evidence is invalid"
+        ) from error
+    return {
+        "installer_drill_evidence_identity_sha256": report["evidence_identity_sha256"],
+        "installer_drill_subject_sha256": report["subject_sha256"],
+        "installer_drill_run_id": report["run_id"],
+        "installer_drill_review_status": report["review_status"],
+    }
+
+
+def _legacy_billing_containment_evidence_identity(
+    args: argparse.Namespace,
+) -> dict[str, object]:
+    empty: dict[str, object] = {
+        "legacy_billing_containment_required": False,
+        "legacy_billing_status_identity_sha256": "",
+        "legacy_billing_status_subject_sha256": "",
+        "legacy_billing_current_inventory_sha256": "",
+        "legacy_billing_status_observed_at": "",
+    }
+    if not args.require_legacy:
+        return empty
+    try:
+        configured = load_private_env_file(pathlib.Path(args.env_file))
+        account_id = configured.get("STRIPE_EXPECTED_ACCOUNT_ID", "").strip()
+        display_name = configured.get("STRIPE_EXPECTED_DISPLAY_NAME", "").strip()
+        report = legacy_billing_containment_status.validate_evidence(
+            legacy_billing_containment_status.FIXED_EVIDENCE,
+            expected_release_sha=str(args.expected_release_sha or ""),
+            expected_deployment_id=args.deployment_id,
+            expected_account_id=account_id,
+            expected_display_name=display_name,
+        )
+    except (
+        OSError,
+        ProductionEnvError,
+        legacy_billing_containment_status.EvidenceError,
+    ) as error:
+        raise EvidenceError(
+            "fresh legacy billing containment status is invalid"
+        ) from error
+    return {
+        "legacy_billing_containment_required": True,
+        "legacy_billing_status_identity_sha256": report["evidence_identity_sha256"],
+        "legacy_billing_status_subject_sha256": report["subject_sha256"],
+        "legacy_billing_current_inventory_sha256": report["current_inventory_sha256"],
+        "legacy_billing_status_observed_at": report["observed_at"],
+    }
+
+
+def container_image_identity(release_sha: str) -> tuple[dict[str, str], str]:
+    image_names = production_image_names(release_sha)
     try:
         completed = subprocess.run(
-            ("/usr/bin/docker", "image", "inspect", *PRODUCTION_IMAGE_NAMES),
+            ("/usr/bin/docker", "image", "inspect", *image_names),
             env=production_subprocess_environment(),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
@@ -873,11 +1038,13 @@ def container_image_identity() -> tuple[dict[str, str], str]:
     try:
         inspected = json.loads(completed.stdout)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise EvidenceError("production container image identity is malformed") from error
-    if not isinstance(inspected, list) or len(inspected) != len(PRODUCTION_IMAGE_NAMES):
+        raise EvidenceError(
+            "production container image identity is malformed"
+        ) from error
+    if not isinstance(inspected, list) or len(inspected) != len(image_names):
         raise EvidenceError("production container image identity is incomplete")
     identities: dict[str, str] = {}
-    for name, record in zip(PRODUCTION_IMAGE_NAMES, inspected):
+    for name, record in zip(image_names, inspected):
         if not isinstance(record, dict) or not isinstance(record.get("Id"), str):
             raise EvidenceError("production container image ID is malformed")
         image_id = record["Id"]
@@ -909,7 +1076,9 @@ def venv_identity(host_python: pathlib.Path) -> dict[str, object]:
         or root_metadata.st_uid != os.geteuid()
         or stat.S_IMODE(root_metadata.st_mode) & 0o022
     ):
-        raise EvidenceError("production venv root must be current-owner and symlink-free")
+        raise EvidenceError(
+            "production venv root must be current-owner and symlink-free"
+        )
     if (
         host_python.is_symlink()
         or not stat.S_ISREG(python_metadata.st_mode)
@@ -925,7 +1094,9 @@ def venv_identity(host_python: pathlib.Path) -> dict[str, object]:
         raise EvidenceError("production venv pyvenv.cfg is missing or unsafe")
     site_packages = sorted((venv_root / "lib").glob("python*/site-packages"))
     if len(site_packages) != 1 or not site_packages[0].is_dir():
-        raise EvidenceError("production venv must contain exactly one site-packages directory")
+        raise EvidenceError(
+            "production venv must contain exactly one site-packages directory"
+        )
     site_packages_root = site_packages[0]
 
     files: list[dict[str, object]] = []
@@ -940,7 +1111,9 @@ def venv_identity(host_python: pathlib.Path) -> dict[str, object]:
             or current_metadata.st_uid != os.geteuid()
             or stat.S_IMODE(current_metadata.st_mode) & 0o022
         ):
-            raise EvidenceError("production venv contains a mutable or unsafe directory")
+            raise EvidenceError(
+                "production venv contains a mutable or unsafe directory"
+            )
         for name in sorted(directory_names):
             candidate = current_path / name
             if candidate.is_symlink():
@@ -961,9 +1134,7 @@ def venv_identity(host_python: pathlib.Path) -> dict[str, object]:
             if total_bytes > 512 * 1024 * 1024 or len(files) >= 20_000:
                 raise EvidenceError("production venv exceeds its identity limits")
             relative = candidate.relative_to(venv_root).as_posix()
-            files.append(
-                {"path": relative, "size": len(raw), "sha256": _sha256(raw)}
-            )
+            files.append({"path": relative, "size": len(raw), "sha256": _sha256(raw)})
             file_paths.add(candidate.resolve(strict=True))
 
     packages: list[dict[str, str]] = []
@@ -973,9 +1144,10 @@ def venv_identity(host_python: pathlib.Path) -> dict[str, object]:
             raise EvidenceError("production venv distribution metadata is unsafe")
         metadata_path = dist_info / "METADATA"
         record_path = dist_info / "RECORD"
-        if metadata_path.resolve(strict=True) not in file_paths or record_path.resolve(
-            strict=True
-        ) not in file_paths:
+        if (
+            metadata_path.resolve(strict=True) not in file_paths
+            or record_path.resolve(strict=True) not in file_paths
+        ):
             raise EvidenceError("production venv distribution lacks METADATA or RECORD")
         metadata_raw = metadata_path.read_bytes()
         record_raw = record_path.read_bytes()
@@ -984,7 +1156,9 @@ def venv_identity(host_python: pathlib.Path) -> dict[str, object]:
         version = str(message.get("Version", "")).strip()
         normalized = _normalized_package_name(name)
         if not normalized or not version or normalized in package_names:
-            raise EvidenceError("production venv contains duplicate or invalid packages")
+            raise EvidenceError(
+                "production venv contains duplicate or invalid packages"
+            )
         package_names.add(normalized)
         try:
             record_rows = list(csv.reader(io.StringIO(record_raw.decode("utf-8"))))
@@ -999,9 +1173,13 @@ def venv_identity(host_python: pathlib.Path) -> dict[str, object]:
                 target = lexical.resolve(strict=True)
                 target.relative_to(venv_root.resolve(strict=True))
             except (OSError, ValueError) as error:
-                raise EvidenceError("production venv RECORD points outside the venv") from error
+                raise EvidenceError(
+                    "production venv RECORD points outside the venv"
+                ) from error
             if target in seen_records or target not in file_paths:
-                raise EvidenceError("production venv RECORD target is duplicate or missing")
+                raise EvidenceError(
+                    "production venv RECORD target is duplicate or missing"
+                )
             seen_records.add(target)
         packages.append(
             {
@@ -1012,10 +1190,15 @@ def venv_identity(host_python: pathlib.Path) -> dict[str, object]:
             }
         )
     if not packages:
-        raise EvidenceError("production venv contains no installed distribution metadata")
+        raise EvidenceError(
+            "production venv contains no installed distribution metadata"
+        )
 
     canonical = json.dumps(
-        {"files": sorted(files, key=lambda item: str(item["path"])), "packages": packages},
+        {
+            "files": sorted(files, key=lambda item: str(item["path"])),
+            "packages": packages,
+        },
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
@@ -1126,7 +1309,9 @@ def validate_git_metadata(root: pathlib.Path) -> None:
                 metadata = candidate.lstat()
                 relative = candidate.relative_to(git_dir)
             except (OSError, ValueError) as error:
-                raise EvidenceError("deployment Git metadata changed during validation") from error
+                raise EvidenceError(
+                    "deployment Git metadata changed during validation"
+                ) from error
             expected_directory = name in names
             if (
                 candidate.is_symlink()
@@ -1135,9 +1320,7 @@ def validate_git_metadata(root: pathlib.Path) -> None:
                 or (expected_directory and not stat.S_ISDIR(metadata.st_mode))
                 or (not expected_directory and not stat.S_ISREG(metadata.st_mode))
             ):
-                raise EvidenceError(
-                    "deployment Git metadata contains an unsafe entry"
-                )
+                raise EvidenceError("deployment Git metadata contains an unsafe entry")
             if relative in forbidden:
                 raise EvidenceError(
                     "deployment Git metadata may not use external object stores"
@@ -1208,7 +1391,9 @@ def validate_immutable_source_materialization(
         or root_metadata.st_uid != os.geteuid()
         or stat.S_IMODE(root_metadata.st_mode) & 0o022
     ):
-        raise EvidenceError("deployment source root must be current-owner and symlink-free")
+        raise EvidenceError(
+            "deployment source root must be current-owner and symlink-free"
+        )
     raw_paths = _git_bytes(root, git_executable, "ls-files", "-z")
     try:
         relative_paths = [
@@ -1251,7 +1436,9 @@ def validate_immutable_source_materialization(
             metadata = candidate.lstat()
             candidate.resolve(strict=True).relative_to(resolved_root)
         except (OSError, ValueError) as error:
-            raise EvidenceError("tracked source file is unavailable or escapes the root") from error
+            raise EvidenceError(
+                "tracked source file is unavailable or escapes the root"
+            ) from error
         if (
             candidate.is_symlink()
             or not stat.S_ISREG(metadata.st_mode)
@@ -1259,7 +1446,9 @@ def validate_immutable_source_materialization(
             or metadata.st_uid != os.geteuid()
             or stat.S_IMODE(metadata.st_mode) & 0o222
         ):
-            raise EvidenceError("tracked deployment source must be immutable regular files")
+            raise EvidenceError(
+                "tracked deployment source must be immutable regular files"
+            )
         expected_mode, expected_object_id = expected_entries[relative]
         actual_mode = "100755" if metadata.st_mode & stat.S_IXUSR else "100644"
         if actual_mode != expected_mode:
@@ -1292,8 +1481,11 @@ def validate_immutable_source_materialization(
 
 
 def _timestamp(now: datetime) -> str:
-    return now.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace(
-        "+00:00", "Z"
+    return (
+        now.astimezone(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
     )
 
 
@@ -1362,6 +1554,15 @@ def placeholder_evidence(status: str, expected_release_sha: str) -> dict[str, ob
         "fixed_host_backup_evidence_identity_sha256": "",
         "fixed_host_backup_subject_sha256": "",
         "fixed_host_backup_run_id": "",
+        "installer_drill_evidence_identity_sha256": "",
+        "installer_drill_subject_sha256": "",
+        "installer_drill_run_id": "",
+        "installer_drill_review_status": "",
+        "legacy_billing_containment_required": False,
+        "legacy_billing_status_identity_sha256": "",
+        "legacy_billing_status_subject_sha256": "",
+        "legacy_billing_current_inventory_sha256": "",
+        "legacy_billing_status_observed_at": "",
         "private_gate_input_snapshot_sha256": "",
         "host_python_realpath": "",
         "host_python_sha256": "",
@@ -1414,13 +1615,21 @@ def build_pass_evidence(
         remote_main_sha,
     ) = source_identity(root, git_path)
     if release_sha != args.expected_release_sha:
-        raise EvidenceError("production preflight release SHA does not match the expected SHA")
+        raise EvidenceError(
+            "production preflight release SHA does not match the expected SHA"
+        )
     if branch != "main":
-        raise EvidenceError("production preflight evidence may be issued only from main")
+        raise EvidenceError(
+            "production preflight evidence may be issued only from main"
+        )
     if not clean:
-        raise EvidenceError("production preflight evidence requires a clean source tree")
+        raise EvidenceError(
+            "production preflight evidence requires a clean source tree"
+        )
     if not published_origin_main:
-        raise EvidenceError("production preflight evidence requires HEAD to equal origin/main")
+        raise EvidenceError(
+            "production preflight evidence requires HEAD to equal origin/main"
+        )
     final_private_snapshot = _private_gate_input_snapshot(args)
     if (
         issuance_input_snapshot is not None
@@ -1433,6 +1642,10 @@ def build_pass_evidence(
     fixed_host_backup = _fixed_host_backup_evidence_identity(
         args, machine_id_path=machine_id_path
     )
+    installer_drill = _installer_drill_evidence_identity(
+        args, machine_id_path=machine_id_path
+    )
+    legacy_billing = _legacy_billing_containment_evidence_identity(args)
     host_python_realpath, host_python_sha256 = _regular_file_digest(
         host_python_path,
         label="host Python",
@@ -1443,7 +1656,7 @@ def build_pass_evidence(
     git_realpath, git_sha256 = _regular_file_digest(
         git_path, label="Git executable", reject_symlink=True
     )
-    container_image_ids, container_images_sha256 = container_image_identity()
+    container_image_ids, container_images_sha256 = container_image_identity(release_sha)
     return {
         "schema_version": EVIDENCE_SCHEMA,
         "status": "pass",
@@ -1465,6 +1678,8 @@ def build_pass_evidence(
         ),
         **production_runtime,
         **fixed_host_backup,
+        **installer_drill,
+        **legacy_billing,
         "host_python_realpath": host_python_realpath,
         "host_python_sha256": host_python_sha256,
         **runtime,
@@ -1489,6 +1704,8 @@ def validate_evidence_issuance_inputs(
     _cloudflare_evidence_identity(args)
     _production_runtime_evidence_identity(args)
     _fixed_host_backup_evidence_identity(args, machine_id_path=machine_id_path)
+    _installer_drill_evidence_identity(args, machine_id_path=machine_id_path)
+    _legacy_billing_containment_evidence_identity(args)
     _regular_file_digest(host_python_path, label="host Python", reject_symlink=True)
     venv_identity(host_python_path)
     validate_immutable_source_materialization(root, git_path)
@@ -1501,7 +1718,9 @@ def validate_evidence_issuance_inputs(
         or not clean
         or not published
     ):
-        raise EvidenceError("evidence issuance requires the current clean published main")
+        raise EvidenceError(
+            "evidence issuance requires the current clean published main"
+        )
     private_snapshot = _private_gate_input_snapshot(args)
     stable_host_identity(machine_id_path)
     return private_snapshot
@@ -1512,11 +1731,20 @@ def atomic_write_evidence(path: pathlib.Path, payload: dict[str, object]) -> Non
     try:
         parent_metadata = parent.lstat()
     except OSError as error:
-        raise EvidenceError("production preflight evidence parent is unavailable") from error
+        raise EvidenceError(
+            "production preflight evidence parent is unavailable"
+        ) from error
     if parent.is_symlink() or not stat.S_ISDIR(parent_metadata.st_mode):
-        raise EvidenceError("production preflight evidence parent must be a real directory")
-    if parent_metadata.st_uid != os.geteuid() or stat.S_IMODE(parent_metadata.st_mode) & 0o077:
-        raise EvidenceError("production preflight evidence parent must be current-owner-only")
+        raise EvidenceError(
+            "production preflight evidence parent must be a real directory"
+        )
+    if (
+        parent_metadata.st_uid != os.geteuid()
+        or stat.S_IMODE(parent_metadata.st_mode) & 0o077
+    ):
+        raise EvidenceError(
+            "production preflight evidence parent must be current-owner-only"
+        )
     try:
         existing = path.lstat()
     except FileNotFoundError:
@@ -1528,9 +1756,13 @@ def atomic_write_evidence(path: pathlib.Path, payload: dict[str, object]) -> Non
         or existing.st_uid != os.geteuid()
         or stat.S_IMODE(existing.st_mode) != 0o600
     ):
-        raise EvidenceError("existing production preflight evidence must be current-owner mode 0600")
+        raise EvidenceError(
+            "existing production preflight evidence must be current-owner mode 0600"
+        )
 
-    encoded = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    encoded = (
+        json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
     if len(encoded) > EVIDENCE_MAX_BYTES:
         raise EvidenceError("production preflight evidence exceeds its size limit")
     descriptor, temporary_name = tempfile.mkstemp(
@@ -1572,7 +1804,9 @@ def create_evidence_exclusive(path: pathlib.Path, payload: dict[str, object]) ->
         or stat.S_IMODE(metadata.st_mode) != 0o700
     ):
         raise EvidenceError("production preflight evidence parent must be mode 0700")
-    encoded = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    encoded = (
+        json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -1615,7 +1849,9 @@ def consume_evidence(
         or directory_metadata.st_uid != os.geteuid()
         or stat.S_IMODE(directory_metadata.st_mode) != 0o700
     ):
-        raise EvidenceError("production evidence consumption directory must be mode 0700")
+        raise EvidenceError(
+            "production evidence consumption directory must be mode 0700"
+        )
     claim = consumption_dir / f"{nonce}.claim"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
     if hasattr(os, "O_NOFOLLOW"):
@@ -1623,7 +1859,9 @@ def consume_evidence(
     try:
         claim_descriptor = os.open(claim, flags, 0o600)
     except OSError as error:
-        raise EvidenceError("production preflight evidence was already consumed") from error
+        raise EvidenceError(
+            "production preflight evidence was already consumed"
+        ) from error
     os.close(claim_descriptor)
     destination = consumption_dir / f"{nonce}.evidence.json"
     failed_destination = consumption_dir / f"{nonce}.failed.json"
@@ -1646,15 +1884,23 @@ def consume_evidence(
 
 
 def _parse_created_at(raw: object) -> datetime:
-    if not isinstance(raw, str) or re.fullmatch(
-        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z",
-        raw,
-    ) is None:
-        raise EvidenceError("production preflight evidence created_at is not canonical UTC")
+    if (
+        not isinstance(raw, str)
+        or re.fullmatch(
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z",
+            raw,
+        )
+        is None
+    ):
+        raise EvidenceError(
+            "production preflight evidence created_at is not canonical UTC"
+        )
     try:
         parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError as error:
-        raise EvidenceError("production preflight evidence created_at is invalid") from error
+        raise EvidenceError(
+            "production preflight evidence created_at is invalid"
+        ) from error
     if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
         raise EvidenceError("production preflight evidence created_at must be UTC")
     return parsed
@@ -1669,7 +1915,9 @@ def verify_evidence(
     machine_id_path: pathlib.Path = FIXED_MACHINE_ID_PATH,
 ) -> dict[str, object]:
     if not args.production or args.live:
-        raise EvidenceError("production preflight evidence is valid only before a production deploy")
+        raise EvidenceError(
+            "production preflight evidence is valid only before a production deploy"
+        )
     try:
         raw = read_private_file(
             path,
@@ -1681,9 +1929,16 @@ def verify_evidence(
         raise EvidenceError(str(error)) from error
     payload = _strict_json_object(raw)
     if set(payload) != EVIDENCE_KEYS:
-        raise EvidenceError("production preflight evidence fields are incomplete or unknown")
-    if payload.get("schema_version") != EVIDENCE_SCHEMA or payload.get("status") != "pass":
-        raise EvidenceError("production preflight evidence is not a completed passing artifact")
+        raise EvidenceError(
+            "production preflight evidence fields are incomplete or unknown"
+        )
+    if (
+        payload.get("schema_version") != EVIDENCE_SCHEMA
+        or payload.get("status") != "pass"
+    ):
+        raise EvidenceError(
+            "production preflight evidence is not a completed passing artifact"
+        )
     checked_at = now or datetime.now(timezone.utc)
     created_at = _parse_created_at(payload.get("created_at"))
     age = checked_at - created_at
@@ -1697,12 +1952,13 @@ def verify_evidence(
         or payload.get("published_origin_main") is not True
         or payload.get("remote_url") != EXPECTED_REMOTE_URL
         or payload.get("deployment_id") != args.deployment_id
-        or payload.get("host_identity_sha256")
-        != stable_host_identity(machine_id_path)
+        or payload.get("host_identity_sha256") != stable_host_identity(machine_id_path)
         or not isinstance(payload.get("nonce"), str)
         or NONCE.fullmatch(str(payload.get("nonce"))) is None
     ):
-        raise EvidenceError("production preflight evidence has an invalid deployment mode")
+        raise EvidenceError(
+            "production preflight evidence has an invalid deployment mode"
+        )
     expected_release_sha = str(args.expected_release_sha or "")
     if RELEASE_SHA.fullmatch(expected_release_sha) is None:
         raise EvidenceError("expected deployment release SHA is not canonical")
@@ -1726,7 +1982,9 @@ def verify_evidence(
         or payload.get("remote_url") != remote_url
         or payload.get("remote_main_sha") != remote_main_sha
     ):
-        raise EvidenceError("production preflight evidence does not bind the current clean main release")
+        raise EvidenceError(
+            "production preflight evidence does not bind the current clean main release"
+        )
 
     configured = load_private_env_file(pathlib.Path(args.env_file))
     reject_conflicting_inherited_environment(configured, dict(os.environ))
@@ -1735,6 +1993,10 @@ def verify_evidence(
     fixed_host_backup = _fixed_host_backup_evidence_identity(
         args, machine_id_path=machine_id_path
     )
+    installer_drill = _installer_drill_evidence_identity(
+        args, machine_id_path=machine_id_path
+    )
+    legacy_billing = _legacy_billing_containment_evidence_identity(args)
     host_python_realpath, host_python_sha256 = _regular_file_digest(
         host_python_path,
         label="host Python",
@@ -1745,26 +2007,23 @@ def verify_evidence(
     git_realpath, git_sha256 = _regular_file_digest(
         git_path, label="Git executable", reject_symlink=True
     )
-    container_image_ids, container_images_sha256 = container_image_identity()
+    container_image_ids, container_images_sha256 = container_image_identity(
+        expected_release_sha
+    )
     if (
         any(payload.get(key) != value for key, value in private_snapshot.items())
         or payload.get("private_gate_input_snapshot_sha256")
         != _identity_snapshot_sha256(private_snapshot)
         or type(payload.get("production_runtime_file_count")) is not int
         or type(payload.get("production_runtime_byte_count")) is not int
-        or any(
-            payload.get(key) != value
-            for key, value in production_runtime.items()
-        )
-        or any(
-            payload.get(key) != value
-            for key, value in fixed_host_backup.items()
-        )
+        or any(payload.get(key) != value for key, value in production_runtime.items())
+        or any(payload.get(key) != value for key, value in fixed_host_backup.items())
+        or any(payload.get(key) != value for key, value in installer_drill.items())
+        or any(payload.get(key) != value for key, value in legacy_billing.items())
         or payload.get("host_python_realpath") != host_python_realpath
         or payload.get("host_python_sha256") != host_python_sha256
         or payload.get("venv_root") != runtime["venv_root"]
-        or payload.get("venv_identity_sha256")
-        != runtime["venv_identity_sha256"]
+        or payload.get("venv_identity_sha256") != runtime["venv_identity_sha256"]
         or type(payload.get("venv_file_count")) is not int
         or payload.get("venv_file_count") != runtime["venv_file_count"]
         or type(payload.get("venv_package_count")) is not int
@@ -1777,7 +2036,9 @@ def verify_evidence(
         or payload.get("container_images_sha256") != container_images_sha256
         or payload.get("container_image_ids") != container_image_ids
     ):
-        raise EvidenceError("production preflight evidence inputs changed after the gate ran")
+        raise EvidenceError(
+            "production preflight evidence inputs changed after the gate ran"
+        )
 
     gate_results = payload.get("gate_results")
     if not isinstance(gate_results, list):
@@ -1797,20 +2058,26 @@ def verify_evidence(
             "status",
             "returncode",
         }:
-            raise EvidenceError("production preflight evidence gate result is malformed")
+            raise EvidenceError(
+                "production preflight evidence gate result is malformed"
+            )
         if (
             type(result.get("status")) is not str
             or result.get("status") != "PASS"
             or type(result.get("returncode")) is not int
             or result.get("returncode") != 0
         ):
-            raise EvidenceError("production preflight evidence contains a non-passing gate")
+            raise EvidenceError(
+                "production preflight evidence contains a non-passing gate"
+            )
         name = result.get("name")
         if not isinstance(name, str):
             raise EvidenceError("production preflight evidence gate name is malformed")
         actual_names.append(name)
     if actual_names != expected_names or len(set(actual_names)) != len(actual_names):
-        raise EvidenceError("production preflight evidence does not contain the complete gate set")
+        raise EvidenceError(
+            "production preflight evidence does not contain the complete gate set"
+        )
     return {
         "schema_version": 1,
         "status": "pass",
@@ -1845,7 +2112,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--require-legacy",
         action="store_true",
-        help="Require sibling legacy checkout evidence",
+        help="Require a fresh exact-account read-only legacy billing containment artifact",
     )
     parser.add_argument(
         "--env-file",
@@ -1944,6 +2211,8 @@ def main(argv: list[str]) -> int:
 
     if args.production and not args.pages_bindings_file:
         parser.error("--production requires --pages-bindings-file")
+    if args.require_legacy and not args.production:
+        parser.error("--require-legacy requires --production")
     if args.live and not args.production:
         parser.error("--live requires --production")
     if args.production and not args.host_python:
@@ -1955,9 +2224,7 @@ def main(argv: list[str]) -> int:
             or not host_python.is_file()
             or not os.access(host_python, os.X_OK)
         ):
-            parser.error(
-                "--host-python must be an existing executable absolute path"
-            )
+            parser.error("--host-python must be an existing executable absolute path")
         args.check_host_python = True
         for option, value in (
             ("--node-executable", args.node_executable),
@@ -1976,7 +2243,9 @@ def main(argv: list[str]) -> int:
             parser.error("--production requires --wrangler-entrypoint")
         wrangler_entrypoint = pathlib.Path(args.wrangler_entrypoint)
         if not wrangler_entrypoint.is_absolute() or not wrangler_entrypoint.is_file():
-            parser.error("--wrangler-entrypoint must be an existing regular absolute path")
+            parser.error(
+                "--wrangler-entrypoint must be an existing regular absolute path"
+            )
         if DEPLOYMENT_ID.fullmatch(args.deployment_id or "") is None:
             parser.error("--deployment-id is invalid")
     if args.evidence_output and (

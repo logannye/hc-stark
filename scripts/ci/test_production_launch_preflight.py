@@ -63,6 +63,13 @@ def test_local_preflight_builds_fast_static_gate_sequence():
             "pytest",
             "scripts/ci/test_fixed_host_backup_evidence.py",
         ),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "scripts/ci/test_installer_drill_evidence.py",
+            "scripts/ci/test_legacy_billing_containment_status.py",
+        ),
         ("python", "scripts/ci/site_route_check.py"),
         ("python", "-m", "pytest", "scripts/ci/test_site_route_check.py"),
         (
@@ -98,7 +105,14 @@ def test_local_preflight_builds_fast_static_gate_sequence():
             "billing/tests/test_evaluation_start_ready.py",
             "billing/tests/test_stripe_production_identity_check.py",
         ),
-        ("python", "-m", "pytest", "scripts/commercial/test_validate_scorecard.py"),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "scripts/commercial/test_validate_scorecard.py",
+            "scripts/commercial/test_evaluation_qualification.py",
+            "scripts/commercial/test_partner_preflight.py",
+        ),
         ("python", "scripts/ci/site_deploy_check.py"),
         (
             "python",
@@ -114,10 +128,17 @@ def test_local_preflight_builds_fast_static_gate_sequence():
             "scripts/ci/test_cloudflare_pages_secret_check.py",
             "scripts/ci/test_cloudflare_toolchain_check.py",
         ),
+        (
+            "python",
+            "-m",
+            "pytest",
+            "scripts/deploy/test_cloudflare_pages_release.py",
+        ),
         ("python", "scripts/ci/cloudflare_toolchain_check.py"),
         ("node", "scripts/ci/site_worker_dispatch_test.mjs"),
         ("python", "scripts/ci/compose_config_check.py"),
         ("python", "-m", "pytest", "scripts/ci/test_billing_service_hardening.py"),
+        ("python", "-m", "pytest", "deploy/hetzner/test_deployment_transaction.py"),
         ("python", "scripts/ci/deploy_readiness_check.py", "--env-file", ".env"),
     ]
 
@@ -161,6 +182,17 @@ def test_production_adds_stricter_deploy_gates():
     assert (
         "/usr/bin/python3",
         "scripts/ci/fixed_host_backup_evidence.py",
+        "--expected-release-sha",
+        "0" * 40,
+        "--expected-deployment-id",
+        preflight.DEFAULT_DEPLOYMENT_ID,
+        "--machine-id-file",
+        "/etc/machine-id",
+    ) in commands(built)
+    assert (
+        "/usr/bin/python3",
+        "scripts/ci/installer_drill_evidence.py",
+        "verify",
         "--expected-release-sha",
         "0" * 40,
         "--expected-deployment-id",
@@ -233,6 +265,50 @@ def test_production_build_always_enables_host_checks():
         "--host-python",
         "/var/lib/tinyzkp-runtime/billing-venv/bin/python",
     ) in commands(built)
+
+
+def test_require_legacy_adds_fresh_live_containment_artifact_gate():
+    built = preflight.build_steps(
+        args(
+            production=True,
+            require_legacy=True,
+            pages_bindings_file="/secure/pages.env",
+            env_file="/opt/hc-stark/.env",
+            host_python="/var/lib/tinyzkp-runtime/billing-venv/bin/python",
+            expected_release_sha="a" * 40,
+        ),
+        python="python",
+        node="node",
+    )
+
+    assert (
+        "/usr/bin/python3",
+        "scripts/ci/legacy_billing_containment_status.py",
+        "verify",
+        "--env-file",
+        "/opt/hc-stark/.env",
+        "--expected-release-sha",
+        "a" * 40,
+        "--expected-deployment-id",
+        preflight.DEFAULT_DEPLOYMENT_ID,
+    ) in commands(built)
+
+    without = preflight.build_steps(
+        args(
+            production=True,
+            require_legacy=False,
+            pages_bindings_file="/secure/pages.env",
+            env_file="/opt/hc-stark/.env",
+            host_python="/var/lib/tinyzkp-runtime/billing-venv/bin/python",
+            expected_release_sha="a" * 40,
+        ),
+        python="python",
+        node="node",
+    )
+    assert not any(
+        "legacy_billing_containment_status.py" in command
+        for command in commands(without)
+    )
 
 
 def test_production_build_rejects_omitted_host_python():
@@ -414,14 +490,18 @@ def test_live_cli_requires_expected_release_sha(monkeypatch):
     assert exc.value.code == 2
 
 
+def test_require_legacy_cli_requires_complete_production_mode():
+    with pytest.raises(SystemExit) as exc:
+        preflight.main(["--require-legacy"])
+    assert exc.value.code == 2
+
+
 def test_production_cli_requires_explicit_existing_host_python(tmp_path):
     bindings = tmp_path / "pages.env"
     bindings.write_text("placeholder\n", encoding="utf-8")
 
     with pytest.raises(SystemExit) as omitted:
-        preflight.main(
-            ["--production", "--pages-bindings-file", str(bindings)]
-        )
+        preflight.main(["--production", "--pages-bindings-file", str(bindings)])
     assert omitted.value.code == 2
 
     with pytest.raises(SystemExit) as missing:
@@ -519,6 +599,27 @@ def _production_evidence_fixture(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         preflight,
+        "_installer_drill_evidence_identity",
+        lambda _args, **_kwargs: {
+            "installer_drill_evidence_identity_sha256": "4" * 64,
+            "installer_drill_subject_sha256": "5" * 64,
+            "installer_drill_run_id": "6" * 32,
+            "installer_drill_review_status": "unreviewed",
+        },
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_legacy_billing_containment_evidence_identity",
+        lambda _args: {
+            "legacy_billing_containment_required": False,
+            "legacy_billing_status_identity_sha256": "",
+            "legacy_billing_status_subject_sha256": "",
+            "legacy_billing_current_inventory_sha256": "",
+            "legacy_billing_status_observed_at": "",
+        },
+    )
+    monkeypatch.setattr(
+        preflight,
         "cloudflare_toolchain_identity",
         lambda _node, _wrangler: {
             "profile_id": "tinyzkp-cloudflare-production-v1",
@@ -540,10 +641,10 @@ def _production_evidence_fixture(tmp_path, monkeypatch):
     monkeypatch.setattr(
         preflight,
         "container_image_identity",
-        lambda: (
+        lambda _release_sha: (
             {
-                "hc-stark-hc-server:latest": "sha256:" + "e" * 64,
-                "hc-stark-hc-mcp:latest": "sha256:" + "f" * 64,
+                f"tinyzkp/hc-server:{release_sha}": "sha256:" + "e" * 64,
+                f"tinyzkp/hc-mcp:{release_sha}": "sha256:" + "f" * 64,
             },
             "9" * 64,
         ),
@@ -580,8 +681,8 @@ def test_complete_production_evidence_round_trip(tmp_path, monkeypatch):
         "complete_gate_set": True,
         "container_images_sha256": "9" * 64,
         "container_image_ids": {
-            "hc-stark-hc-server:latest": "sha256:" + "e" * 64,
-            "hc-stark-hc-mcp:latest": "sha256:" + "f" * 64,
+            "tinyzkp/hc-server:" + "a" * 40: "sha256:" + "e" * 64,
+            "tinyzkp/hc-mcp:" + "a" * 40: "sha256:" + "f" * 64,
         },
     }
     assert evidence.stat().st_mode & 0o777 == 0o600
@@ -630,9 +731,7 @@ def test_production_evidence_rejects_changed_cloudflare_materialization(
         preflight.verify_evidence(evidence, configured, now=now)
 
 
-def test_production_evidence_rejects_changed_backup_credential(
-    tmp_path, monkeypatch
-):
+def test_production_evidence_rejects_changed_backup_credential(tmp_path, monkeypatch):
     configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
     evidence = tmp_path / "preflight.json"
     payload = preflight.build_pass_evidence(configured, results, now=now)
@@ -652,9 +751,7 @@ def test_production_evidence_rejects_changed_backup_credential(
         preflight.verify_evidence(evidence, configured, now=now)
 
 
-def test_evidence_rejects_private_input_rotation_while_gates_run(
-    tmp_path, monkeypatch
-):
+def test_evidence_rejects_private_input_rotation_while_gates_run(tmp_path, monkeypatch):
     configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
     initial = preflight._private_gate_input_snapshot(configured)
     monkeypatch.setattr(
@@ -712,6 +809,67 @@ def test_production_evidence_rejects_changed_fixed_host_backup_evidence(
             "fixed_host_backup_evidence_identity_sha256": "4" * 64,
             "fixed_host_backup_subject_sha256": "2" * 64,
             "fixed_host_backup_run_id": "3" * 32,
+        },
+    )
+
+    with pytest.raises(preflight.EvidenceError, match="inputs changed"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_production_evidence_rejects_changed_installer_drill_evidence(
+    tmp_path, monkeypatch
+):
+    configured, results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    evidence = tmp_path / "preflight.json"
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    preflight.atomic_write_evidence(evidence, payload)
+    monkeypatch.setattr(
+        preflight,
+        "_installer_drill_evidence_identity",
+        lambda _args, **_kwargs: {
+            "installer_drill_evidence_identity_sha256": "7" * 64,
+            "installer_drill_subject_sha256": "5" * 64,
+            "installer_drill_run_id": "6" * 32,
+            "installer_drill_review_status": "unreviewed",
+        },
+    )
+
+    with pytest.raises(preflight.EvidenceError, match="inputs changed"):
+        preflight.verify_evidence(evidence, configured, now=now)
+
+
+def test_production_evidence_binds_required_legacy_containment_status(
+    tmp_path, monkeypatch
+):
+    configured, _results, now = _production_evidence_fixture(tmp_path, monkeypatch)
+    configured.require_legacy = True
+    current = {
+        "legacy_billing_containment_required": True,
+        "legacy_billing_status_identity_sha256": "8" * 64,
+        "legacy_billing_status_subject_sha256": "9" * 64,
+        "legacy_billing_current_inventory_sha256": "a" * 64,
+        "legacy_billing_status_observed_at": "2026-07-10T20:00:00Z",
+    }
+    monkeypatch.setattr(
+        preflight,
+        "_legacy_billing_containment_evidence_identity",
+        lambda _args: current,
+    )
+    steps = preflight.build_steps(configured, python=sys.executable, node="node")
+    results = [
+        preflight.StepResult(step.name, "PASS", step.command, returncode=0)
+        for step in steps
+    ]
+    evidence = tmp_path / "preflight.json"
+    payload = preflight.build_pass_evidence(configured, results, now=now)
+    assert payload["legacy_billing_containment_required"] is True
+    preflight.atomic_write_evidence(evidence, payload)
+    monkeypatch.setattr(
+        preflight,
+        "_legacy_billing_containment_evidence_identity",
+        lambda _args: {
+            **current,
+            "legacy_billing_status_identity_sha256": "b" * 64,
         },
     )
 
@@ -841,7 +999,9 @@ def test_production_evidence_rejects_duplicate_json_symlink_and_bad_mode(
 
 def test_atomic_evidence_requires_owner_only_parent(tmp_path):
     tmp_path.chmod(0o755)
-    with pytest.raises(preflight.EvidenceError, match="parent must be current-owner-only"):
+    with pytest.raises(
+        preflight.EvidenceError, match="parent must be current-owner-only"
+    ):
         preflight.atomic_write_evidence(
             tmp_path / "preflight.json",
             preflight.placeholder_evidence("in_progress", "a" * 40),
@@ -893,22 +1053,27 @@ def test_source_identity_requires_clean_published_main(tmp_path):
     (repository / "tracked").write_text("one\n", encoding="utf-8")
     subprocess.run(["git", "add", "tracked"], cwd=repository, check=True)
     subprocess.run(["git", "commit", "-q", "-m", "test"], cwd=repository, check=True)
-    subprocess.run(["git", "remote", "add", "origin", str(repository)], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", str(repository)], cwd=repository, check=True
+    )
 
     git_executable = pathlib.Path(
         subprocess.run(
             ["which", "git"], text=True, capture_output=True, check=True
         ).stdout.strip()
     )
-    release_sha, branch, clean, published, remote_url, remote_sha = preflight.source_identity(
-        repository, git_executable, str(repository)
+    release_sha, branch, clean, published, remote_url, remote_sha = (
+        preflight.source_identity(repository, git_executable, str(repository))
     )
     assert preflight.RELEASE_SHA.fullmatch(release_sha)
     assert (branch, clean, published) == ("main", True, True)
     assert (remote_url, remote_sha) == (str(repository), release_sha)
 
     (repository / "tracked").write_text("changed\n", encoding="utf-8")
-    assert preflight.source_identity(repository, git_executable, str(repository))[2] is False
+    assert (
+        preflight.source_identity(repository, git_executable, str(repository))[2]
+        is False
+    )
 
 
 def test_source_identity_ignores_repo_local_remote_rewrites(tmp_path):
@@ -973,14 +1138,15 @@ def test_venv_identity_hashes_all_files_and_rejects_symlinks(tmp_path):
     dist = site / "demo-1.0.dist-info"
     dist.mkdir(parents=True)
     python = venv / "bin" / "python"
-    python.write_bytes(pathlib.Path(shutil.which("true") or "/usr/bin/true").read_bytes())
+    python.write_bytes(
+        pathlib.Path(shutil.which("true") or "/usr/bin/true").read_bytes()
+    )
     (venv / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
     metadata = dist / "METADATA"
     record = dist / "RECORD"
     metadata.write_text("Name: demo\nVersion: 1.0\n", encoding="utf-8")
     record.write_text(
-        "demo-1.0.dist-info/METADATA,,\n"
-        "demo-1.0.dist-info/RECORD,,\n",
+        "demo-1.0.dist-info/METADATA,,\ndemo-1.0.dist-info/RECORD,,\n",
         encoding="utf-8",
     )
     for directory in (venv, venv / "bin", venv / "lib", site.parent, site, dist):

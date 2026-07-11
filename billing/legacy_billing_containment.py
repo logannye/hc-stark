@@ -19,9 +19,18 @@ import os
 from pathlib import Path
 import re
 import stat
+import sys
 from typing import Any, Iterable
 
 import stripe
+
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts" / "ci"))
+from deploy_readiness_check import (  # noqa: E402
+    load_private_env_file,
+    reject_conflicting_inherited_environment,
+)
 
 
 STRIPE_API_VERSION = "2026-02-25.clover"
@@ -204,6 +213,9 @@ class Inventory:
                         "id": _object_id(item),
                         "customer_id": _related_id(_value(item, "customer")),
                         "status": str(_value(item, "status", "")),
+                        "pause_collection_behavior": str(
+                            _nested(item, "pause_collection", "behavior") or ""
+                        ),
                         "product_ids": sorted(subscription_product_ids(item)),
                     }
                     for item in self.subscriptions
@@ -554,18 +566,43 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--apply-catalog", action="store_true")
     parser.add_argument("--pause-notified-subscriptions", action="store_true")
     parser.add_argument("--notification-ledger", type=Path)
+    parser.add_argument(
+        "--env-file",
+        type=Path,
+        help="Owner-only production environment file; avoids shell-sourcing Stripe credentials",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+    configured: dict[str, str] = {}
+    if args.env_file is not None:
+        configured = load_private_env_file(args.env_file)
+        reject_conflicting_inherited_environment(
+            configured,
+            dict(os.environ),
+            keys={
+                "STRIPE_SECRET_KEY",
+                "STRIPE_EXPECTED_ACCOUNT_ID",
+                "STRIPE_EXPECTED_DISPLAY_NAME",
+            },
+        )
+    stripe.api_key = configured.get("STRIPE_SECRET_KEY") or os.environ.get(
+        "STRIPE_SECRET_KEY"
+    )
     stripe.api_version = STRIPE_API_VERSION
     if not stripe.api_key:
         raise SystemExit("STRIPE_SECRET_KEY is required")
 
     account = stripe.Account.retrieve()
-    verify_account(account, args.expected_account_id or "", args.expected_display_name or "")
+    verify_account(
+        account,
+        args.expected_account_id
+        or configured.get("STRIPE_EXPECTED_ACCOUNT_ID", ""),
+        args.expected_display_name
+        or configured.get("STRIPE_EXPECTED_DISPLAY_NAME", ""),
+    )
     inventory = collect_inventory(account)
     document = inventory.document(account)
     digest = _sha256(document)

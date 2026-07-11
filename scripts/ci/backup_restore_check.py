@@ -106,11 +106,22 @@ REQUIRED_MARKERS = {
         "CREATE TABLE IF NOT EXISTS verify_log",
         "CREATE TABLE IF NOT EXISTS failed_proofs",
     ),
-    "deploy/hetzner/setup.sh": (
-        "/etc/cron.d/hc-billing",
-        "rm -f /etc/cron.d/hc-backup",
+    "deploy/hetzner/hc-billing.cron": (
         "/opt/hc-stark/billing/backup.sh",
-        "HC_BACKUP_REMOTE",
+        "evaluation_intake.py",
+        "purge-expired --apply",
+    ),
+    "deploy/hetzner/deployment_transaction.py": (
+        '"cron": REPO / "deploy/hetzner/hc-billing.cron"',
+        '"cron": pathlib.Path("/etc/cron.d/hc-billing")',
+        "_snapshot_configs",
+        "_restore_configs",
+    ),
+    "deploy/hetzner/setup.sh": (
+        "RELEASE AUTHORITY: NONE",
+        "/var/lib/tinyzkp-private/backup",
+        "/opt/hc-stark/backups",
+        "create-loader-token",
     ),
 }
 
@@ -123,6 +134,12 @@ FORBIDDEN_MARKERS = {
         "/v1/ping",
         "usage_events",
         "source /opt/hc-stark/.env",
+    ),
+    "deploy/hetzner/setup.sh": (
+        "/etc/cron.d/hc-billing",
+        "systemctl start",
+        "systemctl enable",
+        "apt-get install",
     ),
 }
 

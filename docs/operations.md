@@ -72,9 +72,9 @@ On Hetzner, the host-level billing webhook and hourly billing cron run from
 hash-locked `billing/requirements.lock`.
 Run that installer as a separate operator preparation step before creating
 production preflight evidence. The deploy script never installs or changes
-runtime packages; it verifies the byte-bound, read-only virtualenv, rewrites
-the billing cron and `hc-billing-webhook.service` definitions to use it, and
-then restarts the webhook.
+runtime packages; it verifies the byte-bound, read-only virtualenv, validates
+the canonical billing cron, Caddy, and `hc-billing-webhook.service` definitions,
+and installs them inside the same rollback transaction as the containers.
 
 The repository now pins one dependency profile only: Debian 12 x86-64,
 `/usr/bin` CPython 3.11, and `manylinux2014_x86_64` wheels. Exact direct roots,
@@ -167,6 +167,7 @@ under one operator command:
 
 ```sh
 scripts/ci/run_production_preflight.sh \
+  --require-legacy \
   --production \
   --env-file /opt/hc-stark/.env \
   --pages-bindings-file /var/lib/tinyzkp-private/deploy/pages-bindings.env \
@@ -179,6 +180,43 @@ scripts/ci/run_production_preflight.sh \
   --expected-release-sha "$(git rev-parse HEAD)" \
   --evidence-output /var/lib/tinyzkp-private/deploy/production-preflight.json
 ```
+
+`--require-legacy` is a real production gate, not a compatibility alias. It
+requires a fresh, owner-only read-only Stripe containment artifact at
+`/var/lib/tinyzkp-private/deploy/legacy-billing-containment-status.json`.
+Generate it only after an exact baseline inventory and reviewed scope manifest
+have classified every active Stripe object. The current inventory command is
+read-only; it neither archives nor pauses anything:
+
+```sh
+umask 077
+/var/lib/tinyzkp-runtime/billing-venv/bin/python \
+  billing/legacy_billing_containment.py \
+  --env-file /opt/hc-stark/.env \
+  --inventory-output /var/lib/tinyzkp-private/deploy/legacy-current.json
+
+OBSERVED_AT="$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ)"
+/usr/bin/python3 scripts/ci/legacy_billing_containment_status.py capture \
+  --baseline-inventory /var/lib/tinyzkp-private/deploy/legacy-baseline.json \
+  --current-inventory /var/lib/tinyzkp-private/deploy/legacy-current.json \
+  --scope-manifest /var/lib/tinyzkp-private/deploy/legacy-scope.json \
+  --notification-ledger /var/lib/tinyzkp-private/deploy/legacy-notifications.json \
+  --env-file /opt/hc-stark/.env \
+  --expected-release-sha "$(/usr/bin/git rev-parse HEAD)" \
+  --expected-deployment-id tinyzkp-production-primary \
+  --observed-at "$OBSERVED_AT"
+```
+
+The verifier recomputes both inventories and exact account identity, binds the
+reviewed TinyZKP selections and unrelated-object allowlist, and fails if a
+selected catalog object, Payment Link, meter, chargeable subscription, or open
+invoice remains. A selected subscription may remain visible only when Stripe
+reports `pause_collection.behavior=void` and the exact no-email notification
+and refund/credit/`none_due` resolution record is present. Any new active
+object absent from the reviewed baseline fails closed. The status expires
+after fifteen minutes and is rechecked when deployment evidence is consumed.
+Omit `--notification-ledger` only when the reviewed scope contains no legacy
+subscriptions or invoices.
 
 Run this from a clean `main` checkout whose `HEAD` equals the locally fetched
 remote `main` SHA at the reviewed GitHub URL. Before issuing evidence, run
@@ -243,18 +281,54 @@ passing gate is included. Rotating a backup credential or changing any bound
 runtime byte after preflight intentionally invalidates the short-lived deploy
 claim.
 
-`deploy/hetzner/deploy.sh` performs no fetch or pull after evidence creation.
-It verifies the artifact before changing the billing runtime, cron, systemd,
-containers, or Caddy:
+`deploy/hetzner/setup.sh` is filesystem bootstrap only. It has no release
+authority, installs no mutable packages, writes no live cron/unit/Caddy config,
+and never enables, reloads, or starts a service. A reviewed Debian base image
+must provide Docker, Caddy, Python, and `flock`; mutable "latest" package
+installation is explicitly outside the TinyZKP release path.
+
+`deploy/hetzner/deploy.sh` performs no fetch, pull, build, or package install
+after evidence creation. It verifies and consumes the artifact before changing
+cron, systemd, containers, or Caddy:
 
 ```sh
 deploy/hetzner/deploy.sh
 ```
 
-Deploy atomically consumes the artifact before its first mutation and starts
-the already-attested images with `--no-build`. Success,
-failure, interruption, or retry therefore requires a newly run preflight and a
-new nonce; the artifact is root self-attestation, not a separate human approval.
+Deploy takes an exclusive `flock`, opens an owner-only transaction ledger, and
+records the pre-deploy config bytes, modes, owners, service state, container
+image IDs, and prior known-containment record. It starts only
+`tinyzkp/hc-server:<release-sha>` and `tinyzkp/hc-mcp:<release-sha>` with
+`--no-build`; mutable `latest` tags are not accepted. Every staged config is
+validated before the first atomic replacement. The transaction helper repeats
+local health, fail-closed capabilities, legacy verification, and contact-gate
+checks before it will commit the release as known containment.
+
+ERR/EXIT/HUP/INT/TERM paths invoke rollback. When a prior known-containment
+release exists, rollback accepts only its exact 40-character SHA and restores
+its snapshotted configs, service state, and immutable images. On the first
+containment release there is no authorized legacy target, so failure stops API,
+MCP, webhook, and the legacy compose unit. A SIGKILL/power loss leaves the
+owner-only transaction active and blocks another deploy until the operator
+runs the exact recorded rollback command:
+
+```sh
+/opt/hc-stark/deploy/hetzner/rollback.sh <prior-known-containment-40-char-sha>
+```
+
+The command cannot select an arbitrary git revision or image. Do not remove or
+edit `active-deployment-transaction.json` manually. Success, failure,
+interruption, or retry requires a newly run preflight and nonce; the artifact
+is root self-attestation, not separate human approval.
+
+If `status` shows that the interrupted first containment transaction has no
+prior known release, use the explicit stop-only form instead:
+
+```sh
+/opt/hc-stark/deploy/hetzner/rollback.sh --fail-closed-no-prior
+```
+
+That form rejects a transaction which does have prior known containment.
 
 Hosted proving and authenticated proving smoke remain disabled. After API/MCP
 and Pages deploys finish, the public live canary is still blocked until a pinned,
@@ -267,7 +341,7 @@ commit and require all three surfaces to report it before announcing:
 ```sh
 CLOUDFLARE_API_TOKEN=REDACTED CLOUDFLARE_ACCOUNT_ID=REDACTED \
 scripts/ci/run_production_preflight.sh \
-  --production --live \
+  --require-legacy --production --live \
   --env-file /opt/hc-stark/.env \
   --pages-bindings-file /var/lib/tinyzkp-private/deploy/pages-bindings.env \
   --host-python /var/lib/tinyzkp-runtime/billing-venv/bin/python \
@@ -375,9 +449,22 @@ Run the site deploy preflight before every Pages deploy:
 python3 scripts/ci/site_deploy_check.py
 python3 scripts/ci/site_deploy_check.py --production --bindings-file /secure/tinyzkp-pages.env
 python3 scripts/ci/cloudflare_toolchain_check.py
+python3 -m pytest scripts/deploy/test_cloudflare_pages_release.py
 node scripts/ci/site_worker_dispatch_test.mjs
 node scripts/ci/test_analytics_attribution.mjs
 ```
+
+Production Pages changes must use
+`scripts/deploy/cloudflare_pages_release.py` and the exact plan/apply/canary
+sequence in `docs/runbooks/cloudflare_pages_release.md`. The production launch
+preflight runs the release-wrapper adversarial suite and binds that passing
+gate into `gate_results`, so deploy evidence is incomplete if the transaction
+tests are omitted. Once pinned Wrangler is invoked, every subsequent failure
+automatically rolls back only to the prior deployment captured in the reviewed
+plan and verifies Cloudflare's canonical state. Canary failure has the same
+mandatory rollback behavior. A `deploy_failed_rollback_failed` or
+`failed_rollback_failed` record is a critical stop condition, not permission to
+continue or announce the release.
 
 The static mode verifies `site/wrangler.toml`, the Advanced Mode `_worker.js`
 route table, every Pages API function handler, and classified Cloudflare
