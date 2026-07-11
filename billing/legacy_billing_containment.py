@@ -293,6 +293,80 @@ def write_private_json(path: Path, value: Any) -> None:
         raise RuntimeError(f"inventory output is not owner-only: {path}")
 
 
+def build_scope_template(account: Any, inventory: Inventory) -> dict[str, Any]:
+    """Return an inventory-bound, deliberately empty review scope.
+
+    Object selection is a human authorization boundary.  The generator binds
+    the current account and complete inventory but never guesses which Stripe
+    objects belong to TinyZKP.
+    """
+
+    return {
+        "schema_version": 1,
+        "stripe_account_id": _object_id(account),
+        "stripe_display_name": account_display_name(account),
+        "inventory_sha256": inventory_digest(account, inventory),
+        "selections": {field: [] for field in ID_PREFIXES},
+    }
+
+
+def build_notification_ledger_template(
+    account: Any,
+    inventory: Inventory,
+    scope: Scope,
+) -> dict[str, Any]:
+    """Return a fail-closed skeleton for selected legacy subscriptions.
+
+    The skeleton copies only Stripe object identifiers and their relationships.
+    Notification, approval, and refund/credit evidence remain invalid
+    placeholders until an operator records actions performed outside this
+    program through an approved no-email channel.
+    """
+
+    plan = build_plan(account, inventory, scope)
+    actions = {(item["action"], item["object_id"]) for item in plan["actions"]}
+    selected_subscriptions = sorted(
+        object_id
+        for action, object_id in actions
+        if action == "pause_subscription"
+    )
+    selected_invoices = {
+        object_id for action, object_id in actions if action == "void_open_invoice"
+    }
+    subscriptions = _objects_by_id(inventory.subscriptions)
+    invoices = _objects_by_id(inventory.open_invoices)
+    records: list[dict[str, Any]] = []
+    for subscription_id in selected_subscriptions:
+        subscription = subscriptions[subscription_id]
+        approved_invoice_ids = sorted(
+            invoice_id
+            for invoice_id in selected_invoices
+            if _related_id(_value(invoices[invoice_id], "subscription"))
+            == subscription_id
+        )
+        records.append(
+            {
+                "subscription_id": subscription_id,
+                "customer_id": _related_id(_value(subscription, "customer")),
+                "notified_at": "REPLACE_RFC3339_UTC",
+                "notification_channel": "REPLACE_NO_EMAIL_CHANNEL",
+                "notification_evidence_sha256": "REPLACE_SHA256",
+                "resolution": "REPLACE_refund_credit_or_none_due",
+                "resolution_object_id": "REPLACE_OR_EMPTY_FOR_NONE_DUE",
+                "resolution_amount": -1,
+                "currency": "usd",
+                "resolution_evidence_sha256": "REPLACE_SHA256",
+                "approved_open_invoice_ids": approved_invoice_ids,
+            }
+        )
+    return {
+        "schema_version": 2,
+        "stripe_account_id": _object_id(account),
+        "inventory_sha256": inventory_digest(account, inventory),
+        "subscriptions": records,
+    }
+
+
 @dataclass(frozen=True)
 class Scope:
     stripe_account_id: str
@@ -561,7 +635,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--expected-display-name", default=os.environ.get("STRIPE_EXPECTED_DISPLAY_NAME")
     )
     parser.add_argument("--inventory-output", type=Path)
+    parser.add_argument(
+        "--scope-template-output",
+        type=Path,
+        help=(
+            "Write an owner-only, current-inventory-bound scope skeleton with "
+            "no selected objects"
+        ),
+    )
     parser.add_argument("--scope-manifest", type=Path)
+    parser.add_argument(
+        "--notification-template-output",
+        type=Path,
+        help=(
+            "Write an owner-only fail-closed notification/resolution skeleton "
+            "for the exact selected subscriptions"
+        ),
+    )
     parser.add_argument("--expected-plan-sha256")
     parser.add_argument("--apply-catalog", action="store_true")
     parser.add_argument("--pause-notified-subscriptions", action="store_true")
@@ -574,8 +664,40 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def validate_artifact_paths(args: argparse.Namespace) -> None:
+    """Reject output aliasing before reading Stripe or touching the filesystem."""
+
+    outputs = {
+        label: path.resolve(strict=False)
+        for label, path in (
+            ("inventory output", args.inventory_output),
+            ("scope template output", args.scope_template_output),
+            ("notification template output", args.notification_template_output),
+        )
+        if path is not None
+    }
+    if len(set(outputs.values())) != len(outputs):
+        raise RuntimeError("legacy containment outputs must use distinct paths")
+    inputs = {
+        label: path.resolve(strict=False)
+        for label, path in (
+            ("environment file", args.env_file),
+            ("scope manifest", args.scope_manifest),
+            ("notification ledger", args.notification_ledger),
+        )
+        if path is not None
+    }
+    for output_label, output_path in outputs.items():
+        for input_label, input_path in inputs.items():
+            if output_path == input_path:
+                raise RuntimeError(
+                    f"{output_label} must not overwrite the {input_label}"
+                )
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+    validate_artifact_paths(args)
     configured: dict[str, str] = {}
     if args.env_file is not None:
         configured = load_private_env_file(args.env_file)
@@ -610,11 +732,33 @@ def main(argv: list[str] | None = None) -> None:
         write_private_json(args.inventory_output, {**document, "inventory_sha256": digest})
 
     applying = args.apply_catalog or args.pause_notified_subscriptions
+    generating_templates = bool(
+        args.scope_template_output or args.notification_template_output
+    )
+    if applying and generating_templates:
+        raise RuntimeError("template generation cannot be combined with Stripe writes")
+    if args.scope_template_output:
+        write_private_json(
+            args.scope_template_output,
+            build_scope_template(account, inventory),
+        )
+    if args.notification_template_output and args.scope_manifest is None:
+        raise RuntimeError(
+            "notification template generation requires --scope-manifest"
+        )
     if applying and args.scope_manifest is None:
         raise RuntimeError("apply requires --scope-manifest")
     plan = None
+    scope = None
     if args.scope_manifest is not None:
-        plan = build_plan(account, inventory, load_scope_manifest(args.scope_manifest))
+        scope = load_scope_manifest(args.scope_manifest)
+        plan = build_plan(account, inventory, scope)
+    if args.notification_template_output:
+        assert scope is not None
+        write_private_json(
+            args.notification_template_output,
+            build_notification_ledger_template(account, inventory, scope),
+        )
 
     output = {
         "mode": "apply" if applying else "read_only",
@@ -623,6 +767,14 @@ def main(argv: list[str] | None = None) -> None:
         "inventory_sha256": digest,
         "counts": {key: len(value) for key, value in document["objects"].items()},
         "inventory_output": str(args.inventory_output) if args.inventory_output else None,
+        "scope_template_output": (
+            str(args.scope_template_output) if args.scope_template_output else None
+        ),
+        "notification_template_output": (
+            str(args.notification_template_output)
+            if args.notification_template_output
+            else None
+        ),
         "plan": plan,
     }
     print(json.dumps(output, indent=2, sort_keys=True))

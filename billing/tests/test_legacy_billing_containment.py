@@ -237,3 +237,96 @@ def test_private_inventory_output_is_owner_only_and_rejects_symlink(tmp_path: Pa
     linked.symlink_to(target)
     with pytest.raises(RuntimeError, match="symlink"):
         containment.write_private_json(linked, {"unsafe": False})
+
+
+def test_scope_template_binds_inventory_without_selecting_objects(tmp_path: Path):
+    inv = inventory()
+    payload = containment.build_scope_template(ACCOUNT, inv)
+
+    assert payload["stripe_account_id"] == "acct_tinyzkp"
+    assert payload["inventory_sha256"] == containment.inventory_digest(ACCOUNT, inv)
+    assert payload["selections"] == {
+        field: [] for field in containment.ID_PREFIXES
+    }
+
+    output = tmp_path / "private" / "scope.json"
+    containment.write_private_json(output, payload)
+    scope = containment.load_scope_manifest(output)
+    plan = containment.build_plan(ACCOUNT, inv, scope)
+    assert plan["actions"] == []
+    assert stat.S_IMODE(output.stat().st_mode) == 0o600
+
+
+def test_notification_template_is_relationship_bound_and_fails_closed(
+    tmp_path: Path,
+):
+    inv = inventory()
+    scope = load_scope(tmp_path)
+    payload = containment.build_notification_ledger_template(ACCOUNT, inv, scope)
+
+    assert payload["stripe_account_id"] == "acct_tinyzkp"
+    assert payload["inventory_sha256"] == containment.inventory_digest(ACCOUNT, inv)
+    assert payload["subscriptions"] == [
+        {
+            "subscription_id": "sub_legacy",
+            "customer_id": "cus_legacy",
+            "notified_at": "REPLACE_RFC3339_UTC",
+            "notification_channel": "REPLACE_NO_EMAIL_CHANNEL",
+            "notification_evidence_sha256": "REPLACE_SHA256",
+            "resolution": "REPLACE_refund_credit_or_none_due",
+            "resolution_object_id": "REPLACE_OR_EMPTY_FOR_NONE_DUE",
+            "resolution_amount": -1,
+            "currency": "usd",
+            "resolution_evidence_sha256": "REPLACE_SHA256",
+            "approved_open_invoice_ids": ["in_legacy"],
+        }
+    ]
+
+    output = tmp_path / "private" / "notifications.json"
+    containment.write_private_json(output, payload)
+    with pytest.raises(RuntimeError, match="notification"):
+        containment.load_notification_ledger(output)
+
+
+def test_template_generation_cannot_be_combined_with_writes(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_fake")
+    monkeypatch.setattr(containment.stripe.Account, "retrieve", lambda: ACCOUNT)
+    monkeypatch.setattr(containment, "collect_inventory", lambda _account: inventory())
+
+    with pytest.raises(RuntimeError, match="cannot be combined"):
+        containment.main(
+            [
+                "--expected-account-id",
+                "acct_tinyzkp",
+                "--expected-display-name",
+                "TinyZKP",
+                "--scope-template-output",
+                str(tmp_path / "scope.json"),
+                "--apply-catalog",
+            ]
+        )
+
+
+def test_artifact_outputs_cannot_alias_inputs_or_each_other(tmp_path: Path):
+    shared = tmp_path / "shared.json"
+    args = containment.parse_args(
+        [
+            "--scope-manifest",
+            str(shared),
+            "--scope-template-output",
+            str(shared),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="must not overwrite"):
+        containment.validate_artifact_paths(args)
+
+    args = containment.parse_args(
+        [
+            "--inventory-output",
+            str(shared),
+            "--scope-template-output",
+            str(shared),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="distinct paths"):
+        containment.validate_artifact_paths(args)
