@@ -148,9 +148,26 @@ sudo /usr/bin/python3 billing/runtime_lock.py verify-production-runtime \
   --node-binary /var/lib/tinyzkp-runtime/node-v24.18.0-linux-x64/bin/node
 ```
 
-The installer evidence verifier does not run the drill. Retain the real raw
-logs and observations, have the allowlisted reviewer sign the exact subject,
-then capture and verify:
+The installer evidence verifier does not run the drill. Create the complete
+owner-only pending workspace first; every measured field is `null`, no success
+log exists, and the scaffold cannot satisfy capture or production verification:
+
+```bash
+RUN_ID="$(/usr/bin/openssl rand -hex 16)"
+sudo /usr/bin/python3 scripts/ci/fixed_host_evidence_workspace.py \
+  installer-scaffold \
+  --release-sha "$RELEASE_SHA" \
+  --host-identity-sha256 "$HOST_IDENTITY_SHA256" \
+  --deployment-id tinyzkp-production-primary \
+  --run-id "$RUN_ID" \
+  --output-root "/var/lib/tinyzkp-private/deploy/installer-drill-runs/$RUN_ID"
+```
+
+An explicitly authorized privileged operator or independently reviewed harness
+must execute all cases and replace the template with direct observations and
+the exact nonempty logs. The scaffold never invokes the installer or injects a
+failure. Retain those raw logs and observations, have the allowlisted reviewer
+sign the exact subject, then capture and verify:
 
 ```bash
 /usr/bin/python3 scripts/ci/installer_drill_evidence.py required-cases
@@ -164,9 +181,11 @@ then capture and verify:
   --expected-deployment-id tinyzkp-production-primary
 ```
 
-The backup evidence tool is verify-only; follow `docs/operations.md` and
-`docs/runbooks/restore.md` to perform the real fixed-host drill and independent
-review before running:
+The backup evidence verifier is verify-only. The observation workspace helper
+can generate complete pending report/case templates and package a finished raw
+set, but it never runs a backup or restore and cannot create `review.json` or a
+signature. Follow `docs/operations.md` and `docs/runbooks/restore.md` to perform
+the real fixed-host drill and independent review before running:
 
 ```bash
 /var/lib/tinyzkp-runtime/billing-venv/bin/python \

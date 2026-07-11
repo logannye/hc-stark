@@ -246,6 +246,7 @@ def build_steps(
                 "-m",
                 "pytest",
                 "scripts/ci/test_fixed_host_backup_evidence.py",
+                "scripts/ci/test_fixed_host_evidence_workspace.py",
             ),
         ),
         Step(

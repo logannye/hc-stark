@@ -132,6 +132,7 @@ jobs:
           python3 -m pytest billing/tests/test_stripe_revenue_ops_audit.py
           python3 -m pytest billing/tests/test_runtime_lock.py
           python3 -m pytest scripts/ci/test_fixed_host_backup_evidence.py
+          python3 -m pytest scripts/ci/test_fixed_host_evidence_workspace.py
           python3 -m pytest scripts/ci/test_installer_drill_evidence.py
           python3 -m pytest scripts/ci/test_legacy_billing_containment_status.py
           python3 -m pytest scripts/ci/test_billing_service_hardening.py
@@ -165,6 +166,7 @@ jobs:
           python3 -m py_compile scripts/ci/cloudflare_toolchain_check.py
           python3 -m py_compile scripts/ci/materialize_cloudflare_toolchain.py
           python3 -m py_compile scripts/ci/fixed_host_backup_evidence.py
+          python3 -m py_compile scripts/ci/fixed_host_evidence_workspace.py
           python3 -m py_compile scripts/ci/installer_drill_evidence.py
           python3 -m py_compile scripts/ci/legacy_billing_containment_status.py
           python3 -m py_compile deploy/hetzner/deployment_transaction.py

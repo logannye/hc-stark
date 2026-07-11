@@ -262,9 +262,9 @@ def build_bundle(tmp_path: pathlib.Path) -> pathlib.Path:
         canonical({"artifacts": {key: descriptors[key] for key in sorted(descriptors)}})
     ).hexdigest()
     bundle = {
-        "schema_version": 1,
-        "status": "reviewed_pass",
-        "evidence_id": "f" * 64,
+        "schema_version": evidence.SCHEMA_VERSION,
+        "status": evidence.BUNDLE_STATUS,
+        "evidence_id": "",
         "captured_at": CAPTURED,
         "release_sha": RELEASE,
         "host": {
@@ -279,6 +279,9 @@ def build_bundle(tmp_path: pathlib.Path) -> pathlib.Path:
         "subject_artifact_set_sha256": subject,
         "artifacts": descriptors,
     }
+    bundle["evidence_id"] = hashlib.sha256(
+        canonical({key: value for key, value in bundle.items() if key != "evidence_id"})
+    ).hexdigest()
     bundle_raw = canonical(bundle)
     write_private(root / "bundle.json", bundle_raw)
     review = {
@@ -334,6 +337,9 @@ def rewrite_structured(root: pathlib.Path, artifact_id: str, mutate):
             }
         )
     ).hexdigest()
+    bundle["evidence_id"] = hashlib.sha256(
+        canonical({key: value for key, value in bundle.items() if key != "evidence_id"})
+    ).hexdigest()
     bundle_raw = canonical(bundle)
     write_private(bundle_path, bundle_raw)
     review_path = root / "review.json"
@@ -349,6 +355,16 @@ def test_complete_reviewed_fixed_host_bundle_passes_policy(tmp_path):
     assert report["status"] == "reviewed_pass"
     assert report["artifact_count"] == len(evidence._expected_artifact_ids())
     assert len(report["evidence_identity_sha256"]) == 64
+
+
+def test_rejects_nonderived_bundle_evidence_id(tmp_path):
+    root = build_bundle(tmp_path)
+    bundle_path = root / "bundle.json"
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["evidence_id"] = "0" * 64
+    write_private(bundle_path, canonical(bundle))
+    with pytest.raises(evidence.EvidenceError, match="not derived canonically"):
+        validate(root)
 
 
 def test_rejects_changed_artifact_and_noncanonical_or_public_bundle(tmp_path):

@@ -202,6 +202,7 @@ def main() -> int:
         "billing/tests/test_runtime_lock.py",
         "billing/runtime_lock.py",
         "scripts/ci/test_fixed_host_backup_evidence.py",
+        "scripts/ci/test_fixed_host_evidence_workspace.py",
         "scripts/ci/test_installer_drill_evidence.py",
         "scripts/ci/test_legacy_billing_containment_status.py",
         "billing/tests/test_agreement_gate.py",
@@ -234,6 +235,8 @@ def main() -> int:
     for relative in (
         "scripts/ci/fixed_host_backup_evidence.py",
         "scripts/ci/test_fixed_host_backup_evidence.py",
+        "scripts/ci/fixed_host_evidence_workspace.py",
+        "scripts/ci/test_fixed_host_evidence_workspace.py",
         "scripts/ci/installer_drill_evidence.py",
         "scripts/ci/test_installer_drill_evidence.py",
         "scripts/ci/legacy_billing_containment_status.py",
@@ -304,6 +307,7 @@ def main() -> int:
         '"cloudflare_materialization_sha256"',
         '"Cloudflare Pages release transaction adversarial tests"',
         '"scripts/deploy/test_cloudflare_pages_release.py"',
+        '"scripts/ci/test_fixed_host_evidence_workspace.py"',
     ):
         require(
             marker in production_preflight,
