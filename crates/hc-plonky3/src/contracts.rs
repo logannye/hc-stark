@@ -276,7 +276,7 @@ impl TraceManifestV1 {
             || self.compression != "zstd"
             || self.chunk_uncompressed_bytes == 0
             || self.chunk_uncompressed_bytes > MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES
-            || self.chunk_uncompressed_bytes % 8 != 0
+            || !self.chunk_uncompressed_bytes.is_multiple_of(8)
             || self.chunks.is_empty()
             || canonical_json_bytes_v1(self)?.len() > MAX_TRACE_MANIFEST_JSON_BYTES
         {
