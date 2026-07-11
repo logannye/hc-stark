@@ -26,11 +26,16 @@ def test_api_database_and_object_storage_are_fail_closed():
 
 def test_worker_has_exact_release_resource_envelope_and_no_database_secret():
     compose = text("docker-compose.worker.yml")
+    service = text("systemd/tinyzkp-beta-worker.service")
     assert 'cpuset: "0-7"' in compose
     assert "mem_limit: 16g" in compose
+    assert 'restart: "no"' in compose
     assert "network_mode: host" in compose
     assert "no-new-privileges:true" in compose
     assert "DATABASE" not in compose and "STRIPE" not in compose and "AWS_" not in compose
+    assert "StartLimitBurst=5" in service
+    assert "Restart=on-failure" in service
+    assert "--abort-on-container-exit --exit-code-from worker" in service
 
 
 def test_backup_and_rollback_contracts_are_tracked():

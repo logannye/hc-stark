@@ -3,7 +3,8 @@ name: tinyzkp-beta-worker
 services:
   worker:
     image: ${TINYZKP_BETA_WORKER_IMAGE:?set a digest-pinned beta worker image}
-    restart: unless-stopped
+    # systemd owns the bounded restart policy so a crash loop cannot run forever.
+    restart: "no"
     cpuset: "0-7"
     mem_limit: 16g
     mem_reservation: 16g
@@ -21,4 +22,3 @@ services:
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
     network_mode: host
-
