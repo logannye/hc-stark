@@ -2550,6 +2550,437 @@ def validate_resource_gate(
     return failures
 
 
+RESOURCE_MATRIX_ROLE = "matrix_manifest"
+RESOURCE_WORKLOADS = ("fibonacci", "poseidon2")
+
+
+def resource_matrix_gate_roles(*, baseline: bool) -> set[str]:
+    suffixes = {"manifest", "candidate_report", "candidate_normalized_manifest"}
+    if baseline:
+        suffixes.update({"baseline_report", "baseline_normalized_manifest"})
+    return {
+        RESOURCE_MATRIX_ROLE,
+        *(f"{workload}_{suffix}" for workload in RESOURCE_WORKLOADS for suffix in suffixes),
+    }
+
+
+RESOURCE_MATRIX_ENTRIES = {
+    "fibonacci_1m": {
+        "workload": "fibonacci",
+        "logical_rows": 1_048_576,
+        "mode": "throughput",
+        "gate": "one-million",
+        "manifest_path": "examples/plonky3/fibonacci-1m.json",
+        "stem": "fibonacci-1m",
+        "evidence_gate": "one_million_row_resource_gate",
+        "prefix": "fibonacci",
+        "baseline": True,
+    },
+    "poseidon2_1m": {
+        "workload": "poseidon2_goldilocks",
+        "logical_rows": 1_048_576,
+        "mode": "throughput",
+        "gate": "one-million",
+        "manifest_path": "examples/plonky3/poseidon2-1m.json",
+        "stem": "poseidon2-1m",
+        "evidence_gate": "one_million_row_resource_gate",
+        "prefix": "poseidon2",
+        "baseline": True,
+    },
+    "fibonacci_16m": {
+        "workload": "fibonacci",
+        "logical_rows": 16_777_216,
+        "mode": "ceiling",
+        "gate": "ten-million",
+        "manifest_path": "examples/plonky3/fibonacci-16m.json",
+        "stem": "fibonacci-16m",
+        "evidence_gate": "ten_million_row_resource_gate",
+        "prefix": "fibonacci",
+        "baseline": False,
+    },
+    "poseidon2_16m": {
+        "workload": "poseidon2_goldilocks",
+        "logical_rows": 16_777_216,
+        "mode": "ceiling",
+        "gate": "ten-million",
+        "manifest_path": "examples/plonky3/poseidon2-16m.json",
+        "stem": "poseidon2-16m",
+        "evidence_gate": "ten_million_row_resource_gate",
+        "prefix": "poseidon2",
+        "baseline": False,
+    },
+}
+
+
+def _matrix_artifact_paths(stem: str, *, baseline: bool) -> dict[str, str]:
+    paths = {
+        "host_preflight": f"{stem}.host-preflight.json",
+        "preflight_log": f"{stem}.host-preflight.log",
+        "candidate_report": f"{stem}.json",
+        "candidate_manifest": f"{stem}.bounded.manifest.json",
+        "benchmark_log": f"{stem}.benchmark.log",
+        "gate_log": f"{stem}.gate.log",
+    }
+    if baseline:
+        paths.update(
+            {
+                "baseline_report": f"{stem}.baseline.json",
+                "baseline_manifest": f"{stem}.baseline.conventional.manifest.json",
+            }
+        )
+    return paths
+
+
+def _resource_gate_artifacts(
+    gates: dict[str, object],
+    name: str,
+    *,
+    expected_roles: set[str],
+    root: Path,
+) -> tuple[dict[str, tuple[Path, dict[str, object]]], list[str]]:
+    failures: list[str] = []
+    gate = gates.get(name)
+    raw_artifacts = gate.get("artifacts") if isinstance(gate, dict) else None
+    if not isinstance(raw_artifacts, list):
+        return {}, [f"{name}: resource artifact list is missing"]
+    resolved: dict[str, tuple[Path, dict[str, object]]] = {}
+    for raw in raw_artifacts:
+        try:
+            path, descriptor = safe_artifact(root, raw)
+        except (OSError, ValueError) as error:
+            failures.append(f"{name}: {error}")
+            continue
+        role = descriptor.get("role")
+        if not isinstance(role, str) or role in resolved:
+            failures.append(f"{name}: resource artifact roles are malformed")
+            continue
+        resolved[role] = (path, descriptor)
+    if set(resolved) != expected_roles:
+        missing = expected_roles - set(resolved)
+        extra = set(resolved) - expected_roles
+        if missing:
+            failures.append(
+                f"{name}: required matrix-bound roles are missing: {', '.join(sorted(missing))}"
+            )
+        if extra:
+            failures.append(
+                f"{name}: unexpected matrix-bound roles are present: {', '.join(sorted(extra))}"
+            )
+    return resolved, failures
+
+
+def _valid_matrix_artifact_descriptor(value: object) -> bool:
+    if not isinstance(value, dict) or set(value) != {
+        "role",
+        "path",
+        "sha256",
+        "size_bytes",
+        "mode",
+    }:
+        return False
+    raw_path = value.get("path")
+    return (
+        bounded_string(value.get("role"), maximum=256)
+        and isinstance(raw_path, str)
+        and bool(raw_path)
+        and not Path(raw_path).is_absolute()
+        and ".." not in Path(raw_path).parts
+        and lower_hex(value.get("sha256"), 64)
+        and exact_int(value.get("size_bytes"))
+        and value.get("size_bytes", -1) >= 0
+        and exact_int(value.get("mode"), 0o600)
+    )
+
+
+def validate_resource_matrix_binding(
+    gates: dict[str, object],
+    release_sha: str,
+    source_tree_sha256: object,
+    *,
+    root: Path = ROOT,
+) -> list[str]:
+    """Bind both first-party resource gates to one fail-closed matrix capture."""
+
+    failures: list[str] = []
+    one, one_failures = _resource_gate_artifacts(
+        gates,
+        "one_million_row_resource_gate",
+        expected_roles=resource_matrix_gate_roles(baseline=True),
+        root=root,
+    )
+    ten, ten_failures = _resource_gate_artifacts(
+        gates,
+        "ten_million_row_resource_gate",
+        expected_roles=resource_matrix_gate_roles(baseline=False),
+        root=root,
+    )
+    failures.extend(one_failures)
+    failures.extend(ten_failures)
+    if RESOURCE_MATRIX_ROLE not in one or RESOURCE_MATRIX_ROLE not in ten:
+        return failures + ["fixed-host matrix manifest is required by both resource gates"]
+    one_matrix_path, one_matrix_descriptor = one[RESOURCE_MATRIX_ROLE]
+    ten_matrix_path, ten_matrix_descriptor = ten[RESOURCE_MATRIX_ROLE]
+    if (
+        one_matrix_path != ten_matrix_path
+        or one_matrix_descriptor.get("sha256") != ten_matrix_descriptor.get("sha256")
+    ):
+        failures.append("first-party resource gates do not use the same matrix manifest")
+        return failures
+    try:
+        matrix = read_object(one_matrix_path)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return failures + [f"fixed-host matrix manifest is unavailable: {error}"]
+
+    expected_matrix_keys = {
+        "schema_version",
+        "kind",
+        "release_sha",
+        "source_tree_sha256",
+        "profile",
+        "plonky3_version",
+        "source_root",
+        "cli_path",
+        "cli_sha256",
+        "cli_identity",
+        "output_dir",
+        "scratch_root",
+        "cgroup_parent",
+        "created_at",
+        "updated_at",
+        "status",
+        "fixed_host_evidence_eligible",
+        "stable_host_identity",
+        "local_matrix_gates_passed",
+        "release_eligible",
+        "authority",
+        "external_gates",
+        "entries",
+        "last_error",
+        "completed_at",
+    }
+    if set(matrix) != expected_matrix_keys:
+        failures.append("fixed-host matrix schema is not closed")
+    if (
+        not exact_int(matrix.get("schema_version"), 1)
+        or matrix.get("kind") != "tinyzkp_fixed_host_release_matrix_v1"
+        or matrix.get("release_sha") != release_sha
+        or matrix.get("source_tree_sha256") != source_tree_sha256
+        or matrix.get("profile") != "tinyzkp-p3-goldilocks-v1"
+        or matrix.get("plonky3_version") != "0.6.1"
+        or matrix.get("status") != "local_matrix_complete_external_gates_pending"
+        or matrix.get("fixed_host_evidence_eligible") is not True
+        or matrix.get("local_matrix_gates_passed") is not True
+        or matrix.get("release_eligible") is not False
+        or matrix.get("last_error") is not None
+        or not bounded_string(matrix.get("completed_at"))
+    ):
+        failures.append("fixed-host matrix completion or source identity is invalid")
+    for field in (
+        "source_root",
+        "cli_path",
+        "output_dir",
+        "scratch_root",
+        "cgroup_parent",
+    ):
+        value = matrix.get(field)
+        if not bounded_string(value) or not Path(str(value)).is_absolute():
+            failures.append(f"fixed-host matrix {field} must be an absolute bounded path")
+    for field in ("created_at", "updated_at"):
+        if not bounded_string(matrix.get(field)):
+            failures.append(f"fixed-host matrix {field} is missing")
+    if not lower_hex(matrix.get("cli_sha256"), 64):
+        failures.append("fixed-host matrix CLI digest is malformed")
+
+    cli_identity = matrix.get("cli_identity")
+    expected_cli_keys = {
+        "service",
+        "package_version",
+        "release_sha",
+        "release_ref",
+        "backend",
+        "plonky3_version",
+        "compatibility_profile",
+        "dependency_lock_sha256",
+    }
+    if (
+        not isinstance(cli_identity, dict)
+        or set(cli_identity) != expected_cli_keys
+        or cli_identity.get("service") != "cli"
+        or cli_identity.get("release_sha") != release_sha
+        or cli_identity.get("backend") != "plonky3"
+        or cli_identity.get("plonky3_version") != "0.6.1"
+        or cli_identity.get("compatibility_profile") != "tinyzkp-p3-goldilocks-v1"
+        or not bounded_string(cli_identity.get("package_version"), maximum=128)
+        or not lower_hex(cli_identity.get("dependency_lock_sha256"), 64)
+        or (
+            cli_identity.get("release_ref") is not None
+            and not bounded_string(cli_identity.get("release_ref"), maximum=512)
+        )
+    ):
+        failures.append("fixed-host matrix CLI identity is incomplete or skewed")
+
+    expected_authority = {
+        "may_approve_backend_release": False,
+        "may_provision_or_mutate_infrastructure": False,
+        "may_publish_or_upload_evidence": False,
+    }
+    expected_external = {
+        "independent_reproduction": "required_external",
+        "plonky3_specialist_review": "required_external",
+        "implementation_review": "required_external",
+        "design_partner_acceptance": "required_external",
+        "signed_release_assembly": "required_external",
+    }
+    if not type_sensitive_equal(matrix.get("authority"), expected_authority):
+        failures.append("fixed-host matrix overstates its release authority")
+    if not type_sensitive_equal(matrix.get("external_gates"), expected_external):
+        failures.append("fixed-host matrix may not satisfy external gates")
+
+    stable_host = matrix.get("stable_host_identity")
+    stable_host_fields = {
+        "hardware",
+        "logical_cpu_count",
+        "total_memory_bytes",
+        "operating_system",
+        "storage_device",
+        "storage_is_rotational",
+        "storage_is_nvme",
+        "storage_total_bytes",
+    }
+    if not isinstance(stable_host, dict) or set(stable_host) != stable_host_fields:
+        failures.append("fixed-host matrix stable-host identity is malformed")
+        stable_host = {}
+
+    entries = matrix.get("entries")
+    if not isinstance(entries, list) or len(entries) != len(RESOURCE_MATRIX_ENTRIES):
+        return failures + ["fixed-host matrix entry inventory is incomplete"]
+    entries_by_id: dict[str, dict[str, object]] = {}
+    for entry in entries:
+        entry_id = entry.get("entry_id") if isinstance(entry, dict) else None
+        if not isinstance(entry_id, str) or entry_id in entries_by_id:
+            failures.append("fixed-host matrix entry identities are malformed")
+            continue
+        entries_by_id[entry_id] = entry
+    if set(entries_by_id) != set(RESOURCE_MATRIX_ENTRIES):
+        failures.append("fixed-host matrix does not contain the exact release workload set")
+        return failures
+
+    gate_artifacts = {
+        "one_million_row_resource_gate": one,
+        "ten_million_row_resource_gate": ten,
+    }
+    expected_entry_keys = {
+        "entry_id",
+        "workload",
+        "logical_rows",
+        "mode",
+        "gate",
+        "manifest_path",
+        "manifest_sha256",
+        "status",
+        "attempts",
+        "artifacts",
+        "last_error",
+        "completed_at",
+    }
+    for entry_id, specification in RESOURCE_MATRIX_ENTRIES.items():
+        entry = entries_by_id[entry_id]
+        if (
+            set(entry) != expected_entry_keys
+            or entry.get("workload") != specification["workload"]
+            or entry.get("logical_rows") != specification["logical_rows"]
+            or entry.get("mode") != specification["mode"]
+            or entry.get("gate") != specification["gate"]
+            or entry.get("manifest_path") != specification["manifest_path"]
+            or entry.get("status") != "complete"
+            or not exact_int(entry.get("attempts"))
+            or entry.get("attempts", 0) <= 0
+            or entry.get("last_error") is not None
+            or not bounded_string(entry.get("completed_at"))
+        ):
+            failures.append(f"fixed-host matrix entry is incomplete or skewed: {entry_id}")
+        evidence = gate_artifacts[str(specification["evidence_gate"])]
+        prefix = str(specification["prefix"])
+        manifest_evidence = evidence.get(f"{prefix}_manifest")
+        if (
+            manifest_evidence is None
+            or entry.get("manifest_sha256") != manifest_evidence[1].get("sha256")
+        ):
+            failures.append(f"fixed-host matrix source manifest mismatch: {entry_id}")
+
+        raw_artifacts = entry.get("artifacts")
+        expected_paths = _matrix_artifact_paths(
+            str(specification["stem"]), baseline=bool(specification["baseline"])
+        )
+        if not isinstance(raw_artifacts, list):
+            failures.append(f"fixed-host matrix artifacts are missing: {entry_id}")
+            continue
+        artifact_map: dict[str, dict[str, object]] = {}
+        for artifact in raw_artifacts:
+            if not _valid_matrix_artifact_descriptor(artifact):
+                failures.append(f"fixed-host matrix artifact is malformed: {entry_id}")
+                continue
+            assert isinstance(artifact, dict)
+            role = str(artifact["role"])
+            if role in artifact_map:
+                failures.append(f"fixed-host matrix artifact roles are duplicated: {entry_id}")
+                continue
+            artifact_map[role] = artifact
+        if set(artifact_map) != set(expected_paths):
+            failures.append(f"fixed-host matrix artifact inventory is incomplete: {entry_id}")
+            continue
+        if {str(value["path"]) for value in artifact_map.values()} != set(
+            expected_paths.values()
+        ):
+            failures.append(f"fixed-host matrix artifact paths are noncanonical: {entry_id}")
+        for role, expected_path in expected_paths.items():
+            if artifact_map[role].get("path") != expected_path:
+                failures.append(
+                    f"fixed-host matrix artifact path mismatch: {entry_id}/{role}"
+                )
+
+        bindings = {
+            "candidate_report": f"{prefix}_candidate_report",
+            "candidate_manifest": f"{prefix}_candidate_normalized_manifest",
+        }
+        if bool(specification["baseline"]):
+            bindings.update(
+                {
+                    "baseline_report": f"{prefix}_baseline_report",
+                    "baseline_manifest": f"{prefix}_baseline_normalized_manifest",
+                }
+            )
+        for matrix_role, evidence_role in bindings.items():
+            evidence_item = evidence.get(evidence_role)
+            matrix_item = artifact_map.get(matrix_role)
+            if evidence_item is None or matrix_item is None:
+                continue
+            evidence_path, evidence_descriptor = evidence_item
+            if (
+                matrix_item.get("sha256") != evidence_descriptor.get("sha256")
+                or matrix_item.get("size_bytes") != evidence_path.stat().st_size
+            ):
+                failures.append(
+                    f"fixed-host matrix does not bind exact evidence: {entry_id}/{matrix_role}"
+                )
+            if matrix_role.endswith("report"):
+                try:
+                    report = read_object(evidence_path)
+                except (OSError, ValueError, json.JSONDecodeError) as error:
+                    failures.append(
+                        f"fixed-host matrix report is unavailable: {entry_id}/{matrix_role}: {error}"
+                    )
+                else:
+                    observed_host = {
+                        field: report.get(field) for field in stable_host_fields
+                    }
+                    if not type_sensitive_equal(observed_host, stable_host):
+                        failures.append(
+                            f"fixed-host matrix report host identity mismatch: {entry_id}/{matrix_role}"
+                        )
+    return failures
+
+
 def validate_independent_reproduction(
     artifacts: list[tuple[Path, dict[str, object]]],
     metadata: dict[str, object],
@@ -2708,6 +3139,14 @@ def validate_review_execution_bindings(
         expected: dict[tuple[str, str], str] = {}
         one_million = artifacts("one_million_row_resource_gate")
         ten_million = artifacts("ten_million_row_resource_gate")
+        if (
+            one_million[RESOURCE_MATRIX_ROLE].get("sha256")
+            != ten_million[RESOURCE_MATRIX_ROLE].get("sha256")
+        ):
+            raise ValueError("resource gates do not share one matrix manifest")
+        expected[("raw-reports", "fixed_host_matrix_manifest")] = str(
+            one_million[RESOURCE_MATRIX_ROLE]["sha256"]
+        )
         for workload in ("fibonacci", "poseidon2"):
             for mode in ("baseline", "candidate"):
                 role = f"{workload}_{mode}_report"
@@ -2812,6 +3251,14 @@ def evidence_failures(evidence: dict[str, object], *, root: Path = ROOT) -> list
                 source_tree_sha256=source_tree_sha256,
             )
         )
+    problems.extend(
+        validate_resource_matrix_binding(
+            gates,
+            source_release_sha,
+            source_tree_sha256,
+            root=root,
+        )
+    )
     problems.extend(
         validate_review_execution_bindings(
             gates, source_release_sha, root=root

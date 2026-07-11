@@ -88,6 +88,15 @@ Independent reproduction, both independent reviews, design-partner acceptance,
 and signed release assembly remain external gates. This first-party run must
 never be relabeled as independent evidence.
 
+The candidate-evidence builder requires the same matrix file under the
+`matrix_manifest` role in both the 1M and 16M first-party resource gates. The
+backend gate hashes it again and rejects the candidate unless it binds the
+exact source manifests, reports, and normalized manifests supplied by those
+gates. It also derives the stable-host identity from every report and compares
+it with the single identity in the matrix. The review bundle carries the same
+bytes under `raw-reports/fixed_host_matrix_manifest`; a standalone report set
+without this authority-limiting manifest is not admissible release evidence.
+
 ## GitHub Actions
 
 The `Fixed-host Plonky3 reports` workflow exposes a manual `release_matrix`

@@ -71,6 +71,14 @@ def evidence_failures(evidence: dict[str, object], *, root: Path) -> list[str]:
             )
         )
     problems.extend(
+        final_gate.validate_resource_matrix_binding(
+            gates,
+            release_sha,
+            source_digest,
+            root=root,
+        )
+    )
+    problems.extend(
         final_gate.validate_review_execution_bindings(
             gates, release_sha, root=root
         )

@@ -92,7 +92,11 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
   artifact inventory; and revalidates digests and gate semantics before
   skipping completed work. Its terminal state explicitly remains ineligible
   for release because independent reproduction and the external gates cannot
-  be satisfied by the first-party controller.
+  be satisfied by the first-party controller. Candidate and final gates now
+  require the same hashed matrix manifest in both first-party resource gates,
+  rebind every source manifest/report/normalized manifest, derive one stable
+  host identity from all reports, and require the matrix's release authority
+  to remain false.
 - Candidate and final release evidence use separate fail-closed gates. The
   candidate builder computes artifact hashes and rejects manual pass/digest
   fields; signing finalization verifies Sigstore before it can add the final

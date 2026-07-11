@@ -110,6 +110,7 @@ FUZZ_TARGETS = (
 )
 REQUIRED_EVIDENCE_ROLES = {
     "raw-reports": {
+        "fixed_host_matrix_manifest",
         "one_million_fibonacci_baseline_report",
         "one_million_fibonacci_candidate_report",
         "one_million_poseidon2_baseline_report",

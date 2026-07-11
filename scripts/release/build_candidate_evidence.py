@@ -22,6 +22,7 @@ import strict_json  # noqa: E402
 
 MAX_INPUT_BYTES = 1024 * 1024
 WORKLOADS = ("fibonacci", "poseidon2")
+RESOURCE_MATRIX_ROLE = "matrix_manifest"
 CRASH_CASES = tuple(f"checkpoint_{phase}" for phase in final_gate.CRASH_PHASES) + tuple(
     sorted(final_gate.CRASH_INTEGRITY_CASES)
 )
@@ -35,8 +36,10 @@ def resource_roles(*, baseline: bool) -> list[str]:
     return [f"{workload}_{suffix}" for workload in WORKLOADS for suffix in suffixes]
 
 
-ONE_MILLION_ROLES = resource_roles(baseline=True)
-TEN_MILLION_ROLES = resource_roles(baseline=False)
+ONE_MILLION_WORKLOAD_ROLES = resource_roles(baseline=True)
+TEN_MILLION_WORKLOAD_ROLES = resource_roles(baseline=False)
+ONE_MILLION_ROLES = [RESOURCE_MATRIX_ROLE, *ONE_MILLION_WORKLOAD_ROLES]
+TEN_MILLION_ROLES = [RESOURCE_MATRIX_ROLE, *TEN_MILLION_WORKLOAD_ROLES]
 GATE_ROLES = {
     "clean_release_source": ["test_report", "test_log"],
     "plonky3_dependency_profile_pinned": ["test_report", "test_log"],
@@ -48,8 +51,8 @@ GATE_ROLES = {
     "independent_resource_reproduction": [
         "reproduction_record",
         "reproduction_signature",
-        *[f"one_million_{role}" for role in ONE_MILLION_ROLES],
-        *[f"ten_million_{role}" for role in TEN_MILLION_ROLES],
+        *[f"one_million_{role}" for role in ONE_MILLION_WORKLOAD_ROLES],
+        *[f"ten_million_{role}" for role in TEN_MILLION_WORKLOAD_ROLES],
     ],
     "crash_resume_and_corruption_suite": [
         "crash_matrix",
@@ -275,6 +278,14 @@ def verify_review_execution_coverage(
     expected: dict[tuple[str, str], str] = {}
     one = artifacts("one_million_row_resource_gate")
     ten = artifacts("ten_million_row_resource_gate")
+    if (
+        one[RESOURCE_MATRIX_ROLE]["sha256"]
+        != ten[RESOURCE_MATRIX_ROLE]["sha256"]
+    ):
+        raise ValueError("resource gates do not share one fixed-host matrix manifest")
+    expected[("raw-reports", "fixed_host_matrix_manifest")] = str(
+        one[RESOURCE_MATRIX_ROLE]["sha256"]
+    )
     for workload in ("fibonacci", "poseidon2"):
         for mode in ("baseline", "candidate"):
             role = f"{workload}_{mode}_report"
@@ -386,7 +397,11 @@ def template() -> dict[str, object]:
                 "artifacts": [
                     {
                         "role": role,
-                        "path": f"release/evidence/REPLACE/{name}/{role}",
+                        "path": (
+                            "release/evidence/REPLACE/fixed-host-release-matrix-v1.json"
+                            if role == RESOURCE_MATRIX_ROLE
+                            else f"release/evidence/REPLACE/{name}/{role}"
+                        ),
                     }
                     for role in GATE_ROLES[name]
                 ],

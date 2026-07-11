@@ -31,6 +31,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCHMARK_DIR = ROOT / "scripts" / "benchmark"
+CI_DIR = ROOT / "scripts" / "ci"
+if str(CI_DIR) not in sys.path:
+    sys.path.insert(0, str(CI_DIR))
+import source_tree_identity  # noqa: E402
+
 PROFILE = "tinyzkp-p3-goldilocks-v1"
 PLONKY3_VERSION = "0.6.1"
 BASELINE_MEMORY_CAP = 16 * 1024**3
@@ -381,7 +386,9 @@ def git_output(*arguments: str) -> str:
     return completed.stdout.strip()
 
 
-def validate_source_identity(release_sha: str) -> None:
+def validate_source_identity(release_sha: str) -> str:
+    if source_tree_identity.require_canonical_commit(ROOT, release_sha) != release_sha:
+        raise ValueError("checked-out source does not match the requested release SHA")
     if git_output("rev-parse", "--verify", "HEAD^{commit}") != release_sha:
         raise ValueError("checked-out source does not match the requested release SHA")
     for arguments in (("diff", "--quiet", "HEAD", "--"), ("diff", "--cached", "--quiet", "--")):
@@ -398,6 +405,7 @@ def validate_source_identity(release_sha: str) -> None:
             raise ValueError("fixed-host evidence requires a clean tracked source tree")
         if completed.returncode != 0:
             raise RuntimeError(f"git source-integrity check failed: {completed.stderr[-1000:]}")
+    return source_tree_identity.source_tree_sha256(ROOT, release_sha)
 
 
 def validate_cli_identity(cli: Path, release_sha: str) -> dict[str, object]:
@@ -659,6 +667,7 @@ def validate_entry_gate(entry: MatrixEntry, output_dir: Path, release_sha: str) 
 
 def new_state(
     release_sha: str,
+    source_tree_sha256: str,
     cli: Path,
     cli_identity: dict[str, object],
     output_dir: Path,
@@ -688,6 +697,7 @@ def new_state(
         "schema_version": 1,
         "kind": MATRIX_KIND,
         "release_sha": release_sha,
+        "source_tree_sha256": source_tree_sha256,
         "profile": PROFILE,
         "plonky3_version": PLONKY3_VERSION,
         "source_root": str(ROOT),
@@ -726,6 +736,7 @@ def validate_loaded_state(
     state: dict[str, object],
     *,
     release_sha: str,
+    source_tree_sha256: str,
     cli: Path,
     output_dir: Path,
     scratch_root: Path,
@@ -735,6 +746,7 @@ def validate_loaded_state(
         "schema_version": 1,
         "kind": MATRIX_KIND,
         "release_sha": release_sha,
+        "source_tree_sha256": source_tree_sha256,
         "profile": PROFILE,
         "plonky3_version": PLONKY3_VERSION,
         "source_root": str(ROOT),
@@ -952,7 +964,7 @@ def execute(args: argparse.Namespace) -> int:
     state_path = output_dir / "fixed-host-release-matrix-v1.json"
 
     with MatrixLock(output_dir / ".fixed-host-release-matrix.lock", uid, gid):
-        validate_source_identity(release_sha)
+        source_tree_sha256 = validate_source_identity(release_sha)
         cli_identity = validate_cli_identity(cli, release_sha)
         for item in MATRIX:
             validate_matrix_manifest(item, scratch_root)
@@ -964,6 +976,7 @@ def execute(args: argparse.Namespace) -> int:
             validate_loaded_state(
                 state,
                 release_sha=release_sha,
+                source_tree_sha256=source_tree_sha256,
                 cli=cli,
                 output_dir=output_dir,
                 scratch_root=scratch_root,
@@ -972,6 +985,7 @@ def execute(args: argparse.Namespace) -> int:
         else:
             state = new_state(
                 release_sha,
+                source_tree_sha256,
                 cli,
                 cli_identity,
                 output_dir,

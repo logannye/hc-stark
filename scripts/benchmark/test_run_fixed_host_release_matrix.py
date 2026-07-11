@@ -105,6 +105,7 @@ def test_new_state_never_claims_release_or_external_gate_completion(tmp_path):
     cli.write_bytes(b"binary")
     state = MATRIX.new_state(
         RELEASE_SHA,
+        "b" * 64,
         cli,
         {"release_sha": RELEASE_SHA},
         tmp_path / "reports",
@@ -231,7 +232,7 @@ def test_execute_resumes_only_revalidated_complete_entries(monkeypatch, tmp_path
         release_sha=RELEASE_SHA,
     )
 
-    monkeypatch.setattr(MATRIX, "validate_source_identity", lambda _sha: None)
+    monkeypatch.setattr(MATRIX, "validate_source_identity", lambda _sha: "b" * 64)
     monkeypatch.setattr(
         MATRIX,
         "validate_cli_identity",
@@ -297,6 +298,7 @@ def test_loaded_state_rejects_any_release_authority_claim(tmp_path):
     cgroup = Path("/sys/fs/cgroup/tinyzkp-bench")
     state = MATRIX.new_state(
         RELEASE_SHA,
+        "b" * 64,
         cli,
         {"release_sha": RELEASE_SHA},
         output,
@@ -308,6 +310,7 @@ def test_loaded_state_rejects_any_release_authority_claim(tmp_path):
         MATRIX.validate_loaded_state(
             state,
             release_sha=RELEASE_SHA,
+            source_tree_sha256="b" * 64,
             cli=cli,
             output_dir=output,
             scratch_root=scratch,

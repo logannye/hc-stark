@@ -164,6 +164,7 @@ def main() -> int:
 
     evidence_builder = text("scripts/release/build_candidate_evidence.py")
     release_validator = text("scripts/ci/backend_release_ready.py")
+    prerelease_validator = text("scripts/ci/backend_prerelease_ready.py")
     fuzz_runner = text("scripts/release/run_fuzz_smoke.py")
     fuzz_anchor = text("scripts/release/fuzz_tool_anchor.py")
     gate_tool_anchor = text("scripts/release/gate_tool_anchor.py")
@@ -176,6 +177,13 @@ def main() -> int:
         and 'f"crash_log_{name}"' in evidence_builder
         and 'f"fuzz_log_{name}"' in evidence_builder,
         "candidate evidence no longer requires crash/fuzz reports, tool provenance, and logs",
+    )
+    require(
+        'RESOURCE_MATRIX_ROLE = "matrix_manifest"' in evidence_builder
+        and "fixed-host-release-matrix-v1.json" in evidence_builder
+        and "validate_resource_matrix_binding" in release_validator
+        and "validate_resource_matrix_binding" in prerelease_validator,
+        "first-party resource evidence no longer requires one authority-limited matrix manifest",
     )
     for marker in (
         "validate_fuzz_smoke",
