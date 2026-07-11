@@ -71,6 +71,7 @@ jobs:
             --tag "$IMAGE_PREFIX/hc-beta-worker:sha-$HC_RELEASE_SHA" \
             --metadata-file candidate-artifacts/worker-metadata.json .
           docker buildx build --push --provenance=true --sbom=true \
+            --build-arg HC_RELEASE_SHA="$HC_RELEASE_SHA" \
             --file deploy/hetzner/beta/Dockerfile.postgres \
             --tag "$IMAGE_PREFIX/tinyzkp-postgres:sha-$HC_RELEASE_SHA" \
             --metadata-file candidate-artifacts/postgres-metadata.json .

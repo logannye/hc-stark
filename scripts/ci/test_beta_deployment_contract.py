@@ -45,6 +45,7 @@ def test_backup_and_rollback_contracts_are_tracked():
     backup = text("pgbackrest.conf.example")
     rollback = text("caddy-route.rollback.caddy")
     assert "archive_mode = on" in postgres and "archive-push" in postgres
+    assert "LABEL org.opencontainers.image.revision=$HC_RELEASE_SHA" in postgres_image
     assert "PGBACKREST_VERSION=2.58.0-1.pgdg12+1" in postgres_image
     assert "--no-install-recommends ca-certificates" in postgres_image
     assert "repo1-cipher-type=aes-256-cbc" in backup
@@ -79,6 +80,7 @@ def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
     candidate = (ROOT / ".github/workflows/public-beta-candidate.yml").read_text()
     authorization = (ROOT / ".github/workflows/public-beta-release.yml").read_text()
     assert "docker buildx build --push" in candidate
+    assert candidate.count('--build-arg HC_RELEASE_SHA="$HC_RELEASE_SHA"') == 3
     assert "build_dark_canary_authorization.py" in candidate
     assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in candidate
     assert "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c" in candidate
