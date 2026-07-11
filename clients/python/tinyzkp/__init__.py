@@ -1,6 +1,7 @@
 """TinyZKP local Plonky3 artifact SDK."""
 
 from tinyzkp.client import (
+    AirBuilder,
     ArtifactError,
     BenchmarkReportV1,
     Cli,
@@ -15,8 +16,10 @@ from tinyzkp.client import (
     load_bundle,
     load_manifest,
     load_report,
+    validate_air_package,
 )
 from tinyzkp.schema_models import (
+    AirPackageV1Model,
     BenchmarkReportV1Model,
     ProofBundleV1Model,
     ResourcePolicyV1Model,
@@ -26,6 +29,8 @@ from tinyzkp.schema_models import (
 __version__ = "0.2.0-dev"
 
 __all__ = [
+    "AirBuilder",
+    "AirPackageV1Model",
     "ArtifactError",
     "BenchmarkReportV1",
     "BenchmarkReportV1Model",
@@ -44,4 +49,5 @@ __all__ = [
     "load_bundle",
     "load_manifest",
     "load_report",
+    "validate_air_package",
 ]

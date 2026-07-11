@@ -5,6 +5,10 @@ import JSONbigFactory from "json-bigint";
 import { readFileSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import type {
+  AirConstraintKindV1,
+  AirConstraintV1,
+  AirExpressionV1,
+  AirPackageV1,
   BenchmarkReportV1,
   ProofBundleV1,
   ResourcePolicyV1,
@@ -13,6 +17,10 @@ import type {
 } from "./schema-models.js";
 
 export type {
+  AirConstraintKindV1,
+  AirConstraintV1,
+  AirExpressionV1,
+  AirPackageV1,
   BenchmarkMode,
   BenchmarkReportV1,
   CheckpointPolicy,
@@ -47,6 +55,109 @@ export class ArtifactError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ArtifactError";
+  }
+}
+
+export class AirBuilder {
+  private readonly expressions: AirExpressionV1[] = [];
+  private readonly constraints: AirConstraintV1[] = [];
+
+  constructor(
+    public readonly traceWidth: number,
+    public readonly publicValueCount = 0,
+  ) {}
+
+  private push(expression: AirExpressionV1): number {
+    this.expressions.push(expression);
+    return this.expressions.length - 1;
+  }
+
+  constant(value: UInt64): number { return this.push({ op: "constant", value }); }
+  current(column: number): number { return this.push({ op: "current", column }); }
+  next(column: number): number { return this.push({ op: "next", column }); }
+  publicValue(index: number): number { return this.push({ op: "public", index }); }
+  add(left: number, right: number): number { return this.push({ op: "add", left, right }); }
+  sub(left: number, right: number): number { return this.push({ op: "sub", left, right }); }
+  mul(left: number, right: number): number { return this.push({ op: "mul", left, right }); }
+
+  constrain(kind: AirConstraintKindV1, expression: number): void {
+    this.constraints.push({ kind, expression });
+  }
+
+  build(): AirPackageV1 {
+    const air: AirPackageV1 = {
+      schema_version: 1,
+      backend: "plonky3",
+      profile: COMPATIBILITY_PROFILE,
+      field: "goldilocks",
+      expected_verifier: "p3_uni_stark_0.6.1",
+      trace_width: this.traceWidth,
+      public_value_count: this.publicValueCount,
+      expressions: [...this.expressions],
+      constraints: [...this.constraints],
+    };
+    validateAirPackage(air);
+    return air;
+  }
+}
+
+export function validateAirPackage(value: unknown): asserts value is AirPackageV1 {
+  const air = object(value, "AIR package");
+  exactKeys(air, [
+    "schema_version", "backend", "profile", "field", "expected_verifier",
+    "trace_width", "public_value_count", "expressions", "constraints",
+  ]);
+  if (
+    air.schema_version !== 1 || air.backend !== "plonky3" ||
+    air.profile !== COMPATIBILITY_PROFILE || air.field !== "goldilocks" ||
+    air.expected_verifier !== "p3_uni_stark_0.6.1" ||
+    !Number.isSafeInteger(air.trace_width) || (air.trace_width as number) < 1 ||
+    (air.trace_width as number) > 256 || !Number.isSafeInteger(air.public_value_count) ||
+    (air.public_value_count as number) < 0 || (air.public_value_count as number) > 1024 ||
+    !Array.isArray(air.expressions) || air.expressions.length < 1 || air.expressions.length > 8192 ||
+    !Array.isArray(air.constraints) || air.constraints.length < 1 || air.constraints.length > 1024
+  ) throw new ArtifactError("invalid AIR profile or bounds");
+
+  const degrees: number[] = [];
+  for (let position = 0; position < air.expressions.length; position += 1) {
+    const expression = object(air.expressions[position], "AIR expression");
+    const op = expression.op;
+    let degree: number;
+    if (op === "constant") {
+      exactKeys(expression, ["op", "value"]);
+      degree = isU64(expression.value) && BigInt(expression.value as UInt64) < GOLDILOCKS_MODULUS ? 0 : 4;
+    } else if (op === "current" || op === "next") {
+      exactKeys(expression, ["op", "column"]);
+      degree = Number.isSafeInteger(expression.column) && (expression.column as number) >= 0 &&
+        (expression.column as number) < (air.trace_width as number) ? 1 : 4;
+    } else if (op === "public") {
+      exactKeys(expression, ["op", "index"]);
+      degree = Number.isSafeInteger(expression.index) && (expression.index as number) >= 0 &&
+        (expression.index as number) < (air.public_value_count as number) ? 0 : 4;
+    } else if (op === "add" || op === "sub" || op === "mul") {
+      exactKeys(expression, ["op", "left", "right"]);
+      const left = expression.left as number;
+      const right = expression.right as number;
+      if (!Number.isSafeInteger(left) || !Number.isSafeInteger(right) ||
+          left < 0 || right < 0 || left >= position || right >= position) {
+        throw new ArtifactError("AIR graph references must point backward");
+      }
+      degree = op === "mul" ? degrees[left] + degrees[right] : Math.max(degrees[left], degrees[right]);
+    } else throw new ArtifactError("unsupported AIR expression");
+    if (degree > 3) throw new ArtifactError("AIR degree exceeds three");
+    degrees.push(degree);
+  }
+  for (const value of air.constraints) {
+    const constraint = object(value, "AIR constraint");
+    exactKeys(constraint, ["kind", "expression"]);
+    if (!new Set(["transition", "first_row", "last_row"]).has(String(constraint.kind)) ||
+        !Number.isSafeInteger(constraint.expression) || (constraint.expression as number) < 0 ||
+        (constraint.expression as number) >= air.expressions.length) {
+      throw new ArtifactError("invalid AIR constraint");
+    }
+  }
+  if (canonicalJsonV1(air).length > 4 * 1024 * 1024) {
+    throw new ArtifactError("AIR exceeds the 4 MiB limit");
   }
 }
 
@@ -349,6 +460,17 @@ export class Cli {
 
   prove(manifest: string, output: string): void {
     this.run(["plonky3", "prove", "--manifest", manifest, "--output", output]);
+  }
+
+  validateAir(air: string): void {
+    this.run(["plonky3", "validate-air", "--air", air]);
+  }
+
+  packTrace(air: string, trace: string, rows: number, outputDir: string, chunkBytes = 64 * 1024 * 1024): void {
+    this.run([
+      "plonky3", "pack-trace", "--air", air, "--trace", trace,
+      "--rows", String(rows), "--output-dir", outputDir, "--chunk-bytes", String(chunkBytes),
+    ]);
   }
 
   resume(checkpoint: string, output: string): void {

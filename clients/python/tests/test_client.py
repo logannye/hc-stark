@@ -7,15 +7,40 @@ import pytest
 from blake3 import blake3
 
 from tinyzkp import (
+    AirBuilder,
     ArtifactError,
     ResourcePolicyV1,
     WorkloadManifestV1,
     canonical_json_v1,
+    canonical_digest_hex,
     decode_base64url,
     load_bundle,
     load_manifest,
     load_report,
 )
+
+
+def test_air_builder_matches_rust_maximum_width_golden_vector():
+    builder = AirBuilder(trace_width=256, public_value_count=1)
+    current = builder.current(255)
+    maximum = builder.constant(0xFFFF_FFFF_0000_0000)
+    constraint = builder.sub(current, maximum)
+    builder.constrain("first_row", constraint)
+    package = builder.build()
+    assert canonical_digest_hex(package) == (
+        "794df3f5378ff97b9c2877bd1f01c8fbcf646a212981a9f2bd8cdd7147a4a454"
+    )
+
+
+def test_air_builder_rejects_forward_reference_and_degree_four():
+    builder = AirBuilder(trace_width=1)
+    column = builder.current(0)
+    square = builder.mul(column, column)
+    cube = builder.mul(square, column)
+    degree_four = builder.mul(cube, column)
+    builder.constrain("transition", degree_four)
+    with pytest.raises(ArtifactError, match="degree"):
+        builder.build()
 
 
 def policy(tmp_path) -> ResourcePolicyV1:

@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  AirBuilder,
   ArtifactError,
   canonicalDigestHex,
   canonicalJsonV1,
@@ -15,6 +16,28 @@ import {
   loadManifest,
   validateManifest,
 } from "../dist/esm/client.js";
+
+test("AIR builder matches the Rust maximum-width golden vector", () => {
+  const builder = new AirBuilder(256, 1);
+  const current = builder.current(255);
+  const maximum = builder.constant(0xffff_ffff_0000_0000n);
+  const constraint = builder.sub(current, maximum);
+  builder.constrain("first_row", constraint);
+  assert.equal(
+    canonicalDigestHex(builder.build()),
+    "794df3f5378ff97b9c2877bd1f01c8fbcf646a212981a9f2bd8cdd7147a4a454",
+  );
+});
+
+test("AIR builder rejects degree-four graphs", () => {
+  const builder = new AirBuilder(1);
+  const column = builder.current(0);
+  const square = builder.mul(column, column);
+  const cube = builder.mul(square, column);
+  const degreeFour = builder.mul(cube, column);
+  builder.constrain("transition", degreeFour);
+  assert.throws(() => builder.build(), /degree exceeds three/);
+});
 
 const policy = {
   mode: "scratch",
