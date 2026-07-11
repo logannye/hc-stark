@@ -20,4 +20,5 @@ log-level-file=detail
 [tinyzkp-beta]
 pg1-path=/var/lib/postgresql/data/pgdata
 pg1-port=5432
-
+pg1-database=tinyzkp_beta
+pg1-user=tinyzkp_beta
