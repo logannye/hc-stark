@@ -4,12 +4,26 @@
 # production services (API, MCP, website, billing webhook) and sends a macOS
 # notification + optional Slack/Discord webhook on any failures.
 #
-# Usage: ./api_health_audit.sh
-# Env:   TINYZKP_AUDIT_API_KEY  (optional — enables prove/verify/usage tests)
+# Usage: TINYZKP_AUDIT_MODE=containment|production ./api_health_audit.sh
+# Env:   TINYZKP_AUDIT_MODE     (required — never infer release posture)
+#        TINYZKP_AUDIT_API_KEY  (production only — enables prove/verify/usage tests)
 #        TINYZKP_AUDIT_MCP_E2E  (optional — set to 1 for MCP prove/verify E2E)
 #        TINYZKP_AUDIT_WEBHOOK  (optional — Slack/Discord webhook URL)
 
 set -euo pipefail
+
+AUDIT_MODE="${TINYZKP_AUDIT_MODE:-}"
+case "$AUDIT_MODE" in
+    containment)
+        exec python3 "$(cd "$(dirname "$0")" && pwd)/containment_health_audit.py"
+        ;;
+    production)
+        ;;
+    *)
+        echo "TINYZKP_AUDIT_MODE must be explicitly set to containment or production" >&2
+        exit 2
+        ;;
+esac
 
 # ── Configuration ──────────────────────────────────────────────────
 API="https://api.tinyzkp.com"
@@ -22,7 +36,14 @@ LOG_DIR="$HOME/hc-stark/logs/audit"
 LOG_FILE="$LOG_DIR/api_audit_$(date +%Y-%m-%d).log"
 WEBHOOK="${TINYZKP_AUDIT_WEBHOOK:-}"
 
+if [ -z "$API_KEY" ] || [ -z "${TINYZKP_INTERNAL_SECRET:-}" ]; then
+    echo "production audit mode requires TINYZKP_AUDIT_API_KEY and TINYZKP_INTERNAL_SECRET" >&2
+    exit 2
+fi
+
 mkdir -p "$LOG_DIR"
+
+echo "TinyZKP audit mode: production" >&2
 
 # Scratch files. test_api writes its response body to RESP_FILE (instead of
 # stdout) so callers never wrap it in $(...) — command substitution runs the

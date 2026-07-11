@@ -159,6 +159,45 @@ python3 scripts/ci/production_launch_preflight.py
 python3 scripts/ci/server_card_check.py
 ```
 
+### Daily production audit modes
+
+The macOS audit is fail-closed and requires an explicit release posture:
+
+```sh
+TINYZKP_AUDIT_MODE=containment bash scripts/monitoring/api_health_audit.sh
+```
+
+Containment mode verifies infrastructure health and requires hosted proving,
+signup, checkout, legacy routes, and billing provisioning to remain disabled.
+Production mode restores the authenticated end-to-end contract and requires
+both `TINYZKP_AUDIT_API_KEY` and `TINYZKP_INTERNAL_SECRET`.
+
+Install the tracked 06:00 LaunchAgent from the canonical checkout with:
+
+```sh
+bash deploy/macos/install_api_audit_launchagent.sh
+launchctl kickstart -k "gui/$(id -u)/com.tinyzkp.api-audit"
+```
+
+Configuration lives in `~/.config/tinyzkp/audit.env` with mode `0600`; never put
+credentials in the plist. The installer copies the canonical scripts to
+`~/Library/Application Support/TinyZKP/audit` because macOS denies LaunchAgents
+access to Documents; rerun the installer after changing audit code. Logs live
+under `~/Library/Logs/TinyZKP`. Rotate any
+credential previously stored in a plist before using production mode. At v9
+relaunch, change the mode only after the release gates pass, install the
+production audit credentials, run the full audit manually, and then retain the
+new mode. Roll back by restoring `TINYZKP_AUDIT_MODE=containment` and reloading
+the LaunchAgent; do not re-enable hosted capabilities to make an audit green.
+
+When the legacy research repo is checked out next to `hc-stark`, include it in
+the audit:
+
+```sh
+python3 scripts/ci/launch_gate_audit.py --require-legacy
+scripts/ci/run_production_preflight.sh --require-legacy
+```
+
 For a production deploy rehearsal, run the aggregate preflight with the
 production env file and Cloudflare Pages binding file. This keeps local repo
 evidence, deploy-readiness policy, Pages configuration, Compose rendering,

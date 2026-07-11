@@ -2,14 +2,56 @@
 
 const TARGETS = [
   { name: "api-health", url: "https://api.tinyzkp.com/healthz", expect: 200 },
+  { name: "api-ready", url: "https://api.tinyzkp.com/readyz", expect: 200 },
+  { name: "webhook-health", url: "https://webhook.tinyzkp.com/health", expect: 200 },
   {
     name: "api-capabilities",
     url: "https://api.tinyzkp.com/v1/capabilities",
     expect: 200,
     contains: '"proving_available":false',
   },
+  {
+    name: "published-recovery-status",
+    url: "https://tinyzkp.com/discovery.json",
+    expect: 200,
+    jsonField: "service_status",
+    jsonValue: "backend_recovery",
+  },
+  {
+    name: "api-proving-contained",
+    url: "https://api.tinyzkp.com/templates",
+    expect: 503,
+    contains: '"code":"protocol_upgrade"',
+  },
+  {
+    name: "checkout-contained",
+    url: "https://tinyzkp.com/api/create-checkout",
+    method: "POST",
+    body: "{}",
+    expect: 503,
+    contains: '"code":"protocol_upgrade"',
+  },
+  {
+    name: "mcp-transport",
+    url: "https://mcp.tinyzkp.com/mcp",
+    method: "POST",
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "tinyzkp-uptime-probe", version: "1.0" } } }),
+    expect: 200,
+    contains: "protocolVersion",
+  },
+  {
+    name: "site",
+    url: "https://tinyzkp.com/",
+    expect: 200,
+  },
+  {
+    name: "site-status",
+    url: "https://tinyzkp.com/status",
+    expect: 200,
+    contains: "Planned maintenance",
+  },
   { name: "mcp-version", url: "https://mcp.tinyzkp.com/version", expect: 200, contains: '"service":"mcp"' },
-  { name: "site-status", url: "https://tinyzkp.com/status", expect: 200, contains: "Backend recovery in progress" },
+  { name: "site-recovery-status", url: "https://tinyzkp.com/status", expect: 200, contains: "Backend recovery in progress" },
   { name: "site-security", url: "https://tinyzkp.com/security", expect: 200, contains: "release gates" },
   { name: "site-docs", url: "https://tinyzkp.com/docs", expect: 200, contains: "Maintenance API" },
 ];
@@ -21,19 +63,40 @@ async function probe(target) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(target.url, {
-      method: "GET",
+    const res = await fetch(target.url, {
+      method: target.method || "GET",
+      body: target.body,
       signal: controller.signal,
       cf: { cacheTtl: 0 },
-      headers: { "user-agent": "tinyzkp-recovery-uptime-probe" },
+      headers: {
+        "user-agent": "tinyzkp-uptime-probe",
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+      },
     });
-    if (response.status !== target.expect) return { name: target.name, ok: false, status: response.status };
-    if (!target.contains) return { name: target.name, ok: true, status: response.status };
-    const body = await response.text();
-    const ok = body.includes(target.contains);
-    return { name: target.name, ok, status: response.status, missing: ok ? undefined : target.contains };
-  } catch (error) {
-    return { name: target.name, ok: false, status: 0, error: String(error) };
+    const statusOk = target.expect === null ? true : res.status === target.expect;
+    if (!statusOk) return { name: target.name, ok: false, status: res.status };
+
+    if (target.contains || target.jsonField) {
+      const body = await res.text();
+      if (target.jsonField) {
+        let payload;
+        try { payload = JSON.parse(body); } catch { return { name: target.name, ok: false, status: res.status, error: "invalid JSON" }; }
+        const jsonOk = payload[target.jsonField] === target.jsonValue;
+        return { name: target.name, ok: jsonOk, status: res.status, missing: jsonOk ? undefined : `${target.jsonField}=${target.jsonValue}` };
+      }
+      const containsOk = body.includes(target.contains);
+      return {
+        name: target.name,
+        ok: containsOk,
+        status: res.status,
+        missing: containsOk ? undefined : target.contains,
+      };
+    }
+
+    return { name: target.name, ok: true, status: res.status };
+  } catch (err) {
+    return { name: target.name, ok: false, status: 0, error: String(err) };
   } finally {
     clearTimeout(timer);
   }
@@ -80,3 +143,5 @@ export default {
     });
   },
 };
+
+export { TARGETS, probe };
