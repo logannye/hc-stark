@@ -471,7 +471,7 @@ pub async fn create_upload(
         return idempotency::replay(status, body);
     }
     let upload_id = Uuid::new_v4();
-    let prefix = format!("tenants/{}/uploads/{upload_id}", tenant.tenant_id);
+    let prefix = format!("uploads/{}/{upload_id}", tenant.tenant_id);
     sqlx::query(
         "INSERT INTO beta_uploads
              (upload_id,tenant_id,air_package_id,trace_digest_hex,manifest_json,object_prefix,status,expires_at)
