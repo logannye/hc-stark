@@ -30,6 +30,11 @@ TARGETS = (
     "scratch_artifact_header_v1",
     "checkpoint_identity_v2",
     "resume_checkpoint_v2",
+    "air_package_v1",
+    "trace_manifest_v1",
+    "hosted_proof_bundle_v1",
+    "zstd_trace_chunk_v1",
+    "beta_api_request_v1",
 )
 SMOKE_SEED_LIMIT = 16
 MAX_SMOKE_SEED_BYTES = 1024 * 1024
@@ -219,6 +224,21 @@ def seed_payloads(target: str) -> list[bytes]:
         seeds = [checkpoint_seed()]
     elif target == "challenger_snapshot_v1":
         seeds = [b"\0"]
+    elif target == "air_package_v1":
+        seeds = [b"{}", b'{"schema_version":1}']
+    elif target == "trace_manifest_v1":
+        seeds = [b"[{},{}]", b'[{"schema_version":1},{"schema_version":1}]']
+    elif target == "hosted_proof_bundle_v1":
+        seeds = [b"{}", b'{"schema_version":1}']
+    elif target == "zstd_trace_chunk_v1":
+        # A minimal valid empty Zstandard frame plus a truncated magic header
+        # exercise both decoder construction and bounded failure paths.
+        seeds = [bytes.fromhex("28b52ffd2000010000"), bytes.fromhex("28b52ffd")]
+    elif target == "beta_api_request_v1":
+        seeds = [
+            b"{}",
+            b'{"air":{},"local_proof":{},"manifest":{},"public_inputs":[],"lease_epoch":0}',
+        ]
     else:
         seeds = [b"\0", b"TZSCRATCH1"]
     unique = {hashlib.sha256(payload).digest(): payload for payload in seeds if payload}
