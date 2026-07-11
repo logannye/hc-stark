@@ -142,6 +142,19 @@ def test_execution_passed(value: object) -> bool:
     )
 
 
+def tool_descriptor_pairs(
+    opened_tools: list[int], expected_digests: tuple[object, ...], *, partial: bool
+) -> tuple[tuple[int, object], ...]:
+    """Require descriptor-bound tools only for full Linux release evidence."""
+
+    expected_count = 0 if partial else len(expected_digests)
+    if len(opened_tools) != expected_count:
+        raise ValueError("crash evidence tool descriptor set is incomplete")
+    if partial:
+        return ()
+    return tuple(zip(opened_tools, expected_digests, strict=True))
+
+
 def parse_disk_full_marker(payload: bytes) -> dict[str, object]:
     markers = list(DISK_FULL_MARKER.finditer(payload))
     marker = markers[0] if len(markers) == 1 else None
@@ -580,10 +593,10 @@ def main(argv: list[str]) -> int:
             )
         if immutable is not None:
             evidence_runtime.verify_read_only_source(immutable, inventory)
-        for descriptor_value, expected in zip(
+        for descriptor_value, expected in tool_descriptor_pairs(
             opened_tools,
             (cargo_identity["sha256"], rustc_identity["sha256"]),
-            strict=True,
+            partial=args.partial,
         ):
             if evidence_runtime._digest_descriptor(descriptor_value) != expected:
                 raise ValueError("release tool executable changed during crash evidence")

@@ -127,6 +127,26 @@ def test_test_execution_rejects_zero_or_different_tests():
     )
 
 
+def test_partial_matrix_expects_no_descriptor_bound_release_tools():
+    assert MODULE.tool_descriptor_pairs([], ("cargo", "rustc"), partial=True) == ()
+    try:
+        MODULE.tool_descriptor_pairs([1], ("cargo", "rustc"), partial=True)
+    except ValueError as error:
+        assert "descriptor set is incomplete" in str(error)
+    else:
+        raise AssertionError("partial mode accepted an unexpected release descriptor")
+
+    assert MODULE.tool_descriptor_pairs(
+        [10, 11], ("cargo", "rustc"), partial=False
+    ) == ((10, "cargo"), (11, "rustc"))
+    try:
+        MODULE.tool_descriptor_pairs([], ("cargo", "rustc"), partial=False)
+    except ValueError as error:
+        assert "descriptor set is incomplete" in str(error)
+    else:
+        raise AssertionError("release mode accepted missing tool descriptors")
+
+
 def test_release_mode_requires_disk_full_contract():
     try:
         MODULE.main(
