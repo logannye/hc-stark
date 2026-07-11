@@ -30,7 +30,8 @@ FIXED_BUNDLE_NAME = "bundle.json"
 FIXED_REVIEW_NAME = "review.json"
 FIXED_RAW_NAME = "raw"
 FIXED_MACHINE_ID = pathlib.Path("/etc/machine-id")
-SCHEMA = "tinyzkp-fixed-host-backup-evidence-v1"
+SCHEMA_VERSION = 2
+BUNDLE_STATUS = "observations_complete"
 MAX_EVIDENCE_BYTES = 512 * 1024
 MAX_STRUCTURED_ARTIFACT_BYTES = 2 * 1024 * 1024
 MAX_LOG_ARTIFACT_BYTES = 64 * 1024 * 1024
@@ -454,11 +455,18 @@ def _validate_bundle_header(
     )
     if (
         type(bundle["schema_version"]) is not int
-        or bundle["schema_version"] != 1
-        or bundle["status"] != "reviewed_pass"
+        or bundle["schema_version"] != SCHEMA_VERSION
+        or bundle["status"] != BUNDLE_STATUS
     ):
-        raise EvidenceError("fixed-host bundle is not reviewed passing evidence")
-    _digest(bundle["evidence_id"], label="evidence ID")
+        raise EvidenceError("fixed-host bundle is not a complete observation bundle")
+    evidence_id = _digest(bundle["evidence_id"], label="evidence ID")
+    expected_evidence_id = _sha256(
+        _canonical_json(
+            {key: value for key, value in bundle.items() if key != "evidence_id"}
+        )
+    )
+    if not hmac.compare_digest(evidence_id, expected_evidence_id):
+        raise EvidenceError("fixed-host bundle evidence ID is not derived canonically")
     if bundle["release_sha"] != expected_release_sha:
         raise EvidenceError(
             "fixed-host bundle release does not match the expected release"
@@ -1251,31 +1259,16 @@ def _validate_review(
     )
 
 
-def validate_evidence(
+def _validate_observation_root(
     *,
     expected_release_sha: str,
     expected_host_identity_sha256: str,
     expected_deployment_id: str,
-    evidence_root: pathlib.Path = FIXED_EVIDENCE_ROOT,
-    required_uid: int = 0,
-    now: datetime | None = None,
-    enforce_fixed_host: bool = True,
-    enforce_fixed_path: bool = True,
-    machine_id_file: pathlib.Path = FIXED_MACHINE_ID,
-) -> dict[str, object]:
-    if RELEASE_RE.fullmatch(expected_release_sha) is None:
-        raise EvidenceError("expected release SHA is not canonical")
-    if SHA256_RE.fullmatch(expected_host_identity_sha256) is None:
-        raise EvidenceError("expected host identity is not canonical")
-    if DEPLOYMENT_RE.fullmatch(expected_deployment_id) is None:
-        raise EvidenceError("expected deployment ID is not canonical")
-    if enforce_fixed_path and evidence_root != FIXED_EVIDENCE_ROOT:
-        raise EvidenceError("fixed-host evidence root path is not authorized")
-    if enforce_fixed_host:
-        _enforce_fixed_host(expected_host_identity_sha256, machine_id_file)
-    if enforce_fixed_path:
-        _validate_fixed_ancestors(evidence_root, uid=required_uid)
-
+    evidence_root: pathlib.Path,
+    required_uid: int,
+    checked_at: datetime,
+    expected_root_entries: set[str],
+) -> dict[str, Any]:
     root_identity = _validate_directory(
         evidence_root, uid=required_uid, label="fixed-host evidence root"
     )
@@ -1284,7 +1277,7 @@ def validate_evidence(
         raw_root, uid=required_uid, label="raw artifact root"
     )
     root_entries = {entry.name for entry in os.scandir(evidence_root)}
-    if root_entries != {FIXED_BUNDLE_NAME, FIXED_REVIEW_NAME, FIXED_RAW_NAME}:
+    if root_entries != expected_root_entries:
         raise EvidenceError(
             "fixed-host evidence root contains missing or unexpected entries"
         )
@@ -1296,7 +1289,6 @@ def validate_evidence(
         limit=MAX_EVIDENCE_BYTES,
     )
     bundle = _parse_canonical_json(bundle_raw, label="fixed-host evidence bundle")
-    checked_at = now or datetime.now(timezone.utc)
     captured_at = _validate_bundle_header(
         bundle,
         expected_release_sha=expected_release_sha,
@@ -1326,7 +1318,8 @@ def validate_evidence(
     )
     _validate_staging(
         _parse_canonical_json(
-            contents["service_uid_staging_report"], label="service-UID staging report"
+            contents["service_uid_staging_report"],
+            label="service-UID staging report",
         ),
         bundle,
         timestamp,
@@ -1363,6 +1356,139 @@ def validate_evidence(
         signal_matrix=True,
     )
 
+    final_root = evidence_root.lstat()
+    final_raw = raw_root.lstat()
+    if (final_root.st_dev, final_root.st_ino) != (
+        root_identity.st_dev,
+        root_identity.st_ino,
+    ) or (
+        final_raw.st_dev,
+        final_raw.st_ino,
+    ) != (raw_identity.st_dev, raw_identity.st_ino):
+        raise EvidenceError(
+            "fixed-host evidence directories changed during verification"
+        )
+    return {
+        "bundle": bundle,
+        "bundle_raw": bundle_raw,
+        "captured_at": captured_at,
+        "contents": contents,
+        "subject_sha256": subject_sha256,
+        "root_identity": root_identity,
+        "raw_identity": raw_identity,
+        "raw_root": raw_root,
+    }
+
+
+def _recheck_observation_directories(
+    result: dict[str, Any], evidence_root: pathlib.Path
+) -> None:
+    final_root = evidence_root.lstat()
+    final_raw = result["raw_root"].lstat()
+    root_identity = result["root_identity"]
+    raw_identity = result["raw_identity"]
+    if (final_root.st_dev, final_root.st_ino) != (
+        root_identity.st_dev,
+        root_identity.st_ino,
+    ) or (
+        final_raw.st_dev,
+        final_raw.st_ino,
+    ) != (raw_identity.st_dev, raw_identity.st_ino):
+        raise EvidenceError(
+            "fixed-host evidence directories changed during verification"
+        )
+
+
+def validate_observations(
+    *,
+    expected_release_sha: str,
+    expected_host_identity_sha256: str,
+    expected_deployment_id: str,
+    evidence_root: pathlib.Path,
+    required_uid: int,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Validate a captured observation bundle before independent review.
+
+    This deliberately accepts only a root containing ``bundle.json`` and
+    ``raw/``. It neither reads nor creates review material and its return status
+    is never a production approval.
+    """
+
+    if RELEASE_RE.fullmatch(expected_release_sha) is None:
+        raise EvidenceError("expected release SHA is not canonical")
+    if SHA256_RE.fullmatch(expected_host_identity_sha256) is None:
+        raise EvidenceError("expected host identity is not canonical")
+    if DEPLOYMENT_RE.fullmatch(expected_deployment_id) is None:
+        raise EvidenceError("expected deployment ID is not canonical")
+
+    checked_at = now or datetime.now(timezone.utc)
+    result = _validate_observation_root(
+        expected_release_sha=expected_release_sha,
+        expected_host_identity_sha256=expected_host_identity_sha256,
+        expected_deployment_id=expected_deployment_id,
+        evidence_root=evidence_root,
+        required_uid=required_uid,
+        checked_at=checked_at,
+        expected_root_entries={FIXED_BUNDLE_NAME, FIXED_RAW_NAME},
+    )
+    bundle = result["bundle"]
+    contents = result["contents"]
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "status": "external_review_required",
+        "release_sha": expected_release_sha,
+        "host_identity_sha256": expected_host_identity_sha256,
+        "deployment_id": expected_deployment_id,
+        "run_id": bundle["run_id"],
+        "captured_at": bundle["captured_at"],
+        "artifact_count": len(contents),
+        "bundle_sha256": _sha256(result["bundle_raw"]),
+        "subject_artifact_set_sha256": result["subject_sha256"],
+    }
+
+
+def validate_evidence(
+    *,
+    expected_release_sha: str,
+    expected_host_identity_sha256: str,
+    expected_deployment_id: str,
+    evidence_root: pathlib.Path = FIXED_EVIDENCE_ROOT,
+    required_uid: int = 0,
+    now: datetime | None = None,
+    enforce_fixed_host: bool = True,
+    enforce_fixed_path: bool = True,
+    machine_id_file: pathlib.Path = FIXED_MACHINE_ID,
+) -> dict[str, object]:
+    if RELEASE_RE.fullmatch(expected_release_sha) is None:
+        raise EvidenceError("expected release SHA is not canonical")
+    if SHA256_RE.fullmatch(expected_host_identity_sha256) is None:
+        raise EvidenceError("expected host identity is not canonical")
+    if DEPLOYMENT_RE.fullmatch(expected_deployment_id) is None:
+        raise EvidenceError("expected deployment ID is not canonical")
+    if enforce_fixed_path and evidence_root != FIXED_EVIDENCE_ROOT:
+        raise EvidenceError("fixed-host evidence root path is not authorized")
+    if enforce_fixed_host:
+        _enforce_fixed_host(expected_host_identity_sha256, machine_id_file)
+    if enforce_fixed_path:
+        _validate_fixed_ancestors(evidence_root, uid=required_uid)
+
+    checked_at = now or datetime.now(timezone.utc)
+    result = _validate_observation_root(
+        expected_release_sha=expected_release_sha,
+        expected_host_identity_sha256=expected_host_identity_sha256,
+        expected_deployment_id=expected_deployment_id,
+        evidence_root=evidence_root,
+        required_uid=required_uid,
+        checked_at=checked_at,
+        expected_root_entries={FIXED_BUNDLE_NAME, FIXED_REVIEW_NAME, FIXED_RAW_NAME},
+    )
+    bundle = result["bundle"]
+    bundle_raw = result["bundle_raw"]
+    captured_at = result["captured_at"]
+    contents = result["contents"]
+    subject_sha256 = result["subject_sha256"]
+
     review_raw, _review_metadata = _read_private_file(
         evidence_root / FIXED_REVIEW_NAME,
         uid=required_uid,
@@ -1387,21 +1513,10 @@ def validate_evidence(
             }
         )
     )
+    _recheck_observation_directories(result, evidence_root)
 
-    final_root = evidence_root.lstat()
-    final_raw = raw_root.lstat()
-    if (final_root.st_dev, final_root.st_ino) != (
-        root_identity.st_dev,
-        root_identity.st_ino,
-    ) or (
-        final_raw.st_dev,
-        final_raw.st_ino,
-    ) != (raw_identity.st_dev, raw_identity.st_ino):
-        raise EvidenceError(
-            "fixed-host evidence directories changed during verification"
-        )
     return {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
         "status": "reviewed_pass",
         "release_sha": expected_release_sha,
         "host_identity_sha256": expected_host_identity_sha256,

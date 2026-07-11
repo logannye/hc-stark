@@ -62,6 +62,7 @@ def test_local_preflight_builds_fast_static_gate_sequence():
             "-m",
             "pytest",
             "scripts/ci/test_fixed_host_backup_evidence.py",
+            "scripts/ci/test_fixed_host_evidence_workspace.py",
         ),
         (
             "python",

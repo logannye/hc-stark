@@ -441,6 +441,47 @@ CI can unit-test this policy, but it cannot create or pass fixed-host evidence:
 the reviewed bundle, raw artifacts, host identity, private ownership boundary,
 and independent review must come from the production-equivalent Linux drill.
 
+Use the observation workspace helper before the privileged drill so case names,
+artifact paths, and structured report fields are not recreated by hand. The
+scaffold contains only `null` pending observations, creates no raw success
+logs, and is deliberately rejected by every evidence gate:
+
+```sh
+RUN_ID="$(/usr/bin/openssl rand -hex 16)"
+sudo /usr/bin/python3 scripts/ci/fixed_host_evidence_workspace.py \
+  backup-scaffold \
+  --release-sha "$RELEASE_SHA" \
+  --host-identity-sha256 "$HOST_IDENTITY_SHA256" \
+  --deployment-id tinyzkp-production-primary \
+  --run-id "$RUN_ID" \
+  --output-root "/var/lib/tinyzkp-private/backup/drill-runs/$RUN_ID"
+```
+
+The privileged operator or separately reviewed harness must write every exact
+canonical JSON observation and nonempty log beneath that workspace's `raw/`
+directory. The helper does **not** execute a backup, inject a failure, restore
+data, or contact the off-box store. Once the raw set is complete, package and
+semantically validate observations without creating approval:
+
+```sh
+sudo /usr/bin/python3 scripts/ci/fixed_host_evidence_workspace.py \
+  backup-capture \
+  --release-sha "$RELEASE_SHA" \
+  --host-identity-sha256 "$HOST_IDENTITY_SHA256" \
+  --deployment-id tinyzkp-production-primary \
+  --run-id "$RUN_ID" \
+  --workspace "/var/lib/tinyzkp-private/backup/drill-runs/$RUN_ID" \
+  --output-root /var/lib/tinyzkp-private/backup/fixed-host-evidence
+```
+
+Capture creates only `bundle.json` and `raw/`. Bundle schema v2 has status
+`observations_complete`, and its `evidence_id` is derived canonically from all
+other bundle fields. That status is not an approval. The production verifier
+requires a separate `review.json`, binds it to the exact bundle and artifact
+subject, and fails closed while the review is absent, stale, unapproved,
+non-independent, or reports an open critical/high finding. Capture has no
+option to create a review or signature.
+
 ### Cloudflare Pages deploy gate
 
 Run the site deploy preflight before every Pages deploy:
