@@ -46,3 +46,25 @@ def test_beta_routing_cannot_break_ordinary_containment_deploys():
     assert "tinyzkp-beta-route.caddy" not in containment
     assert "tinyzkp-beta-route.caddy" in beta
     assert "Caddyfile.tinyzkp-containment" in switch
+
+
+def test_operator_environment_templates_cover_both_hosts_and_oauth_hostname():
+    api = text("compose.api.env.example")
+    worker = text("compose.worker.env.example")
+    api_runtime = text("beta-api.env.example")
+    assert "TINYZKP_BETA_API_IMAGE=" in api and "@sha256:" in api
+    assert "TINYZKP_POSTGRES_IMAGE=" in api and "@sha256:" in api
+    assert "TINYZKP_BETA_WORKER_IMAGE=" in worker and "@sha256:" in worker
+    assert "https://api.tinyzkp.com/v1/auth/github/callback" in api_runtime
+    assert "https://tinyzkp.com/v1/auth/github/callback" not in api_runtime
+
+
+def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
+    candidate = (ROOT / ".github/workflows/public-beta-candidate.yml").read_text()
+    authorization = (ROOT / ".github/workflows/public-beta-release.yml").read_text()
+    assert "docker buildx build --push" in candidate
+    assert "build_dark_canary_authorization.py" in candidate
+    assert "extract_public_beta_evidence.py" in authorization
+    assert "build_public_beta_authorization.py" in authorization
+    assert "docker build" not in authorization
+    assert "workflow_dispatch" in candidate and "workflow_dispatch" in authorization

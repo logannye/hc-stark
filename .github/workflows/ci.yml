@@ -120,6 +120,10 @@ jobs:
           python3 -m pytest scripts/ci/test_production_launch_preflight.py
           python3 -m pytest scripts/ci/test_release_identity_check.py
           python3 -m pytest scripts/monitoring/test_backend_recovery_canary.py
+          python3 -m pytest scripts/load/test_run_public_beta_load.py
+          python3 -m pytest scripts/canary/test_run_public_beta_canary.py
+          python3 -m pytest scripts/release/test_build_dark_canary_authorization.py
+          python3 -m pytest scripts/release/test_extract_public_beta_evidence.py
 
       - name: backup restore checks
         run: |

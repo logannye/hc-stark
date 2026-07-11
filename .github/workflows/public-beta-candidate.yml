@@ -1,0 +1,125 @@
+name: Build paid public-beta candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact merged main commit to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: public-beta-candidate-${{ inputs.release_sha }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    env:
+      HC_RELEASE_SHA: ${{ inputs.release_sha }}
+      REGISTRY: ghcr.io
+      IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/hc-stark
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+      - name: Require exact current merged main candidate
+        run: |
+          [[ "$HC_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "release_sha must be a full lowercase Git commit" >&2; exit 2; }
+          test "$(git rev-parse HEAD)" = "$HC_RELEASE_SHA"
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$HC_RELEASE_SHA"
+          test -z "$(git status --porcelain)"
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.95.0"
+      - name: Recheck candidate release gates
+        run: |
+          cargo test --locked -p hc-beta-api -p hc-beta-worker -p hc-cli
+          cargo clippy --locked -p hc-beta-api -p hc-beta-worker -p hc-cli --all-targets -- -D warnings
+          python3 scripts/ci/production_launch_preflight.py
+      - name: Authenticate to immutable package registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login "$REGISTRY" -u "${{ github.actor }}" --password-stdin
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+      - name: Build and push candidate images
+        run: |
+          install -d candidate-artifacts
+          docker buildx build --push --provenance=true --sbom=true \
+            --build-arg HC_RELEASE_SHA="$HC_RELEASE_SHA" \
+            --file deploy/hetzner/beta/Dockerfile.api \
+            --tag "$IMAGE_PREFIX/hc-beta-api:sha-$HC_RELEASE_SHA" \
+            --metadata-file candidate-artifacts/api-metadata.json .
+          docker buildx build --push --provenance=true --sbom=true \
+            --build-arg HC_RELEASE_SHA="$HC_RELEASE_SHA" \
+            --file deploy/hetzner/beta/Dockerfile.worker \
+            --tag "$IMAGE_PREFIX/hc-beta-worker:sha-$HC_RELEASE_SHA" \
+            --metadata-file candidate-artifacts/worker-metadata.json .
+          docker buildx build --push --provenance=true --sbom=true \
+            --file deploy/hetzner/beta/Dockerfile.postgres \
+            --tag "$IMAGE_PREFIX/tinyzkp-postgres:sha-$HC_RELEASE_SHA" \
+            --metadata-file candidate-artifacts/postgres-metadata.json .
+      - name: Record and sign immutable image identities
+        run: |
+          API_REF="$IMAGE_PREFIX/hc-beta-api@$(jq -er '."containerimage.digest"' candidate-artifacts/api-metadata.json)"
+          WORKER_REF="$IMAGE_PREFIX/hc-beta-worker@$(jq -er '."containerimage.digest"' candidate-artifacts/worker-metadata.json)"
+          POSTGRES_REF="$IMAGE_PREFIX/tinyzkp-postgres@$(jq -er '."containerimage.digest"' candidate-artifacts/postgres-metadata.json)"
+          jq -n \
+            --arg release_sha "$HC_RELEASE_SHA" \
+            --arg api "$API_REF" \
+            --arg worker "$WORKER_REF" \
+            --arg postgres "$POSTGRES_REF" \
+            '{schema_version:1,release_sha:$release_sha,images:{api:$api,worker:$worker,postgres:$postgres}}' \
+            > candidate-artifacts/candidate-images.json
+          echo "API_REF=$API_REF" >> "$GITHUB_ENV"
+          echo "WORKER_REF=$WORKER_REF" >> "$GITHUB_ENV"
+          echo "POSTGRES_REF=$POSTGRES_REF" >> "$GITHUB_ENV"
+          cosign sign --yes "$API_REF"
+          cosign sign --yes "$WORKER_REF"
+          cosign sign --yes "$POSTGRES_REF"
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.API_REF }}
+          format: spdx-json
+          output-file: candidate-artifacts/hc-beta-api.spdx.json
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.WORKER_REF }}
+          format: spdx-json
+          output-file: candidate-artifacts/hc-beta-worker.spdx.json
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.POSTGRES_REF }}
+          format: spdx-json
+          output-file: candidate-artifacts/tinyzkp-postgres.spdx.json
+      - name: Build and sign narrow live-billing canary authorization
+        run: |
+          python3 scripts/release/build_dark_canary_authorization.py \
+            --release-sha "$HC_RELEASE_SHA" \
+            --output candidate-artifacts/dark-canary-authorization.json
+          cosign sign-blob --yes \
+            --bundle candidate-artifacts/dark-canary-authorization.sigstore.json \
+            candidate-artifacts/dark-canary-authorization.json
+      - name: Build signed CLI and checksums
+        run: |
+          cargo build --locked --release -p hc-cli
+          install -m 0755 target/release/hc-cli candidate-artifacts/hc-cli-linux-x86_64
+          (cd candidate-artifacts && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          cosign sign-blob --yes --bundle candidate-artifacts/SHA256SUMS.sigstore.json candidate-artifacts/SHA256SUMS
+      - uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
+        with:
+          subject-checksums: candidate-artifacts/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: public-beta-candidate-${{ inputs.release_sha }}
+          path: candidate-artifacts
+          if-no-files-found: error
+          retention-days: 30
