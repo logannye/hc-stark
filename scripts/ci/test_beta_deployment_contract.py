@@ -66,6 +66,7 @@ def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
     assert "docker buildx build --push" in candidate
     assert "build_dark_canary_authorization.py" in candidate
     assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in candidate
+    assert "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c" in candidate
     assert "pip install pytest -r billing/requirements.txt" in candidate
     assert "components: rustfmt, clippy" in candidate
     assert "extract_public_beta_evidence.py" in authorization
