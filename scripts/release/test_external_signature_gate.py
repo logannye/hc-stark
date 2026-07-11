@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -29,7 +30,9 @@ def test_unsigned_external_truth_claim_fails_closed(tmp_path: Path):
 
 
 def test_non_allowlisted_signer_cannot_authenticate_claim(tmp_path: Path):
-    git_path = shutil.which("git", path="/usr/bin:/bin:/usr/local/bin")
+    git_path = os.environ.get("TINYZKP_ANCHORED_GIT") or shutil.which(
+        "git", path="/usr/bin:/bin:/usr/local/bin"
+    )
     assert git_path is not None
     git_path = str(Path(git_path).resolve())
     trust = tmp_path / "release" / "release-trust-v1.json"
@@ -60,11 +63,11 @@ def test_non_allowlisted_signer_cannot_authenticate_claim(tmp_path: Path):
     bundle = tmp_path / "bundle.json"
     claim.write_text("{}", encoding="utf-8")
     bundle.write_text("{}", encoding="utf-8")
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run([git_path, "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run([git_path, "add", "."], cwd=tmp_path, check=True)
     subprocess.run(
         [
-            "git",
+            git_path,
             "-c",
             "user.name=TinyZKP Test",
             "-c",
@@ -77,7 +80,7 @@ def test_non_allowlisted_signer_cannot_authenticate_claim(tmp_path: Path):
         check=True,
     )
     release_sha = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=tmp_path, text=True
+        [git_path, "rev-parse", "HEAD"], cwd=tmp_path, text=True
     ).strip()
     failures = gate.verify_external_signature(
         [
