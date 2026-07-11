@@ -137,6 +137,7 @@ def main() -> int:
     release_validator = text("scripts/ci/backend_release_ready.py")
     fuzz_runner = text("scripts/release/run_fuzz_smoke.py")
     fuzz_anchor = text("scripts/release/fuzz_tool_anchor.py")
+    gate_tool_anchor = text("scripts/release/gate_tool_anchor.py")
     require(
         '"crash_resume_and_corruption_suite": [' in evidence_builder
         and '"crash_matrix"' in evidence_builder
@@ -182,6 +183,17 @@ def main() -> int:
         "write_json_atomic",
     ):
         require(marker in fuzz_anchor, f"cargo-fuzz anchor workflow lost control: {marker}")
+    for marker in (
+        '"status": "unreviewed"',
+        '"review_required": True',
+        "expected_tool_names",
+        "require_trusted_mapping",
+        "write_json_atomic",
+    ):
+        require(
+            marker in gate_tool_anchor,
+            f"generic gate-tool anchor workflow lost control: {marker}",
+        )
     nightly_workflow = text(".github/workflows/nightly-backend.yml")
     require(
         "cargo install cargo-fuzz --version 0.13.2 --locked" in nightly_workflow,
