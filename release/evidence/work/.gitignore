@@ -1,0 +1,5 @@
+# External parties complete inputs and return signatures here. These working
+# files may contain reviewer identity or confidential operational paths and
+# must never be committed. Promote only validated, sanitized release artifacts.
+*
+!.gitignore
