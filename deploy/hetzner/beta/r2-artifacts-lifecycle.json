@@ -1,0 +1,22 @@
+{
+  "Rules": [
+    {
+      "ID": "tinyzkp-beta-uploads-24h",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "uploads/" },
+      "Expiration": { "Days": 1 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+    },
+    {
+      "ID": "tinyzkp-beta-bundles-90d-maximum",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "bundles/" },
+      "Expiration": { "Days": 90 }
+    },
+    {
+      "ID": "tinyzkp-beta-abort-incomplete-24h",
+      "Status": "Enabled",
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+    }
+  ]
+}

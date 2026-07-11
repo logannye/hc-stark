@@ -320,6 +320,7 @@ jobs:
           bash -n deploy/hetzner/deploy.sh
           bash -n deploy/hetzner/setup.sh
           bash -n deploy/hetzner/rollback.sh
+          bash -n deploy/hetzner/beta/configure-r2-lifecycle.sh
 
       - name: site JavaScript syntax
         run: |

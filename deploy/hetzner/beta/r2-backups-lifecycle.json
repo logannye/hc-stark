@@ -1,0 +1,9 @@
+{
+  "Rules": [
+    {
+      "ID": "tinyzkp-backups-abort-incomplete-24h",
+      "Status": "Enabled",
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+    }
+  ]
+}
