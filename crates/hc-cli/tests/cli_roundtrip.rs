@@ -22,6 +22,7 @@ const SIGTERM: i32 = 15;
 
 #[test]
 fn release_identity_is_machine_readable_and_profile_pinned() {
+    let expected_release_sha = option_env!("HC_RELEASE_SHA").unwrap_or("abc123");
     let output = cargo_bin_cmd!("hc-cli")
         .env("HC_RELEASE_SHA", "abc123")
         .arg("release")
@@ -30,7 +31,7 @@ fn release_identity_is_machine_readable_and_profile_pinned() {
     assert!(output.status.success());
     let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(payload["service"], "cli");
-    assert_eq!(payload["release_sha"], "abc123");
+    assert_eq!(payload["release_sha"], expected_release_sha);
     assert_eq!(payload["plonky3_version"], "0.6.1");
     assert_eq!(payload["compatibility_profile"], "tinyzkp-p3-goldilocks-v1");
     assert_eq!(
