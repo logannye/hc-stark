@@ -42,6 +42,16 @@ pub struct StripeEventData {
     pub object: Value,
 }
 
+pub struct CheckoutSessionParams<'a> {
+    pub tenant_id: &'a str,
+    pub customer_id: &'a str,
+    pub sku: &'a str,
+    pub operation_id: &'a str,
+    pub success_url: &'a str,
+    pub cancel_url: &'a str,
+    pub synthetic_canary: bool,
+}
+
 impl StripeClient {
     pub fn new(
         secret_key: String,
@@ -93,36 +103,34 @@ impl StripeClient {
 
     pub async fn create_checkout(
         &self,
-        tenant_id: &str,
-        customer_id: &str,
-        sku: &str,
-        operation_id: &str,
-        success_url: &str,
-        cancel_url: &str,
-        synthetic_canary: bool,
+        params: CheckoutSessionParams<'_>,
     ) -> Result<StripeObject, ApiError> {
         let price = self
             .prices
-            .get(sku)
+            .get(params.sku)
             .ok_or(ApiError::Invalid("unknown_sku"))?;
-        let mode = if sku.ends_with("_monthly") {
+        let mode = if params.sku.ends_with("_monthly") {
             "subscription"
         } else {
             "payment"
         };
-        let canary = if synthetic_canary { "true" } else { "false" };
+        let canary = if params.synthetic_canary {
+            "true"
+        } else {
+            "false"
+        };
         let mut fields = vec![
             ("mode", mode),
-            ("customer", customer_id),
+            ("customer", params.customer_id),
             ("line_items[0][price]", price.as_str()),
             ("line_items[0][quantity]", "1"),
-            ("client_reference_id", tenant_id),
-            ("success_url", success_url),
-            ("cancel_url", cancel_url),
+            ("client_reference_id", params.tenant_id),
+            ("success_url", params.success_url),
+            ("cancel_url", params.cancel_url),
             ("metadata[tinyzkp_catalog]", CATALOG_NAMESPACE),
-            ("metadata[tinyzkp_tenant_id]", tenant_id),
-            ("metadata[tinyzkp_sku]", sku),
-            ("metadata[tinyzkp_operation_id]", operation_id),
+            ("metadata[tinyzkp_tenant_id]", params.tenant_id),
+            ("metadata[tinyzkp_sku]", params.sku),
+            ("metadata[tinyzkp_operation_id]", params.operation_id),
             ("metadata[tinyzkp_synthetic_canary]", canary),
         ];
         if mode == "subscription" {
@@ -131,8 +139,11 @@ impl StripeClient {
                     "subscription_data[metadata][tinyzkp_catalog]",
                     CATALOG_NAMESPACE,
                 ),
-                ("subscription_data[metadata][tinyzkp_tenant_id]", tenant_id),
-                ("subscription_data[metadata][tinyzkp_sku]", sku),
+                (
+                    "subscription_data[metadata][tinyzkp_tenant_id]",
+                    params.tenant_id,
+                ),
+                ("subscription_data[metadata][tinyzkp_sku]", params.sku),
             ]);
         } else {
             fields.extend([
@@ -142,12 +153,12 @@ impl StripeClient {
                 ),
                 (
                     "payment_intent_data[metadata][tinyzkp_tenant_id]",
-                    tenant_id,
+                    params.tenant_id,
                 ),
-                ("payment_intent_data[metadata][tinyzkp_sku]", sku),
+                ("payment_intent_data[metadata][tinyzkp_sku]", params.sku),
             ]);
         }
-        self.post_form("/v1/checkout/sessions", &fields, operation_id)
+        self.post_form("/v1/checkout/sessions", &fields, params.operation_id)
             .await
     }
 

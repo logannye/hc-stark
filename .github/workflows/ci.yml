@@ -327,10 +327,10 @@ jobs:
           node scripts/ci/cloudflare_backup_worker_test.mjs
 
       - name: clippy production packages and partner API example
-        run: cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm -p hc-server -p hc-mcp -p tinyzkp-partner-adapter-example --all-targets --locked -- -D warnings
+        run: cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm -p hc-server -p hc-mcp -p hc-beta-api -p hc-beta-worker -p tinyzkp-partner-adapter-example --all-targets --locked -- -D warnings
 
       - name: production package tests
-        run: cargo test -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm -p hc-server -p hc-mcp --locked
+        run: cargo test -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm -p hc-server -p hc-mcp -p hc-beta-api -p hc-beta-worker --locked
 
       - name: cargo audit
         run: |
