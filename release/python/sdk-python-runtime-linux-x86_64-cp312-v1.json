@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "target": "cp312-cp312-manylinux_2_17_x86_64",
+  "status": "unconfigured",
+  "runtime": null
+}

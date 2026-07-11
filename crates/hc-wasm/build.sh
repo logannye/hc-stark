@@ -10,12 +10,23 @@
 set -euo pipefail
 
 TARGET="${1:-web}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR=${BASH_SOURCE[0]%/*}
+cd "$SCRIPT_DIR"
+SCRIPT_DIR=$PWD
 PACKAGE_VERSION="${TINYZKP_SDK_VERSION:-}"
 OUT_DIR="${TINYZKP_WASM_OUT_DIR:-pkg}"
 cargo_bin=${TINYZKP_CARGO:-cargo}
 python_bin=${TINYZKP_PYTHON:-python3}
 wasm_pack_bin=${TINYZKP_WASM_PACK:-wasm-pack}
+
+if [[ "${TINYZKP_IMMUTABLE_SOURCE:-}" == "1" ]]; then
+  for required in TINYZKP_CARGO TINYZKP_PYTHON TINYZKP_WASM_PACK; do
+    if [[ -z "${!required:-}" ]]; then
+      echo "evidenced WASM build lacks required descriptor: $required" >&2
+      exit 2
+    fi
+  done
+fi
 
 if [[ -z "$PACKAGE_VERSION" ]]; then
   PACKAGE_VERSION="$({
@@ -35,8 +46,6 @@ fi
 
 echo "Building @tinyzkp/verify ${PACKAGE_VERSION} for target: ${TARGET}"
 
-cd "$SCRIPT_DIR"
-
 # Clear RUSTFLAGS to avoid host-target flags (e.g. -Ctarget-cpu) leaking into wasm build.
 RUSTFLAGS='' "$wasm_pack_bin" build \
   --target "$TARGET" \
@@ -45,7 +54,7 @@ RUSTFLAGS='' "$wasm_pack_bin" build \
   -- --no-default-features --locked
 
 # Override package.json with our npm metadata.
-cat > "$OUT_DIR/package.json" <<PKGJSON
+IFS= read -r -d '' PACKAGE_JSON <<PKGJSON || true
 {
   "name": "@tinyzkp/verify",
   "version": "${PACKAGE_VERSION}",
@@ -76,7 +85,10 @@ cat > "$OUT_DIR/package.json" <<PKGJSON
   "homepage": "https://tinyzkp.com"
 }
 PKGJSON
+printf '%s\n' "$PACKAGE_JSON" > "$OUT_DIR/package.json"
 
-install -m 0644 LICENSE "$OUT_DIR/LICENSE"
+"$python_bin" -I -c \
+  'import os,shutil,sys; shutil.copyfile(sys.argv[1], sys.argv[2]); os.chmod(sys.argv[2], 0o644)' \
+  LICENSE "$OUT_DIR/LICENSE"
 
 echo "Build complete: ${OUT_DIR}/"

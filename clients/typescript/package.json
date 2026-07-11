@@ -21,7 +21,7 @@
   "scripts": {
     "build:esm": "tsc -p tsconfig.json",
     "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist/cjs/package.json', JSON.stringify({type:'commonjs'}, null, 2))\"",
-    "build": "rm -rf dist && npm run build:esm && npm run build:cjs",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && npm run build:esm && npm run build:cjs",
     "test": "npm run build && node --test tests/*.test.mjs tests/*.test.cjs",
     "prepublishOnly": "npm run build"
   },
@@ -58,7 +58,7 @@
   },
   "devDependencies": {
     "@types/json-bigint": "1.0.4",
-    "@types/node": "^20",
-    "typescript": "^5.3"
+    "@types/node": "20.19.39",
+    "typescript": "5.9.3"
   }
 }

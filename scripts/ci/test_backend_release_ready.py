@@ -538,7 +538,7 @@ def test_evidenced_command_binds_release_command_profile_and_log(tmp_path):
     write_json(
         report,
         {
-            "schema_version": 2,
+            "schema_version": 4,
             "release_sha": release_sha,
             "source_tree_sha256": gate.source_tree_identity.source_tree_sha256(
                 gate.ROOT, release_sha
@@ -578,8 +578,10 @@ def test_evidenced_command_binds_release_command_profile_and_log(tmp_path):
                 "source_write_allowed": False,
                 "writable_paths": ["cargo-target", "sdk-work", "tmp"],
             },
-            "immutable_file_count": 1,
-            "tools": {
+                "network_boundary": None,
+                "immutable_file_count": 1,
+                "gate_inputs": {},
+                "tools": {
                 "cargo": {
                     "path": "/tool/cargo",
                     "sha256": "c" * 64,

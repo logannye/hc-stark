@@ -28,6 +28,24 @@ def test_runner_has_only_fixed_gate_commands_and_timeouts():
         assert spec["parser"].endswith("_v1")
 
 
+def test_evidence_runner_never_materializes_or_downloads_sdk_wheels():
+    source = MODULE_PATH.read_text(encoding="utf-8")
+    assert "materialize_wheelhouse(" not in source
+    assert "urlopen(" not in source
+    assert "--sdk-python-wheelhouse" in source
+    assert "--sdk-npm-tarballs" in source
+
+
+def test_sdk_gate_uses_sealed_dependencies_and_direct_node_without_npm():
+    gate = (MODULE_PATH.parents[1] / "ci" / "sdk_contract_gate.sh").read_text(encoding="utf-8")
+    assert "TINYZKP_SEALED_PYTHON_WHEELS" in gate
+    assert "TINYZKP_SEALED_NPM_TARBALLS" in gate
+    assert "npm ci" not in gate
+    assert "TINYZKP_NPM" not in gate
+    assert '"$node_bin" "$typescript_root/node_modules/typescript/bin/tsc"' in gate
+    assert "CARGO RUSTC" in gate
+
+
 def test_output_parsers_reject_generic_success_text_and_duplicate_markers():
     assert module.parse_output(
         "clean_release_source", b"all tests passed\n"
@@ -35,6 +53,27 @@ def test_output_parsers_reject_generic_success_text_and_duplicate_markers():
     marker = b"PASS TinyZKP deterministic cross-mode proof vectors\n"
     assert module.parse_output("deterministic_cross_mode_proofs", marker)["passed"] is True
     assert module.parse_output("deterministic_cross_mode_proofs", marker * 2)["passed"] is False
+
+    sdk_marker = b"PASS TinyZKP replacement SDK contracts\n"
+    python_marker = (
+        b"PASS TinyZKP locked Python SDK environment (10 wheels, "
+        + b"a" * 64
+        + b")\n"
+    )
+    npm_marker = (
+        b"PASS TinyZKP locked TypeScript SDK environment (7 tarballs, "
+        + b"b" * 64
+        + b")\n"
+    )
+    parsed = module.parse_output("replacement_sdk_contracts", python_marker + npm_marker + sdk_marker)
+    assert parsed["passed"] is True
+    assert parsed["python_wheel_count"] == 10
+    assert parsed["python_wheel_set_sha256"] == "a" * 64
+    assert parsed["npm_tarball_count"] == 7
+    assert parsed["npm_tarball_set_sha256"] == "b" * 64
+    assert module.parse_output(
+        "replacement_sdk_contracts", python_marker * 2 + npm_marker + sdk_marker
+    )["passed"] is False
 
 
 def test_run_rejects_unreviewed_commands_before_touching_outputs(tmp_path):

@@ -165,6 +165,31 @@ def test_subprocess_timeout_fails_closed_and_kills_process_group(tmp_path):
     assert status == 124
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="pre-exec boundary is Linux-only")
+def test_preexec_boundary_has_child_side_hard_deadline(tmp_path, monkeypatch):
+    def stuck(_parent_inode):
+        __import__("time").sleep(30)
+
+    monkeypatch.setattr(MODULE, "_enter_verified_no_network_namespace", stuck)
+    monkeypatch.setattr(MODULE, "CHILD_BOUNDARY_STARTUP_TIMEOUT_SECONDS", 1)
+    writable = tmp_path / "writable"
+    writable.mkdir()
+    started = __import__("time").monotonic()
+    with tempfile.TemporaryFile("w+b") as log:
+        with pytest.raises((ValueError, subprocess.SubprocessError)):
+            MODULE.run_logged(
+                [sys.executable, "-c", "pass"],
+                cwd=tmp_path,
+                environment=MODULE.sanitized_environment(os.environ),
+                log=log,
+                timeout_seconds=10,
+                write_boundary_paths=(writable,),
+                require_network_namespace=True,
+                network_boundary_result={},
+            )
+    assert __import__("time").monotonic() - started < 5
+
+
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Landlock is Linux-only")
 def test_landlock_blocks_transient_modify_and_restore_probe(tmp_path):
     try:

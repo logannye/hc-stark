@@ -70,6 +70,61 @@ the exact template command through `run_evidenced_command.py`. The resulting
 profile, exit status, timestamps, duration, and SHA-256 of the separately
 hashed `test_log`; typed metadata alone cannot claim a successful test run.
 
+The SDK gate has a separate, explicit network preparation step. On the
+reviewed CPython 3.12 glibc x86_64 host, materialize the ten committed Python
+wheels and seven committed npm tarballs into separate empty owner-only
+directories before starting evidence execution. Preparation rejects proxies,
+redirects, URL skew, digest/size skew, and unsafe archive metadata. The evidence
+runner never downloads dependencies. It copies verified bytes into sealed
+Linux memfds, makes the mutable source directories inaccessible to the child,
+and executes the SDK gate inside a fresh isolated IP network namespace plus the
+Landlock write boundary. This boundary does not yet deny pathname Unix-domain
+socket connections, so it is one of the explicit blockers below rather than a
+complete no-network sandbox:
+
+```bash
+install -d -m 0700 release/evidence/sdk-python-wheelhouse
+python3.12 scripts/ci/verify_sdk_python_wheelhouse.py materialize \
+  --wheelhouse release/evidence/sdk-python-wheelhouse
+python3.12 scripts/ci/verify_sdk_npm_tarballs.py \
+  --materialize release/evidence/sdk-npm-tarballs
+python3.12 scripts/release/run_evidenced_command.py \
+  --gate replacement_sdk_contracts \
+  --release-sha "$HC_RELEASE_SHA" \
+  --sdk-python-wheelhouse release/evidence/sdk-python-wheelhouse \
+  --sdk-npm-tarballs release/evidence/sdk-npm-tarballs \
+  --report release/evidence/sdk-contracts/test-report.json \
+  --log release/evidence/sdk-contracts/test.log
+```
+
+The wheelhouse location is not an authorization or dependency override. Every
+byte and package field is recomputed from the exact release commit, and the
+runner rejects extra files, path overlap, missing memfd seals, platform skew,
+network-namespace failure, and the old environment-flag shortcut. npm is never
+executed: the reviewed extractor creates `node_modules`, and the FD-held Node
+interpreter invokes the exact TypeScript compiler and tests directly.
+
+The SDK gate also requires the fixed Linux Python runtime to match the reviewed
+committed anchor. The repository intentionally ships that anchor as
+`unconfigured`. `python3.12 scripts/ci/capture_sdk_python_runtime.py` emits only
+a read-only candidate; its output alone must not be promoted to `reviewed`.
+Before promotion, the evidence host still needs a hermetic or immutable Python
+runtime (including stdlib/shared libraries and the copied venv interpreter), a
+dedicated unprivileged identity with no supplementary groups, and denial or
+isolation of pathname Unix-domain sockets. These controls close same-UID
+swap-and-restore and host-socket escape paths that aggregate pre/post hashing
+cannot close.
+
+Ambient Cargo state is also excluded: the runner supplies an empty private
+`CARGO_HOME`, so user config, rustc wrappers, linker overrides, source
+replacement, and mutable registry caches cannot affect evidence. Consequently,
+the SDK gate remains fail-closed until Cargo dependencies are committed as a
+reviewed vendor tree/config and wasm-pack's matching wasm-bindgen helper is
+added to the committed tool inventory. The native linker, `cc`, `ar`, build
+scripts, Rust sysroot libraries, and any other descendant executable must also
+be hermetic or added to the reviewed inventory. Neither an ambient cache nor a
+helper download can satisfy the SDK evidence gate.
+
 Release-identity evidence must use the `identity_report` role. Generate it with
 `release_identity_check.py --expected-sha <sha> --cli-release-file <file>
 --benchmark-report <report> --output <file>`. The checker reads the deployed

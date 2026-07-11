@@ -1791,10 +1791,93 @@ def validate_test_run_evidence(
     if primary == "bash":
         expected_tools.update({"cargo", "rustc"})
     if expected_gate == "replacement_sdk_contracts":
-        expected_tools.update({"python3", "node", "npm", "wasm-pack"})
+        expected_tools.update({"python3", "node", "wasm-pack"})
     if primary == "cargo":
         expected_tools.add("rustc")
     boundary = report.get("write_boundary")
+    network_boundary = report.get("network_boundary")
+    gate_inputs = report.get("gate_inputs")
+    expected_gate_inputs: dict[str, object] = {}
+    sdk_lock_matches = True
+    sdk_runtime_valid = True
+    if expected_gate == "replacement_sdk_contracts":
+        try:
+            expected_sdk_lock = run_evidenced_command.sdk_python_lock_identity(
+                root, release_sha
+            )
+        except (OSError, ValueError):
+            sdk_lock_matches = False
+        else:
+            expected_gate_inputs = {
+                "sdk_python_lock": expected_sdk_lock,
+                "sdk_python_wheelhouse": expected_sdk_lock,
+            }
+            sdk_lock_matches = (
+                isinstance(reparsed, dict)
+                and reparsed.get("python_wheel_count")
+                == expected_sdk_lock.get("wheel_count")
+                and reparsed.get("python_wheel_set_sha256")
+                == expected_sdk_lock.get("wheel_set_sha256")
+            )
+        try:
+            expected_npm_lock = run_evidenced_command.sdk_npm_lock_identity(
+                root, release_sha
+            )
+            full_python = run_evidenced_command.verify_sdk_python_wheelhouse.committed_lock_identity(
+                root, release_sha, evidence_runtime.commit_blob
+            )
+            full_npm = run_evidenced_command.verify_sdk_npm_tarballs.committed_lock_identity(
+                root, release_sha, evidence_runtime.commit_blob
+            )
+            expected_python_runtime = run_evidenced_command.sdk_python_runtime_anchor(
+                root, release_sha
+            )
+        except (OSError, ValueError):
+            sdk_lock_matches = False
+        else:
+            python_runtime = gate_inputs.get("python_runtime") if isinstance(gate_inputs, dict) else None
+            sdk_runtime_valid = (
+                isinstance(python_runtime, dict)
+                and set(python_runtime) == {
+                    "schema_version", "interpreter_sha256", "stdlib_roots", "file_count",
+                    "total_bytes", "files_sha256", "mapped_file_count"
+                }
+                and exact_int(python_runtime.get("schema_version"), 1)
+                and lower_hex(python_runtime.get("interpreter_sha256"), 64)
+                and isinstance(python_runtime.get("stdlib_roots"), list)
+                and bool(python_runtime.get("stdlib_roots"))
+                and all(isinstance(value, str) and Path(value).is_absolute() for value in python_runtime.get("stdlib_roots", []))
+                and exact_int(python_runtime.get("file_count")) and python_runtime.get("file_count", 0) > 0
+                and exact_int(python_runtime.get("total_bytes")) and python_runtime.get("total_bytes", 0) > 0
+                and lower_hex(python_runtime.get("files_sha256"), 64)
+                and exact_int(python_runtime.get("mapped_file_count")) and python_runtime.get("mapped_file_count", 0) > 0
+                and isinstance(tools, dict)
+                and isinstance(tools.get("python3"), dict)
+                and python_runtime.get("interpreter_sha256") == tools["python3"].get("sha256")
+                and type_sensitive_equal(python_runtime, expected_python_runtime)
+            )
+            descriptor_records = [
+                {"filename": item["filename"], "bytes": item["bytes"], "sha256": item["sha256"], "seals": evidence_runtime.MEMFD_SEALS}
+                for item in [*full_python["wheels"], *full_npm["packages"]]
+            ]
+            sealed = {
+                "kind": "sealed-memfd-dependencies-v1",
+                "python_count": len(full_python["wheels"]),
+                "npm_count": len(full_npm["packages"]),
+                "descriptor_set_sha256": evidence_runtime.canonical_json_sha256(descriptor_records),
+                "required_seals": evidence_runtime.MEMFD_SEALS,
+            }
+            expected_gate_inputs.update({
+                "sdk_npm_lock": expected_npm_lock,
+                "sdk_npm_tarballs": expected_npm_lock,
+                "sealed_dependencies": sealed,
+                "python_runtime": python_runtime,
+            })
+            sdk_lock_matches = sdk_lock_matches and (
+                isinstance(reparsed, dict)
+                and reparsed.get("npm_tarball_count") == expected_npm_lock.get("tarball_count")
+                and reparsed.get("npm_tarball_set_sha256") == expected_npm_lock.get("tarball_set_sha256")
+            )
     anchored_generic_tools = True
     try:
         generic_anchors = evidence_runtime.gate_tool_anchors(root, release_sha)
@@ -1836,10 +1919,12 @@ def validate_test_run_evidence(
             "environment_policy_sha256",
             "immutable_source",
             "write_boundary",
+            "network_boundary",
             "immutable_file_count",
             "tools",
+            "gate_inputs",
         }
-        or not exact_int(report.get("schema_version"), 2)
+        or not exact_int(report.get("schema_version"), 4)
         or report.get("release_sha") != release_sha
         or report.get("source_tree_sha256") != expected_source_tree
         or report.get("dependency_lock_sha256") != expected_lock
@@ -1890,6 +1975,22 @@ def validate_test_run_evidence(
         or boundary.get("abi_version", 0) < 3
         or boundary.get("source_write_allowed") is not False
         or boundary.get("writable_paths") != ["cargo-target", "sdk-work", "tmp"]
+        or (
+            expected_gate == "replacement_sdk_contracts"
+            and (
+                not isinstance(network_boundary, dict)
+                or set(network_boundary) != {
+                    "kind", "parent_namespace_inode", "child_namespace_inode", "interfaces", "external_routes"
+                }
+                or network_boundary.get("kind") != "linux-network-namespace-v1"
+                or not exact_int(network_boundary.get("parent_namespace_inode"))
+                or not exact_int(network_boundary.get("child_namespace_inode"))
+                or network_boundary.get("parent_namespace_inode") == network_boundary.get("child_namespace_inode")
+                or network_boundary.get("interfaces") != ["lo"]
+                or network_boundary.get("external_routes") is not False
+            )
+        )
+        or (expected_gate != "replacement_sdk_contracts" and network_boundary is not None)
         or not exact_int(report.get("immutable_file_count"))
         or report.get("immutable_file_count", 0) <= 0
         or not type_sensitive_equal(
@@ -1902,6 +2003,9 @@ def validate_test_run_evidence(
         or set(tools) != expected_tools
         or not anchored_cargo
         or not anchored_generic_tools
+        or not type_sensitive_equal(gate_inputs, expected_gate_inputs)
+        or not sdk_lock_matches
+        or not sdk_runtime_valid
         or any(
             not isinstance(value, dict)
             or set(value) != {"path", "sha256", "version"}

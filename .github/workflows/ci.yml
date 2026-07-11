@@ -186,6 +186,9 @@ jobs:
           python3 -m pytest scripts/release/test_run_crash_matrix.py -q
           python3 -m pytest scripts/release/test_run_evidenced_command.py -q
           python3 -m pytest scripts/ci/test_generate_sdk_schema_models.py -q
+          python3 -m pytest scripts/ci/test_verify_sdk_python_wheelhouse.py -q
+          python3 -m pytest scripts/ci/test_materialize_sdk_python_env.py -q
+          python3 -m pytest scripts/ci/test_verify_sdk_npm_tarballs.py -q
 
       - name: Durable checkpoint and crash-resume matrix
         run: cargo test -p hc-plonky3 --features fault-injection --locked bounded_prover::tests
@@ -199,8 +202,13 @@ jobs:
           python3 -m py_compile scripts/ci/backend_recovery_gate.py
           python3 -m py_compile scripts/ci/backend_source_scan.py
           python3 -m py_compile scripts/ci/generate_sdk_schema_models.py
+          python3 -m py_compile scripts/ci/verify_sdk_python_wheelhouse.py
+          python3 -m py_compile scripts/ci/materialize_sdk_python_env.py
+          python3 -m py_compile scripts/ci/verify_sdk_npm_tarballs.py
+          python3 -m py_compile scripts/ci/capture_sdk_python_runtime.py
           python3 -m py_compile scripts/ci/plonky3_compatibility_gate.py
           bash -n scripts/ci/sdk_contract_gate.sh
+          bash -n crates/hc-wasm/build.sh
           python3 -m py_compile scripts/ci/backend_release_ready.py
           python3 -m py_compile scripts/ci/backend_prerelease_ready.py
           python3 -m py_compile scripts/ci/source_tree_identity.py
