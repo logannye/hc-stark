@@ -283,6 +283,20 @@ def collect_database_evidence(
             raise ValueError(
                 f"observed Stripe events are not durably processed: missing={missing}, unprocessed={unprocessed}"
             )
+        wrong_api_version = [
+            str(row[0])
+            for row in connection.execute(
+                "SELECT stripe_event_id FROM beta_stripe_events "
+                "WHERE stripe_event_id=ANY(%s) "
+                "AND payload_json->>'api_version' IS DISTINCT FROM %s",
+                (list(expected_events), STRIPE_API_VERSION),
+            ).fetchall()
+        ]
+        if wrong_api_version:
+            raise ValueError(
+                "observed Stripe events were not formatted with the pinned API version: "
+                + ",".join(sorted(wrong_api_version))
+            )
         queue_depth = connection.execute(
             "SELECT count(*) FROM beta_stripe_events WHERE processing_status<>'processed'"
         ).fetchone()[0]
