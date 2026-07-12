@@ -43,6 +43,7 @@ def test_backup_and_rollback_contracts_are_tracked():
     postgres = text("postgresql.conf")
     postgres_image = text("Dockerfile.postgres")
     backup = text("pgbackrest.conf.example")
+    restore = text("restore-drill.sh")
     rollback = text("caddy-route.rollback.caddy")
     assert "archive_mode = on" in postgres and "archive-push" in postgres
     assert "LABEL org.opencontainers.image.revision=$HC_RELEASE_SHA" in postgres_image
@@ -52,6 +53,12 @@ def test_backup_and_rollback_contracts_are_tracked():
     assert "pg1-database=tinyzkp_beta" in backup
     assert "pg1-user=tinyzkp_beta" in backup
     assert "repo1-retention-full=4" in backup and "repo1-retention-diff=30" in backup
+    assert "TINYZKP_POSTGRES_IMAGE must be digest pinned" in restore
+    assert "docker exec -i -u postgres" in restore
+    assert "credit ledger restore mismatch" in restore
+    assert "docker volume rm" in restore
+    assert "pg_isready -h 127.0.0.1" not in restore
+    assert "psql postgresql://" not in restore
     assert "beta_writes_disabled" in rollback
     assert "reverse_proxy 127.0.0.1:8090" in rollback
 
