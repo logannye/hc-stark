@@ -19,6 +19,10 @@ Third-party, externally hosted, free tier, pages by SMS/email/Slack. ~5 minutes:
 3. Add an **SMS or Slack** alert contact (not email-only — you want to be woken up).
 4. Optional: add `https://tinyzkp.com/` (the Cloudflare Pages marketing site) as a homepage monitor.
 
+At public-beta activation, replace the recovery expectations with API and site
+`service_status=public_beta`, dashboard and beta-pricing availability, and
+continued failure of retired legacy proving routes.
+
 That's it — nothing to deploy.
 
 ---
@@ -33,6 +37,10 @@ npx wrangler secret put ALERT_WEBHOOK_URL   # paste a Slack/Discord/JSON webhook
 npx wrangler deploy
 ```
 
+The tracked Worker defaults to `AUDIT_MODE=containment`. Activation deploys it
+with `--var AUDIT_MODE:public_beta`; rollback restores `containment`. Any other
+mode fails the entire probe instead of silently selecting a contract.
+
 Verify it works by hitting the deployed worker URL in a browser — it runs the probe on demand and returns JSON (`200` if everything is up, `503` if a target is down). To force a page, point a target at a known-bad URL temporarily, or stop the API container and watch the webhook fire within ~2 min.
 
 Notes:
@@ -40,7 +48,7 @@ Notes:
 - Adjust the cadence in `wrangler.toml` (`crons`). `*/2 * * * *` = every 2 minutes (UTC).
 - The Worker probes the same surfaces as Option A, including content markers
   that catch fallback pages, stale schema deploys, and accidental re-enablement.
-  Switch the target contract back to production only as an explicit relaunch step.
+  Switch the target contract only as an explicit activation transaction.
 
 ---
 

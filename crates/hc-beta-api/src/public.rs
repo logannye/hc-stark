@@ -295,6 +295,31 @@ pub async fn create_api_key(
     Ok((StatusCode::CREATED, Json(response)).into_response())
 }
 
+pub async fn list_api_keys(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    let tenant = auth::authenticate(&headers, &state).await?;
+    let rows = sqlx::query(
+        "SELECT api_key_id,key_prefix,label,
+                extract(epoch from created_at)::bigint AS created_at_epoch,
+                extract(epoch from revoked_at)::bigint AS revoked_at_epoch
+           FROM beta_api_keys WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100",
+    )
+    .bind(&tenant.tenant_id)
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(json!({
+        "api_keys": rows.into_iter().map(|row| json!({
+            "id": row.get::<Uuid,_>("api_key_id"),
+            "prefix": row.get::<String,_>("key_prefix"),
+            "label": row.get::<String,_>("label"),
+            "created_at": row.get::<i64,_>("created_at_epoch"),
+            "revoked_at": row.get::<Option<i64>,_>("revoked_at_epoch"),
+        })).collect::<Vec<_>>()
+    })))
+}
+
 pub async fn revoke_api_key(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -733,6 +758,33 @@ pub async fn get_job(
             .transpose()?,
         error_code: row.get("error_code"),
     }))
+}
+
+pub async fn list_jobs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    let tenant = auth::authenticate(&headers, &state).await?;
+    let rows = sqlx::query(
+        "SELECT job_id,status,estimate_json,settled_millicredits,error_code,
+                extract(epoch from created_at)::bigint AS created_at_epoch,
+                extract(epoch from completed_at)::bigint AS completed_at_epoch
+           FROM beta_proof_jobs WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100",
+    )
+    .bind(&tenant.tenant_id)
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(json!({
+        "jobs": rows.into_iter().map(|row| json!({
+            "job_id": row.get::<Uuid,_>("job_id"),
+            "status": row.get::<String,_>("status"),
+            "estimate": row.get::<Value,_>("estimate_json"),
+            "settled_millicredits": row.get::<Option<i64>,_>("settled_millicredits"),
+            "error_code": row.get::<Option<String>,_>("error_code"),
+            "created_at": row.get::<i64,_>("created_at_epoch"),
+            "completed_at": row.get::<Option<i64>,_>("completed_at_epoch"),
+        })).collect::<Vec<_>>()
+    })))
 }
 
 pub async fn cancel_job(

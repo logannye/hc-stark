@@ -18,6 +18,7 @@ const CANONICAL_HOST = "tinyzkp.com";
 const PUBLIC_EXTENSIONLESS_PATHS = new Set([
   "/", "/engine", "/benchmarks", "/plonky3", "/security", "/docs",
   "/pricing", "/status", "/contact", "/privacy", "/terms", "/requests",
+  "/dashboard",
 ]);
 const SITE_ASSET_MANIFEST_PATHS = [
   "/index.html",
@@ -27,6 +28,8 @@ const SITE_ASSET_MANIFEST_PATHS = [
   "/privacy.html",
   "/terms.html",
   "/status.html",
+  "/dashboard.html",
+  "/dashboard.js",
   "/.well-known/security.txt",
   "/pricing.json",
   "/openapi.json",

@@ -8,6 +8,9 @@ compatibility_flags = ["global_fetch_strictly_public"]
 [triggers]
 crons = ["*/2 * * * *"]
 
+[vars]
+AUDIT_MODE = "containment"
+
 # Set the alert destination as a secret, never commit it:
 #   npx wrangler secret put ALERT_WEBHOOK_URL
 # (a Slack incoming-webhook, Discord webhook, or any JSON endpoint)

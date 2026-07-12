@@ -70,6 +70,26 @@ def test_beta_routing_cannot_break_ordinary_containment_deploys():
     assert "tinyzkp-beta-route.caddy" not in containment
     assert "tinyzkp-beta-route.caddy" in beta
     assert "Caddyfile.tinyzkp-containment" in switch
+    assert "flock -n" in switch
+    assert "restore_previous" in switch
+    assert "caddy validate --config \"$staged_caddy\"" in switch
+    assert "EXPECTED_SHA" in switch and "EXPECTED_STATUS" in switch
+
+
+def test_beta_cors_dark_route_and_webhook_remain_fail_closed():
+    caddy = text("Caddyfile.beta")
+    dark = text("caddy-route.dark-canary.caddy")
+    rollback = text("caddy-route.rollback.caddy")
+    writes = text("set-beta-writes.sh")
+    assert "@stripe_beta_webhook" in caddy
+    assert caddy.index("@stripe_beta_webhook") < caddy.index("@beta_write")
+    assert 'Access-Control-Allow-Credentials "true"' in caddy
+    assert "header_regexp Origin" in caddy
+    assert 'respond "" 204' in caddy
+    assert "operator_canary_only" in dark
+    assert "beta_writes_disabled" in rollback
+    assert "TINYZKP_BETA_WRITES_ENABLED" in writes
+    assert "restore" in writes and "flock -n" in writes
 
 
 def test_operator_environment_templates_cover_both_hosts_and_oauth_hostname():
