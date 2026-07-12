@@ -5,13 +5,23 @@ ACTION="${1:-}"
 EXPECTED_SHA="${2:-}"
 EXPECTED_STATUS="${3:-}"
 SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
-TARGET_ROUTE=/etc/caddy/tinyzkp-beta-route.caddy
-TARGET_CADDY=/etc/caddy/Caddyfile
-LOCK=/run/lock/tinyzkp-beta-route.lock
+TEST_MODE="${TINYZKP_ROUTE_TEST_MODE:-0}"
+TARGET_ROUTE="${TINYZKP_ROUTE_TARGET_ROUTE:-/etc/caddy/tinyzkp-beta-route.caddy}"
+TARGET_CADDY="${TINYZKP_ROUTE_TARGET_CADDY:-/etc/caddy/Caddyfile}"
+CONTAINMENT_CADDY="${TINYZKP_ROUTE_CONTAINMENT_CADDY:-/etc/caddy/Caddyfile.tinyzkp-containment}"
+LOCK="${TINYZKP_ROUTE_LOCK:-/run/lock/tinyzkp-beta-route.lock}"
 
-if [[ $EUID -ne 0 ]]; then
+if [[ $EUID -ne 0 && "$TEST_MODE" != 1 ]]; then
   echo "switch-beta-route must run as root" >&2
   exit 2
+fi
+if [[ "$TEST_MODE" == 1 ]]; then
+  for target in "$TARGET_ROUTE" "$TARGET_CADDY" "$CONTAINMENT_CADDY" "$LOCK"; do
+    [[ "$target" == "${TMPDIR:-/tmp}/"* ]] || {
+      echo "test-mode paths must remain below TMPDIR" >&2
+      exit 2
+    }
+  done
 fi
 if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   echo "an exact lowercase release SHA is required" >&2
@@ -25,18 +35,28 @@ esac
 exec 9>"$LOCK"
 flock -n 9 || { echo "another route transaction is active" >&2; exit 3; }
 
-transaction="$(mktemp -d /etc/caddy/.tinyzkp-route.XXXXXX)"
+transaction="$(mktemp -d "$(dirname "$TARGET_CADDY")/.tinyzkp-route.XXXXXX")"
 chmod 0700 "$transaction"
 previous_route="$transaction/previous-route.caddy"
 previous_caddy="$transaction/previous-Caddyfile"
 staged_route="$transaction/next-route.caddy"
 staged_caddy="$transaction/next-Caddyfile"
-cp --preserve=mode,ownership "$TARGET_ROUTE" "$previous_route"
-cp --preserve=mode,ownership "$TARGET_CADDY" "$previous_caddy"
+cp -p "$TARGET_ROUTE" "$previous_route"
+cp -p "$TARGET_CADDY" "$previous_caddy"
+
+install_target() {
+  source="$1"
+  destination="$2"
+  if [[ "$TEST_MODE" == 1 ]]; then
+    install -m 0640 "$source" "$destination"
+  else
+    install -o root -g caddy -m 0640 "$source" "$destination"
+  fi
+}
 
 restore_previous() {
-  install -o root -g caddy -m 0640 "$previous_route" "$TARGET_ROUTE"
-  install -o root -g caddy -m 0640 "$previous_caddy" "$TARGET_CADDY"
+  install_target "$previous_route" "$TARGET_ROUTE"
+  install_target "$previous_caddy" "$TARGET_CADDY"
   caddy validate --config "$TARGET_CADDY" >/dev/null 2>&1 || return 1
   systemctl reload caddy
 }
@@ -62,11 +82,11 @@ esac
 install -m 0640 "$source_route" "$staged_route"
 
 if [[ "$ACTION" == containment ]]; then
-  [[ -f /etc/caddy/Caddyfile.tinyzkp-containment ]] || {
+  [[ -f "$CONTAINMENT_CADDY" ]] || {
     echo "containment Caddyfile backup is missing" >&2
     exit 3
   }
-  install -m 0640 /etc/caddy/Caddyfile.tinyzkp-containment "$staged_caddy"
+  install -m 0640 "$CONTAINMENT_CADDY" "$staged_caddy"
 else
   sed "s#/etc/caddy/tinyzkp-beta-route.caddy#$staged_route#" \
     "$SOURCE_DIR/Caddyfile.beta" >"$staged_caddy"
@@ -74,11 +94,11 @@ else
 fi
 caddy validate --config "$staged_caddy"
 
-install -o root -g caddy -m 0640 "$staged_route" "$TARGET_ROUTE"
+install_target "$staged_route" "$TARGET_ROUTE"
 if [[ "$ACTION" == containment ]]; then
-  install -o root -g caddy -m 0640 "$staged_caddy" "$TARGET_CADDY"
+  install_target "$staged_caddy" "$TARGET_CADDY"
 else
-  install -o root -g caddy -m 0640 "$SOURCE_DIR/Caddyfile.beta" "$TARGET_CADDY"
+  install_target "$SOURCE_DIR/Caddyfile.beta" "$TARGET_CADDY"
 fi
 caddy validate --config "$TARGET_CADDY"
 systemctl reload caddy

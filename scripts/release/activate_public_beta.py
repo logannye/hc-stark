@@ -89,19 +89,7 @@ def require_executable(path: Path) -> Path:
     return path
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--release-sha", required=True)
-    parser.add_argument("--staged-site", type=Path, required=True)
-    parser.add_argument("--api-ssh", required=True)
-    parser.add_argument("--account-id", required=True)
-    parser.add_argument("--project", default="tinyzkp")
-    parser.add_argument("--cloudflare-token-env", default="CLOUDFLARE_API_TOKEN")
-    parser.add_argument("--wrangler", default="wrangler")
-    parser.add_argument("--smoke-command", type=Path, required=True)
-    parser.add_argument("--evidence", type=Path, required=True)
-    parser.add_argument("--confirmation", required=True)
-    args = parser.parse_args()
+def activate(args: argparse.Namespace) -> None:
     if len(args.release_sha) != 40 or any(byte not in "0123456789abcdef" for byte in args.release_sha):
         raise SystemExit("release SHA must be a full lowercase Git commit")
     if args.confirmation != "ACTIVATE_PUBLIC_BETA":
@@ -137,11 +125,45 @@ def main() -> None:
         environment = {"PATH": "/usr/local/bin:/usr/bin:/bin", "TINYZKP_RELEASE_SHA": args.release_sha}
         run([str(smoke)], env=environment)
         run([args.wrangler, "deploy", "--config", "deploy/uptime-probe/wrangler.toml", "--var", "AUDIT_MODE:public_beta"], cwd=root)
-    except BaseException:
-        run(ssh + ["sudo", "/opt/tinyzkp/deploy/hetzner/beta/set-beta-writes.sh", "0", args.release_sha, "public_beta"])
-        run(ssh + ["sudo", "/opt/tinyzkp/deploy/hetzner/beta/switch-beta-route.sh", "rollback", args.release_sha, "public_beta"])
-        rollback_pages(token, args.account_id, args.project, str(previous["id"]))
-        run([args.wrangler, "deploy", "--config", "deploy/uptime-probe/wrangler.toml", "--var", "AUDIT_MODE:containment"], cwd=root)
+    except BaseException as activation_error:
+        rollback_errors: list[str] = []
+
+        def attempt(label: str, action: Any) -> None:
+            try:
+                action()
+            except BaseException as error:  # keep restoring independent surfaces
+                rollback_errors.append(f"{label}: {error}")
+
+        attempt(
+            "disable writes",
+            lambda: run(ssh + ["sudo", "/opt/tinyzkp/deploy/hetzner/beta/set-beta-writes.sh", "0", args.release_sha, "public_beta"]),
+        )
+        attempt(
+            "restore Caddy rollback route",
+            lambda: run(ssh + ["sudo", "/opt/tinyzkp/deploy/hetzner/beta/switch-beta-route.sh", "rollback", args.release_sha, "public_beta"]),
+        )
+        attempt(
+            "restore Pages deployment",
+            lambda: rollback_pages(token, args.account_id, args.project, str(previous["id"])),
+        )
+        attempt(
+            "restore containment probe",
+            lambda: run(
+                [args.wrangler, "deploy", "--config", "deploy/uptime-probe/wrangler.toml", "--var", "AUDIT_MODE:containment"],
+                cwd=root,
+            ),
+        )
+
+        def verify_containment() -> None:
+            discovery = fetch_json("https://tinyzkp.com/discovery.json")
+            if discovery.get("service_status") != "backend_recovery":
+                raise RuntimeError("public discovery did not return to containment")
+
+        attempt("verify containment", verify_containment)
+        if rollback_errors:
+            raise RuntimeError(
+                "activation failed and rollback was incomplete: " + "; ".join(rollback_errors)
+            ) from activation_error
         raise
     write_private(
         args.evidence,
@@ -159,6 +181,21 @@ def main() -> None:
             "probe_mode": "public_beta",
         },
     )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--release-sha", required=True)
+    parser.add_argument("--staged-site", type=Path, required=True)
+    parser.add_argument("--api-ssh", required=True)
+    parser.add_argument("--account-id", required=True)
+    parser.add_argument("--project", default="tinyzkp")
+    parser.add_argument("--cloudflare-token-env", default="CLOUDFLARE_API_TOKEN")
+    parser.add_argument("--wrangler", default="wrangler")
+    parser.add_argument("--smoke-command", type=Path, required=True)
+    parser.add_argument("--evidence", type=Path, required=True)
+    parser.add_argument("--confirmation", required=True)
+    activate(parser.parse_args())
 
 
 if __name__ == "__main__":
