@@ -15,7 +15,7 @@ def test_fixed_host_preflight_emits_typed_success(monkeypatch, tmp_path):
     monkeypatch.setattr(preflight.HARNESS, "fixed_host_failures", lambda value: [])
 
     report = preflight.check(scratch, cgroup)
-    assert report["schema_version"] == 1
+    assert report["schema_version"] == 2
     assert report["passed"] is True
     assert report["failures"] == []
     assert report["host"] == {"logical_cpu_count": 8}

@@ -25,15 +25,21 @@ def fixtures(rows=1_048_576):
         },
     }
     common = {
-        "schema_version": 1,
+        "schema_version": 2,
         "scope": "full_pipeline",
         "benchmark_session_id": "0123456789abcdef0123456789abcdef",
         "hardware": "test-host",
-        "logical_cpu_count": 8,
-        "total_memory_bytes": 16 * 1024**3,
+        "physical_logical_cpu_count": 12,
+        "physical_memory_bytes": 64 * 1024**3,
+        "effective_cpu_count": 8,
+        "effective_cpu_affinity": list(range(8)),
+        "effective_memory_max_bytes": 16 * 1024**3,
+        "effective_swap_max_bytes": 0,
+        "cgroup_v2_path": "/tinyzkp-bench",
         "operating_system": "linux",
         "storage": "nvme",
         "storage_device": "259:1:nvme0n1p1",
+        "effective_storage_device": "259:1:nvme0n1p1",
         "storage_is_rotational": False,
         "storage_is_nvme": True,
         "storage_total_bytes": 1_000_000_000_000,
@@ -165,8 +171,9 @@ def test_release_reports_require_the_same_fixed_host_session():
     manifest, baseline, candidate, baseline_normalized, candidate_normalized = fixtures()
     candidate["benchmark_session_id"] = "f" * 32
     candidate["storage_device"] = "259:2:nvme1n1p1"
-    candidate["logical_cpu_count"] = 16
-    candidate["total_memory_bytes"] = 32 * 1024**3
+    candidate["effective_cpu_count"] = 7
+    candidate["effective_cpu_affinity"] = list(range(7))
+    candidate["effective_memory_max_bytes"] = 32 * 1024**3
     candidate["storage_is_nvme"] = False
     candidate["storage_available_bytes"] = 499_999_999_999
     candidate["scratch_directory_mode"] = 0o755
@@ -179,8 +186,8 @@ def test_release_reports_require_the_same_fixed_host_session():
         baseline_normalized=baseline_normalized,
         candidate_normalized=candidate_normalized,
     )
-    assert "candidate release host must expose exactly 8 logical CPUs" in failures
-    assert "candidate release host is not in the 16-GB memory class" in failures
+    assert "candidate release cgroup must expose exactly 8 effective CPUs" in failures
+    assert "candidate release cgroup is not in the 16-GiB memory class" in failures
     assert "candidate release scratch storage is not verified NVMe" in failures
     assert (
         "candidate release scratch storage must have at least 500 GB available"

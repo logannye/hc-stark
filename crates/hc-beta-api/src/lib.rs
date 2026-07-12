@@ -134,6 +134,14 @@ pub fn public_router(state: AppState) -> Router {
 
 pub fn worker_router(state: AppState) -> Router {
     Router::new()
+        .route(
+            "/internal/v1/workers/draining",
+            post(worker_routes::draining),
+        )
+        .route(
+            "/internal/v1/leases/startup-validate",
+            post(worker_routes::startup_validate),
+        )
         .route("/internal/v1/leases/claim", post(worker_routes::claim))
         .route(
             "/internal/v1/jobs/:id/heartbeat",

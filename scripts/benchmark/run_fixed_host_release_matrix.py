@@ -486,10 +486,16 @@ def validate_matrix_manifest(entry: MatrixEntry, scratch_root: Path) -> dict[str
 def stable_host_identity(host: dict[str, object]) -> dict[str, object]:
     fields = (
         "hardware",
-        "logical_cpu_count",
-        "total_memory_bytes",
+        "physical_logical_cpu_count",
+        "physical_memory_bytes",
+        "effective_cpu_count",
+        "effective_cpu_affinity",
+        "effective_memory_max_bytes",
+        "effective_swap_max_bytes",
+        "cgroup_v2_path",
         "operating_system",
         "storage_device",
+        "effective_storage_device",
         "storage_is_rotational",
         "storage_is_nvme",
         "storage_total_bytes",
@@ -504,7 +510,7 @@ def validate_preflight_report(
     cgroup_parent: Path,
 ) -> dict[str, object]:
     report = read_json_object(path)
-    if report.get("schema_version") != 1 or report.get("passed") is not True:
+    if report.get("schema_version") != 2 or report.get("passed") is not True:
         raise ValueError(f"fixed-host preflight did not pass: {path}")
     if report.get("release_sha") != release_sha:
         raise ValueError("fixed-host preflight release identity mismatch")

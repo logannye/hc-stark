@@ -18,6 +18,32 @@ use uuid::Uuid;
 
 const LEASE_SECONDS: u64 = 120;
 
+pub async fn draining(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<WorkerDrainingRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let worker_id = auth::authenticate_worker(&headers, &state).await?;
+    if request.release_sha != state.config.release_sha {
+        return Err(ApiError::Conflict("worker_release_mismatch"));
+    }
+    let changed = sqlx::query(
+        "UPDATE beta_workers SET draining=$2,
+             draining_at=CASE WHEN $2 THEN now() ELSE NULL END,last_heartbeat_at=now()
+          WHERE worker_id=$1 AND enabled",
+    )
+    .bind(&worker_id)
+    .bind(request.draining)
+    .execute(&state.pool)
+    .await?;
+    if changed.rows_affected() != 1 {
+        return Err(ApiError::Unauthorized);
+    }
+    Ok(Json(
+        json!({"worker_id":worker_id,"draining":request.draining}),
+    ))
+}
+
 pub async fn claim(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -30,7 +56,7 @@ pub async fn claim(
     let mut tx = state.pool.begin().await?;
     let worker = sqlx::query(
         "UPDATE beta_workers SET free_scratch_bytes=$2,release_sha=$3,last_heartbeat_at=now()
-          WHERE worker_id=$1 AND enabled
+          WHERE worker_id=$1 AND enabled AND NOT draining
           RETURNING max_slots",
     )
     .bind(&worker_id)
@@ -121,6 +147,71 @@ pub async fn claim(
         job_id,
         attempt: u32::try_from(attempt).map_err(|_| ApiError::Internal)?,
         lease_epoch: u64::try_from(lease_epoch).map_err(|_| ApiError::Internal)?,
+        lease_seconds: LEASE_SECONDS,
+        air: serde_json::from_value(row.get("package_json")).map_err(|_| ApiError::Internal)?,
+        manifest: serde_json::from_value(row.get("manifest_json"))
+            .map_err(|_| ApiError::Internal)?,
+        public_inputs: serde_json::from_value(row.get("public_inputs_json"))
+            .map_err(|_| ApiError::Internal)?,
+        input_chunks,
+    })))
+}
+
+pub async fn startup_validate(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<WorkerStartupLeaseRequest>,
+) -> Result<Json<Option<WorkerClaimResponse>>, ApiError> {
+    let worker_id = auth::authenticate_worker(&headers, &state).await?;
+    if request.release_sha != state.config.release_sha || !is_digest(&request.checkpoint_identity) {
+        return Err(ApiError::Conflict("worker_release_or_checkpoint_mismatch"));
+    }
+    let row = sqlx::query(
+        "UPDATE beta_proof_jobs j SET lease_expires_at=now()+interval '120 seconds'
+          FROM beta_air_packages a,beta_uploads u
+         WHERE j.job_id=$1 AND j.lease_owner=$2 AND j.attempt=$3 AND j.lease_epoch=$4
+           AND j.release_sha=$5 AND j.checkpoint_identity=$6
+           AND j.air_package_id=a.air_package_id AND j.upload_id=u.upload_id
+           AND j.lease_expires_at > now()
+           AND j.status IN ('leased','proving','verifying','cancel_requested')
+         RETURNING j.job_id,j.attempt,j.lease_epoch,j.public_inputs_json,
+                   a.package_json,u.manifest_json",
+    )
+    .bind(request.job_id)
+    .bind(&worker_id)
+    .bind(i32::try_from(request.attempt).map_err(|_| ApiError::Invalid("invalid_attempt"))?)
+    .bind(to_i64(request.lease_epoch)?)
+    .bind(&request.release_sha)
+    .bind(&request.checkpoint_identity)
+    .fetch_optional(&state.pool)
+    .await?;
+    let Some(row) = row else {
+        return Ok(Json(None));
+    };
+    let chunk_rows = sqlx::query(
+        "SELECT chunk_index,object_key FROM beta_upload_chunks c
+          JOIN beta_proof_jobs j ON j.upload_id=c.upload_id
+         WHERE j.job_id=$1 ORDER BY chunk_index",
+    )
+    .bind(request.job_id)
+    .fetch_all(&state.pool)
+    .await?;
+    let mut input_chunks = Vec::with_capacity(chunk_rows.len());
+    for chunk in chunk_rows {
+        let index =
+            u32::try_from(chunk.get::<i32, _>("chunk_index")).map_err(|_| ApiError::Internal)?;
+        let object_key: String = chunk.get("object_key");
+        let upload = state.object_store.presign_download(&object_key).await?;
+        input_chunks.push(UploadChunkUrl {
+            index,
+            object_key,
+            upload,
+        });
+    }
+    Ok(Json(Some(WorkerClaimResponse {
+        job_id: request.job_id,
+        attempt: request.attempt,
+        lease_epoch: request.lease_epoch,
         lease_seconds: LEASE_SECONDS,
         air: serde_json::from_value(row.get("package_json")).map_err(|_| ApiError::Internal)?,
         manifest: serde_json::from_value(row.get("manifest_json"))
@@ -368,7 +459,7 @@ pub async fn failure(
     let worker_id = auth::authenticate_worker(&headers, &state).await?;
     let mut tx = state.pool.begin().await?;
     let row = sqlx::query(
-        "SELECT tenant_id,status,lease_owner,attempt,lease_epoch,
+        "SELECT tenant_id,status,lease_owner,attempt,lease_epoch,checkpoint_identity,
                 reserved_subscription_millicredits,reserved_purchased_millicredits
            FROM beta_proof_jobs WHERE job_id=$1 FOR UPDATE",
     )
@@ -377,7 +468,12 @@ pub async fn failure(
     .await?;
     ensure_lease_row(&row, &worker_id, request.attempt, request.lease_epoch)?;
     let attempt = row.get::<i32, _>("attempt");
-    let status = if request.retryable && attempt < 3 {
+    let checkpoint_identity: Option<String> = row.get("checkpoint_identity");
+    let status = if request.retryable
+        && attempt < 3
+        && request.code == "prover_interrupted"
+        && checkpoint_identity.as_deref().is_some_and(is_digest)
+    {
         sqlx::query(
             "UPDATE beta_proof_jobs SET status='queued',lease_owner=NULL,lease_expires_at=NULL,
                     progress_json=NULL,error_code=$2 WHERE job_id=$1",

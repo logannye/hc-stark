@@ -25,7 +25,7 @@ def check(scratch_dir: Path, cgroup_parent: Path) -> dict[str, object]:
     metadata = HARNESS.collect_host_metadata(scratch_dir)
     failures = HARNESS.fixed_host_failures(metadata)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "release_sha": os.environ.get("HC_RELEASE_SHA", "development-unreleased"),
         "scratch_dir": str(scratch_dir.resolve()),
         "cgroup_parent": str(cgroup_parent.resolve()),
@@ -49,7 +49,7 @@ def main(argv: list[str]) -> int:
         report = check(args.scratch_dir, args.cgroup_parent)
     except (OSError, RuntimeError, ValueError) as error:
         report = {
-            "schema_version": 1,
+            "schema_version": 2,
             "release_sha": os.environ.get(
                 "HC_RELEASE_SHA", "development-unreleased"
             ),

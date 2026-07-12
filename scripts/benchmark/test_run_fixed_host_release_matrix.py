@@ -207,10 +207,16 @@ def test_stable_snapshot_rejects_path_replacement_during_read(monkeypatch, tmp_p
 def _eligible_host():
     return {
         "hardware": "fixed-host; logical_cpus=8",
-        "logical_cpu_count": 8,
-        "total_memory_bytes": 16 * 1024**3,
+        "physical_logical_cpu_count": 12,
+        "physical_memory_bytes": 64 * 1024**3,
+        "effective_cpu_count": 8,
+        "effective_cpu_affinity": list(range(8)),
+        "effective_memory_max_bytes": 16 * 1024**3,
+        "effective_swap_max_bytes": 0,
+        "cgroup_v2_path": "/tinyzkp-bench",
         "operating_system": "Linux-test",
         "storage_device": "259:1:nvme0n1p1",
+        "effective_storage_device": "259:1:nvme0n1p1",
         "storage_is_rotational": False,
         "storage_is_nvme": True,
         "storage_total_bytes": 1_000_000_000_000,

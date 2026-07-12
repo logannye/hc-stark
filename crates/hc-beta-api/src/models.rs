@@ -134,6 +134,21 @@ pub struct WorkerClaimRequest {
     pub free_scratch_bytes: u64,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WorkerDrainingRequest {
+    pub release_sha: String,
+    pub draining: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WorkerStartupLeaseRequest {
+    pub job_id: Uuid,
+    pub attempt: u32,
+    pub lease_epoch: u64,
+    pub release_sha: String,
+    pub checkpoint_identity: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct WorkerClaimResponse {
     pub job_id: Uuid,
