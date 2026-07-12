@@ -1,39 +1,39 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "api_base_url": "http://127.0.0.1:18090",
   "timeout_seconds": 3600,
   "poll_interval_seconds": 5,
-  "minimum_predicted_rss_bytes": 1610612736,
+  "minimum_predicted_rss_bytes": 1825361100,
   "jobs": [
     {
       "idempotency_key": "load-job-01-REPLACE-UNIQUE",
       "request": {
-        "air_package_id": "REPLACE",
-        "upload_id": "REPLACE",
+        "air_package_id": "REPLACE-AIR-01",
+        "upload_id": "REPLACE-UPLOAD-01",
         "public_inputs": {"schema_version": 1, "values": []}
       }
     },
     {
       "idempotency_key": "load-job-02-REPLACE-UNIQUE",
       "request": {
-        "air_package_id": "REPLACE",
-        "upload_id": "REPLACE",
+        "air_package_id": "REPLACE-AIR-02",
+        "upload_id": "REPLACE-UPLOAD-02",
         "public_inputs": {"schema_version": 1, "values": []}
       }
     },
     {
       "idempotency_key": "load-job-03-REPLACE-UNIQUE",
       "request": {
-        "air_package_id": "REPLACE",
-        "upload_id": "REPLACE",
+        "air_package_id": "REPLACE-AIR-03",
+        "upload_id": "REPLACE-UPLOAD-03",
         "public_inputs": {"schema_version": 1, "values": []}
       }
     },
     {
       "idempotency_key": "load-job-04-REPLACE-UNIQUE",
       "request": {
-        "air_package_id": "REPLACE",
-        "upload_id": "REPLACE",
+        "air_package_id": "REPLACE-AIR-04",
+        "upload_id": "REPLACE-UPLOAD-04",
         "public_inputs": {"schema_version": 1, "values": []}
       }
     }

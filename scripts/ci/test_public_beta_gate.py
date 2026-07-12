@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import public_beta_gate
@@ -15,15 +16,19 @@ def fixture_root(tmp_path: Path) -> tuple[Path, dict]:
         ),
         encoding="utf-8",
     )
-    artifact = tmp_path / "evidence.txt"
-    artifact.write_text("verified\n", encoding="utf-8")
+    artifact = tmp_path / "evidence.json"
+    artifact.write_text(
+        json.dumps({"status": "passed", "release_sha": "a" * 40}),
+        encoding="utf-8",
+    )
+    os.chmod(artifact, 0o600)
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
     evidence = {
         "schema_version": 1,
         "release_channel": "public_beta",
         "release_sha": "a" * 40,
         "gates": {
-            gate: [{"path": "evidence.txt", "sha256": digest}] for gate in required
+            gate: [{"path": "evidence.json", "sha256": digest}] for gate in required
         },
     }
     return tmp_path, evidence
