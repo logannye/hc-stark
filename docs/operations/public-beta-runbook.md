@@ -47,7 +47,24 @@ Production remains in containment until the signed `public_beta` authorization m
   The strict run proves a 1,024-row local registration statement, uploads a multi-chunk `2^18` trace, completes and officially verifies the hosted bundle, checks exact and conflicting idempotency retries, rejects a modified signed checksum, exercises wrong-length and corrupt chunks, proves wrong public inputs cannot charge, and denies a second tenant's bundle request. Evidence files are owner-only and reject secret-like fields and URLs.
 - Complete Stripe test-mode subscription, top-up, failed payment, duplicate webhook, delayed webhook, Portal, cancellation, full refund, partial refund, and failed-refund flows. Webhook delivery is successful once the raw signed body is durably queued; inspect the database-backed processor attempts separately. Require semantic grants and refund reversals to appear exactly once, then run `hc-beta-reconcile` and retain its clean HMAC-signed report.
   Create refunds only through the write-gated operator command: set `TINYZKP_REFUND_PAYMENT_INTENT`, a unique `TINYZKP_REFUND_OPERATION_ID`, optional `TINYZKP_REFUND_AMOUNT_MINOR` for a partial refund, and `TINYZKP_ALLOW_REFUND_WRITE=1`, then run `hc-beta-refund` in the API container. Repeating the same operation ID is a Stripe-idempotent retry.
-- Run the fixed-host 1M/16M matrix, customer_cubic8 matrix, fault/fuzz suite, security review, four-job load test, and identity check on the final candidate. Prepare four paid job request bodies and execute `scripts/load/run_public_beta_load.py`; release evidence requires all four jobs to complete, download, officially verify, and leave `/readyz` continuously healthy.
+- Run the fixed-host 1M/16M matrix, customer_cubic8 matrix, fault/fuzz suite, security review, four-job load test, and identity check on the final candidate. The load runner creates four digest-distinct `customer_cubic8` AIRs, verifies a 1,024-row local proof for each, selects the largest candidate row count whose signed-CLI estimate is within 85–100% of 2 GiB and below the 60-minute admission limit, registers four AIRs, and uploads four independent traces:
+
+  ```sh
+  export TINYZKP_LOAD_API_KEY=<scale-canary-api-key>
+  python3 scripts/load/run_public_beta_load.py \
+    --prepare-scenario \
+    --prepare-state-dir /var/lib/tinyzkp-load/prepare-<release-sha> \
+    --release-sha "$TINYZKP_RELEASE_SHA" \
+    --output /var/lib/tinyzkp-load/scenario-<release-sha>.json
+
+  python3 scripts/load/run_public_beta_load.py \
+    --scenario /var/lib/tinyzkp-load/scenario-<release-sha>.json \
+    --telemetry /var/lib/tinyzkp-load/telemetry-<release-sha>.json \
+    --release-sha "$TINYZKP_RELEASE_SHA" \
+    --output /var/lib/tinyzkp-load/public-beta-load-evidence-v2.json
+  ```
+
+  Scenario and evidence outputs are owner-only and cannot be replaced. Release evidence requires all four jobs to complete, download, officially verify, and leave `/readyz` continuously healthy.
 - Run `restore-drill.sh --confirm-isolated-restore`. Recompute credit balances from immutable events, authenticate a retained test API key, recover a queued job, and verify a retained proof bundle before recording success.
 - Run the resumable 24-hour allowlisted canary with `scripts/canary/run_public_beta_canary.py` and an owner-controlled driver implementing `proof`, `cancel`, `billing`, and `audit` subcommands. The harness pins the driver digest, records one proof per hour, runs cancellation/refund every six hours, performs both tagged live billing canaries, and writes owner-only state after every event. Validate its evidence with `validate_public_beta_canary.py`.
 

@@ -5,15 +5,20 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+import copy
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import shutil
 import statistics
+import sys
+import tempfile
 import time
 from typing import Any
 import urllib.error
 import urllib.request
+import uuid
 
 
 TERMINAL = {"completed", "cancelled", "platform_failed", "customer_failed"}
@@ -23,6 +28,25 @@ READY_P95_LIMIT_MS = 500.0
 READY_MAX_LIMIT_MS = 2_000.0
 CONTROL_P95_LIMIT_MS = 1_000.0
 CONTROL_MAX_LIMIT_MS = 5_000.0
+MAX_PREDICTED_WALL_MS = 60 * 60 * 1000
+
+
+def write_private_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    if path.exists() or path.is_symlink():
+        raise ValueError("refusing to replace load scenario or evidence")
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(value, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
 
 def now() -> str:
@@ -158,6 +182,173 @@ def validate_evidence(value: dict[str, Any], release_sha: str) -> dict[str, Any]
         raise ValueError("load evidence contains residual reservations")
     validate_telemetry(value["telemetry"], release_sha)
     return value
+
+
+def parse_candidate_rows(raw: str) -> list[int]:
+    try:
+        rows = [int(item.strip()) for item in raw.split(",") if item.strip()]
+    except ValueError as error:
+        raise ValueError("candidate row counts must be comma-separated integers") from error
+    if not rows or len(rows) != len(set(rows)):
+        raise ValueError("candidate row counts must be non-empty and unique")
+    if any(value < 1 << 10 or value > 1 << 24 or value & (value - 1) for value in rows):
+        raise ValueError("candidate rows must be powers of two from 2^10 through 2^24")
+    return sorted(rows, reverse=True)
+
+
+def customer_load_variant(fixtures: Any, index: int) -> Any:
+    if index not in range(4):
+        raise ValueError("load fixture index must be from zero through three")
+    original = fixtures.customer_cubic8()
+    air = copy.deepcopy(original.air)
+    for public_input in air["public_inputs"]:
+        public_input["name"] = f"{public_input['name']}_load_{index}"
+    return fixtures.Fixture(
+        name=f"customer_cubic8_load_{index}",
+        air=air,
+        initial_state=original.initial_state,
+        row=original.row,
+        step=original.step,
+        public_values=original.public_values,
+    )
+
+
+def predicted_wall_time_ms(air: dict[str, Any], rows: int) -> int:
+    expression_work = len(air["expressions"]) + len(air["constraints"]) + int(air["trace_width"])
+    return max(1_000, (rows * expression_work + 49_999) // 50_000)
+
+
+def prepare_scenario(
+    *,
+    release_sha: str,
+    output: Path,
+    state_dir: Path,
+    candidate_rows: list[int],
+    api_key_env: str,
+    retain_state: bool,
+) -> dict[str, Any]:
+    if len(release_sha) != 40 or any(character not in "0123456789abcdef" for character in release_sha):
+        raise ValueError("release SHA must be a full lowercase Git commit")
+    canary = Path(__file__).resolve().parents[1] / "canary"
+    sys.path.insert(0, str(canary))
+    try:
+        import declarative_fixtures
+        import hc_beta_e2e
+    finally:
+        sys.path.pop(0)
+    cli_value = os.environ.get("TINYZKP_CLI", "").strip()
+    api_url = os.environ.get("TINYZKP_API_URL", "").strip()
+    token = os.environ.get(api_key_env, "").strip()
+    if not cli_value or not api_url or not token:
+        raise ValueError("TINYZKP_CLI, TINYZKP_API_URL, and the configured load API key are required")
+    cli = Path(cli_value).resolve(strict=True)
+    resolved_output = output.resolve()
+    resolved_state = state_dir.resolve()
+    if resolved_output == resolved_state or resolved_state in resolved_output.parents:
+        raise ValueError("load scenario output must remain outside disposable preparation state")
+    identity = hc_beta_e2e.run([str(cli), "release"], expect_json=True)
+    if not isinstance(identity, dict) or identity.get("release_sha") != release_sha:
+        raise ValueError("signed CLI release identity does not match the load candidate")
+    state_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
+    os.chmod(state_dir, 0o700)
+    client = hc_beta_e2e.ApiClient(api_url, token)
+    prepared: list[tuple[Any, dict[str, Any], Path]] = []
+    selected_rows: int | None = None
+    try:
+        first = customer_load_variant(declarative_fixtures, 0)
+        for rows in candidate_rows:
+            candidate_root = state_dir / f"candidate-{rows}"
+            candidate_root.mkdir(mode=0o700)
+            statement = hc_beta_e2e.prepare_statement(cli, first, rows, candidate_root)
+            estimate_policy = json.loads((candidate_root / "policy.json").read_text(encoding="utf-8"))
+            # Selection needs to observe an over-limit estimate so it can try
+            # the next lower power of two. Hosted admission still enforces the
+            # exact 2-GiB policy when the selected job is submitted.
+            estimate_policy["max_resident_bytes"] = 16 * 1024**3
+            estimate_policy_path = candidate_root / "load-estimate-policy.json"
+            hc_beta_e2e.write_json(estimate_policy_path, estimate_policy)
+            estimate = hc_beta_e2e.run(
+                [
+                    str(cli), "plonky3", "estimate-air",
+                    "--air", str(statement["air_path"]),
+                    "--trace-manifest", str(Path(statement["hosted_packed"]) / "trace-manifest-v1.json"),
+                    "--public-inputs", str(statement["hosted_public_path"]),
+                    "--policy", str(estimate_policy_path),
+                ],
+                expect_json=True,
+            )
+            if not isinstance(estimate, dict) or not isinstance(estimate.get("estimate"), dict):
+                raise RuntimeError("signed CLI returned malformed load preflight evidence")
+            peak = estimate["estimate"].get("peak_resident_bytes")
+            wall = predicted_wall_time_ms(first.air, rows)
+            if isinstance(peak, int) and MIN_RELEASE_PREDICTED_RSS <= peak <= MAX_PREDICTED_RSS and wall < MAX_PREDICTED_WALL_MS:
+                selected_rows = rows
+                statement["load_preflight"] = {
+                    "resources": estimate["estimate"],
+                    "predicted_wall_time_ms": wall,
+                }
+                prepared.append((first, statement, candidate_root))
+                break
+            shutil.rmtree(candidate_root)
+        if selected_rows is None:
+            raise RuntimeError("no candidate row count is within the 85%-to-100% RSS and 60-minute load envelope")
+
+        for index in range(1, 4):
+            fixture = customer_load_variant(declarative_fixtures, index)
+            root = state_dir / f"load-{index}"
+            root.mkdir(mode=0o700)
+            statement = hc_beta_e2e.prepare_statement(cli, fixture, selected_rows, root)
+            statement["load_preflight"] = prepared[0][1]["load_preflight"]
+            prepared.append((fixture, statement, root))
+
+        jobs: list[dict[str, Any]] = []
+        for index, (fixture, statement, _root) in enumerate(prepared):
+            nonce = uuid.uuid4().hex
+            status, registered = client.request(
+                "POST",
+                "/v1/air-packages",
+                {"air": statement["air"], "local_proof": statement["local_proof"]},
+                idempotency_key=f"load-air-{release_sha[:12]}-{index}-{nonce}",
+            )
+            if status != 201:
+                raise RuntimeError(f"load AIR registration {index} returned HTTP {status}")
+            status, upload = client.request(
+                "POST",
+                "/v1/uploads",
+                {
+                    "air_package_id": registered["air_package_id"],
+                    "manifest": statement["hosted_manifest"],
+                },
+                idempotency_key=f"load-upload-{release_sha[:12]}-{index}-{nonce}",
+            )
+            if status != 201:
+                raise RuntimeError(f"load upload creation {index} returned HTTP {status}")
+            hc_beta_e2e.upload_chunks(client, upload, Path(statement["hosted_packed"]))
+            jobs.append(
+                {
+                    "idempotency_key": f"load-job-{release_sha[:12]}-{index}-{nonce}",
+                    "request": {
+                        "air_package_id": registered["air_package_id"],
+                        "upload_id": upload["upload_id"],
+                        "public_inputs": statement["hosted_public"],
+                    },
+                }
+            )
+        scenario = validate_scenario(
+            {
+                "schema_version": 2,
+                "api_base_url": api_url,
+                "jobs": jobs,
+                "timeout_seconds": 3600,
+                "poll_interval_seconds": 5,
+                "minimum_predicted_rss_bytes": MIN_RELEASE_PREDICTED_RSS,
+            }
+        )
+        write_private_json(output, scenario)
+        return scenario
+    finally:
+        if not retain_state:
+            shutil.rmtree(state_dir, ignore_errors=True)
 
 
 def request_json(
@@ -348,19 +539,41 @@ def run(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scenario", type=Path, required=True)
+    parser.add_argument("--scenario", type=Path)
+    parser.add_argument("--prepare-scenario", action="store_true")
+    parser.add_argument("--prepare-state-dir", type=Path)
+    parser.add_argument(
+        "--candidate-rows",
+        default="16777216,8388608,4194304,2097152,1048576",
+    )
+    parser.add_argument("--retain-prepared-state", action="store_true")
     parser.add_argument("--release-sha", required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--telemetry", type=Path, required=True)
+    parser.add_argument("--telemetry", type=Path)
     parser.add_argument("--api-key-env", default="TINYZKP_LOAD_API_KEY")
     args = parser.parse_args()
+    if args.prepare_scenario:
+        if args.scenario is not None or args.telemetry is not None or args.prepare_state_dir is None:
+            raise SystemExit("prepare mode requires --prepare-state-dir and forbids --scenario/--telemetry")
+        prepare_scenario(
+            release_sha=args.release_sha,
+            output=args.output,
+            state_dir=args.prepare_state_dir,
+            candidate_rows=parse_candidate_rows(args.candidate_rows),
+            api_key_env=args.api_key_env,
+            retain_state=args.retain_prepared_state,
+        )
+        return
+    if args.scenario is None or args.telemetry is None or args.prepare_state_dir is not None:
+        raise SystemExit("run mode requires --scenario and --telemetry")
     token = os.environ.get(args.api_key_env, "")
     if not token:
         raise SystemExit(f"{args.api_key_env} is required")
     scenario = validate_scenario(json.loads(args.scenario.read_text(encoding="utf-8")))
     telemetry = json.loads(args.telemetry.read_text(encoding="utf-8"))
     result = run(scenario, token, args.release_sha, telemetry)
-    args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    validate_evidence(result, args.release_sha)
+    write_private_json(args.output, result)
 
 
 if __name__ == "__main__":

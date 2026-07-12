@@ -1,5 +1,7 @@
 import importlib.util
+import os
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -102,3 +104,38 @@ def test_scenario_requires_independent_artifacts_and_near_limit_jobs():
     invalid["minimum_predicted_rss_bytes"] = MODULE.MIN_RELEASE_PREDICTED_RSS - 1
     with pytest.raises(ValueError, match="85%"):
         MODULE.validate_scenario(invalid)
+
+
+def test_prepare_candidates_are_descending_unique_powers_of_two():
+    assert MODULE.parse_candidate_rows("1048576,4194304,2097152") == [
+        4_194_304,
+        2_097_152,
+        1_048_576,
+    ]
+    for invalid in ("", "1024,1024", "1000", "33554432"):
+        with pytest.raises(ValueError):
+            MODULE.parse_candidate_rows(invalid)
+
+
+def test_four_load_air_variants_have_distinct_digests_inputs_and_equal_work():
+    canary = Path(__file__).resolve().parents[1] / "canary"
+    sys.path.insert(0, str(canary))
+    try:
+        import declarative_fixtures
+    finally:
+        sys.path.pop(0)
+    variants = [MODULE.customer_load_variant(declarative_fixtures, index) for index in range(4)]
+    names = [tuple(item["name"] for item in variant.air["public_inputs"]) for variant in variants]
+    assert len(set(names)) == 4
+    assert all(variant.air["constraints"] == variants[0].air["constraints"] for variant in variants)
+    assert len({variant.name for variant in variants}) == 4
+    wall = MODULE.predicted_wall_time_ms(variants[0].air, 1 << 24)
+    assert 1_000 <= wall < MODULE.MAX_PREDICTED_WALL_MS
+
+
+def test_load_outputs_are_owner_only_and_never_replaced(tmp_path: Path):
+    output = tmp_path / "private" / "load.json"
+    MODULE.write_private_json(output, {"status": "passed"})
+    assert os.stat(output).st_mode & 0o077 == 0
+    with pytest.raises(ValueError, match="refusing to replace"):
+        MODULE.write_private_json(output, {"status": "passed"})
