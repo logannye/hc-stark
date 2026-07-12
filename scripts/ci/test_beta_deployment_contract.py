@@ -73,6 +73,9 @@ def test_beta_routing_cannot_break_ordinary_containment_deploys():
     assert "flock -n" in switch
     assert "restore_previous" in switch
     assert "caddy validate --config \"$staged_caddy\"" in switch
+    assert "@beta_stripe_webhook path /webhooks/stripe" in containment
+    assert "@beta_oauth_callback path /v1/auth/github/callback" in containment
+    assert containment.index("@beta_stripe_webhook") < containment.index("reverse_proxy 127.0.0.1:8080")
     assert "EXPECTED_SHA" in switch and "EXPECTED_STATUS" in switch
 
 
