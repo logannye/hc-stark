@@ -175,8 +175,8 @@ test("shared report fixture rejects unknown fields", () => {
   writeFileSync(
     path,
     readFileSync(fixture, "utf8").replace(
-      '"total_memory_bytes": 17179869184',
-      '"total_memory_bytes": 18446744073709551616',
+      '"physical_memory_bytes": 68719476736',
+      '"physical_memory_bytes": 18446744073709551616',
     ),
   );
   assert.throws(() => loadReport(path), ArtifactError);

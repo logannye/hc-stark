@@ -350,8 +350,10 @@ export function validateReport(value: unknown): asserts value is BenchmarkReport
   const report = object(value, "benchmark report");
   const required = [
     "schema_version", "scope", "mode", "benchmark_session_id", "hardware",
-    "logical_cpu_count", "total_memory_bytes", "operating_system", "storage",
-    "storage_device", "storage_is_rotational", "storage_is_nvme",
+    "physical_logical_cpu_count", "physical_memory_bytes", "effective_cpu_count",
+    "effective_cpu_affinity", "effective_memory_max_bytes", "effective_swap_max_bytes",
+    "cgroup_v2_path", "operating_system", "storage",
+    "storage_device", "effective_storage_device", "storage_is_rotational", "storage_is_nvme",
     "storage_total_bytes", "storage_available_bytes", "scratch_directory_mode",
     "scratch_owned_by_runner",
     "release_sha", "dependency_profile", "exact_command", "normalized_manifest_path",
@@ -368,23 +370,37 @@ export function validateReport(value: unknown): asserts value is BenchmarkReport
     throw new ArtifactError("benchmark report fields do not match BenchmarkReportV1");
   }
   if (
-    report.schema_version !== 1 ||
+    report.schema_version !== 2 ||
     report.scope !== "full_pipeline" ||
     (report.mode !== "baseline" && report.mode !== "bounded") ||
     typeof report.benchmark_session_id !== "string" ||
     !/^[0-9a-f]{32}$/.test(report.benchmark_session_id) ||
     typeof report.hardware !== "string" ||
     report.hardware.length === 0 ||
-    !Number.isSafeInteger(report.logical_cpu_count) ||
-    (report.logical_cpu_count as number) <= 0 ||
-    (report.logical_cpu_count as number) > 0xffff_ffff ||
-    !isPositiveU64(report.total_memory_bytes) ||
+    !Number.isSafeInteger(report.physical_logical_cpu_count) ||
+    (report.physical_logical_cpu_count as number) <= 0 ||
+    (report.physical_logical_cpu_count as number) > 0xffff_ffff ||
+    !isPositiveU64(report.physical_memory_bytes) ||
+    !Number.isSafeInteger(report.effective_cpu_count) ||
+    (report.effective_cpu_count as number) <= 0 ||
+    (report.effective_cpu_count as number) > 0xffff_ffff ||
+    !Array.isArray(report.effective_cpu_affinity) ||
+    report.effective_cpu_affinity.length !== report.effective_cpu_count ||
+    !report.effective_cpu_affinity.every((cpu) =>
+      Number.isSafeInteger(cpu) && cpu >= 0 && cpu <= 0xffff_ffff
+    ) ||
+    new Set(report.effective_cpu_affinity).size !== report.effective_cpu_affinity.length ||
+    !isPositiveU64(report.effective_memory_max_bytes) ||
+    !isU64(report.effective_swap_max_bytes) ||
+    typeof report.cgroup_v2_path !== "string" ||
+    !report.cgroup_v2_path.startsWith("/") ||
     typeof report.operating_system !== "string" ||
     report.operating_system.length === 0 ||
     typeof report.storage !== "string" ||
     report.storage.length === 0 ||
     typeof report.storage_device !== "string" ||
     report.storage_device.length === 0 ||
+    report.effective_storage_device !== report.storage_device ||
     typeof report.storage_is_rotational !== "boolean" ||
     typeof report.storage_is_nvme !== "boolean" ||
     !isPositiveU64(report.storage_total_bytes) ||

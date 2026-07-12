@@ -157,7 +157,7 @@ def test_shared_report_fixture_rejects_unknown_fields(tmp_path):
         load_report(path)
 
     raw = json.loads(fixture.read_text(encoding="utf-8"))
-    raw["total_memory_bytes"] = 1 << 64
+    raw["physical_memory_bytes"] = 1 << 64
     path.write_text(json.dumps(raw), encoding="utf-8")
     with pytest.raises(ArtifactError):
         load_report(path)
