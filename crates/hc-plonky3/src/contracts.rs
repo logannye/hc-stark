@@ -710,15 +710,25 @@ pub struct BenchmarkReportV1 {
     #[schemars(length(min = 1))]
     pub hardware: String,
     #[schemars(range(min = 1))]
-    pub logical_cpu_count: u32,
+    pub physical_logical_cpu_count: u32,
     #[schemars(range(min = 1))]
-    pub total_memory_bytes: u64,
+    pub physical_memory_bytes: u64,
+    #[schemars(range(min = 1))]
+    pub effective_cpu_count: u32,
+    pub effective_cpu_affinity: Vec<u32>,
+    #[schemars(range(min = 1))]
+    pub effective_memory_max_bytes: u64,
+    pub effective_swap_max_bytes: u64,
+    #[schemars(length(min = 1))]
+    pub cgroup_v2_path: String,
     #[schemars(length(min = 1))]
     pub operating_system: String,
     #[schemars(length(min = 1))]
     pub storage: String,
     #[schemars(length(min = 1))]
     pub storage_device: String,
+    #[schemars(length(min = 1))]
+    pub effective_storage_device: String,
     pub storage_is_rotational: bool,
     pub storage_is_nvme: bool,
     #[schemars(range(min = 1))]
@@ -757,16 +767,27 @@ pub struct BenchmarkReportV1 {
 
 impl BenchmarkReportV1 {
     pub fn validate(&self) -> Result<()> {
-        if self.schema_version != 1
+        if self.schema_version != 2
             || self.scope != "full_pipeline"
             || self.dependency_profile != COMPATIBILITY_PROFILE
             || !is_lower_hex_identifier(&self.benchmark_session_id, 32)
             || self.hardware.is_empty()
-            || self.logical_cpu_count == 0
-            || self.total_memory_bytes == 0
+            || self.physical_logical_cpu_count == 0
+            || self.physical_memory_bytes == 0
+            || self.effective_cpu_count == 0
+            || self.effective_cpu_affinity.len() != self.effective_cpu_count as usize
+            || self
+                .effective_cpu_affinity
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != self.effective_cpu_affinity.len()
+            || self.effective_memory_max_bytes == 0
+            || !self.cgroup_v2_path.starts_with('/')
             || self.operating_system.is_empty()
             || self.storage.is_empty()
             || self.storage_device.is_empty()
+            || self.effective_storage_device != self.storage_device
             || self.storage_total_bytes == 0
             || self.storage_available_bytes == 0
             || self.storage_available_bytes > self.storage_total_bytes

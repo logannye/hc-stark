@@ -15,8 +15,10 @@ MAX_JSON_BYTES = 1024 * 1024
 PROFILE = "tinyzkp-p3-goldilocks-v1"
 REPORT_REQUIRED_FIELDS = {
     "schema_version", "scope", "mode", "benchmark_session_id", "hardware",
-    "logical_cpu_count", "total_memory_bytes", "operating_system", "storage",
-    "storage_device", "storage_is_rotational", "storage_is_nvme",
+    "physical_logical_cpu_count", "physical_memory_bytes", "effective_cpu_count",
+    "effective_cpu_affinity", "effective_memory_max_bytes", "effective_swap_max_bytes",
+    "cgroup_v2_path", "operating_system", "storage",
+    "storage_device", "effective_storage_device", "storage_is_rotational", "storage_is_nvme",
     "storage_total_bytes", "storage_available_bytes", "scratch_directory_mode",
     "scratch_owned_by_runner",
     "release_sha", "dependency_profile", "exact_command", "normalized_manifest_path",
@@ -72,8 +74,8 @@ def validate_common(
             REPORT_REQUIRED_FIELDS | {"failure_diagnostic"}
         ):
             failures.append(f"{name} fields do not match BenchmarkReportV1")
-        if report.get("schema_version") != 1:
-            failures.append(f"{name} schema_version must be 1")
+        if report.get("schema_version") != 2:
+            failures.append(f"{name} schema_version must be 2")
         if report.get("scope") != "full_pipeline":
             failures.append(f"{name} must be a full_pipeline report")
         session = report.get("benchmark_session_id")
@@ -86,15 +88,35 @@ def validate_common(
         for field in ("hardware", "operating_system", "storage", "storage_device"):
             if not isinstance(report.get(field), str) or not report.get(field):
                 failures.append(f"{name} {field} is missing")
-        if report.get("logical_cpu_count") != 8:
-            failures.append(f"{name} release host must expose exactly 8 logical CPUs")
-        memory = report.get("total_memory_bytes")
+        affinity = report.get("effective_cpu_affinity")
+        if (
+            report.get("effective_cpu_count") != 8
+            or not isinstance(affinity, list)
+            or len(affinity) != 8
+            or any(not isinstance(cpu, int) or isinstance(cpu, bool) or cpu < 0 for cpu in affinity)
+            or len(set(affinity)) != 8
+        ):
+            failures.append(f"{name} release cgroup must expose exactly 8 effective CPUs")
+        memory = report.get("effective_memory_max_bytes")
         if (
             not isinstance(memory, int)
             or isinstance(memory, bool)
             or not 15 * 1024**3 <= memory <= 17 * 1024**3
         ):
-            failures.append(f"{name} release host is not in the 16-GB memory class")
+            failures.append(f"{name} release cgroup is not in the 16-GiB memory class")
+        if report.get("effective_swap_max_bytes") != 0:
+            failures.append(f"{name} release cgroup swap must be disabled")
+        physical_cpus = report.get("physical_logical_cpu_count")
+        if not isinstance(physical_cpus, int) or isinstance(physical_cpus, bool) or physical_cpus < 8:
+            failures.append(f"{name} physical CPU inventory is missing or below 8 CPUs")
+        physical_memory = report.get("physical_memory_bytes")
+        if not isinstance(physical_memory, int) or isinstance(physical_memory, bool) or physical_memory < 15 * 1024**3:
+            failures.append(f"{name} physical memory inventory is missing or below 15 GiB")
+        cgroup_path = report.get("cgroup_v2_path")
+        if not isinstance(cgroup_path, str) or not cgroup_path.startswith("/"):
+            failures.append(f"{name} cgroup identity is missing")
+        if report.get("effective_storage_device") != report.get("storage_device"):
+            failures.append(f"{name} effective scratch storage identity mismatch")
         if report.get("storage_is_rotational") is not False:
             failures.append(f"{name} release scratch storage is rotational or unknown")
         if report.get("storage_is_nvme") is not True:
@@ -231,11 +253,17 @@ def validate_common(
             "workload_manifest_digest_hex",
             "benchmark_session_id",
             "hardware",
-            "logical_cpu_count",
-            "total_memory_bytes",
+            "physical_logical_cpu_count",
+            "physical_memory_bytes",
+            "effective_cpu_count",
+            "effective_cpu_affinity",
+            "effective_memory_max_bytes",
+            "effective_swap_max_bytes",
+            "cgroup_v2_path",
             "operating_system",
             "storage",
             "storage_device",
+            "effective_storage_device",
             "storage_is_rotational",
             "storage_is_nvme",
             "storage_total_bytes",

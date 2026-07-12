@@ -26,6 +26,8 @@ import uuid
 PROFILE = "tinyzkp-p3-goldilocks-v1"
 REQUIRED_CGROUP_CONTROLLERS = {"cpu", "io", "memory", "pids"}
 MIN_FIXED_HOST_SCRATCH_AVAILABLE_BYTES = 500_000_000_000
+MIN_EFFECTIVE_MEMORY_BYTES = 15 * 1024**3
+MAX_EFFECTIVE_MEMORY_BYTES = 17 * 1024**3
 
 
 def valid_resource_estimate(value: object) -> bool:
@@ -207,6 +209,29 @@ def total_memory_bytes() -> int:
     return page_size * page_count
 
 
+def cgroup_v2_identity() -> tuple[str, Path]:
+    """Return the exact unified cgroup that constrains this process."""
+    for line in Path("/proc/self/cgroup").read_text(encoding="utf-8").splitlines():
+        hierarchy, controllers, relative = line.split(":", 2)
+        if hierarchy == "0" and controllers == "":
+            identity = "/" + relative.lstrip("/")
+            return identity, Path("/sys/fs/cgroup") / identity.lstrip("/")
+    raise RuntimeError("process is not attached to a cgroup-v2 hierarchy")
+
+
+def required_cgroup_limit(path: Path, name: str) -> int:
+    raw = (path / name).read_text(encoding="utf-8").strip()
+    if raw == "max":
+        raise RuntimeError(f"effective cgroup {name} is unbounded")
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise RuntimeError(f"effective cgroup {name} is malformed") from error
+    if value < 0:
+        raise RuntimeError(f"effective cgroup {name} is negative")
+    return value
+
+
 def benchmark_runner_uid() -> int:
     if os.geteuid() == 0:
         sudo_uid = os.environ.get("SUDO_UID", "")
@@ -259,10 +284,17 @@ def collect_host_metadata(scratch: Path) -> dict[str, object]:
     device_id = f"{os.major(scratch_stat.st_dev)}:{os.minor(scratch_stat.st_dev)}"
     backing, is_rotational, is_nvme = _block_characteristics(device_id)
     storage_device = f"{device_id}:{backing}"
+    cgroup_identity, cgroup_path = cgroup_v2_identity()
+    effective_affinity = sorted(os.sched_getaffinity(0))
     return {
         "hardware": hardware_description(),
-        "logical_cpu_count": os.cpu_count() or 0,
-        "total_memory_bytes": total_memory_bytes(),
+        "physical_logical_cpu_count": os.cpu_count() or 0,
+        "physical_memory_bytes": total_memory_bytes(),
+        "effective_cpu_count": len(effective_affinity),
+        "effective_cpu_affinity": effective_affinity,
+        "effective_memory_max_bytes": required_cgroup_limit(cgroup_path, "memory.max"),
+        "effective_swap_max_bytes": required_cgroup_limit(cgroup_path, "memory.swap.max"),
+        "cgroup_v2_path": cgroup_identity,
         "operating_system": platform.platform(),
         "storage": (
             f"device={storage_device};rotational={int(is_rotational)};"
@@ -270,6 +302,7 @@ def collect_host_metadata(scratch: Path) -> dict[str, object]:
             f"available_bytes={usage.free}"
         ),
         "storage_device": storage_device,
+        "effective_storage_device": storage_device,
         "storage_is_rotational": is_rotational,
         "storage_is_nvme": is_nvme,
         "storage_total_bytes": usage.total,
@@ -281,11 +314,35 @@ def collect_host_metadata(scratch: Path) -> dict[str, object]:
 
 def fixed_host_failures(metadata: dict[str, object]) -> list[str]:
     failures: list[str] = []
-    if metadata.get("logical_cpu_count") != 8:
-        failures.append("release host must expose exactly 8 logical CPUs")
-    memory = metadata.get("total_memory_bytes")
-    if not isinstance(memory, int) or not 15 * 1024**3 <= memory <= 17 * 1024**3:
-        failures.append("release host memory must be within the 16-GB class")
+    affinity = metadata.get("effective_cpu_affinity")
+    if (
+        metadata.get("effective_cpu_count") != 8
+        or not isinstance(affinity, list)
+        or len(affinity) != 8
+        or any(not isinstance(cpu, int) or isinstance(cpu, bool) or cpu < 0 for cpu in affinity)
+        or len(set(affinity)) != 8
+    ):
+        failures.append("release cgroup must expose exactly 8 effective CPUs")
+    memory = metadata.get("effective_memory_max_bytes")
+    if (
+        not isinstance(memory, int)
+        or isinstance(memory, bool)
+        or not MIN_EFFECTIVE_MEMORY_BYTES <= memory <= MAX_EFFECTIVE_MEMORY_BYTES
+    ):
+        failures.append("release cgroup memory must be within the 16-GiB class")
+    if metadata.get("effective_swap_max_bytes") != 0:
+        failures.append("release cgroup swap must be disabled")
+    physical_cpus = metadata.get("physical_logical_cpu_count")
+    if not isinstance(physical_cpus, int) or isinstance(physical_cpus, bool) or physical_cpus < 8:
+        failures.append("physical host CPU inventory is missing or below 8 CPUs")
+    physical_memory = metadata.get("physical_memory_bytes")
+    if not isinstance(physical_memory, int) or isinstance(physical_memory, bool) or physical_memory < MIN_EFFECTIVE_MEMORY_BYTES:
+        failures.append("physical host memory inventory is missing or below 15 GiB")
+    cgroup_identity = metadata.get("cgroup_v2_path")
+    if not isinstance(cgroup_identity, str) or not cgroup_identity.startswith("/"):
+        failures.append("release cgroup identity is missing")
+    if metadata.get("effective_storage_device") != metadata.get("storage_device"):
+        failures.append("effective scratch storage identity does not match physical storage")
     if metadata.get("storage_is_rotational") is not False:
         failures.append("release scratch storage must be non-rotational")
     if metadata.get("storage_is_nvme") is not True:
@@ -446,7 +503,7 @@ def run_one(
             and observed_rss_peak > 0
         )
         report = {
-            "schema_version": 1,
+            "schema_version": 2,
             "scope": "full_pipeline",
             "mode": "baseline" if mode == "conventional" else "bounded",
             "benchmark_session_id": benchmark_session_id,

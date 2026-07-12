@@ -386,11 +386,17 @@ class BenchmarkReportV1:
     mode: Literal["baseline", "bounded"]
     benchmark_session_id: str
     hardware: str
-    logical_cpu_count: int
-    total_memory_bytes: int
+    physical_logical_cpu_count: int
+    physical_memory_bytes: int
+    effective_cpu_count: int
+    effective_cpu_affinity: list[int]
+    effective_memory_max_bytes: int
+    effective_swap_max_bytes: int
+    cgroup_v2_path: str
     operating_system: str
     storage: str
     storage_device: str
+    effective_storage_device: str
     storage_is_rotational: bool
     storage_is_nvme: bool
     storage_total_bytes: int
@@ -420,7 +426,7 @@ class BenchmarkReportV1:
     def validate(self) -> None:
         self.preflight_estimate.validate()
         if (
-            self.schema_version != 1
+            self.schema_version != 2
             or self.scope != "full_pipeline"
             or self.mode not in {"baseline", "bounded"}
             or self.dependency_profile != COMPATIBILITY_PROFILE
@@ -433,12 +439,25 @@ class BenchmarkReportV1:
                     self.operating_system,
                     self.storage,
                     self.storage_device,
+                    self.effective_storage_device,
                 )
             )
-            or not _is_u32(self.logical_cpu_count)
-            or self.logical_cpu_count == 0
-            or not _is_u64(self.total_memory_bytes)
-            or self.total_memory_bytes == 0
+            or not _is_u32(self.physical_logical_cpu_count)
+            or self.physical_logical_cpu_count == 0
+            or not _is_u64(self.physical_memory_bytes)
+            or self.physical_memory_bytes == 0
+            or not _is_u32(self.effective_cpu_count)
+            or self.effective_cpu_count == 0
+            or not isinstance(self.effective_cpu_affinity, list)
+            or len(self.effective_cpu_affinity) != self.effective_cpu_count
+            or any(not _is_u32(cpu) for cpu in self.effective_cpu_affinity)
+            or len(set(self.effective_cpu_affinity)) != len(self.effective_cpu_affinity)
+            or not _is_u64(self.effective_memory_max_bytes)
+            or self.effective_memory_max_bytes == 0
+            or not _is_u64(self.effective_swap_max_bytes)
+            or not isinstance(self.cgroup_v2_path, str)
+            or not self.cgroup_v2_path.startswith("/")
+            or self.effective_storage_device != self.storage_device
             or not isinstance(self.storage_is_rotational, bool)
             or not isinstance(self.storage_is_nvme, bool)
             or not _is_u64(self.storage_total_bytes)

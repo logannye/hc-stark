@@ -121,8 +121,15 @@ def test_conventional_preflight_uses_memory_cap_without_mutating_evidence_manife
 
 def test_fixed_host_validation_is_typed_and_fail_closed():
     valid = {
-        "logical_cpu_count": 8,
-        "total_memory_bytes": 16 * 1024**3,
+        "physical_logical_cpu_count": 12,
+        "physical_memory_bytes": 64 * 1024**3,
+        "effective_cpu_count": 8,
+        "effective_cpu_affinity": list(range(8)),
+        "effective_memory_max_bytes": 16 * 1024**3,
+        "effective_swap_max_bytes": 0,
+        "cgroup_v2_path": "/tinyzkp-worker",
+        "storage_device": "9:1:nvme0n1",
+        "effective_storage_device": "9:1:nvme0n1",
         "storage_is_rotational": False,
         "storage_is_nvme": True,
         "storage_total_bytes": 1_000_000_000_000,
@@ -134,8 +141,10 @@ def test_fixed_host_validation_is_typed_and_fail_closed():
 
     invalid = {
         **valid,
-        "logical_cpu_count": 16,
-        "total_memory_bytes": 32 * 1024**3,
+        "effective_cpu_count": 7,
+        "effective_cpu_affinity": list(range(7)),
+        "effective_memory_max_bytes": 32 * 1024**3,
+        "effective_swap_max_bytes": 1024,
         "storage_is_rotational": True,
         "storage_is_nvme": False,
         "storage_available_bytes": 499_999_999_999,
@@ -143,7 +152,7 @@ def test_fixed_host_validation_is_typed_and_fail_closed():
         "scratch_owned_by_runner": False,
     }
     failures = MODULE.fixed_host_failures(invalid)
-    assert len(failures) == 7
+    assert len(failures) == 8
     assert "release scratch storage must have at least 500 GB available" in failures
     assert "release scratch directory must have mode 0700" in failures
     assert "release scratch directory must be owned by the benchmark runner" in failures

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict, Union
 
-RUST_SCHEMA_SET_SHA256 = "51c8c1110224f9249b1da38e22599dec3c8d0b5a2565c76e75f059ccccc9a67a"
+RUST_SCHEMA_SET_SHA256 = "7babd215923498f1eabf8e2f50436229c49644b42356b87ca70842a9db08b7da"
 
 AirConstraintKindV1Model = Literal['transition', 'first_row', 'last_row']
 
@@ -173,17 +173,24 @@ class ProofBundleV1Model(TypedDict):
 class _BenchmarkReportV1ModelRequired(TypedDict):
     benchmark_session_id: str
     cgroup_peak_bytes: int
+    cgroup_v2_path: str
     cpu_seconds: float
     dependency_profile: str
+    effective_cpu_affinity: list[int]
+    effective_cpu_count: int
+    effective_memory_max_bytes: int
+    effective_storage_device: str
+    effective_swap_max_bytes: int
     exact_command: list[str]
     exit_status: int
     hardware: str
-    logical_cpu_count: int
     mode: BenchmarkModeModel
     normalized_manifest_digest_hex: str
     normalized_manifest_path: str
     operating_system: str
     peak_rss_bytes: int
+    physical_logical_cpu_count: int
+    physical_memory_bytes: int
     preflight_estimate: ResourceEstimateV1Model
     proof_size_bytes: int
     read_bytes: int
@@ -199,7 +206,6 @@ class _BenchmarkReportV1ModelRequired(TypedDict):
     storage_is_nvme: bool
     storage_is_rotational: bool
     storage_total_bytes: int
-    total_memory_bytes: int
     verification_succeeded: bool
     verification_time_ms: int
     wall_time_ms: int

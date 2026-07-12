@@ -14,12 +14,43 @@
       "format": "uint64",
       "minimum": 1
     },
+    "cgroup_v2_path": {
+      "type": "string",
+      "minLength": 1
+    },
     "cpu_seconds": {
       "type": "number",
       "format": "double"
     },
     "dependency_profile": {
       "type": "string"
+    },
+    "effective_cpu_affinity": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0
+      }
+    },
+    "effective_cpu_count": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 1
+    },
+    "effective_memory_max_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 1
+    },
+    "effective_storage_device": {
+      "type": "string",
+      "minLength": 1
+    },
+    "effective_swap_max_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
     },
     "exact_command": {
       "type": "array",
@@ -42,11 +73,6 @@
       "type": "string",
       "minLength": 1
     },
-    "logical_cpu_count": {
-      "type": "integer",
-      "format": "uint32",
-      "minimum": 1
-    },
     "mode": {
       "$ref": "#/$defs/BenchmarkMode"
     },
@@ -61,6 +87,16 @@
       "minLength": 1
     },
     "peak_rss_bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 1
+    },
+    "physical_logical_cpu_count": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 1
+    },
+    "physical_memory_bytes": {
       "type": "integer",
       "format": "uint64",
       "minimum": 1
@@ -127,11 +163,6 @@
       "format": "uint64",
       "minimum": 1
     },
-    "total_memory_bytes": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 1
-    },
     "verification_succeeded": {
       "type": "boolean"
     },
@@ -161,11 +192,17 @@
     "mode",
     "benchmark_session_id",
     "hardware",
-    "logical_cpu_count",
-    "total_memory_bytes",
+    "physical_logical_cpu_count",
+    "physical_memory_bytes",
+    "effective_cpu_count",
+    "effective_cpu_affinity",
+    "effective_memory_max_bytes",
+    "effective_swap_max_bytes",
+    "cgroup_v2_path",
     "operating_system",
     "storage",
     "storage_device",
+    "effective_storage_device",
     "storage_is_rotational",
     "storage_is_nvme",
     "storage_total_bytes",
