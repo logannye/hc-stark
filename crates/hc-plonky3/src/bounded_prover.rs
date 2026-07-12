@@ -329,7 +329,10 @@ where
         .checked_shl(get_log_num_quotient_chunks::<Val, _>(air, layout, 0) as u32)
         .ok_or(BoundedProverError::UnsupportedProfile)?;
     let rows = rows as u64;
-    let lde_rows = rows.saturating_mul(2);
+    // The frozen profile always uses at least a two-times FRI blowup. AIRs
+    // whose quotient degree needs more chunks raise the blowup to match.
+    let blowup = quotient_chunks.max(2);
+    let lde_rows = rows.saturating_mul(blowup);
     let trace_bytes = rows.saturating_mul(width as u64).saturating_mul(8);
     let trace_lde_bytes = lde_rows.saturating_mul(width as u64).saturating_mul(8);
     let quotient_bytes = rows.saturating_mul(quotient_chunks).saturating_mul(16);
@@ -337,13 +340,15 @@ where
     let one_input_leaf = lde_rows.saturating_mul(32);
     let one_input_tree = merkle_payload_bytes(lde_rows);
     let input_mmcs_bytes = one_input_tree.saturating_mul(2);
-    // Every retained extension-field FRI vector has lengths 2N, N, ..., 2.
-    // Its exact payload is (4N - 2) elements at 16 bytes each. FRI Merkle
-    // trees start at N leaves and halve through 2; summing each full binary
-    // tree gives the exact payload below.
-    let fri_vector_bytes = rows.saturating_mul(4).saturating_sub(2).saturating_mul(16);
+    // Every retained extension-field FRI vector has lengths blowup*N,
+    // blowup*N/2, ..., blowup. Their geometric sum is
+    // 2*blowup*N - blowup elements at 16 bytes each.
+    let fri_vector_bytes = lde_rows
+        .saturating_mul(2)
+        .saturating_sub(blowup)
+        .saturating_mul(16);
     let opening_layer_bytes = fri_vector_bytes / 2;
-    let fri_mmcs_bytes = fri_mmcs_payload_bytes(rows);
+    let fri_mmcs_bytes = fri_mmcs_payload_bytes(lde_rows / 2);
     let durable_core = trace_lde_bytes
         .saturating_add(quotient_lde_bytes)
         .saturating_add(input_mmcs_bytes);
@@ -403,8 +408,8 @@ where
         .max(proof_checkpoint_peak);
 
     let dft = ResourceBoundedDft::new(policy.clone())?;
-    let trace_dft = dft.estimate_scratch((rows as usize).saturating_mul(2), width, false)?;
-    let quotient_dft = dft.estimate_scratch((rows as usize).saturating_mul(2), 2, false)?;
+    let trace_dft = dft.estimate_scratch(lde_rows as usize, width, false)?;
+    let quotient_dft = dft.estimate_scratch(lde_rows as usize, 2, false)?;
     let peak_resident_bytes = trace_dft
         .peak_resident_bytes
         .max(quotient_dft.peak_resident_bytes)
@@ -476,6 +481,20 @@ where
         total_write_bytes: phases.iter().map(|phase| phase.write_bytes).sum(),
         phases,
     })
+}
+
+fn quotient_log_blowup<A>(air: &A, width: usize, public_values: usize) -> usize
+where
+    A: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
+{
+    let layout = AirLayout {
+        preprocessed_width: 0,
+        main_width: width,
+        num_public_values: public_values,
+        num_periodic_columns: 0,
+        ..Default::default()
+    };
+    get_log_num_quotient_chunks::<Val, _>(air, layout, 0).max(1)
 }
 
 fn estimated_profile_proof_bytes(rows: u64, trace_width: u64, quotient_chunks: u64) -> u64 {
@@ -558,7 +577,7 @@ fn estimated_atomic_checkpoint_bytes(
     let resume_payload = serde_json::to_vec(&descriptor)
         .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
 
-    let lde_rows = rows.saturating_mul(2);
+    let lde_rows = rows.saturating_mul((quotient_chunks as u64).max(2));
     let mut artifacts = Vec::with_capacity(
         1usize
             .saturating_add(quotient_chunks)
@@ -786,6 +805,8 @@ where
     if expected_public_values.len() != air.num_public_values() {
         return Err(BoundedProverError::UnsupportedProfile);
     }
+    let width = BaseAir::<Val>::width(&air);
+    let log_blowup = quotient_log_blowup(&air, width, air.num_public_values());
     let full_estimate = estimate_air_pipeline(
         &air,
         workload.identity().id,
@@ -797,8 +818,8 @@ where
         estimate: full_estimate.clone(),
     });
     policy.preflight_for_mode(ExecutionMode::Scratch, full_estimate)?;
-    // The frozen benchmark profile folds the `2 * rows` evaluation domain
-    // down to `blowup * final_poly_len == 2`, one binary round at a time.
+    // Binary FRI performs one round per trace-degree bit; the final evaluation
+    // vector retains exactly `blowup * final_poly_len` values.
     let fri_rounds = rows.trailing_zeros();
     let total_phases = 8 + fri_rounds;
     let mut completed_phases = 0u32;
@@ -807,8 +828,8 @@ where
     local_policy.scratch_dir = job_dir.join("artifacts");
     create_private_dir(&local_policy.scratch_dir)?;
     let result = (|| {
-        let challenger = StarkGenericConfig::initialise_challenger(&make_bounded_verifier_config());
-        let width = BaseAir::<Val>::width(&air);
+        let challenger =
+            StarkGenericConfig::initialise_challenger(&make_bounded_verifier_config(log_blowup));
         let mut trace_store = ScratchMatrixStore::<GoldilocksWord>::create(
             &local_policy.scratch_dir,
             "trace.bin",
@@ -866,7 +887,8 @@ where
         check_cancelled(&cancellation)?;
 
         let dft = ResourceBoundedDft::new(local_policy.clone())?;
-        let trace_lde = dft.try_coset_lde_block_matrix(&trace_store, 1, Goldilocks::GENERATOR)?;
+        let trace_lde =
+            dft.try_coset_lde_block_matrix(&trace_store, log_blowup, Goldilocks::GENERATOR)?;
         trace_lde.retain_for_resume();
         let (trace_lde_path, trace_lde_digest) = trace_lde.scratch_artifact()?;
         let trace_lde_artifact = checkpoint_artifact(
@@ -977,7 +999,10 @@ where
     let trace_domain =
         p3_field::coset::TwoAdicMultiplicativeCoset::new(Goldilocks::ONE, log_degree)
             .ok_or(BoundedProverError::UnsupportedProfile)?;
-    let mut challenger = StarkGenericConfig::initialise_challenger(&make_bounded_verifier_config());
+    let log_blowup = quotient_log_blowup(air, width, public_values.len());
+    let lde_rows = rows * (1usize << log_blowup);
+    let mut challenger =
+        StarkGenericConfig::initialise_challenger(&make_bounded_verifier_config(log_blowup));
     challenger.observe(Goldilocks::from_u8(log_degree as u8));
     challenger.observe(Goldilocks::from_u8(log_degree as u8));
     challenger.observe(Goldilocks::ZERO);
@@ -1093,7 +1118,7 @@ where
         if ldes.len() != num_quotient_chunks
             || ldes
                 .iter()
-                .any(|matrix| matrix.height() != rows * 2 || matrix.width() != 2)
+                .any(|matrix| matrix.height() != lde_rows || matrix.width() != 2)
         {
             return Err(BoundedProverError::InvalidCheckpoint);
         }
@@ -1106,6 +1131,7 @@ where
                 .as_ref()
                 .ok_or(BoundedProverError::InvalidCheckpoint)?,
             num_quotient_chunks,
+            log_blowup,
             &dft,
             local_policy,
             &local_policy.scratch_dir,
@@ -1239,7 +1265,9 @@ where
     let mut words = vec![GoldilocksWord::default(); rows.saturating_mul(width)];
     store.read_rows(0, rows, &mut words)?;
     let trace = RowMajorMatrix::new(words.into_iter().map(|word| word.0).collect(), width);
-    let config = crate::prover::make_config(Radix2DitParallel::<Val>::default());
+    let log_blowup = quotient_log_blowup(&air, width, generated.public_values.len());
+    let config =
+        crate::prover::make_config_with_log_blowup(Radix2DitParallel::<Val>::default(), log_blowup);
     let proof = prove(&config, &air, trace, &generated.public_values);
     let bytes = postcard::to_allocvec(&proof)
         .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
@@ -1266,10 +1294,13 @@ where
     if public_values.len() != workload.air().num_public_values() {
         return Err(BoundedProverError::UnsupportedProfile);
     }
+    let air = workload.air();
+    let log_blowup = quotient_log_blowup(&air, BaseAir::<Val>::width(&air), public_values.len());
     let proof: Proof<GoldilocksConfig<Radix2DitParallel<Val>>> = postcard::from_bytes(proof_bytes)
         .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
-    let config = crate::prover::make_config(Radix2DitParallel::<Val>::default());
-    verify(&config, &workload.air(), &proof, &public_values)
+    let config =
+        crate::prover::make_config_with_log_blowup(Radix2DitParallel::<Val>::default(), log_blowup);
+    verify(&config, &air, &proof, &public_values)
         .map_err(|error| BoundedProverError::Verification(format!("{error:?}")))
 }
 
@@ -1365,13 +1396,15 @@ where
     check_cancelled(cancellation)?;
 
     let challenge_mmcs = ExtensionMmcs::new(input_mmcs.clone());
-    let fri_params = FriParameters::new_benchmark(challenge_mmcs);
+    let log_blowup = quotient_log_blowup(air, BaseAir::<Val>::width(air), public_values.len());
+    let mut fri_params = FriParameters::new_benchmark(challenge_mmcs);
+    fri_params.log_blowup = log_blowup;
     let opening_proof = prove_durable_fri_observed_batched(
         &fri_params,
         &input_mmcs,
         vec![reduced],
         &mut challenger,
-        (rows * 2).trailing_zeros() as usize,
+        (rows * (1usize << log_blowup)).trailing_zeros() as usize,
         |indices| open_input_batches_sorted(&input_mmcs, indices, &trace_data, &quotient_data),
         policy,
         |layer, state| {
@@ -1487,7 +1520,9 @@ where
     let bytes = postcard::to_allocvec(&proof)
         .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
 
-    let official_config = crate::prover::make_config(Radix2DitParallel::<Val>::default());
+    let log_blowup = quotient_log_blowup(air, BaseAir::<Val>::width(air), public_values.len());
+    let official_config =
+        crate::prover::make_config_with_log_blowup(Radix2DitParallel::<Val>::default(), log_blowup);
     let official_proof: Proof<GoldilocksConfig<Radix2DitParallel<Val>>> =
         postcard::from_bytes(&bytes)
             .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
@@ -1844,13 +1879,15 @@ where
         .iter()
         .map(|values| decode_challenges(values))
         .collect::<Result<Vec<_>>>()?;
-    let fri_params = FriParameters::new_benchmark(ExtensionMmcs::new(input_mmcs.clone()));
+    let log_blowup = quotient_log_blowup(air, BaseAir::<Val>::width(air), public_values.len());
+    let mut fri_params = FriParameters::new_benchmark(ExtensionMmcs::new(input_mmcs.clone()));
+    fri_params.log_blowup = log_blowup;
     let opening_proof = prove_durable_fri_observed_batched(
         &fri_params,
         &input_mmcs,
         vec![reduced],
         challenger,
-        (rows * 2).trailing_zeros() as usize,
+        (rows * (1usize << log_blowup)).trailing_zeros() as usize,
         |indices| open_input_batches_sorted(&input_mmcs, indices, &trace_data, &quotient_data),
         policy,
         |layer, challenger| {
@@ -1944,7 +1981,9 @@ where
         .iter()
         .map(|arity| *arity as usize)
         .collect();
-    let fri_params = FriParameters::new_benchmark(ExtensionMmcs::new(input_mmcs.clone()));
+    let log_blowup = quotient_log_blowup(air, BaseAir::<Val>::width(air), public_values.len());
+    let mut fri_params = FriParameters::new_benchmark(ExtensionMmcs::new(input_mmcs.clone()));
+    fri_params.log_blowup = log_blowup;
     let opening_proof = resume_durable_fri_observed_batched(
         &fri_params,
         &input_mmcs,
@@ -1953,7 +1992,7 @@ where
         commit_pow_witnesses,
         log_arities,
         challenger,
-        (rows * 2).trailing_zeros() as usize,
+        (rows * (1usize << log_blowup)).trailing_zeros() as usize,
         |indices| open_input_batches_sorted(&input_mmcs, indices, &trace_data, &quotient_data),
         policy,
         |layer, challenger| {
@@ -2026,6 +2065,7 @@ where
     let saved_challenger = ChallengerSnapshotV1::decode(&manifest.challenger_state)?;
     saved_challenger.restore()?;
 
+    let log_blowup = quotient_log_blowup(&air, width, public_values.len());
     let trace_lde = if manifest.completed_phase == PipelinePhaseV1::Trace {
         let artifact = manifest
             .artifacts
@@ -2040,7 +2080,7 @@ where
             return Err(BoundedProverError::InvalidCheckpoint);
         }
         let dft = ResourceBoundedDft::new(local_policy.clone())?;
-        dft.try_coset_lde_block_matrix(&trace, 1, Goldilocks::GENERATOR)?
+        dft.try_coset_lde_block_matrix(&trace, log_blowup, Goldilocks::GENERATOR)?
     } else {
         let artifact = manifest
             .artifacts
@@ -2052,7 +2092,7 @@ where
             artifact.digest,
         )?
     };
-    if trace_lde.height() != rows * 2 || trace_lde.width() != width {
+    if trace_lde.height() != rows * (1usize << log_blowup) || trace_lde.width() != width {
         return Err(BoundedProverError::InvalidCheckpoint);
     }
 
@@ -2184,8 +2224,11 @@ where
     let proof: Proof<GoldilocksConfig<Radix2DitParallel<Val>>> = postcard::from_bytes(&proof_bytes)
         .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
     let public_values = decode_public_values(&descriptor.public_values)?;
-    let config = crate::prover::make_config(Radix2DitParallel::<Val>::default());
-    verify(&config, &workload.air(), &proof, &public_values)
+    let air = workload.air();
+    let log_blowup = quotient_log_blowup(&air, BaseAir::<Val>::width(&air), public_values.len());
+    let config =
+        crate::prover::make_config_with_log_blowup(Radix2DitParallel::<Val>::default(), log_blowup);
+    verify(&config, &air, &proof, &public_values)
         .map_err(|error| BoundedProverError::Verification(format!("{error:?}")))?;
     Ok(proof_bytes)
 }
@@ -2365,16 +2408,19 @@ where
             })
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
+        let public_values = decode_public_values(&descriptor.public_values)?;
+        let log_blowup =
+            quotient_log_blowup(&air, BaseAir::<Val>::width(&air), public_values.len());
+        let lde_rows = rows * (1usize << log_blowup);
         if rows == 0
             || !rows.is_power_of_two()
-            || trace_lde.height() != rows * 2
+            || trace_lde.height() != lde_rows
             || quotient_ldes
                 .iter()
-                .any(|matrix| matrix.height() != rows * 2)
+                .any(|matrix| matrix.height() != lde_rows)
         {
             return Err(BoundedProverError::InvalidCheckpoint);
         }
-        let public_values = decode_public_values(&descriptor.public_values)?;
         let mut local_policy = descriptor.resource_policy.clone();
         local_policy.scratch_dir = job_dir.join("artifacts");
         create_private_dir(&local_policy.scratch_dir)?;

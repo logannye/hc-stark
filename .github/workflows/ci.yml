@@ -68,6 +68,7 @@ jobs:
           python3 -m pytest \
             scripts/ci/test_public_beta_schema_check.py \
             scripts/ci/test_validate_public_beta_canary.py \
+            scripts/canary/test_hc_beta_e2e.py \
             scripts/benchmark/test_customer_cubic8.py \
             scripts/release/test_build_public_beta_authorization.py \
             scripts/ci/test_beta_deployment_contract.py

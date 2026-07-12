@@ -217,6 +217,7 @@ pub fn build_quotient_chunk_ldes(
     quotient_domain: TwoAdicMultiplicativeCoset<Goldilocks>,
     quotient_values: &ScratchMatrixStore<GoldilocksWord>,
     num_chunks: usize,
+    log_blowup: usize,
     dft: &ResourceBoundedDft,
     policy: &ResourcePolicyV1,
     output_root: &Path,
@@ -281,7 +282,7 @@ pub fn build_quotient_chunk_ldes(
         let mut ldes = Vec::with_capacity(num_chunks);
         for (chunk, domain) in chunks.into_iter().zip(subdomains) {
             let shift = Goldilocks::GENERATOR / domain.shift();
-            let lde = dft.try_coset_lde_block_matrix(&chunk, 1, shift)?;
+            let lde = dft.try_coset_lde_block_matrix(&chunk, log_blowup, shift)?;
             chunk.remove()?;
             ldes.push(lde);
         }
@@ -425,6 +426,7 @@ mod tests {
             quotient_domain,
             &actual,
             1,
+            1,
             &dft,
             &policy(dir.path()),
             dir.path(),
@@ -540,6 +542,7 @@ mod tests {
             quotient_domain,
             &actual,
             num_chunks,
+            1,
             &dft,
             &policy(dir.path()),
             dir.path(),

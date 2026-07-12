@@ -530,6 +530,154 @@ mod tests {
         )
     }
 
+    fn customer_cubic8_air() -> AirPackageV1 {
+        fn push(expressions: &mut Vec<AirExpressionV1>, value: AirExpressionV1) -> u32 {
+            expressions.push(value);
+            u32::try_from(expressions.len() - 1).unwrap()
+        }
+
+        let mut expressions = Vec::new();
+        let mut constraints = Vec::new();
+        for column in 0..8u32 {
+            let current = push(&mut expressions, AirExpressionV1::Current { column });
+            let initial = push(&mut expressions, AirExpressionV1::Public { index: column });
+            let first = push(
+                &mut expressions,
+                AirExpressionV1::Sub {
+                    left: current,
+                    right: initial,
+                },
+            );
+            constraints.push(AirConstraintV1 {
+                kind: AirConstraintKindV1::FirstRow,
+                expression: first,
+            });
+
+            let square = push(
+                &mut expressions,
+                AirExpressionV1::Mul {
+                    left: current,
+                    right: current,
+                },
+            );
+            let cube = push(
+                &mut expressions,
+                AirExpressionV1::Mul {
+                    left: square,
+                    right: current,
+                },
+            );
+            let neighbor = push(
+                &mut expressions,
+                AirExpressionV1::Current {
+                    column: (column + 1) % 8,
+                },
+            );
+            let expected = push(
+                &mut expressions,
+                AirExpressionV1::Add {
+                    left: cube,
+                    right: neighbor,
+                },
+            );
+            let next = push(&mut expressions, AirExpressionV1::Next { column });
+            let transition = push(
+                &mut expressions,
+                AirExpressionV1::Sub {
+                    left: next,
+                    right: expected,
+                },
+            );
+            constraints.push(AirConstraintV1 {
+                kind: AirConstraintKindV1::Transition,
+                expression: transition,
+            });
+
+            let final_value = push(
+                &mut expressions,
+                AirExpressionV1::Public { index: 8 + column },
+            );
+            let last = push(
+                &mut expressions,
+                AirExpressionV1::Sub {
+                    left: current,
+                    right: final_value,
+                },
+            );
+            constraints.push(AirConstraintV1 {
+                kind: AirConstraintKindV1::LastRow,
+                expression: last,
+            });
+        }
+        AirPackageV1 {
+            schema_version: 1,
+            backend: "plonky3".into(),
+            profile: crate::COMPATIBILITY_PROFILE.into(),
+            field: "goldilocks".into(),
+            expected_verifier: "p3_uni_stark_0.6.1".into(),
+            trace_width: 8,
+            public_inputs: (0..16)
+                .map(|index| PublicInputSlotV1 {
+                    name: if index < 8 {
+                        format!("initial_{index}")
+                    } else {
+                        format!("final_{}", index - 8)
+                    },
+                })
+                .collect(),
+            expressions,
+            constraints,
+        }
+    }
+
+    fn packed_customer_cubic8(dir: &Path) -> (TraceManifestV1, Vec<u64>) {
+        fn mul_mod(left: u64, right: u64) -> u64 {
+            (u128::from(left) * u128::from(right) % u128::from(GOLDILOCKS_MODULUS_U64)) as u64
+        }
+
+        let rows = MIN_CUSTOM_TRACE_ROWS;
+        let initial: [u64; 8] = std::array::from_fn(|index| index as u64 + 1);
+        let mut state = initial;
+        let mut final_row = initial;
+        let mut raw = Vec::with_capacity(rows as usize * 8 * 8);
+        for _ in 0..rows {
+            final_row = state;
+            for value in state {
+                raw.extend_from_slice(&value.to_le_bytes());
+            }
+            state = std::array::from_fn(|column| {
+                let cube = mul_mod(
+                    mul_mod(final_row[column], final_row[column]),
+                    final_row[column],
+                );
+                ((u128::from(cube) + u128::from(final_row[(column + 1) % 8]))
+                    % u128::from(GOLDILOCKS_MODULUS_U64)) as u64
+            });
+        }
+        let compressed = zstd::stream::encode_all(raw.as_slice(), 3).unwrap();
+        fs::write(dir.join("chunk-000000.zst"), &compressed).unwrap();
+        let air = customer_cubic8_air();
+        (
+            TraceManifestV1 {
+                schema_version: 1,
+                air_digest_hex: hex_lower(&air.digest().unwrap()),
+                trace_digest_hex: hex_lower(blake3::hash(&raw).as_bytes()),
+                logical_rows: rows,
+                trace_width: 8,
+                field_encoding: "goldilocks_u64_le".into(),
+                compression: "zstd".into(),
+                chunk_uncompressed_bytes: raw.len() as u64,
+                chunks: vec![TraceChunkV1 {
+                    index: 0,
+                    compressed_bytes: compressed.len() as u64,
+                    uncompressed_bytes: raw.len() as u64,
+                    blake3_hex: hex_lower(blake3::hash(&compressed).as_bytes()),
+                }],
+            },
+            initial.into_iter().chain(final_row).collect(),
+        )
+    }
+
     #[test]
     fn uploaded_declarative_trace_is_official_and_byte_identical() {
         let dir = tempdir().unwrap();
@@ -561,5 +709,27 @@ mod tests {
             AirProofBundleV1::from_proof(air, manifest, public_inputs, bounded, "test-release")
                 .unwrap();
         bundle.verify_local_registration_proof().unwrap();
+    }
+
+    #[test]
+    fn uploaded_degree_three_cubic8_is_official_and_byte_identical() {
+        let dir = tempdir().unwrap();
+        let chunks = dir.path().join("chunks");
+        fs::create_dir(&chunks).unwrap();
+        let air = customer_cubic8_air();
+        let (manifest, public) = packed_customer_cubic8(&chunks);
+        let workload = UploadedTraceWorkload::new(air, manifest, public, &chunks).unwrap();
+        let policy = ResourcePolicyV1 {
+            mode: ResourceMode::Scratch,
+            max_resident_bytes: 128 * 1024 * 1024,
+            max_scratch_bytes: 2 * 1024 * 1024 * 1024,
+            scratch_dir: dir.path().join("scratch"),
+            max_threads: 1,
+            checkpoint_policy: CheckpointPolicy::DeleteOnSuccess,
+        };
+        let bounded = prove_resource_bounded(&workload, &policy).unwrap();
+        let reference = prove_resource_reference(&workload).unwrap();
+        assert_eq!(bounded, reference);
+        verify_resource_bounded_proof(&workload, &bounded).unwrap();
     }
 }

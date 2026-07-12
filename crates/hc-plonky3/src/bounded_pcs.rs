@@ -30,11 +30,12 @@ pub struct ResourceBoundedVerifierPcs {
 }
 
 impl ResourceBoundedVerifierPcs {
-    pub fn new() -> Self {
+    pub fn new(log_blowup: usize) -> Self {
         let (_, hash, compression) = profile_components();
         let val_mmcs = crate::prover::ValMmcs::new(hash, compression, 0);
         let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
-        let fri = FriParameters::new_benchmark(challenge_mmcs);
+        let mut fri = FriParameters::new_benchmark(challenge_mmcs);
+        fri.log_blowup = log_blowup;
         Self {
             official: TwoAdicFriPcs::new(Radix2DitParallel::<Val>::default(), val_mmcs, fri),
         }
@@ -43,7 +44,7 @@ impl ResourceBoundedVerifierPcs {
 
 impl Default for ResourceBoundedVerifierPcs {
     fn default() -> Self {
-        Self::new()
+        Self::new(1)
     }
 }
 
@@ -129,10 +130,10 @@ impl Pcs<Challenge, ProfileChallenger> for ResourceBoundedVerifierPcs {
 
 pub type BoundedConfig = StarkConfig<ResourceBoundedVerifierPcs, Challenge, ProfileChallenger>;
 
-pub fn make_bounded_verifier_config() -> BoundedConfig {
+pub fn make_bounded_verifier_config(log_blowup: usize) -> BoundedConfig {
     let (permutation, _, _) = profile_components();
     StarkConfig::new(
-        ResourceBoundedVerifierPcs::new(),
+        ResourceBoundedVerifierPcs::new(log_blowup),
         ProfileChallenger::new(permutation),
     )
 }

@@ -11,7 +11,9 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use hc_plonky3::contracts::{HostedProofBundleV1, MAX_AIR_BUNDLE_JSON_BYTES};
+use hc_plonky3::contracts::{
+    hosted_charge_millicredits, HostedProofBundleV1, MAX_AIR_BUNDLE_JSON_BYTES,
+};
 use serde_json::{json, Value};
 use sqlx::Row;
 use uuid::Uuid;
@@ -347,7 +349,7 @@ pub async fn complete(
     if bundle.proof.provenance.release_sha != state.config.release_sha {
         return Err(ApiError::Conflict("bundle_release_mismatch"));
     }
-    let charge = measured_charge(&bundle);
+    let charge = hosted_charge_millicredits(&bundle.resource_report);
 
     let mut tx = state.pool.begin().await?;
     let row = sqlx::query(
@@ -596,27 +598,6 @@ fn ensure_lease_row(
         return Err(ApiError::Conflict("stale_lease"));
     }
     Ok(())
-}
-
-fn measured_charge(bundle: &HostedProofBundleV1) -> u64 {
-    let compute = bundle
-        .resource_report
-        .wall_time_ms
-        .saturating_mul(250)
-        .div_ceil(3_600_000);
-    let io = bundle
-        .resource_report
-        .total_read_bytes
-        .saturating_add(bundle.resource_report.total_write_bytes)
-        .div_ceil(1024 * 1024 * 1024);
-    compute
-        .saturating_add(io)
-        .max(3)
-        .saturating_mul(120)
-        .div_ceil(100)
-        .saturating_mul(100)
-        .div_ceil(30)
-        .max(10)
 }
 
 fn is_digest(value: &str) -> bool {
