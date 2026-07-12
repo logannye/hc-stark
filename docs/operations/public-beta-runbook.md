@@ -6,11 +6,11 @@ Production remains in containment until the signed `public_beta` authorization m
 
 1. Create a GitHub OAuth app with callback `https://api.tinyzkp.com/v1/auth/github/callback` and record the client ID and secret in the owner-only API environment file. The callback must use the API hostname; `https://tinyzkp.com/v1/auth/github/callback` is not valid for the beta API.
 2. Preview `billing/configure_public_beta_portal.py`, then apply it in Stripe test mode with `TINYZKP_ALLOW_BETA_PORTAL_WRITE=1`. Record the returned configuration ID as `TINYZKP_STRIPE_PORTAL_CONFIGURATION`. The beta Portal permits invoice history, payment-method updates, and cancellation at period end, while plan switching remains disabled. Live application is release-authorization gated.
-2. Create private R2 artifact and backup buckets. Disable public access. Issue separate artifact and backup credentials with no cross-bucket permissions.
-3. Apply and verify the tracked lifecycle policies with `configure-r2-lifecycle.sh apply artifacts` and `apply backups`, setting the corresponding bucket variables and the explicit write gate. Upload keys use the `uploads/` prefix and expire after 24 hours. Bundle keys use `bundles/` with a 90-day hard maximum; the database sweeper enforces the earlier 7/30/90-day plan retention. pgBackRest, not an R2 expiration rule, owns valid backup/WAL retention.
-4. Provision a Debian 12 worker with mirrored NVMe providing at least 1 TB usable. Mount `/srv/tinyzkp-scratch` with `noexec,nodev,nosuid` and mode `0700` owned by UID 10001.
-5. Install WireGuard using the tracked API and worker templates. Only UDP 51820 is public; TCP 8091 is permitted only over the tunnel.
-6. Create the isolated `tinyzkp_public_beta_v1` Stripe catalog and separate Portal configuration. Do not modify legacy TinyZKP or Casino Coach objects.
+3. Create private R2 artifact and backup buckets. Disable public access. Issue separate artifact and backup credentials with no cross-bucket permissions.
+4. Apply and verify the tracked lifecycle policies with `configure-r2-lifecycle.sh apply artifacts` and `apply backups`, setting the corresponding bucket variables and the explicit write gate. Upload keys use the `uploads/` prefix and expire after 24 hours. Bundle keys use `bundles/` with a 90-day hard maximum; the database sweeper enforces the earlier 7/30/90-day plan retention. pgBackRest, not an R2 expiration rule, owns valid backup/WAL retention.
+5. Provision a Debian 12 worker with mirrored NVMe providing at least 1 TB usable. Mount `/srv/tinyzkp-scratch` with `noexec,nodev,nosuid` and mode `0700` owned by UID 10001.
+6. Install WireGuard using the tracked API and worker templates. Only UDP 51820 is public; TCP 8091 is permitted only over the tunnel.
+7. Create the isolated `tinyzkp_public_beta_v1` Stripe catalog and separate Portal configuration. Do not modify legacy TinyZKP or Casino Coach objects.
 
 ## Secrets and credentials
 
@@ -31,6 +31,20 @@ Production remains in containment until the signed `public_beta` authorization m
 
 ## Required drills
 
+- Install the pinned Python dependency from `scripts/benchmark/requirements.txt`, then run the first complete hosted lifecycle with the signed candidate CLI:
+
+  ```sh
+  export TINYZKP_CLI=/opt/tinyzkp/bin/hc-cli
+  export TINYZKP_RELEASE_SHA=<exact-40-character-candidate-sha>
+  export TINYZKP_API_URL=https://<dark-api-endpoint>
+  export TINYZKP_API_KEY=<primary-paid-canary-key>
+  export TINYZKP_SECONDARY_API_KEY=<different-tenant-key>
+  export TINYZKP_E2E_STATE_DIR=/var/lib/tinyzkp-e2e/state
+  export TINYZKP_E2E_EVIDENCE_DIR=/var/lib/tinyzkp-e2e/evidence
+  python3 scripts/canary/hc_beta_e2e.py proof customer_cubic8 --rows 262144 --negative-tests
+  ```
+
+  The strict run proves a 1,024-row local registration statement, uploads a multi-chunk `2^18` trace, completes and officially verifies the hosted bundle, checks exact and conflicting idempotency retries, rejects a modified signed checksum, exercises wrong-length and corrupt chunks, proves wrong public inputs cannot charge, and denies a second tenant's bundle request. Evidence files are owner-only and reject secret-like fields and URLs.
 - Complete Stripe test-mode subscription, top-up, failed payment, duplicate webhook, delayed webhook, Portal, and cancellation flows.
 - Run the fixed-host 1M/16M matrix, customer_cubic8 matrix, fault/fuzz suite, security review, four-job load test, and identity check on the final candidate. Prepare four paid job request bodies and execute `scripts/load/run_public_beta_load.py`; release evidence requires all four jobs to complete, download, officially verify, and leave `/readyz` continuously healthy.
 - Run `restore-drill.sh --confirm-isolated-restore`. Recompute credit balances from immutable events, authenticate a retained test API key, recover a queued job, and verify a retained proof bundle before recording success.

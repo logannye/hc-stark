@@ -516,12 +516,20 @@ fn bundle(
 }
 
 pub(crate) fn make_config<Dft: TwoAdicSubgroupDft<Val>>(dft: Dft) -> GoldilocksConfig<Dft> {
+    make_config_with_log_blowup(dft, 1)
+}
+
+pub(crate) fn make_config_with_log_blowup<Dft: TwoAdicSubgroupDft<Val>>(
+    dft: Dft,
+    log_blowup: usize,
+) -> GoldilocksConfig<Dft> {
     // Copied without parameter changes from Plonky3 v0.6.1's
     // `prove_goldilocks_poseidon2` example.
     let (permutation, hash, compression) = profile_components();
     let val_mmcs = ValMmcs::new(hash, compression, 0);
     let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
-    let fri_parameters = FriParameters::new_benchmark(challenge_mmcs);
+    let mut fri_parameters = FriParameters::new_benchmark(challenge_mmcs);
+    fri_parameters.log_blowup = log_blowup;
     let pcs = Pcs::new(dft, val_mmcs, fri_parameters);
     let challenger = Challenger::new(permutation);
     GoldilocksConfig::new(pcs, challenger)

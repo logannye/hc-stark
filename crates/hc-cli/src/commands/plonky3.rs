@@ -2,11 +2,11 @@ use anyhow::{bail, Context, Result};
 use hc_plonky3::contracts::{
     air_package_schema, air_proof_bundle_schema, benchmark_report_schema,
     hosted_proof_bundle_schema, proof_bundle_schema, public_inputs_schema, trace_manifest_schema,
-    workload_manifest_schema, AirPackageV1, AirProofBundleV1, InputGeneratorV1, ProofBundleV1,
-    PublicInputsV1, TraceChunkV1, TraceManifestV1, WorkloadId, WorkloadManifestV1,
-    MAX_AIR_BUNDLE_JSON_BYTES, MAX_AIR_JSON_BYTES, MAX_BUNDLE_JSON_BYTES, MAX_CUSTOM_TRACE_ROWS,
-    MAX_MANIFEST_JSON_BYTES, MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES, MAX_TRACE_MANIFEST_JSON_BYTES,
-    MAX_TRACE_UNCOMPRESSED_BYTES, MIN_CUSTOM_TRACE_ROWS,
+    workload_manifest_schema, AirPackageV1, AirProofBundleV1, HostedProofBundleV1,
+    InputGeneratorV1, ProofBundleV1, PublicInputsV1, TraceChunkV1, TraceManifestV1, WorkloadId,
+    WorkloadManifestV1, MAX_AIR_BUNDLE_JSON_BYTES, MAX_AIR_JSON_BYTES, MAX_BUNDLE_JSON_BYTES,
+    MAX_CUSTOM_TRACE_ROWS, MAX_MANIFEST_JSON_BYTES, MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES,
+    MAX_TRACE_MANIFEST_JSON_BYTES, MAX_TRACE_UNCOMPRESSED_BYTES, MIN_CUSTOM_TRACE_ROWS,
 };
 use hc_plonky3::{
     estimate_declarative_statement, prove_resource_bounded_observed_with_cancellation,
@@ -100,6 +100,13 @@ pub fn verify_air(bundle_path: &Path) -> Result<()> {
     let bundle: AirProofBundleV1 = read_json_limited(bundle_path, MAX_AIR_BUNDLE_JSON_BYTES)?;
     bundle.verify().map_err(anyhow::Error::msg)?;
     println!("declarative AIR proof accepted by the official p3-uni-stark verifier");
+    Ok(())
+}
+
+pub fn verify_hosted(bundle_path: &Path) -> Result<()> {
+    let bundle: HostedProofBundleV1 = read_json_limited(bundle_path, MAX_AIR_BUNDLE_JSON_BYTES)?;
+    bundle.verify().map_err(anyhow::Error::msg)?;
+    println!("hosted proof bundle accepted by the official p3-uni-stark verifier");
     Ok(())
 }
 

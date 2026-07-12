@@ -101,6 +101,11 @@ enum Plonky3Command {
         #[arg(long)]
         bundle: PathBuf,
     },
+    /// Verify a completed hosted proof bundle with the official adapter.
+    VerifyHosted {
+        #[arg(long)]
+        bundle: PathBuf,
+    },
     /// Estimate and preflight a declarative AIR proof.
     EstimateAir {
         #[arg(long)]
@@ -238,6 +243,9 @@ fn main() -> Result<()> {
                 reference,
             ),
             Plonky3Command::VerifyAir { bundle } => commands::plonky3::verify_air(&bundle),
+            Plonky3Command::VerifyHosted { bundle } => {
+                commands::plonky3::verify_hosted(&bundle)
+            }
             Plonky3Command::EstimateAir {
                 air,
                 trace_manifest,

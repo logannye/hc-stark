@@ -1,8 +1,8 @@
 use anyhow::{bail, Context};
 use hc_plonky3::{
     contracts::{
-        AirPackageV1, AirProofBundleV1, HostedProofBundleV1, HostedResourceReportV1,
-        PublicInputsV1, TraceManifestV1,
+        hosted_charge_millicredits, AirPackageV1, AirProofBundleV1, HostedProofBundleV1,
+        HostedResourceReportV1, PublicInputsV1, TraceManifestV1,
     },
     prove_resource_bounded_observed_with_cancellation, resume_resource_bounded_with_cancellation,
     UploadedTraceWorkload,
@@ -625,17 +625,18 @@ impl Worker {
         proof_bundle.verify().map_err(anyhow::Error::msg)?;
         let wall_time_ms = started.elapsed().as_millis().max(1) as u64;
         let scratch = directory_size(job_dir).await?;
+        let resource_report = HostedResourceReportV1 {
+            peak_resident_bytes: peak_rss_bytes().unwrap_or(1),
+            scratch_high_water_bytes: scratch,
+            total_read_bytes: downloaded,
+            total_write_bytes: scratch,
+            wall_time_ms,
+        };
         let hosted = HostedProofBundleV1 {
             schema_version: 1,
             proof: proof_bundle,
-            resource_report: HostedResourceReportV1 {
-                peak_resident_bytes: peak_rss_bytes().unwrap_or(1),
-                scratch_high_water_bytes: scratch,
-                total_read_bytes: downloaded,
-                total_write_bytes: scratch,
-                wall_time_ms,
-            },
-            charge_millicredits: 0,
+            charge_millicredits: hosted_charge_millicredits(&resource_report),
+            resource_report,
             official_verification: true,
         };
         hosted.verify().map_err(anyhow::Error::msg)?;

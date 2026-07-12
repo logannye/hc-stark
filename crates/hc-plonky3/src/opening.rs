@@ -27,18 +27,23 @@ pub struct MatrixOpening<'a> {
     pub points_and_values: Vec<(ProfileChallenge, Vec<ProfileChallenge>)>,
 }
 
-/// Evaluate every column polynomial represented by a standard-order,
-/// blowup-two LDE at an out-of-domain point using bounded batches.
+/// Evaluate every column polynomial represented by a standard-order coset LDE
+/// at an out-of-domain point using bounded batches.
 pub fn interpolate_standard_lde(
     matrix: &ResourceBoundedMatrix,
     polynomial_height: usize,
     point: ProfileChallenge,
     policy: &ResourcePolicyV1,
 ) -> Result<Vec<ProfileChallenge>> {
+    let lde_height = matrix.height();
     if polynomial_height == 0
         || !polynomial_height.is_power_of_two()
-        || matrix.height() != polynomial_height * 2
+        || lde_height % polynomial_height != 0
     {
+        return Err(DurableOpeningError::InvalidShape);
+    }
+    let blowup = lde_height / polynomial_height;
+    if !blowup.is_power_of_two() || blowup < 2 {
         return Err(DurableOpeningError::InvalidShape);
     }
     let width = matrix.width();
@@ -61,7 +66,7 @@ pub fn interpolate_standard_lde(
         let diffs: Vec<_> = points.iter().map(|value| point - *value).collect();
         let inverses = batch_multiplicative_inverse(&diffs);
         for (row, inverse) in inverses.iter().enumerate().take(row_count) {
-            matrix.read_rows(((row_start + row) * 2) as u64, 1, &mut row_words)?;
+            matrix.read_rows(((row_start + row) * blowup) as u64, 1, &mut row_words)?;
             let adjusted = *inverse - point_inverse;
             for column in 0..width {
                 sums[column] += adjusted * row_words[column].0;
@@ -81,8 +86,7 @@ pub fn interpolate_standard_lde(
 }
 
 /// Build the bit-reversed reduced-opening polynomial consumed by FRI. All
-/// matrices must share the same blowup-two LDE height, as they do in the frozen
-/// TinyZKP Uni-STARK profile.
+/// matrices must share the same LDE height and active TinyZKP profile.
 pub fn build_reduced_opening_layer(
     openings: &[MatrixOpening<'_>],
     batching_alpha: ProfileChallenge,
@@ -220,6 +224,15 @@ mod tests {
 
     #[test]
     fn bounded_interpolation_matches_plonky3_formula() {
+        assert_bounded_interpolation_matches_plonky3_formula(1);
+    }
+
+    #[test]
+    fn bounded_interpolation_supports_degree_three_blowup() {
+        assert_bounded_interpolation_matches_plonky3_formula(2);
+    }
+
+    fn assert_bounded_interpolation_matches_plonky3_formula(log_blowup: usize) {
         let dir = tempfile::tempdir().unwrap();
         let height = 16usize;
         let width = 3usize;
@@ -251,15 +264,16 @@ mod tests {
         store.finalize().unwrap();
         let dft = ResourceBoundedDft::new(policy(dir.path())).unwrap();
         let lde = dft
-            .try_coset_lde_block_matrix(&store, 1, Goldilocks::GENERATOR)
+            .try_coset_lde_block_matrix(&store, log_blowup, Goldilocks::GENERATOR)
             .unwrap();
         let point = ProfileChallenge::from_basis_coefficients_fn(|coordinate| {
             Goldilocks::from_u64((coordinate + 31) as u64)
         });
         let actual = interpolate_standard_lde(&lde, height, point, &policy(dir.path())).unwrap();
+        let blowup = 1usize << log_blowup;
         let standard_subset = RowMajorMatrix::new(
             (0..height)
-                .flat_map(|row| lde.try_row(row * 2).unwrap())
+                .flat_map(|row| lde.try_row(row * blowup).unwrap())
                 .collect(),
             width,
         );
