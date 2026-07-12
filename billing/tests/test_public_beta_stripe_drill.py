@@ -48,6 +48,15 @@ def test_accepts_complete_secret_free_evidence():
     assert drill.validate_evidence(evidence(), SHA)["status"] == "passed"
 
 
+def test_accepts_clover_payment_record_refund_identifier():
+    value = evidence()
+    value["cases"][6]["object_ids"] = ["pyr_1TinyZkpCloverRefund"]
+
+    assert drill.validate_evidence(value, SHA)["cases"][6]["object_ids"] == [
+        "pyr_1TinyZkpCloverRefund"
+    ]
+
+
 @pytest.mark.parametrize(
     "mutation,match",
     [

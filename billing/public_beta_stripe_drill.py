@@ -49,7 +49,9 @@ CASE_IDS = (
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SAFE_DATABASE = re.compile(r"^tinyzkp_beta_stripe_drill_[0-9a-f]{12}$")
-STRIPE_ID = re.compile(r"^(acct|cus|cs|evt|in|pi|ch|re|sub|price|prod|bpc)_[A-Za-z0-9_]+$")
+# Clover returns Payment Records (``pyr_``) for the current refund object,
+# while older test fixtures and retained evidence can still use ``re_``.
+STRIPE_ID = re.compile(r"^(acct|cus|cs|evt|in|pi|ch|re|pyr|sub|price|prod|bpc)_[A-Za-z0-9_]+$")
 FORBIDDEN_KEY = re.compile(
     r"(secret|password|api.?key|cookie|authorization|checkout.?url|portal.?url|presigned|card.?number)",
     re.I,
