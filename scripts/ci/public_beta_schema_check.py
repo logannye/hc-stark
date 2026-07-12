@@ -44,6 +44,7 @@ REQUIRED = (
     "beta_retention_deletions",
     "processing_status IN ('pending','processing','processed','failed')",
     "'refund_reversal'",
+    "'refund_failure_restore'",
     "processing_attempts",
     "report_hmac_sha256",
     "DEFERRABLE INITIALLY DEFERRED",

@@ -545,10 +545,15 @@ async fn process_refund_event(state: &AppState, event: &StripeEvent) -> Result<V
     let tenant_id: String = grant.get("tenant_id");
     let bucket: String = grant.get("credit_bucket");
     let granted: i64 = grant.get("granted_millicredits");
-    let grant_reversed: i64 = grant.get("reversed_millicredits");
     let amount_minor = number_at(object, "/amount").unwrap_or(0).max(0);
     let status = string_at(object, "/status").unwrap_or_else(|| "unknown".into());
     let mut tx = state.pool.begin().await?;
+    let grant_reversed: i64 = sqlx::query_scalar(
+        "SELECT reversed_millicredits FROM beta_credit_grants WHERE grant_id=$1 FOR UPDATE",
+    )
+    .bind(grant_id)
+    .fetch_one(&mut *tx)
+    .await?;
     let previous_refund_reversed: i64 = sqlx::query_scalar(
         "SELECT reversed_millicredits FROM beta_refunds WHERE stripe_refund_id=$1 FOR UPDATE",
     )
@@ -578,6 +583,63 @@ async fn process_refund_event(state: &AppState, event: &StripeEvent) -> Result<V
     .await?;
 
     if status == "failed" || event.event_type == "refund.failed" {
+        // A refund can transiently report `succeeded` and later fail. If its
+        // success event already removed credits, restore them with an
+        // immutable compensating event before recording the discrepancy.
+        // This keeps the materialized balance and grant/refund aggregates
+        // consistent without silently editing ledger history.
+        let restore = refund_failure_restore_delta(previous_refund_reversed, grant_reversed)?;
+        if restore > 0 {
+            let (subscription_delta, purchased_delta) = if bucket == "subscription" {
+                (restore, 0)
+            } else {
+                (0, restore)
+            };
+            sqlx::query(
+                "INSERT INTO beta_credit_events
+                     (event_id,tenant_id,event_type,subscription_delta_millicredits,
+                      purchased_delta_millicredits,stripe_event_id,operation_key,metadata)
+                 VALUES ($1,$2,'refund_failure_restore',$3,$4,$5,$6,$7)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(&tenant_id)
+            .bind(subscription_delta)
+            .bind(purchased_delta)
+            .bind(&event.id)
+            .bind(format!("refund:{refund_id}:failure_restore:{restore}"))
+            .bind(json!({"refund_id":refund_id,"grant_id":grant_id,"amount":restore}))
+            .execute(&mut *tx)
+            .await?;
+            let column = if bucket == "subscription" {
+                "subscription_millicredits"
+            } else {
+                "purchased_millicredits"
+            };
+            let query = format!(
+                "UPDATE beta_credit_accounts SET {column}={column}+$2,
+                 version=version+1,updated_at=now() WHERE tenant_id=$1"
+            );
+            sqlx::query(&query)
+                .bind(&tenant_id)
+                .bind(restore)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query(
+                "UPDATE beta_credit_grants SET reversed_millicredits=reversed_millicredits-$2,
+                        updated_at=now() WHERE grant_id=$1",
+            )
+            .bind(grant_id)
+            .bind(restore)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(
+                "UPDATE beta_refunds SET reversed_millicredits=0,applied_at=NULL,updated_at=now()
+                  WHERE stripe_refund_id=$1",
+            )
+            .bind(&refund_id)
+            .execute(&mut *tx)
+            .await?;
+        }
         sqlx::query(
             "INSERT INTO beta_billing_discrepancies
                  (discrepancy_id,tenant_id,discrepancy_type,semantic_key,details)
@@ -586,7 +648,7 @@ async fn process_refund_event(state: &AppState, event: &StripeEvent) -> Result<V
         .bind(Uuid::new_v4())
         .bind(&tenant_id)
         .bind(format!("refund:{refund_id}:failed"))
-        .bind(json!({"refund_id":refund_id,"stripe_event_id":event.id}))
+        .bind(json!({"refund_id":refund_id,"stripe_event_id":event.id,"restored_millicredits":restore}))
         .execute(&mut *tx)
         .await?;
     } else if status == "succeeded" {
@@ -700,6 +762,16 @@ fn refund_reversal_delta(
         return Err(ApiError::Conflict("refund_exceeds_grant"));
     }
     Ok((desired, delta))
+}
+
+fn refund_failure_restore_delta(
+    refund_reversed: i64,
+    grant_reversed: i64,
+) -> Result<i64, ApiError> {
+    if refund_reversed < 0 || grant_reversed < refund_reversed {
+        return Err(ApiError::Conflict("refund_restore_exceeds_reversal"));
+    }
+    Ok(refund_reversed)
 }
 
 async fn grant_credits(
@@ -1180,5 +1252,17 @@ mod tests {
             (5_000, 5_000)
         );
         assert!(refund_reversal_delta(2_500, 25_000, 20_000, 0).is_err());
+    }
+
+    #[test]
+    fn failed_refund_restores_only_the_reversal_applied_for_that_refund() {
+        assert_eq!(
+            refund_failure_restore_delta(25_000, 25_000).unwrap(),
+            25_000
+        );
+        assert_eq!(refund_failure_restore_delta(0, 25_000).unwrap(), 0);
+        assert_eq!(refund_failure_restore_delta(5_000, 25_000).unwrap(), 5_000);
+        assert!(refund_failure_restore_delta(25_000, 20_000).is_err());
+        assert!(refund_failure_restore_delta(-1, 0).is_err());
     }
 }
