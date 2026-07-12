@@ -81,6 +81,13 @@ def test_operator_environment_templates_cover_both_hosts_and_oauth_hostname():
     assert "TINYZKP_BETA_WORKER_IMAGE=" in worker and "@sha256:" in worker
     assert "https://api.tinyzkp.com/v1/auth/github/callback" in api_runtime
     assert "https://tinyzkp.com/v1/auth/github/callback" not in api_runtime
+    assert "TINYZKP_RECONCILIATION_HMAC_KEY=REPLACE_BASE64_32_BYTES" in api_runtime
+
+
+def test_api_image_contains_reconciliation_and_refund_operators():
+    dockerfile = text("Dockerfile.api")
+    assert "/usr/local/bin/hc-beta-reconcile" in dockerfile
+    assert "/usr/local/bin/hc-beta-refund" in dockerfile
 
 
 def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():

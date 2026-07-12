@@ -15,7 +15,7 @@ Production remains in containment until the signed `public_beta` authorization m
 ## Secrets and credentials
 
 - Copy the tracked environment examples to `/etc/tinyzkp/beta` and `/etc/tinyzkp/worker`; copy `compose.api.env.example` or `compose.worker.env.example` to the corresponding `compose.env`; set files to `0600` and directories to `0700`.
-- Generate independent OAuth encryption, API-key pepper, worker, PostgreSQL, R2, and pgBackRest encryption secrets.
+- Generate independent OAuth encryption, API-key pepper, reconciliation-HMAC, worker, PostgreSQL, R2, and pgBackRest encryption secrets.
 - Register the worker with `register-worker.sh` using the same base64 pepper as the API. The raw worker credential is placed only in the worker environment.
 - Keep the pgBackRest recovery key copy outside the VM and outside the R2 account.
 - Rotate GitHub, Stripe, R2, worker, and database credentials after any suspected exposure. Worker rotation is an idempotent re-registration followed by worker restart.
@@ -45,7 +45,8 @@ Production remains in containment until the signed `public_beta` authorization m
   ```
 
   The strict run proves a 1,024-row local registration statement, uploads a multi-chunk `2^18` trace, completes and officially verifies the hosted bundle, checks exact and conflicting idempotency retries, rejects a modified signed checksum, exercises wrong-length and corrupt chunks, proves wrong public inputs cannot charge, and denies a second tenant's bundle request. Evidence files are owner-only and reject secret-like fields and URLs.
-- Complete Stripe test-mode subscription, top-up, failed payment, duplicate webhook, delayed webhook, Portal, and cancellation flows.
+- Complete Stripe test-mode subscription, top-up, failed payment, duplicate webhook, delayed webhook, Portal, cancellation, full refund, partial refund, and failed-refund flows. Webhook delivery is successful once the raw signed body is durably queued; inspect the database-backed processor attempts separately. Require semantic grants and refund reversals to appear exactly once, then run `hc-beta-reconcile` and retain its clean HMAC-signed report.
+  Create refunds only through the write-gated operator command: set `TINYZKP_REFUND_PAYMENT_INTENT`, a unique `TINYZKP_REFUND_OPERATION_ID`, optional `TINYZKP_REFUND_AMOUNT_MINOR` for a partial refund, and `TINYZKP_ALLOW_REFUND_WRITE=1`, then run `hc-beta-refund` in the API container. Repeating the same operation ID is a Stripe-idempotent retry.
 - Run the fixed-host 1M/16M matrix, customer_cubic8 matrix, fault/fuzz suite, security review, four-job load test, and identity check on the final candidate. Prepare four paid job request bodies and execute `scripts/load/run_public_beta_load.py`; release evidence requires all four jobs to complete, download, officially verify, and leave `/readyz` continuously healthy.
 - Run `restore-drill.sh --confirm-isolated-restore`. Recompute credit balances from immutable events, authenticate a retained test API key, recover a queued job, and verify a retained proof bundle before recording success.
 - Run the resumable 24-hour allowlisted canary with `scripts/canary/run_public_beta_canary.py` and an owner-controlled driver implementing `proof`, `cancel`, `billing`, and `audit` subcommands. The harness pins the driver digest, records one proof per hour, runs cancellation/refund every six hours, performs both tagged live billing canaries, and writes owner-only state after every event. Validate its evidence with `validate_public_beta_canary.py`.

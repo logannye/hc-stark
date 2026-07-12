@@ -26,6 +26,30 @@ pub async fn begin(
     key: &str,
     request_sha256: &str,
 ) -> Result<IdempotencyOutcome, ApiError> {
+    begin_inner(tx, tenant_id, operation, key, request_sha256, false).await
+}
+
+/// Resume an incomplete local operation only when the downstream API uses the
+/// same idempotency key and guarantees an exact replay (Stripe Checkout and
+/// Portal). Do not use this for local ledger mutations.
+pub async fn begin_retriable(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    operation: &str,
+    key: &str,
+    request_sha256: &str,
+) -> Result<IdempotencyOutcome, ApiError> {
+    begin_inner(tx, tenant_id, operation, key, request_sha256, true).await
+}
+
+async fn begin_inner(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    operation: &str,
+    key: &str,
+    request_sha256: &str,
+    retry_incomplete: bool,
+) -> Result<IdempotencyOutcome, ApiError> {
     if key.len() < 8 || key.len() > 200 || !key.bytes().all(|byte| byte.is_ascii_graphic()) {
         return Err(ApiError::Invalid("invalid_idempotency_key"));
     }
@@ -67,6 +91,7 @@ pub async fn begin(
             status: u16::try_from(status).map_err(|_| ApiError::Internal)?,
             body,
         }),
+        _ if retry_incomplete => Ok(IdempotencyOutcome::New),
         _ => Err(ApiError::Conflict("idempotency_in_progress")),
     }
 }
