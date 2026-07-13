@@ -53,6 +53,12 @@ def test_backup_and_rollback_contracts_are_tracked():
     assert "pg1-database=tinyzkp_beta" in backup
     assert "pg1-user=tinyzkp_beta" in backup
     assert "repo1-retention-full=4" in backup and "repo1-retention-diff=30" in backup
+    assert "archive-async=y" in backup
+    assert "spool-path=/var/lib/postgresql/data/pgbackrest-spool" in backup
+    full_service = (ROOT / "deploy/hetzner/beta/systemd/tinyzkp-pgbackrest-full.service").read_text()
+    diff_service = (ROOT / "deploy/hetzner/beta/systemd/tinyzkp-pgbackrest-diff.service").read_text()
+    assert "exec -T --user 999:999 postgres pgbackrest" in full_service
+    assert "exec -T --user 999:999 postgres pgbackrest" in diff_service
     assert "TINYZKP_POSTGRES_IMAGE must be digest pinned" in restore
     assert "docker exec -i -u postgres" in restore
     assert "credit ledger restore mismatch" in restore

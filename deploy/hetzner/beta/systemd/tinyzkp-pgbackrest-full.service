@@ -7,5 +7,4 @@ After=docker.service
 Type=oneshot
 WorkingDirectory=/opt/tinyzkp/deploy/hetzner/beta
 EnvironmentFile=/etc/tinyzkp/beta/compose.env
-ExecStart=/usr/bin/docker compose -f docker-compose.api.yml exec -T postgres pgbackrest --stanza=tinyzkp-beta --type=full backup
-
+ExecStart=/usr/bin/docker compose -f docker-compose.api.yml exec -T --user 999:999 postgres pgbackrest --stanza=tinyzkp-beta --type=full backup
