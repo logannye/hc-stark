@@ -162,3 +162,23 @@ def test_r2_lifecycle_prefixes_separate_inputs_bundles_and_backups():
     }
     backups = json.loads(text("r2-backups-lifecycle.json"))
     assert all("deleteObjectsTransition" not in rule for rule in backups["rules"])
+
+
+def test_r2_browser_cors_is_exact_origin_and_presigned_header_scoped():
+    policy = json.loads(text("r2-artifacts-cors.json"))
+    assert len(policy["rules"]) == 1
+    rule = policy["rules"][0]
+    assert rule["id"] == "tinyzkp-beta-browser-presigned-v1"
+    allowed = rule["allowed"]
+    assert allowed["origins"] == [
+        "https://tinyzkp.com",
+        "https://www.tinyzkp.com",
+    ]
+    assert "*" not in allowed["origins"]
+    assert set(allowed["methods"]) == {"GET", "PUT", "HEAD"}
+    assert "x-amz-meta-tinyzkp-blake3" in allowed["headers"]
+    assert rule["maxAgeSeconds"] <= 300
+
+    script = text("configure-r2-cors.sh")
+    assert "TINYZKP_ALLOW_R2_CORS_WRITE" in script
+    assert "wildcard R2 CORS is forbidden" in script

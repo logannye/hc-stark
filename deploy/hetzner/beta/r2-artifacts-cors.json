@@ -1,0 +1,29 @@
+{
+  "rules": [
+    {
+      "id": "tinyzkp-beta-browser-presigned-v1",
+      "allowed": {
+        "origins": [
+          "https://tinyzkp.com",
+          "https://www.tinyzkp.com"
+        ],
+        "methods": [
+          "GET",
+          "PUT",
+          "HEAD"
+        ],
+        "headers": [
+          "content-length",
+          "content-type",
+          "x-amz-content-sha256",
+          "x-amz-meta-tinyzkp-blake3"
+        ]
+      },
+      "exposeHeaders": [
+        "etag",
+        "x-amz-meta-tinyzkp-blake3"
+      ],
+      "maxAgeSeconds": 300
+    }
+  ]
+}
