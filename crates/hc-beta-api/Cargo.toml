@@ -23,7 +23,7 @@ hex = "0.4"
 hmac = "0.12"
 http = "1.1"
 libc = "0.2"
-prometheus = "0.13"
+prometheus = "0.14"
 rand.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 schemars = { version = "=1.2.1", features = ["uuid1"] }
