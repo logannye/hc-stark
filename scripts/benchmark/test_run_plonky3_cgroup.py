@@ -49,6 +49,41 @@ def test_worker_high_water_mark_is_authoritative_and_required():
     assert MODULE.authoritative_peak_rss({"peak_rss_bytes": True}, 10_000) == 0
 
 
+def test_scratch_measurement_tolerates_phase_directory_cleanup(tmp_path, monkeypatch):
+    class VanishingDirectory:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            raise FileNotFoundError("phase directory was durably removed")
+
+    monkeypatch.setattr(MODULE.os, "scandir", lambda _path: VanishingDirectory())
+
+    assert MODULE.directory_bytes(tmp_path) == 0
+
+
+def test_scratch_measurement_counts_regular_files_without_following_symlinks(tmp_path):
+    nested = tmp_path / "phase" / "artifact"
+    nested.mkdir(parents=True)
+    (tmp_path / "root.bin").write_bytes(b"1234")
+    (nested / "leaf.bin").write_bytes(b"123456")
+    (tmp_path / "outside.bin").write_bytes(b"12345678")
+    (nested / "linked.bin").symlink_to(tmp_path / "outside.bin")
+
+    assert MODULE.directory_bytes(tmp_path / "phase") == 6
+
+
+def test_cgroup_peak_is_conservative_when_kernel_accounting_lags_process_rss():
+    assert MODULE.conservative_cgroup_peak(733_261_824, 736_030_720) == 736_030_720
+    assert MODULE.conservative_cgroup_peak(800_000_000, 736_030_720) == 800_000_000
+
+
 def test_benchmark_runner_uid_honors_sudo_origin(monkeypatch):
     monkeypatch.setattr(MODULE.os, "geteuid", lambda: 0)
     monkeypatch.setenv("SUDO_UID", "1001")
