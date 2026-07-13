@@ -147,3 +147,23 @@ def test_load_outputs_are_owner_only_and_never_replaced(tmp_path: Path):
     assert os.stat(output).st_mode & 0o077 == 0
     with pytest.raises(ValueError, match="refusing to replace"):
         MODULE.write_private_json(output, {"status": "passed"})
+
+
+def test_signed_cli_identity_and_bundle_verification_are_mandatory(tmp_path: Path, monkeypatch):
+    release_sha = "a" * 40
+    cli = tmp_path / "hc-cli"
+    cli.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = release ]; then\n"
+        f"  printf '%s\\n' '{{\"release_sha\":\"{release_sha}\"}}'\n"
+        "  exit 0\n"
+        "fi\n"
+        "test \"$1 $2 $3\" = 'plonky3 verify-hosted --bundle'\n",
+        encoding="utf-8",
+    )
+    cli.chmod(0o700)
+    monkeypatch.setenv("TINYZKP_CLI", str(cli))
+    selected = MODULE.signed_cli(release_sha)
+    MODULE.verify_bundle_with_signed_cli(selected, {"schema_version": 1})
+    with pytest.raises(RuntimeError, match="release identity"):
+        MODULE.signed_cli("b" * 40)

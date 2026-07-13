@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import statistics
+import subprocess
 import sys
 import tempfile
 import time
@@ -170,6 +171,8 @@ def validate_evidence(value: dict[str, Any], release_sha: str) -> dict[str, Any]
         if (
             job.get("status") != "completed"
             or job.get("bundle", {}).get("official_verification") is not True
+            or job.get("bundle", {}).get("signed_cli_verification") is not True
+            or job.get("bundle", {}).get("api_verification") is not True
             or not isinstance(predicted, int)
             or not MIN_RELEASE_PREDICTED_RSS <= predicted <= MAX_PREDICTED_RSS
             or not isinstance(reservation, int)
@@ -188,6 +191,46 @@ def validate_evidence(value: dict[str, Any], release_sha: str) -> dict[str, Any]
         raise ValueError("load evidence contains residual reservations")
     validate_telemetry(value["telemetry"], release_sha)
     return value
+
+
+def signed_cli(release_sha: str) -> Path:
+    configured = os.environ.get("TINYZKP_CLI", "").strip()
+    if not configured:
+        raise RuntimeError("TINYZKP_CLI is required for independent load verification")
+    cli = Path(configured).resolve(strict=True)
+    completed = subprocess.run(
+        [str(cli), "release"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    try:
+        identity = json.loads(completed.stdout)
+    except ValueError as error:
+        raise RuntimeError("signed CLI returned an invalid release identity") from error
+    if completed.returncode != 0 or identity.get("release_sha") != release_sha:
+        raise RuntimeError("signed CLI release identity does not match the load candidate")
+    return cli
+
+
+def verify_bundle_with_signed_cli(cli: Path, bundle: dict[str, Any]) -> None:
+    with tempfile.TemporaryDirectory(prefix="tinyzkp-load-bundle-") as directory:
+        path = Path(directory) / "hosted-bundle.json"
+        write_private_json(path, bundle)
+        completed = subprocess.run(
+            [str(cli), "plonky3", "verify-hosted", "--bundle", str(path)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10 * 60,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError("signed CLI rejected a hosted load-test bundle")
 
 
 def parse_candidate_rows(raw: str) -> list[int]:
@@ -384,6 +427,7 @@ def run(
     scenario: dict[str, Any], token: str, release_sha: str, telemetry: dict[str, Any]
 ) -> dict[str, Any]:
     scenario = validate_scenario(scenario)
+    cli = signed_cli(release_sha)
     base = scenario["api_base_url"].rstrip("/")
     control_latencies: list[float] = []
     ready_latencies: list[float] = []
@@ -467,6 +511,7 @@ def run(
         artifact_latencies.append(download_latency)
         if bundle_status != 200 or not isinstance(bundle, dict):
             raise RuntimeError(f"bundle download failed for {job_id}")
+        verify_bundle_with_signed_cli(cli, bundle)
         verify_status, verification, verify_latency = request_json(
             "POST", f"{base}/v1/verify", token, {"bundle": bundle}
         )
@@ -477,6 +522,8 @@ def run(
             "size_bytes": bundle_response.get("size_bytes"),
             "blake3_hex": bundle_response.get("blake3_hex"),
             "official_verification": True,
+            "signed_cli_verification": True,
+            "api_verification": True,
         }
         reservation = item["submission"]["estimate"].get("reservation_millicredits")
         charge = item["result"].get("settled_millicredits")
