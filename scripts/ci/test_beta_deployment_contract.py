@@ -123,16 +123,31 @@ def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
     candidate = (ROOT / ".github/workflows/public-beta-candidate.yml").read_text()
     authorization = (ROOT / ".github/workflows/public-beta-release.yml").read_text()
     assert "docker buildx build --push" in candidate
-    assert candidate.count('--build-arg HC_RELEASE_SHA="$HC_RELEASE_SHA"') == 3
+    assert candidate.count('--build-arg HC_RELEASE_SHA="$HC_RELEASE_SHA"') == 4
     assert "build_dark_canary_authorization.py" in candidate
     assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in candidate
     assert "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c" in candidate
     assert "pip install pytest -r billing/requirements.txt" in candidate
     assert "components: rustfmt, clippy" in candidate
+    assert "deploy/hetzner/beta/Dockerfile.cli" in candidate
+    assert "debian:12.11-slim@sha256:b1a741487078b369e78119849663d7f1a5341ef2768798f7b7406c4240f86aef" in candidate
+    assert 'jq -er .release_sha' in candidate
+    assert "cargo build --locked --release -p hc-cli" not in candidate
     assert "extract_public_beta_evidence.py" in authorization
     assert "build_public_beta_authorization.py" in authorization
     assert "docker build" not in authorization
     assert "workflow_dispatch" in candidate and "workflow_dispatch" in authorization
+
+
+def test_candidate_cli_is_built_for_the_debian_12_runtime():
+    dockerfile = text("Dockerfile.cli")
+    assert dockerfile.startswith(
+        "FROM rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1 AS build"
+    )
+    assert "ARG HC_RELEASE_SHA" in dockerfile
+    assert "ENV HC_RELEASE_SHA=$HC_RELEASE_SHA" in dockerfile
+    assert "cargo build --locked --release -p hc-cli" in dockerfile
+    assert "FROM scratch" in dockerfile
 
 
 def test_container_context_includes_every_cargo_workspace_member():
