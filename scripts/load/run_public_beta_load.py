@@ -66,6 +66,18 @@ def percentile(values: list[float], fraction: float) -> float:
     return ordered[index]
 
 
+def record_latency(
+    operation: str,
+    latency: float,
+    control_plane: list[float],
+    artifact: list[float],
+) -> None:
+    if operation in {"job_submission", "bundle_download"}:
+        artifact.append(latency)
+    else:
+        control_plane.append(latency)
+
+
 def validate_scenario(value: dict[str, Any]) -> dict[str, Any]:
     if value.get("schema_version") != 2:
         raise ValueError("load scenario schema_version must equal 2")
@@ -453,7 +465,10 @@ def run(
         submissions = list(executor.map(submit, scenario["jobs"]))
     jobs: dict[str, dict[str, Any]] = {}
     for status, payload, latency in submissions:
-        control_latencies.append(latency)
+        # Submission performs the upload's R2 HEAD reconciliation. Keep that
+        # object-store work in the artifact latency class so it cannot hide a
+        # slow database/auth/control path or falsely fail the control-plane SLO.
+        record_latency("job_submission", latency, control_latencies, artifact_latencies)
         if status != 201 or not isinstance(payload, dict):
             raise RuntimeError(f"job submission failed with HTTP {status}: {payload}")
         estimate = payload.get("estimate", {})
@@ -508,7 +523,9 @@ def run(
             None,
             extra_headers=dict(signed.get("headers", {})),
         )
-        artifact_latencies.append(download_latency)
+        record_latency(
+            "bundle_download", download_latency, control_latencies, artifact_latencies
+        )
         if bundle_status != 200 or not isinstance(bundle, dict):
             raise RuntimeError(f"bundle download failed for {job_id}")
         verify_bundle_with_signed_cli(cli, bundle)
