@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import time
 
 import customer_cubic8
@@ -29,13 +30,49 @@ def run(command: list[str], *, capture: bool = False) -> str:
     return completed.stdout.strip() if capture else ""
 
 
+def current_cgroup_path() -> Path:
+    for line in Path("/proc/self/cgroup").read_text(encoding="utf-8").splitlines():
+        hierarchy, controllers, relative = line.split(":", 2)
+        if hierarchy == "0" and controllers == "":
+            return Path("/sys/fs/cgroup") / relative.lstrip("/")
+    raise RuntimeError("current cgroup-v2 identity is unavailable")
+
+
 def cgroup_limit(name: str) -> int | None:
-    path = Path("/sys/fs/cgroup") / name
+    path = current_cgroup_path() / name
     try:
         raw = path.read_text(encoding="utf-8").strip()
         return None if raw == "max" else int(raw)
     except (OSError, ValueError):
         return None
+
+
+def write_private_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(path.parent, 0o700)
+    if path.exists() or path.is_symlink():
+        raise ValueError(f"refusing to replace report: {path}")
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(value, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def process_rss_bytes(pid: int) -> int:
+    try:
+        for line in (Path("/proc") / str(pid) / "status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1]) * 1024
+    except (FileNotFoundError, ProcessLookupError, ValueError):
+        return 0
+    return 0
 
 
 def main() -> None:
@@ -49,11 +86,26 @@ def main() -> None:
     args = parser.parse_args()
     if len(args.release_sha) != 40 or any(char not in "0123456789abcdef" for char in args.release_sha):
         raise ValueError("release SHA must be canonical")
-    args.work.mkdir(parents=True, exist_ok=True, mode=0o700)
+    args.work.mkdir(parents=True, exist_ok=False, mode=0o700)
+    os.chmod(args.work, 0o700)
     customer_cubic8.write_json(args.work / "air.json", customer_cubic8.build_air())
     initial = list(range(1, customer_cubic8.WIDTH + 1))
     final = customer_cubic8.write_trace(args.work / "trace.bin", args.rows, initial)
-    air_digest = run([str(args.cli), "plonky3", "validate-air", "--air", str(args.work / "air.json")], capture=True)
+    validation = json.loads(
+        run(
+            [
+                str(args.cli),
+                "plonky3",
+                "validate-air",
+                "--air",
+                str(args.work / "air.json"),
+            ],
+            capture=True,
+        )
+    )
+    if validation.get("valid") is not True:
+        raise RuntimeError("signed CLI rejected customer_cubic8")
+    air_digest = str(validation["air_digest_hex"])
     public = {"schema_version": 1, "air_digest_hex": air_digest, "values": initial + final}
     customer_cubic8.write_json(args.work / "public-inputs.json", public)
     run([
@@ -70,24 +122,33 @@ def main() -> None:
         "checkpoint_policy": "retain_on_failure",
     }
     customer_cubic8.write_json(args.work / "policy.json", policy)
+    trace_manifest = args.work / "packed" / "trace-manifest-v1.json"
+    if not trace_manifest.is_file():
+        raise RuntimeError("pack-trace did not produce TraceManifestV1")
     command = [
         str(args.cli), "plonky3", "prove-air", "--air", str(args.work / "air.json"),
-        "--trace-manifest", str(args.work / "packed" / "trace-manifest.json"),
+        "--trace-manifest", str(trace_manifest),
         "--chunks-dir", str(args.work / "packed"), "--public-inputs", str(args.work / "public-inputs.json"),
         "--policy", str(args.work / "policy.json"), "--output", str(args.work / "proof.json"),
     ]
     if args.mode == "reference":
         command.append("--reference")
-    timing = args.work / f"time-{args.mode}.txt"
-    timed_command = ["/usr/bin/time", "-v", "-o", str(timing), *command]
     started = time.monotonic_ns()
-    run(timed_command)
-    wall_time_ms = (time.monotonic_ns() - started) // 1_000_000
-    peak_line = next(
-        line for line in timing.read_text(encoding="utf-8").splitlines()
-        if "Maximum resident set size (kbytes)" in line
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
-    peak_kib = int(peak_line.rsplit(":", 1)[1].strip())
+    peak_rss_bytes = 0
+    while process.poll() is None:
+        peak_rss_bytes = max(peak_rss_bytes, process_rss_bytes(process.pid))
+        time.sleep(0.01)
+    stdout, stderr = process.communicate()
+    wall_time_ms = (time.monotonic_ns() - started) // 1_000_000
+    if process.returncode != 0 or peak_rss_bytes <= 0:
+        raise RuntimeError(f"proof command failed: {(stderr or stdout)[-2000:]}")
     run([str(args.cli), "plonky3", "verify-air", "--bundle", str(args.work / "proof.json")])
     proof = json.loads((args.work / "proof.json").read_text(encoding="utf-8"))
     report = {
@@ -98,14 +159,14 @@ def main() -> None:
         "release_sha": args.release_sha,
         "effective_cpu_count": len(os.sched_getaffinity(0)),
         "effective_memory_bytes": cgroup_limit("memory.max"),
-        "peak_resident_bytes": peak_kib * 1024,
+        "effective_swap_bytes": cgroup_limit("memory.swap.max"),
+        "peak_resident_bytes": peak_rss_bytes,
         "wall_time_ms": wall_time_ms,
         "proof_digest_hex": proof["proof_digest_hex"],
         "official_verification": True,
-        "command": timed_command,
+        "command": command,
     }
-    args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    args.output.chmod(0o600)
+    write_private_json(args.output, report)
 
 
 if __name__ == "__main__":

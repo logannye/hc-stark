@@ -17,6 +17,9 @@ def report(rows, mode, rss, wall, proof="a" * 64):
         "logical_rows": rows,
         "mode": mode,
         "release_sha": "b" * 40,
+        "effective_cpu_count": 8,
+        "effective_memory_bytes": 16 * 1024**3,
+        "effective_swap_bytes": 0,
         "peak_resident_bytes": rss,
         "wall_time_ms": wall,
         "proof_digest_hex": proof,
@@ -30,4 +33,3 @@ def test_validator_enforces_public_beta_thresholds():
         report(1_048_576, "bounded", 1_000, 300),
         report(16_777_216, "bounded", 2 * 1024**3, 1_000),
     )
-

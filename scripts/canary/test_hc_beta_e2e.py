@@ -1,7 +1,9 @@
 import importlib.util
 from http.client import RemoteDisconnected
+from io import BytesIO
 from pathlib import Path
 import sys
+from urllib.error import HTTPError
 
 import pytest
 
@@ -113,3 +115,53 @@ def test_truncated_signed_upload_accepts_only_explicit_fail_closed_outcomes():
         E2E.ApiFailure(503, {"error": "infrastructure_unavailable"})
     )
     assert not E2E.truncated_signed_upload_was_rejected(ConnectionError("network outage"))
+
+
+class Response:
+    status = 200
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def read(self):
+        return b""
+
+
+def test_signed_upload_retries_transient_5xx_with_identical_request(monkeypatch):
+    requests = []
+
+    def urlopen(request, *, timeout):
+        requests.append((request.full_url, request.data, dict(request.headers), timeout))
+        if len(requests) == 1:
+            raise HTTPError(request.full_url, 502, "bad gateway", {}, BytesIO())
+        return Response()
+
+    monkeypatch.setattr(E2E, "urlopen", urlopen)
+    monkeypatch.setattr(E2E.time, "sleep", lambda _delay: None)
+    signed = {
+        "url": "https://example.invalid/object",
+        "headers": {"content-length": "3", "x-amz-checksum-sha256": "digest"},
+    }
+    assert E2E.ApiClient("https://api.invalid", "key").put_signed(signed, b"abc") == 200
+    assert len(requests) == 2
+    assert requests[0] == requests[1]
+
+
+def test_signed_upload_never_retries_a_permanent_4xx(monkeypatch):
+    attempts = 0
+
+    def urlopen(request, *, timeout):
+        nonlocal attempts
+        attempts += 1
+        raise HTTPError(request.full_url, 403, "forbidden", {}, BytesIO())
+
+    monkeypatch.setattr(E2E, "urlopen", urlopen)
+    with pytest.raises(E2E.ApiFailure) as failure:
+        E2E.ApiClient("https://api.invalid", "key").put_signed(
+            {"url": "https://example.invalid/object", "headers": {}}, b"abc"
+        )
+    assert failure.value.status == 403
+    assert attempts == 1
