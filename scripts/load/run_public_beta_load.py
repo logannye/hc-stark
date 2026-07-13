@@ -23,7 +23,11 @@ import uuid
 
 TERMINAL = {"completed", "cancelled", "platform_failed", "customer_failed"}
 MAX_PREDICTED_RSS = 2 * 1024 * 1024 * 1024
-MIN_RELEASE_PREDICTED_RSS = MAX_PREDICTED_RSS * 85 // 100
+# Scratch DFTs receive at most half the hard resident policy; the other half is
+# deliberately reserved for the retained pipeline and runtime. Include the
+# bounded prover's 64-MiB accounting floor when selecting a near-limit load.
+EFFECTIVE_PREDICTED_RSS_ENVELOPE = MAX_PREDICTED_RSS // 2 + 64 * 1024 * 1024
+MIN_RELEASE_PREDICTED_RSS = EFFECTIVE_PREDICTED_RSS_ENVELOPE * 85 // 100
 READY_P95_LIMIT_MS = 500.0
 READY_MAX_LIMIT_MS = 2_000.0
 CONTROL_P95_LIMIT_MS = 1_000.0
@@ -99,7 +103,9 @@ def validate_scenario(value: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(poll, int) or not 1 <= poll <= 60:
         raise ValueError("load poll interval must be between 1 and 60 seconds")
     if not isinstance(minimum_rss, int) or not MIN_RELEASE_PREDICTED_RSS <= minimum_rss <= MAX_PREDICTED_RSS:
-        raise ValueError("minimum predicted RSS must be between 85% and 100% of the beta limit")
+        raise ValueError(
+            "minimum predicted RSS must cover at least 85% of the bounded working-set envelope"
+        )
     return value
 
 
@@ -260,20 +266,13 @@ def prepare_scenario(
             candidate_root = state_dir / f"candidate-{rows}"
             candidate_root.mkdir(mode=0o700)
             statement = hc_beta_e2e.prepare_statement(cli, first, rows, candidate_root)
-            estimate_policy = json.loads((candidate_root / "policy.json").read_text(encoding="utf-8"))
-            # Selection needs to observe an over-limit estimate so it can try
-            # the next lower power of two. Hosted admission still enforces the
-            # exact 2-GiB policy when the selected job is submitted.
-            estimate_policy["max_resident_bytes"] = 16 * 1024**3
-            estimate_policy_path = candidate_root / "load-estimate-policy.json"
-            hc_beta_e2e.write_json(estimate_policy_path, estimate_policy)
             estimate = hc_beta_e2e.run(
                 [
                     str(cli), "plonky3", "estimate-air",
                     "--air", str(statement["air_path"]),
                     "--trace-manifest", str(Path(statement["hosted_packed"]) / "trace-manifest-v1.json"),
                     "--public-inputs", str(statement["hosted_public_path"]),
-                    "--policy", str(estimate_policy_path),
+                    "--policy", str(candidate_root / "policy.json"),
                 ],
                 expect_json=True,
             )

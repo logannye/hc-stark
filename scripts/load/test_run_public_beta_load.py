@@ -102,8 +102,16 @@ def test_scenario_requires_independent_artifacts_and_near_limit_jobs():
         MODULE.validate_scenario(invalid)
     invalid = scenario()
     invalid["minimum_predicted_rss_bytes"] = MODULE.MIN_RELEASE_PREDICTED_RSS - 1
-    with pytest.raises(ValueError, match="85%"):
+    with pytest.raises(ValueError, match="85% of the bounded working-set envelope"):
         MODULE.validate_scenario(invalid)
+
+
+def test_load_target_uses_the_effective_bounded_working_set_and_hard_cap():
+    assert MODULE.EFFECTIVE_PREDICTED_RSS_ENVELOPE < MODULE.MAX_PREDICTED_RSS
+    assert MODULE.MIN_RELEASE_PREDICTED_RSS == (
+        MODULE.EFFECTIVE_PREDICTED_RSS_ENVELOPE * 85 // 100
+    )
+    assert MODULE.MIN_RELEASE_PREDICTED_RSS < 1_082_130_432 < MODULE.MAX_PREDICTED_RSS
 
 
 def test_prepare_candidates_are_descending_unique_powers_of_two():
