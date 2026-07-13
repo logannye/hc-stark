@@ -118,8 +118,17 @@ jobs:
             candidate-artifacts/dark-canary-authorization.json
       - name: Build signed CLI and checksums
         run: |
-          cargo build --locked --release -p hc-cli
-          install -m 0755 target/release/hc-cli candidate-artifacts/hc-cli-linux-x86_64
+          docker buildx build \
+            --build-arg HC_RELEASE_SHA="$HC_RELEASE_SHA" \
+            --file deploy/hetzner/beta/Dockerfile.cli \
+            --output "type=local,dest=$RUNNER_TEMP/hc-cli" .
+          install -m 0755 "$RUNNER_TEMP/hc-cli/hc-cli-linux-x86_64" \
+            candidate-artifacts/hc-cli-linux-x86_64
+          CLI_RELEASE="$(docker run --rm --network none --read-only \
+            --mount "type=bind,src=$PWD/candidate-artifacts/hc-cli-linux-x86_64,dst=/usr/local/bin/hc-cli,readonly" \
+            debian:12.11-slim@sha256:b1a741487078b369e78119849663d7f1a5341ef2768798f7b7406c4240f86aef \
+            /usr/local/bin/hc-cli release)"
+          test "$(jq -er .release_sha <<<"$CLI_RELEASE")" = "$HC_RELEASE_SHA"
           (cd candidate-artifacts && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
           cosign sign-blob --yes --bundle candidate-artifacts/SHA256SUMS.sigstore.json candidate-artifacts/SHA256SUMS
       - uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
