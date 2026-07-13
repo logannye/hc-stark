@@ -65,6 +65,7 @@ class MatrixEntry:
     entry_id: str
     workload: str
     logical_rows: int
+    resident_cap_bytes: int
     manifest_relative: str
     mode: str
     gate: str
@@ -81,6 +82,7 @@ MATRIX: tuple[MatrixEntry, ...] = (
         "fibonacci_1m",
         "fibonacci",
         1_048_576,
+        2 * 1024**3,
         "examples/plonky3/fibonacci-1m.json",
         "throughput",
         "one-million",
@@ -91,6 +93,7 @@ MATRIX: tuple[MatrixEntry, ...] = (
         "poseidon2_1m",
         "poseidon2_goldilocks",
         1_048_576,
+        1 * 1024**3,
         "examples/plonky3/poseidon2-1m.json",
         "throughput",
         "one-million",
@@ -101,6 +104,7 @@ MATRIX: tuple[MatrixEntry, ...] = (
         "fibonacci_16m",
         "fibonacci",
         16_777_216,
+        2 * 1024**3,
         "examples/plonky3/fibonacci-16m.json",
         "ceiling",
         "ten-million",
@@ -111,6 +115,7 @@ MATRIX: tuple[MatrixEntry, ...] = (
         "poseidon2_16m",
         "poseidon2_goldilocks",
         16_777_216,
+        2 * 1024**3,
         "examples/plonky3/poseidon2-16m.json",
         "ceiling",
         "ten-million",
@@ -465,7 +470,7 @@ def validate_matrix_manifest(entry: MatrixEntry, scratch_root: Path) -> dict[str
         raise ValueError(f"{entry.entry_id} manifest resource_policy is missing")
     expected_policy = {
         "mode": "scratch",
-        "max_resident_bytes": 2 * 1024**3,
+        "max_resident_bytes": entry.resident_cap_bytes,
         "max_threads": 8,
         "checkpoint_policy": "retain_on_failure",
     }
