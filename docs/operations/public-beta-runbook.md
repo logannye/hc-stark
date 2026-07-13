@@ -10,7 +10,7 @@ Production remains in containment until the signed `public_beta` authorization m
 4. Apply and verify the tracked lifecycle policies with `configure-r2-lifecycle.sh apply artifacts` and `apply backups`, setting the corresponding bucket variables and the explicit write gate. Apply the artifact bucket's exact-origin browser policy with `configure-r2-cors.sh apply`; it permits only `tinyzkp.com` origins and the methods and signed metadata headers required by presigned uploads/downloads. Upload keys use the `uploads/` prefix and expire after 24 hours. Bundle keys use `bundles/` with a 90-day hard maximum; the database sweeper enforces the earlier 7/30/90-day plan retention. pgBackRest, not an R2 expiration rule, owns valid backup/WAL retention.
 5. Use Hetzner worker `3034990`, with two mirrored 1-TB NVMe devices and at least 500 GB free on `/srv/tinyzkp-scratch`. Mount scratch with `noexec,nodev,nosuid` and mode `0700` owned by UID 10001. Record advertised physical capacity and effective free scratch separately.
 6. Install WireGuard using the tracked API and worker templates. Only UDP 51820 is public; TCP 8091 is permitted only over the tunnel.
-7. Create the isolated `tinyzkp_public_beta_v1` Stripe catalog and separate Portal configuration. Do not modify legacy TinyZKP or Casino Coach objects.
+7. Obtain one-time accountant or counsel approval for the Stripe product tax classification and live tax registrations. Create the isolated `tinyzkp_public_beta_v1` Stripe catalog with that approved `txcd_...` tax code, automatic tax, required billing addresses, a separate Portal configuration, and a dedicated live webhook destination. Do not modify legacy TinyZKP or Casino Coach objects. API startup fails closed until all of these objects pass preflight.
 
 ## Secrets and credentials
 
@@ -29,9 +29,30 @@ Production remains in containment until the signed `public_beta` authorization m
 5. Install the worker host with `install-beta-host.sh worker`, confirm WireGuard reachability, then start the worker with the same release SHA.
 6. Access the dark API through an SSH tunnel. Public DNS and Caddy remain in containment.
 
+The signed CLI always targets `https://api.tinyzkp.com`; release binaries do not accept an endpoint override. The dark Caddy policy therefore forwards API reads and writes to the beta service, while the service itself restricts GitHub identities to the operator allowlist and requires tenant API keys. The public website and discovery surface remain in containment.
+
 ## Required drills
 
 - Install the pinned Python dependency from `scripts/benchmark/requirements.txt`, then run the first complete hosted lifecycle with the signed candidate CLI:
+
+  ```sh
+  hc-cli beta quickstart --fixture customer_cubic8 --output-dir ./customer-cubic8
+  hc-cli beta doctor
+  hc-cli beta submit \
+    --air ./customer-cubic8/air.json \
+    --qualification-trace ./customer-cubic8/qualification.trace \
+    --qualification-public-inputs ./customer-cubic8/qualification-public-inputs.json \
+    --job-trace ./customer-cubic8/job.trace \
+    --row-count 16384 \
+    --job-public-inputs ./customer-cubic8/job-public-inputs.json \
+    --policy ./customer-cubic8/policy.json \
+    --output-bundle ./customer-cubic8/proof-bundle.json \
+    --state ./customer-cubic8/resume-state.json
+  ```
+
+  Credentials come only from `TINYZKP_API_KEY` or an owner-only credentials file. Resume state is mode `0600`, is input- and release-bound, and never contains credentials or presigned URLs. Interrupted upload attempts obtain fresh URLs without changing the logical AIR/job idempotency operations.
+
+  Then run the evidence-specific negative matrix:
 
   ```sh
   export TINYZKP_CLI=/opt/tinyzkp/bin/hc-cli
@@ -84,6 +105,8 @@ Production remains in containment until the signed `public_beta` authorization m
 - Run the resumable 24-hour allowlisted canary with `scripts/canary/run_public_beta_canary.py` and an owner-controlled driver implementing `proof`, `cancel`, `billing`, and `audit` subcommands. The harness pins the driver digest, records one proof per hour, runs cancellation/refund every six hours, performs both tagged live billing canaries, and writes owner-only state after every event. Validate its evidence with `validate_public_beta_canary.py`.
 
 ## Activation
+
+The signed candidate `04e8af8ed0be29433adc60730ab5e3eef13b13aa` is explicitly abandoned for activation. Its artifacts and evidence are comparison data only; `activate_public_beta.py` rejects it even if an authorization is supplied.
 
 1. Package the private evidence workspace as `public-beta-evidence.tar.gz` with every path rooted under `release-evidence/`, and attach it to a private draft evidence release. The manifest must be `release-evidence/public-beta-evidence.json` and every referenced artifact must remain under that root.
 2. Tag the unchanged candidate `public-beta-v*`, then dispatch `public-beta-release.yml` on that tag with the private evidence release tag. The workflow safely extracts and verifies the evidence, then signs the public-beta authorization without rebuilding the candidate images.

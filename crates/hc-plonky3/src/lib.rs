@@ -6,6 +6,7 @@
 
 #![deny(unsafe_op_in_unsafe_fn)]
 
+pub mod beta_fixtures;
 mod bounded_pcs;
 mod bounded_prover;
 mod checkpoint;

@@ -5,6 +5,7 @@
   "currency": "USD",
   "credit_unit": "1 credit = 1 USD",
   "automatic_overages": false,
+  "payg": {"minimum_topup":25,"concurrent_jobs":1,"retention_days":7,"custom_air":true},
   "plans": [
     {"sku":"builder_monthly","price":49,"monthly_credits":49,"concurrent_jobs":1,"retention_days":7},
     {"sku":"pro_monthly","price":199,"monthly_credits":210,"concurrent_jobs":2,"retention_days":30},

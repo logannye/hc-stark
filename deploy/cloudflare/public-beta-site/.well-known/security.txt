@@ -1,0 +1,5 @@
+Contact: https://github.com/logannye/hc-stark/security/advisories/new
+Policy: https://tinyzkp.com/security
+Preferred-Languages: en
+Canonical: https://tinyzkp.com/.well-known/security.txt
+Expires: 2027-07-13T00:00:00Z

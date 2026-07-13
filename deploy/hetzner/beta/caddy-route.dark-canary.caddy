@@ -3,5 +3,8 @@
 }
 
 (tinyzkp_beta_read_backend) {
-  respond `{"error":{"code":"operator_canary_only","message":"The paid beta is restricted to allowlisted operators"}}` 503
+  # The API itself enforces the immutable GitHub allowlist and API-key tenant.
+  # Keeping read routes available here lets the signed production-endpoint CLI
+  # run the complete dark lifecycle without a test-only endpoint override.
+  reverse_proxy 127.0.0.1:8090
 }

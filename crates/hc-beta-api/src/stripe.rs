@@ -18,6 +18,8 @@ pub struct StripeClient {
     secret_key: String,
     webhook_secret: String,
     portal_configuration: String,
+    product_tax_code: String,
+    webhook_endpoint: String,
     prices: HashMap<String, String>,
     livemode: bool,
 }
@@ -61,6 +63,8 @@ impl StripeClient {
         secret_key: String,
         webhook_secret: String,
         portal_configuration: String,
+        product_tax_code: String,
+        webhook_endpoint: String,
         prices_json: &str,
     ) -> anyhow::Result<Self> {
         let prices: HashMap<String, String> = serde_json::from_str(prices_json)?;
@@ -90,6 +94,8 @@ impl StripeClient {
             secret_key,
             webhook_secret,
             portal_configuration,
+            product_tax_code,
+            webhook_endpoint,
             prices,
             livemode,
         })
@@ -97,6 +103,58 @@ impl StripeClient {
 
     pub fn livemode(&self) -> bool {
         self.livemode
+    }
+
+    /// Fail startup when the isolated beta catalog, Portal, tax code, or
+    /// webhook destination is missing or belongs to the wrong Stripe mode.
+    pub async fn preflight(&self) -> anyhow::Result<()> {
+        let mut paths = vec![
+            format!("/v1/tax_codes/{}", self.product_tax_code),
+            format!(
+                "/v1/billing_portal/configurations/{}",
+                self.portal_configuration
+            ),
+            format!("/v1/webhook_endpoints/{}", self.webhook_endpoint),
+        ];
+        paths.extend(
+            self.prices
+                .values()
+                .map(|price| format!("/v1/prices/{price}")),
+        );
+        for path in paths {
+            let object = self
+                .retrieve(&path)
+                .await
+                .map_err(|error| anyhow::anyhow!(error))?;
+            if object
+                .get("livemode")
+                .and_then(Value::as_bool)
+                .is_some_and(|mode| mode != self.livemode)
+            {
+                anyhow::bail!("Stripe beta preflight mode mismatch for {path}");
+            }
+            if path.contains("/prices/")
+                && object.get("active").and_then(Value::as_bool) != Some(true)
+            {
+                anyhow::bail!("Stripe beta price is not active: {path}");
+            }
+            if path.contains("/prices/") {
+                let product_id = object
+                    .get("product")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow::anyhow!("Stripe beta price has no product: {path}"))?;
+                let product = self
+                    .retrieve(&format!("/v1/products/{product_id}"))
+                    .await
+                    .map_err(|error| anyhow::anyhow!(error))?;
+                if product.get("tax_code").and_then(Value::as_str)
+                    != Some(self.product_tax_code.as_str())
+                {
+                    anyhow::bail!("Stripe beta product tax code is not approved: {product_id}");
+                }
+            }
+        }
+        Ok(())
     }
 
     pub async fn create_customer(
@@ -138,6 +196,9 @@ impl StripeClient {
         let mut fields = vec![
             ("mode", mode),
             ("customer", params.customer_id),
+            ("automatic_tax[enabled]", "true"),
+            ("billing_address_collection", "required"),
+            ("customer_update[address]", "auto"),
             ("line_items[0][price]", price.as_str()),
             ("line_items[0][quantity]", "1"),
             ("client_reference_id", params.tenant_id),
@@ -355,6 +416,8 @@ mod tests {
             "sk_test_only".into(),
             "whsec_test_only".into(),
             "bpc_test".into(),
+            "txcd_test".into(),
+            "we_test".into(),
             r#"{"builder_monthly":"price_builder","pro_monthly":"price_pro","scale_beta_monthly":"price_scale","topup_25":"price_25","topup_100":"price_100","topup_500":"price_500"}"#,
         )
         .unwrap()

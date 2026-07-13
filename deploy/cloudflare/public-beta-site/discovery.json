@@ -9,6 +9,13 @@
     "hosted_proving": true,
     "hosted_verification": true
   },
+  "capabilities": {
+    "signup": true,
+    "checkout": true,
+    "job_submission": true,
+    "verification": true,
+    "payg": true
+  },
   "profile": {
     "field": "Goldilocks",
     "plonky3": "0.6.1",

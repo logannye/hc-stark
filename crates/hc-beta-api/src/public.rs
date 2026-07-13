@@ -55,6 +55,7 @@ pub async fn github_start(
     Query(query): Query<GithubStartQuery>,
 ) -> Result<Redirect, ApiError> {
     ensure_writes(&state)?;
+    ensure_operational(&state, OperationalCapability::Signup).await?;
     if !query.return_path.starts_with('/') || query.return_path.starts_with("//") {
         return Err(ApiError::Invalid("invalid_return_path"));
     }
@@ -81,6 +82,7 @@ pub async fn github_callback(
     Query(query): Query<GithubCallbackQuery>,
 ) -> Result<Response, ApiError> {
     ensure_writes(&state)?;
+    ensure_operational(&state, OperationalCapability::Signup).await?;
     let mut tx = state.pool.begin().await?;
     let row = sqlx::query(
         "UPDATE beta_oauth_states SET consumed_at=now()
@@ -150,36 +152,14 @@ pub async fn github_callback(
         .bind(&tenant_id)
         .execute(&mut *tx)
         .await?;
-    let granted = sqlx::query(
+    sqlx::query(
         "INSERT INTO beta_sandbox_grants (provider,provider_user_id,original_tenant_id)
          VALUES ('github',$1,$2) ON CONFLICT DO NOTHING",
     )
     .bind(&github_id)
     .bind(&tenant_id)
     .execute(&mut *tx)
-    .await?
-    .rows_affected()
-        == 1;
-    if granted {
-        sqlx::query(
-            "UPDATE beta_credit_accounts SET purchased_millicredits=purchased_millicredits+1000,
-                    version=version+1,updated_at=now() WHERE tenant_id=$1",
-        )
-        .bind(&tenant_id)
-        .execute(&mut *tx)
-        .await?;
-        sqlx::query(
-            "INSERT INTO beta_credit_events
-                 (event_id,tenant_id,event_type,purchased_delta_millicredits,operation_key,metadata)
-             VALUES ($1,$2,'sandbox_grant',1000,$3,$4)",
-        )
-        .bind(Uuid::new_v4())
-        .bind(&tenant_id)
-        .bind(format!("sandbox:github:{github_id}"))
-        .bind(json!({"provider":"github","provider_user_id":github_id}))
-        .execute(&mut *tx)
-        .await?;
-    }
+    .await?;
     let session = auth::random_token(32);
     sqlx::query(
         "INSERT INTO beta_sessions (session_hash,tenant_id,expires_at)
@@ -218,8 +198,11 @@ pub async fn me(
 ) -> Result<Json<MeResponse>, ApiError> {
     let tenant = auth::authenticate(&headers, &state).await?;
     let row = sqlx::query(
-        "SELECT subscription_millicredits,purchased_millicredits,reserved_millicredits,paid_work_frozen
-           FROM beta_credit_accounts WHERE tenant_id=$1",
+        "SELECT a.subscription_millicredits,a.purchased_millicredits,a.reserved_millicredits,
+                a.paid_work_frozen,(SELECT g.entitlement_state FROM beta_sandbox_grants g
+                  JOIN beta_auth_identities i ON i.provider=g.provider AND i.provider_user_id=g.provider_user_id
+                 WHERE i.tenant_id=a.tenant_id LIMIT 1) AS sandbox_entitlement
+           FROM beta_credit_accounts a WHERE tenant_id=$1",
     )
     .bind(&tenant.tenant_id)
     .fetch_one(&state.pool)
@@ -231,6 +214,7 @@ pub async fn me(
         purchased_millicredits: as_u64(row.get::<i64, _>("purchased_millicredits"))?,
         reserved_millicredits: as_u64(row.get::<i64, _>("reserved_millicredits"))?,
         paid_work_frozen: row.get("paid_work_frozen"),
+        sandbox_entitlement: row.get("sandbox_entitlement"),
     }))
 }
 
@@ -248,14 +232,8 @@ pub async fn create_api_key(
     let hash = idempotency::request_hash(&request)?;
     let mut tx = state.pool.begin().await?;
     match idempotency::begin(&mut tx, &tenant.tenant_id, "create_api_key", key, &hash).await? {
-        IdempotencyOutcome::Replay { status, mut body } => {
+        IdempotencyOutcome::Replay { status, body } => {
             tx.commit().await?;
-            if let Some(object) = body.as_object_mut() {
-                object.insert(
-                    "key".into(),
-                    Value::String(derive_api_key(&state, &tenant, key)),
-                );
-            }
             return idempotency::replay(status, body);
         }
         IdempotencyOutcome::New => {}
@@ -277,9 +255,9 @@ pub async fn create_api_key(
     let response = ApiKeyResponse {
         id,
         prefix,
-        key: raw,
+        key: Some(raw),
     };
-    let stored = json!({"id":id,"prefix":response.prefix});
+    let stored = json!({"id":id,"prefix":response.prefix,"key":null});
     sqlx::query(
         "UPDATE beta_idempotency_keys SET response_status=201,response_json=$4,resource_id=$5
           WHERE tenant_id=$1 AND operation=$2 AND idempotency_key=$3",
@@ -298,7 +276,7 @@ pub async fn create_api_key(
 pub async fn list_api_keys(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<ApiKeyListResponse>, ApiError> {
     let tenant = auth::authenticate(&headers, &state).await?;
     let rows = sqlx::query(
         "SELECT api_key_id,key_prefix,label,
@@ -309,45 +287,77 @@ pub async fn list_api_keys(
     .bind(&tenant.tenant_id)
     .fetch_all(&state.pool)
     .await?;
-    Ok(Json(json!({
-        "api_keys": rows.into_iter().map(|row| json!({
-            "id": row.get::<Uuid,_>("api_key_id"),
-            "prefix": row.get::<String,_>("key_prefix"),
-            "label": row.get::<String,_>("label"),
-            "created_at": row.get::<i64,_>("created_at_epoch"),
-            "revoked_at": row.get::<Option<i64>,_>("revoked_at_epoch"),
-        })).collect::<Vec<_>>()
-    })))
+    Ok(Json(ApiKeyListResponse {
+        api_keys: rows
+            .into_iter()
+            .map(|row| ApiKeySummary {
+                id: row.get("api_key_id"),
+                prefix: row.get("key_prefix"),
+                label: row.get("label"),
+                created_at: row.get("created_at_epoch"),
+                revoked_at: row.get("revoked_at_epoch"),
+            })
+            .collect(),
+    }))
 }
 
 pub async fn revoke_api_key(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     headers: HeaderMap,
-) -> Result<StatusCode, ApiError> {
+) -> Result<Response, ApiError> {
     let tenant = auth::authenticate(&headers, &state).await?;
+    let key = idempotency_key(&headers)?;
+    let hash = hex::encode(Sha256::digest(id.as_bytes()));
+    let mut tx = state.pool.begin().await?;
+    if let IdempotencyOutcome::Replay { status, body } =
+        idempotency::begin(&mut tx, &tenant.tenant_id, "revoke_api_key", key, &hash).await?
+    {
+        tx.commit().await?;
+        return idempotency::replay(status, body);
+    }
     let changed = sqlx::query(
         "UPDATE beta_api_keys SET revoked_at=COALESCE(revoked_at,now())
           WHERE api_key_id=$1 AND tenant_id=$2",
     )
     .bind(id)
     .bind(&tenant.tenant_id)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?
     .rows_affected();
     if changed == 0 {
         Err(ApiError::NotFound)
     } else {
-        Ok(StatusCode::NO_CONTENT)
+        let response = RevokeApiKeyResponse { id, revoked: true };
+        idempotency::finish(
+            &mut tx,
+            &tenant.tenant_id,
+            "revoke_api_key",
+            key,
+            StatusCode::OK,
+            &response,
+            Some(&id.to_string()),
+        )
+        .await?;
+        tx.commit().await?;
+        Ok((StatusCode::OK, Json(response)).into_response())
     }
 }
 
 pub async fn delete_account(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<StatusCode, ApiError> {
+) -> Result<Response, ApiError> {
     let tenant = auth::authenticate(&headers, &state).await?;
+    let key = idempotency_key(&headers)?;
     let mut tx = state.pool.begin().await?;
+    let hash = hex::encode(Sha256::digest(b"delete-account-v1"));
+    if let IdempotencyOutcome::Replay { status, body } =
+        idempotency::begin(&mut tx, &tenant.tenant_id, "delete_account", key, &hash).await?
+    {
+        tx.commit().await?;
+        return idempotency::replay(status, body);
+    }
     let active: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM beta_proof_jobs WHERE tenant_id=$1
           AND status IN ('queued','leased','proving','verifying','cancel_requested')",
@@ -393,8 +403,19 @@ pub async fn delete_account(
     .bind(now_millis())
     .execute(&mut *tx)
     .await?;
+    let response = DeleteAccountResponse { deleted: true };
+    idempotency::finish(
+        &mut tx,
+        &tenant.tenant_id,
+        "delete_account",
+        key,
+        StatusCode::OK,
+        &response,
+        Some(&tenant.tenant_id),
+    )
+    .await?;
     tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok((StatusCode::OK, Json(response)).into_response())
 }
 
 pub async fn register_air(
@@ -567,10 +588,8 @@ pub async fn create_job(
     Json(request): Json<CreateJobRequest>,
 ) -> Result<Response, ApiError> {
     ensure_writes(&state)?;
+    ensure_operational(&state, OperationalCapability::JobSubmission).await?;
     let tenant = auth::authenticate(&headers, &state).await?;
-    if tenant.plan == "sandbox" {
-        return Err(ApiError::PaymentRequired);
-    }
     let key = idempotency_key(&headers)?;
     let hash = idempotency::request_hash(&request)?;
     if let Some(IdempotencyOutcome::Replay { status, body }) =
@@ -596,6 +615,15 @@ pub async fn create_job(
         serde_json::from_value(row.get("package_json")).map_err(|_| ApiError::Internal)?;
     let manifest: TraceManifestV1 =
         serde_json::from_value(row.get("manifest_json")).map_err(|_| ApiError::Internal)?;
+    if tenant.plan == "sandbox" {
+        let digest = hex::encode(air.digest().map_err(|_| ApiError::Invalid("invalid_air"))?);
+        let allowed = hc_plonky3::beta_fixtures::beta_fixture_air_digests()
+            .into_iter()
+            .any(|(_, fixture_digest)| fixture_digest == digest);
+        if !allowed || manifest.logical_rows > (1 << 16) {
+            return Err(ApiError::Invalid("sandbox_fixture_only"));
+        }
+    }
     request
         .public_inputs
         .validate_for_air(&air)
@@ -613,12 +641,16 @@ pub async fn create_job(
         .and_then(|value| u64::try_from(value).ok())
         .filter(|value| *value > 0)
         .ok_or(ApiError::Unavailable("no_healthy_worker"))?;
-    let estimate = admission_estimate(&air, &manifest, &request.public_inputs)?;
+    let mut estimate = admission_estimate(&air, &manifest, &request.public_inputs)?;
     if estimate.resources.peak_resident_bytes > MAX_PREDICTED_RSS
         || estimate.predicted_wall_time_ms > MAX_PREDICTED_WALL_MS
         || estimate.resources.scratch_high_water_bytes > worker_free.saturating_mul(70) / 100
     {
         return Err(ApiError::Invalid("job_exceeds_beta_limits"));
+    }
+    if tenant.plan == "sandbox" {
+        estimate.quoted_charge_millicredits = 0;
+        estimate.reservation_millicredits = 0;
     }
     let mut tx = state.pool.begin().await?;
     if let IdempotencyOutcome::Replay { status, body } =
@@ -636,6 +668,22 @@ pub async fn create_job(
     .await?;
     if account.get::<bool, _>("paid_work_frozen") {
         return Err(ApiError::Unavailable("paid_work_frozen"));
+    }
+    if tenant.plan == "sandbox" {
+        let sandbox = sqlx::query(
+            "SELECT g.entitlement_state
+               FROM beta_sandbox_grants g
+               JOIN beta_auth_identities i ON i.provider=g.provider
+                AND i.provider_user_id=g.provider_user_id
+              WHERE i.tenant_id=$1 FOR UPDATE OF g",
+        )
+        .bind(&tenant.tenant_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(ApiError::Conflict("sandbox_entitlement_missing"))?;
+        if sandbox.get::<String, _>("entitlement_state") != "available" {
+            return Err(ApiError::Conflict("sandbox_sample_already_used"));
+        }
     }
     let concurrency_limit = plan_concurrency(&tenant.plan);
     let active: i64 = sqlx::query_scalar(
@@ -682,9 +730,9 @@ pub async fn create_job(
              (job_id,tenant_id,air_package_id,upload_id,status,estimate_json,
               public_inputs_json,public_inputs_digest_hex,reserved_millicredits,
               reserved_subscription_millicredits,reserved_purchased_millicredits,
-              release_sha,retention_expires_at)
+              release_sha,retention_expires_at,sandbox_job)
          VALUES ($1,$2,$3,$4,'queued',$5,$6,$7,$8,$9,$10,$11,
-                 now()+make_interval(days=>$12))",
+                 now()+make_interval(days=>$12),$13)",
     )
     .bind(job_id)
     .bind(&tenant.tenant_id)
@@ -698,8 +746,22 @@ pub async fn create_job(
     .bind(to_i64(reserved_purchased)?)
     .bind(&state.config.release_sha)
     .bind(retention_days)
+    .bind(tenant.plan == "sandbox")
     .execute(&mut *tx)
     .await?;
+    if tenant.plan == "sandbox" {
+        sqlx::query(
+            "UPDATE beta_sandbox_grants g SET entitlement_state='reserved',reserved_job_id=$2,
+                    reserved_at=now(),consumed_at=NULL
+               FROM beta_auth_identities i
+              WHERE i.tenant_id=$1 AND i.provider=g.provider
+                AND i.provider_user_id=g.provider_user_id AND g.entitlement_state='available'",
+        )
+        .bind(&tenant.tenant_id)
+        .bind(job_id)
+        .execute(&mut *tx)
+        .await?;
+    }
     sqlx::query(
         "INSERT INTO beta_credit_events
              (event_id,tenant_id,event_type,subscription_delta_millicredits,
@@ -744,7 +806,8 @@ pub async fn get_job(
 ) -> Result<Json<JobResponse>, ApiError> {
     let tenant = auth::authenticate(&headers, &state).await?;
     let row = sqlx::query(
-        "SELECT status,estimate_json,progress_json,settled_millicredits,error_code
+        "SELECT status,estimate_json,progress_json,settled_millicredits,
+                measured_cost_millicredits,realized_gross_margin_bps,resource_report_json,error_code
            FROM beta_proof_jobs WHERE job_id=$1 AND tenant_id=$2",
     )
     .bind(id)
@@ -762,6 +825,16 @@ pub async fn get_job(
             .get::<Option<i64>, _>("settled_millicredits")
             .map(as_u64)
             .transpose()?,
+        measured_cost_millicredits: row
+            .get::<Option<i64>, _>("measured_cost_millicredits")
+            .map(as_u64)
+            .transpose()?,
+        realized_gross_margin_bps: row.get("realized_gross_margin_bps"),
+        resource_report: row
+            .get::<Option<Value>, _>("resource_report_json")
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| ApiError::Internal)?,
         error_code: row.get("error_code"),
     }))
 }
@@ -769,7 +842,7 @@ pub async fn get_job(
 pub async fn list_jobs(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<JobListResponse>, ApiError> {
     let tenant = auth::authenticate(&headers, &state).await?;
     let rows = sqlx::query(
         "SELECT job_id,status,estimate_json,settled_millicredits,error_code,
@@ -780,24 +853,33 @@ pub async fn list_jobs(
     .bind(&tenant.tenant_id)
     .fetch_all(&state.pool)
     .await?;
-    Ok(Json(json!({
-        "jobs": rows.into_iter().map(|row| json!({
-            "job_id": row.get::<Uuid,_>("job_id"),
-            "status": row.get::<String,_>("status"),
-            "estimate": row.get::<Value,_>("estimate_json"),
-            "settled_millicredits": row.get::<Option<i64>,_>("settled_millicredits"),
-            "error_code": row.get::<Option<String>,_>("error_code"),
-            "created_at": row.get::<i64,_>("created_at_epoch"),
-            "completed_at": row.get::<Option<i64>,_>("completed_at_epoch"),
-        })).collect::<Vec<_>>()
-    })))
+    Ok(Json(JobListResponse {
+        jobs: rows
+            .into_iter()
+            .map(|row| {
+                Ok(JobListItem {
+                    job_id: row.get("job_id"),
+                    status: row.get("status"),
+                    estimate: serde_json::from_value(row.get("estimate_json"))
+                        .map_err(|_| ApiError::Internal)?,
+                    settled_millicredits: row
+                        .get::<Option<i64>, _>("settled_millicredits")
+                        .map(as_u64)
+                        .transpose()?,
+                    error_code: row.get("error_code"),
+                    created_at: row.get("created_at_epoch"),
+                    completed_at: row.get("completed_at_epoch"),
+                })
+            })
+            .collect::<Result<Vec<_>, ApiError>>()?,
+    }))
 }
 
 pub async fn cancel_job(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<CancelJobResponse>, ApiError> {
     let tenant = auth::authenticate(&headers, &state).await?;
     let key = idempotency_key(&headers)?;
     let mut tx = state.pool.begin().await?;
@@ -806,7 +888,9 @@ pub async fn cancel_job(
         idempotency::begin(&mut tx, &tenant.tenant_id, "cancel_job", key, &hash).await?
     {
         tx.commit().await?;
-        return Ok(Json(body));
+        return Ok(Json(
+            serde_json::from_value(body).map_err(|_| ApiError::Internal)?,
+        ));
     }
     let row = sqlx::query(
         "SELECT status,reserved_subscription_millicredits,reserved_purchased_millicredits
@@ -836,7 +920,10 @@ pub async fn cancel_job(
         }
         _ => return Err(ApiError::Internal),
     };
-    let response = json!({"job_id":id,"status":new_status});
+    let response = CancelJobResponse {
+        job_id: id,
+        status: new_status.to_owned(),
+    };
     idempotency::finish(
         &mut tx,
         &tenant.tenant_id,
@@ -1038,12 +1125,34 @@ pub(crate) async fn release_reservation(
     .bind(Uuid::new_v4()).bind(tenant_id).bind(to_i64(subscription)?).bind(to_i64(purchased)?)
     .bind(-to_i64(total)?).bind(job_id).bind(format!("job:{job_id}:release"))
     .bind(json!({"reason":final_status})).execute(&mut **tx).await?;
+    match final_status {
+        "platform_failed" => {
+            sqlx::query(
+                "UPDATE beta_sandbox_grants SET entitlement_state='available',reserved_job_id=NULL,
+                        reserved_at=NULL,consumed_at=NULL WHERE reserved_job_id=$1",
+            )
+            .bind(job_id)
+            .execute(&mut **tx)
+            .await?;
+        }
+        "cancelled" => {
+            sqlx::query(
+                "UPDATE beta_sandbox_grants SET entitlement_state='available',reserved_job_id=NULL,
+                        reserved_at=NULL,consumed_at=NULL
+                  WHERE reserved_job_id=$1 AND entitlement_state='reserved'",
+            )
+            .bind(job_id)
+            .execute(&mut **tx)
+            .await?;
+        }
+        _ => {}
+    }
     Ok(())
 }
 
 fn plan_concurrency(plan: &str) -> u32 {
     match plan {
-        "builder" => 1,
+        "sandbox" | "payg" | "builder" => 1,
         "pro" => 2,
         "scale_beta" => 4,
         _ => 0,
@@ -1052,7 +1161,7 @@ fn plan_concurrency(plan: &str) -> u32 {
 
 fn plan_retention_days(plan: &str) -> i32 {
     match plan {
-        "builder" => 7,
+        "sandbox" | "payg" | "builder" => 7,
         "pro" => 30,
         "scale_beta" => 90,
         _ => 1,
@@ -1072,10 +1181,14 @@ fn derive_api_key(state: &AppState, tenant: &Tenant, idempotency_key: &str) -> S
 }
 
 fn idempotency_key(headers: &HeaderMap) -> Result<&str, ApiError> {
-    headers
+    let key = headers
         .get("idempotency-key")
         .and_then(|value| value.to_str().ok())
-        .ok_or(ApiError::Invalid("missing_idempotency_key"))
+        .ok_or(ApiError::Invalid("missing_idempotency_key"))?;
+    if !(8..=200).contains(&key.len()) || !key.bytes().all(|byte| byte.is_ascii_graphic()) {
+        return Err(ApiError::Invalid("invalid_idempotency_key"));
+    }
+    Ok(key)
 }
 
 pub(crate) fn ensure_writes(state: &AppState) -> Result<(), ApiError> {
@@ -1083,6 +1196,31 @@ pub(crate) fn ensure_writes(state: &AppState) -> Result<(), ApiError> {
         Ok(())
     } else {
         Err(ApiError::Unavailable("beta_writes_disabled"))
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum OperationalCapability {
+    Signup,
+    Checkout,
+    JobSubmission,
+}
+
+pub(crate) async fn ensure_operational(
+    state: &AppState,
+    capability: OperationalCapability,
+) -> Result<(), ApiError> {
+    let column = match capability {
+        OperationalCapability::Signup => "signup_enabled",
+        OperationalCapability::Checkout => "checkout_enabled",
+        OperationalCapability::JobSubmission => "job_submission_enabled",
+    };
+    let query = format!("SELECT {column} FROM beta_operational_flags WHERE singleton=true");
+    let enabled: bool = sqlx::query_scalar(&query).fetch_one(&state.pool).await?;
+    if enabled {
+        Ok(())
+    } else {
+        Err(ApiError::Unavailable("operationally_contained"))
     }
 }
 
@@ -1108,6 +1246,8 @@ mod tests {
     #[test]
     fn plan_limits_are_fail_closed() {
         assert_eq!(plan_concurrency("builder"), 1);
+        assert_eq!(plan_concurrency("payg"), 1);
+        assert_eq!(plan_concurrency("sandbox"), 1);
         assert_eq!(plan_concurrency("pro"), 2);
         assert_eq!(plan_concurrency("scale_beta"), 4);
         assert_eq!(plan_concurrency("unknown"), 0);

@@ -26,6 +26,8 @@ pub async fn checkout(
 ) -> Result<Response, ApiError> {
     let tenant = auth::authenticate(&headers, &state).await?;
     crate::public::ensure_writes(&state)?;
+    crate::public::ensure_operational(&state, crate::public::OperationalCapability::Checkout)
+        .await?;
     if request.synthetic_canary && state.config.exposure != crate::config::ExposureMode::DarkCanary
     {
         return Err(ApiError::Invalid("synthetic_canary_requires_dark_mode"));
@@ -400,7 +402,7 @@ async fn process_event(state: &AppState, event: &StripeEvent) -> Result<Value, A
         | "customer.subscription.updated"
         | "customer.subscription.deleted" => {
             let status = string_at(object, "/status").unwrap_or_else(|| "deleted".into());
-            let plan = sku.as_deref().and_then(plan_for_sku).unwrap_or("sandbox");
+            let subscription_plan = sku.as_deref().and_then(plan_for_sku);
             let subscription_id = if event.event_type.ends_with("deleted") {
                 None
             } else {
@@ -433,6 +435,26 @@ async fn process_event(state: &AppState, event: &StripeEvent) -> Result<Value, A
             )
             .execute(&mut *tx)
             .await?;
+            let active_subscription = matches!(
+                status.as_str(),
+                "active" | "trialing" | "past_due" | "unpaid"
+            );
+            let plan = if active_subscription {
+                subscription_plan.unwrap_or("sandbox")
+            } else {
+                let has_payg: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM beta_credit_grants
+                       WHERE tenant_id=$1 AND grant_kind='topup' AND NOT synthetic_canary)",
+                )
+                .bind(&tenant_id)
+                .fetch_one(&mut *tx)
+                .await?;
+                if has_payg {
+                    "payg"
+                } else {
+                    "sandbox"
+                }
+            };
             sqlx::query("UPDATE tenants SET plan=$2,updated_at_ms=(extract(epoch from now())*1000)::bigint WHERE tenant_id=$1")
                 .bind(&tenant_id).bind(plan).execute(&mut *tx).await?;
         }
@@ -863,6 +885,19 @@ async fn grant_credits(
         .bind(millicredits)
         .execute(&mut **tx)
         .await?;
+    // A real paid top-up is the PAYG entitlement. It upgrades Sandbox exactly
+    // once and never alters an active subscription plan. Refunds intentionally
+    // do not downgrade PAYG; the balance/freeze rules govern later admission.
+    let synthetic_canary = metadata(object, "tinyzkp_synthetic_canary").as_deref() == Some("true");
+    if !subscription && !synthetic_canary {
+        sqlx::query(
+            "UPDATE tenants SET plan='payg',updated_at_ms=(extract(epoch from now())*1000)::bigint
+              WHERE tenant_id=$1 AND plan='sandbox'",
+        )
+        .bind(tenant_id)
+        .execute(&mut **tx)
+        .await?;
+    }
     Ok(())
 }
 
@@ -1198,10 +1233,14 @@ fn validate_redirect(candidate: &str, dashboard: &str) -> Result<(), ApiError> {
 }
 
 fn idempotency_key(headers: &HeaderMap) -> Result<&str, ApiError> {
-    headers
+    let key = headers
         .get("idempotency-key")
         .and_then(|value| value.to_str().ok())
-        .ok_or(ApiError::Invalid("missing_idempotency_key"))
+        .ok_or(ApiError::Invalid("missing_idempotency_key"))?;
+    if !(8..=200).contains(&key.len()) || !key.bytes().all(|byte| byte.is_ascii_graphic()) {
+        return Err(ApiError::Invalid("invalid_idempotency_key"));
+    }
+    Ok(key)
 }
 
 #[cfg(test)]

@@ -90,8 +90,12 @@ def require_executable(path: Path) -> Path:
 
 
 def activate(args: argparse.Namespace) -> None:
+    root = Path(__file__).resolve().parents[2]
     if len(args.release_sha) != 40 or any(byte not in "0123456789abcdef" for byte in args.release_sha):
         raise SystemExit("release SHA must be a full lowercase Git commit")
+    abandoned = json.loads((root / "release" / "abandoned-public-beta-candidates.json").read_text(encoding="utf-8"))
+    if any(candidate.get("release_sha") == args.release_sha for candidate in abandoned.get("candidates", [])):
+        raise SystemExit("this public-beta candidate is permanently abandoned and cannot be activated")
     if args.confirmation != "ACTIVATE_PUBLIC_BETA":
         raise SystemExit("explicit ACTIVATE_PUBLIC_BETA confirmation is required")
     token = os.environ.get(args.cloudflare_token_env, "")
@@ -102,7 +106,6 @@ def activate(args: argparse.Namespace) -> None:
     if discovery.get("service_status") != "public_beta" or discovery.get("release_sha") != args.release_sha:
         raise SystemExit("staged site identity does not match the release")
     smoke = require_executable(args.smoke_command)
-    root = Path(__file__).resolve().parents[2]
     previous = production_deployment(token, args.account_id, args.project)
     current: dict[str, Any] | None = None
     started = now()

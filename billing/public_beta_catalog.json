@@ -55,7 +55,7 @@
     }
   ],
   "sandbox": {
-    "credits": 1,
+    "hosted_sample_jobs": 1,
     "renewing": false,
     "maximum_rows": 65536,
     "workloads": "built_in_samples_only"

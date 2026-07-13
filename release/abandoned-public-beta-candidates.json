@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "candidates": [
+    {
+      "release_sha": "04e8af8ed0be29433adc60730ab5e3eef13b13aa",
+      "status": "abandoned",
+      "public_activation_permitted": false,
+      "artifacts_may_be_used_as_comparison_data": true,
+      "reason": "The candidate predates the usable Sandbox entitlement, PAYG transition, hosted CLI, complete OpenAPI, dedicated beta site policy, and autopilot operations contract."
+    }
+  ]
+}

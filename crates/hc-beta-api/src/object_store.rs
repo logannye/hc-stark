@@ -1,5 +1,6 @@
 use crate::error::ApiError;
 use aws_sdk_s3::{presigning::PresigningConfig, primitives::ByteStream, Client};
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::{collections::BTreeMap, time::Duration};
 
@@ -9,7 +10,7 @@ pub struct ObjectStore {
     bucket: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub struct SignedUrl {
     pub url: String,
     pub expires_in_seconds: u64,

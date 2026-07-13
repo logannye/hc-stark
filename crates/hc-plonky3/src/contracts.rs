@@ -613,19 +613,23 @@ impl HostedProofBundleV1 {
 }
 
 pub fn hosted_charge_millicredits(report: &HostedResourceReportV1) -> u64 {
-    let compute = report.wall_time_ms.saturating_mul(250).div_ceil(3_600_000);
-    let io = report
-        .total_read_bytes
-        .saturating_add(report.total_write_bytes)
-        .div_ceil(1024 * 1024 * 1024);
-    compute
-        .saturating_add(io)
-        .max(3)
+    hosted_measured_cost_millicredits(report)
         .saturating_mul(120)
         .div_ceil(100)
         .saturating_mul(100)
         .div_ceil(30)
         .max(10)
+}
+
+/// Direct metered compute and I/O cost before the operations reserve and
+/// public-beta gross-margin floor are applied.
+pub fn hosted_measured_cost_millicredits(report: &HostedResourceReportV1) -> u64 {
+    let compute = report.wall_time_ms.saturating_mul(250).div_ceil(3_600_000);
+    let io = report
+        .total_read_bytes
+        .saturating_add(report.total_write_bytes)
+        .div_ceil(1024 * 1024 * 1024);
+    compute.saturating_add(io).max(3)
 }
 
 impl ProofBundleV1 {
