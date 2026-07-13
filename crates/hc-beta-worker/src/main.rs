@@ -426,9 +426,87 @@ impl Worker {
             .lock()
             .await
             .insert(claim.job_id, cancellation.clone());
-        let result = self
-            .execute(&claim, &job_dir, &chunks_dir, cancellation)
+        let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<Value>();
+        let endpoint = format!("/internal/v1/jobs/{}/heartbeat", claim.job_id);
+        let initial: anyhow::Result<HeartbeatResponse> = self
+            .json(
+                Method::POST,
+                &endpoint,
+                &HeartbeatRequest {
+                    attempt: claim.attempt,
+                    lease_epoch: claim.lease_epoch,
+                    free_scratch_bytes: free_space(&self.config.scratch).unwrap_or(0),
+                    progress: Some(json!({"event":"lease_claimed"})),
+                    checkpoint_identity: checkpoint(&job_dir)
+                        .ok()
+                        .flatten()
+                        .map(|(_, identity)| identity),
+                },
+            )
             .await;
+        let mut heartbeat = None;
+        let result = match initial {
+            Err(error) => Err(error.context("initial lease heartbeat failed")),
+            Ok(initial) => {
+                if initial.cancel_requested {
+                    cancellation.cancel();
+                }
+                let heartbeat_token = cancellation.clone();
+                let heartbeat_worker = self.clone();
+                let heartbeat_claim = (claim.job_id, claim.attempt, claim.lease_epoch);
+                let heartbeat_job_dir = job_dir.to_path_buf();
+                heartbeat = Some(tokio::spawn(async move {
+                    let mut latest = None;
+                    loop {
+                        tokio::time::sleep(Duration::from_secs(30)).await;
+                        while let Ok(progress) = progress_rx.try_recv() {
+                            latest = Some(progress);
+                        }
+                        let endpoint = format!("/internal/v1/jobs/{}/heartbeat", heartbeat_claim.0);
+                        let response = heartbeat_worker
+                            .json::<_, HeartbeatResponse>(
+                                Method::POST,
+                                &endpoint,
+                                &HeartbeatRequest {
+                                    attempt: heartbeat_claim.1,
+                                    lease_epoch: heartbeat_claim.2,
+                                    free_scratch_bytes: free_space(
+                                        &heartbeat_worker.config.scratch,
+                                    )
+                                    .unwrap_or(0),
+                                    progress: latest.take(),
+                                    checkpoint_identity: checkpoint(&heartbeat_job_dir)
+                                        .ok()
+                                        .flatten()
+                                        .map(|(_, identity)| identity),
+                                },
+                            )
+                            .await;
+                        match response {
+                            Ok(response) if response.cancel_requested => {
+                                heartbeat_token.cancel();
+                                break;
+                            }
+                            Ok(_) => {}
+                            Err(error) => {
+                                tracing::warn!(%error, "heartbeat failed; cancelling local prover");
+                                heartbeat_token.cancel();
+                                break;
+                            }
+                        }
+                    }
+                }));
+                if cancellation.is_cancelled() {
+                    Err(anyhow::anyhow!("operation cancelled"))
+                } else {
+                    self.execute(&claim, &job_dir, &chunks_dir, cancellation, progress_tx)
+                        .await
+                }
+            }
+        };
+        if let Some(heartbeat) = heartbeat {
+            heartbeat.abort();
+        }
         self.active.lock().await.remove(&claim.job_id);
         if self.draining.load(Ordering::Acquire) && result.is_err() {
             if let Ok(Some((_, checkpoint_identity))) = checkpoint(&job_dir) {
@@ -499,6 +577,7 @@ impl Worker {
         job_dir: &Path,
         chunks_dir: &Path,
         cancellation: hc_plonky3::CancellationToken,
+        progress_tx: mpsc::UnboundedSender<Value>,
     ) -> anyhow::Result<()> {
         claim.air.validate().map_err(anyhow::Error::msg)?;
         claim
@@ -514,6 +593,9 @@ impl Worker {
         }
         let mut downloaded = 0u64;
         for (expected, signed) in claim.manifest.chunks.iter().zip(&claim.input_chunks) {
+            if cancellation.is_cancelled() {
+                bail!("operation cancelled");
+            }
             if expected.index != signed.index {
                 bail!("input chunk order mismatch");
             }
@@ -524,6 +606,7 @@ impl Worker {
                 &path,
                 expected.compressed_bytes,
                 &expected.blake3_hex,
+                &cancellation,
             )
             .await?;
             downloaded = downloaded.saturating_add(expected.compressed_bytes);
@@ -544,63 +627,24 @@ impl Worker {
             checkpoint_policy: CheckpointPolicy::RetainOnFailure,
         };
         private_dir(&policy.scratch_dir).await?;
-        let heartbeat_token = cancellation.clone();
-        let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<Value>();
-        let heartbeat_worker = self.clone();
-        let heartbeat_claim = (claim.job_id, claim.attempt, claim.lease_epoch);
-        let heartbeat_job_dir = job_dir.to_path_buf();
-        let heartbeat = tokio::spawn(async move {
-            let mut latest = None;
-            loop {
-                while let Ok(progress) = progress_rx.try_recv() {
-                    latest = Some(progress);
-                }
-                tokio::time::sleep(Duration::from_secs(30)).await;
-                let endpoint = format!("/internal/v1/jobs/{}/heartbeat", heartbeat_claim.0);
-                let response = heartbeat_worker
-                    .json::<_, HeartbeatResponse>(
-                        Method::POST,
-                        &endpoint,
-                        &HeartbeatRequest {
-                            attempt: heartbeat_claim.1,
-                            lease_epoch: heartbeat_claim.2,
-                            free_scratch_bytes: free_space(&heartbeat_worker.config.scratch)
-                                .unwrap_or(0),
-                            progress: latest.take(),
-                            checkpoint_identity: checkpoint(&heartbeat_job_dir)
-                                .ok()
-                                .flatten()
-                                .map(|(_, identity)| identity),
-                        },
-                    )
-                    .await;
-                match response {
-                    Ok(response) if response.cancel_requested => {
-                        heartbeat_token.cancel();
-                        break;
-                    }
-                    Ok(_) => {}
-                    Err(error) => {
-                        tracing::warn!(%error, "heartbeat failed; cancelling local prover");
-                        heartbeat_token.cancel();
-                        break;
-                    }
-                }
-            }
-        });
         let started = Instant::now();
         let air = claim.air.clone();
         let manifest = claim.manifest.clone();
         let public_inputs = claim.public_inputs.clone();
         let resume = checkpoint(job_dir)?.map(|(path, _)| path);
+        let prover_cancellation = cancellation.clone();
         let proof = tokio::task::spawn_blocking(move || {
             if let Some(checkpoint) = resume {
-                resume_resource_bounded_with_cancellation(&checkpoint, &workload, cancellation)
+                resume_resource_bounded_with_cancellation(
+                    &checkpoint,
+                    &workload,
+                    prover_cancellation,
+                )
             } else {
                 prove_resource_bounded_observed_with_cancellation(
                     &workload,
                     &policy,
-                    cancellation,
+                    prover_cancellation,
                     |event| {
                         let _ = progress_tx.send(
                             serde_json::to_value(event)
@@ -612,8 +656,10 @@ impl Worker {
         })
         .await
         .context("prover task panicked")?;
-        heartbeat.abort();
         let proof = proof.map_err(anyhow::Error::msg)?;
+        if cancellation.is_cancelled() {
+            bail!("operation cancelled");
+        }
         let proof_bundle = AirProofBundleV1::from_proof(
             air,
             manifest,
@@ -702,7 +748,11 @@ async fn download_exact(
     path: &Path,
     expected: u64,
     digest: &str,
+    cancellation: &hc_plonky3::CancellationToken,
 ) -> anyhow::Result<()> {
+    if cancellation.is_cancelled() {
+        bail!("operation cancelled");
+    }
     let mut request = http.get(&signed.url);
     for (name, value) in &signed.headers {
         request = request.header(name, value);
@@ -716,6 +766,9 @@ async fn download_exact(
     let mut total = 0u64;
     let mut hasher = blake3::Hasher::new();
     while let Some(chunk) = response.chunk().await? {
+        if cancellation.is_cancelled() {
+            bail!("operation cancelled");
+        }
         total = total.saturating_add(chunk.len() as u64);
         if total > expected {
             bail!("input chunk exceeded signed length");
@@ -1016,6 +1069,28 @@ mod tests {
         assert!(worker.reconcile_startup().await.unwrap().is_empty());
         assert!(!non_uuid.exists());
         assert!(!incomplete.exists());
+    }
+
+    #[tokio::test]
+    async fn cancelled_input_download_stops_before_network_io() {
+        let directory = TestDir::new();
+        let cancellation = hc_plonky3::CancellationToken::new();
+        cancellation.cancel();
+        let error = download_exact(
+            &Client::new(),
+            &SignedUrl {
+                url: "http://127.0.0.1:9/unreachable".into(),
+                headers: BTreeMap::new(),
+            },
+            &directory.path().join("chunk.zst"),
+            1,
+            &"0".repeat(64),
+            &cancellation,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(classify_error(&error), "cancelled");
+        assert!(!directory.path().join("chunk.zst").exists());
     }
 
     #[test]
