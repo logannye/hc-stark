@@ -93,9 +93,11 @@ def test_beta_cors_dark_route_and_webhook_remain_fail_closed():
     assert "@stripe_beta_webhook" in caddy
     assert caddy.index("@stripe_beta_webhook") < caddy.index("@beta_write")
     assert 'Access-Control-Allow-Credentials "true"' in caddy
-    assert "header_regexp Origin" in caddy
+    assert "header Origin https://tinyzkp.com" in caddy
+    assert 'Access-Control-Allow-Origin "{http.request.header.Origin}"' in caddy
     assert 'respond "" 204' in caddy
-    assert "operator_canary_only" in dark
+    assert "immutable GitHub allowlist" in dark
+    assert dark.count("reverse_proxy 127.0.0.1:8090") == 2
     assert "beta_writes_disabled" in rollback
     assert "TINYZKP_BETA_WRITES_ENABLED" in writes
     assert "restore" in writes and "flock -n" in writes
