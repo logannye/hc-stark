@@ -73,6 +73,18 @@ impl ObjectStore {
         })
     }
 
+    pub async fn health(&self) -> anyhow::Result<()> {
+        self.client
+            .head_bucket()
+            .bucket(&self.bucket)
+            .send()
+            .await
+            .map_err(|error| {
+                anyhow::anyhow!("private artifact bucket health check failed: {error}")
+            })?;
+        Ok(())
+    }
+
     pub async fn presign_download(&self, key: &str) -> Result<SignedUrl, ApiError> {
         let expires = Duration::from_secs(5 * 60);
         let request = self

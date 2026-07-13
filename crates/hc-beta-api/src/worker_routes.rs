@@ -186,14 +186,20 @@ pub async fn claim(
     if request.release_sha != state.config.release_sha {
         return Err(ApiError::Conflict("worker_release_mismatch"));
     }
+    if request.total_scratch_bytes == 0 || request.free_scratch_bytes > request.total_scratch_bytes
+    {
+        return Err(ApiError::Invalid("invalid_worker_storage_report"));
+    }
     let mut tx = state.pool.begin().await?;
     let worker = sqlx::query(
-        "UPDATE beta_workers SET free_scratch_bytes=$2,release_sha=$3,last_heartbeat_at=now()
+        "UPDATE beta_workers SET free_scratch_bytes=$2,total_scratch_bytes=$3,
+                release_sha=$4,last_heartbeat_at=now()
           WHERE worker_id=$1 AND enabled AND NOT draining
           RETURNING max_slots",
     )
     .bind(&worker_id)
     .bind(to_i64(request.free_scratch_bytes)?)
+    .bind(to_i64(request.total_scratch_bytes)?)
     .bind(&request.release_sha)
     .fetch_optional(&mut *tx)
     .await?
@@ -369,6 +375,10 @@ pub async fn heartbeat(
     Json(request): Json<WorkerHeartbeatRequest>,
 ) -> Result<Json<WorkerHeartbeatResponse>, ApiError> {
     let worker_id = auth::authenticate_worker(&headers, &state).await?;
+    if request.total_scratch_bytes == 0 || request.free_scratch_bytes > request.total_scratch_bytes
+    {
+        return Err(ApiError::Invalid("invalid_worker_storage_report"));
+    }
     let checkpoint_identity = request.checkpoint_identity.clone();
     let row = sqlx::query(
         "UPDATE beta_proof_jobs SET
@@ -387,10 +397,12 @@ pub async fn heartbeat(
     .fetch_optional(&state.pool).await?
     .ok_or(ApiError::Conflict("stale_lease"))?;
     sqlx::query(
-        "UPDATE beta_workers SET free_scratch_bytes=$2,last_heartbeat_at=now() WHERE worker_id=$1",
+        "UPDATE beta_workers SET free_scratch_bytes=$2,total_scratch_bytes=$3,
+                last_heartbeat_at=now() WHERE worker_id=$1",
     )
     .bind(&worker_id)
     .bind(to_i64(request.free_scratch_bytes)?)
+    .bind(to_i64(request.total_scratch_bytes)?)
     .execute(&state.pool)
     .await?;
     sqlx::query(

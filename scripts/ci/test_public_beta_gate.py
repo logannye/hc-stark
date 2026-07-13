@@ -181,3 +181,46 @@ def test_fault_semantics_require_one_verified_settlement_after_resume():
     ] = 2
     with pytest.raises(ValueError, match="settled once"):
         public_beta_gate.validate_fault_cases(cases)
+
+
+def test_autopilot_evidence_requires_one_alert_and_no_auto_reenable(tmp_path):
+    value = {
+        "schema_version": "public-beta-autopilot-evidence-v1",
+        "status": "passed",
+        "release_sha": "a" * 40,
+        "watchdog_triggers": {
+            trigger: {"contained": True, "alert_count": 1, "auto_reenabled": False}
+            for trigger in public_beta_gate.REQUIRED_WATCHDOG_TRIGGERS
+        },
+        "manual_recovery": {
+            "complete_invariant_check": True,
+            "explicit_operation": True,
+            "restored_all_flags": True,
+        },
+        "preserved_capabilities": {
+            capability: True
+            for capability in (
+                "verification", "balances", "portal", "cancellation", "status",
+                "account_deletion", "completed_downloads",
+            )
+        },
+        "owner_digest": {
+            "ledger_reconciled": True,
+            "redaction_validated": True,
+            "webhook_redacted": True,
+        },
+        "viability": {
+            "day_30_signed": True,
+            "day_60_signed": True,
+            "day_90_signed": True,
+            "failure_disables_signup_checkout_only": True,
+            "destructive_actions_require_separate_approval": True,
+        },
+    }
+    path = tmp_path / "autopilot.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    records = [(path, value)]
+    public_beta_gate.validate_autopilot(records, "a" * 40)
+    value["watchdog_triggers"]["r2_health_failure"]["auto_reenabled"] = True
+    with pytest.raises(ValueError, match="r2_health_failure"):
+        public_beta_gate.validate_autopilot(records, "a" * 40)

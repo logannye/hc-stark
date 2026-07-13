@@ -1,0 +1,10 @@
+[Unit]
+Description=TinyZKP API-host storage health report
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tinyzkp/deploy/hetzner/beta
+EnvironmentFile=/etc/tinyzkp/beta/compose.env
+ExecStart=/opt/tinyzkp/deploy/hetzner/beta/report-api-storage.sh

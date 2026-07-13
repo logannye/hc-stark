@@ -10,14 +10,10 @@ rule_files:
   - "/etc/prometheus/alerts.yml"
 
 scrape_configs:
-  - job_name: "hc-server"
+  - job_name: "hc-beta-api"
     metrics_path: /metrics
-    # HC_METRICS_TOKEN must match the value configured on hc-server.
-    # Prometheus does not interpolate env vars in this file directly; set the
-    # token value here or use credentials_file pointing to a file that
-    # contains only the raw token string.
     authorization:
       type: Bearer
-      credentials_file: /etc/prometheus/metrics_token
+      credentials_file: /etc/prometheus/beta_metrics_token
     static_configs:
-      - targets: ["hc-server:8080"]
+      - targets: ["beta-api:9091"]
