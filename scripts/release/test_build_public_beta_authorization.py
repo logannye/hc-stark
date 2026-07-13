@@ -13,7 +13,8 @@ def test_authorization_is_bound_to_every_required_gate(tmp_path):
     artifacts = {}
     for gate in required:
         path = tmp_path / f"{gate}.json"
-        path.write_text("{}\n")
+        path.write_text(json.dumps({"status": "passed", "release_sha": "a" * 40}) + "\n")
+        path.chmod(0o600)
         artifacts[gate] = [{"path": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}]
     evidence = tmp_path / "evidence.json"
     evidence.write_text(json.dumps({
@@ -22,7 +23,7 @@ def test_authorization_is_bound_to_every_required_gate(tmp_path):
         "release_sha": "a" * 40,
         "gates": artifacts,
     }))
+    evidence.chmod(0o600)
     result = builder.build(evidence, "a" * 40, root=tmp_path)
     assert result["status"] == "ready"
     assert result["verified_gate_ids"] == required
-
