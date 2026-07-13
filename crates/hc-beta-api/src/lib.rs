@@ -177,10 +177,12 @@ pub async fn run() -> anyhow::Result<()> {
     let worker = TcpListener::bind(worker_bind).await?;
     tracing::info!(%public_bind, %worker_bind, release_sha = %state.config.release_sha, "hc-beta-api ready");
     let public_task = axum::serve(public, public_router(state.clone()));
-    let worker_task = axum::serve(worker, worker_router(state));
+    let worker_task = axum::serve(worker, worker_router(state.clone()));
+    let billing_task = tokio::spawn(billing::run_event_processor(state));
     tokio::select! {
         result = public_task => result.context("public HTTP listener stopped")?,
         result = worker_task => result.context("worker HTTP listener stopped")?,
+        result = billing_task => result.context("billing event processor stopped")?,
         _ = tokio::signal::ctrl_c() => tracing::info!("shutdown requested"),
     }
     Ok(())

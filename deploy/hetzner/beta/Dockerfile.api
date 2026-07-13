@@ -2,7 +2,7 @@ FROM rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92e
 ARG HC_RELEASE_SHA
 WORKDIR /src
 COPY . .
-RUN cargo build --locked --release -p hc-beta-api --bin hc-beta-api --bin hc-beta-reconcile --bin hc-beta-retention
+RUN cargo build --locked --release -p hc-beta-api --bin hc-beta-api --bin hc-beta-reconcile --bin hc-beta-refund --bin hc-beta-retention
 RUN curl -fsSLo /tmp/cosign https://github.com/sigstore/cosign/releases/download/v2.4.3/cosign-linux-amd64 \
  && echo 'caaad125acef1cb81d58dcdc454a1e429d09a750d1e9e2b3ed1aed8964454708  /tmp/cosign' | sha256sum -c - \
  && chmod 0755 /tmp/cosign
@@ -16,6 +16,7 @@ RUN apt-get update \
 RUN useradd --system --uid 10001 --home /nonexistent --shell /usr/sbin/nologin tinyzkp
 COPY --from=build /src/target/release/hc-beta-api /usr/local/bin/hc-beta-api
 COPY --from=build /src/target/release/hc-beta-reconcile /usr/local/bin/hc-beta-reconcile
+COPY --from=build /src/target/release/hc-beta-refund /usr/local/bin/hc-beta-refund
 COPY --from=build /src/target/release/hc-beta-retention /usr/local/bin/hc-beta-retention
 COPY --from=build /tmp/cosign /usr/local/bin/cosign
 USER 10001:10001

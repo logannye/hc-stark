@@ -31,6 +31,7 @@ pub struct Config {
     pub stripe_webhook_secret: String,
     pub stripe_portal_configuration: String,
     pub stripe_prices_json: String,
+    pub reconciliation_hmac_key: [u8; 32],
 }
 
 #[derive(Deserialize)]
@@ -95,6 +96,7 @@ impl Config {
             stripe_webhook_secret: required("TINYZKP_STRIPE_WEBHOOK_SECRET")?,
             stripe_portal_configuration: required("TINYZKP_STRIPE_PORTAL_CONFIGURATION")?,
             stripe_prices_json: required("TINYZKP_STRIPE_PRICE_MAP_JSON")?,
+            reconciliation_hmac_key: decode_secret_32("TINYZKP_RECONCILIATION_HMAC_KEY")?,
         })
     }
 }

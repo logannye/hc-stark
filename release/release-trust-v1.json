@@ -30,6 +30,21 @@
     }
   },
   "schema_version": 1,
+  "stripe_cli": {
+    "platforms": {
+      "darwin-arm64": {
+        "archive_sha256": "a9e4aab06ef52ff779edf8394be70b4a13811bbd360b00a82dcce384adc7442a",
+        "archive_url": "https://github.com/stripe/stripe-cli/releases/download/v1.43.7/stripe_1.43.7_mac-os_arm64.tar.gz",
+        "sha256": "025f8cf635e683b2d559a2c6bfc56d2bbd71093da34fac4841002b702b072e78"
+      },
+      "linux-x86_64": {
+        "archive_sha256": "30055ff11cb1f0cf9a036caafd9eb8fe5f1d54d26e2b70a1dd3fcf66b932231a",
+        "archive_url": "https://github.com/stripe/stripe-cli/releases/download/v1.43.7/stripe_1.43.7_linux_x86_64.tar.gz",
+        "sha256": "a51651ac01829a026dea3e21ce7d60326c1c62e7b3854dafcef9beaae17d8fd0"
+      }
+    },
+    "version": "stripe version 1.43.7"
+  },
   "toolchains": {
     "fuzz": {
       "cargo_fuzz_executables": {},

@@ -19,6 +19,7 @@ pub struct StripeClient {
     webhook_secret: String,
     portal_configuration: String,
     prices: HashMap<String, String>,
+    livemode: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -34,6 +35,8 @@ pub struct StripeEvent {
     #[serde(rename = "type")]
     pub event_type: String,
     pub created: i64,
+    #[serde(default)]
+    pub livemode: bool,
     pub data: StripeEventData,
 }
 
@@ -47,6 +50,7 @@ pub struct CheckoutSessionParams<'a> {
     pub customer_id: &'a str,
     pub sku: &'a str,
     pub operation_id: &'a str,
+    pub release_sha: &'a str,
     pub success_url: &'a str,
     pub cancel_url: &'a str,
     pub synthetic_canary: bool,
@@ -74,13 +78,25 @@ impl StripeClient {
         {
             anyhow::bail!("Stripe beta price map is incomplete");
         }
+        let livemode = if secret_key.starts_with("sk_live_") {
+            true
+        } else if secret_key.starts_with("sk_test_") {
+            false
+        } else {
+            anyhow::bail!("Stripe key must be an sk_live_ or sk_test_ secret key");
+        };
         Ok(Self {
             http: Client::new(),
             secret_key,
             webhook_secret,
             portal_configuration,
             prices,
+            livemode,
         })
+    }
+
+    pub fn livemode(&self) -> bool {
+        self.livemode
     }
 
     pub async fn create_customer(
@@ -131,6 +147,7 @@ impl StripeClient {
             ("metadata[tinyzkp_tenant_id]", params.tenant_id),
             ("metadata[tinyzkp_sku]", params.sku),
             ("metadata[tinyzkp_operation_id]", params.operation_id),
+            ("metadata[tinyzkp_release_sha]", params.release_sha),
             ("metadata[tinyzkp_synthetic_canary]", canary),
         ];
         if mode == "subscription" {
@@ -144,6 +161,18 @@ impl StripeClient {
                     params.tenant_id,
                 ),
                 ("subscription_data[metadata][tinyzkp_sku]", params.sku),
+                (
+                    "subscription_data[metadata][tinyzkp_operation_id]",
+                    params.operation_id,
+                ),
+                (
+                    "subscription_data[metadata][tinyzkp_release_sha]",
+                    params.release_sha,
+                ),
+                (
+                    "subscription_data[metadata][tinyzkp_synthetic_canary]",
+                    canary,
+                ),
             ]);
         } else {
             fields.extend([
@@ -156,6 +185,18 @@ impl StripeClient {
                     params.tenant_id,
                 ),
                 ("payment_intent_data[metadata][tinyzkp_sku]", params.sku),
+                (
+                    "payment_intent_data[metadata][tinyzkp_operation_id]",
+                    params.operation_id,
+                ),
+                (
+                    "payment_intent_data[metadata][tinyzkp_release_sha]",
+                    params.release_sha,
+                ),
+                (
+                    "payment_intent_data[metadata][tinyzkp_synthetic_canary]",
+                    canary,
+                ),
             ]);
         }
         self.post_form("/v1/checkout/sessions", &fields, params.operation_id)
@@ -186,6 +227,47 @@ impl StripeClient {
             .get(format!("https://api.stripe.com{path}"))
             .basic_auth(&self.secret_key, Some(""))
             .header("Stripe-Version", API_VERSION)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        Ok(response)
+    }
+
+    pub async fn create_refund(
+        &self,
+        payment_intent: &str,
+        amount_minor: Option<u64>,
+        operation_id: &str,
+    ) -> Result<Value, ApiError> {
+        if !payment_intent.starts_with("pi_") || operation_id.is_empty() {
+            return Err(ApiError::Invalid("invalid_refund_request"));
+        }
+        let mut fields = vec![
+            ("payment_intent".to_owned(), payment_intent.to_owned()),
+            (
+                "metadata[tinyzkp_catalog]".to_owned(),
+                CATALOG_NAMESPACE.to_owned(),
+            ),
+            (
+                "metadata[tinyzkp_operation_id]".to_owned(),
+                operation_id.to_owned(),
+            ),
+        ];
+        if let Some(amount) = amount_minor {
+            if amount == 0 {
+                return Err(ApiError::Invalid("invalid_refund_amount"));
+            }
+            fields.push(("amount".into(), amount.to_string()));
+        }
+        let response = self
+            .http
+            .post("https://api.stripe.com/v1/refunds")
+            .basic_auth(&self.secret_key, Some(""))
+            .header("Stripe-Version", API_VERSION)
+            .header("Idempotency-Key", operation_id)
+            .form(&fields)
             .send()
             .await?
             .error_for_status()?
@@ -258,4 +340,50 @@ pub struct ReconciliationReport {
     pub checked_tenants: usize,
     pub replayed_events: usize,
     pub discrepancies: Vec<String>,
+    pub release_sha: String,
+    pub generated_at_unix: u64,
+    pub report_sha256: String,
+    pub report_hmac_sha256: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn client() -> StripeClient {
+        StripeClient::new(
+            "sk_test_only".into(),
+            "whsec_test_only".into(),
+            "bpc_test".into(),
+            r#"{"builder_monthly":"price_builder","pro_monthly":"price_pro","scale_beta_monthly":"price_scale","topup_25":"price_25","topup_100":"price_100","topup_500":"price_500"}"#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn webhook_signature_binds_the_unmodified_raw_body() {
+        let body = br#"{"id":"evt_test","type":"invoice.paid","created":1,"livemode":false,"data":{"object":{"id":"in_test","object":"invoice"}}}"#;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let mut signed = format!("{timestamp}.").into_bytes();
+        signed.extend(body);
+        let mut mac = Hmac::<Sha256>::new_from_slice(b"whsec_test_only").unwrap();
+        mac.update(&signed);
+        let signature = format!(
+            "t={timestamp},v1={}",
+            hex::encode(mac.finalize().into_bytes())
+        );
+        let event = client().verify_webhook(body, &signature).unwrap();
+        assert_eq!(event.id, "evt_test");
+        let mut changed = body.to_vec();
+        changed.push(b' ');
+        assert!(client().verify_webhook(&changed, &signature).is_err());
+    }
+
+    #[test]
+    fn stripe_api_version_is_the_reviewed_clover_release() {
+        assert_eq!(API_VERSION, "2026-02-25.clover");
+    }
 }

@@ -7,6 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = ROOT / "crates" / "hc-beta-api" / "migrations" / "0001_public_beta.sql"
+MIGRATIONS = SCHEMA.parent
 
 REQUIRED = (
     "beta_auth_identities",
@@ -36,10 +37,22 @@ REQUIRED = (
     "beta_billing_customers",
     "beta_subscriptions",
     "beta_reconciliation_runs",
+    "beta_stripe_object_state",
+    "beta_credit_grants",
+    "beta_refunds",
+    "beta_billing_discrepancies",
     "beta_retention_deletions",
-    "processing_status IN ('pending','processed','failed')",
+    "processing_status IN ('pending','processing','processed','failed')",
+    "'refund_reversal'",
+    "'refund_failure_restore'",
+    "processing_attempts",
+    "report_hmac_sha256",
     "DEFERRABLE INITIALLY DEFERRED",
 )
+
+
+def schema_text() -> str:
+    return "\n".join(path.read_text(encoding="utf-8") for path in sorted(MIGRATIONS.glob("*.sql")))
 
 
 def check(text: str) -> list[str]:
@@ -51,7 +64,7 @@ def check(text: str) -> list[str]:
 
 
 def main() -> int:
-    failures = check(SCHEMA.read_text(encoding="utf-8"))
+    failures = check(schema_text())
     if failures:
         print("Public-beta schema check failed:", file=sys.stderr)
         for failure in failures:
