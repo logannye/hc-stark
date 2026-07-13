@@ -8,6 +8,10 @@ SCRIPT = ROOT / "scripts" / "release" / "stage_public_beta_site.sh"
 
 
 def test_stage_builds_exact_release_beta_surface(tmp_path: Path):
+    containment_worker = (ROOT / "site" / "_worker.js").read_text()
+    assert '"/dashboard"' not in containment_worker
+    assert '"/dashboard.html"' not in containment_worker
+
     output = tmp_path / "site"
     release_sha = "a" * 40
     subprocess.run(["bash", str(SCRIPT), release_sha, str(output)], cwd=ROOT, check=True)
@@ -19,6 +23,10 @@ def test_stage_builds_exact_release_beta_surface(tmp_path: Path):
     assert release_sha in (output / "status.html").read_text()
     assert "Backend recovery in progress" not in (output / "index.html").read_text()
     assert (output / "dashboard.html").is_file()
+    worker = (output / "_worker.js").read_text()
+    assert '"/dashboard"' in worker
+    assert '"/dashboard.html"' in worker
+    assert '"/dashboard.js"' in worker
     assert (output / "SHA256SUMS").stat().st_size > 0
 
 

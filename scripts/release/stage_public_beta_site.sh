@@ -8,8 +8,30 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 [[ -n "$OUTPUT" && ! -e "$OUTPUT" ]] || { echo "output must not already exist" >&2; exit 2; }
 mkdir -m 0700 "$OUTPUT"
 cp -R "$ROOT/site"/. "$OUTPUT"/
-cp -R "$ROOT/site/public-beta"/. "$OUTPUT"/
-rm -rf "$OUTPUT/public-beta"
+cp -R "$ROOT/deploy/cloudflare/public-beta-site"/. "$OUTPUT"/
+
+# The containment worker must not claim beta-only assets before activation.
+# Add them only inside the exact-release staged Pages directory.
+python3 - "$OUTPUT/_worker.js" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+source = path.read_text(encoding="utf-8")
+route_needle = '  "/pricing", "/status", "/contact", "/privacy", "/terms", "/requests",\n'
+asset_needle = '  "/status.html",\n'
+if source.count(route_needle) != 1 or source.count(asset_needle) != 1:
+    raise SystemExit("public-beta worker staging anchors changed")
+source = source.replace(
+    route_needle,
+    route_needle.rstrip("\n") + ' "/dashboard",\n',
+)
+source = source.replace(
+    asset_needle,
+    asset_needle + '  "/dashboard.html",\n  "/dashboard.js",\n',
+)
+path.write_text(source, encoding="utf-8")
+PY
 
 while IFS= read -r -d '' file; do
   if grep -q '__TINYZKP_RELEASE_SHA__' "$file" 2>/dev/null; then
