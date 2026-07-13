@@ -16,6 +16,10 @@ import time
 import customer_cubic8
 
 
+BOUNDED_RESIDENT_CAP_BYTES = 512 * 1024**2
+BOUNDED_MAX_THREADS = 2
+
+
 def run(command: list[str], *, capture: bool = False) -> str:
     completed = subprocess.run(
         command,
@@ -115,10 +119,10 @@ def main() -> None:
     ])
     policy = {
         "mode": "scratch",
-        "max_resident_bytes": 2 * 1024**3,
+        "max_resident_bytes": BOUNDED_RESIDENT_CAP_BYTES,
         "max_scratch_bytes": 1024**4,
         "scratch_dir": str(args.work / "scratch"),
-        "max_threads": 8,
+        "max_threads": BOUNDED_MAX_THREADS,
         "checkpoint_policy": "retain_on_failure",
     }
     customer_cubic8.write_json(args.work / "policy.json", policy)
@@ -160,6 +164,8 @@ def main() -> None:
         "effective_cpu_count": len(os.sched_getaffinity(0)),
         "effective_memory_bytes": cgroup_limit("memory.max"),
         "effective_swap_bytes": cgroup_limit("memory.swap.max"),
+        "policy_resident_bytes": policy["max_resident_bytes"],
+        "policy_max_threads": policy["max_threads"],
         "peak_resident_bytes": peak_rss_bytes,
         "wall_time_ms": wall_time_ms,
         "proof_digest_hex": proof["proof_digest_hex"],

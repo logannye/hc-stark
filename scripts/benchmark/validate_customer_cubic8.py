@@ -11,6 +11,8 @@ import re
 
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+BOUNDED_RESIDENT_CAP_BYTES = 512 * 1024**2
+BOUNDED_MAX_THREADS = 2
 
 
 def load(path: Path) -> dict[str, object]:
@@ -47,6 +49,11 @@ def validate(reference_1m: dict[str, object], bounded_1m: dict[str, object], bou
             raise ValueError("customer_cubic8 report is outside the fixed-host envelope")
         if not SHA256.fullmatch(str(report.get("proof_digest_hex"))):
             raise ValueError("customer_cubic8 proof digest is malformed")
+    for report in (bounded_1m, bounded_16m):
+        if report.get("policy_resident_bytes") != BOUNDED_RESIDENT_CAP_BYTES:
+            raise ValueError("customer_cubic8 bounded resident policy is not the frozen 512-MiB cap")
+        if report.get("policy_max_threads") != BOUNDED_MAX_THREADS:
+            raise ValueError("customer_cubic8 bounded thread policy is not the frozen two-thread cap")
     if reference_1m["proof_digest_hex"] != bounded_1m["proof_digest_hex"]:
         raise ValueError("reference and bounded proof bytes differ")
     if int(reference_1m["peak_resident_bytes"]) < 4 * int(bounded_1m["peak_resident_bytes"]):
