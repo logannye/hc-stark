@@ -1,5 +1,6 @@
 use crate::dft::GoldilocksWord;
 use crate::mmcs::{DurableGoldilocksMmcs, DurableMerkleData};
+use crate::scratch::create_unique_job_dir;
 use crate::ProfileChallenger;
 use hc_stream::{
     ArtifactDigest, BlockMatrix, CanonicalElement, ExecutionMode, MatrixStore, PhaseEstimate,
@@ -1122,22 +1123,7 @@ fn reverse_low_bits(value: usize, bits: usize) -> usize {
 }
 
 fn create_job_dir(root: &Path) -> Result<PathBuf> {
-    fs::create_dir_all(root)?;
-    let metadata = fs::symlink_metadata(root)?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(StreamError::UnsafePath.into());
-    }
-    let id = LAYER_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let path = root.join(format!("fri-layer-{}-{id}", std::process::id()));
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = fs::DirBuilder::new();
-        builder.mode(0o700).create(&path)?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir(&path)?;
-    Ok(path)
+    create_unique_job_dir(root, "fri-layer", &LAYER_COUNTER).map_err(Into::into)
 }
 
 #[cfg(test)]

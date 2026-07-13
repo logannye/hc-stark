@@ -16,9 +16,139 @@ use hc_plonky3::contracts::{
 };
 use serde_json::{json, Value};
 use sqlx::Row;
+use std::time::Duration;
 use uuid::Uuid;
 
 const LEASE_SECONDS: u64 = 120;
+const MAX_ATTEMPTS: i32 = 3;
+const LEASE_REAP_BATCH: i64 = 64;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ExpiredLeaseAction {
+    Requeue,
+    Cancel,
+    PlatformFail,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ExpiredLeaseSummary {
+    pub requeued: usize,
+    pub cancelled: usize,
+    pub platform_failed: usize,
+}
+
+fn expired_lease_action(
+    status: &str,
+    attempt: i32,
+    checkpoint_identity: Option<&str>,
+) -> ExpiredLeaseAction {
+    if status == "cancel_requested" {
+        ExpiredLeaseAction::Cancel
+    } else if attempt < MAX_ATTEMPTS && checkpoint_identity.is_some_and(is_digest) {
+        ExpiredLeaseAction::Requeue
+    } else {
+        ExpiredLeaseAction::PlatformFail
+    }
+}
+
+pub async fn run_lease_reaper(state: AppState) {
+    let mut interval = tokio::time::interval(Duration::from_secs(30));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        interval.tick().await;
+        match reap_expired_leases(&state).await {
+            Ok(summary)
+                if summary.requeued != 0
+                    || summary.cancelled != 0
+                    || summary.platform_failed != 0 =>
+            {
+                tracing::warn!(
+                    requeued = summary.requeued,
+                    cancelled = summary.cancelled,
+                    platform_failed = summary.platform_failed,
+                    "expired worker leases reconciled"
+                );
+            }
+            Ok(_) => {}
+            Err(error) => tracing::error!(%error, "expired worker lease reconciliation failed"),
+        }
+    }
+}
+
+pub async fn reap_expired_leases(state: &AppState) -> Result<ExpiredLeaseSummary, ApiError> {
+    let mut tx = state.pool.begin().await?;
+    let rows = sqlx::query(
+        "SELECT tenant_id,job_id,status,attempt,lease_epoch,checkpoint_identity,
+                reserved_subscription_millicredits,reserved_purchased_millicredits
+           FROM beta_proof_jobs
+          WHERE status IN ('leased','proving','verifying','cancel_requested')
+            AND lease_expires_at <= now()
+          ORDER BY lease_expires_at,created_at
+          FOR UPDATE SKIP LOCKED LIMIT $1",
+    )
+    .bind(LEASE_REAP_BATCH)
+    .fetch_all(&mut *tx)
+    .await?;
+    let mut summary = ExpiredLeaseSummary::default();
+    for row in rows {
+        let tenant_id: String = row.get("tenant_id");
+        let job_id: Uuid = row.get("job_id");
+        let status: String = row.get("status");
+        let attempt: i32 = row.get("attempt");
+        let lease_epoch: i64 = row.get("lease_epoch");
+        let checkpoint_identity: Option<String> = row.get("checkpoint_identity");
+        let action = expired_lease_action(&status, attempt, checkpoint_identity.as_deref());
+        let attempt_result = match action {
+            ExpiredLeaseAction::Requeue => {
+                sqlx::query(
+                    "UPDATE beta_proof_jobs
+                        SET status='queued',lease_owner=NULL,lease_expires_at=NULL,
+                            error_code='lease_expired'
+                      WHERE job_id=$1",
+                )
+                .bind(job_id)
+                .execute(&mut *tx)
+                .await?;
+                summary.requeued += 1;
+                "lease_expired_requeued"
+            }
+            ExpiredLeaseAction::Cancel => {
+                release_reservation(&mut tx, &tenant_id, job_id, &row, "cancelled").await?;
+                sqlx::query(
+                    "UPDATE beta_proof_jobs SET error_code='cancel_lease_expired' WHERE job_id=$1",
+                )
+                .bind(job_id)
+                .execute(&mut *tx)
+                .await?;
+                summary.cancelled += 1;
+                "cancelled"
+            }
+            ExpiredLeaseAction::PlatformFail => {
+                release_reservation(&mut tx, &tenant_id, job_id, &row, "platform_failed").await?;
+                sqlx::query(
+                    "UPDATE beta_proof_jobs SET error_code='lease_expired' WHERE job_id=$1",
+                )
+                .bind(job_id)
+                .execute(&mut *tx)
+                .await?;
+                summary.platform_failed += 1;
+                "platform_failed"
+            }
+        };
+        sqlx::query(
+            "UPDATE beta_job_attempts SET ended_at=COALESCE(ended_at,now()),result=$4
+              WHERE job_id=$1 AND attempt=$2 AND lease_epoch=$3",
+        )
+        .bind(job_id)
+        .bind(attempt)
+        .bind(lease_epoch)
+        .bind(attempt_result)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(summary)
+}
 
 pub async fn draining(
     State(state): State<AppState>,
@@ -616,5 +746,26 @@ mod tests {
         assert!(is_digest(&"a".repeat(64)));
         assert!(!is_digest(&"A".repeat(64)));
         assert!(!is_digest("../bundle"));
+    }
+
+    #[test]
+    fn expired_leases_requeue_only_valid_retryable_checkpoints() {
+        let digest = "a".repeat(64);
+        assert_eq!(
+            expired_lease_action("proving", 1, Some(&digest)),
+            ExpiredLeaseAction::Requeue
+        );
+        assert_eq!(
+            expired_lease_action("proving", MAX_ATTEMPTS, Some(&digest)),
+            ExpiredLeaseAction::PlatformFail
+        );
+        assert_eq!(
+            expired_lease_action("proving", 1, Some("not-a-digest")),
+            ExpiredLeaseAction::PlatformFail
+        );
+        assert_eq!(
+            expired_lease_action("cancel_requested", 1, Some(&digest)),
+            ExpiredLeaseAction::Cancel
+        );
     }
 }

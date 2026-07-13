@@ -17,6 +17,7 @@ mod mmcs;
 mod opening;
 mod prover;
 mod quotient;
+mod scratch;
 mod workloads;
 
 pub use bounded_pcs::{
