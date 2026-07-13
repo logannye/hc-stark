@@ -1,4 +1,5 @@
 import importlib.util
+from http.client import RemoteDisconnected
 from pathlib import Path
 import sys
 
@@ -99,3 +100,16 @@ def test_credit_snapshot_covers_available_and_reserved_balances():
             "reserved_millicredits": 30,
         }
     ) == (100, 200, 30)
+
+
+def test_truncated_signed_upload_accepts_only_explicit_fail_closed_outcomes():
+    assert E2E.truncated_signed_upload_was_rejected(
+        E2E.ApiFailure(403, {"error": "signature_mismatch"})
+    )
+    assert E2E.truncated_signed_upload_was_rejected(
+        RemoteDisconnected("R2 closed a body shorter than signed Content-Length")
+    )
+    assert not E2E.truncated_signed_upload_was_rejected(
+        E2E.ApiFailure(503, {"error": "infrastructure_unavailable"})
+    )
+    assert not E2E.truncated_signed_upload_was_rejected(ConnectionError("network outage"))

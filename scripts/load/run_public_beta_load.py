@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import statistics
+import subprocess
 import sys
 import tempfile
 import time
@@ -23,7 +24,11 @@ import uuid
 
 TERMINAL = {"completed", "cancelled", "platform_failed", "customer_failed"}
 MAX_PREDICTED_RSS = 2 * 1024 * 1024 * 1024
-MIN_RELEASE_PREDICTED_RSS = MAX_PREDICTED_RSS * 85 // 100
+# Scratch DFTs receive at most half the hard resident policy; the other half is
+# deliberately reserved for the retained pipeline and runtime. Include the
+# bounded prover's 64-MiB accounting floor when selecting a near-limit load.
+EFFECTIVE_PREDICTED_RSS_ENVELOPE = MAX_PREDICTED_RSS // 2 + 64 * 1024 * 1024
+MIN_RELEASE_PREDICTED_RSS = EFFECTIVE_PREDICTED_RSS_ENVELOPE * 85 // 100
 READY_P95_LIMIT_MS = 500.0
 READY_MAX_LIMIT_MS = 2_000.0
 CONTROL_P95_LIMIT_MS = 1_000.0
@@ -99,7 +104,9 @@ def validate_scenario(value: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(poll, int) or not 1 <= poll <= 60:
         raise ValueError("load poll interval must be between 1 and 60 seconds")
     if not isinstance(minimum_rss, int) or not MIN_RELEASE_PREDICTED_RSS <= minimum_rss <= MAX_PREDICTED_RSS:
-        raise ValueError("minimum predicted RSS must be between 85% and 100% of the beta limit")
+        raise ValueError(
+            "minimum predicted RSS must cover at least 85% of the bounded working-set envelope"
+        )
     return value
 
 
@@ -164,6 +171,8 @@ def validate_evidence(value: dict[str, Any], release_sha: str) -> dict[str, Any]
         if (
             job.get("status") != "completed"
             or job.get("bundle", {}).get("official_verification") is not True
+            or job.get("bundle", {}).get("signed_cli_verification") is not True
+            or job.get("bundle", {}).get("api_verification") is not True
             or not isinstance(predicted, int)
             or not MIN_RELEASE_PREDICTED_RSS <= predicted <= MAX_PREDICTED_RSS
             or not isinstance(reservation, int)
@@ -182,6 +191,46 @@ def validate_evidence(value: dict[str, Any], release_sha: str) -> dict[str, Any]
         raise ValueError("load evidence contains residual reservations")
     validate_telemetry(value["telemetry"], release_sha)
     return value
+
+
+def signed_cli(release_sha: str) -> Path:
+    configured = os.environ.get("TINYZKP_CLI", "").strip()
+    if not configured:
+        raise RuntimeError("TINYZKP_CLI is required for independent load verification")
+    cli = Path(configured).resolve(strict=True)
+    completed = subprocess.run(
+        [str(cli), "release"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    try:
+        identity = json.loads(completed.stdout)
+    except ValueError as error:
+        raise RuntimeError("signed CLI returned an invalid release identity") from error
+    if completed.returncode != 0 or identity.get("release_sha") != release_sha:
+        raise RuntimeError("signed CLI release identity does not match the load candidate")
+    return cli
+
+
+def verify_bundle_with_signed_cli(cli: Path, bundle: dict[str, Any]) -> None:
+    with tempfile.TemporaryDirectory(prefix="tinyzkp-load-bundle-") as directory:
+        path = Path(directory) / "hosted-bundle.json"
+        write_private_json(path, bundle)
+        completed = subprocess.run(
+            [str(cli), "plonky3", "verify-hosted", "--bundle", str(path)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10 * 60,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError("signed CLI rejected a hosted load-test bundle")
 
 
 def parse_candidate_rows(raw: str) -> list[int]:
@@ -260,20 +309,13 @@ def prepare_scenario(
             candidate_root = state_dir / f"candidate-{rows}"
             candidate_root.mkdir(mode=0o700)
             statement = hc_beta_e2e.prepare_statement(cli, first, rows, candidate_root)
-            estimate_policy = json.loads((candidate_root / "policy.json").read_text(encoding="utf-8"))
-            # Selection needs to observe an over-limit estimate so it can try
-            # the next lower power of two. Hosted admission still enforces the
-            # exact 2-GiB policy when the selected job is submitted.
-            estimate_policy["max_resident_bytes"] = 16 * 1024**3
-            estimate_policy_path = candidate_root / "load-estimate-policy.json"
-            hc_beta_e2e.write_json(estimate_policy_path, estimate_policy)
             estimate = hc_beta_e2e.run(
                 [
                     str(cli), "plonky3", "estimate-air",
                     "--air", str(statement["air_path"]),
                     "--trace-manifest", str(Path(statement["hosted_packed"]) / "trace-manifest-v1.json"),
                     "--public-inputs", str(statement["hosted_public_path"]),
-                    "--policy", str(estimate_policy_path),
+                    "--policy", str(candidate_root / "policy.json"),
                 ],
                 expect_json=True,
             )
@@ -385,6 +427,7 @@ def run(
     scenario: dict[str, Any], token: str, release_sha: str, telemetry: dict[str, Any]
 ) -> dict[str, Any]:
     scenario = validate_scenario(scenario)
+    cli = signed_cli(release_sha)
     base = scenario["api_base_url"].rstrip("/")
     control_latencies: list[float] = []
     ready_latencies: list[float] = []
@@ -468,6 +511,7 @@ def run(
         artifact_latencies.append(download_latency)
         if bundle_status != 200 or not isinstance(bundle, dict):
             raise RuntimeError(f"bundle download failed for {job_id}")
+        verify_bundle_with_signed_cli(cli, bundle)
         verify_status, verification, verify_latency = request_json(
             "POST", f"{base}/v1/verify", token, {"bundle": bundle}
         )
@@ -478,6 +522,8 @@ def run(
             "size_bytes": bundle_response.get("size_bytes"),
             "blake3_hex": bundle_response.get("blake3_hex"),
             "official_verification": True,
+            "signed_cli_verification": True,
+            "api_verification": True,
         }
         reservation = item["submission"]["estimate"].get("reservation_millicredits")
         charge = item["result"].get("settled_millicredits")

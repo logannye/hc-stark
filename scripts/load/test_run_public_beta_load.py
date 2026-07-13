@@ -102,8 +102,16 @@ def test_scenario_requires_independent_artifacts_and_near_limit_jobs():
         MODULE.validate_scenario(invalid)
     invalid = scenario()
     invalid["minimum_predicted_rss_bytes"] = MODULE.MIN_RELEASE_PREDICTED_RSS - 1
-    with pytest.raises(ValueError, match="85%"):
+    with pytest.raises(ValueError, match="85% of the bounded working-set envelope"):
         MODULE.validate_scenario(invalid)
+
+
+def test_load_target_uses_the_effective_bounded_working_set_and_hard_cap():
+    assert MODULE.EFFECTIVE_PREDICTED_RSS_ENVELOPE < MODULE.MAX_PREDICTED_RSS
+    assert MODULE.MIN_RELEASE_PREDICTED_RSS == (
+        MODULE.EFFECTIVE_PREDICTED_RSS_ENVELOPE * 85 // 100
+    )
+    assert MODULE.MIN_RELEASE_PREDICTED_RSS < 1_082_130_432 < MODULE.MAX_PREDICTED_RSS
 
 
 def test_prepare_candidates_are_descending_unique_powers_of_two():
@@ -139,3 +147,23 @@ def test_load_outputs_are_owner_only_and_never_replaced(tmp_path: Path):
     assert os.stat(output).st_mode & 0o077 == 0
     with pytest.raises(ValueError, match="refusing to replace"):
         MODULE.write_private_json(output, {"status": "passed"})
+
+
+def test_signed_cli_identity_and_bundle_verification_are_mandatory(tmp_path: Path, monkeypatch):
+    release_sha = "a" * 40
+    cli = tmp_path / "hc-cli"
+    cli.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = release ]; then\n"
+        f"  printf '%s\\n' '{{\"release_sha\":\"{release_sha}\"}}'\n"
+        "  exit 0\n"
+        "fi\n"
+        "test \"$1 $2 $3\" = 'plonky3 verify-hosted --bundle'\n",
+        encoding="utf-8",
+    )
+    cli.chmod(0o700)
+    monkeypatch.setenv("TINYZKP_CLI", str(cli))
+    selected = MODULE.signed_cli(release_sha)
+    MODULE.verify_bundle_with_signed_cli(selected, {"schema_version": 1})
+    with pytest.raises(RuntimeError, match="release identity"):
+        MODULE.signed_cli("b" * 40)
