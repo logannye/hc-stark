@@ -8,7 +8,7 @@
   "deterministic_seed": 0,
   "resource_policy": {
     "mode": "scratch",
-    "max_resident_bytes": 2147483648,
+    "max_resident_bytes": 1073741824,
     "max_scratch_bytes": 536870912000,
     "scratch_dir": "/var/lib/tinyzkp-bench/scratch/poseidon2-1m",
     "max_threads": 8,
