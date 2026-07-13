@@ -56,6 +56,42 @@ const TARGETS = [
   { name: "site-docs", url: "https://tinyzkp.com/docs", expect: 200, contains: "Maintenance API" },
 ];
 
+const PUBLIC_BETA_TARGETS = [
+  { name: "api-health", url: "https://api.tinyzkp.com/healthz", expect: 200 },
+  { name: "api-ready", url: "https://api.tinyzkp.com/readyz", expect: 200 },
+  { name: "webhook-health", url: "https://webhook.tinyzkp.com/health", expect: 200 },
+  {
+    name: "api-public-beta-status",
+    url: "https://api.tinyzkp.com/v1/discovery",
+    expect: 200,
+    jsonField: "service_status",
+    jsonValue: "public_beta",
+  },
+  {
+    name: "site-public-beta-status",
+    url: "https://tinyzkp.com/discovery.json",
+    expect: 200,
+    jsonField: "service_status",
+    jsonValue: "public_beta",
+  },
+  { name: "site", url: "https://tinyzkp.com/", expect: 200, contains: "Paid public beta" },
+  { name: "dashboard", url: "https://tinyzkp.com/dashboard", expect: 200, contains: "Sign in with GitHub" },
+  { name: "pricing", url: "https://tinyzkp.com/pricing", expect: 200, contains: "no automatic overages" },
+  {
+    name: "legacy-template-route-contained",
+    url: "https://api.tinyzkp.com/templates",
+    expect: 503,
+    contains: '"code":"protocol_upgrade"',
+  },
+  { name: "mcp-version", url: "https://mcp.tinyzkp.com/version", expect: 200, contains: '"service":"mcp"' },
+];
+
+function targetsForMode(mode) {
+  if (!mode || mode === "containment") return TARGETS;
+  if (mode === "public_beta") return PUBLIC_BETA_TARGETS;
+  throw new Error(`invalid AUDIT_MODE: ${mode}`);
+}
+
 const TIMEOUT_MS = 10_000;
 const RETRY_DELAY_MS = 5_000;
 
@@ -125,10 +161,18 @@ async function alert(env, failures) {
 }
 
 async function runProbes(env) {
-  const results = await Promise.all(TARGETS.map(probeWithRetry));
+  let targets;
+  try {
+    targets = targetsForMode(env.AUDIT_MODE);
+  } catch (error) {
+    const failures = [{ name: "audit-mode", ok: false, status: 0, error: String(error) }];
+    await alert(env, failures);
+    return { ok: false, checked_at: new Date().toISOString(), mode: env.AUDIT_MODE, results: failures };
+  }
+  const results = await Promise.all(targets.map(probeWithRetry));
   const failures = results.filter((result) => !result.ok);
   if (failures.length) await alert(env, failures);
-  return { ok: failures.length === 0, checked_at: new Date().toISOString(), results };
+  return { ok: failures.length === 0, checked_at: new Date().toISOString(), mode: env.AUDIT_MODE || "containment", results };
 }
 
 export default {
@@ -144,4 +188,4 @@ export default {
   },
 };
 
-export { TARGETS, probe };
+export { TARGETS, PUBLIC_BETA_TARGETS, targetsForMode, probe };

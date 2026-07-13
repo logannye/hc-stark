@@ -12,12 +12,38 @@ import /etc/caddy/tinyzkp-beta-route.caddy
 api.tinyzkp.com {
   import tinyzkp_security
 
-  @beta_write path /v1/auth/* /v1/api-keys* /v1/account /v1/air-packages /v1/uploads /v1/proof-jobs /v1/proof-jobs/*/cancel /v1/billing/checkout-sessions /webhooks/stripe
+  @stripe_beta_webhook path /webhooks/stripe
+  handle @stripe_beta_webhook {
+    reverse_proxy 127.0.0.1:8090
+  }
+
+  @beta_auth path /v1/auth/*
+  handle @beta_auth {
+    import tinyzkp_beta_write_backend
+  }
+
+  @beta_write {
+    method POST DELETE
+    path /v1/api-keys /v1/api-keys/* /v1/account /v1/air-packages /v1/uploads /v1/proof-jobs /v1/proof-jobs/*/cancel /v1/billing/checkout-sessions
+  }
   handle @beta_write {
     import tinyzkp_beta_write_backend
   }
 
-  @beta_read path /v1/discovery /v1/me /v1/proof-jobs/* /v1/verify /v1/billing/portal-sessions
+  @beta_preflight {
+    method OPTIONS
+    header_regexp Origin ^https://(www\.)?tinyzkp\.com$
+  }
+  handle @beta_preflight {
+    header Access-Control-Allow-Origin "{http.request.header.Origin}"
+    header Access-Control-Allow-Credentials "true"
+    header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS"
+    header Access-Control-Allow-Headers "Authorization, Content-Type, Idempotency-Key"
+    header Vary "Origin"
+    respond "" 204
+  }
+
+  @beta_read path /v1/discovery /v1/me /v1/api-keys /v1/proof-jobs /v1/proof-jobs/* /v1/verify /v1/billing/portal-sessions
   handle @beta_read {
     import tinyzkp_beta_read_backend
   }
@@ -30,6 +56,10 @@ api.tinyzkp.com {
   @cors_www header Origin https://www.tinyzkp.com
   header @cors_tinyzkp Access-Control-Allow-Origin "https://tinyzkp.com"
   header @cors_www Access-Control-Allow-Origin "https://www.tinyzkp.com"
+  header @cors_tinyzkp Access-Control-Allow-Credentials "true"
+  header @cors_www Access-Control-Allow-Credentials "true"
+  header @cors_tinyzkp Vary "Origin"
+  header @cors_www Vary "Origin"
   header {
     Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS"
     Access-Control-Allow-Headers "Authorization, Content-Type, Idempotency-Key"

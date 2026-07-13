@@ -26,6 +26,10 @@ if [[ "$ROLE" == api ]]; then
     mode=$(stat -c %a "$path")
     [[ "$mode" == 600 || "$mode" == 400 ]] || { echo "$path must be mode 0600 or 0400" >&2; exit 3; }
   done
+  [[ "$(stat -c %u "$secret_dir/pgbackrest.conf")" == 999 ]] || {
+    echo "$secret_dir/pgbackrest.conf must be owned by PostgreSQL uid 999" >&2
+    exit 3
+  }
   [[ -d "$secret_dir/release" ]] || { echo "missing $secret_dir/release" >&2; exit 3; }
   [[ "$(stat -c %a "$secret_dir/release")" == 700 ]] || { echo "$secret_dir/release must be mode 0700" >&2; exit 3; }
   if [[ ! -f /etc/caddy/Caddyfile.tinyzkp-containment ]]; then

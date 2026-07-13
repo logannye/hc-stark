@@ -53,6 +53,12 @@ def test_backup_and_rollback_contracts_are_tracked():
     assert "pg1-database=tinyzkp_beta" in backup
     assert "pg1-user=tinyzkp_beta" in backup
     assert "repo1-retention-full=4" in backup and "repo1-retention-diff=30" in backup
+    assert "archive-async=y" in backup
+    assert "spool-path=/var/lib/postgresql/data/pgbackrest-spool" in backup
+    full_service = (ROOT / "deploy/hetzner/beta/systemd/tinyzkp-pgbackrest-full.service").read_text()
+    diff_service = (ROOT / "deploy/hetzner/beta/systemd/tinyzkp-pgbackrest-diff.service").read_text()
+    assert "exec -T --user 999:999 postgres pgbackrest" in full_service
+    assert "exec -T --user 999:999 postgres pgbackrest" in diff_service
     assert "TINYZKP_POSTGRES_IMAGE must be digest pinned" in restore
     assert "docker exec -i -u postgres" in restore
     assert "credit ledger restore mismatch" in restore
@@ -70,6 +76,29 @@ def test_beta_routing_cannot_break_ordinary_containment_deploys():
     assert "tinyzkp-beta-route.caddy" not in containment
     assert "tinyzkp-beta-route.caddy" in beta
     assert "Caddyfile.tinyzkp-containment" in switch
+    assert "flock -n" in switch
+    assert "restore_previous" in switch
+    assert "caddy validate --config \"$staged_caddy\"" in switch
+    assert "@beta_stripe_webhook path /webhooks/stripe" in containment
+    assert "@beta_oauth_callback path /v1/auth/github/callback" in containment
+    assert containment.index("@beta_stripe_webhook") < containment.index("reverse_proxy 127.0.0.1:8080")
+    assert "EXPECTED_SHA" in switch and "EXPECTED_STATUS" in switch
+
+
+def test_beta_cors_dark_route_and_webhook_remain_fail_closed():
+    caddy = text("Caddyfile.beta")
+    dark = text("caddy-route.dark-canary.caddy")
+    rollback = text("caddy-route.rollback.caddy")
+    writes = text("set-beta-writes.sh")
+    assert "@stripe_beta_webhook" in caddy
+    assert caddy.index("@stripe_beta_webhook") < caddy.index("@beta_write")
+    assert 'Access-Control-Allow-Credentials "true"' in caddy
+    assert "header_regexp Origin" in caddy
+    assert 'respond "" 204' in caddy
+    assert "operator_canary_only" in dark
+    assert "beta_writes_disabled" in rollback
+    assert "TINYZKP_BETA_WRITES_ENABLED" in writes
+    assert "restore" in writes and "flock -n" in writes
 
 
 def test_operator_environment_templates_cover_both_hosts_and_oauth_hostname():
@@ -133,3 +162,23 @@ def test_r2_lifecycle_prefixes_separate_inputs_bundles_and_backups():
     }
     backups = json.loads(text("r2-backups-lifecycle.json"))
     assert all("deleteObjectsTransition" not in rule for rule in backups["rules"])
+
+
+def test_r2_browser_cors_is_exact_origin_and_presigned_header_scoped():
+    policy = json.loads(text("r2-artifacts-cors.json"))
+    assert len(policy["rules"]) == 1
+    rule = policy["rules"][0]
+    assert rule["id"] == "tinyzkp-beta-browser-presigned-v1"
+    allowed = rule["allowed"]
+    assert allowed["origins"] == [
+        "https://tinyzkp.com",
+        "https://www.tinyzkp.com",
+    ]
+    assert "*" not in allowed["origins"]
+    assert set(allowed["methods"]) == {"GET", "PUT", "HEAD"}
+    assert "x-amz-meta-tinyzkp-blake3" in allowed["headers"]
+    assert rule["maxAgeSeconds"] <= 300
+
+    script = text("configure-r2-cors.sh")
+    assert "TINYZKP_ALLOW_R2_CORS_WRITE" in script
+    assert "wildcard R2 CORS is forbidden" in script

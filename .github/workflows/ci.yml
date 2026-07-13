@@ -71,6 +71,9 @@ jobs:
             scripts/canary/test_hc_beta_e2e.py \
             scripts/benchmark/test_customer_cubic8.py \
             scripts/release/test_build_public_beta_authorization.py \
+            scripts/release/test_stage_public_beta_site.py \
+            scripts/release/test_activate_public_beta.py \
+            deploy/hetzner/beta/test_switch_beta_route.py \
             scripts/ci/test_beta_deployment_contract.py
 
       - name: Plonky3 backend recovery gate

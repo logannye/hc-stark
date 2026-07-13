@@ -9,7 +9,25 @@
 
 api.tinyzkp.com {
   import tinyzkp_security
-  reverse_proxy 127.0.0.1:8080
+
+  # Billing events must remain durable while the customer-facing API is in
+  # containment. The beta service verifies Stripe's signature and mode before
+  # it enqueues an event; this route does not expose Checkout or proving.
+  @beta_stripe_webhook path /webhooks/stripe
+  handle @beta_stripe_webhook {
+    reverse_proxy 127.0.0.1:8090
+  }
+
+  # The callback is public so an operator-allowlisted dark-canary OAuth flow
+  # can finish. The beta API still enforces state, PKCE, and the operator list.
+  @beta_oauth_callback path /v1/auth/github/callback
+  handle @beta_oauth_callback {
+    reverse_proxy 127.0.0.1:8090
+  }
+
+  handle {
+    reverse_proxy 127.0.0.1:8080
+  }
 
   @cors_tinyzkp header Origin https://tinyzkp.com
   @cors_www header Origin https://www.tinyzkp.com

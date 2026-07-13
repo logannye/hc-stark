@@ -109,12 +109,18 @@ pub fn public_router(state: AppState) -> Router {
         .route("/v1/auth/github/start", get(public::github_start))
         .route("/v1/auth/github/callback", get(public::github_callback))
         .route("/v1/me", get(public::me))
-        .route("/v1/api-keys", post(public::create_api_key))
+        .route(
+            "/v1/api-keys",
+            get(public::list_api_keys).post(public::create_api_key),
+        )
         .route("/v1/api-keys/:id", delete(public::revoke_api_key))
         .route("/v1/account", delete(public::delete_account))
         .route("/v1/air-packages", post(public::register_air))
         .route("/v1/uploads", post(public::create_upload))
-        .route("/v1/proof-jobs", post(public::create_job))
+        .route(
+            "/v1/proof-jobs",
+            get(public::list_jobs).post(public::create_job),
+        )
         .route("/v1/proof-jobs/:id", get(public::get_job))
         .route("/v1/proof-jobs/:id/cancel", post(public::cancel_job))
         .route("/v1/proof-jobs/:id/bundle", get(public::get_bundle))

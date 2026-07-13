@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TARGETS, probe } from "./worker.js";
+import { TARGETS, PUBLIC_BETA_TARGETS, targetsForMode, probe } from "./worker.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -18,6 +18,17 @@ try {
     const result = await probe(target);
     assert.equal(result.ok, true, target.name);
   }
+  for (const target of PUBLIC_BETA_TARGETS) {
+    globalThis.fetch = async (_url, options) => {
+      assert.equal(options.method, target.method || "GET");
+      return responseFor(target);
+    };
+    const result = await probe(target);
+    assert.equal(result.ok, true, target.name);
+  }
+  assert.equal(targetsForMode("containment"), TARGETS);
+  assert.equal(targetsForMode("public_beta"), PUBLIC_BETA_TARGETS);
+  assert.throws(() => targetsForMode("production"), /invalid AUDIT_MODE/);
 
   const containment = TARGETS.find((target) => target.name === "checkout-contained");
   globalThis.fetch = async () => responseFor(containment, { status: 200, body: '{"ok":true}' });

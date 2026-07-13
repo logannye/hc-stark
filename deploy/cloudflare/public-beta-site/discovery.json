@@ -1,0 +1,21 @@
+{
+  "schema_version": 4,
+  "name": "TinyZKP",
+  "service_status": "public_beta",
+  "release_sha": "__TINYZKP_RELEASE_SHA__",
+  "availability": {
+    "github_signup": true,
+    "paid_checkout": true,
+    "hosted_proving": true,
+    "hosted_verification": true
+  },
+  "profile": {
+    "field": "Goldilocks",
+    "plonky3": "0.6.1",
+    "maximum_degree": 3,
+    "maximum_trace_columns": 256,
+    "maximum_constraints": 1024,
+    "maximum_job_rss_bytes": 2147483648
+  },
+  "disclosures": ["public beta", "not independently audited", "no SLA", "no zero-knowledge claim"]
+}
