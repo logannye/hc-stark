@@ -23,6 +23,11 @@ def test_stage_builds_exact_release_beta_surface(tmp_path: Path):
     assert release_sha in (output / "status.html").read_text()
     assert "Backend recovery in progress" not in (output / "index.html").read_text()
     assert (output / "dashboard.html").is_file()
+    assert 'name="robots" content="noindex,nofollow"' in (
+        output / "dashboard.html"
+    ).read_text()
+    for page in ("index.html", "pricing.html", "status.html", "dashboard.html"):
+        assert (output / page).read_text().count('name="description"') == 1
     worker = (output / "_worker.js").read_text()
     assert '"/dashboard"' in worker
     assert '"/dashboard.html"' in worker
