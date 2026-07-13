@@ -15,7 +15,7 @@ import sys
 import tempfile
 import time
 from typing import Any
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 import uuid
 
@@ -37,6 +37,8 @@ SENSITIVE_EVIDENCE_KEYS = {
     "webhook_secret",
 }
 SECRET_VALUE_PREFIXES = ("Bearer ", "gho_", "github_pat_", "rk_", "sk_", "whsec_")
+SIGNED_UPLOAD_ATTEMPTS = 4
+SIGNED_UPLOAD_RETRY_SECONDS = 0.5
 
 
 class ApiFailure(RuntimeError):
@@ -101,14 +103,24 @@ class ApiClient:
     ) -> int:
         headers = {str(name): str(value) for name, value in dict(signed["headers"]).items()}
         headers.update(header_overrides or {})
-        request = Request(str(signed["url"]), data=payload, headers=headers, method="PUT")
-        try:
-            with urlopen(request, timeout=self.timeout) as response:
-                response.read()
-                return response.status
-        except HTTPError as error:
-            error.read()
-            raise ApiFailure(error.code, {"error": "signed_upload_rejected"}) from None
+        for attempt in range(1, SIGNED_UPLOAD_ATTEMPTS + 1):
+            request = Request(
+                str(signed["url"]), data=payload, headers=headers, method="PUT"
+            )
+            try:
+                with urlopen(request, timeout=self.timeout) as response:
+                    response.read()
+                    return response.status
+            except HTTPError as error:
+                error.read()
+                failure = ApiFailure(error.code, {"error": "signed_upload_rejected"})
+                if error.code < 500 or attempt == SIGNED_UPLOAD_ATTEMPTS:
+                    raise failure from None
+            except (RemoteDisconnected, TimeoutError, ConnectionError, URLError):
+                if attempt == SIGNED_UPLOAD_ATTEMPTS:
+                    raise
+            time.sleep(SIGNED_UPLOAD_RETRY_SECONDS * attempt)
+        raise AssertionError("signed upload retry loop exhausted")
 
     def get_signed(self, signed: dict[str, object]) -> bytes:
         headers = {str(name): str(value) for name, value in dict(signed["headers"]).items()}

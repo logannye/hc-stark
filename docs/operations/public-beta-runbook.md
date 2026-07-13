@@ -51,6 +51,18 @@ Production remains in containment until the signed `public_beta` authorization m
 - Create a separate `tinyzkp_beta_race_<sha12>` database, apply the production migrations, and run `scripts/load/run_public_beta_races.py`. The runner covers idempotency, overspend, competing terminal states, stale leases, settlement, refund/use, webhook delivery, and ledger reconstruction.
 - Run the fixed-host 1M/16M matrix, customer_cubic8 matrix, fault/fuzz suite, security review, four-job load test, and identity check on the final candidate. The load runner creates four digest-distinct `customer_cubic8` AIRs, verifies a 1,024-row local proof for each, selects the largest candidate row count whose signed-CLI estimate is within 85–100% of 2 GiB and below the 60-minute admission limit, registers four AIRs, and uploads four independent traces:
 
+  Run the declarative customer workload through its resumable fixed-host controller rather than invoking the three proof modes by hand:
+
+  ```sh
+  python3 scripts/benchmark/run_customer_cubic8_matrix.py \
+    --release-sha "$TINYZKP_RELEASE_SHA" \
+    --cli "$TINYZKP_CLI" \
+    --output-dir /var/lib/tinyzkp-evidence/customer-cubic8 \
+    --work-root /srv/tinyzkp-scratch/customer-cubic8
+  ```
+
+  The controller requires clean exact source, the signed CLI identity, eight effective CPUs, a 15–17 GiB cgroup limit, zero swap, and at least 500 GB of NVMe scratch. It hash-binds and revalidates the reference 1M, bounded 1M, and bounded 16M reports before recording a pass.
+
   ```sh
   export TINYZKP_LOAD_API_KEY=<scale-canary-api-key>
   python3 scripts/load/run_public_beta_load.py \
@@ -68,6 +80,7 @@ Production remains in containment until the signed `public_beta` authorization m
 
   Scenario and evidence outputs are owner-only and cannot be replaced. Supply the required host telemetry JSON. Release mode requires five-second readiness samples, the exact 8-CPU/16-GiB worker envelope, zero swap/OOM/restarts, heartbeat age below 60 seconds, scratch use below 70%, and clean PostgreSQL limits. All four jobs must complete, download, officially verify, and leave `/readyz` continuously healthy.
 - Run `restore-drill.sh --confirm-isolated-restore`. Recompute credit balances from immutable events, authenticate a retained test API key, recover a queued job, and verify a retained proof bundle before recording success.
+- Every one of the twelve `public_beta` gates has a dedicated semantic record and validator. A generic JSON file containing only `status: passed` and the release SHA is deliberately rejected. Use the exact `public-beta-*-v1` schemas enforced by `scripts/ci/public_beta_gate.py`; fixed-host gates additionally re-run the resource and customer-cubic validators against the hash-bound raw reports. Fault evidence distinguishes successfully resumed and officially verified work from failures that must release the complete reservation, and separately proves that stale completions cannot settle.
 - Run the resumable 24-hour allowlisted canary with `scripts/canary/run_public_beta_canary.py` and an owner-controlled driver implementing `proof`, `cancel`, `billing`, and `audit` subcommands. The harness pins the driver digest, records one proof per hour, runs cancellation/refund every six hours, performs both tagged live billing canaries, and writes owner-only state after every event. Validate its evidence with `validate_public_beta_canary.py`.
 
 ## Activation

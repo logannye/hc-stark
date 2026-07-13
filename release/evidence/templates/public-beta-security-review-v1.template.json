@@ -1,13 +1,27 @@
 {
-  "schema_version": 1,
+  "schema_version": "public-beta-security-review-v1",
   "release_channel": "public_beta",
   "release_sha": "REPLACE_FULL_GIT_SHA",
   "reviewed_at": "REPLACE_RFC3339_UTC",
-  "reviewer": "REPLACE_REVIEWER",
+  "reviewer": "Logan Nye",
   "threat_model_sha256": "REPLACE_SHA256",
-  "critical_findings_open": 0,
-  "high_findings_open": 0,
+  "topics": [
+    "oauth",
+    "sessions",
+    "api_keys",
+    "tenant_isolation",
+    "r2_signing",
+    "decompression",
+    "ssrf",
+    "lease_replay",
+    "stripe_spoofing",
+    "refunds",
+    "secrets",
+    "account_deletion",
+    "activation_rollback"
+  ],
+  "unresolved_critical": 0,
+  "unresolved_high": 0,
   "findings": [],
   "status": "blocked_until_reviewed"
 }
-
