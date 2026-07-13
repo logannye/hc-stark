@@ -114,6 +114,16 @@ def test_load_target_uses_the_effective_bounded_working_set_and_hard_cap():
     assert MODULE.MIN_RELEASE_PREDICTED_RSS < 1_082_130_432 < MODULE.MAX_PREDICTED_RSS
 
 
+def test_submission_latency_is_classified_as_artifact_work():
+    control = []
+    artifact = []
+    MODULE.record_latency("job_submission", 1.5, control, artifact)
+    MODULE.record_latency("bundle_download", 2.5, control, artifact)
+    MODULE.record_latency("job_status", 0.1, control, artifact)
+    assert artifact == [1.5, 2.5]
+    assert control == [0.1]
+
+
 def test_prepare_candidates_are_descending_unique_powers_of_two():
     assert MODULE.parse_candidate_rows("1048576,4194304,2097152") == [
         4_194_304,

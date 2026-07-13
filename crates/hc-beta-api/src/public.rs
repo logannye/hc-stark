@@ -572,6 +572,13 @@ pub async fn create_job(
         return Err(ApiError::PaymentRequired);
     }
     let key = idempotency_key(&headers)?;
+    let hash = idempotency::request_hash(&request)?;
+    if let Some(IdempotencyOutcome::Replay { status, body }) =
+        idempotency::replay_if_present(&state.pool, &tenant.tenant_id, "create_job", key, &hash)
+            .await?
+    {
+        return idempotency::replay(status, body);
+    }
     let row = sqlx::query(
         "SELECT a.package_json,u.manifest_json,u.status,u.expires_at
            FROM beta_air_packages a JOIN beta_uploads u ON u.air_package_id=a.air_package_id
@@ -613,7 +620,6 @@ pub async fn create_job(
     {
         return Err(ApiError::Invalid("job_exceeds_beta_limits"));
     }
-    let hash = idempotency::request_hash(&request)?;
     let mut tx = state.pool.begin().await?;
     if let IdempotencyOutcome::Replay { status, body } =
         idempotency::begin(&mut tx, &tenant.tenant_id, "create_job", key, &hash).await?
@@ -888,6 +894,7 @@ pub async fn verify(
 }
 
 async fn verify_uploaded_chunks(state: &AppState, upload_id: Uuid) -> Result<(), ApiError> {
+    const MAX_PARALLEL_HEADS: usize = 16;
     let rows = sqlx::query(
         "SELECT chunk_index,object_key,compressed_bytes,blake3_hex
            FROM beta_upload_chunks WHERE upload_id=$1 ORDER BY chunk_index",
@@ -898,26 +905,48 @@ async fn verify_uploaded_chunks(state: &AppState, upload_id: Uuid) -> Result<(),
     if rows.is_empty() {
         return Err(ApiError::Invalid("upload_has_no_chunks"));
     }
+    let mut tasks = tokio::task::JoinSet::new();
+    let mut verified = Vec::with_capacity(rows.len());
     for row in rows {
+        while tasks.len() >= MAX_PARALLEL_HEADS {
+            let result = tasks
+                .join_next()
+                .await
+                .ok_or(ApiError::Internal)?
+                .map_err(|_| ApiError::Internal)??;
+            verified.push(result);
+        }
+        let object_store = state.object_store.clone();
         let key: String = row.get("object_key");
+        let index: i32 = row.get("chunk_index");
         let expected_length = as_u64(row.get::<i64, _>("compressed_bytes"))?;
         let expected_digest: String = row.get("blake3_hex");
-        let head = state.object_store.head(&key).await?;
-        if head.content_length != expected_length
-            || head.metadata.get("tinyzkp-blake3") != Some(&expected_digest)
-        {
-            return Err(ApiError::Invalid("upload_chunk_metadata_mismatch"));
-        }
+        tasks.spawn(async move {
+            let head = object_store.head(&key).await?;
+            if head.content_length != expected_length
+                || head.metadata.get("tinyzkp-blake3") != Some(&expected_digest)
+            {
+                return Err(ApiError::Invalid("upload_chunk_metadata_mismatch"));
+            }
+            Ok::<_, ApiError>((index, head.etag))
+        });
+    }
+    while let Some(result) = tasks.join_next().await {
+        verified.push(result.map_err(|_| ApiError::Internal)??);
+    }
+    let mut tx = state.pool.begin().await?;
+    for (index, etag) in verified {
         sqlx::query(
             "UPDATE beta_upload_chunks SET object_etag=$3,verified_at=now()
               WHERE upload_id=$1 AND chunk_index=$2",
         )
         .bind(upload_id)
-        .bind(row.get::<i32, _>("chunk_index"))
-        .bind(head.etag)
-        .execute(&state.pool)
+        .bind(index)
+        .bind(etag)
+        .execute(&mut *tx)
         .await?;
     }
+    tx.commit().await?;
     Ok(())
 }
 

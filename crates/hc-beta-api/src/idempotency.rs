@@ -7,7 +7,7 @@ use axum::{
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use sqlx::{Postgres, Row, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 
 pub enum IdempotencyOutcome {
     New,
@@ -17,6 +17,47 @@ pub enum IdempotencyOutcome {
 pub fn request_hash<T: Serialize>(request: &T) -> Result<String, ApiError> {
     let bytes = serde_json::to_vec(request).map_err(|_| ApiError::Internal)?;
     Ok(hex::encode(Sha256::digest(bytes)))
+}
+
+/// Return a completed response before an expensive external preflight.
+///
+/// This is deliberately read-only. A missing key is only a hint that the
+/// caller may continue; `begin` remains the serialization point after the
+/// preflight and handles a concurrent request that inserted the key meanwhile.
+pub async fn replay_if_present(
+    pool: &PgPool,
+    tenant_id: &str,
+    operation: &str,
+    key: &str,
+    request_sha256: &str,
+) -> Result<Option<IdempotencyOutcome>, ApiError> {
+    validate_key(key)?;
+    let row = sqlx::query(
+        "SELECT request_sha256, response_status, response_json
+           FROM beta_idempotency_keys
+          WHERE tenant_id=$1 AND operation=$2 AND idempotency_key=$3",
+    )
+    .bind(tenant_id)
+    .bind(operation)
+    .bind(key)
+    .fetch_optional(pool)
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let stored_hash: String = row.get("request_sha256");
+    if stored_hash != request_sha256 {
+        return Err(ApiError::Conflict("idempotency_conflict"));
+    }
+    let status: Option<i32> = row.get("response_status");
+    let body: Option<Value> = row.get("response_json");
+    match (status, body) {
+        (Some(status), Some(body)) => Ok(Some(IdempotencyOutcome::Replay {
+            status: u16::try_from(status).map_err(|_| ApiError::Internal)?,
+            body,
+        })),
+        _ => Err(ApiError::Conflict("idempotency_in_progress")),
+    }
 }
 
 pub async fn begin(
@@ -50,9 +91,7 @@ async fn begin_inner(
     request_sha256: &str,
     retry_incomplete: bool,
 ) -> Result<IdempotencyOutcome, ApiError> {
-    if key.len() < 8 || key.len() > 200 || !key.bytes().all(|byte| byte.is_ascii_graphic()) {
-        return Err(ApiError::Invalid("invalid_idempotency_key"));
-    }
+    validate_key(key)?;
     let inserted = sqlx::query(
         "INSERT INTO beta_idempotency_keys
              (tenant_id, operation, idempotency_key, request_sha256, expires_at)
@@ -94,6 +133,13 @@ async fn begin_inner(
         _ if retry_incomplete => Ok(IdempotencyOutcome::New),
         _ => Err(ApiError::Conflict("idempotency_in_progress")),
     }
+}
+
+fn validate_key(key: &str) -> Result<(), ApiError> {
+    if key.len() < 8 || key.len() > 200 || !key.bytes().all(|byte| byte.is_ascii_graphic()) {
+        return Err(ApiError::Invalid("invalid_idempotency_key"));
+    }
+    Ok(())
 }
 
 pub async fn finish<T: Serialize>(
