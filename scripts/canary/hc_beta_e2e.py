@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from http.client import RemoteDisconnected
 import json
 import os
 from pathlib import Path
@@ -43,6 +44,13 @@ class ApiFailure(RuntimeError):
         super().__init__(f"API request failed with HTTP {status}")
         self.status = status
         self.payload = payload
+
+
+def truncated_signed_upload_was_rejected(error: BaseException) -> bool:
+    """Recognize the two fail-closed responses R2 uses for a short signed PUT."""
+    return (
+        isinstance(error, ApiFailure) and 400 <= error.status < 500
+    ) or isinstance(error, RemoteDisconnected)
 
 
 class ApiClient:
@@ -379,8 +387,8 @@ def run_negative_lifecycle_checks(
             payload = payload[:-1]
         try:
             client.put_signed(dict(item["upload"]), payload)
-        except ApiFailure as error:
-            if index != 0 or not 400 <= error.status < 500:
+        except (ApiFailure, RemoteDisconnected) as error:
+            if index != 0 or not truncated_signed_upload_was_rejected(error):
                 raise
             length_put_rejected = True
             break
