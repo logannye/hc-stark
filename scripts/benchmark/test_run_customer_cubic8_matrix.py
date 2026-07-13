@@ -16,6 +16,8 @@ def report(rows, mode, rss, wall, proof="a" * 64):
         "effective_cpu_count": 8,
         "effective_memory_bytes": 16 * 1024**3,
         "effective_swap_bytes": 0,
+        "policy_resident_bytes": 512 * 1024**2,
+        "policy_max_threads": 2,
         "peak_resident_bytes": rss,
         "wall_time_ms": wall,
         "proof_digest_hex": proof,
