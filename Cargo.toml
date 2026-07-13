@@ -21,6 +21,7 @@
     "crates/hc-server",
     "crates/hc-beta-api",
     "crates/hc-beta-worker",
+    "crates/hc-beta-client",
     "crates/hc-wasm",
     "crates/hc-workloads",
     "crates/hc-mcp",

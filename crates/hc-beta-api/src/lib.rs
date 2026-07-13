@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 pub mod auth;
 pub mod billing;
 pub mod config;
@@ -6,6 +8,7 @@ pub mod github;
 pub mod idempotency;
 pub mod models;
 pub mod object_store;
+pub mod openapi;
 pub mod public;
 pub mod retention;
 pub mod stripe;
@@ -88,8 +91,14 @@ impl AppState {
             config.stripe_secret_key.clone(),
             config.stripe_webhook_secret.clone(),
             config.stripe_portal_configuration.clone(),
+            config.stripe_product_tax_code.clone(),
+            config.stripe_webhook_endpoint.clone(),
             &config.stripe_prices_json,
         )?;
+        stripe
+            .preflight()
+            .await
+            .context("validate isolated Stripe beta catalog")?;
         Ok(Self {
             pool,
             config: Arc::new(config),
@@ -106,6 +115,7 @@ pub fn public_router(state: AppState) -> Router {
         .route("/healthz", get(health))
         .route("/readyz", get(ready))
         .route("/v1/discovery", get(discovery))
+        .route("/v1/openapi.json", get(openapi::document))
         .route("/v1/auth/github/start", get(public::github_start))
         .route("/v1/auth/github/callback", get(public::github_callback))
         .route("/v1/me", get(public::me))
@@ -217,13 +227,25 @@ struct Discovery {
     release_sha: String,
     signup: bool,
     checkout: bool,
+    job_submission: bool,
+    verification: bool,
+    payg: bool,
     hosted_proving: bool,
     disclosures: [&'static str; 4],
 }
 
 async fn discovery(State(state): State<AppState>) -> Json<Discovery> {
     let public = state.config.exposure == config::ExposureMode::PublicBeta;
-    let writes = public && state.config.writes_enabled;
+    let flags = sqlx::query_as::<_, (bool, bool, bool)>(
+        "SELECT signup_enabled,checkout_enabled,job_submission_enabled
+           FROM beta_operational_flags WHERE singleton=true",
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or((false, false, false));
+    let master = public && state.config.writes_enabled;
     Json(Discovery {
         service: "hc-beta-api",
         service_status: if public {
@@ -232,9 +254,12 @@ async fn discovery(State(state): State<AppState>) -> Json<Discovery> {
             "operator_canary"
         },
         release_sha: state.config.release_sha.clone(),
-        signup: writes,
-        checkout: writes,
-        hosted_proving: writes,
+        signup: master && flags.0,
+        checkout: master && flags.1,
+        job_submission: master && flags.2,
+        verification: true,
+        payg: true,
+        hosted_proving: master && flags.2,
         disclosures: [
             "public beta",
             "not independently audited",

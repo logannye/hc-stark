@@ -18,6 +18,24 @@ delete ledger events or retained proof bundles during rollback.
 
 ## Customer artifact preflight
 
+For the supported end-to-end workflow, prefer the signed hosted client:
+
+```sh
+hc-cli beta quickstart --fixture fibonacci --output-dir ./tinyzkp-example
+hc-cli beta submit \
+  --air ./tinyzkp-example/air.json \
+  --qualification-trace ./tinyzkp-example/qualification.trace \
+  --qualification-public-inputs ./tinyzkp-example/qualification-public-inputs.json \
+  --job-trace ./tinyzkp-example/job.trace \
+  --row-count 16384 \
+  --job-public-inputs ./tinyzkp-example/job-public-inputs.json \
+  --policy ./tinyzkp-example/policy.json \
+  --output-bundle ./tinyzkp-example/proof-bundle.json \
+  --state ./tinyzkp-example/resume-state.json
+```
+
+The CLI validates and qualifies the AIR locally, uploads directly through scoped R2 URLs, submits idempotently, downloads the bundle, and verifies it locally and through the official hosted verifier. Credentials are read only from `TINYZKP_API_KEY` or a mode-`0600` credentials file.
+
 Validate the AIR locally:
 
 ```sh
@@ -112,6 +130,17 @@ Portal sessions only for an authenticated tenant's Stripe customer. Grant
 monthly credits only after `invoice.paid`; freeze new paid work after
 `invoice.payment_failed`; process every webhook through the immutable Stripe
 event/idempotency records. Never grant credits from the browser redirect.
+
+A first non-synthetic top-up upgrades only a Sandbox tenant to PAYG. PAYG has
+one concurrent job, seven-day proof retention, and the full supported AIR
+profile. Top-ups do not downgrade or change Builder, Pro, or Scale. The
+nonfungible Sandbox entitlement permits exactly one release-bound fixture job
+at no more than `2^16` rows and is permanently tombstoned by GitHub identity.
+
+Live Checkout requires automatic tax, required billing-address collection, an
+operator-approved Stripe product tax code, verified live prices, a dedicated
+webhook destination, and the beta Portal configuration. API startup fails if
+any preflight condition is missing or inconsistent.
 
 ## Evidence and release authorization
 

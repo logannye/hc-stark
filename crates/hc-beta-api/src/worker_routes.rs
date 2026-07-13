@@ -12,7 +12,8 @@ use axum::{
     Json,
 };
 use hc_plonky3::contracts::{
-    hosted_charge_millicredits, HostedProofBundleV1, MAX_AIR_BUNDLE_JSON_BYTES,
+    hosted_charge_millicredits, hosted_measured_cost_millicredits, HostedProofBundleV1,
+    MAX_AIR_BUNDLE_JSON_BYTES,
 };
 use serde_json::{json, Value};
 use sqlx::Row;
@@ -242,6 +243,13 @@ pub async fn claim(
     .bind(&worker_id)
     .bind(attempt)
     .bind(lease_epoch)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE beta_sandbox_grants SET entitlement_state='consumed',consumed_at=now()
+          WHERE reserved_job_id=$1 AND entitlement_state='reserved'",
+    )
+    .bind(job_id)
     .execute(&mut *tx)
     .await?;
     sqlx::query(
@@ -479,13 +487,14 @@ pub async fn complete(
     if bundle.proof.provenance.release_sha != state.config.release_sha {
         return Err(ApiError::Conflict("bundle_release_mismatch"));
     }
-    let charge = hosted_charge_millicredits(&bundle.resource_report);
+    let retail_charge = hosted_charge_millicredits(&bundle.resource_report);
+    let measured_cost = hosted_measured_cost_millicredits(&bundle.resource_report);
 
     let mut tx = state.pool.begin().await?;
     let row = sqlx::query(
         "SELECT status,lease_owner,attempt,lease_epoch,reserved_millicredits,
                 reserved_subscription_millicredits,reserved_purchased_millicredits,
-                public_inputs_digest_hex
+                public_inputs_digest_hex,sandbox_job
            FROM beta_proof_jobs WHERE job_id=$1 FOR UPDATE",
     )
     .bind(job_id)
@@ -496,8 +505,16 @@ pub async fn complete(
     if bundle.proof.public_inputs_digest_hex != expected_public {
         return Err(ApiError::Invalid("bundle_statement_mismatch"));
     }
+    let sandbox_job: bool = row.get("sandbox_job");
+    let charge = if sandbox_job { 0 } else { retail_charge };
+    let margin_bps = if sandbox_job {
+        -100_000
+    } else {
+        i32::try_from(charge.saturating_sub(measured_cost).saturating_mul(10_000) / charge.max(1))
+            .map_err(|_| ApiError::Internal)?
+    };
     let reserved = as_u64(row.get("reserved_millicredits"))?;
-    if charge > reserved {
+    if !sandbox_job && charge > reserved {
         release_reservation(&mut tx, &tenant_id, job_id, &row, "platform_failed").await?;
         sqlx::query("UPDATE beta_proof_jobs SET error_code='estimate_overflow' WHERE job_id=$1")
             .bind(job_id)
@@ -527,12 +544,16 @@ pub async fn complete(
     .await?;
     sqlx::query(
         "UPDATE beta_proof_jobs SET status='completed',verification_succeeded=true,
-             settled_millicredits=$2,measured_cost_millicredits=$2,
-             proof_object_key=$3,proof_digest_hex=$4,proof_size_bytes=$5,
+             settled_millicredits=$2,measured_cost_millicredits=$3,
+             resource_report_json=$4,realized_gross_margin_bps=$5,
+             proof_object_key=$6,proof_digest_hex=$7,proof_size_bytes=$8,
              completed_at=now(),lease_expires_at=NULL WHERE job_id=$1",
     )
     .bind(job_id)
     .bind(to_i64(charge)?)
+    .bind(to_i64(measured_cost)?)
+    .bind(serde_json::to_value(&bundle.resource_report).map_err(|_| ApiError::Internal)?)
+    .bind(margin_bps)
     .bind(&request.object_key)
     .bind(&request.blake3_hex)
     .bind(to_i64(request.content_length)?)
@@ -546,7 +567,9 @@ pub async fn complete(
     )
     .bind(Uuid::new_v4()).bind(&tenant_id).bind(to_i64(refund_sub)?).bind(to_i64(refund_purchased)?)
     .bind(-to_i64(reserved)?).bind(job_id).bind(format!("job:{job_id}:settlement"))
-    .bind(json!({"charged_millicredits":charge,"verified":true})).execute(&mut *tx).await?;
+    .bind(json!({"charged_millicredits":charge,"retail_value_millicredits":retail_charge,
+                 "measured_cost_millicredits":measured_cost,"realized_gross_margin_bps":margin_bps,
+                 "sandbox_job":sandbox_job,"verified":true})).execute(&mut *tx).await?;
     sqlx::query(
         "UPDATE beta_job_attempts SET ended_at=now(),result='completed'
           WHERE job_id=$1 AND attempt=$2 AND lease_epoch=$3",

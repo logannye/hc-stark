@@ -15,6 +15,12 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
+def test_abandoned_candidate_is_rejected_before_any_external_action(tmp_path: Path):
+    args = argparse.Namespace(release_sha="04e8af8ed0be29433adc60730ab5e3eef13b13aa")
+    with pytest.raises(SystemExit, match="permanently abandoned"):
+        MODULE.activate(args)
+
+
 def test_smoke_command_must_be_operator_owned_and_nonwritable(tmp_path: Path):
     command = tmp_path / "smoke"
     command.write_text("#!/bin/sh\nexit 0\n")

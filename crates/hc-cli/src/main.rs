@@ -26,6 +26,11 @@ enum Commands {
         #[command(subcommand)]
         command: Plonky3Command,
     },
+    /// Paid public-beta hosted proving lifecycle.
+    Beta {
+        #[command(subcommand)]
+        command: BetaCommand,
+    },
     /// Full-pipeline benchmark orchestration.
     Benchmark {
         #[command(subcommand)]
@@ -55,6 +60,70 @@ enum Commands {
     LegacyResearch {
         #[command(subcommand)]
         command: LegacyResearchCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum BetaCommand {
+    Quickstart {
+        #[arg(long)]
+        fixture: String,
+        #[arg(long)]
+        output_dir: PathBuf,
+    },
+    Submit {
+        #[arg(long)]
+        air: PathBuf,
+        #[arg(long)]
+        qualification_trace: PathBuf,
+        #[arg(long)]
+        qualification_public_inputs: PathBuf,
+        #[arg(long)]
+        job_trace: PathBuf,
+        #[arg(long)]
+        row_count: u64,
+        #[arg(long)]
+        job_public_inputs: PathBuf,
+        #[arg(long)]
+        policy: PathBuf,
+        #[arg(long)]
+        output_bundle: PathBuf,
+        #[arg(long)]
+        state: PathBuf,
+        #[arg(long)]
+        credentials_file: Option<PathBuf>,
+    },
+    Status {
+        #[arg(long)]
+        state: PathBuf,
+        #[arg(long)]
+        credentials_file: Option<PathBuf>,
+    },
+    Cancel {
+        #[arg(long)]
+        state: PathBuf,
+        #[arg(long)]
+        credentials_file: Option<PathBuf>,
+    },
+    Download {
+        #[arg(long)]
+        state: PathBuf,
+        #[arg(long)]
+        output_bundle: PathBuf,
+        #[arg(long)]
+        credentials_file: Option<PathBuf>,
+    },
+    Verify {
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long, default_value_t = false)]
+        remote: bool,
+        #[arg(long)]
+        credentials_file: Option<PathBuf>,
+    },
+    Doctor {
+        #[arg(long)]
+        credentials_file: Option<PathBuf>,
     },
 }
 
@@ -210,6 +279,29 @@ fn main() -> Result<()> {
             );
             Ok(())
         }
+        Commands::Beta { command } => match command {
+            BetaCommand::Quickstart { fixture, output_dir } =>
+                commands::beta::quickstart(&fixture, &output_dir),
+            BetaCommand::Submit { air, qualification_trace, qualification_public_inputs,
+                job_trace, row_count, job_public_inputs, policy, output_bundle, state,
+                credentials_file } => commands::beta::submit(commands::beta::SubmitPaths {
+                    air: &air, qualification_trace: &qualification_trace,
+                    qualification_public_inputs: &qualification_public_inputs,
+                    job_trace: &job_trace, row_count, job_public_inputs: &job_public_inputs,
+                    policy: &policy, output_bundle: &output_bundle, state: &state,
+                    credentials_file: credentials_file.as_deref(),
+                }),
+            BetaCommand::Status { state, credentials_file } =>
+                commands::beta::status(&state, credentials_file.as_deref()),
+            BetaCommand::Cancel { state, credentials_file } =>
+                commands::beta::cancel(&state, credentials_file.as_deref()),
+            BetaCommand::Download { state, output_bundle, credentials_file } =>
+                commands::beta::download(&state, &output_bundle, credentials_file.as_deref()),
+            BetaCommand::Verify { bundle, remote, credentials_file } =>
+                commands::beta::verify(&bundle, credentials_file.as_deref(), remote),
+            BetaCommand::Doctor { credentials_file } =>
+                commands::beta::doctor(credentials_file.as_deref()),
+        },
         Commands::Plonky3 { command } => match command {
             Plonky3Command::ValidateAir { air } => commands::plonky3::validate_air(&air),
             Plonky3Command::PackTrace {

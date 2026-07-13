@@ -1,5 +1,5 @@
 use axum::{
-    http::StatusCode,
+    http::{HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -34,6 +34,9 @@ struct ErrorBody {
 struct ErrorDetail {
     code: &'static str,
     message: String,
+    action: &'static str,
+    documentation_url: String,
+    request_id: String,
 }
 
 impl ApiError {
@@ -62,23 +65,45 @@ impl ApiError {
             Self::Internal => "internal_error",
         }
     }
+
+    fn action(&self) -> &'static str {
+        match self {
+            Self::Unauthorized => "Sign in or provide a valid API key.",
+            Self::NotFound => "Check the resource ID and tenant ownership.",
+            Self::Conflict(_) => "Reuse the original request or choose a new idempotency key.",
+            Self::Invalid(_) => "Correct the request using the API contract and retry.",
+            Self::PaymentRequired => "Purchase prepaid credits or reduce the requested workload.",
+            Self::RateLimited => "Wait before retrying with exponential backoff.",
+            Self::Unavailable(_) => "Check service status and retry after recovery.",
+            Self::Internal => "Retry later and provide the request ID if the failure persists.",
+        }
+    }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status_code();
         let code = self.code();
-        tracing::warn!(%status, code, error = %self, "beta API request rejected");
-        (
+        let request_id = uuid::Uuid::new_v4().to_string();
+        tracing::warn!(%status, code, %request_id, error = %self, "beta API request rejected");
+        let mut response = (
             status,
             Json(ErrorBody {
                 error: ErrorDetail {
                     code,
                     message: self.to_string(),
+                    action: self.action(),
+                    documentation_url: format!("https://tinyzkp.com/docs/errors#{code}"),
+                    request_id: request_id.clone(),
                 },
             }),
         )
-            .into_response()
+            .into_response();
+        response.headers_mut().insert(
+            "x-request-id",
+            HeaderValue::from_str(&request_id).expect("UUID is a valid header value"),
+        );
+        response
     }
 }
 

@@ -87,6 +87,9 @@ def checkout_parameters(
         "client_reference_id": tenant_id,
         "success_url": success_url,
         "cancel_url": cancel_url,
+        "automatic_tax": {"enabled": True},
+        "billing_address_collection": "required",
+        "customer_update": {"address": "auto"},
         "metadata": metadata,
     }
     if item["kind"] == "subscription":
@@ -174,6 +177,11 @@ def apply_catalog(catalog: dict[str, Any]) -> dict[str, dict[str, str]]:
             "live catalog writes require a signed exact-SHA dark-canary or public-beta authorization"
         )
     stripe.api_key = key
+    tax_code = os.environ.get("TINYZKP_STRIPE_PRODUCT_TAX_CODE", "").strip()
+    if not re.fullmatch(r"txcd_[A-Za-z0-9_]+", tax_code):
+        raise RuntimeError("TINYZKP_STRIPE_PRODUCT_TAX_CODE must be operator-approved")
+    if os.environ.get("TINYZKP_STRIPE_TAX_SETTINGS_APPROVED") != "1":
+        raise RuntimeError("TINYZKP_STRIPE_TAX_SETTINGS_APPROVED=1 is required")
     stripe.api_version = STRIPE_API_VERSION
     account = stripe.Account.retrieve()
     verify_account(
@@ -199,11 +207,19 @@ def apply_catalog(catalog: dict[str, Any]) -> dict[str, dict[str, str]]:
             product = stripe.Product.create(
                 name=item["name"],
                 description="Paid public beta; no SLA; not independently audited.",
+                tax_code=tax_code,
                 metadata={"tinyzkp_catalog": CATALOG_NAMESPACE, "tinyzkp_sku": sku},
                 idempotency_key=f"{CATALOG_NAMESPACE}:product:{sku}",
             )
             products.append(product)
         product_id = product["id"] if isinstance(product, dict) else product.id
+        product_tax_code = product.get("tax_code") if isinstance(product, dict) else getattr(product, "tax_code", None)
+        if product_tax_code != tax_code:
+            stripe.Product.modify(
+                product_id,
+                tax_code=tax_code,
+                idempotency_key=f"{CATALOG_NAMESPACE}:tax-code:{sku}:{tax_code}",
+            )
         price = next(
             (
                 price

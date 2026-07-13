@@ -30,6 +30,8 @@ pub struct Config {
     pub stripe_secret_key: String,
     pub stripe_webhook_secret: String,
     pub stripe_portal_configuration: String,
+    pub stripe_product_tax_code: String,
+    pub stripe_webhook_endpoint: String,
     pub stripe_prices_json: String,
     pub reconciliation_hmac_key: [u8; 32],
 }
@@ -75,6 +77,20 @@ impl Config {
         if exposure == ExposureMode::DarkCanary && allowlist.is_empty() {
             bail!("dark canary mode requires TINYZKP_OPERATOR_GITHUB_IDS");
         }
+        let stripe_product_tax_code = required("TINYZKP_STRIPE_PRODUCT_TAX_CODE")?;
+        if optional("TINYZKP_STRIPE_TAX_SETTINGS_APPROVED", "0") != "1"
+            || !stripe_product_tax_code.starts_with("txcd_")
+        {
+            bail!("Stripe tax settings require operator approval and an approved txcd_ product tax code");
+        }
+        let stripe_portal_configuration = required("TINYZKP_STRIPE_PORTAL_CONFIGURATION")?;
+        if !stripe_portal_configuration.starts_with("bpc_") {
+            bail!("TINYZKP_STRIPE_PORTAL_CONFIGURATION must be a beta bpc_ configuration");
+        }
+        let stripe_webhook_endpoint = required("TINYZKP_STRIPE_WEBHOOK_ENDPOINT")?;
+        if !stripe_webhook_endpoint.starts_with("we_") {
+            bail!("TINYZKP_STRIPE_WEBHOOK_ENDPOINT must be a configured we_ destination");
+        }
         Ok(Self {
             public_bind: optional("TINYZKP_BETA_PUBLIC_BIND", "127.0.0.1:8090").parse()?,
             worker_bind: optional("TINYZKP_BETA_WORKER_BIND", "10.77.0.1:8091").parse()?,
@@ -94,7 +110,9 @@ impl Config {
             r2_region: optional("TINYZKP_R2_REGION", "auto"),
             stripe_secret_key: required("STRIPE_SECRET_KEY")?,
             stripe_webhook_secret: required("TINYZKP_STRIPE_WEBHOOK_SECRET")?,
-            stripe_portal_configuration: required("TINYZKP_STRIPE_PORTAL_CONFIGURATION")?,
+            stripe_portal_configuration,
+            stripe_product_tax_code,
+            stripe_webhook_endpoint,
             stripe_prices_json: required("TINYZKP_STRIPE_PRICE_MAP_JSON")?,
             reconciliation_hmac_key: decode_secret_32("TINYZKP_RECONCILIATION_HMAC_KEY")?,
         })
