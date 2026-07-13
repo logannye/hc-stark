@@ -32,6 +32,9 @@ if [[ "$ROLE" == api ]]; then
   }
   [[ -d "$secret_dir/release" ]] || { echo "missing $secret_dir/release" >&2; exit 3; }
   [[ "$(stat -c %a "$secret_dir/release")" == 700 ]] || { echo "$secret_dir/release must be mode 0700" >&2; exit 3; }
+  /usr/bin/docker network inspect tinyzkp-observability >/dev/null 2>&1 || \
+    /usr/bin/docker network create --internal --subnet 172.31.77.0/24 tinyzkp-observability >/dev/null
+  install -d -o 10001 -g 10001 -m 0700 /var/lib/tinyzkp-owner /var/lib/tinyzkp-owner/reports
   if [[ ! -f /etc/caddy/Caddyfile.tinyzkp-containment ]]; then
     install -o root -g caddy -m 0640 /etc/caddy/Caddyfile /etc/caddy/Caddyfile.tinyzkp-containment
   fi
@@ -39,7 +42,8 @@ if [[ "$ROLE" == api ]]; then
   install -o root -g root -m 0644 "$SOURCE"/systemd/tinyzkp-*.service /etc/systemd/system/
   install -o root -g root -m 0644 "$SOURCE"/systemd/tinyzkp-*.timer /etc/systemd/system/
   systemctl daemon-reload
-  systemctl enable tinyzkp-pgbackrest-diff.timer tinyzkp-pgbackrest-full.timer tinyzkp-stripe-reconcile.timer tinyzkp-retention.timer
+  chmod 0755 /opt/tinyzkp/deploy/hetzner/beta/report-api-storage.sh /opt/tinyzkp/deploy/hetzner/beta/record-beta-activation.sh
+  systemctl enable tinyzkp-pgbackrest-diff.timer tinyzkp-pgbackrest-full.timer tinyzkp-stripe-reconcile.timer tinyzkp-retention.timer tinyzkp-api-storage-health.timer tinyzkp-owner-digest.timer tinyzkp-viability.timer
   echo "API host files installed. Start dark deployment only after docker compose config succeeds."
 else
   secret_dir=${TINYZKP_WORKER_SECRET_DIR:-/etc/tinyzkp/worker}

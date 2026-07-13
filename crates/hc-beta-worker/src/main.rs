@@ -83,6 +83,7 @@ struct Claim {
 struct ClaimRequest<'a> {
     release_sha: &'a str,
     free_scratch_bytes: u64,
+    total_scratch_bytes: u64,
 }
 
 #[derive(Serialize)]
@@ -105,6 +106,7 @@ struct HeartbeatRequest {
     attempt: u32,
     lease_epoch: u64,
     free_scratch_bytes: u64,
+    total_scratch_bytes: u64,
     progress: Option<Value>,
     checkpoint_identity: Option<String>,
 }
@@ -409,12 +411,14 @@ impl Worker {
     }
 
     async fn claim(&self) -> anyhow::Result<Option<Claim>> {
+        let (total_scratch_bytes, free_scratch_bytes) = scratch_space(&self.config.scratch)?;
         self.json(
             Method::POST,
             "/internal/v1/leases/claim",
             &ClaimRequest {
                 release_sha: &self.config.release_sha,
-                free_scratch_bytes: free_space(&self.config.scratch)?,
+                free_scratch_bytes,
+                total_scratch_bytes,
             },
         )
         .await
@@ -433,6 +437,7 @@ impl Worker {
             .insert(claim.job_id, cancellation.clone());
         let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<Value>();
         let endpoint = format!("/internal/v1/jobs/{}/heartbeat", claim.job_id);
+        let initial_space = scratch_space(&self.config.scratch).unwrap_or((0, 0));
         let initial: anyhow::Result<HeartbeatResponse> = self
             .json(
                 Method::POST,
@@ -440,7 +445,8 @@ impl Worker {
                 &HeartbeatRequest {
                     attempt: claim.attempt,
                     lease_epoch: claim.lease_epoch,
-                    free_scratch_bytes: free_space(&self.config.scratch).unwrap_or(0),
+                    free_scratch_bytes: initial_space.1,
+                    total_scratch_bytes: initial_space.0,
                     progress: Some(json!({"event":"lease_claimed"})),
                     checkpoint_identity: checkpoint(&job_dir)
                         .ok()
@@ -468,6 +474,8 @@ impl Worker {
                             latest = Some(progress);
                         }
                         let endpoint = format!("/internal/v1/jobs/{}/heartbeat", heartbeat_claim.0);
+                        let space =
+                            scratch_space(&heartbeat_worker.config.scratch).unwrap_or((0, 0));
                         let response = heartbeat_worker
                             .json::<_, HeartbeatResponse>(
                                 Method::POST,
@@ -475,10 +483,8 @@ impl Worker {
                                 &HeartbeatRequest {
                                     attempt: heartbeat_claim.1,
                                     lease_epoch: heartbeat_claim.2,
-                                    free_scratch_bytes: free_space(
-                                        &heartbeat_worker.config.scratch,
-                                    )
-                                    .unwrap_or(0),
+                                    free_scratch_bytes: space.1,
+                                    total_scratch_bytes: space.0,
                                     progress: latest.take(),
                                     checkpoint_identity: checkpoint(&heartbeat_job_dir)
                                         .ok()
@@ -516,6 +522,7 @@ impl Worker {
         if self.draining.load(Ordering::Acquire) && result.is_err() {
             if let Ok(Some((_, checkpoint_identity))) = checkpoint(&job_dir) {
                 let endpoint = format!("/internal/v1/jobs/{}/heartbeat", claim.job_id);
+                let space = scratch_space(&self.config.scratch).unwrap_or((0, 0));
                 let _: HeartbeatResponse = self
                     .json(
                         Method::POST,
@@ -523,7 +530,8 @@ impl Worker {
                         &HeartbeatRequest {
                             attempt: claim.attempt,
                             lease_epoch: claim.lease_epoch,
-                            free_scratch_bytes: free_space(&self.config.scratch).unwrap_or(0),
+                            free_scratch_bytes: space.1,
+                            total_scratch_bytes: space.0,
                             progress: Some(json!({"event":"worker_draining"})),
                             checkpoint_identity: Some(checkpoint_identity),
                         },
@@ -637,7 +645,7 @@ impl Worker {
         let policy = ResourcePolicyV1 {
             mode: ResourceMode::Scratch,
             max_resident_bytes: 2 * 1024 * 1024 * 1024,
-            max_scratch_bytes: free_space(&self.config.scratch)?.saturating_mul(70) / 100,
+            max_scratch_bytes: scratch_space(&self.config.scratch)?.1.saturating_mul(70) / 100,
             scratch_dir: job_dir.join("prover"),
             max_threads: 2,
             checkpoint_policy: CheckpointPolicy::RetainOnFailure,
@@ -923,7 +931,7 @@ async fn private_dir(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn free_space(path: &Path) -> anyhow::Result<u64> {
+fn scratch_space(path: &Path) -> anyhow::Result<(u64, u64)> {
     let output = std::process::Command::new("df")
         .args(["-Pk", path.to_str().context("scratch path encoding")?])
         .output()?;
@@ -935,12 +943,16 @@ fn free_space(path: &Path) -> anyhow::Result<u64> {
         .last()
         .context("df output missing")?
         .to_owned();
-    let blocks = line
-        .split_whitespace()
-        .nth(3)
+    let columns = line.split_whitespace().collect::<Vec<_>>();
+    let total = columns
+        .get(1)
+        .context("df total blocks missing")?
+        .parse::<u64>()?;
+    let free = columns
+        .get(3)
         .context("df available blocks missing")?
         .parse::<u64>()?;
-    Ok(blocks.saturating_mul(1024))
+    Ok((total.saturating_mul(1024), free.saturating_mul(1024)))
 }
 
 async fn directory_size(path: &Path) -> anyhow::Result<u64> {

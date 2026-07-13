@@ -128,6 +128,7 @@ def activate(args: argparse.Namespace) -> None:
         environment = {"PATH": "/usr/local/bin:/usr/bin:/bin", "TINYZKP_RELEASE_SHA": args.release_sha}
         run([str(smoke)], env=environment)
         run([args.wrangler, "deploy", "--config", "deploy/uptime-probe/wrangler.toml", "--var", "AUDIT_MODE:public_beta"], cwd=root)
+        run(ssh + ["sudo", "/opt/tinyzkp/deploy/hetzner/beta/record-beta-activation.sh"])
     except BaseException as activation_error:
         rollback_errors: list[str] = []
 

@@ -22,6 +22,8 @@ hc-stream = { path = "../hc-stream" }
 hex = "0.4"
 hmac = "0.12"
 http = "1.1"
+libc = "0.2"
+prometheus = "0.14"
 rand.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 schemars = { version = "=1.2.1", features = ["uuid1"] }
@@ -39,4 +41,5 @@ url = "2.5"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 
 [dev-dependencies]
+tempfile = "3.10"
 tower = "0.5"

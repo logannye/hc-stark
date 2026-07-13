@@ -60,9 +60,35 @@ services:
     environment:
       TINYZKP_BETA_PUBLIC_BIND: 0.0.0.0:8090
       TINYZKP_BETA_WORKER_BIND: 0.0.0.0:8091
+      TINYZKP_BETA_METRICS_BIND: 172.31.77.10:9091
     ports:
       - "127.0.0.1:8090:8090"
       - "10.77.0.1:8091:8091"
+    volumes:
+      - ${TINYZKP_BETA_SECRET_DIR:?}/release:/run/secrets:ro
+    networks:
+      database: {}
+      egress: {}
+      observability:
+        ipv4_address: 172.31.77.10
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=0700,uid=10001,gid=10001
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+
+  beta-ops:
+    image: ${TINYZKP_BETA_API_IMAGE:?set a digest-pinned beta API image}
+    profiles: ["ops"]
+    depends_on:
+      pgbouncer:
+        condition: service_started
+    env_file:
+      - ${TINYZKP_BETA_SECRET_DIR:?}/beta-api.env
+    environment:
+      TINYZKP_BETA_PUBLIC_BIND: 127.0.0.1:8090
+      TINYZKP_BETA_WORKER_BIND: 127.0.0.1:8091
+      TINYZKP_BETA_METRICS_BIND: 127.0.0.1:9091
     volumes:
       - ${TINYZKP_BETA_SECRET_DIR:?}/release:/run/secrets:ro
     networks: [database, egress]
@@ -71,6 +97,7 @@ services:
       - /tmp:size=64m,mode=0700,uid=10001,gid=10001
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
+    entrypoint: ["/bin/false"]
 
 volumes:
   beta-postgres:
@@ -79,3 +106,6 @@ networks:
   database:
     internal: true
   egress:
+  observability:
+    external: true
+    name: tinyzkp-observability

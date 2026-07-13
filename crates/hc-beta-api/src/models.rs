@@ -183,6 +183,7 @@ pub struct RedirectResponse {
 pub struct WorkerClaimRequest {
     pub release_sha: String,
     pub free_scratch_bytes: u64,
+    pub total_scratch_bytes: u64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -217,6 +218,7 @@ pub struct WorkerHeartbeatRequest {
     pub attempt: u32,
     pub lease_epoch: u64,
     pub free_scratch_bytes: u64,
+    pub total_scratch_bytes: u64,
     pub progress: Option<Value>,
     pub checkpoint_identity: Option<String>,
 }

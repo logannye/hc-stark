@@ -1,0 +1,10 @@
+[Unit]
+Description=Evaluate TinyZKP viability reports daily
+
+[Timer]
+OnCalendar=*-*-* 16:30:00 UTC
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

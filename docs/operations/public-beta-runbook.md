@@ -19,6 +19,8 @@ Production remains in containment until the signed `public_beta` authorization m
 - Register the worker with `register-worker.sh` using the same base64 pepper as the API. The raw worker credential is placed only in the worker environment.
 - Keep the pgBackRest recovery key copy outside the VM and outside the R2 account.
 - Rotate GitHub, Stripe, R2, worker, and database credentials after any suspected exposure. Worker rotation is an idempotent re-registration followed by worker restart.
+- Generate a separate random metrics token of at least 32 characters. Put the same raw token in `TINYZKP_BETA_METRICS_TOKEN` and the Prometheus-only owner-readable `/etc/prometheus/beta_metrics_token`. Metrics listen only on the internal `tinyzkp-observability` Docker network and are never published on a host port.
+- Create `/var/lib/tinyzkp-owner/owner-cost.json` from `owner-cost.json.example`, set owner UID 10001 and mode `0600`, and replace the example amount with the actual monthly worker, API host, R2, backup, and monitoring cost. Do not put customer or Stripe data in this file.
 
 ## Dark deployment
 
@@ -104,6 +106,39 @@ The signed CLI always targets `https://api.tinyzkp.com`; release binaries do not
 - Every one of the twelve `public_beta` gates has a dedicated semantic record and validator. A generic JSON file containing only `status: passed` and the release SHA is deliberately rejected. Use the exact `public-beta-*-v1` schemas enforced by `scripts/ci/public_beta_gate.py`; fixed-host gates additionally re-run the resource and customer-cubic validators against the hash-bound raw reports. Fault evidence distinguishes successfully resumed and officially verified work from failures that must release the complete reservation, and separately proves that stale completions cannot settle.
 - Run the resumable 24-hour allowlisted canary with `scripts/canary/run_public_beta_canary.py` and an owner-controlled driver implementing `proof`, `cancel`, `billing`, and `audit` subcommands. The harness pins the driver digest, records one proof per hour, runs cancellation/refund every six hours, performs both tagged live billing canaries, and writes owner-only state after every event. Validate its evidence with `validate_public_beta_canary.py`.
 
+## Autopilot operations
+
+The API runs its invariant watchdog every five minutes. Any failing invariant disables signup, Checkout, and new job submission in one database transaction. Verification, balances, Portal, cancellation, status, account deletion, and completed downloads remain available. An incident is alerted once; a failed alert is retried, but an open incident never floods the owner. A clean later check closes the incident window but does not re-enable writes.
+
+Required checks include exact release identity, immutable-ledger reconstruction, billing discrepancies and reconciliation freshness, Stripe event age, official verifier outcomes, worker heartbeat and leases, backup/WAL freshness, private R2 health, API/scratch free space, and the four-slot worker envelope. The API-host storage timer reports every five minutes. Successful pgBackRest full and differential jobs report backup health; a failed or missing report becomes stale after 26 hours.
+
+After investigating and fixing an incident, run the complete check and explicitly recover with a unique operation ID:
+
+```sh
+docker compose -f docker-compose.api.yml run --rm --no-deps \
+  --entrypoint /usr/local/bin/hc-beta-watchdog beta-ops check
+docker compose -f docker-compose.api.yml run --rm --no-deps \
+  --entrypoint /usr/local/bin/hc-beta-watchdog beta-ops recover recovery-YYYYMMDD-reason
+```
+
+Recovery fails while any invariant remains open. A historical official-verifier rejection is acknowledged only by this explicit recovery operation; it is never deleted or silently ignored.
+
+Prometheus must join the external, internal-only `tinyzkp-observability` network and scrape `beta-api:9091` with `/etc/prometheus/beta_metrics_token`. Use the beta alert rules in `deploy/prometheus/alerts.yml`; the legacy `hc-server` billing/proving alerts are intentionally retired for this service.
+
+The Monday 16:00 UTC owner digest writes a mode-`0600` aggregate JSON report under `/var/lib/tinyzkp-owner/reports` and sends only a redacted aggregate summary to the existing alert webhook. It contains no tenant IDs, emails, API keys, Stripe IDs, cookies, object keys, or URLs. Record support work without copying customer messages:
+
+```sh
+docker compose -f docker-compose.api.yml run --rm --no-deps \
+  --entrypoint /usr/local/bin/hc-beta-support-log beta-ops \
+  onboarding 15 support-20260713-onboarding
+```
+
+Valid categories are `onboarding`, `billing`, `proof`, `security`, `operations`, and `other`; each entry is 1–240 minutes and idempotent by operation ID.
+
+The activation transaction records the viability window only after the public smoke and external probe pass. A daily timer emits signed day-30, day-60, and day-90 reports. At day 90 the gate requires five real paying tenants, trailing revenue at least three times direct cost, at least 70% realized gross margin, no more than 60 support minutes per ten jobs, at least 25% paid-tenant retention, and no unresolved invariant. Failure disables only new signup and Checkout and emits a wind-down report. Cancelling subscriptions, refunding credits, stopping existing jobs, or cancelling Hetzner always requires a separate explicit operator decision.
+
+The exact-release recovery gate must include `public-beta-autopilot-evidence-v1` proving every watchdog trigger, one alert per incident, no automatic re-enable, preserved read/recovery capabilities, owner-digest reconciliation/redaction, and the non-destructive viability behavior.
+
 ## Activation
 
 The signed candidate `04e8af8ed0be29433adc60730ab5e3eef13b13aa` is explicitly abandoned for activation. Its artifacts and evidence are comparison data only; `activate_public_beta.py` rejects it even if an authorization is supplied.
@@ -114,6 +149,8 @@ The signed candidate `04e8af8ed0be29433adc60730ab5e3eef13b13aa` is explicitly ab
 4. Stage the exact site with `scripts/release/stage_public_beta_site.sh RELEASE_SHA OUTPUT`, then verify the dashboard, discovery, pricing, OpenAPI, and asset checksums through a Pages preview.
 5. Confirm discovery reports `public_beta`, the exact release SHA, and disabled writes. After explicit operator confirmation, run `scripts/release/activate_public_beta.py` with the staged site, API SSH target, Cloudflare account, and owner-controlled smoke command. It snapshots Pages, promotes the site, commits Caddy, enables writes only after read checks, and switches the external probe.
 6. If any Pages, Caddy, discovery, write-state, smoke, or probe step fails, the activation operator disables writes, restores the rollback route, rolls Pages back to the prior successful production deployment, and restores containment monitoring.
+
+The current signed comparison candidate `04e8af8ed0be29433adc60730ab5e3eef13b13aa` remains abandoned. Build a new exact candidate only after the self-service contract and autopilot operations PRs merge. Rerun all twelve semantic gates, including the custom-AIR CLI lifecycle, PAYG/Sandbox and tax-address drills, watchdog matrix, owner-digest redaction, four-job load, restore/replay, and unchanged 24-hour canary. Do not activate or perform live customer purchases from this runbook without Logan's explicit final go-live approval.
 
 ## Rollback
 

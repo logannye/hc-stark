@@ -2,13 +2,16 @@
 
 pub mod auth;
 pub mod billing;
+pub mod business;
 pub mod config;
 pub mod error;
 pub mod github;
 pub mod idempotency;
+pub mod metrics;
 pub mod models;
 pub mod object_store;
 pub mod openapi;
+pub mod operations;
 pub mod public;
 pub mod retention;
 pub mod stripe;
@@ -21,6 +24,7 @@ use anyhow::Context;
 use axum::{
     extract::{DefaultBodyLimit, State},
     http::StatusCode,
+    middleware,
     response::IntoResponse,
     routing::{delete, get, post},
     Json, Router,
@@ -42,6 +46,7 @@ pub struct AppState {
     pub github: GithubClient,
     pub stripe: StripeClient,
     pub verify_slots: Arc<tokio::sync::Semaphore>,
+    pub metrics: metrics::Metrics,
 }
 
 #[derive(Clone, Debug)]
@@ -99,6 +104,7 @@ impl AppState {
             .preflight()
             .await
             .context("validate isolated Stripe beta catalog")?;
+        let metrics = metrics::Metrics::new()?;
         Ok(Self {
             pool,
             config: Arc::new(config),
@@ -106,11 +112,13 @@ impl AppState {
             github,
             stripe,
             verify_slots: Arc::new(tokio::sync::Semaphore::new(8)),
+            metrics,
         })
     }
 }
 
 pub fn public_router(state: AppState) -> Router {
+    let metrics = state.metrics.clone();
     Router::new()
         .route("/healthz", get(health))
         .route("/readyz", get(ready))
@@ -145,6 +153,13 @@ pub fn public_router(state: AppState) -> Router {
             axum::http::HeaderName::from_static("x-request-id"),
             MakeRequestUuid,
         ))
+        .layer(middleware::from_fn_with_state(metrics, metrics::track_http))
+        .with_state(state)
+}
+
+pub fn metrics_router(state: AppState) -> Router {
+    Router::new()
+        .route("/metrics", get(metrics::endpoint))
         .with_state(state)
 }
 
@@ -188,19 +203,25 @@ pub async fn run() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     let public_bind = config.public_bind;
     let worker_bind = config.worker_bind;
+    let metrics_bind = config.metrics_bind;
     let state = AppState::create(config).await?;
     let public = TcpListener::bind(public_bind).await?;
     let worker = TcpListener::bind(worker_bind).await?;
-    tracing::info!(%public_bind, %worker_bind, release_sha = %state.config.release_sha, "hc-beta-api ready");
+    let metrics_listener = TcpListener::bind(metrics_bind).await?;
+    tracing::info!(%public_bind, %worker_bind, %metrics_bind, release_sha = %state.config.release_sha, "hc-beta-api ready");
     let public_task = axum::serve(public, public_router(state.clone()));
     let worker_task = axum::serve(worker, worker_router(state.clone()));
+    let metrics_task = axum::serve(metrics_listener, metrics_router(state.clone()));
     let billing_task = tokio::spawn(billing::run_event_processor(state.clone()));
-    let lease_reaper_task = tokio::spawn(worker_routes::run_lease_reaper(state));
+    let lease_reaper_task = tokio::spawn(worker_routes::run_lease_reaper(state.clone()));
+    let watchdog_task = tokio::spawn(operations::run_watchdog(state.clone()));
     tokio::select! {
         result = public_task => result.context("public HTTP listener stopped")?,
         result = worker_task => result.context("worker HTTP listener stopped")?,
+        result = metrics_task => result.context("metrics listener stopped")?,
         result = billing_task => result.context("billing event processor stopped")?,
         result = lease_reaper_task => result.context("worker lease reaper stopped")?,
+        result = watchdog_task => result.context("invariant watchdog stopped")?,
         _ = tokio::signal::ctrl_c() => tracing::info!("shutdown requested"),
     }
     Ok(())

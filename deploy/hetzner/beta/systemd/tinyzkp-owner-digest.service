@@ -1,0 +1,10 @@
+[Unit]
+Description=TinyZKP redacted weekly owner digest
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tinyzkp/deploy/hetzner/beta
+EnvironmentFile=/etc/tinyzkp/beta/compose.env
+ExecStart=/usr/bin/docker compose -f docker-compose.api.yml run --rm --no-deps --volume /var/lib/tinyzkp-owner:/var/lib/tinyzkp-owner --entrypoint /usr/local/bin/hc-beta-owner-digest beta-ops

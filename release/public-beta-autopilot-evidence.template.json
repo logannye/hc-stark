@@ -1,0 +1,10 @@
+{
+  "schema_version": "public-beta-autopilot-evidence-v1",
+  "status": "replace-after-exact-release-drill",
+  "release_sha": "REPLACE_WITH_FULL_COMMIT_SHA",
+  "watchdog_triggers": {},
+  "manual_recovery": {},
+  "preserved_capabilities": {},
+  "owner_digest": {},
+  "viability": {}
+}

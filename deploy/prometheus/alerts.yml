@@ -1,42 +1,53 @@
 groups:
-  - name: hc-stark
+  - name: tinyzkp-public-beta
     rules:
-      - alert: HcHighFailureRate
-        expr: rate(hc_prove_failed_total[5m]) / rate(hc_prove_submitted_total[5m]) > 0.1
+      - alert: TinyZKPBetaWritesContained
+        expr: min(tinyzkp_beta_operational_flag) == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "TinyZKP beta new-obligation writes are contained" }
+      - alert: TinyZKPBetaLedgerDifference
+        expr: tinyzkp_beta_ledger_difference_accounts > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "TinyZKP immutable ledger differs from materialized balances" }
+      - alert: TinyZKPBetaVerifierRejection
+        expr: tinyzkp_beta_verifier_outcomes{outcome="rejected"} > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations: { summary: "TinyZKP official verifier rejection recorded" }
+      - alert: TinyZKPBetaWorkerStale
+        expr: tinyzkp_beta_worker_heartbeat_age_seconds > 120
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "TinyZKP proving worker heartbeat is stale" }
+      - alert: TinyZKPBetaStripeBacklog
+        expr: tinyzkp_beta_stripe_event_backlog > 0
+        for: 15m
+        labels: { severity: critical }
+        annotations: { summary: "TinyZKP Stripe event backlog remains unprocessed" }
+      - alert: TinyZKPBetaReconciliationStale
+        expr: tinyzkp_beta_reconciliation_clean != 1 or tinyzkp_beta_reconciliation_age_seconds > 93600
         for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High prove failure rate (>10%)"
-
-      - alert: HcSlowProves
-        expr: histogram_quantile(0.99, rate(hc_prove_duration_seconds_bucket[10m])) > 300
+        labels: { severity: critical }
+        annotations: { summary: "TinyZKP billing reconciliation is stale or unclean" }
+      - alert: TinyZKPBetaStorageLow
+        expr: min(tinyzkp_beta_storage_free_percent) < 30
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "TinyZKP API or worker storage is below 30% free" }
+      - alert: TinyZKPBetaBackupStale
+        expr: tinyzkp_beta_backup_healthy != 1
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "TinyZKP backup/WAL health is stale" }
+      - alert: TinyZKPBetaRetentionFailure
+        expr: tinyzkp_beta_retention_failures > 0
         for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "P99 prove duration exceeds 5 minutes"
-
-      - alert: HcNoCompletions
-        expr: increase(hc_prove_completed_total[30m]) == 0 and increase(hc_prove_submitted_total[30m]) > 0
-        for: 30m
-        labels:
-          severity: critical
-        annotations:
-          summary: "No proofs completing despite submissions"
-
-      - alert: HcUnbilledBacklog
-        expr: hc_prove_completed_total - hc_usage_cents_total > 100
-        for: 2h
-        labels:
-          severity: warning
-        annotations:
-          summary: "Large unbilled usage backlog detected"
-
-      - alert: HcUsageCapHits
-        expr: increase(hc_usage_cap_rejections_total[1h]) > 10
+        labels: { severity: warning }
+        annotations: { summary: "TinyZKP artifact retention deletion failed" }
+      - alert: TinyZKPBetaControlPlaneSlow
+        expr: histogram_quantile(0.95, rate(tinyzkp_beta_http_request_duration_seconds_bucket[10m])) > 1
         for: 10m
-        labels:
-          severity: info
-        annotations:
-          summary: "Multiple usage cap rejections — customers may be hitting limits"
+        labels: { severity: warning }
+        annotations: { summary: "TinyZKP beta API p95 latency exceeds one second" }

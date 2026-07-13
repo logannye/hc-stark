@@ -84,6 +84,21 @@ REQUIRED_SECURITY_TOPICS = {
     "account_deletion",
     "activation_rollback",
 }
+REQUIRED_WATCHDOG_TRIGGERS = {
+    "release_identity_mismatch",
+    "ledger_reconstruction_difference",
+    "open_billing_discrepancy",
+    "reconciliation_stale_or_unclean",
+    "stripe_backlog_stale",
+    "official_verifier_rejection",
+    "worker_heartbeat_stale",
+    "lease_stale",
+    "backup_or_wal_stale",
+    "r2_health_failure",
+    "api_storage_low_or_stale",
+    "scratch_storage_low",
+    "worker_slot_envelope_exceeded",
+}
 REQUIRED_IDENTITIES = {
     "api",
     "worker",
@@ -501,6 +516,59 @@ def validate_recovery_and_billing(
         )
     ) or restore.get("ledger_differences") != 0 or restore.get("stripe_differences") != 0:
         raise ValueError("restore, replay, or immutable-ledger evidence is incomplete")
+    validate_autopilot(records, release_sha)
+
+
+def validate_autopilot(
+    records: list[tuple[Path, dict[str, Any]]], release_sha: str
+) -> None:
+    _, value = exact_record(records, "public-beta-autopilot-evidence-v1", release_sha)
+    triggers = value.get("watchdog_triggers")
+    if not isinstance(triggers, dict) or set(triggers) != REQUIRED_WATCHDOG_TRIGGERS:
+        raise ValueError("autopilot watchdog trigger matrix is incomplete")
+    for trigger, result in triggers.items():
+        if (
+            not isinstance(result, dict)
+            or result.get("contained") is not True
+            or result.get("alert_count") != 1
+            or result.get("auto_reenabled") is not False
+        ):
+            raise ValueError(f"{trigger}: containment/alert behavior is invalid")
+    recovery = value.get("manual_recovery")
+    if not isinstance(recovery, dict) or any(
+        recovery.get(field) is not True
+        for field in ("complete_invariant_check", "explicit_operation", "restored_all_flags")
+    ):
+        raise ValueError("manual watchdog recovery was not proven")
+    preserved = value.get("preserved_capabilities")
+    if not isinstance(preserved, dict) or set(preserved) != {
+        "verification",
+        "balances",
+        "portal",
+        "cancellation",
+        "status",
+        "account_deletion",
+        "completed_downloads",
+    } or any(item is not True for item in preserved.values()):
+        raise ValueError("automatic containment did not preserve required capabilities")
+    digest = value.get("owner_digest")
+    if not isinstance(digest, dict) or any(
+        digest.get(field) is not True
+        for field in ("ledger_reconciled", "redaction_validated", "webhook_redacted")
+    ):
+        raise ValueError("owner digest reconciliation or redaction is incomplete")
+    viability = value.get("viability")
+    if not isinstance(viability, dict) or any(
+        viability.get(field) is not True
+        for field in (
+            "day_30_signed",
+            "day_60_signed",
+            "day_90_signed",
+            "failure_disables_signup_checkout_only",
+            "destructive_actions_require_separate_approval",
+        )
+    ):
+        raise ValueError("90-day viability controls are incomplete")
 
 
 def validate_advertised_load(
