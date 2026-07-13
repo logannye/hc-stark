@@ -2129,7 +2129,7 @@ def validate_partner_evidence(
         or adapter.get("profile") != "tinyzkp-p3-goldilocks-v1"
         or adapter.get("plonky3_version") != "0.6.1"
         or adapter.get("dependency_lock_sha256")
-        != "cbbcd59982018b8a14e8132c4e19997e80bd656e0126650a8189322845ed994b"
+        != "198f0757a3932aa01a96ae4f640d9f71408a329e53bd96dd17aa2f4c733ecfae"
         or adapter.get("release_sha") != release_sha
         or adapter.get("official_verification") is not True
         or adapter.get("bounded_equals_conventional") is not True
