@@ -6,6 +6,7 @@ EXPECTED_SHA="${2:-}"
 EXPECTED_STATUS="${3:-}"
 SECRET_DIR="${TINYZKP_BETA_SECRET_DIR:-/etc/tinyzkp/beta}"
 ENV_FILE="$SECRET_DIR/beta-api.env"
+COMPOSE_ENV="$SECRET_DIR/compose.env"
 DEPLOY_DIR=/opt/tinyzkp/deploy/hetzner/beta
 
 [[ $EUID -eq 0 ]] || { echo "set-beta-writes must run as root" >&2; exit 2; }
@@ -14,6 +15,8 @@ DEPLOY_DIR=/opt/tinyzkp/deploy/hetzner/beta
 [[ "$EXPECTED_STATUS" == operator_canary || "$EXPECTED_STATUS" == public_beta ]] || { echo "invalid expected status" >&2; exit 2; }
 [[ -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || { echo "beta API environment is missing or unsafe" >&2; exit 3; }
 [[ "$(stat -c %a "$ENV_FILE")" == 600 || "$(stat -c %a "$ENV_FILE")" == 400 ]] || { echo "beta API environment must be owner-only" >&2; exit 3; }
+[[ -f "$COMPOSE_ENV" && ! -L "$COMPOSE_ENV" ]] || { echo "beta Compose environment is missing or unsafe" >&2; exit 3; }
+[[ "$(stat -c %a "$COMPOSE_ENV")" == 600 || "$(stat -c %a "$COMPOSE_ENV")" == 400 ]] || { echo "beta Compose environment must be owner-only" >&2; exit 3; }
 
 lock=/run/lock/tinyzkp-beta-writes.lock
 exec 9>"$lock"
@@ -25,7 +28,7 @@ cp "$ENV_FILE" "$backup"
 restore() {
   install -o root -g root -m 0600 "$backup" "$ENV_FILE"
   cd "$DEPLOY_DIR"
-  /usr/bin/docker compose -f docker-compose.api.yml up -d --no-deps beta-api >/dev/null 2>&1 || true
+  /usr/bin/docker compose --env-file "$COMPOSE_ENV" -f docker-compose.api.yml up -d --no-deps beta-api >/dev/null 2>&1 || true
 }
 committed=0
 cleanup() {
@@ -44,7 +47,7 @@ awk -v value="$VALUE" '
 ' "$ENV_FILE" >"$temporary"
 install -o root -g root -m 0600 "$temporary" "$ENV_FILE"
 cd "$DEPLOY_DIR"
-/usr/bin/docker compose -f docker-compose.api.yml up -d --no-deps beta-api >/dev/null
+/usr/bin/docker compose --env-file "$COMPOSE_ENV" -f docker-compose.api.yml up -d --no-deps beta-api >/dev/null
 
 ready=0
 for _ in $(seq 1 30); do

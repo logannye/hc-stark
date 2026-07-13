@@ -99,6 +99,9 @@ def test_beta_cors_dark_route_and_webhook_remain_fail_closed():
     assert "beta_writes_disabled" in rollback
     assert "TINYZKP_BETA_WRITES_ENABLED" in writes
     assert "restore" in writes and "flock -n" in writes
+    assert 'COMPOSE_ENV="$SECRET_DIR/compose.env"' in writes
+    assert writes.count('docker compose --env-file "$COMPOSE_ENV"') == 2
+    assert "beta Compose environment must be owner-only" in writes
 
 
 def test_operator_environment_templates_cover_both_hosts_and_oauth_hostname():
