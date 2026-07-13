@@ -142,6 +142,32 @@ def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
     assert "workflow_dispatch" in candidate and "workflow_dispatch" in authorization
 
 
+def test_candidate_signs_standalone_services_and_replacement_sdks_with_sboms():
+    candidate = (ROOT / ".github/workflows/public-beta-candidate.yml").read_text()
+    required_artifacts = {
+        "hc-beta-api-linux-x86_64",
+        "hc-beta-worker-linux-x86_64",
+        "hc-cli-linux-x86_64",
+        "tinyzkp-rust-sdk-0.2.0-dev.0.tar.gz",
+        "tinyzkp-0.2.0.dev0-py3-none-any.whl",
+        "tinyzkp-0.2.0-dev.0.tgz",
+    }
+    for artifact in required_artifacts:
+        assert f"candidate-artifacts/{artifact}" in candidate
+    required_sboms = {
+        "hc-beta-api-linux-x86_64.spdx.json",
+        "hc-beta-worker-linux-x86_64.spdx.json",
+        "hc-cli-linux-x86_64.spdx.json",
+        "tinyzkp-rust-sdk.spdx.json",
+        "tinyzkp-python-sdk.spdx.json",
+        "tinyzkp-typescript-sdk.spdx.json",
+    }
+    for sbom in required_sboms:
+        assert f"candidate-artifacts/{sbom}" in candidate
+    assert "subject-checksums: candidate-artifacts/SHA256SUMS" in candidate
+    assert "cosign sign-blob --yes --bundle candidate-artifacts/SHA256SUMS.sigstore.json" in candidate
+
+
 def test_candidate_cli_is_built_for_the_debian_12_runtime():
     dockerfile = text("Dockerfile.cli")
     assert dockerfile.startswith(
