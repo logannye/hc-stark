@@ -1,5 +1,6 @@
 use crate::dft::{GoldilocksWord, ResourceBoundedDft, ResourceBoundedMatrix};
 use crate::prover::GoldilocksConfig;
+use crate::scratch::create_unique_job_dir;
 use hc_stream::{BlockMatrix, MatrixStore, ResourcePolicyV1, ScratchMatrixStore, StreamError};
 use p3_air::{Air, BaseAir, RowWindow};
 use p3_commit::PolynomialSpace;
@@ -14,7 +15,7 @@ use p3_uni_stark::VerifierConstraintFolder;
 use rayon::prelude::*;
 use std::fs;
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 
 type Challenge = BinomialExtensionField<Goldilocks, 2>;
 pub(crate) type EvaluationConfig = GoldilocksConfig<Radix2DitParallel<Goldilocks>>;
@@ -232,16 +233,7 @@ pub fn build_quotient_chunk_ldes(
         return Err(StreamedQuotientError::InvalidShape);
     }
     let chunk_rows = quotient_rows / num_chunks;
-    let id = CHUNK_JOB_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let staging = output_root.join(format!("quotient-chunks-{}-{id}", std::process::id()));
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = fs::DirBuilder::new();
-        builder.mode(0o700).create(&staging)?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir(&staging)?;
+    let staging = create_unique_job_dir(output_root, "quotient-chunks", &CHUNK_JOB_COUNTER)?;
 
     let result = (|| {
         let mut chunks = (0..num_chunks)

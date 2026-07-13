@@ -15,6 +15,7 @@ use crate::prover::{Challenge, GoldilocksConfig, Val, COMPATIBILITY_PROFILE, PLO
 use crate::quotient::{
     build_quotient_chunk_ldes, stream_quotient_values, EvaluationConfig, StreamedQuotientError,
 };
+use crate::scratch::create_unique_job_dir;
 use crate::workloads::{
     FibonacciWorkload, Poseidon2Workload, ResourceBoundedWorkload, WorkloadError,
 };
@@ -2868,22 +2869,7 @@ fn default_failure_injector() -> &'static dyn FailureInjector {
 }
 
 fn create_job_dir(root: &Path) -> Result<PathBuf> {
-    fs::create_dir_all(root)?;
-    let metadata = fs::symlink_metadata(root)?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(StreamError::UnsafePath.into());
-    }
-    let id = PROVER_JOB_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let path = root.join(format!("bounded-prover-{}-{id}", std::process::id()));
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = fs::DirBuilder::new();
-        builder.mode(0o700).create(&path)?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir(&path)?;
-    Ok(path)
+    create_unique_job_dir(root, "bounded-prover", &PROVER_JOB_COUNTER).map_err(Into::into)
 }
 
 fn create_private_dir(path: &Path) -> Result<()> {

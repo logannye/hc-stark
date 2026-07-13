@@ -1,4 +1,5 @@
 use crate::dft::{GoldilocksWord, ResourceBoundedMatrix};
+use crate::scratch::create_unique_job_dir;
 use hc_stream::{
     BlockMatrix, CanonicalElement, ExecutionMode, MatrixStore, PhaseEstimate, ResourceEstimate,
     ResourcePolicyV1, ScratchMatrixStore, StreamError,
@@ -13,7 +14,7 @@ use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
 use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 
 const DIGEST_ELEMS: usize = 4;
 static JOB_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -845,22 +846,7 @@ where
 }
 
 fn create_job_dir(root: &Path) -> Result<PathBuf> {
-    fs::create_dir_all(root)?;
-    let metadata = fs::symlink_metadata(root)?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(StreamError::UnsafePath.into());
-    }
-    let id = JOB_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let path = root.join(format!("mmcs-{}-{id}", std::process::id()));
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = fs::DirBuilder::new();
-        builder.mode(0o700).create(&path)?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir(&path)?;
-    Ok(path)
+    create_unique_job_dir(root, "mmcs", &JOB_COUNTER).map_err(Into::into)
 }
 
 #[cfg(test)]

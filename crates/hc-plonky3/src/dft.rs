@@ -1,3 +1,4 @@
+use crate::scratch::create_unique_job_dir;
 use hc_stream::{
     ArtifactDigest, BlockMatrix, CanonicalElement, ExecutionMode, MatrixStore, PhaseEstimate,
     ResourceEstimate, ResourceMode, ResourcePolicyV1, ScratchMatrixStore, StreamError,
@@ -1019,24 +1020,7 @@ fn highest_power_of_two_at_most(value: usize) -> usize {
 }
 
 fn create_job_dir(root: &Path) -> Result<PathBuf> {
-    fs::create_dir_all(root)?;
-    let metadata = fs::symlink_metadata(root)?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(StreamError::UnsafePath.into());
-    }
-    let id = JOB_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let path = root.join(format!("dft-{}-{id}", std::process::id()));
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        use std::os::unix::fs::PermissionsExt;
-        let mut builder = fs::DirBuilder::new();
-        builder.mode(0o700).create(&path)?;
-        debug_assert_eq!(fs::metadata(&path)?.permissions().mode() & 0o777, 0o700);
-    }
-    #[cfg(not(unix))]
-    fs::create_dir(&path)?;
-    Ok(path)
+    create_unique_job_dir(root, "dft", &JOB_COUNTER).map_err(Into::into)
 }
 
 #[cfg(test)]

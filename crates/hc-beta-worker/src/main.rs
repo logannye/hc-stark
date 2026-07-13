@@ -114,6 +114,11 @@ struct HeartbeatResponse {
     cancel_requested: bool,
 }
 
+#[derive(Deserialize)]
+struct FailureResponse {
+    status: String,
+}
+
 #[derive(Serialize)]
 struct OutputRequest<'a> {
     attempt: u32,
@@ -213,7 +218,7 @@ async fn spawn_claim(
     tasks.spawn(async move {
         let _permit = permit;
         if let Err(error) = worker.run_job(claim).await {
-            tracing::error!(%error, "hosted proof job failed");
+            tracing::error!(error=?error, "hosted proof job failed");
         }
     });
     Ok(())
@@ -544,6 +549,7 @@ impl Worker {
             }
             return Ok(());
         }
+        let mut retain_retry_scratch = false;
         if let Err(error) = &result {
             let code = classify_error(error);
             let action = if code == "cancelled" {
@@ -552,8 +558,8 @@ impl Worker {
                 "failure"
             };
             let endpoint = format!("/internal/v1/jobs/{}/{action}", claim.job_id);
-            let _ = self
-                .json::<_, Value>(
+            match self
+                .json::<_, FailureResponse>(
                     Method::POST,
                     &endpoint,
                     &FailureRequest {
@@ -563,10 +569,20 @@ impl Worker {
                         retryable: matches!(code, "network" | "platform_io" | "prover_interrupted"),
                     },
                 )
-                .await;
+                .await
+            {
+                Ok(response) => {
+                    retain_retry_scratch = should_retain_retry_scratch(&response.status)
+                }
+                Err(report_error) => {
+                    tracing::warn!(%report_error, "failed to report hosted job failure")
+                }
+            }
         }
-        if let Err(error) = fs::remove_dir_all(&job_dir).await {
-            tracing::warn!(%error, path=%job_dir.display(), "scratch cleanup failed");
+        if !retain_retry_scratch {
+            if let Err(error) = fs::remove_dir_all(&job_dir).await {
+                tracing::warn!(%error, path=%job_dir.display(), "scratch cleanup failed");
+            }
         }
         result
     }
@@ -842,7 +858,7 @@ fn checkpoint(job_dir: &Path) -> anyhow::Result<Option<(PathBuf, String)>> {
         let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
         };
-        if Uuid::parse_str(&name).is_err() {
+        if !is_bounded_prover_directory(&name) {
             continue;
         }
         let path = entry.path().join("checkpoint.json");
@@ -862,6 +878,22 @@ fn checkpoint(job_dir: &Path) -> anyhow::Result<Option<(PathBuf, String)>> {
         }
     }
     Ok(found)
+}
+
+fn is_bounded_prover_directory(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix("bounded-prover-") else {
+        return false;
+    };
+    let mut parts = rest.split('-');
+    matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(process), Some(counter), None)
+            if process.parse::<u32>().is_ok() && counter.parse::<u64>().is_ok()
+    )
+}
+
+fn should_retain_retry_scratch(status: &str) -> bool {
+    status == "queued"
 }
 
 async fn remove_entry_without_following(
@@ -1103,5 +1135,68 @@ mod tests {
             classify_error(&anyhow::anyhow!("network HTTP failed")),
             "network"
         );
+    }
+
+    #[test]
+    fn checkpoint_discovery_accepts_only_bounded_prover_directories() {
+        assert!(is_bounded_prover_directory("bounded-prover-1-5"));
+        assert!(is_bounded_prover_directory(
+            "bounded-prover-4294967295-18446744073709551615"
+        ));
+        for invalid in [
+            "bounded-prover",
+            "bounded-prover-1",
+            "bounded-prover-1-2-extra",
+            "bounded-prover-pid-2",
+            "../bounded-prover-1-2",
+            "550e8400-e29b-41d4-a716-446655440000",
+        ] {
+            assert!(!is_bounded_prover_directory(invalid), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn only_requeued_failures_retain_retry_scratch() {
+        assert!(should_retain_retry_scratch("queued"));
+        for terminal in [
+            "platform_failed",
+            "customer_failed",
+            "cancelled",
+            "completed",
+        ] {
+            assert!(!should_retain_retry_scratch(terminal), "{terminal}");
+        }
+    }
+
+    #[test]
+    fn checkpoint_discovery_finds_the_prover_runtime_directory() {
+        let directory = TestDir::new();
+        let prover = directory.path().join("prover/bounded-prover-123-4");
+        std::fs::create_dir_all(&prover).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&prover, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        CheckpointManifestV2 {
+            schema_version: 2,
+            backend_hash: [1; 32],
+            profile_hash: [2; 32],
+            release_hash: [3; 32],
+            dependency_lock_hash: [4; 32],
+            workload_hash: [5; 32],
+            input_hash: [6; 32],
+            resource_policy_hash: [7; 32],
+            completed_phase: hc_stream::PipelinePhaseV1::Trace,
+            challenger_state: vec![],
+            resume_payload: vec![],
+            artifacts: vec![],
+        }
+        .write_atomic(prover.join("checkpoint.json"))
+        .unwrap();
+
+        let (path, identity) = checkpoint(directory.path()).unwrap().unwrap();
+        assert_eq!(path, prover.join("checkpoint.json"));
+        assert_eq!(identity.len(), 64);
     }
 }
