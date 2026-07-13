@@ -92,15 +92,27 @@ def parse_cpu_stat(text: str) -> float:
 
 
 def directory_bytes(root: Path) -> int:
-    if not root.exists():
-        return 0
     total = 0
-    for path in root.rglob("*"):
+    pending = [root]
+    while pending:
+        directory = pending.pop()
         try:
-            if path.is_file() and not path.is_symlink():
-                total += path.stat().st_size
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_symlink():
+                            continue
+                        if entry.is_file(follow_symlinks=False):
+                            total += entry.stat(follow_symlinks=False).st_size
+                        elif entry.is_dir(follow_symlinks=False):
+                            pending.append(Path(entry.path))
+                    except FileNotFoundError:
+                        # Prover phase directories are intentionally removed as
+                        # soon as their durable successor exists.  A sampler
+                        # racing that cleanup must not fail the benchmark.
+                        continue
         except FileNotFoundError:
-            pass
+            continue
     return total
 
 
@@ -132,6 +144,18 @@ def authoritative_peak_rss(worker: dict[str, object], polled_peak: int) -> int:
     ):
         return 0
     return max(worker_peak, polled_peak)
+
+
+def conservative_cgroup_peak(raw_cgroup_peak: int, process_peak_rss: int) -> int:
+    """Account conservatively for per-CPU cgroup memory-charge batching.
+
+    Linux may report ``memory.peak`` a few pages below ``VmHWM`` immediately
+    after a short-lived process exits.  The effective cgroup peak cannot be
+    lower than the authoritative process high-water mark, so retain the larger
+    measurement rather than emitting an internally inconsistent report.
+    """
+
+    return max(raw_cgroup_peak, process_peak_rss)
 
 
 def write_control(path: Path, value: str) -> None:
@@ -481,7 +505,7 @@ def run_one(
             stdout, stderr = process.communicate()
             wall_ms = int((time.monotonic() - started) * 1000)
             scratch_peak = max(scratch_peak, directory_bytes(scratch))
-            cgroup_peak = read_int(cgroup / "memory.peak")
+            raw_cgroup_peak = read_int(cgroup / "memory.peak")
             cpu_seconds = parse_cpu_stat(
                 (cgroup / "cpu.stat").read_text(encoding="utf-8")
             )
@@ -496,6 +520,9 @@ def run_one(
                 int(worker.get("prover_scratch_high_water_bytes", 0)),
             )
             observed_rss_peak = authoritative_peak_rss(worker, observed_rss_peak)
+            cgroup_peak = conservative_cgroup_peak(
+                raw_cgroup_peak, observed_rss_peak
+            )
 
         verification_succeeded = (
             bool(worker.get("verification_succeeded"))
