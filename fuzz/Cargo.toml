@@ -7,6 +7,12 @@ edition = "2021"
 [package.metadata]
 cargo-fuzz = true
 
+# Keep the fuzz package as a standalone workspace. Release evidence executes
+# an immutable copy below the checkout's owner-only evidence directory; without
+# this boundary Cargo walks upward and mistakes that copy for an unlisted member
+# of the mutable parent workspace.
+[workspace]
+
 [dependencies]
 libfuzzer-sys = "0.4"
 blake3 = "=1.8.2"

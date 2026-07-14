@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import stat
 import subprocess
+import tomllib
 
 
 MODULE_PATH = Path(__file__).with_name("run_fuzz_smoke.py")
@@ -32,9 +33,46 @@ def test_all_backend_fuzz_surfaces_are_included():
     )
 
 
+def test_fuzz_manifest_is_an_explicit_standalone_workspace():
+    manifest = tomllib.loads((MODULE.ROOT / "fuzz" / "Cargo.toml").read_text())
+    assert manifest["workspace"] == {}
+
+
+def test_partial_diagnostics_do_not_require_release_descriptors(monkeypatch):
+    MODULE.verify_opened_tool_descriptors([], ("a", "b", "c"))
+
+    monkeypatch.setattr(
+        MODULE.evidence_runtime,
+        "_digest_descriptor",
+        lambda descriptor: {10: "a", 11: "b", 12: "c"}[descriptor],
+    )
+    MODULE.verify_opened_tool_descriptors([10, 11, 12], ("a", "b", "c"))
+
+    try:
+        MODULE.verify_opened_tool_descriptors([10], ("a", "b", "c"))
+    except RuntimeError as error:
+        assert "descriptor set is incomplete" in str(error)
+    else:
+        raise AssertionError("a partial release descriptor set was accepted")
+
+
+def test_partial_diagnostics_select_the_reviewed_nightly():
+    environment = MODULE.fuzz_environment(
+        {"PATH": "/safe/bin", "RUSTUP_TOOLCHAIN": "attacker-controlled"}
+    )
+    assert environment["RUSTUP_TOOLCHAIN"] == MODULE.FUZZ_TOOLCHAIN
+    assert environment["PATH"] == "/safe/bin"
+
+
 def test_run_target_hashes_log_and_pins_nightly_command(tmp_path, monkeypatch):
     def fake_run(command, **kwargs):
-        execution = Path(command[3])
+        if command[1] == "build":
+            binary = Path(command[5]) / command[3] / "release" / command[6]
+            binary.parent.mkdir(parents=True, exist_ok=True)
+            binary.write_bytes(b"#!/bin/sh\nexit 0\n")
+            binary.chmod(0o700)
+            return 0, False
+        execution = Path(command[6])
         (execution / "new-coverage-unit").write_bytes(b"coverage")
         kwargs["log"].write(
             b"#50\tDONE cov: 1 ft: 1 corp: 1/1b\n"
@@ -56,11 +94,19 @@ def test_run_target_hashes_log_and_pins_nightly_command(tmp_path, monkeypatch):
         seconds=5,
         rss_limit_mb=256,
         log_dir=tmp_path / "logs",
+        target_dir=tmp_path / "cargo-target",
+        target_triple="x86_64-unknown-linux-gnu",
     )
     assert result["exit_status"] == 0
-    assert result["command"][:2] == ["cargo-fuzz", "run"]
-    assert result["command"][3].endswith("execution-corpus/proof_bundle_v1")
-    assert result["command"][4].endswith("smoke-corpus/proof_bundle_v1")
+    assert result["build_command"][:2] == ["cargo-fuzz", "build"]
+    assert result["build_command"][5] == "cargo-target"
+    assert result["run_command"][6].endswith("execution-corpus/proof_bundle_v1")
+    assert result["run_command"][7].endswith("smoke-corpus/proof_bundle_v1")
+    assert result["fuzz_binary"]["path"].endswith(
+        "cargo-target/x86_64-unknown-linux-gnu/release/proof_bundle_v1"
+    )
+    assert result["fuzz_binary"]["descriptor_execution"] is False
+    assert len(result["fuzz_binary"]["sha256"]) == 64
     assert result["smoke_seed_count"] == MODULE.SMOKE_SEED_LIMIT
     assert len(result["smoke_corpus_sha256"]) == 64
     assert result["target_marker"] == MODULE.expected_target_marker(
@@ -82,7 +128,13 @@ def test_run_target_hashes_log_and_pins_nightly_command(tmp_path, monkeypatch):
 
 def test_run_target_rejects_transient_seed_corpus_mutation(tmp_path, monkeypatch):
     def fake_run(command, **kwargs):
-        seed = next(Path(command[4]).iterdir())
+        if command[1] == "build":
+            binary = Path(command[5]) / command[3] / "release" / command[6]
+            binary.parent.mkdir(parents=True, exist_ok=True)
+            binary.write_bytes(b"#!/bin/sh\nexit 0\n")
+            binary.chmod(0o700)
+            return 0, False
+        seed = next(Path(command[7]).iterdir())
         seed.write_bytes(b"mutated")
         return 1, False
 
@@ -95,6 +147,8 @@ def test_run_target_rejects_transient_seed_corpus_mutation(tmp_path, monkeypatch
             seconds=1,
             rss_limit_mb=64,
             log_dir=tmp_path / "logs",
+            target_dir=tmp_path / "cargo-target",
+            target_triple="x86_64-unknown-linux-gnu",
         )
     except ValueError as error:
         assert "corpus changed" in str(error)

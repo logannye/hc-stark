@@ -250,6 +250,8 @@ FUZZ_REPORT_KEYS = COMMON_RUNTIME_REPORT_KEYS | {
     "rustc_version",
     "cargo_fuzz_version",
     "cargo_fuzz_identity",
+    "sanitizer",
+    "sanitizer_runtime_environment",
     "execution_boundary",
     "fuzz_dependency_lock_sha256",
     "seconds_per_target",
@@ -289,7 +291,13 @@ CRASH_DISK_FULL_KEYS = CRASH_CASE_BASE_KEYS | {
 }
 FUZZ_TARGET_KEYS = {
     "target",
-    "command",
+    "build_command",
+    "build_exit_status",
+    "build_timed_out",
+    "build_timeout_seconds",
+    "build_duration_ms",
+    "run_command",
+    "fuzz_binary",
     "exit_status",
     "timed_out",
     "timeout_seconds",
@@ -307,6 +315,12 @@ FUZZ_TARGET_KEYS = {
     "libfuzzer_elapsed_seconds",
     "executed_units",
     "peak_rss_mb",
+}
+FUZZ_BINARY_KEYS = {
+    "path",
+    "bytes",
+    "sha256",
+    "descriptor_execution",
 }
 TOOL_IDENTITY_RECORD_KEYS = {
     "schema_version",
@@ -1495,7 +1509,7 @@ def validate_fuzz_smoke(
     boundary = report.get("execution_boundary")
     if (
         set(report) != FUZZ_REPORT_KEYS
-        or not exact_int(report.get("schema_version"), 1)
+        or not exact_int(report.get("schema_version"), 2)
         or report.get("profile") != "tinyzkp-p3-goldilocks-v1"
         or report.get("toolchain") != FUZZ_TOOLCHAIN
         or report.get("rustc_version")
@@ -1512,6 +1526,9 @@ def validate_fuzz_smoke(
         )
         or report.get("cargo_fuzz_identity", {}).get("sha256")
         != expected_cargo_fuzz
+        or report.get("sanitizer") != run_fuzz_smoke.FUZZ_SANITIZER
+        or report.get("sanitizer_runtime_environment")
+        != {"ASAN_OPTIONS": run_fuzz_smoke.FUZZ_ASAN_OPTIONS}
         or report.get("fuzz_dependency_lock_sha256") != expected_fuzz_lock
         or not exact_int(seconds_per_target)
         or seconds_per_target < FUZZ_RELEASE_MIN_SECONDS
@@ -1526,7 +1543,8 @@ def validate_fuzz_smoke(
             "abi_version",
             "source_write_allowed",
             "descriptor_execution",
-            "writable_roots",
+            "build_writable_roots",
+            "run_writable_roots",
             "target_scoped_writes",
         }
         or boundary.get("kind") != "landlock-write-deny-v1"
@@ -1534,7 +1552,8 @@ def validate_fuzz_smoke(
         or boundary.get("abi_version", 0) < 3
         or boundary.get("source_write_allowed") is not False
         or boundary.get("descriptor_execution") is not True
-        or boundary.get("writable_roots") != ["cargo-target", "tmp"]
+        or boundary.get("build_writable_roots") != ["cargo-target", "tmp"]
+        or boundary.get("run_writable_roots") != ["tmp"]
         or boundary.get("target_scoped_writes")
         != ["execution-corpus", "artifacts"]
     ):
@@ -1561,19 +1580,24 @@ def validate_fuzz_smoke(
         if name in actual:
             failures.append(f"fuzz smoke target is duplicated: {name}")
         actual.add(name)
-        command = target.get("command")
+        build_command = target.get("build_command")
+        run_command = target.get("run_command")
+        fuzz_binary = target.get("fuzz_binary")
         paths = (
-            [Path(command[index]) for index in (3, 4)]
-            if isinstance(command, list)
-            and len(command) > 4
+            [Path(run_command[index]) for index in (6, 7)]
+            if isinstance(run_command, list)
+            and len(run_command) > 7
             and all(
-                isinstance(command[index], str) and command[index] for index in (3, 4)
+                isinstance(run_command[index], str) and run_command[index]
+                for index in (6, 7)
             )
             else []
         )
         execution_path, corpus_path = paths if len(paths) == 2 else (None, None)
         artifact_option = (
-            command[9] if isinstance(command, list) and len(command) > 9 else None
+            run_command[4]
+            if isinstance(run_command, list) and len(run_command) > 4
+            else None
         )
         artifact_path = (
             Path(artifact_option.removeprefix("-artifact_prefix=").rstrip("/"))
@@ -1582,8 +1606,16 @@ def validate_fuzz_smoke(
             and artifact_option.removeprefix("-artifact_prefix=").rstrip("/")
             else None
         )
-        execution_raw = command[3] if isinstance(command, list) and len(command) > 3 else None
-        corpus_raw = command[4] if isinstance(command, list) and len(command) > 4 else None
+        execution_raw = (
+            run_command[6]
+            if isinstance(run_command, list) and len(run_command) > 6
+            else None
+        )
+        corpus_raw = (
+            run_command[7]
+            if isinstance(run_command, list) and len(run_command) > 7
+            else None
+        )
         artifact_raw = (
             artifact_option.removeprefix("-artifact_prefix=").rstrip("/")
             if isinstance(artifact_option, str)
@@ -1604,13 +1636,78 @@ def validate_fuzz_smoke(
         common_root = next(iter(command_roots)) if len(command_roots) == 1 else None
         if common_root is not None:
             observed_command_roots.add(common_root)
-        command_valid = (
-            isinstance(command, list)
+        build_target_raw = (
+            build_command[5]
+            if isinstance(build_command, list) and len(build_command) > 5
+            else None
+        )
+        build_target_path = (
+            Path(build_target_raw) if isinstance(build_target_raw, str) else None
+        )
+        binary_raw = fuzz_binary.get("path") if isinstance(fuzz_binary, dict) else None
+        binary_path = Path(binary_raw) if isinstance(binary_raw, str) else None
+        build_command_valid = (
+            isinstance(build_command, list)
             and isinstance(cargo_fuzz_path, str)
+            and isinstance(cargo_host, str)
+            and bounded_string(cargo_host)
+            and re.fullmatch(r"[A-Za-z0-9_.-]+", cargo_host) is not None
+            and len(build_command) == 7
+            and build_command
+            == [
+                cargo_fuzz_path,
+                "build",
+                "--target",
+                cargo_host,
+                "--target-dir",
+                build_target_raw,
+                name,
+            ]
+            and build_target_path is not None
+            and not build_target_path.is_absolute()
+            and bounded_string(build_target_raw)
+            and build_target_path.as_posix() == build_target_raw
+            and "\\" not in build_target_raw
+            and build_target_path.name == "cargo-target"
+            and ".." not in build_target_path.parts
+            and common_root is not None
+            and common_root.parent != Path(".")
+            and build_target_path.parent == common_root.parent
+        )
+        binary_valid = (
+            isinstance(fuzz_binary, dict)
+            and set(fuzz_binary) == FUZZ_BINARY_KEYS
+            and binary_path is not None
+            and not binary_path.is_absolute()
+            and bounded_string(binary_raw)
+            and binary_path.as_posix() == binary_raw
+            and "\\" not in binary_raw
+            and ".." not in binary_path.parts
+            and binary_path.name == name
+            and binary_path.parent.name == "release"
+            and isinstance(cargo_host, str)
+            and binary_path.parent.parent.name == cargo_host
+            and build_target_path is not None
+            and binary_path.parent.parent.parent == build_target_path
+            and common_root is not None
+            and len(binary_path.parents) > 3
+            and binary_path.parents[3] == common_root.parent
+            and exact_int(fuzz_binary.get("bytes"))
+            and fuzz_binary.get("bytes", 0) > 0
+            and isinstance(fuzz_binary.get("sha256"), str)
+            and len(fuzz_binary.get("sha256", "")) == 64
+            and all(
+                character in "0123456789abcdef"
+                for character in fuzz_binary.get("sha256", "")
+            )
+            and fuzz_binary.get("descriptor_execution") is True
+        )
+        run_command_valid = (
+            isinstance(run_command, list)
             and isinstance(seconds_per_target, int)
             and not isinstance(seconds_per_target, bool)
-            and command[:3] == [cargo_fuzz_path, "run", name]
-            and len(command) == 11
+            and len(run_command) == 8
+            and run_command[0] == binary_raw
             and execution_path is not None
             and not execution_path.is_absolute()
             and bounded_string(execution_raw)
@@ -1627,17 +1724,16 @@ def validate_fuzz_smoke(
             and corpus_path.name == name
             and corpus_path.parent.name == "smoke-corpus"
             and ".." not in corpus_path.parts
-            and command[5] == "--"
-            and isinstance(command[6], str)
-            and command[6].startswith("-max_total_time=")
-            and command[6].removeprefix("-max_total_time=").isdigit()
-            and int(command[6].removeprefix("-max_total_time="))
+            and isinstance(run_command[1], str)
+            and run_command[1].startswith("-max_total_time=")
+            and run_command[1].removeprefix("-max_total_time=").isdigit()
+            and int(run_command[1].removeprefix("-max_total_time="))
             == report.get("seconds_per_target")
-            and command[7] == "-rss_limit_mb=2048"
-            and isinstance(command[8], str)
-            and command[8].startswith("-timeout=")
-            and command[8].removeprefix("-timeout=").isdigit()
-            and int(command[8].removeprefix("-timeout="))
+            and run_command[2] == "-rss_limit_mb=2048"
+            and isinstance(run_command[3], str)
+            and run_command[3].startswith("-timeout=")
+            and run_command[3].removeprefix("-timeout=").isdigit()
+            and int(run_command[3].removeprefix("-timeout="))
             == max(10, seconds_per_target)
             and artifact_path is not None
             and not artifact_path.is_absolute()
@@ -1647,10 +1743,11 @@ def validate_fuzz_smoke(
             and artifact_path.name == name
             and artifact_path.parent.name == "artifacts"
             and ".." not in artifact_path.parts
-            and command[10] == "-print_final_stats=1"
+            and run_command[5] == "-print_final_stats=1"
             and common_root is not None
             and common_root != Path(".")
         )
+        command_valid = build_command_valid and binary_valid and run_command_valid
         try:
             expected_corpus = run_fuzz_smoke.expected_corpus_descriptor(name)
         except (OSError, ValueError, json.JSONDecodeError):
@@ -1693,6 +1790,13 @@ def validate_fuzz_smoke(
         )
         if (
             set(target) != FUZZ_TARGET_KEYS
+            or not exact_int(target.get("build_exit_status"), 0)
+            or target.get("build_timed_out") is not False
+            or not exact_int(target.get("build_timeout_seconds"), startup_timeout)
+            or not exact_int(target.get("build_duration_ms"))
+            or target.get("build_duration_ms", 0) <= 0
+            or target.get("build_duration_ms", 0)
+            > target.get("build_timeout_seconds", 0) * 1000 + 10_000
             or not exact_int(target.get("exit_status"), 0)
             or target.get("timed_out") is not False
             or not exact_int(

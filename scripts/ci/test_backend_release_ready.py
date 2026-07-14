@@ -1442,21 +1442,41 @@ def fuzz_target(name):
     marker = gate.run_fuzz_smoke.expected_target_marker(
         name, corpus["corpus_sha256"]
     )
+    target_root = "raw-reports/fuzz-logs"
+    evidence_root = "raw-reports"
+    target_triple = "x86_64-unknown-linux-gnu"
+    binary_path = f"{evidence_root}/cargo-target/{target_triple}/release/{name}"
     return {
         "target": name,
-        "command": [
+        "build_command": [
             "/tool/cargo-fuzz",
-            "run",
+            "build",
+            "--target",
+            target_triple,
+            "--target-dir",
+            f"{evidence_root}/cargo-target",
             name,
-            f"raw-reports/fuzz-logs/execution-corpus/{name}",
-            f"raw-reports/fuzz-logs/smoke-corpus/{name}",
-            "--",
+        ],
+        "build_exit_status": 0,
+        "build_timed_out": False,
+        "build_timeout_seconds": 900,
+        "build_duration_ms": 10_000,
+        "run_command": [
+            binary_path,
             "-max_total_time=60",
             "-rss_limit_mb=2048",
             "-timeout=60",
-            f"-artifact_prefix=raw-reports/fuzz-logs/artifacts/{name}/",
+            f"-artifact_prefix={target_root}/artifacts/{name}/",
             "-print_final_stats=1",
+            f"{target_root}/execution-corpus/{name}",
+            f"{target_root}/smoke-corpus/{name}",
         ],
+        "fuzz_binary": {
+            "path": binary_path,
+            "bytes": 1024,
+            "sha256": "f" * 64,
+            "descriptor_execution": True,
+        },
         "exit_status": 0,
         "timed_out": False,
         "timeout_seconds": 960,
@@ -1480,7 +1500,7 @@ def fuzz_target(name):
 def fuzz_report(release_sha, targets):
     identity = runtime_identity(release_sha, fuzz=True)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         **identity,
         "profile": "tinyzkp-p3-goldilocks-v1",
         "toolchain": gate.FUZZ_TOOLCHAIN,
@@ -1491,12 +1511,17 @@ def fuzz_report(release_sha, targets):
             "sha256": "e" * 64,
             "version": "cargo-fuzz 0.13.2",
         },
+        "sanitizer": gate.run_fuzz_smoke.FUZZ_SANITIZER,
+        "sanitizer_runtime_environment": {
+            "ASAN_OPTIONS": gate.run_fuzz_smoke.FUZZ_ASAN_OPTIONS
+        },
         "execution_boundary": {
             "kind": "landlock-write-deny-v1",
             "abi_version": 3,
             "source_write_allowed": False,
             "descriptor_execution": True,
-            "writable_roots": ["cargo-target", "tmp"],
+            "build_writable_roots": ["cargo-target", "tmp"],
+            "run_writable_roots": ["tmp"],
             "target_scoped_writes": ["execution-corpus", "artifacts"],
         },
         "fuzz_dependency_lock_sha256": gate.evidence_runtime.commit_file_sha256(
@@ -1551,17 +1576,17 @@ def test_fuzz_smoke_requires_every_bounded_reproducible_target(tmp_path):
         for failure in gate.validate_fuzz_smoke(shared_artifacts, release_sha)
     )
 
-    original_paths = [targets[0]["command"][index] for index in (3, 4, 9)]
+    original_paths = [targets[0]["run_command"][index] for index in (4, 6, 7)]
     name = targets[0]["target"]
-    targets[0]["command"][3] = f"unrelated/fuzz/execution-corpus/{name}"
-    targets[0]["command"][4] = f"unrelated/fuzz/smoke-corpus/{name}"
-    targets[0]["command"][9] = f"-artifact_prefix=unrelated/fuzz/artifacts/{name}/"
+    targets[0]["run_command"][4] = f"-artifact_prefix=unrelated/fuzz/artifacts/{name}/"
+    targets[0]["run_command"][6] = f"unrelated/fuzz/execution-corpus/{name}"
+    targets[0]["run_command"][7] = f"unrelated/fuzz/smoke-corpus/{name}"
     write_json(report, report_body)
     assert "fuzz smoke commands do not share one canonical log root" in (
         gate.validate_fuzz_smoke(artifacts, release_sha)
     )
-    for index, original in zip((3, 4, 9), original_paths, strict=True):
-        targets[0]["command"][index] = original
+    for index, original in zip((4, 6, 7), original_paths, strict=True):
+        targets[0]["run_command"][index] = original
 
     first_target = targets[0]
     first_log = log_artifacts[0][0]
@@ -1654,11 +1679,11 @@ def test_fuzz_smoke_rejects_unbounded_or_noncanonical_evidence(tmp_path):
     targets = [fuzz_target(name) for name in sorted(gate.FUZZ_TARGETS)]
     targets[0]["smoke_seed_count"] = gate.FUZZ_SMOKE_SEED_LIMIT + 1
     targets[1]["smoke_corpus_sha256"] = "A" * 64
-    targets[2]["command"][6] = 42
+    targets[2]["run_command"][1] = 42
     targets[3]["duration_ms"] = True
     unknown = fuzz_target(sorted(gate.FUZZ_TARGETS)[0])
     unknown["target"] = "unknown_target"
-    unknown["command"][2] = "unknown_target"
+    unknown["build_command"][6] = "unknown_target"
     targets.append(unknown)
     write_json(report, fuzz_report(release_sha, targets))
     failures = gate.validate_fuzz_smoke([(report, {"role": "fuzz_smoke"})], release_sha)
