@@ -43,7 +43,7 @@ if [[ "$ROLE" == api ]]; then
   install -o root -g root -m 0644 "$SOURCE"/systemd/tinyzkp-*.timer /etc/systemd/system/
   systemctl daemon-reload
   chmod 0755 /opt/tinyzkp/deploy/hetzner/beta/report-api-storage.sh /opt/tinyzkp/deploy/hetzner/beta/record-beta-activation.sh
-  systemctl enable tinyzkp-pgbackrest-diff.timer tinyzkp-pgbackrest-full.timer tinyzkp-stripe-reconcile.timer tinyzkp-retention.timer tinyzkp-api-storage-health.timer tinyzkp-owner-digest.timer tinyzkp-viability.timer
+  systemctl enable tinyzkp-pgbackrest-diff.timer tinyzkp-pgbackrest-full.timer tinyzkp-stripe-reconcile.timer tinyzkp-retention.timer tinyzkp-api-storage-health.timer tinyzkp-owner-digest.timer
   echo "API host files installed. Start dark deployment only after docker compose config succeeds."
 else
   secret_dir=${TINYZKP_WORKER_SECRET_DIR:-/etc/tinyzkp/worker}
