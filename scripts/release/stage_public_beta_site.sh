@@ -39,5 +39,8 @@ if rg -n 'innerHTML' "$OUTPUT/dashboard.js"; then
 fi
 grep -q "Content-Security-Policy" "$OUTPUT/_worker.js"
 grep -q 'automatic tax' "$OUTPUT/openapi.json"
-find "$OUTPUT" -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 shasum -a 256 >"$OUTPUT/SHA256SUMS"
+(
+  cd "$OUTPUT"
+  find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 shasum -a 256 >SHA256SUMS
+)
 echo "PASS staged exact-release public-beta site: $OUTPUT"
