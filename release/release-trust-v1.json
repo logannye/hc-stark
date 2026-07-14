@@ -13,7 +13,14 @@
   },
   "external_signers": [],
   "gate_tools": {
-    "platforms": {}
+    "platforms": {
+      "linux-x86_64": {
+        "bash": "55b89ab22bee4792a210f493a53fb066accd5d30b69837c28d98be5ff863efcf",
+        "node": "6295488653f0d93b0a157841746fef7e72cc4328cfb60c4bbe0ca2668a836ffd",
+        "python3": "6d972cf21be56fe3c947ab6ba257ff8d08c342dd2714442986791bd9a6dfabfe",
+        "wasm-pack": "b46868a6d767e17227d26ec8554fca2c9f0b77cb24efd8906af7517a7ba32a49"
+      }
+    }
   },
   "git": {
     "platforms": {
@@ -47,7 +54,9 @@
   },
   "toolchains": {
     "fuzz": {
-      "cargo_fuzz_executables": {},
+      "cargo_fuzz_executables": {
+        "x86_64-unknown-linux-gnu": "0cab43d089b0418b6a08ba5a8984a2b4da3e011b60a2d8ac6c4f369ab46ce812"
+      },
       "platforms": {
         "aarch64-apple-darwin": {
           "cargo_sha256": "662ba75c2fde58a42bee9f8ec6d773f15abcffa7bd67fecbfb7b86b0d1613fd7",
