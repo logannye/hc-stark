@@ -295,8 +295,13 @@ def _subprocess_environment(home: pathlib.Path) -> dict[str, str]:
         "NPM_CONFIG_FUND": "false",
         "NPM_CONFIG_AUDIT": "false",
         "NPM_CONFIG_IGNORE_SCRIPTS": "true",
-        "NPM_CONFIG_USERCONFIG": os.devnull,
-        "NPM_CONFIG_GLOBALCONFIG": os.devnull,
+        # npm 11 rejects assigning the same file to both configuration
+        # scopes (including /dev/null) as a double-loaded configuration.
+        # Distinct nonexistent paths beneath the freshly-created private
+        # staging home disable both ambient scopes without allowing npm to
+        # fall back to an operator or system configuration.
+        "NPM_CONFIG_USERCONFIG": str(home / ".npmrc-user-disabled"),
+        "NPM_CONFIG_GLOBALCONFIG": str(home / ".npmrc-global-disabled"),
         "NPM_CONFIG_REGISTRY": "https://registry.npmjs.org/",
     }
 
