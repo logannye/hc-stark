@@ -21,6 +21,13 @@
       "public_activation_permitted": false,
       "artifacts_may_be_used_as_comparison_data": true,
       "reason": "The release fuzz runner placed its immutable source below the mutable Cargo workspace, so every required fuzz target failed before execution."
+    },
+    {
+      "release_sha": "8ecaa4845a5b921f0c8b038c44d949a4a6d1670b",
+      "status": "abandoned",
+      "public_activation_permitted": false,
+      "artifacts_may_be_used_as_comparison_data": true,
+      "reason": "The signed TypeScript SDK tarball omitted its compiled ESM, CommonJS, and declaration files and could not be imported after installation."
     }
   ]
 }
