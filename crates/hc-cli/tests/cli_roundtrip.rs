@@ -36,7 +36,7 @@ fn release_identity_is_machine_readable_and_profile_pinned() {
     assert_eq!(payload["compatibility_profile"], "tinyzkp-p3-goldilocks-v1");
     assert_eq!(
         payload["dependency_lock_sha256"],
-        "b29cfd76b16dcb72227903b08303abf48d4844ed2f0a5a8355749b9c3a708b86"
+        "c1afc52e0c067eaaecddc2463a37713189ece1456df806b83fe7fcd9e9cb8420"
     );
 }
 

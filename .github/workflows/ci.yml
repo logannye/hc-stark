@@ -180,6 +180,7 @@ jobs:
           python3 -m pytest billing/tests/test_agreement_gate.py
           python3 -m pytest billing/tests/test_evaluation_delivery_manifest.py
           python3 -m pytest billing/tests/test_stripe_test_drill.py
+          python3 -m pytest billing/tests/test_public_beta_stripe_drill.py
           python3 -m pytest billing/tests/test_configure_contract_portal.py
           python3 -m pytest billing/tests/test_legacy_billing_containment.py
           python3 -m pytest billing/tests/test_stripe_account_context_check.py
@@ -269,6 +270,7 @@ jobs:
           python3 -m py_compile scripts/ci/check_pinned_actions.py
           python3 -m py_compile scripts/ci/cloudflare_pages_secret_check.py
           python3 -m py_compile scripts/ci/cloudflare_toolchain_check.py
+          python3 -m py_compile scripts/ci/cargo_audit_policy.py
           python3 -m py_compile scripts/ci/materialize_cloudflare_toolchain.py
           python3 -m py_compile scripts/ci/fixed_host_backup_evidence.py
           python3 -m py_compile scripts/ci/fixed_host_evidence_workspace.py
@@ -345,9 +347,14 @@ jobs:
       - name: cargo audit
         run: |
           cargo install cargo-audit --locked
-          # Advisory ignores live in .cargo/audit.toml (shared source
-          # of truth with deny.toml). Update both when changing.
-          cargo audit --deny warnings
+          # Advisory ignores live in .cargo/audit.toml. The policy validator
+          # rejects every vulnerability and every warning except exact,
+          # checksummed compatibility bytes whose upstream constraints do not
+          # yet admit a non-yanked release.
+          cargo audit --json > "$RUNNER_TEMP/tinyzkp-cargo-audit.json" || true
+          python3 -m pytest scripts/ci/test_cargo_audit_policy.py -q
+          python3 scripts/ci/cargo_audit_policy.py \
+            --report "$RUNNER_TEMP/tinyzkp-cargo-audit.json"
       - name: cargo deny
         run: |
           cargo install cargo-deny --locked

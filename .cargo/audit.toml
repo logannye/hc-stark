@@ -4,6 +4,11 @@
 #
 # Shared advisory rationales live in deny.toml. Audit-only exceptions are
 # documented inline below.
+#
+# Yanked registry releases are not ignored here. CI parses cargo-audit JSON and
+# permits only the exact checksummed spin 0.9.8/0.10.0 compatibility bytes that
+# lazy_static 1.5.0 and crc-fast 1.10.0 still require. Any other yanked package,
+# vulnerability, or warning category remains release-blocking.
 
 [advisories]
 ignore = [

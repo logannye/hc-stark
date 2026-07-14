@@ -21,6 +21,7 @@ import re
 import secrets
 import stat
 import tempfile
+import time
 from typing import Any
 
 
@@ -227,6 +228,16 @@ def drop_database(admin_dsn: str, database: str) -> None:
         connection.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(database)))
 
 
+def migration_identity(path: Path) -> tuple[int, str, bytes]:
+    match = re.fullmatch(r"([0-9]+)_([a-z0-9_]+)\.sql", path.name)
+    if match is None:
+        raise ValueError(f"invalid SQLx migration filename: {path.name}")
+    version = int(match.group(1), 10)
+    description = match.group(2).replace("_", " ")
+    checksum = hashlib.sha384(path.read_bytes()).digest()
+    return version, description, checksum
+
+
 def migrate_and_seed(dsn: str, release_sha: str, state_dir: Path) -> None:
     psycopg, _, _ = _psycopg()
     root = Path(__file__).resolve().parents[1]
@@ -234,8 +245,27 @@ def migrate_and_seed(dsn: str, release_sha: str, state_dir: Path) -> None:
     raw_keys: dict[str, str] = {}
     tenants = ("topup", "subscription", "refund", "consumed")
     with psycopg.connect(dsn) as connection:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS _sqlx_migrations ("
+            "version BIGINT PRIMARY KEY,"
+            "description TEXT NOT NULL,"
+            "installed_on TIMESTAMPTZ NOT NULL DEFAULT now(),"
+            "success BOOLEAN NOT NULL,"
+            "checksum BYTEA NOT NULL,"
+            "execution_time BIGINT NOT NULL"
+            ")"
+        )
         for migration in sorted((root / "crates" / "hc-beta-api" / "migrations").glob("*.sql")):
+            version, description, checksum = migration_identity(migration)
+            started = time.perf_counter_ns()
             connection.execute(migration.read_text(encoding="utf-8"))
+            execution_time = max(1, (time.perf_counter_ns() - started) // 1_000)
+            connection.execute(
+                "INSERT INTO _sqlx_migrations "
+                "(version,description,success,checksum,execution_time) "
+                "VALUES (%s,%s,true,%s,%s)",
+                (version, description, checksum, execution_time),
+            )
         for label in tenants:
             tenant = f"tenant_stripe_drill_{label}_{release_sha[:12]}"
             raw = "tinyzkp_beta_" + secrets.token_urlsafe(32)

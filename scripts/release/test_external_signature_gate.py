@@ -54,6 +54,7 @@ def test_non_allowlisted_signer_cannot_authenticate_claim(tmp_path: Path):
                         }
                     }
                 },
+                "stripe_cli": {},
                 "toolchains": {},
             }
         ),

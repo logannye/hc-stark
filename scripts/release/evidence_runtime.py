@@ -339,6 +339,7 @@ def release_trust(root: Path, release_sha: str) -> dict[str, object]:
         "external_signers",
         "gate_tools",
         "git",
+        "stripe_cli",
         "toolchains",
     } or value.get("schema_version") != 1 or isinstance(
         value.get("schema_version"), bool
