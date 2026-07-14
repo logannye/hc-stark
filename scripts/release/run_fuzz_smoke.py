@@ -41,6 +41,8 @@ MAX_SMOKE_SEED_BYTES = 1024 * 1024
 PROFILE = "tinyzkp-p3-goldilocks-v1"
 CARGO_FUZZ_VERSION = "cargo-fuzz 0.13.2"
 FUZZ_TOOLCHAIN = "nightly-2026-04-15"
+FUZZ_SANITIZER = "address"
+FUZZ_ASAN_OPTIONS = "detect_odr_violation=0"
 TOOL_IDENTITY_FILE = "fuzz-tool-identity.json"
 RELEASE_MIN_SECONDS_PER_TARGET = 60
 MAX_STARTUP_TIMEOUT_SECONDS = 3600
@@ -92,6 +94,34 @@ def parse_target_marker(payload: bytes) -> dict[str, str] | None:
         "corpus_sha256": corpus_sha256,
         "toolchain": toolchain,
     }
+
+
+def verify_opened_tool_descriptors(
+    opened_tools: list[int], expected_sha256: tuple[str, ...]
+) -> None:
+    """Revalidate release-only executable descriptors after fuzzing.
+
+    Partial diagnostics intentionally execute the identified tool paths
+    directly and therefore have no held descriptors. Release evidence must
+    provide the complete descriptor set; any partial set is an invariant
+    violation rather than something ``zip`` may silently truncate.
+    """
+    if not opened_tools:
+        return
+    if len(opened_tools) != len(expected_sha256):
+        raise RuntimeError("fuzz executable descriptor set is incomplete")
+    for descriptor_value, expected in zip(
+        opened_tools, expected_sha256, strict=True
+    ):
+        if evidence_runtime._digest_descriptor(descriptor_value) != expected:
+            raise RuntimeError("fuzz executable changed during evidence generation")
+
+
+def fuzz_environment(source: dict[str, str] | os._Environ[str]) -> dict[str, str]:
+    """Return the scrubbed environment with the reviewed nightly selected."""
+    environment = evidence_runtime.sanitized_environment(source)
+    environment["RUSTUP_TOOLCHAIN"] = FUZZ_TOOLCHAIN
+    return environment
 
 
 def harden_tree(path: Path) -> None:
@@ -337,15 +367,22 @@ def run_target(
     seconds: int,
     rss_limit_mb: int,
     log_dir: Path,
+    target_dir: Path,
+    target_triple: str,
     cargo_fuzz_executable: str = "cargo-fuzz",
     execution_cargo_fuzz: str | None = None,
     execution_root: Path = ROOT,
     pass_fds: tuple[int, ...] = (),
     write_boundary_paths: tuple[Path, ...] | None = None,
+    run_write_boundary_paths: tuple[Path, ...] | None = None,
     environment: dict[str, str] | None = None,
+    build_timeout_seconds: int = 900,
     timeout_seconds: int | None = None,
 ) -> dict[str, object]:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", target_triple):
+        raise ValueError("fuzz target triple is unsafe")
     log_dir = evidence_runtime.assert_no_symlink_ancestry(ROOT, log_dir)
+    target_dir = evidence_runtime.assert_no_symlink_ancestry(ROOT, target_dir)
     corpus_dir, corpus_descriptor = prepare_smoke_corpus(target, log_dir=log_dir)
     execution_dir = log_dir / "execution-corpus" / target
     evidence_runtime.ensure_private_directory(ROOT, execution_dir.parent)
@@ -353,18 +390,31 @@ def run_target(
     artifact_dir = log_dir / "artifacts" / target
     evidence_runtime.ensure_private_directory(ROOT, artifact_dir.parent)
     evidence_runtime.reset_private_directory(ROOT, log_dir, artifact_dir)
-    command = [
+    target_dir_command_path = target_dir.relative_to(ROOT.resolve()).as_posix()
+    build_command = [
         cargo_fuzz_executable,
-        "run",
+        "build",
+        "--target",
+        target_triple,
+        "--target-dir",
+        target_dir_command_path,
         target,
-        str(execution_dir),
-        str(corpus_dir),
-        "--",
+    ]
+    execution_build_command = list(build_command)
+    execution_build_command[5] = str(target_dir)
+    if execution_cargo_fuzz is not None:
+        execution_build_command[0] = execution_cargo_fuzz
+    fuzz_binary_path = target_dir / target_triple / "release" / target
+    fuzz_binary_command_path = fuzz_binary_path.relative_to(ROOT.resolve()).as_posix()
+    run_command = [
+        fuzz_binary_command_path,
         f"-max_total_time={seconds}",
         f"-rss_limit_mb={rss_limit_mb}",
         f"-timeout={max(10, seconds)}",
         f"-artifact_prefix={artifact_dir}{os.sep}",
         "-print_final_stats=1",
+        str(execution_dir),
+        str(corpus_dir),
     ]
     environment = dict(
         evidence_runtime.sanitized_environment(os.environ)
@@ -374,44 +424,93 @@ def run_target(
     execution_command_path = execution_dir.relative_to(ROOT.resolve()).as_posix()
     corpus_command_path = corpus_dir.relative_to(ROOT.resolve()).as_posix()
     artifact_command_path = artifact_dir.relative_to(ROOT.resolve()).as_posix()
-    command[3] = execution_command_path
-    command[4] = corpus_command_path
-    command[9] = f"-artifact_prefix={artifact_command_path}/"
-    execution_command = list(command)
-    execution_command[3] = str(execution_dir)
-    execution_command[4] = str(corpus_dir)
-    execution_command[9] = f"-artifact_prefix={artifact_dir}/"
-    if execution_cargo_fuzz is not None:
-        execution_command[0] = execution_cargo_fuzz
+    run_command[4] = f"-artifact_prefix={artifact_command_path}/"
+    run_command[6] = execution_command_path
+    run_command[7] = corpus_command_path
+    execution_command = list(run_command)
+    execution_command[0] = str(fuzz_binary_path)
+    execution_command[4] = f"-artifact_prefix={artifact_dir}/"
+    execution_command[6] = str(execution_dir)
+    execution_command[7] = str(corpus_dir)
     timeout_seconds = seconds + 900 if timeout_seconds is None else timeout_seconds
     target_marker = expected_target_marker(
         target, str(corpus_descriptor["corpus_sha256"])
     )
     log_path = log_dir / f"{target}.log"
-    started = time.monotonic()
+    build_started = time.monotonic()
     descriptor = evidence_runtime.open_private_output(ROOT, log_path)
+    fuzz_binary_descriptor: int | None = None
     try:
         with os.fdopen(descriptor, "wb") as log:
             log.write(target_marker_line(target_marker))
             log.flush()
-            scoped_boundary = (
-                (*write_boundary_paths, execution_dir, artifact_dir)
-                if write_boundary_paths is not None
-                else None
-            )
-            exit_status, timed_out = evidence_runtime.run_logged(
-                execution_command,
+            build_exit_status, build_timed_out = evidence_runtime.run_logged(
+                execution_build_command,
                 cwd=execution_root,
                 environment=environment,
                 log=log,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=build_timeout_seconds,
                 pass_fds=pass_fds,
+                write_boundary_paths=write_boundary_paths,
+            )
+            build_duration_ms = evidence_runtime.elapsed_milliseconds(build_started)
+            if build_exit_status != 0 or build_timed_out:
+                raise RuntimeError(f"fuzz target build failed: {target}")
+            details = os.lstat(fuzz_binary_path)
+            if (
+                stat.S_ISLNK(details.st_mode)
+                or not stat.S_ISREG(details.st_mode)
+                or details.st_uid != os.geteuid()
+                or details.st_size <= 0
+                or details.st_mode & 0o111 == 0
+            ):
+                raise RuntimeError(f"built fuzz executable is unsafe: {target}")
+            fuzz_binary_sha256 = hashlib.sha256(fuzz_binary_path.read_bytes()).hexdigest()
+            fuzz_binary_identity = {
+                "path": fuzz_binary_command_path,
+                "bytes": details.st_size,
+                "sha256": fuzz_binary_sha256,
+                "descriptor_execution": execution_cargo_fuzz is not None,
+            }
+            run_pass_fds = pass_fds
+            if execution_cargo_fuzz is not None:
+                fuzz_binary_descriptor, execution_fuzz_binary = (
+                    evidence_runtime.open_executable_descriptor(
+                        fuzz_binary_path, expected_sha256=fuzz_binary_sha256
+                    )
+                )
+                execution_command[0] = execution_fuzz_binary
+                run_pass_fds = (*pass_fds, fuzz_binary_descriptor)
+            scoped_boundary = (
+                (*run_write_boundary_paths, execution_dir, artifact_dir)
+                if run_write_boundary_paths is not None
+                else None
+            )
+            run_environment = dict(environment)
+            run_environment["ASAN_OPTIONS"] = FUZZ_ASAN_OPTIONS
+            run_started = time.monotonic()
+            exit_status, timed_out = evidence_runtime.run_logged(
+                execution_command,
+                cwd=execution_root,
+                environment=run_environment,
+                log=log,
+                timeout_seconds=timeout_seconds,
+                pass_fds=run_pass_fds,
                 write_boundary_paths=scoped_boundary,
             )
+            duration_ms = evidence_runtime.elapsed_milliseconds(run_started)
+            if (
+                fuzz_binary_descriptor is not None
+                and evidence_runtime._digest_descriptor(fuzz_binary_descriptor)
+                != fuzz_binary_sha256
+            ):
+                raise RuntimeError("fuzz executable changed during evidence generation")
             log.flush()
             os.fsync(log.fileno())
             log_identity = evidence_runtime.private_file_identity(log.fileno())
     finally:
+        if fuzz_binary_descriptor is not None:
+            os.close(fuzz_binary_descriptor)
         harden_tree(execution_dir)
         shutil.rmtree(execution_dir, ignore_errors=False)
         harden_tree(artifact_dir)
@@ -429,11 +528,17 @@ def run_target(
     ]
     return {
         "target": target,
-        "command": command,
+        "build_command": build_command,
+        "build_exit_status": build_exit_status,
+        "build_timed_out": build_timed_out,
+        "build_timeout_seconds": build_timeout_seconds,
+        "build_duration_ms": build_duration_ms,
+        "run_command": run_command,
+        "fuzz_binary": fuzz_binary_identity,
         "exit_status": exit_status,
         "timed_out": timed_out,
         "timeout_seconds": timeout_seconds,
-        "duration_ms": evidence_runtime.elapsed_milliseconds(started),
+        "duration_ms": duration_ms,
         "log_file": log_path.name,
         "log_bytes": len(payload),
         "log_sha256": hashlib.sha256(payload).hexdigest(),
@@ -518,7 +623,7 @@ def main(argv: list[str]) -> int:
         fuzz_dependency_lock_sha256
     ):
         raise RuntimeError("working fuzz/Cargo.lock differs from the source commit")
-    environment = evidence_runtime.sanitized_environment(os.environ)
+    environment = fuzz_environment(os.environ)
     cargo_path = evidence_runtime.rustup_tool_path(
         FUZZ_TOOLCHAIN, "cargo", environment=environment, root=ROOT
     )
@@ -548,6 +653,10 @@ def main(argv: list[str]) -> int:
         ),
         None,
     )
+    if not isinstance(cargo_host, str) or not re.fullmatch(
+        r"[A-Za-z0-9_.-]+", cargo_host
+    ):
+        raise RuntimeError("pinned Cargo host triple is missing or unsafe")
     cargo_fuzz_anchor = evidence_runtime.cargo_fuzz_anchor(
         ROOT, str(source_identity["release_sha"]), str(cargo_host)
     )
@@ -573,6 +682,18 @@ def main(argv: list[str]) -> int:
     evidence_runtime.write_json_atomic(
         ROOT, tool_identity_path, tool_identity_record
     )
+    target_dir = evidence_runtime.reset_private_directory(
+        ROOT, evidence_root, evidence_root / "cargo-target"
+    )
+    temp_dir = evidence_runtime.reset_private_directory(
+        ROOT, evidence_root, evidence_root / "tmp"
+    )
+    environment.update(
+        CARGO_TARGET_DIR=str(target_dir),
+        TMPDIR=str(temp_dir),
+        TMP=str(temp_dir),
+        TEMP=str(temp_dir),
+    )
     immutable: Path | None = None
     inventory: list[dict[str, object]] = []
     opened_tools: list[int] = []
@@ -589,12 +710,6 @@ def main(argv: list[str]) -> int:
             evidence_root=evidence_root,
         )
         execution_root = immutable
-        target_dir = evidence_runtime.reset_private_directory(
-            ROOT, evidence_root, evidence_root / "cargo-target"
-        )
-        temp_dir = evidence_runtime.reset_private_directory(
-            ROOT, evidence_root, evidence_root / "tmp"
-        )
         write_boundary_paths = (target_dir, temp_dir)
         cargo_fd, cargo_executable = evidence_runtime.open_executable_descriptor(
             str(cargo_identity["path"]),
@@ -614,17 +729,14 @@ def main(argv: list[str]) -> int:
             CARGO=cargo_executable,
             RUSTC=rustc_executable,
             RUSTUP_TOOLCHAIN=FUZZ_TOOLCHAIN,
-            CARGO_TARGET_DIR=str(target_dir),
-            TMPDIR=str(temp_dir),
-            TMP=str(temp_dir),
-            TEMP=str(temp_dir),
         )
         boundary = {
             "kind": "landlock-write-deny-v1",
             "abi_version": abi,
             "source_write_allowed": False,
             "descriptor_execution": True,
-            "writable_roots": [path.name for path in write_boundary_paths],
+            "build_writable_roots": [path.name for path in write_boundary_paths],
+            "run_writable_roots": [temp_dir.name],
             "target_scoped_writes": ["execution-corpus", "artifacts"],
         }
     try:
@@ -634,29 +746,32 @@ def main(argv: list[str]) -> int:
                 seconds=args.seconds,
                 rss_limit_mb=args.rss_limit_mb,
                 log_dir=args.log_dir,
+                target_dir=target_dir,
+                target_triple=str(cargo_host),
                 cargo_fuzz_executable=str(cargo_fuzz_identity["path"]),
                 execution_cargo_fuzz=execution_cargo_fuzz,
                 execution_root=execution_root,
                 pass_fds=pass_fds,
                 write_boundary_paths=write_boundary_paths,
+                run_write_boundary_paths=(temp_dir,)
+                if write_boundary_paths is not None
+                else None,
                 environment=environment,
+                build_timeout_seconds=args.startup_timeout_seconds,
                 timeout_seconds=args.seconds + args.startup_timeout_seconds,
             )
             for target in TARGETS
         ]
         if immutable is not None:
             evidence_runtime.verify_read_only_source(immutable, inventory)
-        for descriptor_value, expected in zip(
+        verify_opened_tool_descriptors(
             opened_tools,
             (
-                cargo_identity["sha256"],
-                rustc_identity["sha256"],
-                cargo_fuzz_identity["sha256"],
+                str(cargo_identity["sha256"]),
+                str(rustc_identity["sha256"]),
+                str(cargo_fuzz_identity["sha256"]),
             ),
-            strict=True,
-        ):
-            if evidence_runtime._digest_descriptor(descriptor_value) != expected:
-                raise RuntimeError("fuzz executable changed during evidence generation")
+        )
     finally:
         for descriptor_value in opened_tools:
             os.close(descriptor_value)
@@ -675,7 +790,7 @@ def main(argv: list[str]) -> int:
         and args.rss_limit_mb == 2048
     )
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         **source_identity,
         "profile": PROFILE,
         "toolchain": FUZZ_TOOLCHAIN,
@@ -692,6 +807,8 @@ def main(argv: list[str]) -> int:
         "tool_identity_sha256": hashlib.sha256(tool_identity_payload).hexdigest(),
         "cargo_fuzz_version": cargo_fuzz_version,
         "cargo_fuzz_identity": cargo_fuzz_identity,
+        "sanitizer": FUZZ_SANITIZER,
+        "sanitizer_runtime_environment": {"ASAN_OPTIONS": FUZZ_ASAN_OPTIONS},
         "execution_boundary": boundary,
         "fuzz_dependency_lock_sha256": fuzz_dependency_lock_sha256,
         "seconds_per_target": args.seconds,
@@ -699,6 +816,8 @@ def main(argv: list[str]) -> int:
         "release_eligible": release_eligible,
         "all_targets_passed": all(
             result["exit_status"] == 0
+            and result["build_exit_status"] == 0
+            and result["build_timed_out"] is False
             and result["timed_out"] is False
             and result["artifacts"] == []
             and result["libfuzzer_done"] is True

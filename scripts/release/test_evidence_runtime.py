@@ -259,6 +259,39 @@ def test_landlock_blocks_transient_modify_and_restore_probe(tmp_path):
     assert committed.read_bytes() == b"original\n"
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Landlock is Linux-only")
+def test_landlock_allows_only_the_exact_dev_null_sink(tmp_path):
+    try:
+        assert MODULE.landlock_abi_version() >= 3
+    except ValueError as error:
+        pytest.skip(str(error))
+    writable = tmp_path / "writable"
+    writable.mkdir()
+    with tempfile.TemporaryFile("w+b") as log:
+        status, timed_out = MODULE.run_logged(
+            ["/bin/sh", "-c", "printf allowed >/dev/null"],
+            cwd=tmp_path,
+            environment=MODULE.sanitized_environment(os.environ),
+            log=log,
+            timeout_seconds=10,
+            write_boundary_paths=(writable,),
+        )
+    assert timed_out is False
+    assert status == 0
+
+    with tempfile.TemporaryFile("w+b") as log:
+        status, timed_out = MODULE.run_logged(
+            ["/bin/sh", "-c", "printf denied >/dev/zero"],
+            cwd=tmp_path,
+            environment=MODULE.sanitized_environment(os.environ),
+            log=log,
+            timeout_seconds=10,
+            write_boundary_paths=(writable,),
+        )
+    assert timed_out is False
+    assert status != 0
+
+
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="descriptor launch is Linux-only")
 def test_open_executable_descriptor_defeats_path_swap_and_restore(tmp_path):
     tool = tmp_path / "tool"

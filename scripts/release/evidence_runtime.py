@@ -1144,6 +1144,44 @@ def _apply_landlock_write_boundary(writable_paths: tuple[Path, ...]) -> None:
                 0,
             ) != 0:
                 raise OSError(ctypes.get_errno(), "landlock_add_rule failed")
+        # Rust build scripts commonly use Stdio::null while probing compiler
+        # features. Permit writes to that exact kernel sink without allowing
+        # any other device node or the surrounding /dev directory. Validate
+        # the opened inode before installing the file-scoped rule so a replaced
+        # path cannot widen the boundary.
+        null_path = Path("/dev/null")
+        null_before = os.lstat(null_path)
+        if (
+            not stat.S_ISCHR(null_before.st_mode)
+            or null_before.st_uid != 0
+            or null_before.st_rdev != os.makedev(1, 3)
+        ):
+            raise OSError("/dev/null does not have the expected device identity")
+        null_descriptor = os.open(
+            null_path,
+            os.O_PATH | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+        )
+        opened.append(null_descriptor)
+        null_opened = os.fstat(null_descriptor)
+        if (
+            (null_opened.st_dev, null_opened.st_ino, null_opened.st_rdev)
+            != (null_before.st_dev, null_before.st_ino, null_before.st_rdev)
+            or not stat.S_ISCHR(null_opened.st_mode)
+        ):
+            raise OSError("/dev/null changed before the Landlock rule was installed")
+        null_rule = _LandlockPathBeneath(
+            LANDLOCK_ACCESS_FS_WRITE_FILE, null_descriptor, 0
+        )
+        if libc.syscall(
+            add,
+            ruleset,
+            LANDLOCK_RULE_PATH_BENEATH,
+            ctypes.byref(null_rule),
+            0,
+        ) != 0:
+            raise OSError(
+                ctypes.get_errno(), "landlock_add_rule failed for /dev/null"
+            )
         PR_SET_NO_NEW_PRIVS = 38
         if libc.prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
             raise OSError(ctypes.get_errno(), "PR_SET_NO_NEW_PRIVS failed")

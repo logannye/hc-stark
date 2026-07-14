@@ -7,6 +7,20 @@
       "public_activation_permitted": false,
       "artifacts_may_be_used_as_comparison_data": true,
       "reason": "The candidate predates the usable Sandbox entitlement, PAYG transition, hosted CLI, complete OpenAPI, dedicated beta site policy, and autopilot operations contract."
+    },
+    {
+      "release_sha": "622b55a890f206cfa05490c7a37b0e6f84f55002",
+      "status": "abandoned",
+      "public_activation_permitted": false,
+      "artifacts_may_be_used_as_comparison_data": true,
+      "reason": "The staged public-beta checksum manifest contained absolute workstation paths and was not portable to the deployment host."
+    },
+    {
+      "release_sha": "401122749a33e045c891288cf10872e79777b2d8",
+      "status": "abandoned",
+      "public_activation_permitted": false,
+      "artifacts_may_be_used_as_comparison_data": true,
+      "reason": "The release fuzz runner placed its immutable source below the mutable Cargo workspace, so every required fuzz target failed before execution."
     }
   ]
 }
