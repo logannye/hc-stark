@@ -15,8 +15,17 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
-def test_abandoned_candidate_is_rejected_before_any_external_action(tmp_path: Path):
-    args = argparse.Namespace(release_sha="04e8af8ed0be29433adc60730ab5e3eef13b13aa")
+@pytest.mark.parametrize(
+    "release_sha",
+    [
+        "04e8af8ed0be29433adc60730ab5e3eef13b13aa",
+        "8ecaa4845a5b921f0c8b038c44d949a4a6d1670b",
+    ],
+)
+def test_abandoned_candidate_is_rejected_before_any_external_action(
+    tmp_path: Path, release_sha: str
+):
+    args = argparse.Namespace(release_sha=release_sha)
     with pytest.raises(SystemExit, match="permanently abandoned"):
         MODULE.activate(args)
 

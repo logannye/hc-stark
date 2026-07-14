@@ -136,8 +136,52 @@ jobs:
 
           npm --prefix clients/typescript ci
           (cd clients/typescript && npm pack --pack-destination "$RUNNER_TEMP/typescript-sdk")
-          install -m 0644 "$RUNNER_TEMP/typescript-sdk/tinyzkp-0.2.0-dev.0.tgz" \
-            candidate-artifacts/tinyzkp-0.2.0-dev.0.tgz
+          typescript_package="$RUNNER_TEMP/typescript-sdk/tinyzkp-0.2.0-dev.0.tgz"
+          tar -tzf "$typescript_package" > "$RUNNER_TEMP/typescript-sdk-contents.txt"
+          for required in \
+            package/dist/esm/client.js \
+            package/dist/esm/client.d.ts \
+            package/dist/cjs/client.js \
+            package/dist/cjs/package.json
+          do
+            grep -Fx "$required" "$RUNNER_TEMP/typescript-sdk-contents.txt"
+          done
+          install -d "$RUNNER_TEMP/typescript-sdk-smoke"
+          tar -xzf "$typescript_package" -C "$RUNNER_TEMP/typescript-sdk-smoke"
+          ln -s "$PWD/clients/typescript/node_modules" \
+            "$RUNNER_TEMP/typescript-sdk-smoke/package/node_modules"
+          node --input-type=module - \
+            "$RUNNER_TEMP/typescript-sdk-smoke/package/dist/esm/client.js" \
+            "$PWD/test-vectors/plonky3/fibonacci-max-field.manifest.json" <<'NODE'
+          import { pathToFileURL } from "node:url";
+          const sdk = await import(pathToFileURL(process.argv[2]).href);
+          const builder = new sdk.AirBuilder(256, ["expected"]);
+          const current = builder.current(255);
+          const maximum = builder.constant(0xffff_ffff_0000_0000n);
+          builder.constrain("first_row", builder.sub(current, maximum));
+          if (
+            sdk.canonicalDigestHex(builder.build()) !==
+            "6886efd9315d23e967964ab8ca67e635558cf89c245c7fa787ae35ef05543fbc"
+          ) {
+            throw new Error("packaged maximum-width TypeScript vector differs");
+          }
+          const manifest = sdk.loadManifest(process.argv[3]);
+          if (
+            sdk.manifestDigestHex(manifest) !==
+            "d66d868441137e6db964add9d7e4a2164ca3a722c66e73cbf06c2a576efee653"
+          ) {
+            throw new Error("packaged maximum-Goldilocks TypeScript vector differs");
+          }
+          console.log("PASS packaged TypeScript SDK golden vectors");
+          NODE
+          node - "$RUNNER_TEMP/typescript-sdk-smoke/package/dist/cjs/client.js" <<'NODE'
+          const sdk = require(process.argv[2]);
+          if (typeof sdk.AirBuilder !== "function" || typeof sdk.loadManifest !== "function") {
+            throw new Error("packaged CommonJS API is incomplete");
+          }
+          console.log("PASS packaged TypeScript SDK CommonJS import");
+          NODE
+          install -m 0644 "$typescript_package" candidate-artifacts/tinyzkp-0.2.0-dev.0.tgz
 
           git archive --format=tar.gz --prefix=tinyzkp-rust-sdk-0.2.0-dev.0/ \
             "$HC_RELEASE_SHA" Cargo.toml Cargo.lock clients/rust crates examples/partner-adapter test-vectors/plonky3 \

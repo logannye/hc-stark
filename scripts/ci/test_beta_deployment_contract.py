@@ -170,6 +170,22 @@ def test_candidate_signs_standalone_services_and_replacement_sdks_with_sboms():
     assert "cosign sign-blob --yes --bundle candidate-artifacts/SHA256SUMS.sigstore.json" in candidate
 
 
+def test_candidate_typescript_package_contains_and_executes_both_module_formats():
+    candidate = (ROOT / ".github/workflows/public-beta-candidate.yml").read_text()
+    package = json.loads((ROOT / "clients/typescript/package.json").read_text())
+    assert package["scripts"]["prepack"] == "npm run build"
+    for required in (
+        "package/dist/esm/client.js",
+        "package/dist/esm/client.d.ts",
+        "package/dist/cjs/client.js",
+        "package/dist/cjs/package.json",
+    ):
+        assert required in candidate
+    assert "pathToFileURL(process.argv[2]).href" in candidate
+    assert "PASS packaged TypeScript SDK golden vectors" in candidate
+    assert "PASS packaged TypeScript SDK CommonJS import" in candidate
+
+
 def test_candidate_cli_is_built_for_the_debian_12_runtime():
     dockerfile = text("Dockerfile.cli")
     assert dockerfile.startswith(
