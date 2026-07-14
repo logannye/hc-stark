@@ -10,6 +10,7 @@ TARGET_ROUTE="${TINYZKP_ROUTE_TARGET_ROUTE:-/etc/caddy/tinyzkp-beta-route.caddy}
 TARGET_CADDY="${TINYZKP_ROUTE_TARGET_CADDY:-/etc/caddy/Caddyfile}"
 CONTAINMENT_CADDY="${TINYZKP_ROUTE_CONTAINMENT_CADDY:-/etc/caddy/Caddyfile.tinyzkp-containment}"
 LOCK="${TINYZKP_ROUTE_LOCK:-/run/lock/tinyzkp-beta-route.lock}"
+ORIGIN_API_RESOLVE="${TINYZKP_ROUTE_ORIGIN_API_RESOLVE:-api.tinyzkp.com:443:127.0.0.1}"
 
 if [[ $EUID -ne 0 && "$TEST_MODE" != 1 ]]; then
   echo "switch-beta-route must run as root" >&2
@@ -115,17 +116,17 @@ if [[ "$ACTION" != containment ]]; then
   }
 fi
 
-curl --fail --silent --show-error --max-time 15 https://api.tinyzkp.com/healthz >/dev/null
-if [[ "$ACTION" == public || "$ACTION" == rollback ]]; then
-  external_discovery="$(curl --fail --silent --show-error --max-time 15 https://api.tinyzkp.com/v1/discovery)"
-  [[ "$(jq -er .release_sha <<<"$external_discovery")" == "$EXPECTED_SHA" ]]
-  [[ "$(jq -er .service_status <<<"$external_discovery")" == "$EXPECTED_STATUS" ]]
-elif [[ "$ACTION" == dark ]]; then
-  code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 https://api.tinyzkp.com/v1/discovery)"
-  [[ "$code" == 503 ]] || { echo "dark route exposed public discovery" >&2; exit 4; }
+curl --fail --silent --show-error --max-time 15 \
+  --resolve "$ORIGIN_API_RESOLVE" https://api.tinyzkp.com/healthz >/dev/null
+if [[ "$ACTION" == public || "$ACTION" == rollback || "$ACTION" == dark ]]; then
+  origin_discovery="$(curl --fail --silent --show-error --max-time 15 \
+    --resolve "$ORIGIN_API_RESOLVE" https://api.tinyzkp.com/v1/discovery)"
+  [[ "$(jq -er .release_sha <<<"$origin_discovery")" == "$EXPECTED_SHA" ]]
+  [[ "$(jq -er .service_status <<<"$origin_discovery")" == "$EXPECTED_STATUS" ]]
 else
-  external_status="$(curl --fail --silent --show-error --max-time 15 https://tinyzkp.com/discovery.json | jq -er .service_status)"
-  [[ "$external_status" == backend_recovery ]] || { echo "containment discovery did not recover" >&2; exit 4; }
+  code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 \
+    --resolve "$ORIGIN_API_RESOLVE" https://api.tinyzkp.com/v1/discovery)"
+  [[ "$code" == 503 ]] || { echo "containment API discovery did not recover" >&2; exit 4; }
 fi
 
 committed=1
