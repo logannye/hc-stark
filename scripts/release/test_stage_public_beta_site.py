@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import shutil
 import subprocess
 
 
@@ -49,7 +50,18 @@ def test_stage_builds_exact_release_beta_surface(tmp_path: Path):
     combined = "\n".join(path.read_text() for path in output.glob("*.html")).lower()
     for forbidden in ("backend recovery", "contact sales", "custom engineering", "evaluation application"):
         assert forbidden not in combined
-    assert (output / "SHA256SUMS").stat().st_size > 0
+    checksums = (output / "SHA256SUMS").read_text().splitlines()
+    assert checksums
+    assert all("  ./" in line for line in checksums)
+    assert all(str(output) not in line for line in checksums)
+
+    relocated = tmp_path / "relocated-site"
+    shutil.copytree(output, relocated)
+    subprocess.run(
+        ["shasum", "-a", "256", "-c", "SHA256SUMS"],
+        cwd=relocated,
+        check=True,
+    )
 
 
 def test_stage_refuses_existing_output_or_short_sha(tmp_path: Path):
