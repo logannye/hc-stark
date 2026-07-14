@@ -28,6 +28,13 @@
       "public_activation_permitted": false,
       "artifacts_may_be_used_as_comparison_data": true,
       "reason": "The signed TypeScript SDK tarball omitted its compiled ESM, CommonJS, and declaration files and could not be imported after installation."
+    },
+    {
+      "release_sha": "81519b2b42d84fb34283e0a11cbc2d378ec20e01",
+      "status": "abandoned",
+      "public_activation_permitted": false,
+      "artifacts_may_be_used_as_comparison_data": true,
+      "reason": "The exact dark deployment exposed an upgrade defect in migration 0006: an existing worker with nonzero free scratch was checked against a newly defaulted total capacity of zero, so the API correctly failed closed before serving traffic."
     }
   ]
 }

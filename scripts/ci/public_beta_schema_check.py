@@ -66,6 +66,15 @@ REQUIRED = (
     "DEFERRABLE INITIALLY DEFERRED",
 )
 
+WORKER_CAPACITY_UPGRADE = (
+    "ADD COLUMN IF NOT EXISTS total_scratch_bytes BIGINT;",
+    "SET total_scratch_bytes = GREATEST(COALESCE(total_scratch_bytes, 0), free_scratch_bytes);",
+    "ALTER COLUMN total_scratch_bytes SET DEFAULT 0",
+    "ALTER COLUMN total_scratch_bytes SET NOT NULL",
+    "ADD CONSTRAINT beta_workers_scratch_capacity_check",
+    "CHECK (total_scratch_bytes >= 0 AND free_scratch_bytes <= total_scratch_bytes)",
+)
+
 
 def schema_text() -> str:
     return "\n".join(path.read_text(encoding="utf-8") for path in sorted(MIGRATIONS.glob("*.sql")))
@@ -73,6 +82,13 @@ def schema_text() -> str:
 
 def check(text: str) -> list[str]:
     failures = [f"missing PostgreSQL invariant: {marker}" for marker in REQUIRED if marker not in text]
+    positions = [text.find(marker) for marker in WORKER_CAPACITY_UPGRADE]
+    if any(position < 0 for position in positions):
+        failures.append("worker scratch capacity migration is missing its upgrade-safe backfill contract")
+    elif positions != sorted(positions):
+        failures.append("worker scratch capacity migration must add, backfill, constrain, and validate in order")
+    if "ADD COLUMN IF NOT EXISTS total_scratch_bytes BIGINT NOT NULL" in text:
+        failures.append("worker scratch capacity must be backfilled before it becomes NOT NULL")
     for forbidden in ("api_key_plaintext", "credit_balance DOUBLE", "DROP TABLE", "CASCADE;"):
         if forbidden in text:
             failures.append(f"unsafe PostgreSQL marker: {forbidden}")

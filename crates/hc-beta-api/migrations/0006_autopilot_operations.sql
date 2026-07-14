@@ -1,7 +1,27 @@
 -- Fail-closed, low-touch operations and business viability controls.
 
+-- Existing workers already report nonzero free scratch. Add the capacity column
+-- without a zero default first, backfill it from that observed state, and only
+-- then make the invariant mandatory. Adding NOT NULL DEFAULT 0 together with
+-- the cross-column check makes every pre-migration worker row invalid.
 ALTER TABLE beta_workers
-    ADD COLUMN IF NOT EXISTS total_scratch_bytes BIGINT NOT NULL DEFAULT 0
+    ADD COLUMN IF NOT EXISTS total_scratch_bytes BIGINT;
+
+UPDATE beta_workers
+SET total_scratch_bytes = GREATEST(COALESCE(total_scratch_bytes, 0), free_scratch_bytes);
+
+ALTER TABLE beta_workers
+    ALTER COLUMN total_scratch_bytes SET DEFAULT 0,
+    ALTER COLUMN total_scratch_bytes SET NOT NULL;
+
+-- Remove the automatically named constraint left by any manually recovered
+-- partial application before installing the stable, tracked name.
+ALTER TABLE beta_workers
+    DROP CONSTRAINT IF EXISTS beta_workers_check,
+    DROP CONSTRAINT IF EXISTS beta_workers_scratch_capacity_check;
+
+ALTER TABLE beta_workers
+    ADD CONSTRAINT beta_workers_scratch_capacity_check
         CHECK (total_scratch_bytes >= 0 AND free_scratch_bytes <= total_scratch_bytes);
 
 CREATE TABLE IF NOT EXISTS beta_operational_incidents (
