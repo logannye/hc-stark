@@ -32,6 +32,12 @@ def route_environment(tmp_path: Path) -> tuple[dict[str, str], Path, Path]:
         tools / "caddy",
         """#!/bin/sh
 set -eu
+if test "${1:-}" = validate; then
+  test "${2:-}" = --adapter
+  test "${3:-}" = caddyfile
+  test "${4:-}" = --config
+  test -n "${5:-}"
+fi
 count_file="$TINYZKP_ROUTE_TEST_ROOT/caddy-count"
 count=0
 test ! -f "$count_file" || count=$(cat "$count_file")

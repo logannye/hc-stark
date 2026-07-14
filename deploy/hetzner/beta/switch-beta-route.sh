@@ -57,7 +57,7 @@ install_target() {
 restore_previous() {
   install_target "$previous_route" "$TARGET_ROUTE"
   install_target "$previous_caddy" "$TARGET_CADDY"
-  caddy validate --config "$TARGET_CADDY" >/dev/null 2>&1 || return 1
+  caddy validate --adapter caddyfile --config "$TARGET_CADDY" >/dev/null 2>&1 || return 1
   systemctl reload caddy
 }
 
@@ -92,7 +92,7 @@ else
     "$SOURCE_DIR/Caddyfile.beta" >"$staged_caddy"
   chmod 0640 "$staged_caddy"
 fi
-caddy validate --config "$staged_caddy"
+caddy validate --adapter caddyfile --config "$staged_caddy"
 
 install_target "$staged_route" "$TARGET_ROUTE"
 if [[ "$ACTION" == containment ]]; then
@@ -100,7 +100,7 @@ if [[ "$ACTION" == containment ]]; then
 else
   install_target "$SOURCE_DIR/Caddyfile.beta" "$TARGET_CADDY"
 fi
-caddy validate --config "$TARGET_CADDY"
+caddy validate --adapter caddyfile --config "$TARGET_CADDY"
 systemctl reload caddy
 
 if [[ "$ACTION" != containment ]]; then
