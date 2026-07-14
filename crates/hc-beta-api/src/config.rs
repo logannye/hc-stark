@@ -9,7 +9,7 @@ pub enum ExposureMode {
     PublicBeta,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Config {
     pub public_bind: SocketAddr,
     pub worker_bind: SocketAddr,
@@ -37,6 +37,7 @@ pub struct Config {
     pub stripe_prices_json: String,
     pub reconciliation_hmac_key: [u8; 32],
     pub alert_webhook_url: String,
+    pub alert_webhook_token: String,
 }
 
 #[derive(Deserialize)]
@@ -107,6 +108,10 @@ impl Config {
         if !alert_webhook_url.starts_with("https://") {
             bail!("TINYZKP_ALERT_WEBHOOK_URL must use HTTPS");
         }
+        let alert_webhook_token = required("TINYZKP_ALERT_WEBHOOK_TOKEN")?;
+        if alert_webhook_token.len() < 32 || alert_webhook_token.len() > 512 {
+            bail!("TINYZKP_ALERT_WEBHOOK_TOKEN must contain 32-512 characters");
+        }
         Ok(Self {
             public_bind: optional("TINYZKP_BETA_PUBLIC_BIND", "127.0.0.1:8090").parse()?,
             worker_bind: optional("TINYZKP_BETA_WORKER_BIND", "10.77.0.1:8091").parse()?,
@@ -134,6 +139,7 @@ impl Config {
             stripe_prices_json: required("TINYZKP_STRIPE_PRICE_MAP_JSON")?,
             reconciliation_hmac_key: decode_secret_32("TINYZKP_RECONCILIATION_HMAC_KEY")?,
             alert_webhook_url,
+            alert_webhook_token,
         })
     }
 }

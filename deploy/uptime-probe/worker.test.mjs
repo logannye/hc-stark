@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TARGETS, PUBLIC_BETA_TARGETS, targetsForMode, probe } from "./worker.js";
+import { TARGETS, PUBLIC_BETA_TARGETS, targetsForMode, probe, alert } from "./worker.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -40,6 +40,21 @@ try {
   const wrongCode = await probe(containment);
   assert.equal(wrongCode.ok, false);
   assert.equal(wrongCode.missing, containment.contains);
+
+  let alertRequest;
+  globalThis.fetch = async (url, options) => {
+    alertRequest = { url, options };
+    return new Response(null, { status: 204 });
+  };
+  await alert(
+    { ALERT_WEBHOOK_URL: "https://relay.example/alert", ALERT_WEBHOOK_TOKEN: "x".repeat(64) },
+    [{ name: "api-ready", status: 503 }],
+  );
+  assert.equal(alertRequest.options.headers.authorization, `Bearer ${"x".repeat(64)}`);
+  assert.deepEqual(JSON.parse(alertRequest.options.body), {
+    text: "🔴 TinyZKP recovery surface failed: api-ready (503)",
+    incident: "external_probe_failed",
+  });
 } finally {
   globalThis.fetch = originalFetch;
 }

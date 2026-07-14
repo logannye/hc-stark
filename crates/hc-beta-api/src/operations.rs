@@ -228,6 +228,7 @@ pub async fn recover(state: &AppState, operation: &str) -> anyhow::Result<Invari
 async fn send_alert(state: &AppState, report: &InvariantReport) -> anyhow::Result<()> {
     reqwest::Client::new()
         .post(&state.config.alert_webhook_url)
+        .bearer_auth(&state.config.alert_webhook_token)
         .json(&json!({
             "text": format!(
                 "TinyZKP automatically contained signup, Checkout, and new jobs: {}",

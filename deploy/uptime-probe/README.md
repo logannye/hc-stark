@@ -29,12 +29,13 @@ That's it — nothing to deploy.
 
 ## Option B — Cloudflare Worker cron (in-repo, no third party)
 
-`worker.js` runs on Cloudflare's edge (off the box, off the laptop) every 2 minutes, retries once to filter blips, and POSTs to a webhook on a confirmed failure. You already use Cloudflare for the site, so there's no new vendor.
+`worker.js` runs on Cloudflare's edge (off the box, off the laptop) every 2 minutes, retries once to filter blips, and POSTs to the authenticated TinyZKP email relay on a confirmed failure. You already use Cloudflare for the site, so there is no new vendor or SMTP server.
 
 ```bash
 cd deploy/uptime-probe
-npx wrangler secret put ALERT_WEBHOOK_URL   # paste a Slack/Discord/JSON webhook URL
-npx wrangler deploy
+wrangler secret put ALERT_WEBHOOK_URL
+wrangler secret put ALERT_WEBHOOK_TOKEN
+wrangler deploy
 ```
 
 The tracked Worker defaults to `AUDIT_MODE=containment`. Activation deploys it
@@ -44,7 +45,7 @@ mode fails the entire probe instead of silently selecting a contract.
 Verify it works by hitting the deployed worker URL in a browser — it runs the probe on demand and returns JSON (`200` if everything is up, `503` if a target is down). To force a page, point a target at a known-bad URL temporarily, or stop the API container and watch the webhook fire within ~2 min.
 
 Notes:
-- Alerts go to a **webhook** (Slack/Discord/generic), deliberately not email — the prior MailChannels email path broke (PR #9).
+- Alerts use the authenticated relay in `deploy/cloudflare/alert-relay`, which sends only to the account-verified `logan@galenhealth.org` destination through Cloudflare Email Service. It does not revive the retired MailChannels path.
 - Adjust the cadence in `wrangler.toml` (`crons`). `*/2 * * * *` = every 2 minutes (UTC).
 - The Worker probes the same surfaces as Option A, including content markers
   that catch fallback pages, stale schema deploys, and accidental re-enablement.

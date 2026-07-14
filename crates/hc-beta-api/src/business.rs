@@ -106,8 +106,13 @@ pub async fn send_summary(value: Value) -> anyhow::Result<()> {
     if !url.starts_with("https://") {
         bail!("TINYZKP_ALERT_WEBHOOK_URL must use HTTPS");
     }
+    let token = required("TINYZKP_ALERT_WEBHOOK_TOKEN")?;
+    if token.len() < 32 || token.len() > 512 {
+        bail!("TINYZKP_ALERT_WEBHOOK_TOKEN must contain 32-512 characters");
+    }
     reqwest::Client::new()
         .post(url)
+        .bearer_auth(token)
         .json(&value)
         .timeout(Duration::from_secs(10))
         .send()
