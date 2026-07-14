@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 from http.client import RemoteDisconnected
 import json
 import os
@@ -39,6 +41,34 @@ SENSITIVE_EVIDENCE_KEYS = {
 SECRET_VALUE_PREFIXES = ("Bearer ", "gho_", "github_pat_", "rk_", "sk_", "whsec_")
 SIGNED_UPLOAD_ATTEMPTS = 4
 SIGNED_UPLOAD_RETRY_SECONDS = 0.5
+ATTESTATION_ZERO_FIELDS = (
+    "verifier_failures",
+    "unexplained_credit_differences",
+    "stuck_leases",
+    "unauthorized_artifact_accesses",
+    "leaked_scratch_directories",
+)
+ATTESTATION_SOURCES = {
+    ("billing", "topup"): {
+        "stripe_live_object",
+        "credit_ledger",
+        "refund_reversal",
+        "reconciliation",
+    },
+    ("billing", "subscription"): {
+        "stripe_live_object",
+        "credit_ledger",
+        "refund_reversal",
+        "reconciliation",
+        "subscription_cancellation",
+    },
+    ("audit", None): {
+        "watchdog",
+        "cross_tenant_authorization",
+        "worker_scratch",
+        "reconciliation",
+    },
+}
 
 
 class ApiFailure(RuntimeError):
@@ -183,6 +213,133 @@ def assert_public_evidence(value: object, path: str = "$") -> None:
             raise RuntimeError(f"evidence contains secret-like value at {path}")
 
 
+def canonical_json(value: object) -> bytes:
+    return json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
+def private_regular_file(path: Path, label: str) -> Path:
+    if path.is_symlink():
+        raise RuntimeError(f"{label} must not be a symlink")
+    path = path.resolve(strict=True)
+    details = path.stat()
+    if (
+        not stat.S_ISREG(details.st_mode)
+        or details.st_uid != os.geteuid()
+        or details.st_nlink != 1
+        or stat.S_IMODE(details.st_mode) != 0o600
+    ):
+        raise RuntimeError(f"{label} must be an owner-only regular file")
+    return path
+
+
+def validate_operator_attestation(
+    value: object,
+    *,
+    release_sha: str,
+    attestation_type: str,
+    kind: str | None,
+    hmac_key: bytes,
+) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise RuntimeError("operator attestation must be a JSON object")
+    payload = dict(value)
+    supplied_hmac = payload.pop("hmac_sha256", None)
+    if not isinstance(supplied_hmac, str) or len(supplied_hmac) != 64:
+        raise RuntimeError("operator attestation HMAC is missing or malformed")
+    expected_hmac = hmac.new(hmac_key, canonical_json(payload), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(supplied_hmac, expected_hmac):
+        raise RuntimeError("operator attestation HMAC does not verify")
+    if (
+        payload.get("schema_version") != 1
+        or payload.get("release_sha") != release_sha
+        or payload.get("attestation_type") != attestation_type
+        or payload.get("status") != "passed"
+    ):
+        raise RuntimeError("operator attestation identity or status does not match")
+    if attestation_type == "billing" and payload.get("kind") != kind:
+        raise RuntimeError("billing attestation kind does not match")
+    sources = payload.get("source_evidence")
+    if not isinstance(sources, list):
+        raise RuntimeError("operator attestation source evidence is missing")
+    observed_sources: set[str] = set()
+    for item in sources:
+        if not isinstance(item, dict):
+            raise RuntimeError("operator attestation source entry is malformed")
+        name = item.get("name")
+        digest = item.get("sha256")
+        if (
+            not isinstance(name, str)
+            or name in observed_sources
+            or not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            or item.get("status") != "passed"
+            or not isinstance(item.get("validator"), str)
+            or not item["validator"].strip()
+            or not isinstance(item.get("validator_sha256"), str)
+            or len(item["validator_sha256"]) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in item["validator_sha256"]
+            )
+        ):
+            raise RuntimeError("operator attestation source entry is invalid")
+        observed_sources.add(name)
+    required_sources = ATTESTATION_SOURCES[(attestation_type, kind)]
+    if not required_sources.issubset(observed_sources):
+        missing = ",".join(sorted(required_sources - observed_sources))
+        raise RuntimeError(f"operator attestation is missing source evidence: {missing}")
+    if attestation_type == "billing":
+        if (
+            payload.get("synthetic") is not True
+            or payload.get("refunded") is not True
+            or payload.get("excluded_from_revenue") is not True
+            or (kind == "subscription" and payload.get("cancelled") is not True)
+        ):
+            raise RuntimeError("live billing attestation is incomplete")
+    else:
+        for field in ATTESTATION_ZERO_FIELDS:
+            if payload.get(field) != 0:
+                raise RuntimeError(f"canary audit requires {field}=0")
+    assert_public_evidence(payload)
+    payload_sha256 = hashlib.sha256(canonical_json(payload)).hexdigest()
+    payload["attestation_hmac_verified"] = True
+    payload["attestation_hmac_sha256"] = supplied_hmac
+    payload["attestation_payload_sha256"] = payload_sha256
+    return payload
+
+
+def load_operator_attestation(attestation_type: str, kind: str | None = None) -> dict[str, object]:
+    release_sha = canonical_sha(required("TINYZKP_RELEASE_SHA"))
+    directory = Path(required("TINYZKP_CANARY_ATTESTATION_DIR"))
+    if directory.is_symlink():
+        raise RuntimeError("canary attestation directory must not be a symlink")
+    directory = directory.resolve(strict=True)
+    details = directory.stat()
+    if (
+        not stat.S_ISDIR(details.st_mode)
+        or details.st_uid != os.geteuid()
+        or stat.S_IMODE(details.st_mode) != 0o700
+    ):
+        raise RuntimeError("canary attestation directory must be owner-only")
+    name = f"{attestation_type}-{kind}.json" if kind else f"{attestation_type}.json"
+    evidence_path = private_regular_file(directory / name, "canary attestation")
+    key_path = private_regular_file(
+        Path(required("TINYZKP_CANARY_ATTESTATION_HMAC_KEY_FILE")),
+        "canary attestation HMAC key",
+    )
+    key = key_path.read_bytes().strip()
+    if len(key) < 32:
+        raise RuntimeError("canary attestation HMAC key must contain at least 32 bytes")
+    return validate_operator_attestation(
+        json.loads(evidence_path.read_text(encoding="utf-8")),
+        release_sha=release_sha,
+        attestation_type=attestation_type,
+        kind=kind,
+        hmac_key=key,
+    )
+
+
 def persist_evidence(result: dict[str, object]) -> None:
     assert_public_evidence(result)
     configured = os.environ.get("TINYZKP_E2E_EVIDENCE_DIR", "").strip()
@@ -194,7 +351,10 @@ def persist_evidence(result: dict[str, object]) -> None:
     details = directory.stat()
     if not stat.S_ISDIR(details.st_mode) or stat.S_IMODE(details.st_mode) != 0o700:
         raise RuntimeError("evidence directory must be owner-only")
-    name = f"{result['release_sha']}-{result['workload']}-{result['rows']}-{result['job_id']}.json"
+    identity = hashlib.sha256(canonical_json(result)).hexdigest()[:16]
+    label = str(result.get("workload") or result.get("kind") or result.get("attestation_type") or "event")
+    label = "".join(character for character in label if character.isalnum() or character in "-_")
+    name = f"{result['release_sha']}-{label}-{identity}.json"
     destination = directory / name
     temporary = directory / f".{name}.{os.getpid()}.tmp"
     descriptor = os.open(
@@ -678,8 +838,12 @@ def main() -> None:
     elif args.command == "cancel":
         rows = args.rows or int(os.environ.get("TINYZKP_CANCEL_ROWS", str(1 << 18)))
         result = execute_lifecycle(args.workload, rows, cancel=True)
+    elif args.command == "billing":
+        result = load_operator_attestation("billing", args.kind)
+    elif args.command == "audit":
+        result = load_operator_attestation("audit")
     else:
-        raise RuntimeError(f"{args.command} is unavailable until the billing/evidence PR lands")
+        raise AssertionError(f"unhandled command: {args.command}")
     assert_public_evidence(result)
     persist_evidence(result)
     print(json.dumps(result, separators=(",", ":"), sort_keys=True))

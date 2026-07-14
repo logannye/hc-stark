@@ -51,10 +51,21 @@ def validate(value: dict[str, object], release_sha: str) -> list[str]:
         item.get("synthetic") is not True
         or item.get("refunded") is not True
         or item.get("excluded_from_revenue") is not True
+        or item.get("attestation_hmac_verified") is not True
+        or len(str(item.get("attestation_hmac_sha256", ""))) != 64
+        or len(str(item.get("attestation_payload_sha256", ""))) != 64
         or (item.get("kind") == "subscription" and item.get("cancelled") is not True)
         for item in billing if isinstance(item, dict)
     ):
         failures.append("live billing canaries are incomplete")
+    audit = value.get("final_audit")
+    if (
+        not isinstance(audit, dict)
+        or audit.get("attestation_hmac_verified") is not True
+        or len(str(audit.get("attestation_hmac_sha256", ""))) != 64
+        or len(str(audit.get("attestation_payload_sha256", ""))) != 64
+    ):
+        failures.append("final audit attestation is missing or unverified")
     for field in ZERO_FIELDS:
         if value.get(field) != 0:
             failures.append(f"{field} must be zero")

@@ -17,9 +17,10 @@ def valid():
         ],
         "cancellation_refund_exercises": [{"full_reservation_released": True} for _ in range(4)],
         "live_billing_canaries": [
-            {"kind": "topup", "synthetic": True, "refunded": True, "excluded_from_revenue": True},
-            {"kind": "subscription", "synthetic": True, "cancelled": True, "refunded": True, "excluded_from_revenue": True},
+            {"kind": "topup", "synthetic": True, "refunded": True, "excluded_from_revenue": True, "attestation_hmac_verified": True, "attestation_hmac_sha256": "b" * 64, "attestation_payload_sha256": "c" * 64},
+            {"kind": "subscription", "synthetic": True, "cancelled": True, "refunded": True, "excluded_from_revenue": True, "attestation_hmac_verified": True, "attestation_hmac_sha256": "b" * 64, "attestation_payload_sha256": "c" * 64},
         ],
+        "final_audit": {"attestation_hmac_verified": True, "attestation_hmac_sha256": "b" * 64, "attestation_payload_sha256": "c" * 64},
         "verifier_failures": 0,
         "unexplained_credit_differences": 0,
         "stuck_leases": 0,

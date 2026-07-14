@@ -1,4 +1,6 @@
 import importlib.util
+import hashlib
+import hmac
 from http.client import RemoteDisconnected
 from io import BytesIO
 from pathlib import Path
@@ -92,6 +94,84 @@ def test_public_evidence_rejects_secrets_and_urls():
         E2E.assert_public_evidence({"download": "https://example.test/signed"})
     with pytest.raises(RuntimeError, match="secret-like value"):
         E2E.assert_public_evidence({"value": "sk_test_secret"})
+
+
+def signed_attestation(attestation_type, kind=None):
+    source_names = E2E.ATTESTATION_SOURCES[(attestation_type, kind)]
+    value = {
+        "schema_version": 1,
+        "release_sha": "a" * 40,
+        "attestation_type": attestation_type,
+        "status": "passed",
+        "source_evidence": [
+            {
+                "name": name,
+                "sha256": hashlib.sha256(name.encode()).hexdigest(),
+                "status": "passed",
+                "validator": f"validate-{name}",
+                "validator_sha256": hashlib.sha256(f"validate-{name}".encode()).hexdigest(),
+            }
+            for name in sorted(source_names)
+        ],
+    }
+    if attestation_type == "billing":
+        value.update(
+            {
+                "kind": kind,
+                "synthetic": True,
+                "refunded": True,
+                "excluded_from_revenue": True,
+                "cancelled": kind == "subscription",
+            }
+        )
+    else:
+        value.update({field: 0 for field in E2E.ATTESTATION_ZERO_FIELDS})
+    key = b"k" * 32
+    value["hmac_sha256"] = hmac.new(
+        key, E2E.canonical_json(value), hashlib.sha256
+    ).hexdigest()
+    return value, key
+
+
+@pytest.mark.parametrize("kind", ["topup", "subscription"])
+def test_live_billing_attestation_is_release_bound_complete_and_signed(kind):
+    value, key = signed_attestation("billing", kind)
+    checked = E2E.validate_operator_attestation(
+        value,
+        release_sha="a" * 40,
+        attestation_type="billing",
+        kind=kind,
+        hmac_key=key,
+    )
+    assert checked["attestation_hmac_verified"] is True
+    assert len(checked["attestation_payload_sha256"]) == 64
+
+
+def test_operator_attestation_rejects_tampering_and_missing_sources():
+    value, key = signed_attestation("billing", "topup")
+    value["refunded"] = False
+    with pytest.raises(RuntimeError, match="HMAC"):
+        E2E.validate_operator_attestation(
+            value,
+            release_sha="a" * 40,
+            attestation_type="billing",
+            kind="topup",
+            hmac_key=key,
+        )
+    value, key = signed_attestation("audit")
+    value["source_evidence"] = value["source_evidence"][:-1]
+    unsigned = {key_: item for key_, item in value.items() if key_ != "hmac_sha256"}
+    value["hmac_sha256"] = hmac.new(
+        key, E2E.canonical_json(unsigned), hashlib.sha256
+    ).hexdigest()
+    with pytest.raises(RuntimeError, match="missing source evidence"):
+        E2E.validate_operator_attestation(
+            value,
+            release_sha="a" * 40,
+            attestation_type="audit",
+            kind=None,
+            hmac_key=key,
+        )
 
 
 def test_credit_snapshot_covers_available_and_reserved_balances():
