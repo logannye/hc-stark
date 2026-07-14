@@ -44,6 +44,39 @@ def commit_repository(root: Path) -> str:
     ).strip()
 
 
+def release_trust_contract() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "cosign": {},
+        "external_signers": [],
+        "gate_tools": {},
+        "git": {},
+        "stripe_cli": {},
+        "toolchains": {},
+    }
+
+
+def test_release_trust_accepts_exact_v1_contract(monkeypatch, tmp_path):
+    value = release_trust_contract()
+    monkeypatch.setattr(MODULE, "committed_json", lambda *_arguments: value)
+
+    assert MODULE.release_trust(tmp_path, "a" * 40) is value
+
+
+def test_release_trust_rejects_unknown_or_missing_sections(monkeypatch, tmp_path):
+    value = release_trust_contract()
+    value["unexpected"] = {}
+    monkeypatch.setattr(MODULE, "committed_json", lambda *_arguments: value)
+    with pytest.raises(ValueError, match="malformed"):
+        MODULE.release_trust(tmp_path, "a" * 40)
+
+    value = release_trust_contract()
+    del value["stripe_cli"]
+    monkeypatch.setattr(MODULE, "committed_json", lambda *_arguments: value)
+    with pytest.raises(ValueError, match="malformed"):
+        MODULE.release_trust(tmp_path, "a" * 40)
+
+
 def test_private_reset_rejects_symlinked_parent_without_deletion(tmp_path):
     victim = tmp_path / "victim"
     target = victim / "child"

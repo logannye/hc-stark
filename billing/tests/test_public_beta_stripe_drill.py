@@ -98,3 +98,32 @@ def test_private_json_requires_owner_only_file(tmp_path: Path):
 @pytest.mark.parametrize("name", ["postgres", "tinyzkp_beta_stripe_drill_x", "tinyzkp_beta_stripe_drill_aaaaaaaaaaaa_extra"])
 def test_database_name_is_strict(name):
     assert drill.SAFE_DATABASE.fullmatch(name) is None
+
+
+def test_migration_identity_matches_sqlx_contract(tmp_path: Path):
+    migration = tmp_path / "0005_self_service_contract.sql"
+    content = b"SELECT 1;\n"
+    migration.write_bytes(content)
+
+    version, description, checksum = drill.migration_identity(migration)
+
+    assert version == 5
+    assert description == "self service contract"
+    assert checksum == hashlib.sha384(content).digest()
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "self_service.sql",
+        "0005-self-service.sql",
+        "0005_SELF_SERVICE.sql",
+        "0005_self service.sql",
+    ],
+)
+def test_migration_identity_rejects_non_sqlx_names(tmp_path: Path, name: str):
+    migration = tmp_path / name
+    migration.write_text("SELECT 1;\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="migration filename"):
+        drill.migration_identity(migration)

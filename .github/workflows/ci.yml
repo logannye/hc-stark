@@ -180,6 +180,7 @@ jobs:
           python3 -m pytest billing/tests/test_agreement_gate.py
           python3 -m pytest billing/tests/test_evaluation_delivery_manifest.py
           python3 -m pytest billing/tests/test_stripe_test_drill.py
+          python3 -m pytest billing/tests/test_public_beta_stripe_drill.py
           python3 -m pytest billing/tests/test_configure_contract_portal.py
           python3 -m pytest billing/tests/test_legacy_billing_containment.py
           python3 -m pytest billing/tests/test_stripe_account_context_check.py
