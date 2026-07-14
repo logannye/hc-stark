@@ -146,8 +146,8 @@ async function probeWithRetry(target) {
 }
 
 async function alert(env, failures) {
-  if (!env.ALERT_WEBHOOK_URL) {
-    console.error("ALERT_WEBHOOK_URL unset", JSON.stringify(failures));
+  if (!env.ALERT_WEBHOOK_URL || !env.ALERT_WEBHOOK_TOKEN) {
+    console.error("alert webhook configuration unset", JSON.stringify(failures));
     return;
   }
   const text = "🔴 TinyZKP recovery surface failed: " + failures
@@ -155,8 +155,11 @@ async function alert(env, failures) {
     .join(", ");
   await fetch(env.ALERT_WEBHOOK_URL, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text, content: text, failures }),
+    headers: {
+      authorization: `Bearer ${env.ALERT_WEBHOOK_TOKEN}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ text, incident: "external_probe_failed" }),
   }).catch((error) => console.error("alert webhook failed", error));
 }
 
@@ -188,4 +191,4 @@ export default {
   },
 };
 
-export { TARGETS, PUBLIC_BETA_TARGETS, targetsForMode, probe };
+export { TARGETS, PUBLIC_BETA_TARGETS, targetsForMode, probe, alert };

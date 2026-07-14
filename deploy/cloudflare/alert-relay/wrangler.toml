@@ -1,0 +1,17 @@
+name = "tinyzkp-alert-relay"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+[vars]
+ALERT_FROM = "alerts@tinyzkp.com"
+ALERT_TO = "logan@galenhealth.org"
+
+[[send_email]]
+name = "ALERT_EMAIL"
+destination_address = "logan@galenhealth.org"
+allowed_sender_addresses = ["alerts@tinyzkp.com"]
+
+# Install the same high-entropy value in both places without committing it:
+#   wrangler secret put ALERT_RELAY_TOKEN --config deploy/cloudflare/alert-relay/wrangler.toml
+#   TINYZKP_ALERT_WEBHOOK_TOKEN=<same value> in /etc/tinyzkp/beta/beta-api.env
