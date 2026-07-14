@@ -35,6 +35,13 @@
       "public_activation_permitted": false,
       "artifacts_may_be_used_as_comparison_data": true,
       "reason": "The exact dark deployment exposed an upgrade defect in migration 0006: an existing worker with nonzero free scratch was checked against a newly defaulted total capacity of zero, so the API correctly failed closed before serving traffic."
+    },
+    {
+      "release_sha": "74bc5d3a3f51ad73a0cfffd857eeb9efd423e18b",
+      "status": "abandoned",
+      "public_activation_permitted": false,
+      "artifacts_may_be_used_as_comparison_data": true,
+      "reason": "The transactional dark-route drill exposed a host compatibility defect: Caddyfile syntax was validated without the required caddyfile adapter. The switch automatically restored containment before exposing the beta route."
     }
   ]
 }

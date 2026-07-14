@@ -42,6 +42,17 @@ def test_activation_records_viability_window_only_after_public_smoke_and_probe()
     assert smoke < probe < activation
 
 
+def test_viability_timer_starts_only_after_public_activation_is_recorded():
+    installer = (BETA / "install-beta-host.sh").read_text(encoding="utf-8")
+    activation = (BETA / "record-beta-activation.sh").read_text(encoding="utf-8")
+    assert "tinyzkp-owner-digest.timer tinyzkp-viability.timer" not in installer
+    assert "hc-beta-viability beta-ops activate" in activation
+    assert "systemctl enable --now tinyzkp-viability.timer" in activation
+    assert activation.index("hc-beta-viability beta-ops activate") < activation.index(
+        "systemctl enable --now tinyzkp-viability.timer"
+    )
+
+
 def test_day_90_failure_does_not_disable_existing_jobs():
     source = (
         ROOT / "crates/hc-beta-api/src/bin/hc-beta-viability.rs"
