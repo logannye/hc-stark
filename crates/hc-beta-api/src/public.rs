@@ -33,6 +33,21 @@ use uuid::Uuid;
 
 const MAX_PREDICTED_RSS: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_PREDICTED_WALL_MS: u64 = 60 * 60 * 1000;
+const REGISTER_AIR_SQL: &str = "INSERT INTO beta_air_packages
+         (air_package_id,tenant_id,air_digest_hex,package_json,release_sha)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (tenant_id,air_digest_hex) DO UPDATE SET
+         package_json=EXCLUDED.package_json,
+         release_sha=EXCLUDED.release_sha
+     RETURNING air_package_id";
+const CURRENT_RELEASE_AIR_SQL: &str = "SELECT package_json FROM beta_air_packages
+      WHERE air_package_id=$1 AND tenant_id=$2 AND release_sha=$3";
+const CURRENT_RELEASE_JOB_INPUTS_SQL: &str =
+    "SELECT a.package_json,u.manifest_json,u.status,u.expires_at
+       FROM beta_air_packages a JOIN beta_uploads u ON u.air_package_id=a.air_package_id
+      WHERE a.air_package_id=$1 AND u.upload_id=$2
+        AND a.tenant_id=$3 AND u.tenant_id=$3 AND a.release_sha=$4
+        AND u.status IN ('pending','complete') AND u.expires_at > now()";
 
 #[derive(Deserialize)]
 pub struct GithubStartQuery {
@@ -451,20 +466,14 @@ pub async fn register_air(
     }
     let id = Uuid::new_v4();
     let package_json = serde_json::to_value(&request.air).map_err(|_| ApiError::Internal)?;
-    let row = sqlx::query(
-        "INSERT INTO beta_air_packages
-             (air_package_id,tenant_id,air_digest_hex,package_json,release_sha)
-         VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (tenant_id,air_digest_hex) DO UPDATE SET package_json=EXCLUDED.package_json
-         RETURNING air_package_id",
-    )
-    .bind(id)
-    .bind(&tenant.tenant_id)
-    .bind(&air_digest_hex)
-    .bind(package_json)
-    .bind(&state.config.release_sha)
-    .fetch_one(&mut *tx)
-    .await?;
+    let row = sqlx::query(REGISTER_AIR_SQL)
+        .bind(id)
+        .bind(&tenant.tenant_id)
+        .bind(&air_digest_hex)
+        .bind(package_json)
+        .bind(&state.config.release_sha)
+        .fetch_one(&mut *tx)
+        .await?;
     let actual_id: Uuid = row.get("air_package_id");
     let response = RegisterAirResponse {
         air_package_id: actual_id,
@@ -493,15 +502,13 @@ pub async fn create_upload(
     ensure_writes(&state)?;
     let tenant = auth::authenticate(&headers, &state).await?;
     let key = idempotency_key(&headers)?;
-    let row = sqlx::query(
-        "SELECT package_json FROM beta_air_packages
-          WHERE air_package_id=$1 AND tenant_id=$2",
-    )
-    .bind(request.air_package_id)
-    .bind(&tenant.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or(ApiError::NotFound)?;
+    let row = sqlx::query(CURRENT_RELEASE_AIR_SQL)
+        .bind(request.air_package_id)
+        .bind(&tenant.tenant_id)
+        .bind(&state.config.release_sha)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or(ApiError::NotFound)?;
     let air: AirPackageV1 =
         serde_json::from_value(row.get("package_json")).map_err(|_| ApiError::Internal)?;
     request
@@ -598,19 +605,14 @@ pub async fn create_job(
     {
         return idempotency::replay(status, body);
     }
-    let row = sqlx::query(
-        "SELECT a.package_json,u.manifest_json,u.status,u.expires_at
-           FROM beta_air_packages a JOIN beta_uploads u ON u.air_package_id=a.air_package_id
-          WHERE a.air_package_id=$1 AND u.upload_id=$2
-            AND a.tenant_id=$3 AND u.tenant_id=$3
-            AND u.status IN ('pending','complete') AND u.expires_at > now()",
-    )
-    .bind(request.air_package_id)
-    .bind(request.upload_id)
-    .bind(&tenant.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or(ApiError::NotFound)?;
+    let row = sqlx::query(CURRENT_RELEASE_JOB_INPUTS_SQL)
+        .bind(request.air_package_id)
+        .bind(request.upload_id)
+        .bind(&tenant.tenant_id)
+        .bind(&state.config.release_sha)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or(ApiError::NotFound)?;
     let air: AirPackageV1 =
         serde_json::from_value(row.get("package_json")).map_err(|_| ApiError::Internal)?;
     let manifest: TraceManifestV1 =
@@ -1251,6 +1253,13 @@ mod tests {
         assert_eq!(plan_concurrency("pro"), 2);
         assert_eq!(plan_concurrency("scale_beta"), 4);
         assert_eq!(plan_concurrency("unknown"), 0);
+    }
+
+    #[test]
+    fn air_admission_is_bound_to_the_running_release() {
+        assert!(REGISTER_AIR_SQL.contains("release_sha=EXCLUDED.release_sha"));
+        assert!(CURRENT_RELEASE_AIR_SQL.contains("release_sha=$3"));
+        assert!(CURRENT_RELEASE_JOB_INPUTS_SQL.contains("a.release_sha=$4"));
     }
 
     #[test]

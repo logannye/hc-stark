@@ -42,6 +42,13 @@
       "public_activation_permitted": false,
       "artifacts_may_be_used_as_comparison_data": true,
       "reason": "The transactional dark-route drill exposed a host compatibility defect: Caddyfile syntax was validated without the required caddyfile adapter. The switch automatically restored containment before exposing the beta route."
+    },
+    {
+      "release_sha": "1876ecf57b5d9945fa56b9c7ab154447d2363a56",
+      "status": "abandoned",
+      "public_activation_permitted": false,
+      "artifacts_may_be_used_as_comparison_data": true,
+      "reason": "Exact-candidate load preparation showed that re-registering an existing AIR verified the new local proof but retained the prior release identity in beta_air_packages, while upload and job admission did not reject stale AIR identities."
     }
   ]
 }
