@@ -61,6 +61,7 @@ def new_state(release_sha: str, driver_sha256: str, started_epoch: float) -> dic
         "hourly_verified_proofs": [],
         "cancellation_refund_exercises": [],
         "live_billing_canaries": [],
+        "final_audit": None,
         **{field: None for field in ZERO_FIELDS},
         "status": "running",
     }
@@ -252,6 +253,9 @@ def main() -> None:
         if value != 0:
             raise RuntimeError(f"canary audit requires {field}=0")
         state[field] = 0
+    if audit.get("attestation_hmac_verified") is not True:
+        raise RuntimeError("canary audit attestation was not cryptographically verified")
+    state["final_audit"] = audit
     state["completed_at"] = utc()
     state["status"] = "passed"
     state.pop("started_epoch", None)

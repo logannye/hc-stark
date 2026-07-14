@@ -17,6 +17,7 @@ def test_state_is_exact_sha_and_driver_bound():
     assert state["driver_sha256"] == "b" * 64
     assert state["status"] == "running"
     assert state["hourly_verified_proofs"] == []
+    assert state["final_audit"] is None
 
 
 def test_event_validation_is_fail_closed():
