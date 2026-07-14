@@ -379,8 +379,13 @@ def test_materializer_always_uses_pinned_npm_ci_without_scripts():
 
     environment = materialize._subprocess_environment(pathlib.Path("/private/home"))
     assert environment["NPM_CONFIG_IGNORE_SCRIPTS"] == "true"
-    assert environment["NPM_CONFIG_USERCONFIG"] == "/dev/null"
-    assert environment["NPM_CONFIG_GLOBALCONFIG"] == "/dev/null"
+    assert environment["NPM_CONFIG_USERCONFIG"] == (
+        "/private/home/.npmrc-user-disabled"
+    )
+    assert environment["NPM_CONFIG_GLOBALCONFIG"] == (
+        "/private/home/.npmrc-global-disabled"
+    )
+    assert environment["NPM_CONFIG_USERCONFIG"] != environment["NPM_CONFIG_GLOBALCONFIG"]
     assert environment["NPM_CONFIG_REGISTRY"] == "https://registry.npmjs.org/"
     assert "NODE_OPTIONS" not in environment
 
