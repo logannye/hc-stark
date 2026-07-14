@@ -27,7 +27,7 @@ pub const COMPATIBILITY_PROFILE: &str = "tinyzkp-p3-goldilocks-v1";
 /// field element and would lose the original input across checkpoint resume.
 pub const GOLDILOCKS_MODULUS_U64: u64 = 0xffff_ffff_0000_0001;
 pub const DEPENDENCY_LOCK_SHA256: &str =
-    "b29cfd76b16dcb72227903b08303abf48d4844ed2f0a5a8355749b9c3a708b86";
+    "c1afc52e0c067eaaecddc2463a37713189ece1456df806b83fe7fcd9e9cb8420";
 
 /// Resolve the running release identity. Certified builds use their embedded
 /// identity; development builds may supply an explicit operator identity.
