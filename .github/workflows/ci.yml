@@ -65,6 +65,7 @@ jobs:
           cargo test --locked -p hc-beta-api -p hc-beta-worker
           cargo check --locked -p hc-cli
           python3 scripts/ci/public_beta_schema_check.py
+          scripts/ci/public_beta_migration_upgrade_check.sh
           python3 -m pytest \
             scripts/ci/test_public_beta_schema_check.py \
             scripts/ci/test_validate_public_beta_canary.py \
