@@ -320,6 +320,14 @@ async fn process_event(state: &AppState, event: &StripeEvent) -> Result<Value, A
     ) {
         return process_refund_event(state, event).await;
     }
+    // Stripe can emit companion events such as `charge.refund.updated` for a
+    // Refund. They are not part of TinyZKP's billing contract and do not carry
+    // the Checkout/subscription metadata required below. Ignore unsupported
+    // event families before metadata parsing so they cannot poison the durable
+    // webhook queue or hold reconciliation open forever.
+    if !supported_billing_event(&event.event_type) {
+        return Ok(json!({"ignored":"unsupported_event_type"}));
+    }
     if metadata(object, "tinyzkp_catalog").as_deref() != Some(CATALOG_NAMESPACE) {
         return Ok(json!({"ignored":"foreign_catalog"}));
     }
@@ -466,6 +474,19 @@ async fn process_event(state: &AppState, event: &StripeEvent) -> Result<Value, A
     record_object_state(&mut tx, &state_type, &state_id, event, object).await?;
     tx.commit().await?;
     Ok(json!({"processed":event.event_type,"tenant_id":tenant_id}))
+}
+
+fn supported_billing_event(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "invoice.paid"
+            | "invoice.payment_failed"
+            | "checkout.session.completed"
+            | "checkout.session.async_payment_succeeded"
+            | "customer.subscription.created"
+            | "customer.subscription.updated"
+            | "customer.subscription.deleted"
+    )
 }
 
 fn ordering_identity(object_type: &str, object_id: &str, object: &Value) -> (String, String) {
@@ -1303,5 +1324,13 @@ mod tests {
         assert_eq!(refund_failure_restore_delta(5_000, 25_000).unwrap(), 5_000);
         assert!(refund_failure_restore_delta(25_000, 20_000).is_err());
         assert!(refund_failure_restore_delta(-1, 0).is_err());
+    }
+
+    #[test]
+    fn unsupported_stripe_companion_events_are_ignored_before_metadata_parsing() {
+        assert!(supported_billing_event("invoice.paid"));
+        assert!(supported_billing_event("checkout.session.completed"));
+        assert!(!supported_billing_event("charge.refund.updated"));
+        assert!(!supported_billing_event("payment_intent.succeeded"));
     }
 }

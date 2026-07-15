@@ -60,6 +60,16 @@ else
   done
   chown 10001:10001 /srv/tinyzkp-scratch
   chmod 0700 /srv/tinyzkp-scratch
+  install -o root -g root -m 0644 "$SOURCE/worker-sysctl.conf" /etc/sysctl.d/99-tinyzkp-worker.conf
+  /usr/sbin/sysctl -p /etc/sysctl.d/99-tinyzkp-worker.conf >/dev/null
+  [[ "$(/usr/sbin/sysctl -n vm.dirty_background_bytes)" == 134217728 ]] || {
+    echo "worker dirty-background writeback cap did not apply" >&2
+    exit 3
+  }
+  [[ "$(/usr/sbin/sysctl -n vm.dirty_bytes)" == 268435456 ]] || {
+    echo "worker dirty-page writeback cap did not apply" >&2
+    exit 3
+  }
   install -o root -g root -m 0644 "$SOURCE/systemd/tinyzkp-beta-worker.service" /etc/systemd/system/
   systemctl daemon-reload
   systemctl enable tinyzkp-beta-worker.service
