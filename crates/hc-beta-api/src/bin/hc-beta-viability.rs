@@ -92,7 +92,7 @@ async fn report() -> anyhow::Result<()> {
                  AND created_at<=cutoff AND created_at>COALESCE((SELECT max(acknowledged_at)
                     FROM beta_invariant_acknowledgements WHERE invariant='official_verifier_rejection'
                       AND acknowledged_at<=cutoff),'-infinity'::timestamptz))::bigint verifier_issues,
-              (SELECT count(*) FROM beta_retention_deletions,bounds WHERE last_error IS NOT NULL AND created_at<=cutoff AND deleted_at IS NULL)::bigint retention_issues,
+              (SELECT count(*) FROM beta_retention_deletions,bounds WHERE last_error IS NOT NULL AND not_before<=cutoff AND deleted_at IS NULL)::bigint retention_issues,
               (SELECT count(*) FROM beta_credit_accounts a LEFT JOIN (
                  SELECT tenant_id,COALESCE(sum(subscription_delta_millicredits),0) s,
                     COALESCE(sum(purchased_delta_millicredits),0) p,COALESCE(sum(reserved_delta_millicredits),0) r
