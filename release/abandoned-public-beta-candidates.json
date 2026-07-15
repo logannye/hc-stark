@@ -49,6 +49,13 @@
       "public_activation_permitted": false,
       "artifacts_may_be_used_as_comparison_data": true,
       "reason": "Exact-candidate load preparation showed that re-registering an existing AIR verified the new local proof but retained the prior release identity in beta_air_packages, while upload and job admission did not reject stale AIR identities."
+    },
+    {
+      "release_sha": "1536698f3b212ee22044b06c96008603ed34d442",
+      "status": "abandoned",
+      "public_activation_permitted": false,
+      "artifacts_may_be_used_as_comparison_data": true,
+      "reason": "Exact-candidate qualification exposed two release blockers: Stripe companion events such as charge.refund.updated poisoned the asynchronous event queue, and ratio-based host dirty-page thresholds allowed scratch writeback to exhaust the fixed-host job cgroup."
     }
   ]
 }
