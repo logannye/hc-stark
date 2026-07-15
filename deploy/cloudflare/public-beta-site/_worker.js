@@ -42,6 +42,15 @@ function siteLocation(url, env, path) {
   return new URL(path, `${origin}/`).toString();
 }
 
+function assetRequest(request, path = null) {
+  const asset = new URL(request.url);
+  asset.protocol = "https:";
+  asset.hostname = HOST;
+  asset.port = "";
+  if (path !== null) asset.pathname = path;
+  return new Request(asset, request);
+}
+
 async function releaseInfo(env) {
   const assets = [];
   for (const path of ASSETS) {
@@ -82,10 +91,9 @@ export default {
     }
     const segment = url.pathname.split("/").pop() || "";
     if (!segment.includes(".") && !PUBLIC.has(url.pathname)) return secured(new Response("not found", { status: 404 }));
-    let response = await env.ASSETS.fetch(request);
+    let response = await env.ASSETS.fetch(assetRequest(request));
     if (response.status === 404 && PUBLIC.has(url.pathname) && url.pathname !== "/") {
-      const asset = new URL(url); asset.pathname = `${url.pathname}.html`;
-      response = await env.ASSETS.fetch(new Request(asset, request));
+      response = await env.ASSETS.fetch(assetRequest(request, `${url.pathname}.html`));
     }
     return secured(response);
   },

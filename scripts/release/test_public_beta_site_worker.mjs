@@ -42,6 +42,7 @@ async function expectAsset(url, branch = "candidate-release") {
   assert.equal(response.status, 200, `${url} must serve the staged asset`);
   assert.equal(response.headers.get("Content-Security-Policy")?.includes("default-src 'self'"), true);
   assert.equal(env.ASSETS.calls.length, 1);
+  assert.equal(new URL(env.ASSETS.calls[0]).hostname, "tinyzkp.com");
 }
 
 async function expectRedirect(url, branch, expected) {
