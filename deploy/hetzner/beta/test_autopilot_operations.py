@@ -62,3 +62,19 @@ def test_day_90_failure_does_not_disable_existing_jobs():
     assert "checkout_enabled=false" in update
     assert "job_submission_enabled=false" not in update
     assert "DELETE" not in update
+
+
+def test_viability_retention_cutoff_uses_a_migrated_timestamp_column():
+    source = (
+        ROOT / "crates/hc-beta-api/src/bin/hc-beta-viability.rs"
+    ).read_text(encoding="utf-8")
+    migration = (
+        ROOT / "crates/hc-beta-api/migrations/0001_public_beta.sql"
+    ).read_text(encoding="utf-8")
+    assert "not_before TIMESTAMPTZ NOT NULL" in migration
+    retention_query = source[
+        source.index("FROM beta_retention_deletions,bounds") - 80 :
+        source.index("FROM beta_retention_deletions,bounds") + 180
+    ]
+    assert "not_before<=cutoff" in retention_query
+    assert "created_at<=cutoff" not in retention_query
