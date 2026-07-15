@@ -75,6 +75,8 @@ The signed CLI always targets `https://api.tinyzkp.com`; release binaries do not
 - Create a separate `tinyzkp_beta_race_<sha12>` database, apply the production migrations, and run `scripts/load/run_public_beta_races.py`. The runner covers idempotency, overspend, competing terminal states, stale leases, settlement, refund/use, webhook delivery, and ledger reconstruction.
 - Run the fixed-host 1M/16M matrix, customer_cubic8 matrix, fault/fuzz suite, security review, four-job load test, and identity check on the final candidate. The load runner creates four digest-distinct `customer_cubic8` AIRs, verifies a 1,024-row local proof for each, selects the largest candidate row count whose signed-CLI estimate is within 85–100% of 2 GiB and below the 60-minute admission limit, registers four AIRs, and uploads four independent traces:
 
+  Before starting fixed-host or production proving, run `install-beta-host.sh worker` and verify `vm.dirty_background_bytes=134217728` and `vm.dirty_bytes=268435456`. These absolute writeback limits prevent the 64-GiB host's ratio-based defaults from allowing scratch page cache to exhaust a bounded job cgroup. A missing or different value invalidates fixed-host and load evidence.
+
   Run the declarative customer workload through its resumable fixed-host controller rather than invoking the three proof modes by hand:
 
   ```sh
