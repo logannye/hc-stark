@@ -2,6 +2,7 @@
 // This file intentionally does not derive from the containment worker.
 
 const HOST = "tinyzkp.com";
+const PAGES_PREVIEW_SUFFIX = ".tinyzkp.pages.dev";
 const PUBLIC = new Set(["/", "/docs", "/security", "/privacy", "/terms", "/requests", "/pricing", "/dashboard", "/status"]);
 const ASSETS = ["/index.html", "/docs.html", "/security.html", "/privacy.html", "/terms.html", "/requests.html", "/pricing.html", "/dashboard.html", "/dashboard.js", "/status.html", "/discovery.json", "/pricing.json", "/openapi.json"];
 const RETIRED = ["/enterprise", "/evaluation", "/pilot", "/platform-rollout", "/contact-sales", "/certified", "/fleet", "/oem", "/engine", "/benchmarks", "/plonky3", "/research"];
@@ -27,6 +28,20 @@ function normalized(path) {
   return path.endsWith(".html") ? path.slice(0, -5) : path;
 }
 
+function isPagesPreview(url, env) {
+  const branch = env.CF_PAGES_BRANCH;
+  return url.protocol === "https:"
+    && typeof branch === "string"
+    && branch.length > 0
+    && branch !== "main"
+    && url.hostname.toLowerCase().endsWith(PAGES_PREVIEW_SUFFIX);
+}
+
+function siteLocation(url, env, path) {
+  const origin = isPagesPreview(url, env) ? url.origin : `https://${HOST}`;
+  return new URL(path, `${origin}/`).toString();
+}
+
 async function releaseInfo(env) {
   const assets = [];
   for (const path of ASSETS) {
@@ -45,15 +60,16 @@ async function releaseInfo(env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== HOST) {
+    const canonicalHost = url.protocol === "https:" && url.hostname.toLowerCase() === HOST;
+    if (!canonicalHost && !isPagesPreview(url, env)) {
       const target = new URL(url); target.protocol = "https:"; target.hostname = HOST; target.port = "";
       return secured(redirect(target.toString()));
     }
     const path = normalized(url.pathname);
     if (path === "/signup") return secured(redirect("https://api.tinyzkp.com/v1/auth/github/start?return_path=/dashboard", 302));
-    if (path === "/contact") return secured(redirect("https://tinyzkp.com/requests"));
+    if (path === "/contact") return secured(redirect(siteLocation(url, env, "/requests")));
     if (["/enterprise", "/evaluation", "/pilot", "/platform-rollout"].includes(path)) {
-      return secured(redirect("https://tinyzkp.com/pricing"));
+      return secured(redirect(siteLocation(url, env, "/pricing")));
     }
     if (RETIRED.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
       return secured(new Response("This legacy surface has been retired. Use self-service pricing.", { status: 410, headers: { "Content-Type": "text/plain; charset=utf-8" } }));
