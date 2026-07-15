@@ -36,6 +36,9 @@ def test_stage_builds_exact_release_beta_surface(tmp_path: Path):
     assert "Dedicated Cloudflare Pages policy" in worker
     assert "Content-Security-Policy" in worker
     assert 'path === "/signup"' in worker
+    assert "isPagesPreview(url, env)" in worker
+    assert 'branch !== "main"' in worker
+    assert 'PAGES_PREVIEW_SUFFIX = ".tinyzkp.pages.dev"' in worker
     assert not (output / "contact.html").exists()
     assert "innerHTML" not in (output / "dashboard.js").read_text()
     openapi = json.loads((output / "openapi.json").read_text())

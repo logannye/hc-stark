@@ -156,6 +156,7 @@ jobs:
           python3 -m pytest scripts/ci/test_cloudflare_toolchain_check.py
           python3 -m pytest scripts/deploy/test_cloudflare_pages_release.py
           node scripts/ci/site_worker_dispatch_test.mjs
+          node scripts/release/test_public_beta_site_worker.mjs
 
       - name: Docker Compose config checks
         run: |

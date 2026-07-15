@@ -137,6 +137,7 @@ def test_local_preflight_builds_fast_static_gate_sequence():
         ),
         ("python", "scripts/ci/cloudflare_toolchain_check.py"),
         ("node", "scripts/ci/site_worker_dispatch_test.mjs"),
+        ("node", "scripts/release/test_public_beta_site_worker.mjs"),
         ("python", "scripts/ci/compose_config_check.py"),
         ("python", "-m", "pytest", "scripts/ci/test_billing_service_hardening.py"),
         ("python", "-m", "pytest", "deploy/hetzner/test_deployment_transaction.py"),

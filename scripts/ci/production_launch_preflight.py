@@ -368,6 +368,10 @@ def build_steps(
             (node, "scripts/ci/site_worker_dispatch_test.mjs"),
         ),
         Step(
+            "public beta Pages preview policy check",
+            (node, "scripts/release/test_public_beta_site_worker.mjs"),
+        ),
+        Step(
             "Docker Compose render check",
             (python, "scripts/ci/compose_config_check.py"),
         ),
