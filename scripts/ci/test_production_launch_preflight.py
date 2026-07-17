@@ -49,6 +49,7 @@ def test_local_preflight_builds_fast_static_gate_sequence():
     built = preflight.build_steps(args(), python="python", node="node")
 
     assert commands(built) == [
+        ("python", "scripts/ci/evaluation_revenue_launch_baseline_check.py"),
         ("python", "scripts/ci/recovery_reconciliation_invariants.py"),
         ("python", "scripts/ci/backend_recovery_gate.py"),
         ("python", "scripts/ci/server_card_check.py"),

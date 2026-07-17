@@ -1,5 +1,9 @@
 # Cold-Email Template — 50-Account Outbound
 
+> **ARCHIVED — DO NOT SEND.** TinyZKP's contract-evaluation launch is
+> inbound-only and customer email is prohibited. This retired template is
+> preserved only as historical product research.
+
 The math: 50 hand-picked AI agent companies × 10–15% reply rate × 2–3% close rate ≈ 1–2 paying customers per week. Zero CAC.
 
 ## Picking the 50

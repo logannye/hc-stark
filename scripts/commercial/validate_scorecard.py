@@ -12,11 +12,12 @@ import sys
 
 MAX_BYTES = 1024 * 1024
 ALLOWED_STAGES = {
-    "interview_completed",
     "benchmark_committed",
     "benchmark_reproduced",
-    "evaluation_proposed",
+    "evaluation_qualified",
     "evaluation_signed",
+    "evaluation_invoiced",
+    "evaluation_deposit_paid",
     "annual_signed",
 }
 ZERO_VALUE_KEYS = {"traffic", "directory_listings", "free_accounts", "unsent_leads"}
@@ -28,8 +29,8 @@ def margin(revenue: float, cogs: float) -> float | None:
 
 def validate(payload: dict[str, object]) -> list[str]:
     failures: list[str] = []
-    if payload.get("schema_version") != 1:
-        failures.append("schema_version must be 1")
+    if payload.get("schema_version") != 2:
+        failures.append("schema_version must be 2")
     if not isinstance(payload.get("period"), str) or not re.fullmatch(r"\d{4}-\d{2}", payload["period"]):
         failures.append("period must use YYYY-MM")
     forbidden = sorted(ZERO_VALUE_KEYS & payload.keys())
@@ -40,11 +41,16 @@ def validate(payload: dict[str, object]) -> list[str]:
         "contracted_arr_usd",
         "cash_collected_usd",
         "evaluation_revenue_usd",
+        "evaluation_invoiced_usd",
+        "evaluation_paid_usd",
         "recurring_software_revenue_usd",
         "recurring_software_cogs_usd",
         "hosted_revenue_usd",
         "hosted_cogs_usd",
         "buyer_calls_completed",
+        "inbound_applications",
+        "qualified_opportunities",
+        "signed_evaluations",
         "reproducible_bottlenecks",
         "benchmark_reports_received",
         "evaluations_sold",
@@ -55,6 +61,36 @@ def validate(payload: dict[str, object]) -> list[str]:
         value = payload.get(field)
         if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
             failures.append(f"{field} must be a non-negative number")
+    ordered_counts = (
+        payload.get("inbound_applications"),
+        payload.get("qualified_opportunities"),
+        payload.get("signed_evaluations"),
+        payload.get("evaluations_sold"),
+    )
+    if all(
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        for value in ordered_counts
+    ) and not (
+        ordered_counts[0] >= ordered_counts[1] >= ordered_counts[2]
+        == ordered_counts[3]
+    ):
+        failures.append(
+            "applications, qualified opportunities, and signed evaluations are inconsistent"
+        )
+    invoiced = payload.get("evaluation_invoiced_usd")
+    paid = payload.get("evaluation_paid_usd")
+    revenue = payload.get("evaluation_revenue_usd")
+    cash = payload.get("cash_collected_usd")
+    if all(
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        for value in (invoiced, paid, revenue, cash)
+    ):
+        if paid > invoiced:
+            failures.append("evaluation paid amount cannot exceed invoiced amount")
+        if revenue != paid:
+            failures.append("evaluation revenue must equal paid evaluation invoices")
+        if paid > cash:
+            failures.append("evaluation paid amount cannot exceed total cash collected")
 
     customers = payload.get("customers")
     if not isinstance(customers, list):
@@ -103,7 +139,12 @@ def validate(payload: dict[str, object]) -> list[str]:
         amount = item.get("contracted_value_usd", 0)
         if not isinstance(amount, (int, float)) or isinstance(amount, bool) or amount < 0:
             failures.append("pipeline contracted_value_usd is invalid")
-        elif stage not in {"evaluation_signed", "annual_signed"} and amount != 0:
+        elif stage not in {
+            "evaluation_signed",
+            "evaluation_invoiced",
+            "evaluation_deposit_paid",
+            "annual_signed",
+        } and amount != 0:
             failures.append("unsigned pipeline stages must have zero contracted value")
 
     software_margin = margin(

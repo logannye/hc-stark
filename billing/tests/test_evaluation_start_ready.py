@@ -172,7 +172,7 @@ def paid_invoice(req, plan_sha256):
         "customer": "cus_test",
         "status": "paid",
         "currency": "usd",
-        "amount_paid": 1_250_000,
+        "amount_paid": 750_000,
         "amount_remaining": 0,
         "collection_method": "send_invoice",
         "auto_advance": False,

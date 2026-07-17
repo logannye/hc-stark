@@ -220,19 +220,12 @@ def validate(site_url: str, api_url: str, mcp_url: str, timeout: int) -> list[st
     contact_text = contact.body.decode("utf-8", errors="replace")
     parser = ContactFormParser()
     parser.feed(contact_text)
-    email = parser.fields.get("email")
     contact_method = parser.fields.get("contact_method")
     contact_handle = parser.fields.get("contact_handle")
     if contact.status != 200:
         failures.append(f"contact returned HTTP {contact.status}")
-    if (
-        email is None
-        or email[0] != "input"
-        or not isinstance(email[1].get("type"), str)
-        or email[1]["type"].lower() != "email"
-        or "required" in email[1]
-    ):
-        failures.append("contact email field must exist and remain optional")
+    if parser.fields.get("email") is not None:
+        failures.append("contact must not collect email")
     if (
         contact_method is None
         or contact_method[0] != "select"

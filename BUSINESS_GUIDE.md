@@ -30,7 +30,7 @@ updating that source and its parity gates.
 
 | Offer | Commercial terms | Delivery boundary |
 |---|---|---|
-| Founding Evaluation | $25K; first two customers; 50% signature / 50% delivery | One workload, three weeks, maximum fifteen engineering days |
+| Founding Evaluation | $15K; first three customers; $7.5K signature / $7.5K delivery | One workload, two weeks, maximum eight engineering days; no production integration, hosted proving, SLA, continuing support, or extra workload |
 | Standard Evaluation | $40K; 50% signature / 50% delivery | Same fixed scope; changes require written order |
 | TinyZKP Certified | $60K/year prepaid after backend v1 release | One workload, signed LTS, notices, automated quarterly report, ≤10 support hours/quarter |
 | TinyZKP Fleet/OEM | $125K/year minimum prepaid after backend v1 release | Private deployment, policy, observability, checkpoint operations, release coordination, SLA |
@@ -46,7 +46,7 @@ notification and a prorated refund or credit decision.
 ## Funnel and automation
 
 1. A team runs the open-source benchmark or submits reproducible OOM evidence.
-2. The application receives an automatic acknowledgement and benchmark command.
+2. The browser returns the application ID and benchmark command synchronously.
 3. A deterministic qualification check confirms verifier success, supported
    workload, reproducibility, and memory gap.
 4. A founder runs one technical review call.
@@ -55,9 +55,9 @@ notification and a prorated refund or credit decision.
    recommendation.
 7. A successful workload converts to Certified or Fleet/OEM.
 
-Do not automate unsolicited outbound. Until three recurring customers exist,
-send at most twenty researched founder messages per month. Traffic, directory
-listings, free accounts, and unsent leads carry zero pipeline value.
+Customer acquisition is inbound-only. Do not send unsolicited prospect
+messages or customer email. Traffic, directory listings, and unqualified or
+unsent leads carry zero pipeline value.
 
 Low-touch delivery comes from strict boundaries:
 

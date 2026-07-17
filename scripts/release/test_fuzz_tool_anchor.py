@@ -90,3 +90,14 @@ def test_nightly_captures_then_verifies_before_expensive_evidence():
     verify = workflow.index("fuzz_tool_anchor.py verify")
     expensive = workflow.index("Randomized proof equality through 2^18")
     assert capture < verify < expensive
+    for job in (
+        "fuzz-tool-anchor:",
+        "proof-equality:",
+        "scratch-calibration:",
+        "crash-matrix:",
+        "fuzz-smoke:",
+        "nightly-evidence-complete:",
+    ):
+        assert job in workflow
+    assert "timeout-minutes: 720" not in workflow
+    assert "cancel-in-progress: false" in workflow

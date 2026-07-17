@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "status": "recorded",
+  "captured_at": "2026-07-17T21:12:36Z",
+  "canonical_remote": "https://github.com/logannye/hc-stark.git",
+  "starting_commit_sha": "7a1b9db80f26a2fd713bef44e54faea6ccaba578",
+  "implementation_branch": "codex/evaluation-revenue-launch",
+  "dependency_locks": {
+    "Cargo.lock": "c1afc52e0c067eaaecddc2463a37713189ece1456df806b83fe7fcd9e9cb8420",
+    "billing/requirements.lock": "68ab3f2d8be7c9be5838de7ddc3c8b30ab432c25bf3b23594021191d054cf97b",
+    "release/cloudflare-production-toolchain-v1.json": "9ecd06dd74c683cdd60eee4da62da156e65faa07b8a1f77f43acd7a280e45fe6",
+    "rust-toolchain.toml": "ccc2e1ec095fbcdc5c18912f077cda7f967f6ce3b214c92a76919a88aa8542b4"
+  },
+  "commercial_contract": {
+    "pricing_source_sha256": "affa95a4c1bb7ec056e9b3ff89cf8e23f894d67f57b5b3eb5ee733679b8ab920",
+    "founding_offer_sha256": "61e4b33400d667ece3463d0ea62c47477fb01877f5bc09eb67a1555ee6350f46",
+    "offer_id": "founding_evaluation",
+    "price_usd": 15000,
+    "deposit_usd": 7500,
+    "delivery_usd": 7500,
+    "customer_cap": 3,
+    "duration": "2_weeks",
+    "engineering_day_cap": 8
+  },
+  "deployment_inputs": [
+    "/opt/hc-stark/.env",
+    "/var/lib/tinyzkp-private/deploy/pages-bindings.env",
+    "/var/lib/tinyzkp-private/deploy/internal-secret",
+    "/var/lib/tinyzkp-private/deploy/legacy-billing-containment-status.json",
+    "/var/lib/tinyzkp-private/deploy/production-preflight.json",
+    "/var/lib/tinyzkp-private/deploy/installer-drill-evidence.json",
+    "/var/lib/tinyzkp-private/backup/fixed-host-evidence"
+  ],
+  "release_contract": {
+    "site_api_mcp_same_sha": true,
+    "proving_worker_deployed": false,
+    "hosted_proving_enabled": false,
+    "hosted_verification_enabled": false,
+    "account_creation_enabled": false,
+    "public_checkout_enabled": false,
+    "customer_email_enabled": false
+  }
+}

@@ -22,6 +22,8 @@ import tempfile
 from typing import Any
 
 
+ROOT = Path(__file__).resolve().parents[1]
+OFFERS_PATH = ROOT / "site" / "pricing.json"
 PROFILE_SCHEMA = "tinyzkp-agreement-form-profile-v1"
 GATE_SCHEMA = "tinyzkp-agreement-gate-v1"
 HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -61,8 +63,9 @@ GATE_KEYS = {
 }
 REQUIRED_TERMS = {
     "one_workload": ("exactly one", "plonky3", "workload"),
-    "three_week_term": ("three weeks",),
-    "fifteen_day_cap": ("fifteen", "person-days"),
+    "fixed_fee": (),
+    "offer_duration": (),
+    "engineering_cap": (),
     "change_orders": ("written change order",),
     "deposit_and_delivery": ("50% deposit", "remaining 50%"),
     "no_production_sla": (
@@ -215,7 +218,75 @@ def validate_profile(payload: Any) -> dict[str, Any]:
     return payload
 
 
-def validate_agreement_source(raw: bytes) -> dict[str, bool]:
+def evaluation_offer(offer_id: str) -> dict[str, Any]:
+    payload = json.loads(OFFERS_PATH.read_text(encoding="utf-8"))
+    offers = {
+        offer.get("id"): offer
+        for offer in payload.get("offers", [])
+        if isinstance(offer, dict)
+    }
+    offer = offers.get(offer_id)
+    if not isinstance(offer, dict) or offer_id not in {
+        "founding_evaluation",
+        "standard_evaluation",
+    }:
+        raise ValueError("agreement gate supports evaluation offers only")
+    return offer
+
+
+def number_word(value: int) -> str:
+    words = {
+        1: "one",
+        2: "two",
+        3: "three",
+        4: "four",
+        5: "five",
+        6: "six",
+        7: "seven",
+        8: "eight",
+        9: "nine",
+        10: "ten",
+        11: "eleven",
+        12: "twelve",
+        13: "thirteen",
+        14: "fourteen",
+        15: "fifteen",
+        16: "sixteen",
+        17: "seventeen",
+        18: "eighteen",
+        19: "nineteen",
+        20: "twenty",
+    }
+    if value not in words:
+        raise ValueError("agreement offer term is outside the supported range")
+    return words[value]
+
+
+def offer_term_requirements(offer_id: str) -> dict[str, tuple[str, ...]]:
+    offer = evaluation_offer(offer_id)
+    duration = offer.get("duration")
+    day_cap = offer.get("engineering_day_cap")
+    price = offer.get("price")
+    if (
+        not isinstance(duration, str)
+        or not duration.endswith("_weeks")
+        or not duration.removesuffix("_weeks").isdigit()
+        or not isinstance(day_cap, int)
+        or isinstance(day_cap, bool)
+        or not isinstance(price, int)
+        or isinstance(price, bool)
+    ):
+        raise ValueError("evaluation offer terms are invalid")
+    weeks = int(duration.removesuffix("_weeks"))
+    return {
+        **REQUIRED_TERMS,
+        "fixed_fee": (f"${price:,}",),
+        "offer_duration": (f"{number_word(weeks)} weeks",),
+        "engineering_cap": (number_word(day_cap), "person-days"),
+    }
+
+
+def validate_agreement_source(raw: bytes, offer_id: str) -> dict[str, bool]:
     try:
         text = raw.decode("utf-8")
     except UnicodeError as error:
@@ -228,7 +299,7 @@ def validate_agreement_source(raw: bytes) -> dict[str, bool]:
             )
     lowered = " ".join(text.lower().split())
     results: dict[str, bool] = {}
-    for term, phrases in REQUIRED_TERMS.items():
+    for term, phrases in offer_term_requirements(offer_id).items():
         results[term] = all(phrase in lowered for phrase in phrases)
         if not results[term]:
             raise ValueError(
@@ -276,7 +347,7 @@ def build_gate(
         raise ValueError("approved template does not match counsel profile")
     if digest_bytes(counsel_approval) != profile["counsel_approval_sha256"]:
         raise ValueError("counsel approval record does not match profile")
-    required_terms = validate_agreement_source(source)
+    required_terms = validate_agreement_source(source, offer_id)
     try:
         qualification_payload = decode_json(qualification, "qualification evidence")
         preflight_payload = decode_json(preflight_raw, "partner preflight evidence")

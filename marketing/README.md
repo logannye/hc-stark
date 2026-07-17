@@ -6,9 +6,10 @@
 > Use `commercial/no-email-evaluation-runbook.md` and applicant-selected
 > no-email reply channels for the bounded evaluation program.
 
-This directory holds **drafts** of customer-acquisition assets ready to publish or send. Nothing in here is auto-deployed — every file is a copy/paste artifact for the founder to send manually after final review.
+The remaining material is preserved only as historical product research. It is
+not an operating queue and is not authoritative for the current offer.
 
-## Live state (as of launch)
+## Historical snapshot (not current)
 
 | Surface | Status | Verify |
 |---|---|---|
@@ -31,7 +32,7 @@ This directory holds **drafts** of customer-acquisition assets ready to publish 
 | Demo API key in Cloudflare Pages secret | **Set** | `wrangler pages secret list` includes `TINYZKP_DEMO_API_KEY` |
 | Production hc-server template handler bug (template_id pre-flight) | **Fixed and deployed** | End-to-end prove → verify works against real templates |
 
-## Contents
+## Archived contents
 
 | File | What it is | Where to publish |
 |---|---|---|
@@ -64,7 +65,7 @@ This directory holds **drafts** of customer-acquisition assets ready to publish 
 | `INTEGRATION_CURSOR.md` | Integration tutorial: TinyZKP MCP in Cursor | Blog + Cursor community |
 | `OUTBOUND_EMAIL.md` | Cold-email template for the 50-account outreach | Founder Gmail / Superhuman |
 
-## Recommended sequence (90-day plan)
+## Archived sequence — do not execute
 
 > Week 1's "deploy site acquisition surfaces" and `$5,000` Production Pilot
 > checkout path are **done**. The pilot route is live with an inline price_data
@@ -83,8 +84,8 @@ This directory holds **drafts** of customer-acquisition assets ready to publish 
 | 1–2 | After each manual action, update `marketing/gtm_pipeline_state.json`, rerender with `python3 scripts/marketing/render_gtm_pipeline_ledger.py`, and verify with `python3 scripts/ci/gtm_pipeline_ledger_check.py` |
 | 2 | Submit `MCP_DIRECTORY.md` to Anthropic; submit PRs against LangChain/LlamaIndex/Cursor integration docs using `INTEGRATION_LANGCHAIN.md` and `INTEGRATION_CURSOR.md` |
 | 3 | Post `HN_LAUNCH.md` on Tuesday morning ET; ship `X_THREAD.md` 30 minutes after the HN post hits the front page |
-| 4–8 | Run `python3 scripts/marketing/generate_outbound_targets.py --limit 50`, then `python3 scripts/marketing/render_outbound_send_queue.py`, verify with `python3 scripts/ci/outbound_targets_check.py` and `python3 scripts/ci/outbound_send_queue_check.py`, then send from `marketing/generated/outbound_send_queue.md` using `OUTBOUND_EMAIL.md`. 10 manual emails/day, M/T/W |
+| 4–8 | Superseded. Do not generate or send the outbound queue. Contract-evaluation acquisition is inbound-only. |
 | 5–8 | Kick off SOC 2 Type 1 with Drata or Vanta |
 | 8–12 | First conference talk; second case study; usage-based overage live |
 
-Every asset is intentionally short. Don't over-edit them — ship.
+Do not ship or send these archived assets.

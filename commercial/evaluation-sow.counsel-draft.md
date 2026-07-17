@@ -9,7 +9,8 @@
 - Customer legal name: `[CUSTOMER ENTITY]`
 - Effective date: `[DATE]`
 - Agreement ID: `[AGREEMENT_ID]`
-- Offer: `[Founding Evaluation — $25,000 | Standard Evaluation — $40,000]`
+- Offer options: Founding Evaluation — $15,000; Standard Evaluation — $40,000.
+- Selected offer and fixed fee: `[COUNSEL: SELECT EXACTLY ONE OFFER]`
 
 This statement of work (SOW), the attached acceptance matrix, and the approved
 master services terms together form the agreement. If they conflict, counsel
@@ -22,9 +23,11 @@ conventional baseline on one agreed baseline host. The workload digest,
 software/profile versions, baseline command, resource policy, and acceptance
 criteria are fixed in the attached acceptance matrix before work begins.
 
-- Scheduled evaluation period: three weeks after the start conditions in
-  Section 4 are satisfied.
-- Engineering cap: fifteen person-days.
+- The Founding Evaluation is scheduled for two weeks and capped at eight
+  person-days. The Standard Evaluation is scheduled for three weeks and capped
+  at fifteen person-days.
+- Selected scheduled period: `[COUNSEL: INSERT SELECTED OFFER DURATION]`
+- Selected engineering cap: `[COUNSEL: INSERT SELECTED OFFER CAP]`
 - Additional workloads, environments, formats, integrations, meetings, or
   engineering time require a written change order signed by both parties.
 

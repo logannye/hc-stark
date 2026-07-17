@@ -159,7 +159,8 @@ Local software remains MIT. TinyZKP sells fixed-scope evaluations, signed LTS
 releases, compatibility guidance, private deployment, policy enforcement,
 checkpoint operations, observability, and commercial SLAs:
 
-- Founding Evaluation: $25K for the first two customers;
+- Founding Evaluation: $15K for the first three customers, two weeks, at most
+  eight engineering days, billed $7.5K on signature and $7.5K on acceptance;
 - Standard Evaluation: $40K fixed, three weeks, fifteen engineering days;
 - TinyZKP Certified after backend v1 release: $60K/year prepaid, one workload,
   at most ten support hours per quarter;

@@ -955,15 +955,15 @@ def send_contact():
         return flask.jsonify(error="unauthorized"), 403
 
     data = flask.request.get_json(silent=True) or {}
+    if "email" in data:
+        return flask.jsonify(error="email fields are not accepted"), 400
     if (
         isinstance(data.get("name"), str) and len(data["name"]) > 200
-        or isinstance(data.get("email"), str) and len(data["email"]) > 254
         or isinstance(data.get("message"), str) and len(data["message"]) > 5000
     ):
         return flask.jsonify(error="invalid input"), 400
 
     name = _contact_string(data.get("name"), 200)
-    email = _contact_string(data.get("email"), 254).lower()
     category = _contact_string(data.get("category"), 80) or "General Inquiry"
     message = _contact_string(data.get("message"), 5000)
     qualification = _sanitize_contact_qualification(data.get("qualification"))
@@ -973,8 +973,6 @@ def send_contact():
 
     if not name or not message:
         return flask.jsonify(error="name and message are required"), 400
-    if email and ("@" not in email or len(email) > 254):
-        return flask.jsonify(error="invalid email"), 400
     if len(name) > 200 or len(message) > 5000:
         return flask.jsonify(error="invalid input"), 400
     valid_categories = {
@@ -1000,7 +998,6 @@ def send_contact():
     try:
         application_id = evaluation_store.create_application(
             name=name,
-            email=email,
             category=safe_category,
             message=message,
             qualification=qualification,

@@ -133,8 +133,13 @@ export async function onRequestPost(context) {
 
     const body = await context.request.json();
     const { qualification, context: leadContext, _honeypot } = body;
+    if (Object.prototype.hasOwnProperty.call(body, "email")) {
+      return new Response(JSON.stringify({ error: "email fields are not accepted" }), {
+        status: 400,
+        headers: jsonHeaders,
+      });
+    }
     const name = cleanString(body.name, 200);
-    const email = cleanString(body.email, 254).toLowerCase();
     const category = cleanString(body.category, 80);
     const message = cleanString(body.message, MAX_MESSAGE_LEN);
 
@@ -153,16 +158,8 @@ export async function onRequestPost(context) {
       );
     }
 
-    if (email && !email.includes("@")) {
-      return new Response(JSON.stringify({ error: "invalid email" }), {
-        status: 400,
-        headers: jsonHeaders,
-      });
-    }
-
     if (
       (typeof body.name === "string" && body.name.length > 200) ||
-      (typeof body.email === "string" && body.email.length > 254) ||
       (typeof body.message === "string" && body.message.length > MAX_MESSAGE_LEN)
     ) {
       return new Response(
@@ -210,7 +207,6 @@ export async function onRequestPost(context) {
       },
       body: JSON.stringify({
         name,
-        email,
         category: safeCategory,
         message,
         qualification: safeQualification,

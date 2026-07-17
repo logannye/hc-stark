@@ -94,6 +94,7 @@ function targetsForMode(mode) {
 
 const TIMEOUT_MS = 10_000;
 const RETRY_DELAY_MS = 5_000;
+const CONTACT_READINESS_CRON = "17 * * * *";
 
 async function probe(target) {
   const controller = new AbortController();
@@ -178,9 +179,92 @@ async function runProbes(env) {
   return { ok: failures.length === 0, checked_at: new Date().toISOString(), mode: env.AUDIT_MODE || "containment", results };
 }
 
+async function runContactReadiness(env) {
+  const secret = env.CONTACT_READINESS_SECRET;
+  if (!secret) {
+    const failures = [{
+      name: "contact-readiness-config",
+      ok: false,
+      status: 0,
+      error: "CONTACT_READINESS_SECRET is unset",
+    }];
+    await alert(env, failures);
+    return { ok: false, checked_at: new Date().toISOString(), results: failures };
+  }
+  const nonce = `probe_${crypto.randomUUID().replaceAll("-", "")}`;
+  const submitted = await fetch("https://tinyzkp.com/api/contact", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: "https://tinyzkp.com",
+      "user-agent": "tinyzkp-uptime-probe",
+    },
+    body: JSON.stringify({
+      name: "TinyZKP readiness probe",
+      category: "General Inquiry",
+      message: `TinyZKP automated contact readiness probe ${nonce}`,
+      qualification: {
+        intent: "automated_readiness_probe",
+        contact_method: "github",
+        contact_handle: "https://tinyzkp.com/status",
+        consent: "twelve_month_retention",
+      },
+      _honeypot: "",
+    }),
+  });
+  const submission = await submitted.json().catch(() => ({}));
+  const applicationId = submission.application_id;
+  if (
+    submitted.status !== 200
+    || typeof applicationId !== "string"
+    || !applicationId.startsWith("eval_")
+  ) {
+    const failures = [{
+      name: "contact-readiness-submit",
+      ok: false,
+      status: submitted.status,
+    }];
+    await alert(env, failures);
+    return { ok: false, checked_at: new Date().toISOString(), results: failures };
+  }
+  const reconciled = await fetch("https://webhook.tinyzkp.com/contact-readiness", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-internal-secret": secret,
+      "user-agent": "tinyzkp-uptime-probe",
+    },
+    body: JSON.stringify({ application_id: applicationId, nonce }),
+  });
+  const cleanup = await reconciled.json().catch(() => ({}));
+  const ok = (
+    reconciled.status === 200
+    && cleanup.stored === true
+    && cleanup.cleaned === true
+  );
+  if (!ok) {
+    await alert(env, [{
+      name: "contact-readiness-cleanup",
+      ok: false,
+      status: reconciled.status,
+    }]);
+  }
+  return {
+    ok,
+    checked_at: new Date().toISOString(),
+    stored: ok,
+    cleaned: ok,
+    application_id: applicationId,
+  };
+}
+
 export default {
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(runProbes(env));
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(
+      event.cron === CONTACT_READINESS_CRON
+        ? runContactReadiness(env)
+        : runProbes(env),
+    );
   },
   async fetch(_request, env) {
     const summary = await runProbes(env);
@@ -191,4 +275,12 @@ export default {
   },
 };
 
-export { TARGETS, PUBLIC_BETA_TARGETS, targetsForMode, probe, alert };
+export {
+  TARGETS,
+  PUBLIC_BETA_TARGETS,
+  CONTACT_READINESS_CRON,
+  targetsForMode,
+  probe,
+  alert,
+  runContactReadiness,
+};

@@ -196,7 +196,6 @@ async function main() {
             headers: { "Content-Type": "application/json", Origin: "https://tinyzkp.com" },
             body: JSON.stringify({
               name: "Proving Lead",
-              email: "lead@example.com",
               category: "Design Partner",
               message: "Reproducible public workload",
               qualification: {
@@ -231,6 +230,7 @@ async function main() {
         assert.equal(forwarded.qualification.contact_method, "github");
         assert.equal(forwarded.qualification.contact_handle, "https://github.com/example");
         assert.equal(forwarded.qualification.secret, undefined);
+        assert.equal(forwarded.email, undefined);
         assert.deepEqual(assets.calls, []);
       } finally {
         globalThis.fetch = originalFetch;
@@ -255,7 +255,6 @@ async function main() {
             headers: { "Content-Type": "application/json", Origin: "https://tinyzkp.com" },
             body: JSON.stringify({
               name: "No Email Applicant",
-              email: "",
               category: "Security Report",
               message: "Reproducible public workload",
               qualification: {
@@ -271,8 +270,44 @@ async function main() {
         assert.equal(response.status, 200);
         assert.equal(calls.length, 1);
         const forwarded = JSON.parse(calls[0].init.body);
-        assert.equal(forwarded.email, "");
+        assert.equal(forwarded.email, undefined);
         assert.equal(forwarded.qualification.contact_method, "github");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+
+    {
+      const assets = assetsMock();
+      const originalFetch = globalThis.fetch;
+      let upstreamCalls = 0;
+      globalThis.fetch = async () => {
+        upstreamCalls += 1;
+        throw new Error("email-bearing intake must not reach the webhook");
+      };
+      try {
+        const response = await worker.fetch(
+          new Request("https://tinyzkp.com/api/contact", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Origin: "https://tinyzkp.com" },
+            body: JSON.stringify({
+              name: "Email Applicant",
+              email: "lead@example.com",
+              category: "General Inquiry",
+              message: "This payload must be rejected",
+              qualification: {
+                contact_method: "github",
+                contact_handle: "https://github.com/example",
+                consent: "twelve_month_retention",
+              },
+            }),
+          }),
+          { ASSETS: assets, WEBHOOK_BASE_URL: "https://webhook.test", INTERNAL_SECRET: "internal" },
+          { waitUntil() {} },
+        );
+        assert.equal(response.status, 400);
+        assert.equal((await json(response)).error, "email fields are not accepted");
+        assert.equal(upstreamCalls, 0);
       } finally {
         globalThis.fetch = originalFetch;
       }

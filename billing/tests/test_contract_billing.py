@@ -198,7 +198,7 @@ def test_evaluation_plan_is_half_and_never_checkout():
     req = request()
     offer = req.validate(offers)
     summary = billing.plan(req, offer)
-    assert summary["amount_cents"] == 1_250_000
+    assert summary["amount_cents"] == 750_000
     assert summary["collection_method"] == "send_invoice"
     assert summary["public_checkout"] is False
     assert len(summary["contract_evidence_sha256"]) == 64
@@ -469,22 +469,38 @@ def test_evaluation_contract_requires_exact_qualification_preflight_gate_and_tes
         "stripe_account_id": "acct_expected",
         "stripe_display_name": "TinyZKP Test",
         "stripe_customer_id": "cus_test_drill",
-        "stripe_invoice_id": "in_test_drill",
+        "stripe_paid_invoice_id": "in_test_paid",
+        "stripe_void_invoice_id": "in_test_void",
         "drill_id": "drill-001",
-        "amount_cents": billing.stripe_test_drill.AMOUNT_CENTS,
+        "offer_id": "founding_evaluation",
+        "offer_sha256": billing.stripe_test_drill.offer_digest(
+            billing.load_offers()["founding_evaluation"]
+        ),
+        "amount_cents": billing.evaluation_milestone_amount_cents(
+            billing.load_offers()["founding_evaluation"],
+            "evaluation-deposit",
+        ),
         "currency": "usd",
         "collection_method": "send_invoice",
         "days_until_due": 15,
         "auto_advance": False,
         "livemode": False,
-        "hosted_invoice_url_sha256": "a" * 64,
-        "created_status": "draft",
-        "finalized_status": "open",
-        "retrieved_status": "open",
+        "hosted_paid_invoice_url_sha256": "a" * 64,
+        "hosted_void_invoice_url_sha256": "d" * 64,
+        "paid_created_status": "draft",
+        "paid_finalized_status": "open",
+        "payment_status": "paid",
+        "paid_retrieved_status": "paid",
+        "void_created_status": "draft",
+        "void_finalized_status": "open",
+        "void_retrieved_status": "open",
         "voided_status": "void",
+        "payment_method": "pm_card_visa",
+        "customer_email_present": False,
+        "duplicate_prevention_verified": True,
         "send_api_invoked": False,
         "checkout_created": False,
-        "cleanup_complete": True,
+        "void_cleanup_complete": True,
         "started_at": (now - timedelta(minutes=3)).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "completed_at": reviewed_at,
         "release_sha": "b" * 40,
@@ -1033,13 +1049,13 @@ def test_hosted_invoice_url_rejects_untrusted_variants(url):
         billing.hosted_invoice_url({"hosted_invoice_url": url})
 
 
-def test_founding_offer_is_limited_to_two_unique_agreements(monkeypatch):
+def test_founding_offer_uses_source_customer_cap(monkeypatch):
     plans = {
         agreement: billing.plan(
             request(agreement_id=agreement),
             request(agreement_id=agreement).validate(billing.load_offers()),
         )["plan_sha256"]
-        for agreement in ("eval-001", "eval-002")
+        for agreement in ("eval-001", "eval-002", "eval-003")
     }
     invoices = {
         "data": [
@@ -1050,7 +1066,7 @@ def test_founding_offer_is_limited_to_two_unique_agreements(monkeypatch):
                 "currency": "usd",
                 "collection_method": "send_invoice",
                 "auto_advance": False,
-                "total": 1_250_000,
+                "total": 750_000,
                 "metadata": {
                     "tinyzkp_offer_id": "founding_evaluation",
                     "tinyzkp_agreement_id": agreement,
@@ -1066,7 +1082,7 @@ def test_founding_offer_is_limited_to_two_unique_agreements(monkeypatch):
                     "tinyzkp_test_drill_sha256": "4" * 64,
                 },
             }
-            for agreement in ("eval-001", "eval-002")
+            for agreement in ("eval-001", "eval-002", "eval-003")
         ]
     }
     client = SimpleNamespace(
@@ -1075,12 +1091,12 @@ def test_founding_offer_is_limited_to_two_unique_agreements(monkeypatch):
 
     existing = request(agreement_id="eval-001")
     billing.validate_evaluation_history(existing, client, plans["eval-001"])
-    with pytest.raises(ValueError, match="slots are already allocated"):
-        third = request(agreement_id="eval-003")
-        third_plan = billing.plan(third, third.validate(billing.load_offers()))[
+    with pytest.raises(ValueError, match="3 Founding Evaluation slots"):
+        fourth = request(agreement_id="eval-004")
+        fourth_plan = billing.plan(fourth, fourth.validate(billing.load_offers()))[
             "plan_sha256"
         ]
-        billing.validate_evaluation_history(third, client, third_plan)
+        billing.validate_evaluation_history(fourth, client, fourth_plan)
 
 
 def test_delivery_requires_existing_paid_deposit():
@@ -1118,10 +1134,10 @@ def paid_deposit_for_delivery(req):
         "currency": "usd",
         "total": 2_000_000
         if req.offer_id == "standard_evaluation"
-        else 1_250_000,
+        else 750_000,
         "amount_paid": 2_000_000
         if req.offer_id == "standard_evaluation"
-        else 1_250_000,
+        else 750_000,
         "amount_remaining": 0,
         "collection_method": "send_invoice",
         "auto_advance": False,
@@ -1232,7 +1248,7 @@ def test_existing_same_plan_invoice_is_reused_instead_of_recreated():
         "currency": "usd",
         "collection_method": "send_invoice",
         "auto_advance": False,
-        "total": 1_250_000,
+        "total": 750_000,
         "metadata": {
             "tinyzkp_offer_id": req.offer_id,
             "tinyzkp_agreement_id": req.agreement_id,
@@ -1748,7 +1764,6 @@ def test_contract_customer_must_be_explicitly_bound():
     req = request()
     customer = {
         "id": "cus_test",
-        "email": "billing@customer.example",
         "name": "Example Customer LLC",
         "address": {
             "line1": "1 Main Street",
@@ -1766,6 +1781,28 @@ def test_contract_customer_must_be_explicitly_bound():
     customer["metadata"]["tinyzkp_agreement_id"] = "other"
     with pytest.raises(ValueError, match="contract-tagged"):
         billing.validate_contract_customer(customer, req)
+
+
+def test_contract_customer_does_not_require_or_validate_email():
+    req = request()
+    customer = {
+        "id": "cus_test",
+        "name": "Example Customer LLC",
+        "address": {
+            "line1": "1 Main Street",
+            "city": "San Francisco",
+            "postal_code": "94105",
+            "country": "US",
+        },
+        "metadata": {
+            "tinyzkp_contract_customer": "true",
+            "tinyzkp_agreement_id": "eval-001",
+            "tinyzkp_offer_id": "founding_evaluation",
+        },
+    }
+    billing.validate_contract_customer(customer, req)
+    customer["email"] = "not-an-email"
+    billing.validate_contract_customer(customer, req)
 
     customer["metadata"]["tinyzkp_agreement_id"] = "eval-001"
     customer["address"]["postal_code"] = ""
@@ -1846,7 +1883,7 @@ def test_apply_reuses_exact_existing_invoice_without_second_stripe_create(
         "collection_method": "send_invoice",
         "auto_advance": False,
         "hosted_invoice_url": "https://invoice.stripe.com/i/in_existing",
-        "total": 1_250_000,
+        "total": 750_000,
         "metadata": billing.contract_metadata(req, "deposit", plan_sha256),
     }
     account = {

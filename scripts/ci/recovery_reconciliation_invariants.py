@@ -529,8 +529,22 @@ def main() -> int:
         "run_crash_matrix_disk_full.sh",
         "fuzz_tool_anchor.py capture",
         "fuzz_tool_anchor.py verify",
+        "fuzz-tool-anchor:",
+        "proof-equality:",
+        "scratch-calibration:",
+        "crash-matrix:",
+        "fuzz-smoke:",
+        "nightly-evidence-complete:",
+        "TINYZKP_NIGHTLY_EXACT_LOG",
+        "TINYZKP_NIGHTLY_WORKLOAD",
+        "Require every evidence shard to complete successfully",
+        "cancel-in-progress: false",
     ):
         require(marker in nightly_workflow, f"nightly evidence workflow lost control: {marker}")
+    require(
+        "timeout-minutes: 720" not in nightly_workflow,
+        "nightly evidence workflow retained the cancellation-prone 12-hour monolith",
+    )
     try:
         capture_position = nightly_workflow.index("fuzz_tool_anchor.py capture")
         verify_position = nightly_workflow.index("fuzz_tool_anchor.py verify")

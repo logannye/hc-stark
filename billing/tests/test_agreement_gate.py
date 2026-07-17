@@ -7,8 +7,8 @@ import agreement_gate as gate
 
 
 COMPLETE = """
-TinyZKP evaluates exactly one pinned Plonky3 workload for three weeks with a
-fifteen person-days cap. Extra work needs a written change order. Fees are a
+TinyZKP evaluates exactly one pinned Plonky3 workload for two weeks with an
+eight person-days cap for a $15,000 fixed fee. Extra work needs a written change order. Fees are a
 50% deposit and remaining 50% only after written delivery acceptance. This is
 not hosted proving, not a security certification, and not an SLA. TinyZKP does
 not guarantee performance. Supply a non-sensitive deterministic input
@@ -112,7 +112,10 @@ def test_build_gate_binds_every_document(tmp_path):
 )
 def test_source_rejects_unresolved_markers(marker):
     with pytest.raises(ValueError, match="unresolved marker"):
-        gate.validate_agreement_source((COMPLETE + marker).encode())
+        gate.validate_agreement_source(
+            (COMPLETE + marker).encode(),
+            "founding_evaluation",
+        )
 
 
 def test_current_counsel_draft_is_deliberately_not_approvable():
@@ -122,7 +125,26 @@ def test_current_counsel_draft_is_deliberately_not_approvable():
         / "evaluation-sow.counsel-draft.md"
     )
     with pytest.raises(ValueError, match="unresolved marker"):
-        gate.validate_agreement_source(draft.read_bytes())
+        gate.validate_agreement_source(draft.read_bytes(), "founding_evaluation")
+
+
+def test_offer_specific_terms_come_from_pricing_source():
+    with pytest.raises(ValueError, match="offer_duration"):
+        gate.validate_agreement_source(
+            COMPLETE.replace("two weeks", "three weeks").encode(),
+            "founding_evaluation",
+        )
+    standard = (
+        COMPLETE.replace("two weeks", "three weeks")
+        .replace("eight person-days", "fifteen person-days")
+        .replace("$15,000", "$40,000")
+    )
+    assert all(
+        gate.validate_agreement_source(
+            standard.encode(),
+            "standard_evaluation",
+        ).values()
+    )
 
 
 def test_build_rejects_template_or_approval_hash_mismatch(tmp_path):

@@ -20,7 +20,12 @@ Production remains in containment until the signed `public_beta` authorization m
 - Keep the pgBackRest recovery key copy outside the VM and outside the R2 account.
 - Rotate GitHub, Stripe, R2, worker, and database credentials after any suspected exposure. Worker rotation is an idempotent re-registration followed by worker restart.
 - Generate a separate random metrics token of at least 32 characters. Put the same raw token in `TINYZKP_BETA_METRICS_TOKEN` and the Prometheus-only owner-readable `/etc/prometheus/beta_metrics_token`. Metrics listen only on the internal `tinyzkp-observability` Docker network and are never published on a host port.
-- Deploy the authenticated Cloudflare email relay under `deploy/cloudflare/alert-relay`. Verify `logan@galenhealth.org` as its fixed Email Routing destination, restrict its send binding to `alerts@tinyzkp.com`, and install one independent high-entropy token as `ALERT_RELAY_TOKEN`, `TINYZKP_ALERT_WEBHOOK_TOKEN`, and the uptime probe's `ALERT_WEBHOOK_TOKEN`. Confirm a synthetic email before beginning the 24-hour canary. Do not use an unauthenticated generic webhook.
+- Configure an authenticated non-email incident receiver for the uptime probe
+  and hosted canary. Install independent high-entropy bearer tokens for the
+  probe and backend alert paths, prove delivery to SMS, paging, or an approved
+  chat/incident channel, and record the synthetic incident before beginning
+  the 24-hour canary. The retired Cloudflare email relay is not an acceptable
+  target, and unauthenticated generic webhooks remain forbidden.
 - Create `/var/lib/tinyzkp-owner/owner-cost.json` from `owner-cost.json.example`, set owner UID 10001 and mode `0600`, and replace the example amount with the actual monthly worker, API host, R2, backup, and monitoring cost. Do not put customer or Stripe data in this file.
 
 ## Dark deployment

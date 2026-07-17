@@ -8,25 +8,26 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: nightly-backend-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  proof-equality-crash-and-fuzz:
+  fuzz-tool-anchor:
     runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
-    timeout-minutes: 720
-    env:
-      TINYZKP_NIGHTLY_MAX_LOG: "18"
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: "1.95.0"
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "nightly-2026-04-15"
           components: rust-src
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-      - name: Warm exact locked dependencies before offline evidence runs
+      - name: Warm exact locked fuzz dependencies
         run: |
-          cargo fetch --locked
           cargo +nightly-2026-04-15 fetch \
             --manifest-path fuzz/Cargo.toml \
             --locked
@@ -36,20 +37,140 @@ jobs:
         env:
           HC_RELEASE_SHA: ${{ github.sha }}
         run: |
+          mkdir -p raw-reports
           python3 scripts/release/fuzz_tool_anchor.py capture \
             --output raw-reports/cargo-fuzz-anchor-candidate.json
           python3 scripts/release/fuzz_tool_anchor.py verify \
             --candidate raw-reports/cargo-fuzz-anchor-candidate.json
-      - name: Randomized proof equality through 2^18
-        run: cargo test -p hc-plonky3 --release --locked nightly_proof_equality_through_configured_power_of_two -- --ignored --nocapture
+      - name: Upload fuzz trust evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cargo-fuzz-anchor-${{ github.sha }}
+          path: |
+            raw-reports/
+            fuzz-tool-identity.json
+          if-no-files-found: error
+
+  proof-equality:
+    name: Randomized proof equality through 2^18 (${{ matrix.workload }}, 2^${{ matrix.log_rows }})
+    needs: fuzz-tool-anchor
+    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
+    timeout-minutes: 1440
+    strategy:
+      fail-fast: false
+      matrix:
+        workload: [fibonacci, poseidon2]
+        log_rows: [10, 14, 18]
+    env:
+      TINYZKP_NIGHTLY_EXACT_LOG: ${{ matrix.log_rows }}
+      TINYZKP_NIGHTLY_WORKLOAD: ${{ matrix.workload }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - name: Warm exact locked dependencies
+        run: cargo fetch --locked
+      - name: Run one bounded proof-equality shard
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -o pipefail
+          mkdir -p raw-reports
+          started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          started_epoch="$(date +%s)"
+          log="raw-reports/proof-equality-${{ matrix.workload }}-log${{ matrix.log_rows }}.log"
+          status=passed
+          cargo test -p hc-plonky3 --release --locked \
+            nightly_proof_equality_through_configured_power_of_two \
+            -- --ignored --nocapture 2>&1 | tee "$log" || status=failed
+          completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          duration_seconds="$(( $(date +%s) - started_epoch ))"
+          log_sha256="$(sha256sum "$log" | cut -d' ' -f1)"
+          export STATUS="$status"
+          export STARTED_AT="$started_at"
+          export COMPLETED_AT="$completed_at"
+          export DURATION_SECONDS="$duration_seconds"
+          export LOG_SHA256="$log_sha256"
+          python3 -c 'import json,os; print(json.dumps({"schema_version":1,"status":os.environ["STATUS"],"release_sha":os.environ["HC_RELEASE_SHA"],"workload":os.environ["TINYZKP_NIGHTLY_WORKLOAD"],"log_rows":int(os.environ["TINYZKP_NIGHTLY_EXACT_LOG"]),"started_at":os.environ["STARTED_AT"],"completed_at":os.environ["COMPLETED_AT"],"duration_seconds":int(os.environ["DURATION_SECONDS"]),"log_sha256":os.environ["LOG_SHA256"]},sort_keys=True,indent=2))' \
+            > "raw-reports/proof-equality-${{ matrix.workload }}-log${{ matrix.log_rows }}.json"
+          test "$status" = passed
+      - name: Upload proof-equality shard
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: proof-equality-${{ matrix.workload }}-log${{ matrix.log_rows }}-${{ github.sha }}
+          path: raw-reports/
+          if-no-files-found: error
+
+  scratch-calibration:
+    needs: fuzz-tool-anchor
+    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - name: Scratch preflight calibration across powers of two
         run: cargo test -p hc-plonky3 --release --locked bounded_prover::tests::scratch_estimates_track_multiple_release_scale_powers -- --exact --ignored --nocapture
+
+  crash-matrix:
+    needs: fuzz-tool-anchor
+    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - name: Complete machine-readable checkpoint crash rotation
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
         run: |
-          HC_RELEASE_SHA="${{ github.sha }}" \
-            scripts/release/run_crash_matrix_disk_full.sh \
-              raw-reports/crash-matrix.json \
-              raw-reports/crash-logs
+          mkdir -p raw-reports
+          scripts/release/run_crash_matrix_disk_full.sh \
+            raw-reports/crash-matrix.json \
+            raw-reports/crash-logs
+      - name: Upload crash evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: crash-matrix-${{ github.sha }}
+          path: raw-reports/
+          if-no-files-found: error
+
+  fuzz-smoke:
+    needs: fuzz-tool-anchor
+    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "nightly-2026-04-15"
+          components: rust-src
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - name: Warm exact locked fuzz dependencies
+        run: |
+          cargo +nightly-2026-04-15 fetch \
+            --manifest-path fuzz/Cargo.toml \
+            --locked
+      - name: Install exact cargo-fuzz
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Revalidate fuzz executable on this runner allocation
+        env:
+          HC_RELEASE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p raw-reports
+          python3 scripts/release/fuzz_tool_anchor.py capture \
+            --output raw-reports/cargo-fuzz-anchor-candidate.json
+          python3 scripts/release/fuzz_tool_anchor.py verify \
+            --candidate raw-reports/cargo-fuzz-anchor-candidate.json
       - name: Parser and recovery fuzz smoke
         env:
           HC_RELEASE_SHA: ${{ github.sha }}
@@ -59,10 +180,35 @@ jobs:
             --rss-limit-mb 2048 \
             --output raw-reports/fuzz-smoke.json \
             --log-dir raw-reports/fuzz-logs
-      - name: Upload crash/fuzz logs and summaries
+      - name: Upload fuzz logs and summaries
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: plonky3-fuzz-smoke-${{ github.sha }}
           path: raw-reports/
-          if-no-files-found: warn
+          if-no-files-found: error
+
+  nightly-evidence-complete:
+    if: ${{ always() }}
+    needs:
+      - fuzz-tool-anchor
+      - proof-equality
+      - scratch-calibration
+      - crash-matrix
+      - fuzz-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require every evidence shard to complete successfully
+        env:
+          FUZZ_TOOL_ANCHOR_RESULT: ${{ needs.fuzz-tool-anchor.result }}
+          PROOF_EQUALITY_RESULT: ${{ needs.proof-equality.result }}
+          SCRATCH_CALIBRATION_RESULT: ${{ needs.scratch-calibration.result }}
+          CRASH_MATRIX_RESULT: ${{ needs.crash-matrix.result }}
+          FUZZ_SMOKE_RESULT: ${{ needs.fuzz-smoke.result }}
+        run: |
+          test "$FUZZ_TOOL_ANCHOR_RESULT" = success
+          test "$PROOF_EQUALITY_RESULT" = success
+          test "$SCRATCH_CALIBRATION_RESULT" = success
+          test "$CRASH_MATRIX_RESULT" = success
+          test "$FUZZ_SMOKE_RESULT" = success

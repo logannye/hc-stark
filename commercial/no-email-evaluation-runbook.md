@@ -6,8 +6,8 @@ application ID and benchmark instructions synchronously and stores the record
 in an owner-only SQLite ledger.
 
 Applicants select a no-email reply channel (GitHub, LinkedIn, Signal, Discord,
-Telegram, Matrix, or phone/SMS). Work email is optional and must not be used for
-recovery-period follow-up. Use only the applicant-selected channel and handle.
+Telegram, Matrix, or phone/SMS). The public intake rejects and does not store
+email fields. Use only the applicant-selected channel and handle.
 
 ## Review intake
 
@@ -21,7 +21,7 @@ cd /opt/hc-stark
 
 The default list is contact-redacted. Use `--include-contact` only when the
 operator has a legitimate need to view the applicant's submitted contact data.
-Do not copy handles, phone numbers, or optional email addresses into the
+Do not copy handles or phone numbers into the
 repository, issue tracker, benchmark reports, or review bundles.
 
 The SQLite workflow status is not qualification authority. Do not mark an
@@ -162,8 +162,9 @@ python3 billing/agreement_gate.py build \
 4. On a positively identified Stripe **test-mode** account and disposable test
    customer, run the isolated invoice drill. This is the only command in this
    section that mutates Stripe, and it rejects every live key. It creates,
-   finalizes, retrieves, and voids one $12,500 test invoice without calling the
-   send API or creating Checkout. Set the two non-secret identity variables
+   derives the current deposit from `site/pricing.json`, then finalizes,
+   retrieves, and voids that test invoice without calling the send API or
+   creating Checkout. Set the two non-secret identity variables
    below from the exact owner-reviewed `STRIPE_EXPECTED_ACCOUNT_ID` and
    `STRIPE_EXPECTED_DISPLAY_NAME` values; do not assume the legal/dashboard
    display name is `TinyZKP`:
@@ -179,16 +180,21 @@ python3 billing/stripe_test_drill.py run \
   --display-name "$EXPECTED_STRIPE_DASHBOARD_NAME" \
   --customer-id cus_REPLACE \
   --drill-id AGREEMENT_ID-preinvoice \
+  --offer-id founding_evaluation \
   --release-sha FULL_40_HEX_RELEASE_SHA \
-  --output /secure/stripe-test-drill-v1.json \
+  --output /secure/stripe-test-drill-v3.json \
   --apply
 
 python3 billing/stripe_test_drill.py verify \
-  --evidence /secure/stripe-test-drill-v1.json
+  --evidence /secure/stripe-test-drill-v3.json
 ```
 
-   Never use a live key for this drill. Contract preview rejects evidence older
-   than 30 days or from a different account.
+   The selected test customer must have no email. The drill idempotently
+   creates two invoices: one is finalized, paid with Stripe's test payment
+   method, and retrieved as paid; the other is finalized, retrieved, and
+   voided. Both expose valid hosted invoice URLs, and the drill never invokes
+   invoice-send. Never use a live key for this drill. Contract preview rejects
+   evidence older than 30 days or from a different account.
 5. Create a private `ContractEvidenceV2` record from the tracked template. Never
    put the completed record or contract documents in the repository:
 
@@ -213,10 +219,11 @@ sha256sum SIGNED_AGREEMENT ACCEPTANCE_MATRIX
    - `tinyzkp_agreement_id=AGREEMENT_ID`
    - `tinyzkp_offer_id=founding_evaluation` (or the exact contracted offer)
 
-   The customer must have the customer's contractual billing address. Do not
-   use the founder's unrelated-business email address as the customer or sender
+   The customer must have the customer's legal name and contractual billing
+   address. Customer email is neither required nor validated. Do not use the
+   founder's unrelated-business email address as the customer or sender
    address.
-7. Preview the $12,500 Founding Evaluation deposit:
+7. Preview the $7,500 Founding Evaluation deposit:
 
 ```bash
 python3 billing/contract_billing.py evaluation-deposit \
@@ -229,7 +236,7 @@ python3 billing/contract_billing.py evaluation-deposit \
   --agreement-gate-document /secure/agreement-gate-v1.json \
   --qualification-document /secure/qualification-v1.json \
   --partner-preflight-document /secure/partner-preflight-v1.json \
-  --stripe-test-drill-document /secure/stripe-test-drill-v1.json \
+  --stripe-test-drill-document /secure/stripe-test-drill-v3.json \
   --expected-account-id "$EXPECTED_STRIPE_ACCOUNT_ID" \
   --expected-display-name "$EXPECTED_STRIPE_DASHBOARD_NAME"
 ```

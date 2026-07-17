@@ -8,7 +8,7 @@ verification, public Checkout, account creation, metered billing, Certified,
 or Fleet/OEM service.
 
 The first revenue event is a countersigned Founding Evaluation followed by a
-paid `$12,500` deposit. Production proving remains blocked.
+paid `$7,500` deposit. Production proving remains blocked.
 
 ## Non-negotiable communication boundary
 
@@ -46,7 +46,7 @@ No command in this document authorizes a subsequent command.
 
 The containment and backend branches are separate release trains.
 
-1. Review and merge `codex/no-email-commercial-ops` into `main` first. Do not
+1. Review and merge `codex/evaluation-revenue-launch` into `main` first. Do not
    include backend proving work in this emergency containment change.
 2. Capture and independently review the fixed-host runtime and operator
    evidence described below. Any reviewed provenance or reviewer-key source
@@ -438,8 +438,10 @@ Use `commercial/no-email-evaluation-runbook.md` as the exact evidence flow:
 2. Run and verify `PartnerPreflightV1` before proposing work.
 3. Obtain a counsel-approved form, countersigned agreement, and frozen
    acceptance matrix. The tracked counsel draft is deliberately unsendable.
-4. Run the isolated `$12,500` Stripe **test-mode** invoice drill. It is a test
-   Stripe write and rejects live keys.
+4. Run the isolated Stripe **test-mode** invoice drill for
+   `founding_evaluation`. It derives the `$7,500` deposit and exact offer
+   digest from `site/pricing.json`; it is a test Stripe write and rejects live
+   keys.
 5. Verify the live Stripe account identity and separate TinyZKP sender profile.
 6. Preview the exact deposit invoice. Creating/finalizing it is a separately
    authorized live Stripe write; the CLI never calls Stripe's send-invoice API.
@@ -449,9 +451,10 @@ Use `commercial/no-email-evaluation-runbook.md` as the exact evidence flow:
    deposit is paid and the workload, acceptance matrix, and baseline host are
    frozen.
 
-Prospect research may remain local. Contacting a prospect through GitHub,
-LinkedIn, Signal, Discord, Telegram, Matrix, or phone/SMS is an external action
-requiring operator authorization. Never open an unsolicited sales issue.
+Customer acquisition is inbound-only. Reply only to applicants through their
+selected GitHub, LinkedIn, Signal, Discord, Telegram, Matrix, or phone/SMS
+channel after operator authorization. Never open an unsolicited sales issue or
+initiate prospect outreach.
 
 ## Certified, Fleet/OEM, and hosted proving remain blocked
 

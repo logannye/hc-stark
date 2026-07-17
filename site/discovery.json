@@ -2,7 +2,7 @@
   "schema_version": 3,
   "name": "TinyZKP",
   "canonical_url": "https://tinyzkp.com",
-  "updated_at": "2026-07-09",
+  "updated_at": "2026-07-17",
   "service_status": "backend_recovery",
   "positioning": {
     "short": "Run larger Plonky3 workloads within a fixed RAM budget.",
@@ -28,7 +28,7 @@
     {"label":"Review release gates","url":"https://tinyzkp.com/security"}
   ],
   "commercial_routes": [
-    {"id":"founding_evaluation","price_usd":25000,"availability":"first_two_customers","url":"https://tinyzkp.com/contact?intent=memory_bounded_evaluation"},
+    {"id":"founding_evaluation","price_usd":15000,"availability":"limited_customers","customer_cap":3,"duration":"2_weeks","engineering_day_cap":8,"deposit_usd":7500,"delivery_usd":7500,"url":"https://tinyzkp.com/contact?intent=memory_bounded_evaluation"},
     {"id":"standard_evaluation","price_usd":40000,"url":"https://tinyzkp.com/contact?intent=memory_bounded_evaluation"},
     {"id":"tinyzkp_certified","annual_price_usd":60000,"url":"https://tinyzkp.com/contact?intent=certified"},
     {"id":"tinyzkp_fleet_oem","annual_minimum_usd":125000,"url":"https://tinyzkp.com/contact?intent=fleet_oem"},

@@ -855,23 +855,54 @@ mod tests {
     #[test]
     #[ignore = "nightly fixed-host proof equality matrix"]
     fn nightly_proof_equality_through_configured_power_of_two() {
-        let max_log = std::env::var("TINYZKP_NIGHTLY_MAX_LOG")
+        let exact_log = std::env::var("TINYZKP_NIGHTLY_EXACT_LOG")
             .ok()
-            .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(14)
-            .clamp(10, 18);
-        let mut logs = vec![10, 14, max_log];
-        logs.sort_unstable();
-        logs.dedup();
+            .map(|value| {
+                let parsed = value
+                    .parse::<usize>()
+                    .expect("TINYZKP_NIGHTLY_EXACT_LOG must be an integer");
+                assert!(
+                    (10..=18).contains(&parsed),
+                    "TINYZKP_NIGHTLY_EXACT_LOG must be between 10 and 18"
+                );
+                parsed
+            });
+        let logs = if let Some(log_rows) = exact_log {
+            vec![log_rows]
+        } else {
+            let max_log = std::env::var("TINYZKP_NIGHTLY_MAX_LOG")
+                .ok()
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(14)
+                .clamp(10, 18);
+            let mut logs = vec![10, 14, max_log];
+            logs.sort_unstable();
+            logs.dedup();
+            logs
+        };
+        let workload_filter =
+            std::env::var("TINYZKP_NIGHTLY_WORKLOAD").unwrap_or_else(|_| "all".to_string());
+        assert!(
+            matches!(workload_filter.as_str(), "all" | "fibonacci" | "poseidon2"),
+            "TINYZKP_NIGHTLY_WORKLOAD must be all, fibonacci, or poseidon2"
+        );
         for log_rows in logs {
             let rows = 1u64 << log_rows;
-            for workload in [
-                WorkloadKind::Fibonacci {
+            let workloads = match workload_filter.as_str() {
+                "fibonacci" => vec![WorkloadKind::Fibonacci {
                     initial_a: (log_rows * 17) as u64,
                     initial_b: (log_rows * 29 + 1) as u64,
-                },
-                WorkloadKind::Poseidon2,
-            ] {
+                }],
+                "poseidon2" => vec![WorkloadKind::Poseidon2],
+                _ => vec![
+                    WorkloadKind::Fibonacci {
+                        initial_a: (log_rows * 17) as u64,
+                        initial_b: (log_rows * 29 + 1) as u64,
+                    },
+                    WorkloadKind::Poseidon2,
+                ],
+            };
+            for workload in workloads {
                 let dir = tempfile::tempdir().unwrap();
                 let bounded_policy = ResourcePolicyV1 {
                     mode: ResourceMode::Scratch,

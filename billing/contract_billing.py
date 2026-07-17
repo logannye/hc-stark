@@ -757,6 +757,20 @@ def verify_contract_documents(
             preflight_payload, compatibility
         )
         stripe_test_drill.validate_evidence(drill_payload)
+        contracted_offer = load_offers().get(evidence.offer_id)
+        if (
+            contracted_offer is None
+            or drill_payload.get("offer_id") != evidence.offer_id
+            or drill_payload.get("offer_sha256")
+            != stripe_test_drill.offer_digest(contracted_offer)
+            or drill_payload.get("amount_cents")
+            != evaluation_milestone_amount_cents(
+                contracted_offer, "evaluation-deposit"
+            )
+        ):
+            raise ValueError(
+                "Stripe test drill does not bind the contracted offer and deposit"
+            )
         exact_digests = {
             "agreement gate": (gate_digest, evidence.agreement_gate_sha256),
             "qualification": (qualification_digest, evidence.qualification_sha256),
@@ -978,6 +992,35 @@ def offer_amount(offer: dict[str, Any]) -> int:
     return int(offer.get("price", offer.get("minimum_price")))
 
 
+def evaluation_milestone_amount_cents(
+    offer: dict[str, Any],
+    action: str,
+) -> int:
+    field = {
+        "evaluation-deposit": "deposit_percent",
+        "evaluation-delivery": "delivery_percent",
+    }.get(action)
+    if field is None:
+        raise ValueError("evaluation milestone amount requires an evaluation action")
+    milestones = offer.get("billing_milestones")
+    if (
+        not isinstance(milestones, dict)
+        or set(milestones) != {"deposit_percent", "delivery_percent"}
+        or any(
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or value <= 0
+            for value in milestones.values()
+        )
+        or sum(milestones.values()) != 100
+    ):
+        raise ValueError("evaluation offer billing milestones are invalid")
+    numerator = offer_amount(offer) * 100 * milestones[field]
+    if numerator % 100:
+        raise ValueError("evaluation milestone does not resolve to whole cents")
+    return numerator // 100
+
+
 def contract_amount_cents(
     request: BillingRequest,
     offer: dict[str, Any],
@@ -987,7 +1030,7 @@ def contract_amount_cents(
         if not isinstance(negotiated, int) or isinstance(negotiated, bool):
             raise ValueError("annual contract is missing its signed negotiated amount")
         return negotiated
-    return offer_amount(offer) * 100 // 2
+    return evaluation_milestone_amount_cents(offer, request.action)
 
 
 def _write_private_file(path: Path, payload: bytes) -> None:
@@ -1278,14 +1321,11 @@ def contract_metadata(
 
 def validate_contract_customer(customer: Any, request: BillingRequest) -> None:
     metadata = value(customer, "metadata", {}) or {}
-    email = value(customer, "email")
     name = value(customer, "name")
     address = value(customer, "address", {}) or {}
     if (
         value(customer, "id") != request.customer_id
         or value(customer, "deleted") is True
-        or not isinstance(email, str)
-        or "@" not in email
         or not isinstance(name, str)
         or not name.strip()
         or any(
@@ -1702,7 +1742,10 @@ def validate_paid_deposit_for_delivery(
 ) -> None:
     """Bind a delivery invoice to the exact previously paid deposit object."""
     metadata = value(invoice, "metadata", {}) or {}
-    expected_amount = offer_amount(load_offers()[request.offer_id]) * 100 // 2
+    expected_amount = evaluation_milestone_amount_cents(
+        load_offers()[request.offer_id],
+        "evaluation-deposit",
+    )
     if (
         stripe_object_id(invoice) != request.evidence.deposit_invoice_id
         or stripe_object_id(value(invoice, "customer")) != request.customer_id
@@ -1775,6 +1818,14 @@ def validate_evaluation_history(
         request.action == "evaluation-deposit"
         and request.offer_id == "founding_evaluation"
     ):
+        founding_offer = load_offers()["founding_evaluation"]
+        customer_cap = founding_offer.get("customer_cap")
+        if (
+            not isinstance(customer_cap, int)
+            or isinstance(customer_cap, bool)
+            or customer_cap <= 0
+        ):
+            raise ValueError("Founding Evaluation customer cap is invalid")
         agreements = {
             str(value(metadata, "tinyzkp_agreement_id"))
             for invoice in listed_invoices(client)
@@ -1784,8 +1835,13 @@ def validate_evaluation_history(
             and value(metadata, "tinyzkp_milestone") == "deposit"
             and value(metadata, "tinyzkp_agreement_id")
         }
-        if request.agreement_id not in agreements and len(agreements) >= 2:
-            raise ValueError("the two Founding Evaluation slots are already allocated")
+        if (
+            request.agreement_id not in agreements
+            and len(agreements) >= customer_cap
+        ):
+            raise ValueError(
+                f"the {customer_cap} Founding Evaluation slots are already allocated"
+            )
     if same_plan_claims > 1:
         raise ValueError(
             "multiple existing invoices already claim this agreement milestone and plan"
@@ -1802,7 +1858,7 @@ def create_invoice(
     client: Any,
     plan_sha256: str,
 ) -> Any:
-    amount_cents = offer_amount(offer) * 100 // 2
+    amount_cents = evaluation_milestone_amount_cents(offer, request.action)
     milestone = "deposit" if request.action == "evaluation-deposit" else "delivery"
     metadata = contract_metadata(request, milestone, plan_sha256)
     idempotency = f"tinyzkp-{request.agreement_id}-{milestone}-{plan_sha256[:24]}"

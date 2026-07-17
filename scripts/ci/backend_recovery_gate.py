@@ -268,6 +268,18 @@ def check_billing_and_release() -> None:
         "production preflight must reject outbound email configuration",
     )
     require(
+        "The remaining material is preserved only as historical product research"
+        in text("marketing/README.md")
+        and "Do not ship or send these archived assets"
+        in text("marketing/README.md"),
+        "recovery launch must archive the legacy outbound operating queue",
+    )
+    require(
+        "ARCHIVED — DO NOT SEND" in text("marketing/OUTBOUND_EMAIL.md")
+        and "inbound-only" in text("marketing/OUTBOUND_EMAIL.md"),
+        "legacy cold-email copy must be explicitly non-operational",
+    )
+    require(
         "TINYZKP_CONTRACT_SENDER_IDENTITY_CONFIRMED"
         in text("billing/contract_billing.py"),
         "contract invoices must require a verified TinyZKP sender identity",

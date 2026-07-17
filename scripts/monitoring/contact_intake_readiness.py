@@ -76,7 +76,6 @@ def run(site_url: str, webhook_url: str, secret: str) -> dict[str, object]:
         urljoin(site_url.rstrip("/") + "/", "api/contact"),
         {
             "name": "TinyZKP readiness probe",
-            "email": "",
             "category": "General Inquiry",
             "message": message,
             "qualification": {

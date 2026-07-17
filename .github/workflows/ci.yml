@@ -78,7 +78,10 @@ jobs:
             scripts/ci/test_beta_deployment_contract.py
 
       - name: Plonky3 backend recovery gate
-        run: python3 scripts/ci/backend_recovery_gate.py
+        run: |
+          python3 scripts/ci/evaluation_revenue_launch_baseline_check.py
+          python3 -m pytest scripts/ci/test_evaluation_revenue_launch_baseline_check.py
+          python3 scripts/ci/backend_recovery_gate.py
 
       - name: Backend source secret and generated-artifact scan
         run: |

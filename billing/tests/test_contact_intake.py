@@ -81,10 +81,9 @@ def test_contact_format_includes_project_fit():
 def test_send_contact_route_persists_sanitized_qualification(monkeypatch):
     captured = {}
 
-    def fake_create(*, name, email, category, message, qualification):
+    def fake_create(*, name, category, message, qualification):
         captured.update({
             "name": name,
-            "email": email,
             "category": category,
             "message": message,
             "qualification": qualification or {},
@@ -101,7 +100,6 @@ def test_send_contact_route_persists_sanitized_qualification(monkeypatch):
             headers=HEADERS,
             json={
                 "name": "Buyer",
-                "email": "Buyer@Example.com",
                 "category": "Design Partner",
                 "message": "We have a long trace use case.",
                     "qualification": _complete_qualification(
@@ -114,7 +112,7 @@ def test_send_contact_route_persists_sanitized_qualification(monkeypatch):
     assert resp.status_code == 201
     assert resp.get_json()["application_id"] == "eval_test123"
     assert "hc-cli benchmark plonky3" in resp.get_json()["benchmark_command"]
-    assert captured["email"] == "buyer@example.com"
+    assert "email" not in captured
     assert captured["category"] == "Design Partner"
     assert captured["qualification"]["workload"] == "Long Plonky3 trace"
     assert captured["qualification"]["logical_rows"] == "1048576"
@@ -137,7 +135,6 @@ def test_operational_request_uses_no_email_channel_and_no_benchmark_instructions
             headers=HEADERS,
             json={
                 "name": "Reporter",
-                "email": "",
                 "category": "Security Report",
                 "message": "High-level report; details withheld pending private channel.",
                 "qualification": {
@@ -150,7 +147,7 @@ def test_operational_request_uses_no_email_channel_and_no_benchmark_instructions
 
     assert resp.status_code == 201
     assert captured["category"] == "Security Report"
-    assert captured["email"] == ""
+    assert "email" not in captured
     assert resp.get_json()["application_id"] == "eval_security_request"
     assert "benchmark_command" not in resp.get_json()
     assert "no-email channel" in resp.get_json()["next_action"]
@@ -165,7 +162,6 @@ def test_all_contact_categories_require_no_email_reply_channel(monkeypatch):
             headers=HEADERS,
             json={
                 "name": "Requester",
-                "email": "buyer@example.com",
                 "category": "Privacy Request",
                 "message": "Please delete application eval_example.",
                 "qualification": {"consent": "twelve_month_retention"},
@@ -185,7 +181,6 @@ def test_design_partner_server_rejects_browser_bypass_with_incomplete_scope(monk
             headers=HEADERS,
             json={
                 "name": "Proving Lead",
-                "email": "",
                 "category": "Design Partner",
                 "message": "Incomplete application",
                 "qualification": {
@@ -211,7 +206,6 @@ def test_send_contact_rejects_oversized_message(monkeypatch):
             headers=HEADERS,
             json={
                 "name": "Buyer",
-                "email": "buyer@example.com",
                 "category": "Enterprise",
                 "message": "x" * 5001,
             },
@@ -246,7 +240,6 @@ def test_design_partner_intake_sends_no_email(monkeypatch):
             headers=HEADERS,
             json={
                 "name": "Proving Lead",
-                "email": "lead@example.com",
                 "category": "Design Partner",
                 "message": "Public deterministic workload",
                     "qualification": _complete_qualification(
@@ -294,7 +287,6 @@ def test_design_partner_intake_accepts_no_email_with_no_email_contact(monkeypatc
             headers=HEADERS,
             json={
                 "name": "Proving Lead",
-                "email": "",
                 "category": "Design Partner",
                 "message": "Public deterministic workload",
                     "qualification": _complete_qualification(),
@@ -302,7 +294,7 @@ def test_design_partner_intake_accepts_no_email_with_no_email_contact(monkeypatc
         )
 
     assert resp.status_code == 201
-    assert captured["email"] == ""
+    assert "email" not in captured
     assert captured["qualification"]["contact_method"] == "github"
 
 
@@ -315,7 +307,6 @@ def test_design_partner_intake_requires_supported_no_email_contact(monkeypatch):
             headers=HEADERS,
             json={
                 "name": "Proving Lead",
-                "email": "lead@example.com",
                 "category": "Design Partner",
                 "message": "Public deterministic workload",
                     "qualification": _complete_qualification(
@@ -327,6 +318,26 @@ def test_design_partner_intake_requires_supported_no_email_contact(monkeypatch):
 
     assert resp.status_code == 400
     assert "no-email contact" in resp.get_json()["error"]
+
+
+def test_contact_intake_rejects_email_property(monkeypatch):
+    monkeypatch.setattr(provision_tenant, "INTERNAL_SECRET", SECRET)
+    provision_tenant.app.config["TESTING"] = True
+    with provision_tenant.app.test_client() as client:
+        resp = client.post(
+            "/send-contact",
+            headers=HEADERS,
+            json={
+                "name": "Proving Lead",
+                "email": "lead@example.com",
+                "category": "Design Partner",
+                "message": "Public deterministic workload",
+                "qualification": _complete_qualification(),
+            },
+        )
+
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "email fields are not accepted"
 
 
 def test_contact_readiness_requires_secret_and_consumes_exact_probe(monkeypatch):

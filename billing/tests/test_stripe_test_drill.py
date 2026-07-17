@@ -8,19 +8,31 @@ import pytest
 import stripe_test_drill as drill
 
 
-def _invoice(status: str) -> dict:
+OFFER_ID = "founding_evaluation"
+OFFER = drill.load_offer(OFFER_ID)
+OFFER_SHA256 = drill.offer_digest(OFFER)
+AMOUNT_CENTS = drill.deposit_amount_cents(OFFER)
+
+
+def _invoice(status: str, lifecycle: str) -> dict:
+    invoice_id = f"in_test_{lifecycle}"
     return {
-        "id": "in_test_drill",
+        "id": invoice_id,
         "customer": "cus_test_drill",
         "status": status,
         "collection_method": "send_invoice",
         "auto_advance": False,
         "livemode": False,
-        "total": drill.AMOUNT_CENTS if status != "draft" else 0,
+        "total": AMOUNT_CENTS if status != "draft" else 0,
+        "amount_paid": AMOUNT_CENTS if status == "paid" else 0,
+        "amount_remaining": 0 if status == "paid" else AMOUNT_CENTS,
         "hosted_invoice_url": "https://invoice.stripe.com/i/test_drill",
         "metadata": {
             "tinyzkp_test_drill": "true",
             "tinyzkp_test_drill_id": "drill-001",
+            "tinyzkp_test_drill_lifecycle": lifecycle,
+            "tinyzkp_offer_id": OFFER_ID,
+            "tinyzkp_offer_sha256": OFFER_SHA256,
             "tinyzkp_release_sha": "a" * 40,
         },
     }
@@ -29,29 +41,41 @@ def _invoice(status: str) -> dict:
 class FakeInvoices:
     def __init__(self):
         self.calls = []
-        self.status = "draft"
+        self.statuses = {}
 
     def create(self, params, options):
         self.calls.append(("create", params, options))
-        return _invoice("draft")
+        lifecycle = params["metadata"]["tinyzkp_test_drill_lifecycle"]
+        self.statuses.setdefault(lifecycle, "draft")
+        return _invoice("draft", lifecycle)
 
     def finalize_invoice(self, invoice_id, params, options):
         self.calls.append(("finalize", invoice_id, params, options))
-        self.status = "open"
-        return _invoice("open")
+        lifecycle = invoice_id.removeprefix("in_test_")
+        self.statuses[lifecycle] = "open"
+        return _invoice("open", lifecycle)
 
     def retrieve(self, invoice_id):
         self.calls.append(("retrieve", invoice_id))
-        return _invoice(self.status)
+        lifecycle = invoice_id.removeprefix("in_test_")
+        return _invoice(self.statuses[lifecycle], lifecycle)
 
     def void_invoice(self, invoice_id, params, options):
         self.calls.append(("void", invoice_id, params, options))
-        self.status = "void"
-        return _invoice("void")
+        lifecycle = invoice_id.removeprefix("in_test_")
+        self.statuses[lifecycle] = "void"
+        return _invoice("void", lifecycle)
+
+    def pay(self, invoice_id, params, options):
+        self.calls.append(("pay", invoice_id, params, options))
+        lifecycle = invoice_id.removeprefix("in_test_")
+        self.statuses[lifecycle] = "paid"
+        return _invoice("paid", lifecycle)
 
     def delete(self, invoice_id):
         self.calls.append(("delete", invoice_id))
-        self.status = "deleted"
+        lifecycle = invoice_id.removeprefix("in_test_")
+        self.statuses[lifecycle] = "deleted"
         return {"id": invoice_id, "deleted": True, "livemode": False}
 
 
@@ -63,8 +87,8 @@ class FakeItems:
         self.calls.append((params, options))
         return {
             "id": "ii_test_drill",
-            "invoice": "in_test_drill",
-            "amount": drill.AMOUNT_CENTS,
+            "invoice": params["invoice"],
+            "amount": AMOUNT_CENTS,
             "livemode": False,
         }
 
@@ -92,7 +116,7 @@ def client():
     )
 
 
-def test_drill_is_exact_test_mode_and_voids_without_send(monkeypatch):
+def test_drill_proves_paid_and_void_lifecycles_without_email_or_send(monkeypatch):
     monkeypatch.setattr(drill.importlib.metadata, "version", lambda package: "15.3.0")
     fake = client()
     evidence = drill.run_drill(
@@ -101,22 +125,49 @@ def test_drill_is_exact_test_mode_and_voids_without_send(monkeypatch):
         display_name="TinyZKP Test",
         customer_id="cus_test_drill",
         drill_id="drill-001",
+        offer_id=OFFER_ID,
         release_sha="a" * 40,
     )
-    assert evidence["amount_cents"] == 1_250_000
+    assert evidence["offer_id"] == OFFER_ID
+    assert evidence["offer_sha256"] == OFFER_SHA256
+    assert evidence["amount_cents"] == 750_000
     assert evidence["livemode"] is False
+    assert evidence["customer_email_present"] is False
+    assert evidence["duplicate_prevention_verified"] is True
+    assert evidence["payment_status"] == "paid"
+    assert evidence["paid_retrieved_status"] == "paid"
+    assert evidence["voided_status"] == "void"
     assert evidence["send_api_invoked"] is False
     assert evidence["checkout_created"] is False
-    assert evidence["cleanup_complete"] is True
+    assert evidence["void_cleanup_complete"] is True
     call_names = [call[0] for call in fake.v1.invoices.calls]
-    assert call_names == ["create", "finalize", "retrieve", "void"]
+    assert call_names == [
+        "create",
+        "create",
+        "finalize",
+        "retrieve",
+        "void",
+        "create",
+        "create",
+        "finalize",
+        "pay",
+        "retrieve",
+        "retrieve",
+        "retrieve",
+    ]
     assert not hasattr(fake.v1.invoices, "send_invoice")
     invoice_params = fake.v1.invoices.calls[0][1]
     assert invoice_params["auto_advance"] is False
     assert invoice_params["collection_method"] == "send_invoice"
-    item_params = fake.v1.invoice_items.calls[0][0]
-    assert item_params["invoice"] == "in_test_drill"
-    assert item_params["amount"] == 1_250_000
+    assert [call[0]["invoice"] for call in fake.v1.invoice_items.calls] == [
+        "in_test_void",
+        "in_test_paid",
+    ]
+    assert all(
+        call[0]["amount"] == 750_000 for call in fake.v1.invoice_items.calls
+    )
+    pay_call = next(call for call in fake.v1.invoices.calls if call[0] == "pay")
+    assert pay_call[2] == {"payment_method": "pm_card_visa"}
 
 
 def test_failure_cleans_up_draft_invoice(monkeypatch):
@@ -131,12 +182,34 @@ def test_failure_cleans_up_draft_invoice(monkeypatch):
             display_name="TinyZKP Test",
             customer_id="cus_test_drill",
             drill_id="drill-001",
+            offer_id=OFFER_ID,
             release_sha="a" * 40,
         )
     assert fake.v1.invoices.calls[-2:] == [
-        ("retrieve", "in_test_drill"),
-        ("delete", "in_test_drill"),
+        ("retrieve", "in_test_void"),
+        ("delete", "in_test_void"),
     ]
+
+
+def test_drill_rejects_a_test_customer_with_email():
+    fake = client()
+    fake.v1.customers.retrieve = lambda customer_id: {
+        "id": customer_id,
+        "livemode": False,
+        "deleted": False,
+        "email": "customer@example.com",
+    }
+    with pytest.raises(ValueError, match="customer without email"):
+        drill.run_drill(
+            fake,
+            account_id="acct_tinyzkp_test",
+            display_name="TinyZKP Test",
+            customer_id="cus_test_drill",
+            drill_id="drill-001",
+            offer_id=OFFER_ID,
+            release_sha="a" * 40,
+        )
+    assert fake.v1.invoices.calls == []
 
 
 def test_evidence_round_trip_requires_owner_only(tmp_path):
@@ -148,22 +221,33 @@ def test_evidence_round_trip_requires_owner_only(tmp_path):
         "stripe_account_id": "acct_tinyzkp_test",
         "stripe_display_name": "TinyZKP Test",
         "stripe_customer_id": "cus_test_drill",
-        "stripe_invoice_id": "in_test_drill",
+        "stripe_paid_invoice_id": "in_test_paid",
+        "stripe_void_invoice_id": "in_test_void",
         "drill_id": "drill-001",
-        "amount_cents": drill.AMOUNT_CENTS,
+        "offer_id": OFFER_ID,
+        "offer_sha256": OFFER_SHA256,
+        "amount_cents": AMOUNT_CENTS,
         "currency": "usd",
         "collection_method": "send_invoice",
         "days_until_due": 15,
         "auto_advance": False,
         "livemode": False,
-        "hosted_invoice_url_sha256": "b" * 64,
-        "created_status": "draft",
-        "finalized_status": "open",
-        "retrieved_status": "open",
+        "hosted_paid_invoice_url_sha256": "b" * 64,
+        "hosted_void_invoice_url_sha256": "d" * 64,
+        "paid_created_status": "draft",
+        "paid_finalized_status": "open",
+        "payment_status": "paid",
+        "paid_retrieved_status": "paid",
+        "void_created_status": "draft",
+        "void_finalized_status": "open",
+        "void_retrieved_status": "open",
         "voided_status": "void",
+        "payment_method": "pm_card_visa",
+        "customer_email_present": False,
+        "duplicate_prevention_verified": True,
         "send_api_invoked": False,
         "checkout_created": False,
-        "cleanup_complete": True,
+        "void_cleanup_complete": True,
         "started_at": "2026-07-10T12:00:00Z",
         "completed_at": "2026-07-10T12:01:00Z",
         "release_sha": "a" * 40,
@@ -186,7 +270,10 @@ def test_evidence_round_trip_requires_owner_only(tmp_path):
         ("amount_cents", 1),
         ("send_api_invoked", True),
         ("checkout_created", True),
-        ("cleanup_complete", False),
+        ("void_cleanup_complete", False),
+        ("customer_email_present", True),
+        ("duplicate_prevention_verified", False),
+        ("payment_status", "open"),
         ("voided_status", "open"),
         ("stripe_api_version", "old"),
     ],
@@ -200,22 +287,33 @@ def test_evidence_rejects_unsafe_or_incomplete_claims(field, value):
         "stripe_account_id": "acct_tinyzkp_test",
         "stripe_display_name": "TinyZKP Test",
         "stripe_customer_id": "cus_test_drill",
-        "stripe_invoice_id": "in_test_drill",
+        "stripe_paid_invoice_id": "in_test_paid",
+        "stripe_void_invoice_id": "in_test_void",
         "drill_id": "drill-001",
-        "amount_cents": drill.AMOUNT_CENTS,
+        "offer_id": OFFER_ID,
+        "offer_sha256": OFFER_SHA256,
+        "amount_cents": AMOUNT_CENTS,
         "currency": "usd",
         "collection_method": "send_invoice",
         "days_until_due": 15,
         "auto_advance": False,
         "livemode": False,
-        "hosted_invoice_url_sha256": "b" * 64,
-        "created_status": "draft",
-        "finalized_status": "open",
-        "retrieved_status": "open",
+        "hosted_paid_invoice_url_sha256": "b" * 64,
+        "hosted_void_invoice_url_sha256": "d" * 64,
+        "paid_created_status": "draft",
+        "paid_finalized_status": "open",
+        "payment_status": "paid",
+        "paid_retrieved_status": "paid",
+        "void_created_status": "draft",
+        "void_finalized_status": "open",
+        "void_retrieved_status": "open",
         "voided_status": "void",
+        "payment_method": "pm_card_visa",
+        "customer_email_present": False,
+        "duplicate_prevention_verified": True,
         "send_api_invoked": False,
         "checkout_created": False,
-        "cleanup_complete": True,
+        "void_cleanup_complete": True,
         "started_at": "2026-07-10T12:00:00Z",
         "completed_at": "2026-07-10T12:01:00Z",
         "release_sha": "a" * 40,
@@ -241,6 +339,8 @@ def test_cli_rejects_live_key_before_client_creation(tmp_path):
             "cus_live",
             "--drill-id",
             "drill-001",
+            "--offer-id",
+            OFFER_ID,
             "--release-sha",
             "a" * 40,
             "--output",

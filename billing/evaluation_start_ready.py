@@ -30,7 +30,10 @@ def validate_paid_deposit_invoice(
     plan_sha256: str,
 ) -> None:
     metadata = billing.value(invoice, "metadata", {}) or {}
-    expected_amount = billing.offer_amount(offer) * 100 // 2
+    expected_amount = billing.evaluation_milestone_amount_cents(
+        offer,
+        "evaluation-deposit",
+    )
     checks = (
         billing.value(invoice, "id") == invoice_id,
         billing.value(invoice, "customer") == request.customer_id,

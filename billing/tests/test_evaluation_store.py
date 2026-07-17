@@ -15,7 +15,6 @@ NOW = dt.datetime(2026, 7, 10, 12, 0, tzinfo=dt.timezone.utc)
 def _create(path, *, now=NOW):
     return evaluation_store.create_application(
         name="Proving Lead",
-        email="lead@example.com",
         category="Design Partner",
         message="Reproduce with a public generator.",
         qualification={
@@ -49,7 +48,7 @@ def test_create_is_durable_owner_only_and_redacted_by_default(tmp_path):
         include_contact=True,
         path=path,
     )
-    assert full["email"] == "lead@example.com"
+    assert "email" not in full
     assert full["qualification"]["workload"] == "Poseidon2 AIR"
 
 
@@ -109,7 +108,6 @@ def test_readiness_probe_is_verified_and_deleted_without_contact_data(tmp_path):
     nonce = "probe_0123456789abcdef"
     application_id = evaluation_store.create_application(
         name="TinyZKP readiness probe",
-        email="",
         category="General Inquiry",
         message=f"TinyZKP automated contact readiness probe {nonce}",
         qualification={
@@ -123,3 +121,54 @@ def test_readiness_probe_is_verified_and_deleted_without_contact_data(tmp_path):
     assert not evaluation_store.consume_readiness_probe(application_id, "probe_wrong", path=path)
     assert evaluation_store.consume_readiness_probe(application_id, nonce, path=path)
     assert evaluation_store.get_application(application_id, path=path) is None
+
+
+def test_open_db_migrates_legacy_email_column_without_retaining_addresses(tmp_path):
+    path = tmp_path / "private" / "applications.sqlite"
+    path.parent.mkdir(mode=0o700)
+    import sqlite3
+
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE evaluation_applications (
+                application_id TEXT PRIMARY KEY,
+                submitted_at TEXT NOT NULL,
+                retention_deadline TEXT NOT NULL,
+                status TEXT NOT NULL,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                category TEXT NOT NULL,
+                message TEXT NOT NULL,
+                qualification_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO evaluation_applications VALUES (
+                'eval_legacy', '2026-07-10T12:00:00Z', '2027-07-10T12:00:00Z',
+                'new', 'Legacy Contact', 'legacy@example.com', 'General Inquiry',
+                'Legacy request', '{}', '2026-07-10T12:00:00Z'
+            )
+            """
+        )
+    path.chmod(0o600)
+
+    with evaluation_store.open_db(path) as conn:
+        columns = [
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(evaluation_applications)"
+            ).fetchall()
+        ]
+        assert "email" not in columns
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    record = evaluation_store.get_application(
+        "eval_legacy",
+        include_contact=True,
+        path=path,
+    )
+    assert record["name"] == "Legacy Contact"
+    assert "email" not in record

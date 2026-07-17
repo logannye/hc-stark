@@ -12,7 +12,8 @@ legacy protocol.
 
 Commercial work during maintenance is contracted and invoiced as one of:
 
-- $25,000 Founding Memory-Bounded Evaluation for the first two customers
+- $15,000 Founding Memory-Bounded Evaluation for the first three customers
+  (two weeks, at most eight engineering days, $7,500 per milestone)
 - $40,000 standard Memory-Bounded Prover Evaluation
 - $60,000/year TinyZKP Certified after backend v1 release (annual prepaid,
   capped support)
@@ -42,7 +43,7 @@ invoice requires hashed delivery-acceptance evidence plus the exact paid
 deposit invoice ID and deposit plan hash;
 annual subscriptions require an active, exact-price yearly Stripe Price. Apply
 mode reconciles existing Stripe invoices so the founding offer cannot exceed
-two agreement IDs. Preview and apply both hash the owner-only agreement and
+the `customer_cap` in `site/pricing.json`. Preview and apply both hash the owner-only agreement and
 scope documents directly and reject any mismatch with the evidence record.
 Certified/Fleet previews additionally require the owner-only commercial release
 authorization and its separately signed Sigstore bundle. The CLI verifies the

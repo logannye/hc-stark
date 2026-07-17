@@ -2,7 +2,7 @@
   "schema_version": 3,
   "name": "TinyZKP Commercial Offers",
   "url": "https://tinyzkp.com/pricing",
-  "effective_date": "2026-07-09",
+  "effective_date": "2026-07-17",
   "currency": "USD",
   "service_status": "backend_recovery",
   "hosted_proving_available": false,
@@ -19,20 +19,26 @@
     {
       "id": "founding_evaluation",
       "name": "Founding Memory-Bounded Evaluation",
-      "price": 25000,
-      "availability": "first_two_customers",
-      "availability_label": "Available during recovery · first two customers",
+      "price": 15000,
+      "availability": "limited_customers",
+      "customer_cap": 3,
+      "availability_label": "Available during recovery · first three customers",
       "billing": "50_percent_upfront_50_percent_on_delivery",
-      "duration": "3_weeks",
-      "engineering_day_cap": 15,
-      "kicker": "First two customers",
-      "unit": "fixed · 3 weeks",
+      "billing_milestones": {
+        "deposit_percent": 50,
+        "delivery_percent": 50
+      },
+      "duration": "2_weeks",
+      "engineering_day_cap": 8,
+      "kicker": "First three customers",
+      "unit": "fixed · 2 weeks",
       "deliverables": [
         "One workload and conventional baseline",
-        "Bounded integration prototype",
-        "Reproducible RAM, time, I/O, scratch, proof, and verifier report",
+        "Bounded feasibility prototype",
+        "Reproducible results, limitations, and production recommendation",
         "50% on signature and 50% on delivery",
-        "At most fifteen engineering days"
+        "At most eight engineering days",
+        "Excludes production integration, hosted proving, support, SLAs, and additional workloads"
       ],
       "contact_url": "https://tinyzkp.com/contact?intent=memory_bounded_evaluation"
     },
@@ -43,6 +49,10 @@
       "availability": "contracted_during_recovery",
       "availability_label": "Available during recovery",
       "billing": "50_percent_upfront_50_percent_on_delivery",
+      "billing_milestones": {
+        "deposit_percent": 50,
+        "delivery_percent": 50
+      },
       "duration": "3_weeks",
       "engineering_day_cap": 15,
       "kicker": "Standard evaluation",

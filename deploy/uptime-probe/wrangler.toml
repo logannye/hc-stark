@@ -3,14 +3,15 @@ main = "worker.js"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["global_fetch_strictly_public"]
 
-# Probe every 2 minutes (cron is UTC). A confirmed failure pages within ~2 min
-# instead of "whenever the daily Mac audit next runs".
+# Probe every 5 minutes and exercise durable intake once per hour (cron is UTC).
 [triggers]
-crons = ["*/2 * * * *"]
+crons = ["*/5 * * * *", "17 * * * *"]
 
 [vars]
 AUDIT_MODE = "containment"
 
-# Set the email relay URL and its independent bearer token as secrets:
+# Set a non-email incident webhook, its bearer token, and the intake cleanup
+# secret with `wrangler secret put`:
 #   wrangler secret put ALERT_WEBHOOK_URL
 #   wrangler secret put ALERT_WEBHOOK_TOKEN
+#   wrangler secret put CONTACT_READINESS_SECRET

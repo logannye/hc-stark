@@ -83,7 +83,6 @@ def test_retention_command_purges_as_ledger_owner_in_subprocess(tmp_path):
     expired_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=366)
     application_id = evaluation_store.create_application(
         name="Retention probe",
-        email="",
         category="General Inquiry",
         message="Expired no-email retention probe",
         qualification={

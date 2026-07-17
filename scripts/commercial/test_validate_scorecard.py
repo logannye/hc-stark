@@ -5,16 +5,21 @@ import validate_scorecard as scorecard
 
 def example():
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "period": "2026-07",
         "contracted_arr_usd": 60_000,
         "cash_collected_usd": 60_000,
         "evaluation_revenue_usd": 0,
+        "evaluation_invoiced_usd": 0,
+        "evaluation_paid_usd": 0,
         "recurring_software_revenue_usd": 5_000,
         "recurring_software_cogs_usd": 500,
         "hosted_revenue_usd": 0,
         "hosted_cogs_usd": 0,
         "buyer_calls_completed": 3,
+        "inbound_applications": 3,
+        "qualified_opportunities": 1,
+        "signed_evaluations": 1,
         "reproducible_bottlenecks": 1,
         "benchmark_reports_received": 1,
         "evaluations_sold": 1,
@@ -38,7 +43,7 @@ def test_vanity_pipeline_and_unbounded_support_fail():
     payload["directory_listings"] = 10
     payload["customers"][0]["support_hours_quarter_to_date"] = 11
     payload["pipeline"][0] = {
-        "stage": "interview_completed",
+        "stage": "benchmark_committed",
         "evidence": "calendar-call",
         "contracted_value_usd": 50_000,
     }
@@ -46,6 +51,19 @@ def test_vanity_pipeline_and_unbounded_support_fail():
     assert any("vanity metrics" in failure for failure in failures)
     assert any("support hours" in failure for failure in failures)
     assert any("zero contracted value" in failure for failure in failures)
+
+
+def test_only_paid_evaluation_invoices_count_as_revenue():
+    payload = example()
+    payload["evaluation_invoiced_usd"] = 7_500
+    payload["evaluation_paid_usd"] = 0
+    payload["evaluation_revenue_usd"] = 7_500
+    failures = scorecard.validate(payload)
+    assert "evaluation revenue must equal paid evaluation invoices" in failures
+
+    payload["evaluation_paid_usd"] = 7_500
+    payload["cash_collected_usd"] = 7_500
+    assert scorecard.validate(payload) == []
 
 
 def test_margin_floors_fail_closed():

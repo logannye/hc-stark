@@ -1,14 +1,19 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "period": "2026-07",
   "contracted_arr_usd": 0,
   "cash_collected_usd": 0,
   "evaluation_revenue_usd": 0,
+  "evaluation_invoiced_usd": 0,
+  "evaluation_paid_usd": 0,
   "recurring_software_revenue_usd": 0,
   "recurring_software_cogs_usd": 0,
   "hosted_revenue_usd": 0,
   "hosted_cogs_usd": 0,
   "buyer_calls_completed": 0,
+  "inbound_applications": 0,
+  "qualified_opportunities": 0,
+  "signed_evaluations": 0,
   "reproducible_bottlenecks": 0,
   "benchmark_reports_received": 0,
   "evaluations_sold": 0,
@@ -16,5 +21,5 @@
   "customers": [],
   "pipeline": [],
   "runway_months": 0,
-  "notes": "Evidence only; traffic, listings, free accounts, and unsent leads are not pipeline."
+  "notes": "Evidence only; inbound applications are not pipeline until qualified, and only paid invoices count as evaluation revenue."
 }

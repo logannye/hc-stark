@@ -218,6 +218,10 @@ def build_steps(
 
     steps = [
         Step(
+            "evaluation revenue launch baseline",
+            (python, "scripts/ci/evaluation_revenue_launch_baseline_check.py"),
+        ),
+        Step(
             "recovery reconciliation invariants",
             (python, "scripts/ci/recovery_reconciliation_invariants.py"),
         ),

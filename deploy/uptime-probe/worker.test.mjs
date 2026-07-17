@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { TARGETS, PUBLIC_BETA_TARGETS, targetsForMode, probe, alert } from "./worker.js";
+import {
+  TARGETS,
+  PUBLIC_BETA_TARGETS,
+  CONTACT_READINESS_CRON,
+  targetsForMode,
+  probe,
+  alert,
+  runContactReadiness,
+} from "./worker.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -55,6 +63,37 @@ try {
     text: "🔴 TinyZKP recovery surface failed: api-ready (503)",
     incident: "external_probe_failed",
   });
+
+  const readinessCalls = [];
+  globalThis.fetch = async (url, options) => {
+    readinessCalls.push({ url: String(url), options });
+    if (String(url).endsWith("/api/contact")) {
+      return new Response(JSON.stringify({ application_id: "eval_probe" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ stored: true, cleaned: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const readiness = await runContactReadiness({
+    CONTACT_READINESS_SECRET: "contact-secret",
+  });
+  assert.equal(CONTACT_READINESS_CRON, "17 * * * *");
+  assert.equal(readiness.ok, true);
+  assert.equal(readinessCalls.length, 2);
+  const submitted = JSON.parse(readinessCalls[0].options.body);
+  assert.equal(submitted.email, undefined);
+  assert.equal(submitted.qualification.contact_method, "github");
+  assert.equal(
+    readinessCalls[1].options.headers["x-internal-secret"],
+    "contact-secret",
+  );
+  const cleanup = JSON.parse(readinessCalls[1].options.body);
+  assert.equal(cleanup.application_id, "eval_probe");
+  assert.match(cleanup.nonce, /^probe_[0-9a-f]{32}$/);
 } finally {
   globalThis.fetch = originalFetch;
 }

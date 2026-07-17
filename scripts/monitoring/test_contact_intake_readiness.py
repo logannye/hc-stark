@@ -74,7 +74,7 @@ def test_run_submits_and_cleans_no_pii_probe(monkeypatch):
 
     assert result["stored"] is True and result["cleaned"] is True
     submitted = calls[0][1]
-    assert submitted["email"] == ""
+    assert "email" not in submitted
     assert submitted["qualification"]["contact_method"] == "github"
     assert "@" not in json.dumps(submitted)
     assert calls[1][2] == {"X-Internal-Secret": "secret"}

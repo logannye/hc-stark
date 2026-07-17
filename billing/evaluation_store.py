@@ -20,6 +20,19 @@ from typing import Any
 
 DEFAULT_PATH = "/opt/hc-stark/data/evaluation_applications.sqlite"
 VALID_STATUSES = {"new", "qualified", "declined", "contracting", "closed"}
+SCHEMA_VERSION = 2
+TABLE_NAME = "evaluation_applications"
+TABLE_COLUMNS = (
+    "application_id",
+    "submitted_at",
+    "retention_deadline",
+    "status",
+    "name",
+    "category",
+    "message",
+    "qualification_json",
+    "updated_at",
+)
 
 
 def _utc_now() -> dt.datetime:
@@ -58,6 +71,61 @@ def _prepare_private_path(db_path: Path) -> None:
         raise PermissionError(f"evaluation store must be a regular file: {db_path}")
 
 
+def _create_table(conn: sqlite3.Connection, name: str = TABLE_NAME) -> None:
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {name} (
+            application_id TEXT PRIMARY KEY,
+            submitted_at TEXT NOT NULL,
+            retention_deadline TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN ('new', 'qualified', 'declined', 'contracting', 'closed')
+            ),
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            message TEXT NOT NULL,
+            qualification_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    existing = [
+        row[1]
+        for row in conn.execute(f"PRAGMA table_info({TABLE_NAME})").fetchall()
+    ]
+    if not existing:
+        _create_table(conn)
+    elif "email" in existing:
+        replacement = f"{TABLE_NAME}_v2"
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(f"DROP TABLE IF EXISTS {replacement}")
+            _create_table(conn, replacement)
+            columns = ", ".join(TABLE_COLUMNS)
+            conn.execute(
+                f"INSERT INTO {replacement} ({columns}) "
+                f"SELECT {columns} FROM {TABLE_NAME}"
+            )
+            conn.execute(f"DROP TABLE {TABLE_NAME}")
+            conn.execute(f"ALTER TABLE {replacement} RENAME TO {TABLE_NAME}")
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    elif tuple(existing) != TABLE_COLUMNS:
+        raise sqlite3.DatabaseError("evaluation store schema is unsupported")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_evaluation_status_submitted "
+        "ON evaluation_applications(status, submitted_at)"
+    )
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    conn.commit()
+
+
 def open_db(path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
     db_path = _path(path)
     _prepare_private_path(db_path)
@@ -67,29 +135,7 @@ def open_db(path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS evaluation_applications (
-                application_id TEXT PRIMARY KEY,
-                submitted_at TEXT NOT NULL,
-                retention_deadline TEXT NOT NULL,
-                status TEXT NOT NULL CHECK (
-                    status IN ('new', 'qualified', 'declined', 'contracting', 'closed')
-                ),
-                name TEXT NOT NULL,
-                email TEXT NOT NULL,
-                category TEXT NOT NULL,
-                message TEXT NOT NULL,
-                qualification_json TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_evaluation_status_submitted "
-            "ON evaluation_applications(status, submitted_at)"
-        )
-        conn.commit()
+        _ensure_schema(conn)
         _require_owner_only(db_path, 0o600, kind="evaluation store")
     except Exception:
         conn.close()
@@ -100,7 +146,6 @@ def open_db(path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
 def create_application(
     *,
     name: str,
-    email: str,
     category: str,
     message: str,
     qualification: dict[str, str],
@@ -121,15 +166,14 @@ def create_application(
             """
             INSERT INTO evaluation_applications (
                 application_id, submitted_at, retention_deadline, status,
-                name, email, category, message, qualification_json, updated_at
-            ) VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?, ?)
+                name, category, message, qualification_json, updated_at
+            ) VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?)
             """,
             (
                 application_id,
                 _iso(submitted),
                 _iso(retention_deadline),
                 name,
-                email,
                 category,
                 message,
                 canonical_qualification,
@@ -158,7 +202,6 @@ def _record(row: sqlite3.Row, *, include_contact: bool) -> dict[str, Any]:
         result.update(
             {
                 "name": row["name"],
-                "email": row["email"],
                 "message": row["message"],
                 "qualification": qualification,
             }

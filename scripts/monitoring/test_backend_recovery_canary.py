@@ -24,7 +24,7 @@ def test_validate_accepts_consistent_maintenance_surfaces(monkeypatch):
         observation(
             "contact",
             200,
-            b'<input name="email" type="email"><select name="contact_method" required></select><input name="contact_handle" required><p>No email will be sent.</p>',
+            b'<select name="contact_method" required></select><input name="contact_handle" required><p>No email will be sent.</p>',
         ),
         observation("security", 200, b"HTTPS security reporting"),
         observation("privacy", 200, b"HTTPS privacy requests"),
@@ -85,7 +85,7 @@ def test_validate_rejects_enabled_proving_and_legacy_acceptance(monkeypatch):
     assert any("proving_available must be false" in failure for failure in failures)
     assert any("prove returned HTTP 200" in failure for failure in failures)
     assert any("legacy verify returned HTTP 200" in failure for failure in failures)
-    assert any("contact email field must exist and remain optional" in failure for failure in failures)
+    assert any("contact must not collect email" in failure for failure in failures)
     assert any("contact must require a no-email reply channel" in failure for failure in failures)
     assert any("contact must require a no-email reply handle" in failure for failure in failures)
     assert any("contact does not disclose the no-email recovery policy" in failure for failure in failures)
