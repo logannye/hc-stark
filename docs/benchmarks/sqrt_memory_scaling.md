@@ -1,5 +1,8 @@
 # O(√T) memory scaling — measured
 
+> **Legacy research — not production evidence.** These historical measurements
+> do not qualify or describe the supported TinyZKP Guard production profile.
+
 This is the reproducible evidence behind hc-stark's core claim: the
 height-compressed **streaming** commitment holds an **O(√T)** working set instead
 of the **O(T)** that a conventional STARK commitment needs — at the *same* root.

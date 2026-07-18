@@ -11,7 +11,7 @@
   "categories": ["developer", "business", "security"],
   "icons": [{"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}],
   "shortcuts": [
-    {"name": "Run the free doctor", "short_name": "Doctor", "description": "Evaluate compatibility and resources before purchase.", "url": "/docs#doctor"},
+    {"name": "Run the free doctor", "short_name": "Doctor", "description": "Evaluate compatibility and resources before purchase.", "url": "/doctor"},
     {"name": "Check compatibility", "short_name": "Compatibility", "description": "Review the exact supported Plonky3 v1 profile.", "url": "/compatibility"}
   ]
 }

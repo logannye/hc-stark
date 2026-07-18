@@ -10,7 +10,7 @@ inputs:
     description: Relative path to a JobManifestV1 document.
     required: true
   run-proof:
-    description: Set to true to run the proof after the free doctor succeeds.
+    description: Set to true to run the proof after Guard's canonical doctor succeeds.
     required: false
     default: "false"
   report:

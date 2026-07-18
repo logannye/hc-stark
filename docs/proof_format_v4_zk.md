@@ -1,5 +1,8 @@
 # Proof format and transcript spec (v4, ZK)
 
+> **Legacy research — not production evidence.** This standalone protocol is
+> outside the supported Guard profile and establishes no production privacy claim.
+
 This document defines the **compatibility contract** for `hc-stark` proof artifacts and Fiat–Shamir transcripts when **zero-knowledge masking** is enabled.
 
 This is a *protocol* specification: implementations must follow it exactly for proofs to verify.
@@ -89,4 +92,3 @@ Every release should include:
 - at least one small v4 proof fixture that verifies,
 - at least one mutation/tamper fixture that fails,
 - an upgrade procedure documenting changes.
-

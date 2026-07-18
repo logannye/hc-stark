@@ -44,7 +44,7 @@ API_ORIGIN = "https://api.cloudflare.com/client/v4"
 WRITE_ENV = "TINYZKP_ALLOW_CLOUDFLARE_PAGES_WRITE"
 DEPLOY_PLAN_SCHEMA = "tinyzkp-cloudflare-pages-deploy-plan-v1"
 DEPLOYMENT_RECORD_SCHEMA = "tinyzkp-cloudflare-pages-deployment-v1"
-CANARY_RECORD_SCHEMA = "tinyzkp-cloudflare-pages-canary-v2"
+CANARY_RECORD_SCHEMA = "tinyzkp-cloudflare-pages-canary-v3"
 DEPLOY_FAILURE_RECORD_SCHEMA = "tinyzkp-cloudflare-pages-deploy-failure-v1"
 ROLLBACK_PLAN_SCHEMA = "tinyzkp-cloudflare-pages-rollback-plan-v1"
 ROLLBACK_RECORD_SCHEMA = "tinyzkp-cloudflare-pages-rollback-v1"
@@ -1536,7 +1536,7 @@ def validate_canary_record(value: Any) -> dict[str, Any]:
     checks = record.get("checks")
     if not isinstance(checks, list) or len(checks) != 2:
         raise ReleaseError("canary record must contain exactly two checks")
-    expected_names = ["release_identity", "backend_recovery"]
+    expected_names = ["static_contracts", "static_routes"]
     for index, check_value in enumerate(checks):
         check = exact_object(check_value, CANARY_CHECK_KEYS, f"canary check {index}")
         if check.get("name") != expected_names[index]:
@@ -1636,19 +1636,25 @@ def run_post_deploy_canary(
     _recorded_deployment_matches_api(record, api)
     commands = (
         (
-            "release_identity",
+            "static_contracts",
             (
                 "/usr/bin/python3",
-                str(ROOT / "scripts" / "ci" / "release_identity_check.py"),
-                "--expected-sha",
-                record["release_sha"],
+                str(ROOT / "scripts" / "deploy" / "static_site_canary.py"),
+                "--base-url",
+                record["new_deployment"]["url"],
+                "--mode",
+                "contracts",
             ),
         ),
         (
-            "backend_recovery",
+            "static_routes",
             (
                 "/usr/bin/python3",
-                str(ROOT / "scripts" / "monitoring" / "backend_recovery_canary.py"),
+                str(ROOT / "scripts" / "deploy" / "static_site_canary.py"),
+                "--base-url",
+                record["new_deployment"]["url"],
+                "--mode",
+                "routes",
             ),
         ),
     )

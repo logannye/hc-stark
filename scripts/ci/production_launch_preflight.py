@@ -227,7 +227,10 @@ def build_steps(
             "frozen Plonky3 compatibility profile",
             (python, "scripts/ci/plonky3_compatibility_gate.py"),
         ),
-        Step("launch gate audit", (python, "scripts/ci/launch_gate_audit.py")),
+        Step(
+            "Guard launch state derivation",
+            (python, "scripts/ci/guard_launch_gate.py", "--check"),
+        ),
         Step(
             "billing runtime dependency metadata",
             (python, "billing/runtime_lock.py", "verify-metadata"),

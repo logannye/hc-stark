@@ -37,6 +37,24 @@ async function main() {
       assert.deepEqual(assets.calls, []);
     }
 
+    for (const hostname of [
+      "api.tinyzkp.com",
+      "mcp.tinyzkp.com",
+      "webhook.tinyzkp.com",
+    ]) {
+      for (const method of ["GET", "POST", "PUT", "DELETE"]) {
+        const assets = assetsMock();
+        const response = await worker.fetch(new Request(`https://${hostname}/any/path?ignored=1`, {
+          method,
+          body: new Set(["POST", "PUT"]).has(method) ? "{}" : undefined,
+        }), { ASSETS: assets });
+        assert.equal(response.status, 410, `${method} ${hostname} must be gone`);
+        assert.equal(response.headers.get("Location"), null);
+        assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
+        assert.deepEqual(assets.calls, []);
+      }
+    }
+
     {
       const assets = assetsMock(async (request) => new Response(`asset:${new URL(request.url).pathname}`, { status: 200 }));
       const response = await worker.fetch(new Request("https://preview-branch.tinyzkp.pages.dev/guard"), { ASSETS: assets });
@@ -95,7 +113,8 @@ async function main() {
       assert.equal(response.status, 200);
       assert.equal(await response.text(), "pricing");
       assert.deepEqual(assets.calls, ["/pricing", "/pricing.html"]);
-      assert.match(response.headers.get("Content-Security-Policy"), /connect-src 'self'/);
+      assert.match(response.headers.get("Content-Security-Policy"), /connect-src 'self' https:\/\/cloudflareinsights\.com/);
+      assert.match(response.headers.get("Content-Security-Policy"), /script-src 'self' https:\/\/static\.cloudflareinsights\.com(?:;|$)/);
       assert.equal(response.headers.get("X-Frame-Options"), "DENY");
     }
 

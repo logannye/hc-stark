@@ -5,9 +5,14 @@
 // calls no upstream service, and stores no visitor or proof data.
 
 const CANONICAL_HOST = "tinyzkp.com";
+const RETIRED_HOSTS = new Set([
+  "api.tinyzkp.com",
+  "mcp.tinyzkp.com",
+  "webhook.tinyzkp.com",
+]);
 
 const SECURITY_HEADERS = {
-  "Content-Security-Policy": "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'; upgrade-insecure-requests",
+  "Content-Security-Policy": "default-src 'self'; base-uri 'self'; connect-src 'self' https://cloudflareinsights.com; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; upgrade-insecure-requests",
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Resource-Policy": "same-site",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
@@ -22,11 +27,16 @@ const PUBLIC_ROUTES = new Set([
   "/guard",
   "/compatibility",
   "/benchmarks",
+  "/doctor",
   "/pricing",
   "/docs",
+  "/troubleshooting",
   "/security",
   "/releases",
   "/support",
+  "/plonky3-out-of-memory",
+  "/resumable-plonky3-prover",
+  "/ssd-backed-plonky3-proving",
   "/terms",
   "/privacy",
   "/refunds",
@@ -125,10 +135,8 @@ function normalizedPath(pathname) {
   return withoutHtml.endsWith("/") ? withoutHtml.slice(0, -1) : withoutHtml;
 }
 
-function retiredResponse(pathname) {
-  const normalized = normalizedPath(pathname);
-  if (GONE_ASSETS.has(pathname) || GONE_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
-    return new Response(
+function goneResponse() {
+  return new Response(
       "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>Retired surface — TinyZKP</title></head><body><main><h1>This surface has been retired.</h1><p>TinyZKP no longer operates hosted proving, accounts, receipts, MCP, or beta APIs.</p><p><a href=\"/guard\">Review TinyZKP Guard</a></p></main></body></html>",
       {
         status: 410,
@@ -139,6 +147,12 @@ function retiredResponse(pathname) {
         },
       },
     );
+}
+
+function retiredResponse(pathname) {
+  const normalized = normalizedPath(pathname);
+  if (GONE_ASSETS.has(pathname) || GONE_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
+    return goneResponse();
   }
   return null;
 }
@@ -173,6 +187,12 @@ async function staticResponse(request, env, url, preview) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // Retired service hostnames must never canonicalize to the website. Once
+    // their custom domains are migrated to Pages, every path and method stays
+    // origin-free and permanently unavailable without touching ASSETS.
+    if (RETIRED_HOSTS.has(url.hostname.toLowerCase())) {
+      return secured(goneResponse(), false);
+    }
     const preview = url.hostname.endsWith(".pages.dev");
     const redirect = canonicalRedirect(url);
     if (redirect) return secured(redirect, preview);

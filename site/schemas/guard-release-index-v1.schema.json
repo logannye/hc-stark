@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/guard-release-index-v1.schema.json",
+  "title": "GuardReleaseIndexV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "product",
+    "current_release_identity",
+    "releases"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "product": {"const": "tinyzkp-guard"},
+    "current_release_identity": {
+      "type": "string",
+      "pattern": "^tinyzkp-guard/[A-Za-z0-9.+-]{1,512}$"
+    },
+    "releases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "guard_version",
+          "release_identity",
+          "compatibility_profile",
+          "release_date",
+          "channel_url",
+          "channel_sha256",
+          "artifacts",
+          "state",
+          "successor_release_identity",
+          "advisory_url"
+        ],
+        "properties": {
+          "guard_version": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+          },
+          "release_identity": {
+            "type": "string",
+            "pattern": "^tinyzkp-guard/[A-Za-z0-9.+-]{1,512}$"
+          },
+          "compatibility_profile": {
+            "const": "tinyzkp-p3-goldilocks-v1"
+          },
+          "release_date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "channel_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "channel_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "artifacts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "url", "sha256"],
+              "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "url": {"type": "string", "format": "uri"},
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            }
+          },
+          "state": {
+            "enum": ["current", "superseded", "withdrawn"]
+          },
+          "successor_release_identity": {
+            "oneOf": [
+              {"type": "null"},
+              {
+                "type": "string",
+                "pattern": "^tinyzkp-guard/[A-Za-z0-9.+-]{1,512}$"
+              }
+            ]
+          },
+          "advisory_url": {
+            "oneOf": [
+              {"type": "null"},
+              {"type": "string", "format": "uri"}
+            ]
+          }
+        }
+      }
+    }
+  }
+}

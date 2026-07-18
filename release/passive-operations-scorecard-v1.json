@@ -1,0 +1,28 @@
+{
+  "checkout_mutation_authorized": false,
+  "document_type": "PassiveOperationsScorecardV1",
+  "evaluated_at": "2026-07-18T12:00:00Z",
+  "expansion_frozen": false,
+  "expansion_reasons": [],
+  "freeze_reasons": [],
+  "generated_from": "release/passive-operations-input-v1.json",
+  "market_clock_status": "not_started",
+  "months": [],
+  "note": "This local scorecard recommends action only. Checkout state changes require separately signed, reviewed Guard launch evidence.",
+  "recommendation": "continue",
+  "schema_version": 1,
+  "source_sha256": "c3a6a8a32e6dc28c253a18ce8efccdf0b94fbd650554f6c8092349229c1393f9",
+  "stop_reasons": [],
+  "thresholds": {
+    "annual_customer_share_min": 0.7,
+    "early_monthly_churn_max": 0.3,
+    "month_12_annual_equivalent_min": 6,
+    "owner_minutes_per_month_max": 120,
+    "renewal_rate_min": 0.75,
+    "six_month_paying_organizations_min": 3,
+    "six_month_qualified_organizations": 20,
+    "support_target_minutes_per_customer": 6,
+    "support_warning_max_minutes_per_customer": 12
+  },
+  "warnings": []
+}

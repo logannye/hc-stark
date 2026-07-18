@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Resumable Plonky3 prover — What deterministic recovery requires</title>
+  <meta name="description" content="Understand exact-release checkpoints, durable phases, corruption checks, and ordinary verification for a resumable supported Plonky3 proof job.">
+  <meta name="robots" content="noindex,nofollow" data-guard-acquisition>
+  <link rel="canonical" href="https://tinyzkp.com/resumable-plonky3-prover"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><script src="/shared.js" defer></script>
+</head>
+<body>
+<header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a></nav></div></header>
+<main><section class="page-hero"><div class="container"><div class="eyebrow">Resumable Plonky3 prover</div><h1>Recovery is a release-bound protocol, not a retry flag.</h1><p class="lede">A resumable prover must know which durable phase completed, validate every checkpoint component, and refuse a different release rather than guessing.</p><div class="actions"><a class="button" href="/doctor">Run the free doctor</a><a class="button secondary" href="/troubleshooting#interrupted_resumable">Review resume reasons</a></div></div></section>
+<section class="content container">
+  <h2>Properties that make recovery deterministic</h2><div class="grid"><article class="card"><h3>Atomic durable state</h3><p>A checkpoint becomes visible only after its complete contents and integrity metadata are durable.</p></article><article class="card"><h3>Exact release identity</h3><p>The owning Guard, engine, schemas, proof profile, and artifact digest are recorded and checked before resume.</p></article><article class="card"><h3>Fail-closed reconstruction</h3><p>Missing, truncated, corrupt, stale, symlinked, or cross-release state is rejected rather than repaired silently.</p></article></div>
+  <h2>Interruption is not corruption</h2><p>A signal or host restart after a durable phase may produce <code>interrupted_resumable</code>. Integrity failure produces a different reason and must not be turned into a resume attempt.</p>
+  <h2>Keep the old release</h2><p>Never auto-delete an artifact that owns an unfinished checkpoint. A newer release must not consume older state silently. Verify the final proof through the released ordinary Plonky3 verifier.</p>
+</section></main>
+<footer class="site-footer"><div class="container"><div class="footer-grid"><div><a class="brand" href="/"><span>Tiny</span>ZKP</a><p>Exact-release recovery on customer compute.</p></div><div><h2>Evaluate</h2><a href="/doctor">Doctor</a><a href="/compatibility">Compatibility</a></div><div><h2>Learn</h2><a href="/plonky3-out-of-memory">Plonky3 OOM</a><a href="/ssd-backed-plonky3-proving">SSD-backed proving</a></div><div><h2>Evidence</h2><a href="/benchmarks">Benchmarks</a><a href="/releases">Releases</a></div></div></div></footer>
+</body></html>

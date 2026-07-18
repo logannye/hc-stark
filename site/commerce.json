@@ -1,14 +1,51 @@
 {
-  "schema_version": 1,
-  "provider": "lemon_squeezy",
+  "canonical_launch_gate": "release/guard-launch-state-v2.json",
   "checkout_enabled": false,
-  "launch_gate_status": "blocked",
-  "canonical_launch_gate": "release/guard-launch-gates-v1.json",
-  "configuration_source": "reviewed_release_build",
-  "variants": {
-    "annual": {"reviewed": false, "checkout_url": null},
-    "monthly": {"reviewed": false, "checkout_url": null}
-  },
+  "commerce_state": "unconfigured",
+  "configuration_source": "GuardLaunchEvidenceV2",
   "customer_portal_url": null,
-  "note": "Checkout must remain disabled until every canonical launch gate has reviewed evidence. Do not add a checkout URL directly to page markup."
+  "launch_state": "blocked",
+  "mode": "unconfigured",
+  "note": "Checkout is derived from digest-bound launch evidence and remains fail-closed.",
+  "portal_state": "unconfigured",
+  "price_policy": {
+    "add_ons_allowed": false,
+    "annual_default": true,
+    "annual_usd": 4990,
+    "coupons_allowed": false,
+    "enterprise_variants_allowed": false,
+    "existing_subscribers_grandfathered": true,
+    "existing_variant_ids_repurposed": false,
+    "existing_variant_ids_retained": true,
+    "founding_discount": false,
+    "future_price_changes_use_new_variant_ids": false,
+    "general_availability_date": null,
+    "monthly_usd": 499,
+    "price_lock": "general_availability_plus_six_months",
+    "subscription_pause_offered": false,
+    "trials_allowed": false,
+    "usage_metering": false
+  },
+  "product_id": null,
+  "provider": "lemon_squeezy",
+  "reason_anchors": {
+    "launch": "/releases#launch-blockers",
+    "portal": "/support#merchant-portal",
+    "sales": "/pricing#sales-status"
+  },
+  "sales_state": "closed",
+  "schema_version": 2,
+  "store_id": null,
+  "variants": {
+    "annual": {
+      "checkout_url": null,
+      "reviewed": false,
+      "variant_id": null
+    },
+    "monthly": {
+      "checkout_url": null,
+      "reviewed": false,
+      "variant_id": null
+    }
+  }
 }

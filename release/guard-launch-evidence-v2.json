@@ -1,0 +1,128 @@
+{
+  "schema_version": 2,
+  "document_type": "GuardLaunchEvidenceV2",
+  "evaluated_at": "2026-07-18T12:00:00Z",
+  "release_identity": {
+    "guard_release": "tinyzkp-guard-v1",
+    "guard_version": null,
+    "guard_source_sha": null,
+    "engine_source_sha": null,
+    "compatibility_profile": "tinyzkp-p3-goldilocks-v1"
+  },
+  "trust_policy": {
+    "path": "release/guard-launch-trust-v1.json",
+    "sha256": "a72004286f167a5c585394b17eb99aa970f2b1a0c55a455605b72ff0736cd3cc"
+  },
+  "release_change_class": "proof_critical",
+  "prior_qualified_release": {
+    "status": "blocked",
+    "reason_code": "prior-qualified-release-evidence-missing",
+    "evidence": []
+  },
+  "requested_commerce_state": "unconfigured",
+  "merchant": {
+    "provider": "lemon_squeezy",
+    "approval_status": "pending",
+    "portal_state": "unconfigured",
+    "portal_url": null,
+    "catalog_policy": {
+      "add_ons_allowed": false,
+      "annual_default": true,
+      "annual_emphasized": true,
+      "annual_price_usd": 4990,
+      "cancel_at_period_end": true,
+      "coupons_allowed": false,
+      "dunning_enabled": true,
+      "enterprise_variants_allowed": false,
+      "entitlement_mode": "lemon_squeezy_subscription_license_keys",
+      "invoices_enabled": true,
+      "machine_activation_limit": null,
+      "monthly_price_usd": 499,
+      "portal_enabled": true,
+      "subscription_pause_offered": false,
+      "trials_allowed": false,
+      "usage_metering": false
+    },
+    "test_configuration": {
+      "store_id": null,
+      "product_id": null,
+      "monthly_variant_id": null,
+      "annual_variant_id": null
+    },
+    "live_configuration": {
+      "store_id": null,
+      "product_id": null,
+      "monthly_variant_id": null,
+      "annual_variant_id": null,
+      "monthly_checkout_url": null,
+      "annual_checkout_url": null
+    }
+  },
+  "legal": {
+    "counsel_status": "not_approved",
+    "eula_sha256": null,
+    "notices_sha256": null,
+    "privacy_sha256": null,
+    "refunds_sha256": null,
+    "release_date": null,
+    "seller_status": "unconfirmed",
+    "terms_sha256": null
+  },
+  "gates": {
+    "engine_release_ready": {
+      "status": "blocked",
+      "reason_code": "engine-release-evidence-missing",
+      "evidence": []
+    },
+    "guard_release_ready": {
+      "status": "blocked",
+      "reason_code": "guard-release-evidence-missing",
+      "evidence": []
+    },
+    "three_external_workloads": {
+      "status": "blocked",
+      "reason_code": "external-workload-evidence-missing",
+      "evidence": []
+    },
+    "two_standard_annual_customers": {
+      "status": "blocked",
+      "reason_code": "annual-customer-evidence-missing",
+      "evidence": []
+    },
+    "five_unaided_installs": {
+      "status": "blocked",
+      "reason_code": "clean-machine-evidence-missing",
+      "evidence": []
+    },
+    "legal_terms_approved": {
+      "status": "blocked",
+      "reason_code": "legal-approval-missing",
+      "evidence": []
+    },
+    "merchant_sandbox_lifecycle_passed": {
+      "status": "blocked",
+      "reason_code": "merchant-sandbox-evidence-missing",
+      "evidence": []
+    },
+    "merchant_live_owner_smoke_passed": {
+      "status": "blocked",
+      "reason_code": "merchant-live-smoke-missing",
+      "evidence": []
+    },
+    "legacy_obligations_resolved": {
+      "status": "blocked",
+      "reason_code": "legacy-resolution-evidence-missing",
+      "evidence": []
+    },
+    "hosted_infrastructure_decommissioned": {
+      "status": "blocked",
+      "reason_code": "decommission-evidence-missing",
+      "evidence": []
+    },
+    "release_rehearsal_within_budget": {
+      "status": "blocked",
+      "reason_code": "release-rehearsal-evidence-missing",
+      "evidence": []
+    }
+  }
+}

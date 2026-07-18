@@ -1,114 +1,17 @@
-name: Publish audited backend crates
+name: Retired v1 crates.io publication
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
-  attestations: write
-
-concurrency:
-  group: publish-backend-crates-${{ github.event.release.tag_name }}
-  cancel-in-progress: false
 
 jobs:
-  publish:
-    if: startsWith(github.event.release.tag_name, 'backend-v')
+  fail-closed:
     runs-on: ubuntu-latest
-    env:
-      BACKEND_TAG: ${{ github.event.release.tag_name }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          ref: ${{ github.event.release.tag_name }}
-          fetch-depth: 0
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: "1.95.0"
-      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
-        with:
-          cosign-release: v2.4.3
-      - name: Materialize the reviewed Git executable
+      - name: Refuse irreversible crates.io publication
         run: |
-          python3 scripts/ci/materialize_anchored_git.py \
-            --output "$RUNNER_TEMP/tinyzkp-anchored-git" \
-            --github-env "$GITHUB_ENV"
-      - name: Download and verify final backend evidence
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          install -d release-artifacts
-          gh release download "$BACKEND_TAG" \
-            --dir release-artifacts \
-            --pattern tinyzkp-engine-linux-x86_64 \
-            --pattern tinyzkp-engine.oci.tar \
-            --pattern tinyzkp-engine.spdx.json \
-            --pattern backend-v1-gates.json \
-            --pattern engine-identity.json \
-            --pattern engine-release.json \
-            --pattern backend-v1-final-evidence.json \
-            --pattern backend-v1-final-gates.json \
-            --pattern SHA256SUMS \
-            --pattern SHA256SUMS.sigstore.json \
-            --pattern plonky3-compatibility-v1.json
-          python3 -m pip install -r scripts/benchmark/requirements.txt
-          cosign verify-blob \
-            --bundle release-artifacts/SHA256SUMS.sigstore.json \
-            --certificate-identity-regexp '^https://github\.com/logannye/hc-stark/\.github/workflows/release-backend\.yml@refs/tags/backend-v[^/]+$' \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            release-artifacts/SHA256SUMS
-          (cd release-artifacts && sha256sum --check SHA256SUMS)
-          evidenced_sha="$(jq -er '.release_sha | select(test("^[0-9a-f]{40}$"))' \
-            release-artifacts/backend-v1-final-evidence.json)"
-          test "$(git rev-parse HEAD)" = "$evidenced_sha"
-          test "$(git rev-list -n 1 "$BACKEND_TAG")" = "$evidenced_sha"
-          gh attestation verify release-artifacts/backend-v1-final-evidence.json \
-            --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "github.com/$GITHUB_REPOSITORY/.github/workflows/release-backend.yml" \
-            --source-digest "$evidenced_sha" \
-            --source-ref "refs/tags/$BACKEND_TAG" \
-            --deny-self-hosted-runners
-          gh attestation verify release-artifacts/backend-v1-final-gates.json \
-            --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "github.com/$GITHUB_REPOSITORY/.github/workflows/release-backend.yml" \
-            --source-digest "$evidenced_sha" \
-            --source-ref "refs/tags/$BACKEND_TAG" \
-            --deny-self-hosted-runners
-          cmp release/plonky3-compatibility-v1.json \
-            release-artifacts/plonky3-compatibility-v1.json
-          python3 scripts/ci/backend_release_ready.py \
-            --config release-artifacts/backend-v1-final-gates.json
-      - name: Resolve audited crate versions
-        id: versions
-        run: |
-          echo "stream=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(p["version"] for p in data["packages"] if p["name"] == "hc-stream"))')" >> "$GITHUB_OUTPUT"
-          echo "plonky3=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(p["version"] for p in data["packages"] if p["name"] == "hc-plonky3"))')" >> "$GITHUB_OUTPUT"
-      - name: Package and attest hc-stream
-        run: cargo package --locked -p hc-stream
-      - uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
-        with:
-          subject-path: target/package/hc-stream-${{ steps.versions.outputs.stream }}.crate
-      - name: Publish hc-stream
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: |
-          cargo publish --locked -p hc-stream
-          python3 scripts/release/wait_for_crate_version.py \
-            hc-stream "${{ steps.versions.outputs.stream }}"
-      - name: Package and attest hc-plonky3
-        run: cargo package --locked -p hc-plonky3
-      - uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
-        with:
-          subject-path: target/package/hc-plonky3-${{ steps.versions.outputs.plonky3 }}.crate
-      - name: Publish hc-plonky3
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: |
-          cargo publish --locked -p hc-plonky3
-          python3 scripts/release/wait_for_crate_version.py \
-            hc-plonky3 "${{ steps.versions.outputs.plonky3 }}"
+          echo "TinyZKP v1 release promotion does not publish crates.io packages." >&2
+          echo "Engine candidates remain draft artifacts until the joint Guard/site promotion gate exists." >&2
+          exit 1

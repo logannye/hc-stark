@@ -1,5 +1,8 @@
 # Confidentiality & Zero-Knowledge of `range_proof` (v7)
 
+> **Legacy research — not production evidence.** The range-proof protocol is
+> outside the supported Guard profile and establishes no production privacy claim.
+
 - **Status:** Honest current-state analysis (Phase 1B). Tracks a follow-up for full ZK.
 - **Scope:** The `range_proof` template AIR (`RangeAir`) on the sound v7 STARK core.
 

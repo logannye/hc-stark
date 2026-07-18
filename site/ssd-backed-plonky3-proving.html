@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SSD-backed Plonky3 proving — Plan scratch safely</title>
+  <meta name="description" content="Plan customer-controlled NVMe scratch, headroom, integrity, cleanup, and evidence for bounded-memory supported Plonky3 proving.">
+  <meta name="robots" content="noindex,nofollow" data-guard-acquisition>
+  <link rel="canonical" href="https://tinyzkp.com/ssd-backed-plonky3-proving"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><script src="/shared.js" defer></script>
+</head>
+<body>
+<header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a></nav></div></header>
+<main><section class="page-hero"><div class="container"><div class="eyebrow">SSD-backed Plonky3 proving</div><h1>Treat scratch as proof infrastructure.</h1><p class="lede">Bounded execution trades resident memory for customer-owned durable storage. The scratch device, free-space margin, permissions, integrity, and cleanup policy become part of the job contract.</p><div class="actions"><a class="button" href="/doctor">Run the free doctor</a><a class="button secondary" href="/security">Review data guidance</a></div></div></section>
+<section class="content container">
+  <h2>Preflight before ingestion</h2><div class="grid"><article class="card"><h3>Capacity</h3><p>Require the candidate estimate plus at least 10% free-space headroom. Reject the job before expensive work if either budget fails.</p></article><article class="card"><h3>Device and path</h3><p>Use a regular customer-controlled directory under an approved root. Reject traversal, symlinks, and devices.</p></article><article class="card"><h3>Durability</h3><p>Make phase boundaries atomic and checksummed; test Linux <code>ENOSPC</code> and truncation explicitly.</p></article></div>
+  <h2>Scratch may be sensitive</h2><p>TinyZKP makes no zero-knowledge privacy claim. Scratch may contain witness-derived material. Use encrypted storage where appropriate, owner-only permissions, a documented retention period, and media sanitization under your own policy.</p>
+  <h2>Measure both sides of the trade</h2><p>Record peak RSS, wall time, maximum scratch use, preflight estimate, device identity, and official verification. Published gates require bounded scratch use to remain within 10% of preflight on the fixed host.</p>
+</section></main>
+<footer class="site-footer"><div class="container"><div class="footer-grid"><div><a class="brand" href="/"><span>Tiny</span>ZKP</a><p>Bounded memory using customer-owned NVMe scratch.</p></div><div><h2>Evaluate</h2><a href="/doctor">Doctor</a><a href="/compatibility">Compatibility</a></div><div><h2>Learn</h2><a href="/plonky3-out-of-memory">Plonky3 OOM</a><a href="/resumable-plonky3-prover">Resumable prover</a></div><div><h2>Evidence</h2><a href="/benchmarks">Benchmarks</a><a href="/security">Security</a></div></div></div></footer>
+</body></html>

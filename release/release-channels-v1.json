@@ -15,7 +15,7 @@
       "guard_artifacts": "private_release_candidates",
       "checkout": false,
       "founding_validation_limit": 3,
-      "required_gate_document": "release/guard-launch-gates-v1.json"
+      "required_gate_document": "release/guard-launch-state-v2.json"
     },
     "guard_ga": {
       "inherits": "community",
@@ -24,7 +24,7 @@
       "merchant": "merchant_of_record",
       "runtime_phone_home": false,
       "future_release_activation_requires_active_subscription": true,
-      "required_gate_document": "release/guard-launch-gates-v1.json"
+      "required_gate_document": "release/guard-launch-state-v2.json"
     }
   }
 }

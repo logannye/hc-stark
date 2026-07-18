@@ -1,0 +1,35 @@
+{
+  "acquisition_policy": {
+    "announcement_limit": 1,
+    "community": "plonky3",
+    "direct_messages_allowed": false,
+    "ecosystem_submission_limit": 1,
+    "newsletter_allowed": false,
+    "ongoing_blog_required": false,
+    "outbound_campaigns_allowed": false,
+    "recurring_campaigns_allowed": false
+  },
+  "community_announcement": {
+    "reason_code": "moderator-approved-plonky3-announcement-missing",
+    "status": "blocked"
+  },
+  "day_90_deadline": null,
+  "doctor_evaluation_release": {
+    "identity": null,
+    "reason_code": "signed-doctor-evaluation-release-missing",
+    "status": "blocked"
+  },
+  "document_type": "GuardMarketClockV1",
+  "ecosystem_submission": {
+    "reason_code": "post-qualification-ecosystem-submission-not-made",
+    "status": "blocked"
+  },
+  "evaluated_at": "2026-07-18T12:00:00Z",
+  "generated_from": "release/guard-market-evidence-v1.json",
+  "initial_decision_date": "2026-10-16",
+  "schema_version": 1,
+  "six_month_stop_deadline": null,
+  "source_sha256": "3817ecca5e0607f96b90d0ceb0baa623c30096544620bd4a76c63795436f6e25",
+  "started_at": null,
+  "status": "not_started"
+}

@@ -774,9 +774,10 @@ def test_identity_gate_requires_typed_report_and_matching_metadata(tmp_path):
                     "artifact_sha256": "c" * 64,
                     "manifest_digest": "sha256:" + "d" * 64,
                     "config_digest": "sha256:" + "e" * 64,
-                    "platform": "linux/amd64",
-                    "entrypoint": ["/usr/local/bin/tinyzkp-engine"],
-                },
+                        "platform": "linux/amd64",
+                        "entrypoint": ["/usr/local/bin/tinyzkp-engine"],
+                        "embedded_engine_sha256": "a" * 64,
+                    },
             },
             "compatibility": {
                 "artifact": "release-artifacts/plonky3-compatibility-v1.json",

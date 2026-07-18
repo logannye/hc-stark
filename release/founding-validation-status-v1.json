@@ -12,5 +12,6 @@
   "witness_data_accepted": false,
   "market_gate_passed": false,
   "public_evidence": [],
+  "private_ledger_schema": "release/founding-validation-ledger-v1.schema.json",
   "policy": "Record only scrubbed, digest-bound evidence under docs/validation/FOUNDING_VALIDATION_PROTOCOL.md."
 }

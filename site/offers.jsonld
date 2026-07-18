@@ -1,32 +1,32 @@
 {
   "@context": "https://schema.org",
   "@type": "OfferCatalog",
-  "name": "TinyZKP Community and Guard",
-  "url": "https://tinyzkp.com/pricing",
   "itemListElement": [
     {
       "@type": "Offer",
+      "availability": "https://schema.org/InStock",
       "name": "TinyZKP Community",
       "price": "0",
       "priceCurrency": "USD",
-      "availability": "https://schema.org/InStock",
-      "url": "https://tinyzkp.com/docs#doctor"
+      "url": "https://tinyzkp.com/doctor"
     },
     {
       "@type": "Offer",
+      "availability": "https://schema.org/OutOfStock",
       "name": "TinyZKP Guard annual subscription",
       "price": "4990",
       "priceCurrency": "USD",
-      "availability": "https://schema.org/OutOfStock",
       "url": "https://tinyzkp.com/pricing"
     },
     {
       "@type": "Offer",
+      "availability": "https://schema.org/OutOfStock",
       "name": "TinyZKP Guard monthly subscription",
       "price": "499",
       "priceCurrency": "USD",
-      "availability": "https://schema.org/OutOfStock",
       "url": "https://tinyzkp.com/pricing"
     }
-  ]
+  ],
+  "name": "TinyZKP Community and Guard",
+  "url": "https://tinyzkp.com/pricing"
 }

@@ -8,6 +8,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  TINYZKP_GUARD_TRUST_POLICY_SHA256: ${{ vars.GUARD_LAUNCH_TRUST_POLICY_SHA256 }}
+  TINYZKP_GUARD_MARKET_TRUST_POLICY_SHA256: ${{ vars.GUARD_MARKET_TRUST_POLICY_SHA256 }}
+  TINYZKP_GUARD_SIGNING_TRUST_POLICY_SHA256: ${{ vars.GUARD_SIGNING_TRUST_POLICY_SHA256 }}
 
 jobs:
   validate:
@@ -30,6 +33,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
+
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
 
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
 
@@ -76,6 +83,8 @@ jobs:
         run: |
           python3 -m pytest \
             scripts/ci/test_guard_launch_gate.py \
+            scripts/ci/test_guard_release_index.py \
+            scripts/ci/test_claim_containment_scan.py \
             scripts/ci/test_guard_github_action.py \
             scripts/ci/test_founding_validation_status.py \
             scripts/ci/test_backend_release_ready.py \
@@ -96,6 +105,13 @@ jobs:
             scripts/release/test_run_crash_matrix.py \
             scripts/release/test_run_fuzz_smoke.py -q
           python3 scripts/ci/guard_launch_gate.py
+          python3 scripts/ci/claim_containment_scan.py
+          if test -f site/guard-release-index-v1.json; then
+            cosign verify-blob \
+              --key release/guard-signing-public-key.pem \
+              --signature site/guard-release-index-v1.json.sig \
+              site/guard-release-index-v1.json
+          fi
           python3 scripts/ci/check_pinned_actions.py
 
       - name: Static site contracts
