@@ -66,6 +66,12 @@ def test_checkout_is_consistently_fail_closed() -> None:
         assert variant == {"reviewed": False, "checkout_url": None}
 
 
+def test_homepage_describes_the_blocked_launch_state_unambiguously() -> None:
+    homepage = (SITE / "index.html").read_text(encoding="utf-8")
+    assert "Closed pending evidence" in homepage
+    assert "Evidence gates open" not in homepage
+
+
 def test_checkout_urls_cannot_be_in_page_markup() -> None:
     controls = []
     for page in sorted(PUBLIC_PAGES):
