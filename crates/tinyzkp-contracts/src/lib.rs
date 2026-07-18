@@ -1287,6 +1287,12 @@ pub struct VersionResultV1 {
     pub product: String,
     pub release: ReleaseIdentityV1,
     pub compatibility_profile: String,
+    /// Compile-time merchant identity used by this exact Guard binary.
+    ///
+    /// Release automation compares this value byte-for-byte with the signed
+    /// Guard channel and reviewed commerce evidence. It is intentionally
+    /// public metadata, not a credential.
+    pub merchant_catalog: MerchantCatalogIdentityV1,
     pub commercial_release_blocked: bool,
 }
 
