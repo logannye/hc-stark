@@ -34,6 +34,15 @@ tinyzkp-engine schema --output-dir <directory>
 The exporter serializes every schema directly from the Rust authority. Release
 CI compares the generated files with the published copies byte for byte.
 
+`GuardChannelV1` is minted only for a software release. Its closed
+`release_change_class` is `proof_critical` or `guard_package_only`; a site,
+legal, or pricing-only update never creates a channel. The first
+proof-critical GA channel has no predecessor. Every later proof-critical
+channel and every package-only channel binds both the prior qualified release
+identity and the SHA-256 of the signed release index that established it.
+`GuardReleaseIndexV1` is a nonempty, unique, acyclic history with exactly one
+current release and state-specific successor or withdrawal evidence.
+
 ## Compatibility doctor
 
 Run doctor before purchasing or proving:

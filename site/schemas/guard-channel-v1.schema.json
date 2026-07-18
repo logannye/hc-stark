@@ -24,6 +24,14 @@
       ],
       "type": "object"
     },
+    "GuardReleaseChangeClassV1": {
+      "description": "Software change class for a newly minted Guard release channel.\n\nSite, legal, and pricing-only changes do not mint a software channel and\nare deliberately absent from this closed wire vocabulary.",
+      "enum": [
+        "proof_critical",
+        "guard_package_only"
+      ],
+      "type": "string"
+    },
     "MerchantCatalogIdentityV1": {
       "additionalProperties": false,
       "description": "Exact Lemon Squeezy catalog identifiers bound into a qualified release.\nRuntime entitlement transport remains behind Guard's provider adapter.",
@@ -67,6 +75,62 @@
   "$id": "https://tinyzkp.com/schemas/guard-channel-v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "prior_qualified_release_identity": {
+              "type": "string"
+            },
+            "prior_release_index_sha256": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "prior_qualified_release_identity",
+            "prior_release_index_sha256"
+          ]
+        },
+        {
+          "properties": {
+            "prior_qualified_release_identity": {
+              "type": "null"
+            },
+            "prior_release_index_sha256": {
+              "type": "null"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "if": {
+        "properties": {
+          "release_change_class": {
+            "const": "guard_package_only"
+          }
+        },
+        "required": [
+          "release_change_class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "prior_qualified_release_identity": {
+            "type": "string"
+          },
+          "prior_release_index_sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prior_qualified_release_identity",
+          "prior_release_index_sha256"
+        ]
+      }
+    }
+  ],
   "properties": {
     "artifacts": {
       "items": {
@@ -106,6 +170,22 @@
       "pattern": "^sha256:[0-9a-f]{64}$",
       "type": "string"
     },
+    "prior_qualified_release_identity": {
+      "description": "Qualified predecessor for a later release. Both predecessor fields are\n`None` only for the first proof-critical GA channel.",
+      "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "prior_release_index_sha256": {
+      "description": "SHA-256 of the signed release index that established the predecessor.\nThis is present exactly when `prior_qualified_release_identity` is.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "public_candidate_authorization_commit": {
       "description": "Public repository commit whose generated authorization permitted this\nexact private candidate build. Promotion evidence is necessarily a\nlater public commit, so this identity prevents either commit or the\npublic release tag from being substituted after the build.",
       "pattern": "^[0-9a-f]{40}$",
@@ -114,7 +194,11 @@
     "qualification": {
       "type": "string"
     },
+    "release_change_class": {
+      "$ref": "#/$defs/GuardReleaseChangeClassV1"
+    },
     "release_date": {
+      "format": "date",
       "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
       "type": "string"
     },
@@ -159,6 +243,7 @@
     "schema_version",
     "guard_version",
     "release_identity",
+    "release_change_class",
     "public_candidate_authorization_commit",
     "guard_source_sha",
     "engine_source_sha",

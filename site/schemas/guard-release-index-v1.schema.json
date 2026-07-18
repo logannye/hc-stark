@@ -2,6 +2,71 @@
   "$defs": {
     "GuardReleaseIndexEntryV1": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "current"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "successor_release_identity": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "superseded"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "successor_release_identity": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "successor_release_identity"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "withdrawn"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "advisory_url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "advisory_url"
+            ]
+          }
+        }
+      ],
       "properties": {
         "advisory_url": {
           "format": "uri",
@@ -16,7 +81,9 @@
           "items": {
             "$ref": "#/$defs/ImmutableReleaseArtifactV1"
           },
-          "type": "array"
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
         },
         "channel_sha256": {
           "pattern": "^[0-9a-f]{64}$",
@@ -36,6 +103,7 @@
           "type": "string"
         },
         "release_date": {
+          "format": "date",
           "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
           "type": "string"
         },
@@ -108,13 +176,16 @@
       "type": "string"
     },
     "product": {
+      "const": "tinyzkp-guard",
       "type": "string"
     },
     "releases": {
       "items": {
         "$ref": "#/$defs/GuardReleaseIndexEntryV1"
       },
-      "type": "array"
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
     },
     "schema_version": {
       "const": 1,

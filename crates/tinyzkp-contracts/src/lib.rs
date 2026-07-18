@@ -1214,12 +1214,30 @@ impl MerchantCatalogIdentityV1 {
     }
 }
 
+/// Software change class for a newly minted Guard release channel.
+///
+/// Site, legal, and pricing-only changes do not mint a software channel and
+/// are deliberately absent from this closed wire vocabulary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GuardReleaseChangeClassV1 {
+    ProofCritical,
+    GuardPackageOnly,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GuardChannelV1 {
     pub schema_version: u32,
     pub guard_version: String,
     pub release_identity: String,
+    pub release_change_class: GuardReleaseChangeClassV1,
+    /// Qualified predecessor for a later release. Both predecessor fields are
+    /// `None` only for the first proof-critical GA channel.
+    pub prior_qualified_release_identity: Option<String>,
+    /// SHA-256 of the signed release index that established the predecessor.
+    /// This is present exactly when `prior_qualified_release_identity` is.
+    pub prior_release_index_sha256: Option<String>,
     /// Public repository commit whose generated authorization permitted this
     /// exact private candidate build. Promotion evidence is necessarily a
     /// later public commit, so this identity prevents either commit or the
@@ -1240,9 +1258,29 @@ pub struct GuardChannelV1 {
 
 impl GuardChannelV1 {
     pub fn validate(&self) -> bool {
+        let predecessor_is_valid = match (
+            self.release_change_class,
+            self.prior_qualified_release_identity.as_deref(),
+            self.prior_release_index_sha256.as_deref(),
+        ) {
+            (GuardReleaseChangeClassV1::ProofCritical, None, None) => true,
+            (
+                GuardReleaseChangeClassV1::ProofCritical
+                | GuardReleaseChangeClassV1::GuardPackageOnly,
+                Some(prior_identity),
+                Some(prior_index_sha256),
+            ) => {
+                is_safe_release_identity(prior_identity)
+                    && prior_identity != self.release_identity
+                    && is_lower_hex_digest(prior_index_sha256)
+            }
+            _ => false,
+        };
+
         self.schema_version == 1
             && is_safe_release_identity(&self.guard_version)
             && is_safe_release_identity(&self.release_identity)
+            && predecessor_is_valid
             && is_git_sha(&self.public_candidate_authorization_commit)
             && is_git_sha(&self.guard_source_sha)
             && is_git_sha(&self.engine_source_sha)
@@ -1283,20 +1321,64 @@ pub struct GuardReleaseIndexV1 {
 
 impl GuardReleaseIndexV1 {
     pub fn validate(&self) -> bool {
+        let release_identities = self
+            .releases
+            .iter()
+            .map(|release| release.release_identity.as_str())
+            .collect::<BTreeSet<_>>();
+
         self.schema_version == 1
             && self.product == "tinyzkp-guard"
             && is_safe_release_identity(&self.current_release_identity)
-            && self
-                .releases
-                .iter()
-                .filter(|release| release.state == GuardReleaseStateV1::Current)
-                .count()
-                == 1
+            && !self.releases.is_empty()
+            && release_identities.len() == self.releases.len()
+            && release_identities.contains(self.current_release_identity.as_str())
+            && all_unique(
+                self.releases
+                    .iter()
+                    .map(|release| release.guard_version.as_str()),
+            )
             && self.releases.iter().all(GuardReleaseIndexEntryV1::validate)
-            && self.releases.iter().any(|release| {
-                release.state == GuardReleaseStateV1::Current
-                    && release.release_identity == self.current_release_identity
+            && self.releases.iter().all(|release| {
+                (release.state == GuardReleaseStateV1::Current)
+                    == (release.release_identity == self.current_release_identity)
             })
+            && self.releases.iter().all(|release| {
+                release
+                    .successor_release_identity
+                    .as_deref()
+                    .is_none_or(|successor| release_identities.contains(successor))
+            })
+            && self.successor_chains_are_acyclic()
+    }
+
+    fn successor_chains_are_acyclic(&self) -> bool {
+        let successors = self
+            .releases
+            .iter()
+            .map(|release| {
+                (
+                    release.release_identity.as_str(),
+                    release.successor_release_identity.as_deref(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        for start in successors.keys().copied() {
+            let mut visited = BTreeSet::new();
+            let mut cursor = Some(start);
+            while let Some(identity) = cursor {
+                if !visited.insert(identity) {
+                    return false;
+                }
+                let Some(successor) = successors.get(identity) else {
+                    return false;
+                };
+                cursor = *successor;
+            }
+        }
+
+        true
     }
 }
 
@@ -1317,9 +1399,16 @@ pub struct GuardReleaseIndexEntryV1 {
 
 impl GuardReleaseIndexEntryV1 {
     pub fn validate(&self) -> bool {
+        let state_is_valid = match self.state {
+            GuardReleaseStateV1::Current => self.successor_release_identity.is_none(),
+            GuardReleaseStateV1::Superseded => self.successor_release_identity.is_some(),
+            GuardReleaseStateV1::Withdrawn => self.advisory_url.is_some(),
+        };
+
         is_safe_release_identity(&self.guard_version)
             && is_safe_release_identity(&self.release_identity)
             && self.compatibility_profile == COMPATIBILITY_PROFILE
+            && is_iso_date(&self.release_date)
             && is_https_url(&self.channel_url)
             && is_lower_hex_digest(&self.channel_sha256)
             && !self.artifacts.is_empty()
@@ -1328,11 +1417,14 @@ impl GuardReleaseIndexEntryV1 {
                     && is_https_url(&artifact.url)
                     && is_lower_hex_digest(&artifact.sha256)
             })
+            && all_unique(self.artifacts.iter().map(|artifact| artifact.name.as_str()))
             && self
                 .successor_release_identity
                 .as_deref()
                 .is_none_or(is_safe_release_identity)
+            && self.successor_release_identity.as_deref() != Some(self.release_identity.as_str())
             && self.advisory_url.as_deref().is_none_or(is_https_url)
+            && state_is_valid
     }
 }
 
@@ -1472,9 +1564,22 @@ fn is_iso_date(value: &str) -> bool {
     {
         return false;
     }
+    let year = u16::from(bytes[0] - b'0') * 1000
+        + u16::from(bytes[1] - b'0') * 100
+        + u16::from(bytes[2] - b'0') * 10
+        + u16::from(bytes[3] - b'0');
     let month = (bytes[5] - b'0') * 10 + bytes[6] - b'0';
     let day = (bytes[8] - b'0') * 10 + bytes[9] - b'0';
-    (1..=12).contains(&month) && (1..=31).contains(&day)
+    let leap_year =
+        year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap_year => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=days_in_month).contains(&day)
 }
 
 fn all_unique<'a>(mut values: impl Iterator<Item = &'a str>) -> bool {
@@ -1673,6 +1778,51 @@ pub fn public_schema<T: JsonSchema>(name: &str) -> Value {
         }
     }
     if name == "guard-channel-v1.schema.json" {
+        if let Some(root) = schema.as_object_mut() {
+            root.insert(
+                "allOf".into(),
+                json!([
+                    {
+                        "oneOf": [
+                            {
+                                "properties": {
+                                    "prior_qualified_release_identity": {"type": "string"},
+                                    "prior_release_index_sha256": {"type": "string"}
+                                },
+                                "required": [
+                                    "prior_qualified_release_identity",
+                                    "prior_release_index_sha256"
+                                ]
+                            },
+                            {
+                                "properties": {
+                                    "prior_qualified_release_identity": {"type": "null"},
+                                    "prior_release_index_sha256": {"type": "null"}
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "if": {
+                            "properties": {
+                                "release_change_class": {"const": "guard_package_only"}
+                            },
+                            "required": ["release_change_class"]
+                        },
+                        "then": {
+                            "properties": {
+                                "prior_qualified_release_identity": {"type": "string"},
+                                "prior_release_index_sha256": {"type": "string"}
+                            },
+                            "required": [
+                                "prior_qualified_release_identity",
+                                "prior_release_index_sha256"
+                            ]
+                        }
+                    }
+                ]),
+            );
+        }
         if let Some(schemas) = schema
             .pointer_mut("/properties/schemas")
             .and_then(Value::as_object_mut)
@@ -1703,6 +1853,66 @@ pub fn public_schema<T: JsonSchema>(name: &str) -> Value {
             1,
             u64::MAX,
         );
+    }
+    if name == "guard-release-index-v1.schema.json" {
+        set_const(&mut schema, "/properties/product", json!("tinyzkp-guard"));
+        if let Some(releases) = schema
+            .pointer_mut("/properties/releases")
+            .and_then(Value::as_object_mut)
+        {
+            releases.insert("minItems".into(), json!(1));
+            releases.insert("uniqueItems".into(), json!(true));
+        }
+        if let Some(artifacts) = schema
+            .pointer_mut("/$defs/GuardReleaseIndexEntryV1/properties/artifacts")
+            .and_then(Value::as_object_mut)
+        {
+            artifacts.insert("minItems".into(), json!(1));
+            artifacts.insert("uniqueItems".into(), json!(true));
+        }
+        if let Some(entry) = schema
+            .pointer_mut("/$defs/GuardReleaseIndexEntryV1")
+            .and_then(Value::as_object_mut)
+        {
+            entry.insert(
+                "allOf".into(),
+                json!([
+                    {
+                        "if": {
+                            "properties": {"state": {"const": "current"}},
+                            "required": ["state"]
+                        },
+                        "then": {
+                            "properties": {
+                                "successor_release_identity": {"type": "null"}
+                            }
+                        }
+                    },
+                    {
+                        "if": {
+                            "properties": {"state": {"const": "superseded"}},
+                            "required": ["state"]
+                        },
+                        "then": {
+                            "properties": {
+                                "successor_release_identity": {"type": "string"}
+                            },
+                            "required": ["successor_release_identity"]
+                        }
+                    },
+                    {
+                        "if": {
+                            "properties": {"state": {"const": "withdrawn"}},
+                            "required": ["state"]
+                        },
+                        "then": {
+                            "properties": {"advisory_url": {"type": "string"}},
+                            "required": ["advisory_url"]
+                        }
+                    }
+                ]),
+            );
+        }
     }
     schema
 }
@@ -1741,6 +1951,7 @@ fn harden_schema(value: &mut Value) {
                         "engine_release_identity"
                         | "release_identity"
                         | "current_release_identity"
+                        | "prior_qualified_release_identity"
                         | "required_release_identity"
                         | "successor_release_identity"
                         | "guard_source_identity"
@@ -1755,7 +1966,11 @@ fn harden_schema(value: &mut Value) {
                         | "engine_source_sha" => {
                             property.insert("pattern".into(), json!(r"^[0-9a-f]{40}$"));
                         }
-                        "sha256" | "channel_sha256" | "engine_artifact_sha256" | "eula_sha256" => {
+                        "sha256"
+                        | "channel_sha256"
+                        | "engine_artifact_sha256"
+                        | "eula_sha256"
+                        | "prior_release_index_sha256" => {
                             property.insert("pattern".into(), json!(r"^[0-9a-f]{64}$"));
                         }
                         "oci_digest" => {
@@ -1783,6 +1998,7 @@ fn harden_schema(value: &mut Value) {
                                 "pattern".into(),
                                 json!(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"),
                             );
+                            property.insert("format".into(), json!("date"));
                         }
                         "relative_path"
                         | "air_package"
@@ -2233,6 +2449,104 @@ mod tests {
         }
     }
 
+    fn merchant_catalog() -> MerchantCatalogIdentityV1 {
+        MerchantCatalogIdentityV1 {
+            merchant: "lemon_squeezy".into(),
+            entitlement_mode: "lemon_squeezy_subscription_license_keys".into(),
+            store_id: "123".into(),
+            product_id: "456".into(),
+            monthly_variant_id: "789".into(),
+            annual_variant_id: "790".into(),
+        }
+    }
+
+    fn guard_channel(
+        release_change_class: GuardReleaseChangeClassV1,
+        prior_qualified_release_identity: Option<&str>,
+        prior_release_index_sha256: Option<&str>,
+    ) -> GuardChannelV1 {
+        GuardChannelV1 {
+            schema_version: 1,
+            guard_version: "1.0.0".into(),
+            release_identity: "tinyzkp-guard/1.0.0+qualified".into(),
+            release_change_class,
+            prior_qualified_release_identity: prior_qualified_release_identity.map(str::to_owned),
+            prior_release_index_sha256: prior_release_index_sha256.map(str::to_owned),
+            public_candidate_authorization_commit: "a".repeat(40),
+            guard_source_sha: "b".repeat(40),
+            engine_source_sha: "c".repeat(40),
+            engine_artifact_sha256: "d".repeat(64),
+            artifacts: vec![ArtifactDescriptorV1 {
+                name: "tinyzkp-guard.tar.gz".into(),
+                sha256: "e".repeat(64),
+                size_bytes: 1,
+            }],
+            oci_digest: format!("sha256:{}", "f".repeat(64)),
+            schemas: PUBLISHED_SCHEMA_NAMES
+                .iter()
+                .map(|name| ((*name).to_owned(), "0".repeat(64)))
+                .collect(),
+            eula_sha256: "1".repeat(64),
+            release_date: "2026-07-18".into(),
+            compatibility_profile: COMPATIBILITY_PROFILE.into(),
+            merchant_catalog: merchant_catalog(),
+            qualification: "qualified".into(),
+        }
+    }
+
+    fn release_index_entry(
+        guard_version: &str,
+        release_identity: &str,
+        state: GuardReleaseStateV1,
+        successor_release_identity: Option<&str>,
+        advisory_url: Option<&str>,
+    ) -> GuardReleaseIndexEntryV1 {
+        GuardReleaseIndexEntryV1 {
+            guard_version: guard_version.into(),
+            release_identity: release_identity.into(),
+            compatibility_profile: COMPATIBILITY_PROFILE.into(),
+            release_date: "2026-07-18".into(),
+            channel_url: format!(
+                "https://github.com/tinyzkp/releases/{guard_version}/channel.json"
+            ),
+            channel_sha256: "a".repeat(64),
+            artifacts: vec![ImmutableReleaseArtifactV1 {
+                name: format!("tinyzkp-guard-{guard_version}.tar.gz"),
+                url: format!(
+                    "https://github.com/tinyzkp/releases/{guard_version}/tinyzkp-guard.tar.gz"
+                ),
+                sha256: "b".repeat(64),
+            }],
+            state,
+            successor_release_identity: successor_release_identity.map(str::to_owned),
+            advisory_url: advisory_url.map(str::to_owned),
+        }
+    }
+
+    fn release_index() -> GuardReleaseIndexV1 {
+        GuardReleaseIndexV1 {
+            schema_version: 1,
+            product: "tinyzkp-guard".into(),
+            current_release_identity: "release-2".into(),
+            releases: vec![
+                release_index_entry(
+                    "1.0.0",
+                    "release-1",
+                    GuardReleaseStateV1::Superseded,
+                    Some("release-2"),
+                    None,
+                ),
+                release_index_entry(
+                    "1.1.0",
+                    "release-2",
+                    GuardReleaseStateV1::Current,
+                    None,
+                    None,
+                ),
+            ],
+        }
+    }
+
     #[test]
     fn reason_vocabulary_is_exact_and_docs_are_local_anchors() {
         let encoded = serde_json::to_value(schema_for!(ReasonCodeV1)).unwrap();
@@ -2473,6 +2787,58 @@ mod tests {
             channel.pointer("/properties/public_candidate_authorization_commit/pattern"),
             Some(&json!(r"^[0-9a-f]{40}$"))
         );
+        assert_eq!(
+            channel.pointer("/$defs/GuardReleaseChangeClassV1/enum"),
+            Some(&json!(["proof_critical", "guard_package_only"]))
+        );
+        assert_eq!(
+            channel.pointer("/properties/prior_qualified_release_identity/pattern"),
+            Some(&json!(r"^(?!/)(?!.*\.\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$"))
+        );
+        assert_eq!(
+            channel.pointer("/properties/prior_release_index_sha256/pattern"),
+            Some(&json!(r"^[0-9a-f]{64}$"))
+        );
+        assert_eq!(
+            channel
+                .pointer("/allOf")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(2)
+        );
+        let release_index = schema_by_name("guard-release-index-v1.schema.json").unwrap();
+        assert_eq!(
+            release_index.pointer("/properties/product/const"),
+            Some(&json!("tinyzkp-guard"))
+        );
+        assert_eq!(
+            release_index.pointer("/properties/releases/minItems"),
+            Some(&json!(1))
+        );
+        assert_eq!(
+            release_index.pointer("/properties/releases/uniqueItems"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            release_index.pointer("/$defs/GuardReleaseIndexEntryV1/properties/artifacts/minItems"),
+            Some(&json!(1))
+        );
+        assert_eq!(
+            release_index
+                .pointer("/$defs/GuardReleaseIndexEntryV1/properties/artifacts/uniqueItems"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            release_index.pointer("/$defs/GuardReleaseIndexEntryV1/properties/release_date/format"),
+            Some(&json!("date"))
+        );
+        assert_eq!(
+            release_index
+                .pointer("/$defs/GuardReleaseIndexEntryV1/allOf")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(3)
+        );
         let compatibility = schema_by_name(COMPATIBILITY_MANIFEST_SCHEMA_NAME).unwrap();
         assert_eq!(
             compatibility.pointer("/properties/profile/const"),
@@ -2504,16 +2870,189 @@ mod tests {
 
     #[test]
     fn merchant_catalog_identity_is_exact_and_variant_distinct() {
-        let mut catalog = MerchantCatalogIdentityV1 {
-            merchant: "lemon_squeezy".into(),
-            entitlement_mode: "lemon_squeezy_subscription_license_keys".into(),
-            store_id: "123".into(),
-            product_id: "456".into(),
-            monthly_variant_id: "789".into(),
-            annual_variant_id: "790".into(),
-        };
+        let mut catalog = merchant_catalog();
         assert!(catalog.validate());
         catalog.annual_variant_id = catalog.monthly_variant_id.clone();
         assert!(!catalog.validate());
+    }
+
+    #[test]
+    fn guard_channel_change_class_vocabulary_is_closed() {
+        assert_eq!(
+            serde_json::to_value(GuardReleaseChangeClassV1::ProofCritical).unwrap(),
+            json!("proof_critical")
+        );
+        assert_eq!(
+            serde_json::to_value(GuardReleaseChangeClassV1::GuardPackageOnly).unwrap(),
+            json!("guard_package_only")
+        );
+        for unsupported in ["site_legal_pricing", "pricing_only", "arbitrary"] {
+            assert!(
+                serde_json::from_value::<GuardReleaseChangeClassV1>(json!(unsupported)).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn guard_channel_binds_change_class_and_predecessor_as_a_pair() {
+        let prior_identity = "tinyzkp-guard/0.9.0+qualified";
+        let prior_index_digest = "2".repeat(64);
+
+        assert!(
+            guard_channel(GuardReleaseChangeClassV1::ProofCritical, None, None).validate(),
+            "first GA is the only channel shape without a predecessor"
+        );
+        assert!(guard_channel(
+            GuardReleaseChangeClassV1::ProofCritical,
+            Some(prior_identity),
+            Some(&prior_index_digest),
+        )
+        .validate());
+        assert!(guard_channel(
+            GuardReleaseChangeClassV1::GuardPackageOnly,
+            Some(prior_identity),
+            Some(&prior_index_digest),
+        )
+        .validate());
+        assert!(!guard_channel(GuardReleaseChangeClassV1::GuardPackageOnly, None, None).validate());
+
+        for change_class in [
+            GuardReleaseChangeClassV1::ProofCritical,
+            GuardReleaseChangeClassV1::GuardPackageOnly,
+        ] {
+            assert!(!guard_channel(change_class, Some(prior_identity), None).validate());
+            assert!(!guard_channel(change_class, None, Some(&prior_index_digest)).validate());
+        }
+    }
+
+    #[test]
+    fn guard_channel_rejects_unsafe_or_self_referential_predecessors() {
+        let prior_index_digest = "2".repeat(64);
+        let current_identity = "tinyzkp-guard/1.0.0+qualified";
+
+        assert!(!guard_channel(
+            GuardReleaseChangeClassV1::ProofCritical,
+            Some(current_identity),
+            Some(&prior_index_digest),
+        )
+        .validate());
+        assert!(!guard_channel(
+            GuardReleaseChangeClassV1::ProofCritical,
+            Some("../prior"),
+            Some(&prior_index_digest),
+        )
+        .validate());
+        assert!(!guard_channel(
+            GuardReleaseChangeClassV1::ProofCritical,
+            Some("tinyzkp-guard/0.9.0+qualified"),
+            Some(&"A".repeat(64)),
+        )
+        .validate());
+    }
+
+    #[test]
+    fn release_index_requires_unique_nonempty_exact_current_history() {
+        let valid = release_index();
+        assert!(valid.validate());
+
+        let mut empty = valid.clone();
+        empty.releases.clear();
+        assert!(!empty.validate());
+
+        let mut duplicate_identity = valid.clone();
+        duplicate_identity.releases[0].release_identity = "release-2".into();
+        assert!(!duplicate_identity.validate());
+
+        let mut duplicate_version = valid.clone();
+        duplicate_version.releases[0].guard_version = "1.1.0".into();
+        assert!(!duplicate_version.validate());
+
+        let mut wrong_current = valid.clone();
+        wrong_current.current_release_identity = "release-1".into();
+        assert!(!wrong_current.validate());
+
+        let mut two_current = valid.clone();
+        two_current.releases[0].state = GuardReleaseStateV1::Current;
+        two_current.releases[0].successor_release_identity = None;
+        assert!(!two_current.validate());
+
+        let mut no_current = valid.clone();
+        no_current.current_release_identity = "missing".into();
+        no_current.releases[1].state = GuardReleaseStateV1::Withdrawn;
+        no_current.releases[1].advisory_url =
+            Some("https://tinyzkp.com/security/advisories/release-2".into());
+        assert!(!no_current.validate());
+    }
+
+    #[test]
+    fn release_index_rejects_invalid_dates_and_duplicate_artifact_names() {
+        let valid = release_index();
+
+        for invalid_date in ["2026-00-01", "2026-04-31", "2025-02-29"] {
+            let mut invalid = valid.clone();
+            invalid.releases[0].release_date = invalid_date.into();
+            assert!(!invalid.validate(), "{invalid_date}");
+        }
+        let mut leap_day = valid.clone();
+        leap_day.releases[0].release_date = "2024-02-29".into();
+        assert!(leap_day.validate());
+
+        let mut duplicate_artifact = valid.clone();
+        let mut second_artifact = duplicate_artifact.releases[0].artifacts[0].clone();
+        second_artifact.url.push_str(".mirror");
+        duplicate_artifact.releases[0]
+            .artifacts
+            .push(second_artifact);
+        assert!(!duplicate_artifact.validate());
+    }
+
+    #[test]
+    fn release_index_enforces_successor_and_withdrawal_state_rules() {
+        let valid = release_index();
+
+        let mut superseded_without_successor = valid.clone();
+        superseded_without_successor.releases[0].successor_release_identity = None;
+        assert!(!superseded_without_successor.validate());
+
+        let mut missing_successor = valid.clone();
+        missing_successor.releases[0].successor_release_identity = Some("missing".into());
+        assert!(!missing_successor.validate());
+
+        let mut current_with_successor = valid.clone();
+        current_with_successor.releases[1].successor_release_identity = Some("release-1".into());
+        assert!(!current_with_successor.validate());
+
+        let mut withdrawn_without_advisory = valid.clone();
+        withdrawn_without_advisory.releases[0].state = GuardReleaseStateV1::Withdrawn;
+        assert!(!withdrawn_without_advisory.validate());
+
+        let mut withdrawn = valid.clone();
+        withdrawn.releases[0].state = GuardReleaseStateV1::Withdrawn;
+        withdrawn.releases[0].advisory_url =
+            Some("https://tinyzkp.com/security/advisories/release-1".into());
+        assert!(withdrawn.validate());
+    }
+
+    #[test]
+    fn release_index_rejects_self_and_cyclic_successor_chains() {
+        let valid = release_index();
+
+        let mut self_successor = valid.clone();
+        self_successor.releases[0].successor_release_identity = Some("release-1".into());
+        assert!(!self_successor.validate());
+
+        let mut cycle = valid.clone();
+        cycle.releases.insert(
+            1,
+            release_index_entry(
+                "1.0.1",
+                "release-middle",
+                GuardReleaseStateV1::Superseded,
+                Some("release-1"),
+                None,
+            ),
+        );
+        cycle.releases[0].successor_release_identity = Some("release-middle".into());
+        assert!(!cycle.validate());
     }
 }
