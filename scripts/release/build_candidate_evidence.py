@@ -80,8 +80,7 @@ GATE_ROLES = {
         "acceptance_record",
         "partner_signature",
     ],
-    "replacement_sdk_contracts": ["test_report", "test_log"],
-    "api_mcp_site_cli_identity_match": ["identity_report"],
+    "air_job_contracts": ["test_report", "test_log"],
 }
 
 
@@ -126,7 +125,14 @@ def gate_metadata(name: str, release_sha: str) -> dict[str, object]:
             "bash",
             "scripts/ci/check_plonky3_known_answers.sh",
         ],
-        "replacement_sdk_contracts": ["bash", "scripts/ci/sdk_contract_gate.sh"],
+        "air_job_contracts": [
+            "cargo",
+            "test",
+            "-p",
+            "hc-cli",
+            "--locked",
+            "plonky3_air_job_contracts",
+        ],
     }
     if name in commands:
         release_profile = name.startswith("official_") or name == "deterministic_cross_mode_proofs"
@@ -171,12 +177,6 @@ def gate_metadata(name: str, release_sha: str) -> dict[str, object]:
             "witness_data_committed": False,
             "bounded_and_conventional": True,
             "signer_id": "REPLACE_WITH_ALLOWLISTED_SIGNER_ID",
-        }
-    if name == "api_mcp_site_cli_identity_match":
-        return {
-            "identities": {
-                surface: release_sha for surface in ("api", "mcp", "site", "cli")
-            }
         }
     return {}
 

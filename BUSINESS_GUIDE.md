@@ -1,138 +1,122 @@
-# TinyZKP business operating guide
+# TinyZKP Guard business guide
 
-TinyZKP is an infrastructure company for proving teams with a reproducible RAM
-bottleneck. It is not a general receipt SaaS, an AI-agent product, a public
-pay-as-you-go prover, or a new proof protocol.
+Status: approved passive-revenue operating policy.
 
-## Positioning
+## Product and buyer
 
-**Promise:** prove larger Plonky3 STARK traces within a RAM budget, using
-deterministic SSD scratch and recoverable jobs while preserving the official
-proof format and verifier.
+TinyZKP Guard is a customer-operated overflow and recovery supervisor for the
+exact supported Plonky3 profile. The buyer is a proof-infrastructure lead,
+protocol engineer, or technical founder with an observed memory, hardware-cost,
+or interrupted-job problem. CI runners and schedulers are the machine users.
 
-**Buyer:** proving lead, protocol engineering lead, zkVM/rollup CTO,
-proof-network infrastructure owner, or ZK coprocessor team.
+TinyZKP does not sell generic cryptography consulting, hosted proving, agent
+receipts, or a claim that it is the only implementation of a technique.
 
-**Qualification:** a supported, reproducible workload that verifies under the
-pinned Plonky3 verifier and either OOMs today or has at least a 1.5× gap between
-current peak memory and the target ceiling.
+## Catalog
 
-**Primary call to action:** benchmark your workload. The evaluation application
-must collect the stack, workload, rows, current RSS/OOM evidence, target RAM,
-scratch availability, verifier, sensitivity, technical owner, budget owner,
-and timeline. Never accept witness data or credentials through the website.
+| Product | Price | Included |
+|---|---:|---|
+| Community | $0 | MIT engine, verifier, schemas, reference workloads, doctor, and published evidence |
+| Guard monthly | $499/month | Local Guard supervisor and qualified releases |
+| Guard annual | $4,990/year | Same product; default purchase option |
 
-## Offers
+One subscription covers one legal organization's internal users and runners.
+There are no credits, meters, top-ups, machine activation counts, trials,
+discount programs, enterprise tiers, SLAs, or bundled engineering hours.
+Redistribution, resale, and service-bureau use are prohibited by the commercial
+license.
 
-[`site/pricing.json`](site/pricing.json) is the current machine-readable source.
-No seller may change price, scope, or support obligations in a proposal without
-updating that source and its parity gates.
+Activated releases remain usable offline indefinitely. An active subscription
+is required only to activate a later release.
 
-| Offer | Commercial terms | Delivery boundary |
-|---|---|---|
-| Founding Evaluation | $25K; first two customers; 50% signature / 50% delivery | One workload, three weeks, maximum fifteen engineering days |
-| Standard Evaluation | $40K; 50% signature / 50% delivery | Same fixed scope; changes require written order |
-| TinyZKP Certified | $60K/year prepaid after backend v1 release | One workload, signed LTS, notices, automated quarterly report, ≤10 support hours/quarter |
-| TinyZKP Fleet/OEM | $125K/year minimum prepaid after backend v1 release | Private deployment, policy, observability, checkpoint operations, release coordination, SLA |
-| Custom engineering | $300/hour minimum effective rate | Separately scoped; must improve the backend, adapter, or repeatable deployment product |
-| Reserved capacity | Future $15K/month minimum | Unavailable until review, demand, and ≥80% measured gross margin |
+## Founding validation
 
-Evaluation milestones use Stripe Invoicing. Recurring contracts use annual
-Stripe Billing subscriptions with `send_invoice`. Public Checkout and customer
-initiated plan switching remain disabled. Existing customer records must be
-preserved; pausing or cancelling a legacy subscription requires documented
-notification and a prorated refund or credit decision.
+The pre-launch validation cohort is permanently capped at three organizations
+and disappears at general availability.
 
-## Funnel and automation
+Each organization:
 
-1. A team runs the open-source benchmark or submits reproducible OOM evidence.
-2. The application receives an automatic acknowledgement and benchmark command.
-3. A deterministic qualification check confirms verifier success, supported
-   workload, reproducibility, and memory gap.
-4. A founder runs one technical review call.
-5. A fixed-scope evaluation is invoiced 50% upfront.
-6. The delivery report contains raw measurement data and a production
-   recommendation.
-7. A successful workload converts to Certified or Fleet/OEM.
+1. Runs the free doctor and shares only a scrubbed compatibility result.
+2. Supplies at most one workload through the standard public adapter.
+3. Accepts the published $4,990 annual price before TinyZKP accepts the
+   validation.
+4. Receives no customer-specific branch, custom AIR work, witness handling, or
+   architecture consulting.
+5. May consume no more than four hours of TinyZKP assistance.
 
-Do not automate unsolicited outbound. Until three recurring customers exist,
-send at most twenty researched founder messages per month. Traffic, directory
-listings, free accounts, and unsent leads carry zero pipeline value.
+Launch requires three external workloads from at least two organizations and
+two ordinary annual purchases through the self-service checkout. If the shared
+adapter cannot support the workloads without source changes, the subscription
+does not launch.
 
-Low-touch delivery comes from strict boundaries:
+## Customer lifecycle
 
-- one workload and one acceptance matrix per evaluation;
-- standard manifests, bundles, reports, policies, and runbooks;
-- signed LTS trains instead of customer-specific branches;
-- automated quarterly benchmark reports;
-- ten included support hours per customer per quarter;
-- change orders for extra workloads or bespoke engineering;
-- no private control-plane repository before the first annual agreement.
+1. An evergreen compatibility or benchmark page reaches a buyer with an active
+   problem.
+2. The buyer runs the free local doctor.
+3. Compatible buyers purchase through the merchant-of-record.
+4. Checkout sends the receipt and license key without TinyZKP intervention.
+5. The customer verifies, activates, and runs the signed local artifact.
+6. The merchant handles renewal, dunning, invoices, payment changes, and
+   cancellation.
+7. Documentation, GitHub issues, and one managed mailbox handle product defects
+   on the published profile.
 
-## Revenue and financial controls
+No customer workload, witness, scratch artifact, or proof enters TinyZKP
+infrastructure.
 
-The month-12 target is two $125K Fleet/OEM contracts plus one $60K Certified
-contract: approximately $310K ARR. Evaluation revenue funds external review and
-integration work but is not ARR.
+## Demand without an operating treadmill
 
-Monthly reporting must include:
+Distribution is limited to evergreen, high-intent surfaces:
 
-- contracted ARR and cash collected;
-- evaluation deposits and delivery liabilities;
-- COGS by workload and support hours by customer;
-- reproducible bottlenecks, qualified applications, evaluations sold, and
-  evaluation-to-annual conversion;
-- gross margin, customer concentration, churn risk, and runway;
-- release adoption and unresolved security/reliability risk.
+- GitHub Releases, crates.io, GHCR, and the public CI action.
+- Reproducible benchmark and compatibility pages.
+- Documentation for Plonky3 OOM, SSD-backed proving, and resumable proof jobs.
+- One-time founding-partner outreach before launch.
 
-Start each month from
-[`commercial/monthly-scorecard.example.json`](commercial/monthly-scorecard.example.json)
-and run `python3 scripts/commercial/validate_scorecard.py <scorecard>`. The
-validator gives unsigned opportunities zero contracted value, rejects vanity
-metrics, reconciles customer ARR, enforces the support cap, and fails closed on
-the 90% software / 80% hosted margin floors.
+There is no newsletter, blog schedule, lifecycle campaign, cold-outbound
+program, paid-ad program, generic agent SEO, or custom CRM.
 
-Targets: at least 90% software gross margin, at least 80% for any future hosted
-capacity, annual prepayment, no more than ten included support hours per quarter,
-and no full-time hire until signed recurring revenue covers the role.
+## Support and maintenance limits
 
-## Release and claim control
+- Best-effort asynchronous support only; no response-time commitment.
+- Issues must include the release ID, compatibility result, verifier result,
+  and scrubbed diagnostics. Never accept witness or license-key material.
+- Ordinary issues are batched. Security disclosures use the private security
+  channel.
+- One scheduled release day per quarter; additional releases only for material
+  security or correctness defects.
+- Ordinary business operations must remain below two hours per month.
+- Support must average no more than fifteen minutes per customer per month.
 
-No production or paid proving relaunch occurs until every entry in
-[`release/backend-v1-gates.json`](release/backend-v1-gates.json) is passed with
-evidence and the file status is `ready`. The tag-publishing workflow enforces
-this mechanically.
+If a prospect requires custom AIR work, an SLA, SSO, a security questionnaire,
+a DPA for proof data, a private branch, or hosted operations, decline the sale.
 
-Every published benchmark must link hardware, source revision, dependency
-profile, workload digest, exact command, raw baseline/candidate reports, and
-verification result. Never call TinyZKP faster when the measured advantage is
-capacity or recoverability. Never market component memory as full-pipeline
-memory.
+## Metrics and stop rules
 
-The website, API, MCP, CLI, compatibility manifest, and benchmark report must
-expose the same release identity. During recovery, live canaries must prove that
-hosted proving and checkout are unavailable and status says backend recovery.
+Review only:
 
-## Weekly operating review
+- qualified doctor users;
+- checkout conversion;
+- paid organizations and ARR;
+- churn and refunds;
+- compatibility failures;
+- support minutes.
 
-Review only evidence-bearing metrics:
+Do not build a custom analytics service or CRM.
 
-- completed buyer calls;
-- reproducible memory bottlenecks;
-- reports submitted and qualification outcome;
-- evaluations contracted, deposits collected, and delivery status;
-- conversions to Certified/Fleet, contracted ARR, and concentration;
-- support hours, COGS, gross margin, and cash runway;
-- release-gate progress, review findings, and customer adoption.
+Stop commercial investment if fewer than three organizations pay after twenty
+technically qualified doctor users. Freeze new sales if integration exceeds
+four hours per customer or support/operations exceed their limits for two
+consecutive quarters.
 
-Publish no more than one substantive benchmark, integration report, or RFC per
-month. Open an upstream Plonky3 RFC only after the local 1M-row prototype has
-honest measurements; propose block-readable matrices and caller-supplied
-storage without making TinyZKP's release depend on upstream acceptance.
+The intended steady state is approximately ten annual customers and $50,000
+ARR, not an enterprise software company.
 
-## Deferred work
+## Launch authority
 
-Hosted pay-as-you-go, standalone v9, privacy claims, recursion, GPU, zkML, zkVM,
-KZG, IPA, rollup integrations, warm fleets, Postgres scheduling, and horizontal
-scale remain inactive unless a signed customer funds them and they have their
-own security and unit-economics plan.
+`release/guard-launch-gates-v1.json` is the machine source of truth. Public
+checkout remains disabled until technical evidence, external workloads,
+unaided installs, legal approval, merchant lifecycle tests, first customers,
+legacy-obligation resolution, and hosted-infrastructure retirement are all
+reviewed and recorded.

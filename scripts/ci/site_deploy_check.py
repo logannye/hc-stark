@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Cloudflare Pages deploy configuration for TinyZKP.com.
-
-The static route checker proves internal links resolve. This preflight focuses
-on deploy/runtime coherence: Pages config, advanced-mode worker routing, API
-function handler exports, and the environment bindings required for production.
-"""
+"""Validate the static-only Cloudflare Pages configuration for TinyZKP.com."""
 
 from __future__ import annotations
 
@@ -38,44 +33,38 @@ EXPECTED_OUTPUT_DIR = "."
 
 REQUIRED_FILES = [
     "index.html",
-    "engine.html",
+    "guard.html",
+    "compatibility.html",
     "benchmarks.html",
-    "plonky3.html",
     "docs.html",
     "security.html",
     "pricing.html",
-    "contact.html",
-    "status.html",
+    "releases.html",
+    "support.html",
     "privacy.html",
     "terms.html",
-    "requests.html",
+    "refunds.html",
+    "eula.html",
     "pricing.json",
+    "discovery.json",
+    "commerce.json",
+    "compatibility.json",
+    "release.json",
     "offers.jsonld",
-    "openapi.json",
     "sitemap.xml",
     "robots.txt",
     "shared.css",
+    "shared.js",
     "favicon.svg",
-    "og-image.png",
-    "og-image.svg",
+    "guard-social.png",
     "_worker.js",
 ]
 
-REQUIRED_BINDINGS = {
-    "INTERNAL_SECRET",
-}
+REQUIRED_BINDINGS: set[str] = set()
 
 ONE_OF_BINDINGS: list[tuple[str, ...]] = []
 
-OPTIONAL_BINDINGS = {
-    "CF_PAGES_BRANCH",
-    "CF_PAGES_COMMIT_SHA",
-    "CF_PAGES_URL",
-    "TINYZKP_RELEASE_BUILD_URL",
-    "TINYZKP_RELEASE_REF",
-    "TINYZKP_RELEASE_SHA",
-    "WEBHOOK_BASE_URL",
-}
+OPTIONAL_BINDINGS: set[str] = set()
 
 
 def display(path: pathlib.Path) -> str:
@@ -129,7 +118,6 @@ def load_bindings(
         key: value
         for key, value in os.environ.items()
         if key.startswith("TINYZKP_")
-        or key in {"INTERNAL_SECRET", "WEBHOOK_BASE_URL"}
     }
     if path is not None:
         env.update(parse_env_file(path))
@@ -254,10 +242,11 @@ def main(argv: list[str]) -> int:
             + ", ".join(missing_static_refs)
         )
     unused_classified = sorted(expected_refs - env_refs)
-    # WEBHOOK_BASE_URL has a safe canonical default.
-    unexpected_unused = [key for key in unused_classified if key != "WEBHOOK_BASE_URL"]
-    if unexpected_unused:
-        failures.append("classified Pages bindings are not referenced: " + ", ".join(unexpected_unused))
+    if unused_classified:
+        failures.append(
+            "classified Pages bindings are not referenced: "
+            + ", ".join(unused_classified)
+        )
 
     if args.production:
         try:

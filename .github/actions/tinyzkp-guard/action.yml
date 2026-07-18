@@ -1,0 +1,36 @@
+name: TinyZKP Guard
+description: Run TinyZKP Guard through its public local CLI and JSON contracts.
+
+inputs:
+  guard-binary:
+    description: Absolute path to the activated TinyZKP Guard executable.
+    required: false
+    default: tinyzkp
+  job:
+    description: Relative path to a JobManifestV1 document.
+    required: true
+  run-proof:
+    description: Set to true to run the proof after the free doctor succeeds.
+    required: false
+    default: "false"
+  report:
+    description: Relative path that receives JobResultV1 when run-proof is true.
+    required: false
+    default: tinyzkp-job-result-v1.json
+  baseline:
+    description: Optional relative PolicyBaselineV1 path checked after a proof run.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Run TinyZKP Guard contracts
+      shell: bash
+      env:
+        TINYZKP_ACTION_GUARD: ${{ inputs.guard-binary }}
+        TINYZKP_ACTION_JOB: ${{ inputs.job }}
+        TINYZKP_ACTION_RUN: ${{ inputs.run-proof }}
+        TINYZKP_ACTION_REPORT: ${{ inputs.report }}
+        TINYZKP_ACTION_BASELINE: ${{ inputs.baseline }}
+      run: '"${{ github.action_path }}/run.sh"'

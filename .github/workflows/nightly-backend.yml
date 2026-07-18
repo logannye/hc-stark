@@ -1,8 +1,6 @@
-name: Nightly Plonky3 backend stress
+name: Manual Plonky3 release qualification
 
 on:
-  schedule:
-    - cron: "0 4 * * *"
   workflow_dispatch:
 
 permissions:

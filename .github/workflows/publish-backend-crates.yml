@@ -40,14 +40,12 @@ jobs:
           install -d release-artifacts
           gh release download "$BACKEND_TAG" \
             --dir release-artifacts \
-            --pattern hc-cli-linux-x86_64 \
-            --pattern hc-server-linux-x86_64 \
-            --pattern hc-mcp-http-linux-x86_64 \
-            --pattern hc-mcp-stdio-linux-x86_64 \
-            --pattern tinyzkp-maintenance.oci.tar \
-            --pattern tinyzkp-backend.spdx.json \
+            --pattern tinyzkp-engine-linux-x86_64 \
+            --pattern tinyzkp-engine.oci.tar \
+            --pattern tinyzkp-engine.spdx.json \
             --pattern backend-v1-gates.json \
-            --pattern cli-release.json \
+            --pattern engine-identity.json \
+            --pattern engine-release.json \
             --pattern backend-v1-final-evidence.json \
             --pattern backend-v1-final-gates.json \
             --pattern SHA256SUMS \

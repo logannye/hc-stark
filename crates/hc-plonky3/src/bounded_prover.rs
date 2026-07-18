@@ -23,7 +23,7 @@ use hc_stream::{
     cleanup_job_directory, ArtifactDigest, BlockMatrix, CheckpointArtifactV2, CheckpointIdentityV2,
     CheckpointManifestV2, CheckpointPolicy, ExecutionMode, MatrixStore, MemoryMatrix,
     PhaseEstimate, PipelineArtifactKindV1, PipelinePhaseV1, PreflightReport, ResourceEstimate,
-    ResourcePolicyV1, ScratchMatrixStore, StreamError, SCRATCH_STORE_HEADER_BYTES,
+    ResourceMode, ResourcePolicyV1, ScratchMatrixStore, StreamError, SCRATCH_STORE_HEADER_BYTES,
 };
 use p3_air::symbolic::{AirLayout, SymbolicAirBuilder};
 use p3_air::{Air, BaseAir};
@@ -188,6 +188,26 @@ pub struct ResumedProofV1 {
     pub proof_bytes: Vec<u8>,
 }
 
+/// A mode-aware plan for a statically linked or declarative workload.
+///
+/// Auto selection is always based on the conventional estimate. The selected
+/// mode is then preflighted against its own estimate, so the smaller resident
+/// footprint of the scratch path can never cause Auto to reselect memory.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ResourceExecutionPlanV1 {
+    pub selected_mode: ExecutionMode,
+    pub conventional_estimate: ResourceEstimate,
+    pub bounded_estimate: ResourceEstimate,
+    pub preflight: PreflightReport,
+}
+
+/// Proof bytes together with the mode selected by [`plan_resource_workload`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlannedResourceProofV1 {
+    pub selected_mode: ExecutionMode,
+    pub proof_bytes: Vec<u8>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum ProverEventV1 {
@@ -308,6 +328,86 @@ where
     )
 }
 
+/// Conservative resident-memory estimate for the conventional upstream
+/// Plonky3 pipeline for any supported resource-bounded workload.
+pub fn estimate_resource_conventional_workload<W>(workload: &W) -> Result<ResourceEstimate>
+where
+    W: ResourceBoundedWorkload,
+    W::Air: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
+{
+    let rows =
+        usize::try_from(workload.rows()).map_err(|_| BoundedProverError::UnsupportedProfile)?;
+    if rows == 0 || !rows.is_power_of_two() {
+        return Err(BoundedProverError::UnsupportedProfile);
+    }
+    let air = workload.air();
+    if air.preprocessed_width() != 0
+        || air.num_periodic_columns() != 0
+        || workload.public_values().len() != air.num_public_values()
+    {
+        return Err(BoundedProverError::UnsupportedProfile);
+    }
+    let width = BaseAir::<Val>::width(&air);
+    let quotient_chunks = quotient_chunks(&air, width, air.num_public_values())?;
+    Ok(crate::prover::conventional_pipeline_estimate(
+        rows,
+        width as u64,
+        quotient_chunks,
+    ))
+}
+
+/// Calculate and preflight both supported execution paths, selecting the
+/// conventional path for Auto only when its estimated resident peak is at or
+/// below 70% of the configured cap.
+pub fn plan_resource_workload<W>(
+    workload: &W,
+    policy: &ResourcePolicyV1,
+) -> Result<ResourceExecutionPlanV1>
+where
+    W: ResourceBoundedWorkload,
+    W::Air: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
+{
+    policy.validate()?;
+    let conventional_estimate = estimate_resource_conventional_workload(workload)?;
+    let bounded_estimate = estimate_resource_bounded_workload(workload, policy)?;
+    let selected_mode = match policy.mode {
+        ResourceMode::Memory => ExecutionMode::Memory,
+        ResourceMode::Scratch => ExecutionMode::Scratch,
+        ResourceMode::Auto
+            if conventional_estimate.peak_resident_bytes <= policy.memory_selection_threshold() =>
+        {
+            ExecutionMode::Memory
+        }
+        ResourceMode::Auto => ExecutionMode::Scratch,
+    };
+    let selected_estimate = match selected_mode {
+        ExecutionMode::Memory => conventional_estimate.clone(),
+        ExecutionMode::Scratch => bounded_estimate.clone(),
+    };
+    let preflight = policy.preflight_for_mode(selected_mode, selected_estimate)?;
+    Ok(ResourceExecutionPlanV1 {
+        selected_mode,
+        conventional_estimate,
+        bounded_estimate,
+        preflight,
+    })
+}
+
+fn quotient_chunks<A>(air: &A, width: usize, public_values: usize) -> Result<u64>
+where
+    A: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
+{
+    let layout = AirLayout {
+        preprocessed_width: 0,
+        main_width: width,
+        num_public_values: public_values,
+        num_periodic_columns: 0,
+        ..Default::default()
+    };
+    1u64.checked_shl(get_log_num_quotient_chunks::<Val, _>(air, layout, 0) as u32)
+        .ok_or(BoundedProverError::UnsupportedProfile)
+}
+
 fn estimate_air_pipeline<A>(
     air: &A,
     workload_id: &str,
@@ -319,16 +419,7 @@ where
     A: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
 {
     let width = BaseAir::<Val>::width(air);
-    let layout = AirLayout {
-        preprocessed_width: 0,
-        main_width: width,
-        num_public_values: public_values,
-        num_periodic_columns: 0,
-        ..Default::default()
-    };
-    let quotient_chunks = 1u64
-        .checked_shl(get_log_num_quotient_chunks::<Val, _>(air, layout, 0) as u32)
-        .ok_or(BoundedProverError::UnsupportedProfile)?;
+    let quotient_chunks = quotient_chunks(air, width, public_values)?;
     let rows = rows as u64;
     // The frozen profile always uses at least a two-times FRI blowup. AIRs
     // whose quotient degree needs more chunks raise the blowup to match.
@@ -720,6 +811,84 @@ impl FailureInjector for EnvironmentAbortFailureInjector {
 
 /// Complete resource-bounded orchestration for the frozen Goldilocks profile.
 /// The returned bytes deserialize as the official Plonky3 proof type.
+pub fn prove_resource_with_policy<W>(
+    workload: &W,
+    policy: &ResourcePolicyV1,
+) -> Result<PlannedResourceProofV1>
+where
+    W: ResourceBoundedWorkload + Sync,
+    W::Air: BaseAir<Val>
+        + Air<SymbolicAirBuilder<Val>>
+        + for<'a> Air<ProverConstraintFolder<'a, GoldilocksConfig<Radix2DitParallel<Val>>>>
+        + for<'a> Air<VerifierConstraintFolder<'a, GoldilocksConfig<Radix2DitParallel<Val>>>>
+        + for<'a> Air<p3_air::DebugConstraintBuilder<'a, Val>>,
+{
+    prove_resource_with_policy_observed_with_cancellation(
+        workload,
+        policy,
+        CancellationToken::new(),
+        |_| {},
+    )
+}
+
+/// Execute a statically linked or declarative workload according to its
+/// resource policy. Memory mode uses the unmodified upstream prover; scratch
+/// mode uses the durable bounded pipeline and is therefore resumable.
+pub fn prove_resource_with_policy_observed_with_cancellation<W, Observe>(
+    workload: &W,
+    policy: &ResourcePolicyV1,
+    cancellation: CancellationToken,
+    mut observe: Observe,
+) -> Result<PlannedResourceProofV1>
+where
+    W: ResourceBoundedWorkload + Sync,
+    W::Air: BaseAir<Val>
+        + Air<SymbolicAirBuilder<Val>>
+        + for<'a> Air<ProverConstraintFolder<'a, GoldilocksConfig<Radix2DitParallel<Val>>>>
+        + for<'a> Air<VerifierConstraintFolder<'a, GoldilocksConfig<Radix2DitParallel<Val>>>>
+        + for<'a> Air<p3_air::DebugConstraintBuilder<'a, Val>>,
+    Observe: FnMut(&ProverEventV1),
+{
+    let plan = plan_resource_workload(workload, policy)?;
+    match plan.selected_mode {
+        ExecutionMode::Memory => {
+            check_cancelled(&cancellation)?;
+            observe(&ProverEventV1::ResourceEstimate {
+                estimate: plan.conventional_estimate,
+            });
+            let proof_bytes = rayon::ThreadPoolBuilder::new()
+                .num_threads(policy.max_threads)
+                .build()
+                .map_err(|_| BoundedProverError::UnsupportedProfile)?
+                .install(|| prove_resource_reference(workload))?;
+            check_cancelled(&cancellation)?;
+            observe(&ProverEventV1::Phase {
+                phase: PipelinePhaseV1::ProofAssembly,
+                completed_phases: 1,
+                total_phases: 1,
+                checkpoint_path: None,
+                resource_usage: measure_resource_usage(None),
+            });
+            Ok(PlannedResourceProofV1 {
+                selected_mode: ExecutionMode::Memory,
+                proof_bytes,
+            })
+        }
+        ExecutionMode::Scratch => {
+            let proof_bytes = prove_resource_bounded_observed_with_cancellation(
+                workload,
+                policy,
+                cancellation,
+                &mut observe,
+            )?;
+            Ok(PlannedResourceProofV1 {
+                selected_mode: ExecutionMode::Scratch,
+                proof_bytes,
+            })
+        }
+    }
+}
+
 pub fn prove_resource_bounded<W>(workload: &W, policy: &ResourcePolicyV1) -> Result<Vec<u8>>
 where
     W: ResourceBoundedWorkload,
@@ -2255,12 +2424,33 @@ where
         + Air<SymbolicAirBuilder<Val>>
         + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
 {
+    resume_resource_bounded_with_cancellation_observed(
+        checkpoint_path,
+        workload,
+        cancellation,
+        |_| {},
+    )
+}
+
+pub fn resume_resource_bounded_with_cancellation_observed<W, Observe>(
+    checkpoint_path: &Path,
+    workload: &W,
+    cancellation: CancellationToken,
+    observe: Observe,
+) -> Result<Vec<u8>>
+where
+    W: ResourceBoundedWorkload,
+    W::Air: BaseAir<Val>
+        + Air<SymbolicAirBuilder<Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    Observe: FnMut(&ProverEventV1),
+{
     resume_resource_bounded_with_control(
         checkpoint_path,
         workload,
         cancellation,
         default_failure_injector(),
-        |_| {},
+        observe,
     )
 }
 
@@ -2920,6 +3110,59 @@ mod tests {
             max_threads: 1,
             checkpoint_policy: CheckpointPolicy::DeleteOnSuccess,
         }
+    }
+
+    #[test]
+    fn auto_plan_uses_conventional_peak_and_preflights_the_selected_estimate() {
+        let dir = tempfile::tempdir().unwrap();
+        let small = FibonacciWorkload {
+            initial_a: 0,
+            initial_b: 1,
+            logical_rows: 16,
+        };
+        let mut automatic = policy(dir.path());
+        automatic.mode = ResourceMode::Auto;
+        let memory_plan = plan_resource_workload(&small, &automatic).unwrap();
+        assert_eq!(memory_plan.selected_mode, ExecutionMode::Memory);
+        assert_eq!(
+            memory_plan.preflight.estimate,
+            memory_plan.conventional_estimate
+        );
+
+        let larger = Poseidon2Workload { logical_rows: 4096 };
+        automatic.max_resident_bytes = 64 * 1024 * 1024;
+        let scratch_plan = plan_resource_workload(&larger, &automatic).unwrap();
+        assert!(
+            scratch_plan.conventional_estimate.peak_resident_bytes
+                > automatic.memory_selection_threshold()
+        );
+        assert_eq!(scratch_plan.selected_mode, ExecutionMode::Scratch);
+        assert_eq!(
+            scratch_plan.preflight.estimate,
+            scratch_plan.bounded_estimate
+        );
+    }
+
+    #[test]
+    fn policy_executor_produces_the_same_official_bytes_in_both_modes() {
+        let dir = tempfile::tempdir().unwrap();
+        let workload = FibonacciWorkload {
+            initial_a: 3,
+            initial_b: 5,
+            logical_rows: 16,
+        };
+        let reference = prove_resource_reference(&workload).unwrap();
+
+        let mut memory_policy = policy(&dir.path().join("memory"));
+        memory_policy.mode = ResourceMode::Auto;
+        let memory = prove_resource_with_policy(&workload, &memory_policy).unwrap();
+        assert_eq!(memory.selected_mode, ExecutionMode::Memory);
+        assert_eq!(memory.proof_bytes, reference);
+
+        let scratch =
+            prove_resource_with_policy(&workload, &policy(&dir.path().join("scratch"))).unwrap();
+        assert_eq!(scratch.selected_mode, ExecutionMode::Scratch);
+        assert_eq!(scratch.proof_bytes, reference);
     }
 
     fn assert_scratch_estimate_tracks_measured_peak<W>(workload: &W)

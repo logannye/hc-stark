@@ -306,9 +306,9 @@ def audit_backend_recovery(root: pathlib.Path) -> list[GateResult] | None:
         "plonky3_specialist_review",
         "implementation_review_no_high_findings",
         "external_design_partner_integration",
-        "replacement_sdk_contracts",
+        "air_job_contracts",
         "signed_release_sbom_and_checksums",
-        "api_mcp_site_cli_identity_match",
+        "engine_cli_oci_identity_match",
     )
     evidence_path = root / str(payload.get("evidence_manifest", ""))
     evidence = {}

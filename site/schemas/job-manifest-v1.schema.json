@@ -1,0 +1,203 @@
+{
+  "$id": "https://tinyzkp.com/schemas/job-manifest-v1.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "AirFeaturesV1": {
+      "additionalProperties": false,
+      "properties": {
+        "uses_buses": {
+          "type": "boolean"
+        },
+        "uses_gpu": {
+          "type": "boolean"
+        },
+        "uses_lookups": {
+          "type": "boolean"
+        },
+        "uses_multi_table": {
+          "type": "boolean"
+        },
+        "uses_periodic_columns": {
+          "type": "boolean"
+        },
+        "uses_permutations": {
+          "type": "boolean"
+        },
+        "uses_preprocessed_columns": {
+          "type": "boolean"
+        },
+        "uses_recursion": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "uses_buses",
+        "uses_gpu",
+        "uses_lookups",
+        "uses_multi_table",
+        "uses_periodic_columns",
+        "uses_permutations",
+        "uses_preprocessed_columns",
+        "uses_recursion"
+      ],
+      "type": "object"
+    },
+    "JobRootsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "input_root": {
+          "type": "string"
+        },
+        "job_root": {
+          "type": "string"
+        },
+        "output_root": {
+          "type": "string"
+        },
+        "scratch_root": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_root",
+        "job_root",
+        "output_root",
+        "scratch_root"
+      ],
+      "type": "object"
+    },
+    "RequestedModeV1": {
+      "enum": [
+        "auto",
+        "conventional",
+        "bounded"
+      ],
+      "type": "string"
+    },
+    "WorkloadInputV1": {
+      "additionalProperties": false,
+      "properties": {
+        "air_package": {
+          "type": "string"
+        },
+        "chunks_dir": {
+          "type": "string"
+        },
+        "extension_degree": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "features": {
+          "$ref": "#/definitions/AirFeaturesV1"
+        },
+        "field": {
+          "type": "string"
+        },
+        "logical_rows": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "max_constraint_degree": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "permutation": {
+          "type": "string"
+        },
+        "public_inputs": {
+          "type": "string"
+        },
+        "trace_manifest": {
+          "type": "string"
+        },
+        "trace_width": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "verifier": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "air_package",
+        "chunks_dir",
+        "extension_degree",
+        "features",
+        "field",
+        "logical_rows",
+        "max_constraint_degree",
+        "permutation",
+        "public_inputs",
+        "trace_manifest",
+        "trace_width",
+        "verifier"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "compatibility_profile": {
+      "const": "tinyzkp-p3-goldilocks-v1",
+      "type": "string"
+    },
+    "job_dir": {
+      "type": "string"
+    },
+    "max_threads": {
+      "format": "uint16",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "mode": {
+      "$ref": "#/definitions/RequestedModeV1"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "ram_budget_bytes": {
+      "format": "uint64",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "roots": {
+      "$ref": "#/definitions/JobRootsV1"
+    },
+    "schema_version": {
+      "const": 1,
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "scratch_budget_bytes": {
+      "format": "uint64",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "scratch_dir": {
+      "type": "string"
+    },
+    "workload": {
+      "$ref": "#/definitions/WorkloadInputV1"
+    }
+  },
+  "required": [
+    "compatibility_profile",
+    "job_dir",
+    "max_threads",
+    "mode",
+    "output_dir",
+    "ram_budget_bytes",
+    "roots",
+    "schema_version",
+    "scratch_budget_bytes",
+    "scratch_dir",
+    "workload"
+  ],
+  "title": "JobManifestV1",
+  "type": "object"
+}

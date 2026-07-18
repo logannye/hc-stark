@@ -6,11 +6,12 @@ under an explicit RAM ceiling, using deterministic SSD scratch where global
 transforms require it, while retaining the official Plonky3 proof format and
 unmodified verifier.
 
-> **Backend recovery:** hosted proving, hosted verification, account creation,
-> public checkout, and legacy usage meters are disabled. The public API and MCP
-> surface expose status, release identity, and capabilities only. Do not use this
-> repository as a production prover until every gate in
+> **Pre-release:** hosted proving, hosted verification, account creation,
+> public checkout, legacy usage meters, and MCP commerce are retired. Do not
+> use this repository as a production prover until every gate in
 > [`release/backend-v1-gates.json`](release/backend-v1-gates.json) is passed.
+> Guard checkout is independently fail-closed by
+> [`release/guard-launch-gates-v1.json`](release/guard-launch-gates-v1.json).
 
 ## Product boundary
 
@@ -39,10 +40,10 @@ separate block-matrix entry point. The implementation remains pre-production
 until fixed-host resource evidence, independent reviews, and an external
 design-partner integration satisfy the machine release gates.
 
-Standalone TinyZKP protocols, legacy receipts, recursion, zkML, zkVM, IPA,
+Standalone TinyZKP protocols, legacy receipts, hosted services, recursion, zkML, zkVM, IPA,
 Spartan, KZG, and rollup prototypes are research only. Legacy CLI access
 requires the explicit `legacy-research` feature and is not compiled into the
-production API, MCP service, container, or default CI path.
+public engine container or default CI path.
 
 ## Repository map
 
@@ -51,13 +52,14 @@ production API, MCP service, container, or default CI path.
 | `crates/hc-stream` | Resource policy, block matrices, matrix stores, preflight, and checkpoint contracts |
 | `crates/hc-plonky3` | Pinned Plonky3 configuration, workloads, DFT adapter, official prover/verifier, and artifact contracts |
 | `crates/hc-cli` | Production Plonky3 CLI and benchmark worker |
-| `crates/hc-server` | Maintenance-only public API; historical implementation is retained but not compiled |
-| `crates/hc-mcp` | Capability-only production MCP surface |
 | `scripts/benchmark` | cgroup-v2 benchmark orchestration and report tooling |
 | `release` | Dependency compatibility and mandatory release-gate evidence |
-| `site` | Maintenance website and evaluation application |
-| `billing` | Billing containment, customer-record preservation, contract invoicing tools, and backups |
+| `site` | Static Guard product, compatibility, evidence, documentation, and legal-status site |
 | `docs/recovery` | Architecture, delivery, release, and operating documentation |
+
+Historical server, MCP, billing, SDK, and hosted-beta sources remain available
+under the `archive/hosted-beta-2026-07-17` tag. They are not part of the active
+release payload.
 
 ## Build and test
 
@@ -66,10 +68,10 @@ toolchains. Plonky3 and artifact-serialization dependencies are exact-pinned in 
 workspace and verified against [`release/plonky3-compatibility-v1.json`](release/plonky3-compatibility-v1.json).
 
 ```bash
-cargo test -p hc-stream -p hc-plonky3 -p hc-cli -p hc-server -p hc-mcp
-cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-server -p hc-mcp \
+cargo test -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm
+cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm \
   --all-targets -- -D warnings
-python3 scripts/ci/production_launch_preflight.py
+python3 scripts/ci/guard_launch_gate.py
 ```
 
 The recovery preflight deliberately does not run live canaries. After an
@@ -106,8 +108,8 @@ reproduction is available only in an offline research build:
 cargo run -p hc-cli --features legacy-research -- legacy-research --help
 ```
 
-`hc-cli release` emits JSON for cross-checking CLI, API, MCP, site, and
-benchmark provenance before publication.
+`hc-cli release` emits JSON for cross-checking the engine binary, OCI image,
+compatibility profile, and benchmark provenance before publication.
 
 ## Benchmark integrity
 
@@ -132,44 +134,40 @@ Release targets remain blocked until independently reproduced:
 
 - 1M rows: at least 4× lower peak RAM, at most 3× baseline wall time, and no
   more than 10% above the configured cap;
-- 10M rows: at most 2 GiB whole-process peak memory, successful official
+- 16,777,216 rows: at most 2 GiB whole-process peak memory, successful official
   verification, and scratch usage within 10% of preflight;
 - deterministic crash recovery, parser/resource fuzzing, independent review,
   one external design-partner integration, signed artifacts, SBOM, checksums,
   and release identity agreement.
 
-## Public service behavior
+## Self-hosted behavior
 
-During recovery:
+The public product is a local binary and customer-operated OCI image. It has no
+job API, account database, queue, worker fleet, proof storage, usage meter, or
+runtime TinyZKP dependency. Customer witnesses, scratch data, and proofs remain
+on customer-controlled storage.
 
-- `GET /healthz`, `GET /version`, and `GET /v1/capabilities` are available;
-- proving paths return `503 protocol_upgrade`;
-- hosted v5/v7 verification returns `422 legacy_statement_unbound`;
-- MCP discovery exposes only `get_capabilities`;
-- checkout, account creation, demos, and meter emission are disabled;
-- tags cannot publish SDKs, WASM, or MCP binaries while backend-v1 gates are
-  blocked.
-
-Run [`scripts/monitoring/backend_recovery_canary.py`](scripts/monitoring/backend_recovery_canary.py)
-from an external machine after deployment.
+The separate commercial Guard supervisor may activate a signed release through
+the merchant-of-record. After activation, doctor, prove, resume, policy, and
+verify operations are offline. Cancellation prevents activation of future
+releases but does not disable an already activated release.
 
 ## Commercial model
 
-Local software remains MIT. TinyZKP sells fixed-scope evaluations, signed LTS
-releases, compatibility guidance, private deployment, policy enforcement,
-checkpoint operations, observability, and commercial SLAs:
+Proof-critical software remains MIT. TinyZKP intends to sell one
+customer-operated product:
 
-- Founding Evaluation: $25K for the first two customers;
-- Standard Evaluation: $40K fixed, three weeks, fifteen engineering days;
-- TinyZKP Certified after backend v1 release: $60K/year prepaid, one workload,
-  at most ten support hours per quarter;
-- TinyZKP Fleet/OEM after backend v1 release: $125K/year minimum prepaid;
-- custom engineering: at least $300/hour, separately scoped.
+- Community: free MIT engine, verifier, schemas, doctor, reference workloads,
+  and public evidence.
+- TinyZKP Guard: $499/month or $4,990/year for one legal organization's
+  internal use, with automatic mode selection, recovery supervision, CI policy,
+  signed qualification, and access to new releases.
 
-Reserved hosted capacity remains unavailable until a signed customer exists,
-the implementation is reviewed, and measured COGS support at least 80% gross
-margin. There is no public Checkout path. Evaluation milestones use Stripe
-Invoicing; annual agreements use `send_invoice` subscriptions.
+There is no free Guard trial, usage metering, Enterprise tier, Fleet/OEM plan,
+hosted compute, custom AIR work, SLA, onboarding call, or included engineering.
+The free engine and doctor are the evaluation path. Public checkout remains
+disabled until the technical, legal, merchant, external-workload, unaided
+installation, and first-customer gates are evidenced.
 
 The machine-readable commercial source is [`site/pricing.json`](site/pricing.json).
 See [`BUSINESS_GUIDE.md`](BUSINESS_GUIDE.md) for operating controls and
@@ -191,7 +189,7 @@ production certification.
 
 ## License
 
-The existing repository and new public backend code are MIT licensed. Private
-Fleet control-plane modules may be created in a separate repository only after
-a signed annual agreement; they must invoke the public CLI/container through
-the published artifact contracts rather than fork the proof protocol.
+This repository and its public engine code are MIT licensed. TinyZKP Guard is a
+separate, commercially licensed supervisor. Guard must invoke the public engine
+through the published file and CLI contracts; it may not fork proof semantics
+or place proof-critical behavior behind the commercial license.

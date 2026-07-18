@@ -12,15 +12,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ASSET_PATHS = (
     "/index.html",
-    "/contact.html",
-    "/requests.html",
+    "/guard.html",
+    "/compatibility.html",
+    "/benchmarks.html",
+    "/pricing.html",
+    "/docs.html",
     "/security.html",
+    "/releases.html",
+    "/support.html",
     "/privacy.html",
     "/terms.html",
-    "/status.html",
+    "/refunds.html",
+    "/eula.html",
     "/.well-known/security.txt",
     "/pricing.json",
-    "/openapi.json",
+    "/discovery.json",
+    "/commerce.json",
+    "/compatibility.json",
+    "/release.json",
+    "/guard-social.png",
 )
 
 

@@ -1,40 +1,32 @@
 {
   "@context": "https://schema.org",
   "@type": "OfferCatalog",
+  "name": "TinyZKP Community and Guard",
+  "url": "https://tinyzkp.com/pricing",
   "itemListElement": [
     {
       "@type": "Offer",
-      "availability": "https://schema.org/LimitedAvailability",
-      "name": "Founding Memory-Bounded Evaluation",
-      "price": "25000",
+      "name": "TinyZKP Community",
+      "price": "0",
       "priceCurrency": "USD",
-      "url": "https://tinyzkp.com/contact?intent=memory_bounded_evaluation"
+      "availability": "https://schema.org/InStock",
+      "url": "https://tinyzkp.com/docs#doctor"
     },
     {
       "@type": "Offer",
-      "availability": "https://schema.org/LimitedAvailability",
-      "name": "Memory-Bounded Prover Evaluation",
-      "price": "40000",
+      "name": "TinyZKP Guard annual subscription",
+      "price": "4990",
       "priceCurrency": "USD",
-      "url": "https://tinyzkp.com/contact?intent=memory_bounded_evaluation"
+      "availability": "https://schema.org/OutOfStock",
+      "url": "https://tinyzkp.com/pricing"
     },
     {
       "@type": "Offer",
-      "availability": "https://schema.org/PreOrder",
-      "name": "TinyZKP Certified",
-      "price": "60000",
+      "name": "TinyZKP Guard monthly subscription",
+      "price": "499",
       "priceCurrency": "USD",
-      "url": "https://tinyzkp.com/contact?intent=certified"
-    },
-    {
-      "@type": "Offer",
-      "availability": "https://schema.org/PreOrder",
-      "name": "TinyZKP Fleet / OEM",
-      "price": "125000",
-      "priceCurrency": "USD",
-      "url": "https://tinyzkp.com/contact?intent=fleet_oem"
+      "availability": "https://schema.org/OutOfStock",
+      "url": "https://tinyzkp.com/pricing"
     }
-  ],
-  "name": "TinyZKP Commercial Offers",
-  "url": "https://tinyzkp.com/pricing"
+  ]
 }

@@ -88,7 +88,7 @@ def build_sbom(lock_path: Path, *, release_sha: str, created: str) -> dict[str, 
         "spdxVersion": "SPDX-2.3",
         "dataLicense": "CC0-1.0",
         "SPDXID": "SPDXRef-DOCUMENT",
-        "name": f"tinyzkp-backend-preliminary-{lock_digest[:12]}",
+        "name": f"tinyzkp-engine-preliminary-{lock_digest[:12]}",
         "documentNamespace": f"https://tinyzkp.com/spdx/backend/{release_sha}/{lock_digest}",
         "creationInfo": {
             "created": created,

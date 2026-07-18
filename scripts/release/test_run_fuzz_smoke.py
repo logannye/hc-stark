@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import stat
 import subprocess
@@ -27,15 +28,18 @@ def test_all_backend_fuzz_surfaces_are_included():
         "resume_checkpoint_v2",
         "air_package_v1",
         "trace_manifest_v1",
-        "hosted_proof_bundle_v1",
+        "air_proof_bundle_v1",
         "zstd_trace_chunk_v1",
-        "beta_api_request_v1",
+        "public_inputs_v1",
     )
 
 
 def test_fuzz_manifest_is_an_explicit_standalone_workspace():
     manifest = tomllib.loads((MODULE.ROOT / "fuzz" / "Cargo.toml").read_text())
     assert manifest["workspace"] == {}
+    bins = {entry["name"] for entry in manifest["bin"]}
+    assert {"air_proof_bundle_v1", "public_inputs_v1"} <= bins
+    assert {"hosted_proof_bundle_v1", "beta_api_request_v1"}.isdisjoint(bins)
 
 
 def test_partial_diagnostics_do_not_require_release_descriptors(monkeypatch):
@@ -209,6 +213,10 @@ def test_tracked_smoke_seeds_are_self_contained_and_bounded():
         assert len(seeds) <= MODULE.SMOKE_SEED_LIMIT
         assert all(0 < len(seed) <= MODULE.MAX_SMOKE_SEED_BYTES for seed in seeds)
     assert MODULE.checkpoint_seed().startswith(b'{"artifacts":[]')
+    air_bundle = json.loads(MODULE.air_proof_bundle_seed())
+    assert air_bundle["air"]["profile"] == MODULE.PROFILE
+    public_inputs = json.loads(MODULE.public_inputs_seed())
+    assert public_inputs["air_digest_hex"] == MODULE.DECLARATIVE_AIR_DIGEST
 
 
 def test_tool_version_fails_closed(monkeypatch):

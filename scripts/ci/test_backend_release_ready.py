@@ -733,7 +733,7 @@ def test_signed_release_metadata_is_bound_to_release(tmp_path):
                 ],
                 "signer_identity_regexp": gate.SIGSTORE_IDENTITY_REGEXP,
                 "signer_oidc_issuer": gate.SIGSTORE_ISSUER,
-                "checksum_entries": 9,
+                "checksum_entries": len(gate.SIGNED_RELEASE_CHECKSUM_NAMES),
             },
             "artifacts": artifacts,
         },
@@ -747,58 +747,132 @@ def test_signed_release_metadata_is_bound_to_release(tmp_path):
 
 def test_identity_gate_requires_typed_report_and_matching_metadata(tmp_path):
     report = tmp_path / "identity.json"
-    identities = {name: "abc" for name in ("api", "mcp", "site", "cli")}
+    release_sha = "a" * 40
+    identities = {name: release_sha for name in ("engine_cli", "engine_oci")}
     write_json(
         report,
         {
             "schema_version": 1,
-            "release_sha": "abc",
+            "release_sha": release_sha,
+            "release_ref": "backend-v1.0.0",
             "profile": "tinyzkp-p3-goldilocks-v1",
             "checked_at": "2026-01-01T00:00:00Z",
             "surfaces": {
-                name: {
-                    "service": name,
-                    "release_sha": "abc",
+                "engine_cli": {
+                    "service": "engine_cli",
+                    "release_sha": release_sha,
+                    "artifact": "release-artifacts/tinyzkp-engine-linux-x86_64",
+                    "artifact_sha256": "a" * 64,
+                    "identity_artifact": "release-artifacts/engine-release.json",
+                    "identity_artifact_sha256": "b" * 64,
                     "package_version": "0.1.0",
-                    **(
-                        {"artifact": "release-artifacts/cli-release.json"}
-                        if name == "cli"
-                        else {
-                            "url": {
-                                "site": "https://tinyzkp.com/api/release",
-                                "api": "https://api.tinyzkp.com/version",
-                                "mcp": "https://mcp.tinyzkp.com/version",
-                            }[name]
-                        }
-                    ),
-                }
-                for name in identities
+                },
+                "engine_oci": {
+                    "service": "engine_oci",
+                    "release_sha": release_sha,
+                    "artifact": "release-artifacts/tinyzkp-engine.oci.tar",
+                    "artifact_sha256": "c" * 64,
+                    "manifest_digest": "sha256:" + "d" * 64,
+                    "config_digest": "sha256:" + "e" * 64,
+                    "platform": "linux/amd64",
+                    "entrypoint": ["/usr/local/bin/tinyzkp-engine"],
+                },
+            },
+            "compatibility": {
+                "artifact": "release-artifacts/plonky3-compatibility-v1.json",
+                "artifact_sha256": "f" * 64,
+                "profile_id": "tinyzkp-p3-goldilocks-v1",
+                "plonky3_version": "0.6.1",
+                "release_status": "reviewed",
             },
         },
     )
     artifacts = [(report, {"role": "identity_report"})]
     assert (
-        gate.validate_identity_evidence(artifacts, {"identities": identities}, "abc")
+        gate.validate_identity_evidence(
+            artifacts, {"identities": identities}, release_sha
+        )
         == []
     )
 
     skewed = identities.copy()
-    skewed["cli"] = "old"
+    skewed["engine_cli"] = "old"
     assert gate.validate_identity_evidence(
-        artifacts, {"identities": skewed}, "abc"
+        artifacts, {"identities": skewed}, release_sha
     ) == ["release identity metadata does not match the machine report"]
 
 
-def test_evidenced_command_binds_release_command_profile_and_log(tmp_path):
+def test_identity_gate_is_bound_to_signed_artifact_digests(tmp_path):
+    artifacts = {
+        "tinyzkp-engine-linux-x86_64": b"engine",
+        "engine-release.json": b"release",
+        "tinyzkp-engine.oci.tar": b"oci",
+        "plonky3-compatibility-v1.json": b"compatibility",
+    }
+    digests = {}
+    for name, payload in artifacts.items():
+        path = tmp_path / name
+        path.write_bytes(payload)
+        digests[name] = hashlib.sha256(payload).hexdigest()
+    report = tmp_path / "engine-identity.json"
+    write_json(
+        report,
+        {
+            "surfaces": {
+                "engine_cli": {
+                    "artifact": "tinyzkp-engine-linux-x86_64",
+                    "artifact_sha256": digests["tinyzkp-engine-linux-x86_64"],
+                    "identity_artifact": "engine-release.json",
+                    "identity_artifact_sha256": digests["engine-release.json"],
+                },
+                "engine_oci": {
+                    "artifact": "tinyzkp-engine.oci.tar",
+                    "artifact_sha256": digests["tinyzkp-engine.oci.tar"],
+                },
+            },
+            "compatibility": {
+                "artifact": "plonky3-compatibility-v1.json",
+                "artifact_sha256": digests["plonky3-compatibility-v1.json"],
+            },
+        },
+    )
+    checksums = tmp_path / "SHA256SUMS"
+    checksums.write_text(
+        "".join(f"{digest}  {name}\n" for name, digest in sorted(digests.items())),
+        encoding="utf-8",
+    )
+    assert gate.validate_identity_checksum_binding(report, checksums) == []
+
+    (tmp_path / "tinyzkp-engine.oci.tar").write_bytes(b"mutated")
+    assert gate.validate_identity_checksum_binding(report, checksums) == [
+        "engine identity does not match the signed artifact checksums"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("gate_id", "test_name", "profile", "require_release_profile"),
+    [
+        (
+            "official_verifier_fibonacci",
+            "fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier",
+            "release",
+            True,
+        ),
+        (
+            "air_job_contracts",
+            "plonky3_air_job_contracts",
+            "ci",
+            False,
+        ),
+    ],
+)
+def test_evidenced_command_binds_release_command_profile_and_log(
+    tmp_path, gate_id, test_name, profile, require_release_profile
+):
     release_sha = source_release_sha()
-    gate_id = "official_verifier_fibonacci"
     spec = gate.run_evidenced_command.GATES[gate_id]
     log = tmp_path / "test.log"
-    log.write_bytes(
-        exact_test_log(
-            "fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier"
-        )
-    )
+    log.write_bytes(exact_test_log(test_name))
     command = spec["command"]
     environment = gate.evidence_runtime.environment_policy()
     report = tmp_path / "test-report.json"
@@ -818,7 +892,7 @@ def test_evidenced_command_binds_release_command_profile_and_log(tmp_path):
             ),
             "profile": "tinyzkp-p3-goldilocks-v1",
             "gate": gate_id,
-            "execution_profile": "release",
+            "execution_profile": profile,
             "logical_command": command,
             "actual_command": ["/tool/cargo", *command[1:]],
             "descriptor_execution": True,
@@ -843,12 +917,12 @@ def test_evidenced_command_binds_release_command_profile_and_log(tmp_path):
                 "kind": "landlock-write-deny-v1",
                 "abi_version": 3,
                 "source_write_allowed": False,
-                "writable_paths": ["cargo-target", "sdk-work", "tmp"],
+                "writable_paths": ["cargo-target", "gate-work", "tmp"],
             },
-                "network_boundary": None,
-                "immutable_file_count": 1,
-                "gate_inputs": {},
-                "tools": {
+            "network_boundary": None,
+            "immutable_file_count": 1,
+            "gate_inputs": {},
+            "tools": {
                 "cargo": {
                     "path": "/tool/cargo",
                     "sha256": "c" * 64,
@@ -868,7 +942,7 @@ def test_evidenced_command_binds_release_command_profile_and_log(tmp_path):
     ]
     metadata = {
         "release_sha": release_sha,
-        "execution_profile": "release",
+        "execution_profile": profile,
         "command": command,
         "exit_status": 0,
         "gate_id": gate_id,
@@ -878,7 +952,7 @@ def test_evidenced_command_binds_release_command_profile_and_log(tmp_path):
             artifacts,
             metadata,
             release_sha,
-            require_release_profile=True,
+            require_release_profile=require_release_profile,
             expected_gate=gate_id,
         )
         == []
@@ -888,7 +962,7 @@ def test_evidenced_command_binds_release_command_profile_and_log(tmp_path):
         artifacts,
         metadata,
         release_sha,
-        require_release_profile=True,
+        require_release_profile=require_release_profile,
         expected_gate=gate_id,
     ) == ["evidenced command report is incomplete or release-skewed"]
 
@@ -1673,6 +1747,14 @@ def test_fuzz_smoke_requires_every_bounded_reproducible_target(tmp_path):
     ]
 
 
+def test_active_fuzz_boundary_matches_runner_and_review_bundle():
+    expected = set(gate.run_fuzz_smoke.TARGETS)
+    assert gate.FUZZ_TARGETS == expected
+    assert set(gate.build_review_bundle.FUZZ_TARGETS) == expected
+    assert {"air_proof_bundle_v1", "public_inputs_v1"} <= expected
+    assert {"hosted_proof_bundle_v1", "beta_api_request_v1"}.isdisjoint(expected)
+
+
 def test_fuzz_smoke_rejects_unbounded_or_noncanonical_evidence(tmp_path):
     release_sha = source_release_sha()
     report = tmp_path / "fuzz.json"
@@ -1702,7 +1784,7 @@ def test_partner_evidence_requires_typed_adapter_report_and_acceptance(tmp_path)
             "mode": "compare",
             "profile": "tinyzkp-p3-goldilocks-v1",
             "plonky3_version": "0.6.1",
-            "dependency_lock_sha256": "c1afc52e0c067eaaecddc2463a37713189ece1456df806b83fe7fcd9e9cb8420",
+            "dependency_lock_sha256": "0e9a8928370fdd4c4218a98a642f734e955d3801ade78f52ebec31ddbcd18a78",
             "release_sha": "abc",
             "official_verification": True,
             "bounded_equals_conventional": True,

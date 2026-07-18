@@ -1,60 +1,26 @@
+/terms
+  X-Robots-Tag: noindex, follow
+/privacy
+  X-Robots-Tag: noindex, follow
+/refunds
+  X-Robots-Tag: noindex, follow
+/eula
+  X-Robots-Tag: noindex, follow
+/account*
+  X-Robots-Tag: noindex, nofollow
 /agents*
   X-Robots-Tag: noindex, nofollow
 /agent-*
   X-Robots-Tag: noindex, nofollow
-/verifiable-agent-output*
+/api/*
   X-Robots-Tag: noindex, nofollow
-/roi*
-  X-Robots-Tag: noindex, nofollow
-/calculator*
-  X-Robots-Tag: noindex, nofollow
-/fit*
-  X-Robots-Tag: noindex, nofollow
-/use-cases*
-  X-Robots-Tag: noindex, nofollow
-/compare*
-  X-Robots-Tag: noindex, nofollow
-/integrations*
-  X-Robots-Tag: noindex, nofollow
-/receipts*
-  X-Robots-Tag: noindex, nofollow
-/try*
-  X-Robots-Tag: noindex, nofollow
-/signup*
-  X-Robots-Tag: noindex, nofollow
-/pilot*
-  X-Robots-Tag: noindex, nofollow
-/platform-rollout*
-  X-Robots-Tag: noindex, nofollow
-/account*
-  X-Robots-Tag: noindex, nofollow
-/welcome*
-  X-Robots-Tag: noindex, nofollow
-/verify*
-  X-Robots-Tag: noindex, nofollow
-/enterprise*
-  X-Robots-Tag: noindex, nofollow
-/evaluation*
+/compute*
   X-Robots-Tag: noindex, nofollow
 /mcp*
   X-Robots-Tag: noindex, nofollow
-/changelog*
+/receipts*
   X-Robots-Tag: noindex, nofollow
-/apps*
+/requests*
   X-Robots-Tag: noindex, nofollow
-/badges*
+/vendor*
   X-Robots-Tag: noindex, nofollow
-/examples*
-  X-Robots-Tag: noindex, nofollow
-/limits*
-  X-Robots-Tag: noindex, nofollow
-/recipes*
-  X-Robots-Tag: noindex, nofollow
-/research*
-  X-Robots-Tag: noindex, nofollow
-/templates*
-  X-Robots-Tag: noindex, nofollow
-/privacy*
-  X-Robots-Tag: noindex, follow
-/terms*
-  X-Robots-Tag: noindex, follow

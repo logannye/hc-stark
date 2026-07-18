@@ -106,7 +106,8 @@ FUZZ_TARGETS = (
     "workload_manifest_v1", "proof_bundle_v1", "plonky3_proof_bytes_v1",
     "benchmark_report_v1", "checkpoint_manifest_v2", "challenger_snapshot_v1",
     "scratch_artifact_header_v1", "checkpoint_identity_v2",
-    "resume_checkpoint_v2",
+    "resume_checkpoint_v2", "air_package_v1", "trace_manifest_v1",
+    "air_proof_bundle_v1", "zstd_trace_chunk_v1", "public_inputs_v1",
 )
 REQUIRED_EVIDENCE_ROLES = {
     "raw-reports": {

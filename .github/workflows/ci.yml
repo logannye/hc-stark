@@ -1,4 +1,4 @@
-name: hc-stark CI
+name: TinyZKP engine and static site CI
 
 on:
   push:
@@ -10,365 +10,104 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
 
-      - name: Materialize release-trust anchored Git
-        run: |
-          python3 scripts/ci/materialize_anchored_git.py \
-            --output "$RUNNER_TEMP/tinyzkp-anchored-git/git" \
-            --github-env "$GITHUB_ENV"
-
-      - name: Install toolchain
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
 
-      - name: Install Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          node-version: 20
+          python-version: "3.12"
 
-      - name: Install Python test deps
-        run: python3 -m pip install --user pytest -r billing/requirements.txt -r scripts/benchmark/requirements.txt
-
-      - name: Install runtime test deps
-        run: sudo apt-get update && sudo apt-get install -y sqlite3
-
-      - name: Cache cargo
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          node-version: "20"
 
-      - name: Containment monitoring contracts
-        run: |
-          bash -n scripts/monitoring/api_health_audit.sh scripts/monitoring/run_api_health_audit.sh deploy/macos/install_api_audit_launchagent.sh
-          python3 -m pytest scripts/ci/test_containment_health_audit.py
-          node deploy/uptime-probe/worker.test.mjs
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
 
-      - name: fmt
+      - name: Install evidence test dependencies
+        run: python3 -m pip install pytest -r scripts/benchmark/requirements.txt
+
+      - name: Formatting
         run: cargo fmt --all -- --check
 
-      - name: Paid public-beta control plane
+      - name: Public engine unit tests
         run: |
-          cargo test --locked -p hc-beta-api -p hc-beta-worker
-          cargo check --locked -p hc-cli
-          python3 scripts/ci/public_beta_schema_check.py
-          scripts/ci/public_beta_migration_upgrade_check.sh
-          python3 -m pytest \
-            scripts/ci/test_public_beta_schema_check.py \
-            scripts/ci/test_validate_public_beta_canary.py \
-            scripts/canary/test_hc_beta_e2e.py \
-            scripts/benchmark/test_customer_cubic8.py \
-            scripts/release/test_build_public_beta_authorization.py \
-            scripts/release/test_stage_public_beta_site.py \
-            scripts/release/test_activate_public_beta.py \
-            deploy/hetzner/beta/test_switch_beta_route.py \
-            scripts/ci/test_beta_deployment_contract.py
+          cargo test --locked -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm
+          cargo test --locked --manifest-path examples/partner-adapter/Cargo.toml
 
-      - name: Plonky3 backend recovery gate
-        run: python3 scripts/ci/backend_recovery_gate.py
+      - name: Public engine clippy
+        run: >-
+          cargo clippy --locked
+          -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm
+          -p tinyzkp-partner-adapter-example
+          --all-targets -- -D warnings
 
-      - name: Backend source secret and generated-artifact scan
+      - name: Frozen compatibility and verifier vectors
         run: |
           python3 scripts/ci/backend_source_scan.py
-          python3 -m pytest scripts/ci/test_backend_source_scan.py -q
+          python3 scripts/ci/plonky3_compatibility_gate.py
+          bash scripts/ci/check_plonky3_known_answers.sh
+          cargo check --locked -p hc-wasm --target wasm32-unknown-unknown
 
-      - name: Frozen Plonky3 compatibility profile
-        run: python3 scripts/ci/plonky3_compatibility_gate.py
-
-      - name: Plonky3 official verifier and DFT differential tests
-        run: cargo test -p hc-plonky3 --locked
-
-      - name: Release four-step DFT differential through 2^20 rows
-        run: cargo test -p hc-plonky3 --release dft --locked
-
-      - name: Plonky3 known-answer vectors are deterministic
-        run: bash scripts/ci/check_plonky3_known_answers.sh
-
-      - name: Plonky3 cgroup harness unit tests
+      - name: Resource harness tests
         run: |
-          python3 -m pytest scripts/benchmark/test_fixed_host_preflight.py -q
-          python3 -m pytest scripts/benchmark/test_run_fixed_host_release_matrix.py -q
-          python3 -m pytest scripts/benchmark/test_run_plonky3_cgroup.py -q
-          python3 -m pytest scripts/benchmark/test_validate_release_gate.py -q
+          python3 -m pytest \
+            scripts/benchmark/test_fixed_host_preflight.py \
+            scripts/benchmark/test_run_fixed_host_release_matrix.py \
+            scripts/benchmark/test_run_plonky3_cgroup.py \
+            scripts/benchmark/test_validate_release_gate.py -q
 
-      - name: reconciliation invariants
-        run: ./scripts/ci/reconciliation_invariants.sh
-
-      - name: launch gate audit
+      - name: Release evidence and launch-gate tests
         run: |
-          python3 -m pytest scripts/ci/test_recovery_reconciliation_invariants.py
-          python3 -m pytest scripts/ci/test_source_tree_identity.py
-          python3 -m pytest scripts/ci/test_materialize_anchored_git.py
-          python3 -m pytest scripts/ci/test_backend_release_ready.py
-          python3 -m pytest scripts/ci/test_backend_prerelease_ready.py
-          python3 -m pytest scripts/release/test_finalize_signed_evidence.py
-          python3 -m pytest scripts/release/test_build_candidate_evidence.py
-          python3 -m pytest scripts/release/test_build_commercial_authorization.py
-          python3 -m pytest scripts/release/test_verify_sdk_release_versions.py
-          python3 -m pytest scripts/release/test_verify_sdk_backend_compatibility.py
-          python3 scripts/ci/launch_gate_audit.py
-          python3 -m pytest scripts/ci/test_launch_gate_audit.py
-          python3 scripts/ci/production_launch_preflight.py
-          python3 -m pytest scripts/ci/test_production_launch_preflight.py
-          python3 -m pytest scripts/ci/test_release_identity_check.py
-          python3 -m pytest scripts/monitoring/test_backend_recovery_canary.py
-          python3 -m pytest scripts/load/test_run_public_beta_load.py
-          python3 -m pytest scripts/canary/test_run_public_beta_canary.py
-          python3 -m pytest scripts/release/test_build_dark_canary_authorization.py
-          python3 -m pytest scripts/release/test_extract_public_beta_evidence.py
-
-      - name: backup restore checks
-        run: |
-          python3 scripts/ci/backup_restore_check.py
-          python3 -m pytest scripts/ci/test_backup_restore_check.py
-          python3 -m pytest billing/tests/test_backup_script.py
-
-      - name: static site route check
-        run: |
-          python3 scripts/commercial/render_offers.py --check
-          python3 -m pytest scripts/commercial/test_render_offers.py
-          python3 scripts/commercial/validate_scorecard.py commercial/monthly-scorecard.example.json
-          python3 -m pytest scripts/commercial/test_validate_scorecard.py
-          python3 -m pytest scripts/commercial/test_evaluation_qualification.py scripts/commercial/test_partner_preflight.py
-          python3 scripts/ci/site_route_check.py
-          python3 -m pytest scripts/ci/test_site_route_check.py
-          node scripts/ci/test_analytics_attribution.mjs
-
-      - name: Cloudflare Pages deploy check
-        run: |
-          python3 scripts/ci/site_deploy_check.py
-          python3 scripts/ci/cloudflare_toolchain_check.py
-          python3 -m pytest scripts/ci/test_site_deploy_check.py
-          python3 -m pytest scripts/ci/test_cloudflare_pages_secret_check.py
-          python3 -m pytest scripts/ci/test_cloudflare_toolchain_check.py
-          python3 -m pytest scripts/deploy/test_cloudflare_pages_release.py
-          node scripts/ci/site_worker_dispatch_test.mjs
-          node scripts/release/test_public_beta_site_worker.mjs
-
-      - name: Docker Compose config checks
-        run: |
-          python3 scripts/ci/compose_config_check.py
-          python3 -m pytest scripts/ci/test_compose_config_check.py
-
-      - name: deploy readiness policy checks
-        run: python3 -m pytest scripts/ci/test_deploy_readiness_check.py
-
-      - name: billing python checks
-        run: |
-          python3 -m pytest billing/tests/test_site_pricing_parity.py
-          python3 -m pytest billing/tests/test_dunning.py
-          python3 -m pytest billing/tests/test_session_endpoints.py
-          python3 -m pytest billing/tests/test_sessions.py
-          python3 -m pytest billing/tests/test_tenant_store.py
-          python3 -m pytest billing/tests/test_usage_pg_tools.py
-          python3 -m pytest billing/tests/test_tenant_pg_tools.py
-          python3 -m pytest billing/tests/test_contact_intake.py
-          python3 -m pytest billing/tests/test_evaluation_store.py
-          python3 -m pytest billing/tests/test_contract_billing.py
-          python3 -m pytest billing/tests/test_evaluation_start_ready.py
-          python3 -m pytest billing/tests/test_agreement_gate.py
-          python3 -m pytest billing/tests/test_evaluation_delivery_manifest.py
-          python3 -m pytest billing/tests/test_stripe_test_drill.py
-          python3 -m pytest billing/tests/test_public_beta_stripe_drill.py
-          python3 -m pytest billing/tests/test_configure_contract_portal.py
-          python3 -m pytest billing/tests/test_legacy_billing_containment.py
-          python3 -m pytest billing/tests/test_stripe_account_context_check.py
-          python3 -m pytest billing/tests/test_stripe_catalog_write_preflight.py
-          python3 -m pytest billing/tests/test_stripe_revenue_ops_audit.py
-          python3 -m pytest billing/tests/test_runtime_lock.py
-          python3 -m pytest scripts/ci/test_fixed_host_backup_evidence.py
-          python3 -m pytest scripts/ci/test_fixed_host_evidence_workspace.py
-          python3 -m pytest scripts/ci/test_installer_drill_evidence.py
-          python3 -m pytest scripts/ci/test_legacy_billing_containment_status.py
-          python3 -m pytest scripts/ci/test_billing_service_hardening.py
-          python3 -m pytest deploy/hetzner/test_deployment_transaction.py
-
-      - name: Python SDK checks
-        run: |
-          python3 -m pip install --user -e 'clients/python[test]'
-          python3 -m pytest clients/python/tests/test_client.py
-
-      - name: TypeScript SDK checks
-        working-directory: clients/typescript
-        run: |
-          npm ci
-          npm run build
-          npm test
-
-      - name: Rust SDK checks
-        run: cargo test --manifest-path clients/rust/Cargo.toml --locked
-
-      - name: WASM local verifier cross-target check
-        run: cargo check -p hc-wasm --target wasm32-unknown-unknown --locked
-
-      - name: WASM local verifier golden runtime
-        run: |
-          cargo install wasm-pack --version 0.14.0 --locked
-          crates/hc-wasm/build.sh
-          node crates/hc-wasm/test-package.mjs
-
-      - name: Statically linked partner adapter example
-        run: |
-          cargo test --manifest-path examples/partner-adapter/Cargo.toml --locked
-          python3 -m pytest examples/partner-adapter/test_run_cgroup.py -q
-
-      - name: Deterministic review bundle tooling
-        run: |
+          python3 -m pytest \
+            scripts/ci/test_guard_launch_gate.py \
+            scripts/ci/test_guard_github_action.py \
+            scripts/ci/test_founding_validation_status.py \
+            scripts/ci/test_backend_release_ready.py \
+            scripts/ci/test_backend_prerelease_ready.py \
+            scripts/ci/test_launch_gate_audit.py \
+            scripts/ci/test_release_distribution_contract.py \
+            scripts/ci/test_source_tree_identity.py \
+            scripts/ci/test_strict_json.py \
+            scripts/ci/test_check_pinned_actions.py \
+            scripts/release/test_build_candidate_evidence.py \
+            scripts/release/test_build_engine_identity_report.py \
+            scripts/release/test_finalize_signed_evidence.py \
+            scripts/release/test_build_review_bundle.py \
+            scripts/release/test_build_external_records.py \
+            scripts/release/test_external_signature_gate.py \
+            scripts/release/test_run_evidenced_command.py \
+            scripts/release/test_run_crash_matrix.py \
+            scripts/release/test_run_fuzz_smoke.py -q
+          python3 scripts/ci/guard_launch_gate.py
           python3 scripts/ci/check_pinned_actions.py
-          python3 -m pytest scripts/ci/test_check_pinned_actions.py -q
-          python3 -m pytest scripts/ci/test_strict_json.py -q
-          python3 -m pytest scripts/release/test_build_preliminary_sbom.py -q
-          python3 -m pytest scripts/release/test_build_review_bundle.py -q
-          python3 -m pytest scripts/release/test_build_external_records.py -q
-          python3 -m pytest scripts/release/test_external_signature_gate.py -q
-          python3 -m pytest scripts/release/test_evidence_runtime.py -q
-          python3 -m pytest scripts/release/test_gate_tool_anchor.py -q
-          python3 -m pytest scripts/release/test_fuzz_tool_anchor.py -q
-          python3 -m pytest scripts/release/test_run_fuzz_smoke.py -q
-          python3 -m pytest scripts/release/test_run_crash_matrix.py -q
-          python3 -m pytest scripts/release/test_run_evidenced_command.py -q
-          python3 -m pytest scripts/ci/test_generate_sdk_schema_models.py -q
-          python3 -m pytest scripts/ci/test_verify_sdk_python_wheelhouse.py -q
-          python3 -m pytest scripts/ci/test_materialize_sdk_python_env.py -q
-          python3 -m pytest scripts/ci/test_verify_sdk_npm_tarballs.py -q
 
-      - name: Durable checkpoint and crash-resume matrix
-        run: cargo test -p hc-plonky3 --features fault-injection --locked bounded_prover::tests
-
-      - name: shell script syntax
+      - name: Static site contracts
         run: |
-          bash -n deploy/hetzner/beta/*.sh
-          bash -n scripts/ci/reconciliation_invariants.sh
-          python3 -m py_compile scripts/ci/production_launch_preflight.py
-          python3 -m py_compile scripts/ci/release_identity_check.py
-          python3 -m py_compile scripts/ci/recovery_reconciliation_invariants.py
-          python3 -m py_compile scripts/ci/backend_recovery_gate.py
-          python3 -m py_compile scripts/ci/backend_source_scan.py
-          python3 -m py_compile scripts/ci/generate_sdk_schema_models.py
-          python3 -m py_compile scripts/ci/verify_sdk_python_wheelhouse.py
-          python3 -m py_compile scripts/ci/materialize_sdk_python_env.py
-          python3 -m py_compile scripts/ci/verify_sdk_npm_tarballs.py
-          python3 -m py_compile scripts/ci/capture_sdk_python_runtime.py
-          python3 -m py_compile scripts/ci/plonky3_compatibility_gate.py
-          bash -n scripts/ci/sdk_contract_gate.sh
-          bash -n crates/hc-wasm/build.sh
-          python3 -m py_compile scripts/ci/backend_release_ready.py
-          python3 -m py_compile scripts/ci/backend_prerelease_ready.py
-          python3 -m py_compile scripts/ci/source_tree_identity.py
-          python3 -m py_compile scripts/ci/strict_json.py
-          python3 -m py_compile scripts/ci/check_pinned_actions.py
-          python3 -m py_compile scripts/ci/cloudflare_pages_secret_check.py
-          python3 -m py_compile scripts/ci/cloudflare_toolchain_check.py
-          python3 -m py_compile scripts/ci/cargo_audit_policy.py
-          python3 -m py_compile scripts/ci/materialize_cloudflare_toolchain.py
-          python3 -m py_compile scripts/ci/fixed_host_backup_evidence.py
-          python3 -m py_compile scripts/ci/fixed_host_evidence_workspace.py
-          python3 -m py_compile scripts/ci/installer_drill_evidence.py
-          python3 -m py_compile scripts/ci/legacy_billing_containment_status.py
-          python3 -m py_compile deploy/hetzner/deployment_transaction.py
-          python3 -m py_compile scripts/monitoring/backend_recovery_canary.py
-          python3 -m py_compile billing/legacy_billing_containment.py
-          python3 -m py_compile billing/configure_contract_portal.py
-          python3 -m py_compile billing/contract_billing.py
-          python3 -m py_compile billing/evaluation_start_ready.py
-          python3 -m py_compile billing/agreement_gate.py
-          python3 -m py_compile billing/evaluation_delivery_manifest.py
-          python3 -m py_compile billing/stripe_test_drill.py
-          python3 -m py_compile billing/evaluation_store.py
-          python3 -m py_compile billing/evaluation_intake.py
-          python3 -m py_compile billing/runtime_lock.py
-          python3 -m py_compile scripts/commercial/render_offers.py
-          python3 -m py_compile scripts/benchmark/fixed_host_preflight.py
-          python3 -m py_compile scripts/commercial/evidence_common.py
-          python3 -m py_compile scripts/commercial/evaluation_qualification.py
-          python3 -m py_compile scripts/commercial/partner_preflight.py
-          python3 -m py_compile scripts/deploy/cloudflare_pages_release.py
-          python3 -m py_compile scripts/benchmark/run_fixed_host_release_matrix.py
-          python3 -m py_compile scripts/benchmark/validate_release_gate.py
-          python3 -m py_compile scripts/release/build_preliminary_sbom.py
-          python3 -m py_compile scripts/release/build_review_bundle.py
-          python3 -m py_compile scripts/release/build_external_records.py
-          python3 -m py_compile scripts/release/build_candidate_evidence.py
-          python3 -m py_compile scripts/release/finalize_signed_evidence.py
-          python3 -m py_compile scripts/release/build_commercial_authorization.py
-          python3 -m py_compile scripts/release/verify_sdk_release_versions.py
-          python3 -m py_compile scripts/release/verify_sdk_backend_compatibility.py
-          python3 -m py_compile scripts/release/evidence_runtime.py
-          python3 -m py_compile scripts/release/gate_tool_anchor.py
-          python3 -m py_compile scripts/release/fuzz_tool_anchor.py
-          python3 -m py_compile scripts/release/run_fuzz_smoke.py
-          python3 -m py_compile scripts/release/run_crash_matrix.py
-          python3 -m py_compile scripts/release/run_evidenced_command.py
-          python3 -m py_compile scripts/release/wait_for_crate_version.py
-          python3 -m py_compile examples/partner-adapter/run_cgroup.py
-          bash -n scripts/monitoring/api_health_audit.sh
-          bash -n scripts/ci/check_plonky3_known_answers.sh
-          bash -n scripts/release/run_crash_matrix_disk_full.sh
-          bash -n scripts/monitoring/host_cron_env.sh
-          python3 -m py_compile billing/stripe_account_context_check.py
-          python3 -m py_compile billing/stripe_revenue_ops_audit.py
-          python3 -m py_compile billing/stripe_catalog_write_preflight.py
-          python3 -m py_compile billing/configure_public_beta_portal.py
-          bash -n billing/backup.sh
-          bash -n billing/setup_stripe_products.sh
-          bash -n deploy/hetzner/install_billing_runtime.sh
-          bash -n deploy/hetzner/deploy.sh
-          bash -n deploy/hetzner/setup.sh
-          bash -n deploy/hetzner/rollback.sh
-          bash -n deploy/hetzner/beta/configure-r2-lifecycle.sh
-
-      - name: site JavaScript syntax
-        run: |
+          python3 scripts/ci/site_route_check.py
+          python3 scripts/ci/site_deploy_check.py
+          python3 -m pytest \
+            scripts/ci/test_site_route_check.py \
+            scripts/ci/test_guard_site_contract.py \
+            scripts/ci/test_site_asset_manifest.py -q
           node --check site/_worker.js
-          node --check scripts/ci/test_analytics_attribution.mjs
-          node --check site/functions/api/contact.js
-          find site/functions/api -name '*.js' -print0 | xargs -0 -n1 node --check
-          node --check site/analytics.js
-          node --check deploy/uptime-probe/worker.js
-          node scripts/ci/cloudflare_backup_worker_test.mjs
+          node scripts/ci/site_worker_dispatch_test.mjs
 
-      - name: clippy production packages and partner API example
-        run: cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm -p hc-server -p hc-mcp -p hc-beta-api -p hc-beta-worker -p tinyzkp-partner-adapter-example --all-targets --locked -- -D warnings
+      - name: Customer-operated OCI image
+        run: docker build --build-arg HC_RELEASE_SHA=${{ github.sha }} --build-arg HC_RELEASE_REF=ci -t tinyzkp-engine:ci .
 
-      - name: production package tests
-        run: cargo test -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm -p hc-server -p hc-mcp -p hc-beta-api -p hc-beta-worker --locked
-
-      - name: cargo audit
+      - name: Dependency policy
         run: |
           cargo install cargo-audit --locked
-          # Advisory ignores live in .cargo/audit.toml. The policy validator
-          # rejects every vulnerability and every warning except exact,
-          # checksummed compatibility bytes whose upstream constraints do not
-          # yet admit a non-yanked release.
           cargo audit --json > "$RUNNER_TEMP/tinyzkp-cargo-audit.json" || true
           python3 -m pytest scripts/ci/test_cargo_audit_policy.py -q
-          python3 scripts/ci/cargo_audit_policy.py \
-            --report "$RUNNER_TEMP/tinyzkp-cargo-audit.json"
-      - name: cargo deny
-        run: |
-          cargo install cargo-deny --locked
-          cargo deny check
-
-      - name: Plonky3 artifact schema smoke
-        run: |
-          rm -rf /tmp/tinyzkp-schemas
-          cargo run -p hc-cli --locked -- schema --output-dir /tmp/tinyzkp-schemas
-          diff -ru site/schemas /tmp/tinyzkp-schemas
-          python3 scripts/ci/generate_sdk_schema_models.py \
-            --schema-dir /tmp/tinyzkp-schemas \
-            --python-output clients/python/tinyzkp/schema_models.py \
-            --typescript-output clients/typescript/src/schema-models.ts \
-            --check
+          python3 scripts/ci/cargo_audit_policy.py --report "$RUNNER_TEMP/tinyzkp-cargo-audit.json"

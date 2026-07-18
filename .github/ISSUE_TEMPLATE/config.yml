@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation and compatibility
+    url: https://tinyzkp.com/docs
+    about: Check the supported profile and local workflow before filing an issue.
+  - name: Private security report
+    url: https://github.com/logannye/hc-stark/security/advisories/new
+    about: Report vulnerabilities privately. Never put vulnerability details in a public issue.
+  - name: Billing and subscription management
+    url: https://tinyzkp.com/support
+    about: Use the merchant portal linked from the support page once commerce is live.

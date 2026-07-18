@@ -1,20 +1,76 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TinyZKP Docs — Plonky3 backend recovery</title><meta name="description" content="TinyZKP resource policy, Plonky3 compatibility, artifact contracts, CLI, and maintenance behavior."><link rel="canonical" href="https://tinyzkp.com/docs"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><link rel="stylesheet" href="/recovery.css"><style>pre{overflow:auto;background:#02060d;border:1px solid var(--border-light);padding:16px;border-radius:8px;color:#b9d9d4;font:12px/1.65 var(--mono);margin:12px 0 20px}</style></head><body>
-<nav class="recovery-nav"><div class="container"><a class="logo" href="/"><span>Tiny</span>ZKP</a><div class="links"><a href="/engine">Engine</a><a href="/benchmarks">Benchmarks</a><a href="/plonky3">Plonky3</a><a href="/security">Security</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/status">Status</a><a href="/contact">Contact</a></div></div></nav><main><div class="container">
-<div class="upgrade"><strong>Maintenance contract.</strong> The hosted API exposes health, release identity, and capabilities only. Production proving and verification are disabled.</div>
-<section class="hero"><div><div class="eyebrow">Developer documentation</div><h1>Build against the resource contract.</h1><p class="lede">TinyZKP targets official Plonky3 0.6.1 proof types and its unmodified verifier. The public Rust and CLI surfaces describe workload, RAM, scratch, checkpoint, provenance, and benchmark behavior rather than a new proof protocol.</p><div class="actions"><a class="cta" href="/openapi.json">Maintenance OpenAPI</a><a class="cta secondary" href="https://github.com/logannye/hc-stark">Rust source</a></div></div><aside class="panel"><h2>Compatibility identity</h2><div class="facts"><div class="fact"><span>Backend</span><strong>plonky3</strong></div><div class="fact"><span>Crate release</span><strong>0.6.1</strong></div><div class="fact"><span>Profile</span><strong>tinyzkp-p3-goldilocks-v1</strong></div><div class="fact"><span>Verifier</span><strong>Official upstream</strong></div><div class="fact"><span>Status</span><strong>Implementation preview</strong></div></div></aside></section>
-<section class="section"><h2>Implementation-preview CLI</h2><pre>hc-cli plonky3 doctor --policy resource-policy.json
-hc-cli plonky3 prove --manifest workload.json --output proof-bundle.json
-hc-cli plonky3 resume --checkpoint checkpoint.json --output proof-bundle.json
-hc-cli plonky3 verify --bundle proof-bundle.json
-hc-cli benchmark plonky3 --manifest workload.json --baseline conventional --candidate bounded --report report.json</pre><p class="small">Commands remain implementation-preview until the release gates pass. Generic legacy proving is available only in offline <code>legacy-research</code> builds.</p></section>
-<section class="section"><h2>Versioned artifacts</h2><table class="table"><thead><tr><th>Type</th><th>Purpose</th></tr></thead><tbody><tr><td><code>WorkloadManifestV1</code></td><td>Backend/profile, workload, input digest or generator, rows, deterministic seed, resource policy, and expected verifier</td></tr><tr><td><code>ProofBundleV1</code></td><td>Official Plonky3 proof bytes, public values, manifest/proof digests, and release provenance; packaging, not a new proof statement</td></tr><tr><td><code>BenchmarkReportV1</code></td><td>Hardware, release, command, workload, CPU, wall time, whole-process RSS, scratch, I/O, proof size, and verifier result</td></tr></tbody></table></section>
-<section class="section"><h2>ResourcePolicyV1</h2><pre>{
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TinyZKP Documentation — Doctor, run, resume, and verify</title>
+  <meta name="description" content="TinyZKP Community and Guard documentation for compatibility checks, local proof execution, resume, verification, CI policy, and diagnostics.">
+  <link rel="canonical" href="https://tinyzkp.com/docs"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><script src="/shared.js" defer></script>
+</head>
+<body>
+<header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a><a class="button nav-buy" data-checkout="annual" data-closed-label="Not yet for sale" data-live-label="Buy Guard">Not yet for sale</a></nav></div></header>
+<main><section class="page-hero"><div class="container"><div class="eyebrow">Local CLI and JSON</div><h1>Evaluate compatibility before you buy.</h1><p class="lede">The Community engine and doctor are the evaluation path. Guard adds local supervision around the same versioned engine and public file contracts.</p><div class="actions"><a class="button" href="#doctor">Run the doctor</a><a class="button secondary" href="https://github.com/logannye/hc-stark">Browse source</a></div></div></section>
+<section class="content container">
+  <div class="notice"><strong>Release status:</strong> the current repository exposes the Community Plonky3 doctor. The unified <code>tinyzkp</code> Guard commands below are the stable v1 contract but are not presented as downloadable production artifacts until the release gate passes.</div>
+  <h2 id="doctor">Free Community doctor</h2>
+  <p>Clone the MIT repository on a supported Rust development host, prepare a resource policy or workload manifest, and run:</p>
+  <pre><code>cargo run -p hc-cli -- plonky3 doctor \
+  --policy examples/plonky3/resource-policy.local.json</code></pre>
+  <p>For a workload-specific check, use <code>--manifest</code> instead of <code>--policy</code>. Treat the report as potentially sensitive operational metadata; inspect it before sharing and never attach witness data, secrets, or license keys.</p>
+  <h2>Guard v1 commands</h2>
+  <div class="table-wrap"><table><thead><tr><th>Command</th><th>Purpose</th></tr></thead><tbody><tr><td><code>tinyzkp activate --license-key-stdin</code></td><td>Validate a current subscription once and write an owner-only, exact-release entitlement.</td></tr><tr><td><code>tinyzkp compatibility check --job job.json</code></td><td>Validate the complete supported profile without proving.</td></tr><tr><td><code>tinyzkp doctor --job job.json</code></td><td>Check compatibility, paths, RAM, scratch, and planned mode.</td></tr><tr><td><code>tinyzkp run --job job.json</code></td><td>Run locally using auto, conventional, or bounded mode.</td></tr><tr><td><code>tinyzkp resume --job-dir ./job</code></td><td>Resume an exact-release-bound interrupted job.</td></tr><tr><td><code>tinyzkp verify --bundle proof.json</code></td><td>Verify through the released ordinary verification path.</td></tr><tr><td><code>tinyzkp policy check --report run.json --baseline baseline.json</code></td><td>Fail CI on a declared resource regression using <a href="/schemas/policy-baseline-v1.schema.json">PolicyBaselineV1</a>.</td></tr><tr><td><code>tinyzkp license status --json</code></td><td>Inspect local entitlement state without contacting the merchant.</td></tr><tr><td><code>tinyzkp version --json</code></td><td>Print Guard, engine, schema, and compatibility identities.</td></tr></tbody></table></div>
+  <h2>Job contract</h2>
+  <p><code>JobManifestV1</code> describes workload inputs, mode, RAM budget, scratch budget, job directory, and output directory. Paths are resolved under declared roots. Traversal, symlinks, devices, unknown fields, oversized inputs, and incompatible releases fail closed.</p>
+  <pre><code>{
+  "schema_version": 1,
+  "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
   "mode": "auto",
-  "max_resident_bytes": 536870912,
-  "max_scratch_bytes": 8589934592,
-  "scratch_dir": "/secure/nvme/tinyzkp",
+  "ram_budget_bytes": 2147483648,
+  "scratch_budget_bytes": 107374182400,
   "max_threads": 8,
-  "checkpoint_policy": "retain_on_failure"
-}</pre><p class="intro"><code>auto</code> uses memory only when the mode-specific estimate is below 70% of the declared cap. The implemented preflight rejects insufficient RAM or scratch and unsafe scratch paths before proving. Full-pipeline input streaming and checkpoint continuation remain release-gated.</p></section>
-<section class="section"><h2>Maintenance API</h2><div class="grid"><article class="card"><h3><code>GET /version</code></h3><p>Release identity for deployment-skew checks.</p></article><article class="card"><h3><code>GET /healthz</code></h3><p>Process liveness only; it does not imply proving availability.</p></article><article class="card"><h3><code>GET /v1/capabilities</code></h3><p>Explicit backend, maintenance, proving, verification, checkout, and compatibility state.</p></article></div><div class="truth"><strong>Fail closed:</strong> prove and account routes return <code>503 protocol_upgrade</code>; hosted pre-v9 verification returns <code>422 legacy_statement_unbound</code>.</div></section>
-</div></main><footer><div class="container"><div class="left">Docs describe implemented or explicitly gated behavior</div><div class="right"><a href="/engine">Engine</a><a href="/security">Security</a><a href="/contact">Contact</a></div></div></footer></body></html>
+  "roots": {
+    "input_root": "inputs",
+    "job_root": "jobs",
+    "output_root": "outputs",
+    "scratch_root": "scratch"
+  },
+  "job_dir": "job-001",
+  "output_dir": "job-001",
+  "scratch_dir": "job-001",
+  "workload": {
+    "air_package": "air-package-v1.json",
+    "trace_manifest": "trace-manifest-v1.json",
+    "chunks_dir": "chunks",
+    "public_inputs": "public-inputs-v1.json",
+    "logical_rows": 1048576,
+    "trace_width": 8,
+    "max_constraint_degree": 3,
+    "field": "goldilocks",
+    "extension_degree": 2,
+    "permutation": "poseidon2_width_8",
+    "verifier": "p3_uni_stark_0.6.1",
+    "features": {
+      "uses_lookups": false,
+      "uses_buses": false,
+      "uses_permutations": false,
+      "uses_multi_table": false,
+      "uses_preprocessed_columns": false,
+      "uses_periodic_columns": false,
+      "uses_recursion": false,
+      "uses_gpu": false
+    }
+  }
+}</code></pre>
+  <p>This example is illustrative until the released schema is signed. Always validate against <a href="/schemas/job-manifest-v1.schema.json">the published JSON Schema</a> bundled with the exact release.</p>
+  <h2>Output and exit behavior</h2>
+  <p>Standard output contains one <code>JobResultV1</code> JSON document. Standard error contains JSON Lines progress. Stable exit classes distinguish incompatible profile, invalid input, insufficient resources, resumable interruption, corrupt checkpoint, verification failure, license failure, and internal error.</p>
+  <h2>Thin GitHub Action</h2>
+  <p>The public composite action runs the same local commands and never receives or activates a license key. Point it at an already installed, activated Guard binary to run the free doctor, optionally produce a proof report, and enforce a policy baseline. There is no separate CI API or hosted execution path.</p>
+  <h2>Container posture</h2>
+  <p>The released OCI image runs as non-root, supports a read-only root filesystem, and requires explicit <code>/work</code> and <code>/scratch</code> mounts. After release activation, proving, resume, and verification must work with networking disabled.</p>
+  <h2>Updates and checkpoints</h2>
+  <p>Never delete an old release while it owns an unfinished job. A newer release must not consume an older checkpoint silently. Keep the exact artifact, signature, compatibility manifest, and entitlement alongside resumable work until verification completes.</p>
+  <h2>Support-safe diagnostics</h2>
+  <p>The versioned JSON output from <code>tinyzkp doctor</code> is the only support-safe diagnostic artifact. It contains compatibility and resource metadata, not manifest paths or input contents. Inspect it before sharing and confirm it contains no witness values, input files, proof secrets, environment variables, absolute private paths, access tokens, or license key. See <a href="/support">support boundaries</a>.</p>
+</section></main>
+<footer class="site-footer"><div class="container"><div class="footer-grid"><div><a class="brand" href="/"><span>Tiny</span>ZKP</a><p>Versioned local interfaces for people and schedulers.</p></div><div><h2>Product</h2><a href="/guard">Guard</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a></div><div><h2>Technical</h2><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Documentation</a></div><div><h2>Company</h2><a href="/security">Security</a><a href="/support">Support</a><a href="/terms">Legal</a></div></div><div class="footer-note">Use the schema and artifact bundled with the exact release.</div></div></footer>
+</body></html>

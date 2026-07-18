@@ -32,9 +32,9 @@ TARGETS = (
     "resume_checkpoint_v2",
     "air_package_v1",
     "trace_manifest_v1",
-    "hosted_proof_bundle_v1",
+    "air_proof_bundle_v1",
     "zstd_trace_chunk_v1",
-    "beta_api_request_v1",
+    "public_inputs_v1",
 )
 SMOKE_SEED_LIMIT = 16
 MAX_SMOKE_SEED_BYTES = 1024 * 1024
@@ -56,6 +56,9 @@ BUNDLE_FIXTURES = (
     "test-vectors/plonky3/poseidon2-8.bundle.json",
 )
 BENCHMARK_FIXTURES = ("test-vectors/plonky3/benchmark-report-v1.json",)
+DECLARATIVE_AIR_DIGEST = (
+    "b5cb62fdd7e9de8c7b4d965cd4fb3d38c423cdabea3efb4dba09cbd03195ebaa"
+)
 DONE_MARKER = re.compile(rb"(?m)^#(\d+)\s+DONE\b")
 RUN_SUMMARY = re.compile(rb"(?m)^Done\s+(\d+)\s+runs\s+in\s+(\d+)\s+second\(s\)\s*$")
 EXECUTED_UNITS = re.compile(rb"(?m)^stat::number_of_executed_units:\s*(\d+)\s*$")
@@ -220,6 +223,83 @@ def checkpoint_seed() -> bytes:
     ).encode("utf-8")
 
 
+def declarative_air_seed() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "backend": "plonky3",
+        "profile": PROFILE,
+        "field": "goldilocks",
+        "expected_verifier": "p3_uni_stark_0.6.1",
+        "trace_width": 1,
+        "public_inputs": [],
+        "expressions": [
+            {"op": "current", "column": 0},
+            {"op": "next", "column": 0},
+            {"op": "sub", "left": 1, "right": 0},
+        ],
+        "constraints": [{"kind": "transition", "expression": 2}],
+    }
+
+
+def public_inputs_seed() -> bytes:
+    return json.dumps(
+        {
+            "schema_version": 1,
+            "air_digest_hex": DECLARATIVE_AIR_DIGEST,
+            "values": [],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def air_proof_bundle_seed() -> bytes:
+    zero_digest = "0" * 64
+    return json.dumps(
+        {
+            "schema_version": 1,
+            "air": declarative_air_seed(),
+            "air_digest_hex": DECLARATIVE_AIR_DIGEST,
+            "trace_manifest": {
+                "schema_version": 1,
+                "air_digest_hex": DECLARATIVE_AIR_DIGEST,
+                "trace_digest_hex": zero_digest,
+                "logical_rows": 1024,
+                "trace_width": 1,
+                "field_encoding": "goldilocks_u64_le",
+                "compression": "zstd",
+                "chunk_uncompressed_bytes": 8192,
+                "chunks": [
+                    {
+                        "index": 0,
+                        "compressed_bytes": 1,
+                        "uncompressed_bytes": 8192,
+                        "blake3_hex": zero_digest,
+                    }
+                ],
+            },
+            "trace_manifest_digest_hex": zero_digest,
+            "public_inputs": {
+                "schema_version": 1,
+                "air_digest_hex": DECLARATIVE_AIR_DIGEST,
+                "values": [],
+            },
+            "public_inputs_digest_hex": zero_digest,
+            "proof_base64url": "",
+            "proof_digest_hex": zero_digest,
+            "provenance": {
+                "prover_version": "0.6.1",
+                "verifier_version": "0.6.1",
+                "release_sha": "fuzz-seed",
+                "dependency_profile": PROFILE,
+                "proof_serializer": "postcard-1.1.3",
+            },
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
 def seed_payloads(target: str) -> list[bytes]:
     if target not in TARGETS:
         raise ValueError(f"unknown fuzz target: {target}")
@@ -258,17 +338,14 @@ def seed_payloads(target: str) -> list[bytes]:
         seeds = [b"{}", b'{"schema_version":1}']
     elif target == "trace_manifest_v1":
         seeds = [b"[{},{}]", b'[{"schema_version":1},{"schema_version":1}]']
-    elif target == "hosted_proof_bundle_v1":
-        seeds = [b"{}", b'{"schema_version":1}']
+    elif target == "air_proof_bundle_v1":
+        seeds = [b"{}", air_proof_bundle_seed()]
     elif target == "zstd_trace_chunk_v1":
         # A minimal valid empty Zstandard frame plus a truncated magic header
         # exercise both decoder construction and bounded failure paths.
         seeds = [bytes.fromhex("28b52ffd2000010000"), bytes.fromhex("28b52ffd")]
-    elif target == "beta_api_request_v1":
-        seeds = [
-            b"{}",
-            b'{"air":{},"local_proof":{},"manifest":{},"public_inputs":[],"lease_epoch":0}',
-        ]
+    elif target == "public_inputs_v1":
+        seeds = [b"{}", public_inputs_seed()]
     else:
         seeds = [b"\0", b"TZSCRATCH1"]
     unique = {hashlib.sha256(payload).digest(): payload for payload in seeds if payload}

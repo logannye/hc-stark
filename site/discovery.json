@@ -1,45 +1,48 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "name": "TinyZKP",
   "canonical_url": "https://tinyzkp.com",
-  "updated_at": "2026-07-09",
-  "service_status": "backend_recovery",
+  "updated_at": "2026-07-17",
+  "service_status": "guard_prelaunch",
   "positioning": {
-    "short": "Run larger Plonky3 workloads within a fixed RAM budget.",
-    "description": "MIT-licensed, resource-bounded Plonky3 proving infrastructure with deterministic SSD scratch, checkpoint recovery, and reproducible resource reports.",
+    "short": "Finish supported Plonky3 proof jobs within a RAM budget.",
+    "description": "A customer-operated supervisor and open proof engine for bounded-memory, SSD-backed, resumable execution without changing the released proof format or ordinary verifier.",
+    "primary_human_users": ["proof infrastructure lead", "protocol engineer", "technical founder"],
+    "primary_machine_users": ["CI runner", "scheduler", "local automation"],
     "privacy_claim": "none",
-    "proof_format": "official Plonky3",
-    "verifier": "unmodified official Plonky3 verifier",
-    "primary_audiences": ["proving lead", "protocol engineering lead", "zkVM or rollup CTO", "proof-network infrastructure owner"]
+    "exclusivity_claim": "none"
   },
   "availability": {
+    "community_source": true,
+    "community_doctor": true,
+    "qualified_engine_artifact": false,
+    "guard_artifact": false,
+    "guard_checkout": false,
     "hosted_proving": false,
     "hosted_verification": false,
-    "account_creation": false,
-    "paid_checkout": false,
-    "source_and_component_benchmarks": true,
-    "design_partner_evaluations": true
+    "customer_accounts": false,
+    "contact_form": false,
+    "event_collector": false
+  },
+  "supported_profile": "https://tinyzkp.com/compatibility.json",
+  "pricing": "https://tinyzkp.com/pricing.json",
+  "commerce": "https://tinyzkp.com/commerce.json",
+  "release_status": "https://tinyzkp.com/release.json",
+  "contracts": {
+    "job_manifest_v1": "https://tinyzkp.com/schemas/job-manifest-v1.schema.json",
+    "job_result_v1": "https://tinyzkp.com/schemas/job-result-v1.schema.json",
+    "compatibility_manifest_v1": "https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json",
+    "guard_channel_v1": "https://tinyzkp.com/schemas/guard-channel-v1.schema.json",
+    "policy_baseline_v1": "https://tinyzkp.com/schemas/policy-baseline-v1.schema.json"
   },
   "primary_actions": [
-    {"label":"Apply for a workload evaluation","url":"https://tinyzkp.com/contact?intent=memory_bounded_evaluation"},
-    {"label":"Run the open-source benchmark","url":"https://github.com/logannye/hc-stark"},
-    {"label":"Review engine architecture","url":"https://tinyzkp.com/engine"},
-    {"label":"Review benchmark evidence","url":"https://tinyzkp.com/benchmarks"},
-    {"label":"Review release gates","url":"https://tinyzkp.com/security"}
+    {"label": "Run the free doctor", "url": "https://tinyzkp.com/docs#doctor"},
+    {"label": "Check compatibility", "url": "https://tinyzkp.com/compatibility"},
+    {"label": "Review release gates", "url": "https://tinyzkp.com/releases"}
   ],
-  "commercial_routes": [
-    {"id":"founding_evaluation","price_usd":25000,"availability":"first_two_customers","url":"https://tinyzkp.com/contact?intent=memory_bounded_evaluation"},
-    {"id":"standard_evaluation","price_usd":40000,"url":"https://tinyzkp.com/contact?intent=memory_bounded_evaluation"},
-    {"id":"tinyzkp_certified","annual_price_usd":60000,"url":"https://tinyzkp.com/contact?intent=certified"},
-    {"id":"tinyzkp_fleet_oem","annual_minimum_usd":125000,"url":"https://tinyzkp.com/contact?intent=fleet_oem"},
-    {"id":"reserved_hosted_capacity","monthly_minimum_usd":15000,"availability":"closed_until_release_demand_and_margin_gates","url":"https://tinyzkp.com/contact?intent=reserved_capacity"}
-  ],
-  "machine_readable_assets": {
-    "openapi":"https://tinyzkp.com/openapi.json",
-    "pricing":"https://tinyzkp.com/pricing.json",
-    "offers":"https://tinyzkp.com/pricing.json",
-    "llms":"https://tinyzkp.com/llms.txt",
-    "sitemap":"https://tinyzkp.com/sitemap.xml"
-  },
-  "support": {"contact":"https://tinyzkp.com/contact","security":"https://tinyzkp.com/.well-known/security.txt","status":"https://tinyzkp.com/status"}
+  "support": {
+    "documentation": "https://tinyzkp.com/docs",
+    "issues": "https://github.com/logannye/hc-stark/issues",
+    "security": "https://tinyzkp.com/security"
+  }
 }

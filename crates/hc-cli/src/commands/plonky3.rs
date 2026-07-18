@@ -1,24 +1,45 @@
 use anyhow::{bail, Context, Result};
 use hc_plonky3::contracts::{
-    air_package_schema, air_proof_bundle_schema, benchmark_report_schema,
-    hosted_proof_bundle_schema, proof_bundle_schema, public_inputs_schema, trace_manifest_schema,
-    workload_manifest_schema, AirPackageV1, AirProofBundleV1, HostedProofBundleV1,
-    InputGeneratorV1, ProofBundleV1, PublicInputsV1, TraceChunkV1, TraceManifestV1, WorkloadId,
-    WorkloadManifestV1, MAX_AIR_BUNDLE_JSON_BYTES, MAX_AIR_JSON_BYTES, MAX_BUNDLE_JSON_BYTES,
-    MAX_CUSTOM_TRACE_ROWS, MAX_MANIFEST_JSON_BYTES, MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES,
-    MAX_TRACE_MANIFEST_JSON_BYTES, MAX_TRACE_UNCOMPRESSED_BYTES, MIN_CUSTOM_TRACE_ROWS,
+    air_package_schema, air_proof_bundle_schema, benchmark_report_schema, proof_bundle_schema,
+    public_inputs_schema, trace_manifest_schema, workload_manifest_schema, AirPackageV1,
+    AirProofBundleV1, InputGeneratorV1, ProofBundleV1, PublicInputsV1, TraceChunkV1,
+    TraceManifestV1, WorkloadId, WorkloadManifestV1, MAX_AIR_BUNDLE_JSON_BYTES, MAX_AIR_JSON_BYTES,
+    MAX_BUNDLE_JSON_BYTES, MAX_CUSTOM_TRACE_ROWS, MAX_MANIFEST_JSON_BYTES,
+    MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES, MAX_TRACE_MANIFEST_JSON_BYTES,
+    MAX_TRACE_UNCOMPRESSED_BYTES, MIN_CUSTOM_TRACE_ROWS,
 };
 use hc_plonky3::{
-    estimate_declarative_statement, prove_resource_bounded_observed_with_cancellation,
-    InternalProofBundle, ResourceBoundedUniStarkProver, UploadedTraceWorkload, WorkloadKind,
-    COMPATIBILITY_PROFILE, PLONKY3_VERSION,
+    plan_declarative_statement, prove_resource_with_policy_observed_with_cancellation,
+    resume_resource_bounded_with_cancellation_observed, InternalProofBundle,
+    ResourceBoundedUniStarkProver, UploadedTraceWorkload, WorkloadKind, COMPATIBILITY_PROFILE,
+    PLONKY3_VERSION,
 };
-use hc_stream::{CheckpointManifestV2, ResourceEstimate, ResourcePolicyV1};
+use hc_stream::{
+    CheckpointManifestV2, ExecutionMode, ResourceEstimate, ResourceMode, ResourcePolicyV1,
+};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AirOperationModeV1 {
+    Conventional,
+    Bounded,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AirOperationReportV1 {
+    schema_version: u32,
+    selected_mode: AirOperationModeV1,
+    peak_resident_bytes: u64,
+    scratch_high_water_bytes: u64,
+    wall_time_millis: u64,
+}
 
 pub fn validate_air(air_path: &Path) -> Result<()> {
     let air: AirPackageV1 = read_json_limited(air_path, MAX_AIR_JSON_BYTES)?;
@@ -68,31 +89,34 @@ pub fn prove_air(
         chunks_dir,
     )
     .map_err(anyhow::Error::msg)?;
-    let proof_bytes = if reference {
-        hc_plonky3::prove_resource_reference(&workload).map_err(anyhow::Error::msg)?
-    } else {
-        let cancellation = hc_plonky3::CancellationToken::new();
-        let handler_token = cancellation.clone();
-        ctrlc::set_handler(move || handler_token.cancel())
-            .context("failed to install the prover cancellation handler")?;
-        prove_resource_bounded_observed_with_cancellation(
-            &workload,
-            &policy,
-            cancellation,
-            emit_backend_event,
-        )
-        .map_err(anyhow::Error::msg)?
-    };
+    let mut execution_policy = policy;
+    if reference {
+        execution_policy.mode = ResourceMode::Memory;
+    }
+    let cancellation = hc_plonky3::CancellationToken::new();
+    let handler_token = cancellation.clone();
+    ctrlc::set_handler(move || handler_token.cancel())
+        .context("failed to install the prover cancellation handler")?;
+    let started = Instant::now();
+    let mut scratch_high_water_bytes = 0;
+    let planned = prove_resource_with_policy_observed_with_cancellation(
+        &workload,
+        &execution_policy,
+        cancellation,
+        |event| observe_air_operation(event, &mut scratch_high_water_bytes),
+    )
+    .map_err(anyhow::Error::msg)?;
+    let selected_mode = planned.selected_mode;
     let bundle = AirProofBundleV1::from_proof(
         air,
         trace_manifest,
         public_inputs,
-        proof_bytes,
+        planned.proof_bytes,
         hc_plonky3::release_identity(),
     )
     .map_err(anyhow::Error::msg)?;
     write_json_atomic(output, &bundle)?;
-    println!("{}", output.display());
+    emit_air_operation_report(selected_mode, scratch_high_water_bytes, started.elapsed())?;
     Ok(())
 }
 
@@ -100,13 +124,6 @@ pub fn verify_air(bundle_path: &Path) -> Result<()> {
     let bundle: AirProofBundleV1 = read_json_limited(bundle_path, MAX_AIR_BUNDLE_JSON_BYTES)?;
     bundle.verify().map_err(anyhow::Error::msg)?;
     println!("declarative AIR proof accepted by the official p3-uni-stark verifier");
-    Ok(())
-}
-
-pub fn verify_hosted(bundle_path: &Path) -> Result<()> {
-    let bundle: HostedProofBundleV1 = read_json_limited(bundle_path, MAX_AIR_BUNDLE_JSON_BYTES)?;
-    bundle.verify().map_err(anyhow::Error::msg)?;
-    println!("hosted proof bundle accepted by the official p3-uni-stark verifier");
     Ok(())
 }
 
@@ -128,24 +145,119 @@ pub fn estimate_air(
     public_inputs
         .validate_for_air(&air)
         .map_err(anyhow::Error::msg)?;
-    let estimate = estimate_declarative_statement(
+    let plan = plan_declarative_statement(
         air,
         trace_manifest.logical_rows,
         &public_inputs.values,
         &policy,
     )
     .map_err(anyhow::Error::msg)?;
-    let preflight = policy
-        .preflight_for_mode(hc_stream::ExecutionMode::Scratch, estimate.clone())
-        .map_err(anyhow::Error::msg)?;
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
             "schema_version": 1,
-            "estimate": estimate,
-            "preflight": preflight,
+            "selected_mode": plan.selected_mode,
+            "conventional_estimate": plan.conventional_estimate,
+            "bounded_estimate": plan.bounded_estimate,
+            "preflight": plan.preflight,
         }))?
     );
+    Ok(())
+}
+
+pub fn resume_air(
+    air_path: &Path,
+    trace_manifest_path: &Path,
+    chunks_dir: &Path,
+    public_inputs_path: &Path,
+    checkpoint_path: &Path,
+    output: &Path,
+) -> Result<()> {
+    let air: AirPackageV1 = read_json_limited(air_path, MAX_AIR_JSON_BYTES)?;
+    let trace_manifest: TraceManifestV1 =
+        read_json_limited(trace_manifest_path, MAX_TRACE_MANIFEST_JSON_BYTES)?;
+    let public_inputs: PublicInputsV1 =
+        read_json_limited(public_inputs_path, MAX_MANIFEST_JSON_BYTES)?;
+    air.validate().map_err(anyhow::Error::msg)?;
+    trace_manifest
+        .validate_for_air(&air)
+        .map_err(anyhow::Error::msg)?;
+    public_inputs
+        .validate_for_air(&air)
+        .map_err(anyhow::Error::msg)?;
+    let workload = UploadedTraceWorkload::new(
+        air.clone(),
+        trace_manifest.clone(),
+        public_inputs.values.clone(),
+        chunks_dir,
+    )
+    .map_err(anyhow::Error::msg)?;
+    let checkpoint = CheckpointManifestV2::read(checkpoint_path).map_err(anyhow::Error::msg)?;
+    emit_event(
+        "resume_air_started",
+        serde_json::json!({
+            "phase": checkpoint.completed_phase.to_string(),
+            "checkpoint": checkpoint_path,
+            "air_digest_hex": hex_lower(&air.digest().map_err(anyhow::Error::msg)?),
+        }),
+    );
+    let cancellation = hc_plonky3::CancellationToken::new();
+    let handler_token = cancellation.clone();
+    ctrlc::set_handler(move || handler_token.cancel())
+        .context("failed to install the declarative AIR resume cancellation handler")?;
+    let started = Instant::now();
+    let mut scratch_high_water_bytes = 0;
+    let proof_bytes = match resume_resource_bounded_with_cancellation_observed(
+        checkpoint_path,
+        &workload,
+        cancellation,
+        |event| observe_air_operation(event, &mut scratch_high_water_bytes),
+    ) {
+        Ok(proof_bytes) => proof_bytes,
+        Err(hc_plonky3::BoundedProverError::Cancelled) => {
+            emit_event(
+                "resume_air_cancelled",
+                serde_json::json!({
+                    "phase": "checkpoint_boundary",
+                    "checkpoint": checkpoint_path,
+                }),
+            );
+            bail!("declarative AIR proof resume was cancelled")
+        }
+        Err(error) => {
+            emit_event(
+                "resume_air_failed",
+                serde_json::json!({
+                    "phase": checkpoint.completed_phase.to_string(),
+                    "checkpoint": checkpoint_path,
+                    "error": error.to_string(),
+                }),
+            );
+            return Err(anyhow::Error::msg(error));
+        }
+    };
+    let bundle = AirProofBundleV1::from_proof(
+        air,
+        trace_manifest,
+        public_inputs,
+        proof_bytes,
+        hc_plonky3::release_identity(),
+    )
+    .map_err(anyhow::Error::msg)?;
+    write_json_atomic(output, &bundle)?;
+    emit_event(
+        "resume_air_completed",
+        serde_json::json!({
+            "phase": "proof_assembly",
+            "output": output,
+            "proof_digest_hex": bundle.proof_digest_hex,
+        }),
+    );
+    emit_air_operation_report(
+        ExecutionMode::Scratch,
+        scratch_high_water_bytes,
+        started.elapsed(),
+    )?;
     Ok(())
 }
 
@@ -485,10 +597,6 @@ pub fn export_schemas(output_dir: &Path) -> Result<()> {
         &output_dir.join("air-proof-bundle-v1.schema.json"),
         &air_proof_bundle_schema(),
     )?;
-    write_json_atomic(
-        &output_dir.join("hosted-proof-bundle-v1.schema.json"),
-        &hosted_proof_bundle_schema(),
-    )?;
     println!("generated schemas in {}", output_dir.display());
     Ok(())
 }
@@ -701,6 +809,34 @@ fn emit_backend_event(event: &hc_plonky3::ProverEventV1) {
         object.insert("schema_version".into(), serde_json::Value::from(1));
     }
     eprintln!("{value}");
+}
+
+fn observe_air_operation(event: &hc_plonky3::ProverEventV1, scratch_high_water_bytes: &mut u64) {
+    if let hc_plonky3::ProverEventV1::Phase { resource_usage, .. } = event {
+        *scratch_high_water_bytes = (*scratch_high_water_bytes).max(resource_usage.scratch_bytes);
+    }
+    emit_backend_event(event);
+}
+
+fn emit_air_operation_report(
+    selected_mode: ExecutionMode,
+    scratch_high_water_bytes: u64,
+    elapsed: std::time::Duration,
+) -> Result<()> {
+    let report = AirOperationReportV1 {
+        schema_version: 1,
+        selected_mode: match selected_mode {
+            ExecutionMode::Memory => AirOperationModeV1::Conventional,
+            ExecutionMode::Scratch => AirOperationModeV1::Bounded,
+        },
+        peak_resident_bytes: process_peak_rss_bytes(),
+        scratch_high_water_bytes,
+        wall_time_millis: u64::try_from(elapsed.as_millis())
+            .unwrap_or(u64::MAX)
+            .max(1),
+    };
+    println!("{}", serde_json::to_string(&report)?);
+    Ok(())
 }
 
 fn hex_lower(bytes: &[u8]) -> String {

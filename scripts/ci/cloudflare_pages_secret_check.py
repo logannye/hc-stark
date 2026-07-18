@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Validate live Cloudflare Pages secret inventory for TinyZKP.
+"""Validate that static TinyZKP Cloudflare Pages has no application secrets.
 
 This check intentionally reads only secret names from `wrangler pages secret
-list`; it never requests or prints secret values. Recovery Pages needs only the
-internal webhook secret. Legacy Stripe prices, Stripe API keys, and demo keys
-must be absent because no deployed Pages function consumes them.
+list`; it never requests or prints secret values. The static site consumes no
+application bindings, so legacy internal, Stripe, and demo secrets must all be
+absent.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def validate_secret_names(secret_names: set[str]) -> list[Check]:
             Check(
                 "FAIL",
                 "legacy billing/demo secrets",
-                "remove unused recovery secrets: " + ", ".join(forbidden),
+                "remove unused static-site secrets: " + ", ".join(forbidden),
             )
         )
     else:
@@ -67,14 +67,14 @@ def validate_secret_names(secret_names: set[str]) -> list[Check]:
         checks.append(
             Check(
                 "FAIL",
-                "unexpected recovery secrets",
-                "remove bindings not consumed by recovery Pages: "
+                "unexpected static-site secrets",
+                "remove bindings not consumed by static Pages: "
                 + ", ".join(unexpected),
             )
         )
     else:
         checks.append(
-            Check("PASS", "unexpected recovery secrets", "none present")
+            Check("PASS", "unexpected static-site secrets", "none present")
         )
     return checks
 
@@ -164,7 +164,7 @@ def main(argv: list[str]) -> int:
     if failures:
         print(f"\n{len(failures)} Cloudflare Pages secret check(s) failed.", file=sys.stderr)
         return 1
-    print("\nCloudflare Pages recovery secret inventory is minimal and complete.")
+    print("\nCloudflare Pages static-site secret inventory is empty.")
     return 0
 
 

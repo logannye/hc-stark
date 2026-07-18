@@ -41,7 +41,7 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
 - Official challenger state and typed artifacts are checkpointed atomically at
   every pipeline phase. Memory, scratch, uninterrupted, and resumed modes emit
   identical proof bytes accepted by the unmodified verifier.
-- Failure injection, corruption/path/symlink/cancellation tests, nine required
+- Failure injection, corruption/path/symlink/cancellation tests, required
   fuzz targets, and machine-readable crash/fuzz evidence runners are present.
   Bundle fuzzing covers envelope validation separately from a valid-envelope
   target that always reaches the official Plonky3 proof decoder. The release
@@ -52,20 +52,19 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
   seeds remain immutable while newly discovered units use a disposable corpus.
   Crash artifacts, logs, and evidence outputs are owner-only; release evidence
   records the compatibility profile and exact Rust identity, and cargo-fuzz is
-  pinned to `0.13.2` in the runner and nightly workflow.
+  pinned to `0.13.2` in the manual qualification workflow.
   Full-corpus campaigns remain separate long-running evidence.
 - The exact cargo-fuzz capture tool emits an owner-only, explicitly unreviewed
-  platform candidate without changing trust. Nightly execution verifies that
-  candidate against a separately committed digest before any expensive test;
-  it fails closed while the Linux runner digest remains unreviewed.
+  platform candidate without changing trust. Manual qualification verifies
+  that candidate against a separately committed digest before any expensive
+  test; it fails closed while the Linux runner digest remains unreviewed.
 - Rust artifact contracts, JSON Schema generation, proof packaging, strict size
-  limits, and a cgroup-v2 benchmark harness are present. Replacement Rust,
-  Python, TypeScript, and local-verification WASM contracts share golden
-  vectors and remain publication-blocked. CI cross-compiles the WASM verifier
-  with the explicit `getrandom` JavaScript backend, executes a golden-proof and
-  mutation smoke in Node, and keeps filesystem resource preflight unavailable
-  on that target.
-- Cross-language `uint64` handling is lossless across Rust, Python, and
+  limits, and a cgroup-v2 benchmark harness are present. The active release
+  ships the engine CLI and OCI image only; Python, TypeScript, hosted API, MCP,
+  and maintenance-server publication paths are retired. The legacy WASM
+  verifier remains a native-tested research artifact and is not a Guard v1
+  release requirement.
+- Cross-language `uint64` handling in archived clients was lossless across Rust, Python, and
   TypeScript. The generated TypeScript contract uses `number | bigint`, its
   file loader preserves large JSON integers, and a maximum-Goldilocks manifest
   and full bounded proof match the Rust digest/reference proof exactly.
@@ -141,16 +140,21 @@ Updated: 2026-07-10. This is a gap ledger, not a release announcement.
 
 ## Not implemented or not yet evidenced
 
-- 1M, 10M, or 100M full-pipeline release measurements;
-- 4× RAM / 3× time acceptance at 1M or ≤2 GiB at 10M;
+- 1,048,576-row and 16,777,216-row full-pipeline fixed-host release
+  measurements for both reference workloads;
+- 4× RAM / 3× time acceptance at 1,048,576 rows or ≤2 GiB at 16,777,216 rows;
 - external Plonky3 specialist review or independent implementation review;
 - independently reviewed Linux cargo-fuzz executable digest for the fixed
   evidence host;
 - independent report reproduction, signed release, final artifact SBOM, or
   compatibility publication;
-- external design-partner integration or paid evaluation conversion;
-- optional benchmark-report intake endpoint;
-- private Fleet controller or hosted capacity.
+- three external workloads from at least two organizations, two standard annual
+  purchases, and the five-machine unaided installation journey;
+- specialist-approved production FRI parameters, counsel-approved commercial
+  terms, and the merchant sandbox/live-owner lifecycle evidence.
+
+Hosted intake, Fleet control, and hosted capacity are intentionally outside the
+Guard product boundary rather than unfinished product work.
 
 ## External actions requiring operator/customer coordination
 

@@ -13,28 +13,31 @@ def test_parse_secret_names_returns_names_only():
     assert check.parse_secret_names(output) == {"INTERNAL_SECRET", "STRIPE_SECRET_KEY"}
 
 
-def test_recovery_inventory_requires_internal_secret_and_rejects_legacy_secrets():
-    checks = check.validate_secret_names({"INTERNAL_SECRET"})
+def test_static_inventory_requires_no_secrets_and_rejects_legacy_secrets():
+    checks = check.validate_secret_names(set())
     assert all(item.status == "PASS" for item in checks)
 
     checks = check.validate_secret_names(
-        {"INTERNAL_SECRET", "STRIPE_SECRET_KEY", "STRIPE_PRICE_ID_PRO", "TINYZKP_DEMO_API_KEY"}
+        {"STRIPE_SECRET_KEY", "STRIPE_PRICE_ID_PRO", "TINYZKP_DEMO_API_KEY"}
     )
     failure = next(item for item in checks if item.name == "legacy billing/demo secrets")
     assert failure.status == "FAIL"
     assert "STRIPE_PRICE_ID_PRO" in failure.detail
 
 
-def test_missing_internal_secret_fails():
-    checks = check.validate_secret_names(set())
-    internal = next(item for item in checks if item.name == "INTERNAL_SECRET")
-    assert internal.status == "FAIL"
+def test_retired_internal_secret_fails_minimal_inventory():
+    checks = check.validate_secret_names({"INTERNAL_SECRET"})
+    unexpected = next(
+        item for item in checks if item.name == "unexpected static-site secrets"
+    )
+    assert unexpected.status == "FAIL"
+    assert "INTERNAL_SECRET" in unexpected.detail
 
 
 def test_arbitrary_unconsumed_secret_fails_minimal_inventory():
     checks = check.validate_secret_names({"INTERNAL_SECRET", "UNUSED_RECOVERY_SECRET"})
     unexpected = next(
-        item for item in checks if item.name == "unexpected recovery secrets"
+        item for item in checks if item.name == "unexpected static-site secrets"
     )
     assert unexpected.status == "FAIL"
     assert "UNUSED_RECOVERY_SECRET" in unexpected.detail

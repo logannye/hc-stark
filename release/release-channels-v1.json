@@ -1,49 +1,30 @@
 {
   "schema_version": 1,
-  "current_channel": "containment",
+  "current_channel": "guard_prelaunch",
   "channels": {
-    "containment": {
-      "public_service_status": "backend_recovery",
-      "signup": false,
+    "community": {
+      "engine_source": "public_mit",
+      "engine_artifacts": "signed_after_engine_gates",
       "checkout": false,
       "hosted_proving": false,
-      "hosted_verification": false
+      "hosted_verification": false,
+      "customer_data_plane": "local_only"
     },
-    "public_beta": {
-      "public_service_status": "public_beta",
-      "signup": true,
+    "guard_prelaunch": {
+      "inherits": "community",
+      "guard_artifacts": "private_release_candidates",
+      "checkout": false,
+      "founding_validation_limit": 3,
+      "required_gate_document": "release/guard-launch-gates-v1.json"
+    },
+    "guard_ga": {
+      "inherits": "community",
+      "guard_artifacts": "commercial_object_code",
       "checkout": true,
-      "hosted_proving": true,
-      "hosted_verification": true,
-      "required_gate_ids": [
-        "clean_merged_ci",
-        "official_verifier_equivalence",
-        "fixed_host_1m",
-        "fixed_host_16m",
-        "fault_and_fuzz",
-        "internal_security",
-        "sdk_golden_vectors",
-        "signed_supply_chain",
-        "release_identity",
-        "recovery_and_billing_replay",
-        "advertised_concurrency_load",
-        "production_canary_24h"
-      ],
-      "disclosures": [
-        "public beta",
-        "not independently audited",
-        "no SLA",
-        "Goldilocks and frozen Plonky3 0.6.1 profile only"
-      ]
-    },
-    "ga": {
-      "public_service_status": "operational",
-      "inherits": "public_beta",
-      "additional_gate_ids": [
-        "independent_security_audit",
-        "independent_reproduction",
-        "design_partner_acceptance"
-      ]
+      "merchant": "merchant_of_record",
+      "runtime_phone_home": false,
+      "future_release_activation_requires_active_subscription": true,
+      "required_gate_document": "release/guard-launch-gates-v1.json"
     }
   }
 }

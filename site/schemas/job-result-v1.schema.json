@@ -1,0 +1,230 @@
+{
+  "$id": "https://tinyzkp.com/schemas/job-result-v1.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "ArtifactReferenceV1": {
+      "additionalProperties": false,
+      "properties": {
+        "relative_path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "relative_path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "JobStatusV1": {
+      "enum": [
+        "succeeded",
+        "interrupted"
+      ],
+      "type": "string"
+    },
+    "ObservedResourcesV1": {
+      "additionalProperties": false,
+      "properties": {
+        "peak_resident_bytes": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "scratch_high_water_bytes": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "wall_time_millis": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "peak_resident_bytes",
+        "scratch_high_water_bytes",
+        "wall_time_millis"
+      ],
+      "type": "object"
+    },
+    "ReleaseIdentityV1": {
+      "additionalProperties": false,
+      "properties": {
+        "compatibility_profile": {
+          "const": "tinyzkp-p3-goldilocks-v1",
+          "type": "string"
+        },
+        "engine_artifact_sha256": {
+          "type": "string"
+        },
+        "engine_source_identity": {
+          "type": "string"
+        },
+        "guard_source_identity": {
+          "type": "string"
+        },
+        "guard_version": {
+          "type": "string"
+        },
+        "qualification": {
+          "type": "string"
+        },
+        "release_identity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "compatibility_profile",
+        "engine_artifact_sha256",
+        "engine_source_identity",
+        "guard_source_identity",
+        "guard_version",
+        "qualification",
+        "release_identity"
+      ],
+      "type": "object"
+    },
+    "RequestedModeV1": {
+      "enum": [
+        "auto",
+        "conventional",
+        "bounded"
+      ],
+      "type": "string"
+    },
+    "ResourceEstimateV1": {
+      "additionalProperties": false,
+      "properties": {
+        "peak_resident_bytes": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "scratch_high_water_bytes": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "total_read_bytes": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "total_write_bytes": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "peak_resident_bytes",
+        "scratch_high_water_bytes",
+        "total_read_bytes",
+        "total_write_bytes"
+      ],
+      "type": "object"
+    },
+    "ResourceEstimatesV1": {
+      "additionalProperties": false,
+      "properties": {
+        "bounded": {
+          "$ref": "#/definitions/ResourceEstimateV1"
+        },
+        "conventional": {
+          "$ref": "#/definitions/ResourceEstimateV1"
+        }
+      },
+      "required": [
+        "bounded",
+        "conventional"
+      ],
+      "type": "object"
+    },
+    "SelectedModeV1": {
+      "enum": [
+        "conventional",
+        "bounded"
+      ],
+      "type": "string"
+    },
+    "VerifierOutcomeV1": {
+      "enum": [
+        "accepted",
+        "not_run"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "checkpoint_relative_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "estimates": {
+      "$ref": "#/definitions/ResourceEstimatesV1"
+    },
+    "observed_resources": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ObservedResourcesV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "proof": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ArtifactReferenceV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "release": {
+      "$ref": "#/definitions/ReleaseIdentityV1"
+    },
+    "requested_mode": {
+      "$ref": "#/definitions/RequestedModeV1"
+    },
+    "resumable": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "selected_mode": {
+      "$ref": "#/definitions/SelectedModeV1"
+    },
+    "status": {
+      "$ref": "#/definitions/JobStatusV1"
+    },
+    "verifier_outcome": {
+      "$ref": "#/definitions/VerifierOutcomeV1"
+    }
+  },
+  "required": [
+    "estimates",
+    "release",
+    "requested_mode",
+    "resumable",
+    "schema_version",
+    "selected_mode",
+    "status",
+    "verifier_outcome"
+  ],
+  "title": "JobResultV1",
+  "type": "object"
+}

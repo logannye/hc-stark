@@ -15,7 +15,9 @@ import source_tree_identity
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "release" / "backend-v1-gates.json"
 SIGNED_GATE = "signed_release_sbom_and_checksums"
-EXPECTED_GATES = set(final_gate.EXPECTED_KINDS) - {SIGNED_GATE}
+IDENTITY_GATE = "engine_cli_oci_identity_match"
+POSTBUILD_GATES = {SIGNED_GATE, IDENTITY_GATE}
+EXPECTED_GATES = set(final_gate.EXPECTED_KINDS) - POSTBUILD_GATES
 
 
 def evidence_failures(evidence: dict[str, object], *, root: Path) -> list[str]:
