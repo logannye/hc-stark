@@ -36,6 +36,7 @@ def test_engine_release_has_no_hosted_or_sdk_executables():
     assert "tinyzkp-engine-linux-x86_64" in workflow
     assert "tinyzkp-engine.oci.tar" in workflow
     assert "ENTRYPOINT [\"/usr/local/bin/tinyzkp-engine\"]" in dockerfile
+    assert "COPY examples/partner-adapter ./examples/partner-adapter" in dockerfile
     for retired in (
         "build_commercial_authorization.py",
         "backend-v1-commercial-authorization",

@@ -12,6 +12,7 @@ WORKDIR /app
 
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
+COPY examples/partner-adapter ./examples/partner-adapter
 COPY docs ./docs
 COPY scripts ./scripts
 COPY README.md ./
