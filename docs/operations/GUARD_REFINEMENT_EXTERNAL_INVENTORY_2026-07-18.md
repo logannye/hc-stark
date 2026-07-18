@@ -63,8 +63,8 @@ would be interrupted.
 - Repository-level Actions secrets visible by name are `CRATES_IO_TOKEN`,
   `NPM_TOKEN`, and `PYPI_TOKEN`. No Cloudflare deployment credential is
   configured at repository scope.
-- No protected `tinyzkp-production` GitHub environment was returned by the
-  repository API.
+- At initial capture, no protected `tinyzkp-production` GitHub environment was
+  returned by the repository API.
 - The current `main` protection requires the `validate` status check and
   rejects force-pushes and branch deletion, but does not require a pull-request
   review or enforce protection against administrators.
@@ -77,6 +77,25 @@ Hosted-beta workflows and package-publication paths must remain unable to
 activate production. Existing secrets are not to be revoked until the active
 workflow inventory identifies whether they protect unrelated historical
 release obligations.
+
+### Repository controls applied on 2026-07-18
+
+After the read-only inventory, the following fail-closed GitHub environments
+were created or tightened without adding credentials, publishing artifacts, or
+enabling a deployment:
+
+- Public `tinyzkp-production`, `tinyzkp-release-promotion`, and
+  `tinyzkp-evaluation-release` accept protected branches only.
+- Public `tinyzkp-pages-preview` accepts only pull-request merge refs matching
+  `refs/pull/*/merge`; the workflow separately rejects pull requests from
+  untrusted forks.
+- Private `guard-production` and legacy `guard-release-candidate` accept
+  protected branches only.
+
+The environments have no recorded launch approval, merchant configuration, or
+Cloudflare credential. Repository variables that authorize evidence trust or
+site deployment remain intentionally unset until their exact reviewed source
+files and deployment credentials exist.
 
 ## Email and disclosure
 
