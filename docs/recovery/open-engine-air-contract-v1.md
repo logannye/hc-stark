@@ -42,6 +42,12 @@ channel and every package-only channel binds both the prior qualified release
 identity and the SHA-256 of the signed release index that established it.
 `GuardReleaseIndexV1` is a nonempty, unique, acyclic history with exactly one
 current release and state-specific successor or withdrawal evidence.
+JSON Schema enforces its closed shape and local field/state constraints, but it
+cannot express release-identity or Guard-version uniqueness across entries,
+artifact-name uniqueness within an entry, exact `current_release_identity`
+linkage, successor target existence, or successor cycles. Consumers must also
+deserialize the index and call `GuardReleaseIndexV1::validate`; schema
+validation alone is insufficient.
 
 ## Compatibility doctor
 

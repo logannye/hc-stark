@@ -12,6 +12,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 
 pub const COMPATIBILITY_PROFILE: &str = "tinyzkp-p3-goldilocks-v1";
@@ -29,6 +30,7 @@ pub const MAX_AIR_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_TRACE_MANIFEST_BYTES: u64 = 8 * 1024 * 1024;
 pub const MAX_PUBLIC_INPUT_BYTES: u64 = 1024 * 1024;
 pub const MAX_TRACE_COMPRESSED_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+const SAFE_ARTIFACT_NAME_SCHEMA_PATTERN: &str = r"^(?!\.{1,2}$)[A-Za-z0-9._-]{1,255}$";
 
 pub const PUBLIC_SCHEMA_NAMES: &[&str] = &[
     "job-manifest-v1.schema.json",
@@ -1588,13 +1590,87 @@ fn all_unique<'a>(mut values: impl Iterator<Item = &'a str>) -> bool {
 }
 
 fn is_https_url(value: &str) -> bool {
-    value.len() <= 2048
-        && value.starts_with("https://")
-        && value.is_ascii()
-        && !value
+    if value.len() > 2048
+        || !value.is_ascii()
+        || value
             .bytes()
-            .any(|byte| byte.is_ascii_control() || byte == b' ')
-        && !value[8..].contains('@')
+            .any(|byte| byte.is_ascii_control() || matches!(byte, b' ' | b'\\'))
+    {
+        return false;
+    }
+    let Some(remainder) = value.strip_prefix("https://") else {
+        return false;
+    };
+    let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
+    let authority = &remainder[..authority_end];
+    !authority.is_empty() && !authority.contains('@') && is_valid_https_authority(authority)
+}
+
+fn is_valid_https_authority(authority: &str) -> bool {
+    if let Some(bracketed) = authority.strip_prefix('[') {
+        let Some(closing_bracket) = bracketed.find(']') else {
+            return false;
+        };
+        let host = &bracketed[..closing_bracket];
+        let suffix = &bracketed[closing_bracket + 1..];
+        if host.is_empty()
+            || (!suffix.is_empty() && !suffix.strip_prefix(':').is_some_and(is_valid_https_port))
+        {
+            return false;
+        }
+        return host.parse::<Ipv6Addr>().is_ok();
+    }
+    if authority.contains(['[', ']']) {
+        return false;
+    }
+
+    let host = match authority.rsplit_once(':') {
+        Some((host, port)) => {
+            if host.contains(':') || !is_valid_https_port(port) {
+                return false;
+            }
+            host
+        }
+        None => authority,
+    };
+    is_valid_https_host(host)
+}
+
+fn is_valid_https_port(port: &str) -> bool {
+    !port.is_empty()
+        && port.len() <= 5
+        && port.bytes().all(|byte| byte.is_ascii_digit())
+        && port.parse::<u16>().is_ok_and(|number| number != 0)
+}
+
+fn is_valid_https_host(host: &str) -> bool {
+    if host.is_empty() || host.len() > 253 {
+        return false;
+    }
+    if host.parse::<Ipv4Addr>().is_ok() {
+        return true;
+    }
+    if host
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || byte == b'.')
+    {
+        return false;
+    }
+    host.split('.').all(|label| {
+        !label.is_empty()
+            && label.len() <= 63
+            && label
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphanumeric)
+            && label
+                .as_bytes()
+                .last()
+                .is_some_and(u8::is_ascii_alphanumeric)
+            && label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    })
 }
 
 fn safe_artifact_name(value: &str) -> bool {
@@ -1869,6 +1945,12 @@ pub fn public_schema<T: JsonSchema>(name: &str) -> Value {
         {
             artifacts.insert("minItems".into(), json!(1));
             artifacts.insert("uniqueItems".into(), json!(true));
+        }
+        if let Some(name) = schema
+            .pointer_mut("/$defs/ImmutableReleaseArtifactV1/properties/name")
+            .and_then(Value::as_object_mut)
+        {
+            name.insert("pattern".into(), json!(SAFE_ARTIFACT_NAME_SCHEMA_PATTERN));
         }
         if let Some(entry) = schema
             .pointer_mut("/$defs/GuardReleaseIndexEntryV1")
@@ -2829,6 +2911,10 @@ mod tests {
             Some(&json!(true))
         );
         assert_eq!(
+            release_index.pointer("/$defs/ImmutableReleaseArtifactV1/properties/name/pattern"),
+            Some(&json!(SAFE_ARTIFACT_NAME_SCHEMA_PATTERN))
+        );
+        assert_eq!(
             release_index.pointer("/$defs/GuardReleaseIndexEntryV1/properties/release_date/format"),
             Some(&json!("date"))
         );
@@ -3004,6 +3090,24 @@ mod tests {
             .artifacts
             .push(second_artifact);
         assert!(!duplicate_artifact.validate());
+
+        for unsafe_name in [
+            "",
+            ".",
+            "..",
+            "../guard.tar.gz",
+            "guard/package",
+            "guard\\package",
+        ] {
+            let mut unsafe_artifact = valid.clone();
+            unsafe_artifact.releases[0].artifacts[0].name = unsafe_name.into();
+            assert!(!unsafe_artifact.validate(), "{unsafe_name:?}");
+        }
+        let mut maximum_name = valid.clone();
+        maximum_name.releases[0].artifacts[0].name = "a".repeat(255);
+        assert!(maximum_name.validate());
+        maximum_name.releases[0].artifacts[0].name.push('a');
+        assert!(!maximum_name.validate());
     }
 
     #[test]
@@ -3031,6 +3135,59 @@ mod tests {
         withdrawn.releases[0].advisory_url =
             Some("https://tinyzkp.com/security/advisories/release-1".into());
         assert!(withdrawn.validate());
+    }
+
+    #[test]
+    fn release_index_rejects_malformed_https_authorities() {
+        for valid_url in [
+            "https://tinyzkp.com",
+            "https://www.tinyzkp.com/releases/guard-v1.0.0/channel.json",
+            "https://downloads.tinyzkp.com:443/guard.tar.gz?download=1#sha256",
+            "https://192.0.2.1:8443/guard.tar.gz",
+            "https://[2001:db8::1]:443/guard.tar.gz",
+        ] {
+            assert!(is_https_url(valid_url), "{valid_url:?}");
+        }
+
+        for invalid_url in [
+            "http://tinyzkp.com/advisory",
+            "https://",
+            "https:///advisory",
+            "https://?advisory=missing",
+            "https://#missing",
+            "https://user@example.com/advisory",
+            "https://user:password@example.com/advisory",
+            "https://-bad.example/advisory",
+            "https://bad-.example/advisory",
+            "https://bad..example/advisory",
+            "https://bad_label.example/advisory",
+            "https://example.com./advisory",
+            "https://999.1.1.1/advisory",
+            "https://1.2.3/advisory",
+            "https://example.com:/advisory",
+            "https://example.com:not-a-port/advisory",
+            "https://example.com:0/advisory",
+            "https://example.com:65536/advisory",
+            "https://[2001:db8::1/advisory",
+            "https://[2001:db8::1]:/advisory",
+            "https://[2001:db8::1]:invalid/advisory",
+            "https://example.com\\advisory",
+            "https://example.com/bad path",
+            "https://example.com/\ncontrol",
+            "https://éxample.com/advisory",
+        ] {
+            let mut invalid = release_index();
+            invalid.releases[0].state = GuardReleaseStateV1::Withdrawn;
+            invalid.releases[0].advisory_url = Some(invalid_url.into());
+            assert!(!invalid.validate(), "{invalid_url:?}");
+        }
+
+        for invalid_url in [
+            format!("https://{}.example/advisory", "a".repeat(64)),
+            format!("https://{}/advisory", "a".repeat(254)),
+        ] {
+            assert!(!is_https_url(&invalid_url), "{invalid_url:?}");
+        }
     }
 
     #[test]
