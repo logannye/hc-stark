@@ -106,6 +106,11 @@
       "pattern": "^sha256:[0-9a-f]{64}$",
       "type": "string"
     },
+    "public_candidate_authorization_commit": {
+      "description": "Public repository commit whose generated authorization permitted this\nexact private candidate build. Promotion evidence is necessarily a\nlater public commit, so this identity prevents either commit or the\npublic release tag from being substituted after the build.",
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
     "qualification": {
       "type": "string"
     },
@@ -154,6 +159,7 @@
     "schema_version",
     "guard_version",
     "release_identity",
+    "public_candidate_authorization_commit",
     "guard_source_sha",
     "engine_source_sha",
     "engine_artifact_sha256",

@@ -1220,6 +1220,11 @@ pub struct GuardChannelV1 {
     pub schema_version: u32,
     pub guard_version: String,
     pub release_identity: String,
+    /// Public repository commit whose generated authorization permitted this
+    /// exact private candidate build. Promotion evidence is necessarily a
+    /// later public commit, so this identity prevents either commit or the
+    /// public release tag from being substituted after the build.
+    pub public_candidate_authorization_commit: String,
     pub guard_source_sha: String,
     pub engine_source_sha: String,
     pub engine_artifact_sha256: String,
@@ -1238,6 +1243,7 @@ impl GuardChannelV1 {
         self.schema_version == 1
             && is_safe_release_identity(&self.guard_version)
             && is_safe_release_identity(&self.release_identity)
+            && is_git_sha(&self.public_candidate_authorization_commit)
             && is_git_sha(&self.guard_source_sha)
             && is_git_sha(&self.engine_source_sha)
             && is_lower_hex_digest(&self.engine_artifact_sha256)
@@ -1744,7 +1750,9 @@ fn harden_schema(value: &mut Value) {
                                 json!(r"^(?!/)(?!.*\.\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$"),
                             );
                         }
-                        "guard_source_sha" | "engine_source_sha" => {
+                        "public_candidate_authorization_commit"
+                        | "guard_source_sha"
+                        | "engine_source_sha" => {
                             property.insert("pattern".into(), json!(r"^[0-9a-f]{40}$"));
                         }
                         "sha256" | "channel_sha256" | "engine_artifact_sha256" | "eula_sha256" => {
@@ -2460,6 +2468,10 @@ mod tests {
         assert_eq!(
             channel.pointer("/properties/schemas/minProperties"),
             Some(&json!(PUBLISHED_SCHEMA_NAMES.len()))
+        );
+        assert_eq!(
+            channel.pointer("/properties/public_candidate_authorization_commit/pattern"),
+            Some(&json!(r"^[0-9a-f]{40}$"))
         );
         let compatibility = schema_by_name(COMPATIBILITY_MANIFEST_SCHEMA_NAME).unwrap();
         assert_eq!(
