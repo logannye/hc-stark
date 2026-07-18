@@ -391,6 +391,22 @@ pub fn estimate_declarative_statement(
     estimate_resource_bounded_workload(&statement, policy).map_err(|_| WorkloadError::InvalidShape)
 }
 
+/// Return both conventional and bounded estimates without performing resource
+/// preflight. The exact-contract doctor uses this so an insufficient budget
+/// still produces a complete, actionable report instead of losing the
+/// estimates inside an error.
+pub fn estimate_declarative_execution_paths(
+    air: AirPackageV1,
+    rows: u64,
+    public_values: &[u64],
+    policy: &ResourcePolicyV1,
+) -> std::result::Result<(ResourceEstimate, ResourceEstimate), crate::BoundedProverError> {
+    let statement = DeclarativeStatement::new(air, rows, public_values)?;
+    let conventional = crate::estimate_resource_conventional_workload(&statement)?;
+    let bounded = crate::estimate_resource_bounded_workload(&statement, policy)?;
+    Ok((conventional, bounded))
+}
+
 /// Mode-aware conventional/bounded plan for a declarative AIR statement.
 /// Trace bytes are not read; the caller must separately validate the trace
 /// manifest before presenting this estimate as applicable to an upload.

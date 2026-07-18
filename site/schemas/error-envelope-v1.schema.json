@@ -1,20 +1,33 @@
 {
   "$defs": {
-    "ArtifactReferenceV1": {
+    "ErrorDetailV1": {
       "additionalProperties": false,
       "properties": {
-        "relative_path": {
-          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
-          "type": "string"
+        "checkpoint_present": {
+          "type": "boolean"
         },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
+        "class": {
+          "$ref": "#/$defs/ExitClassV1"
+        },
+        "exit_code": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "$ref": "#/$defs/ReasonV1"
+        },
+        "resumable": {
+          "type": "boolean"
         }
       },
       "required": [
-        "relative_path",
-        "sha256"
+        "class",
+        "exit_code",
+        "reason",
+        "resumable",
+        "checkpoint_present"
       ],
       "type": "object"
     },
@@ -30,39 +43,6 @@
         "internal_error"
       ],
       "type": "string"
-    },
-    "JobStatusV1": {
-      "enum": [
-        "succeeded",
-        "interrupted"
-      ],
-      "type": "string"
-    },
-    "ObservedResourcesV1": {
-      "additionalProperties": false,
-      "properties": {
-        "peak_resident_bytes": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "scratch_high_water_bytes": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "wall_time_millis": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "peak_resident_bytes",
-        "scratch_high_water_bytes",
-        "wall_time_millis"
-      ],
-      "type": "object"
     },
     "PlatformIdentifierV1": {
       "enum": [
@@ -1220,171 +1200,20 @@
         "docs_url"
       ],
       "type": "object"
-    },
-    "ReleaseIdentityV1": {
-      "additionalProperties": false,
-      "properties": {
-        "compatibility_profile": {
-          "const": "tinyzkp-p3-goldilocks-v1",
-          "type": "string"
-        },
-        "engine_artifact_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
-        },
-        "engine_source_identity": {
-          "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
-          "type": "string"
-        },
-        "guard_source_identity": {
-          "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
-          "type": "string"
-        },
-        "guard_version": {
-          "type": "string"
-        },
-        "qualification": {
-          "type": "string"
-        },
-        "release_identity": {
-          "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
-          "type": "string"
-        }
-      },
-      "required": [
-        "guard_version",
-        "guard_source_identity",
-        "engine_source_identity",
-        "engine_artifact_sha256",
-        "release_identity",
-        "compatibility_profile",
-        "qualification"
-      ],
-      "type": "object"
-    },
-    "RequestedModeV1": {
-      "enum": [
-        "auto",
-        "conventional",
-        "bounded"
-      ],
-      "type": "string"
-    },
-    "ResourceEstimateV1": {
-      "additionalProperties": false,
-      "properties": {
-        "peak_resident_bytes": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "scratch_high_water_bytes": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "total_read_bytes": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "total_write_bytes": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "peak_resident_bytes",
-        "scratch_high_water_bytes",
-        "total_read_bytes",
-        "total_write_bytes"
-      ],
-      "type": "object"
-    },
-    "ResourceEstimatesV1": {
-      "additionalProperties": false,
-      "properties": {
-        "bounded": {
-          "$ref": "#/$defs/ResourceEstimateV1"
-        },
-        "conventional": {
-          "$ref": "#/$defs/ResourceEstimateV1"
-        }
-      },
-      "required": [
-        "conventional",
-        "bounded"
-      ],
-      "type": "object"
-    },
-    "SelectedModeV1": {
-      "enum": [
-        "conventional",
-        "bounded"
-      ],
-      "type": "string"
-    },
-    "VerifierOutcomeV1": {
-      "enum": [
-        "accepted",
-        "rejected",
-        "not_run"
-      ],
-      "type": "string"
     }
   },
-  "$id": "https://tinyzkp.com/schemas/job-result-v1.schema.json",
+  "$id": "https://tinyzkp.com/schemas/error-envelope-v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "checkpoint_relative_path": {
-      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
-      "type": [
-        "string",
-        "null"
-      ]
+    "engine_release_identity": {
+      "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
+      "type": "string"
     },
-    "estimates": {
-      "$ref": "#/$defs/ResourceEstimatesV1"
+    "error": {
+      "$ref": "#/$defs/ErrorDetailV1"
     },
-    "observed_resources": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ObservedResourcesV1"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "proof": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ArtifactReferenceV1"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "reason": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ReasonV1"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "release": {
-      "$ref": "#/$defs/ReleaseIdentityV1"
-    },
-    "requested_mode": {
-      "$ref": "#/$defs/RequestedModeV1"
-    },
-    "resumable": {
+    "ok": {
       "type": "boolean"
     },
     "schema_version": {
@@ -1392,27 +1221,14 @@
       "format": "uint32",
       "minimum": 0,
       "type": "integer"
-    },
-    "selected_mode": {
-      "$ref": "#/$defs/SelectedModeV1"
-    },
-    "status": {
-      "$ref": "#/$defs/JobStatusV1"
-    },
-    "verifier_outcome": {
-      "$ref": "#/$defs/VerifierOutcomeV1"
     }
   },
   "required": [
     "schema_version",
-    "status",
-    "requested_mode",
-    "selected_mode",
-    "estimates",
-    "release",
-    "verifier_outcome",
-    "resumable"
+    "engine_release_identity",
+    "ok",
+    "error"
   ],
-  "title": "JobResultV1",
+  "title": "ErrorEnvelopeV1",
   "type": "object"
 }

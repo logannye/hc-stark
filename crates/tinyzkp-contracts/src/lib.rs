@@ -45,6 +45,26 @@ pub const PUBLIC_SCHEMA_NAMES: &[&str] = &[
     "policy-baseline-v1.schema.json",
 ];
 
+pub const COMPATIBILITY_MANIFEST_SCHEMA_NAME: &str = "compatibility-manifest-v1.schema.json";
+
+/// All schema artifacts shipped and signed with a release: the twelve frozen
+/// API contracts plus the standalone compatibility profile used by Guard.
+pub const PUBLISHED_SCHEMA_NAMES: &[&str] = &[
+    "job-manifest-v1.schema.json",
+    "doctor-report-v1.schema.json",
+    "compatibility-report-v1.schema.json",
+    "reason-v1.schema.json",
+    "error-envelope-v1.schema.json",
+    "progress-event-v1.schema.json",
+    "job-result-v1.schema.json",
+    "support-report-v1.schema.json",
+    "job-inspect-result-v1.schema.json",
+    "guard-channel-v1.schema.json",
+    "guard-release-index-v1.schema.json",
+    "policy-baseline-v1.schema.json",
+    COMPATIBILITY_MANIFEST_SCHEMA_NAME,
+];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestedModeV1 {
@@ -176,8 +196,7 @@ impl JobManifestV1 {
         if self.scratch_budget_bytes == 0 {
             push_unique(
                 &mut reasons,
-                ReasonV1::new(ReasonCodeV1::ScratchBudgetInsufficient)
-                    .resource(1, None, Some(0)),
+                ReasonV1::new(ReasonCodeV1::ScratchBudgetInsufficient).resource(1, None, Some(0)),
             );
         }
         reasons
@@ -291,9 +310,9 @@ impl ReasonCodeV1 {
             | Self::ScratchBudgetInsufficient
             | Self::ScratchSpaceInsufficient => ExitClassV1::InsufficientResources,
             Self::InterruptedResumable => ExitClassV1::ResumableInterruption,
-            Self::CheckpointMissing
-            | Self::CheckpointCorrupt
-            | Self::CheckpointReleaseMismatch => ExitClassV1::CorruptCheckpoint,
+            Self::CheckpointMissing | Self::CheckpointCorrupt | Self::CheckpointReleaseMismatch => {
+                ExitClassV1::CorruptCheckpoint
+            }
             Self::VerificationRejected => ExitClassV1::VerificationFailure,
             Self::ReleaseNotActivated
             | Self::LicenseInactive
@@ -458,8 +477,7 @@ impl ReasonV1 {
                     && self.expected_platform == Some(PlatformIdentifierV1::LinuxX86_64)))
             && (!has_profile
                 || (self.code == ReasonCodeV1::UnsupportedProfile
-                    && self.expected_profile
-                        == Some(ProfileIdentifierV1::TinyzkpP3GoldilocksV1)))
+                    && self.expected_profile == Some(ProfileIdentifierV1::TinyzkpP3GoldilocksV1)))
     }
 }
 
@@ -547,6 +565,17 @@ pub struct DoctorReportV1 {
     pub reasons: Vec<ReasonV1>,
 }
 
+impl DoctorReportV1 {
+    pub fn validate(&self, expected_release_identity: &str) -> bool {
+        self.schema_version == 1
+            && self.engine_release_identity == expected_release_identity
+            && is_safe_release_identity(&self.engine_release_identity)
+            && self.compatibility_profile == COMPATIBILITY_PROFILE
+            && self.reasons.iter().all(ReasonV1::validate)
+            && self.ready == (self.selected_mode.is_some() && self.reasons.is_empty())
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ReleaseIdentityV1 {
@@ -557,6 +586,18 @@ pub struct ReleaseIdentityV1 {
     pub release_identity: String,
     pub compatibility_profile: String,
     pub qualification: String,
+}
+
+impl ReleaseIdentityV1 {
+    pub fn validate(&self) -> bool {
+        is_safe_release_identity(&self.guard_version)
+            && is_safe_release_identity(&self.guard_source_identity)
+            && is_safe_release_identity(&self.engine_source_identity)
+            && is_lower_hex_digest(&self.engine_artifact_sha256)
+            && is_safe_release_identity(&self.release_identity)
+            && self.compatibility_profile == COMPATIBILITY_PROFILE
+            && is_safe_release_identity(&self.qualification)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -608,7 +649,7 @@ pub struct ResourceUsageV1 {
     pub scratch_bytes: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProgressEventV1 {
     pub schema_version: u32,
@@ -645,7 +686,7 @@ impl ProgressEventV1 {
         }
     }
 
-    pub fn validate(&self, expected_release_identity: &str) -> bool {
+    fn validate_shape(&self) -> bool {
         const EVENTS: &[&str] = &[
             "doctor_started",
             "doctor_paths_validated",
@@ -654,8 +695,33 @@ impl ProgressEventV1 {
             "doctor_completed",
             "resource_estimate",
             "phase",
+            "run_started",
+            "run_proving",
+            "run_verifying",
+            "run_interrupted",
+            "run_completed",
+            "resume_started",
+            "resume_proving",
+            "resume_verifying",
+            "resume_interrupted",
+            "resume_completed",
+            "verify_started",
+            "verify_completed",
+            "diagnostics_started",
+            "diagnostics_completed",
+            "policy_started",
+            "policy_completed",
         ];
-        const STAGES: &[&str] = &["validation", "resource_estimate", "proving", "complete"];
+        const STAGES: &[&str] = &[
+            "validation",
+            "resource_estimate",
+            "orchestration",
+            "proving",
+            "verification",
+            "diagnostics",
+            "policy",
+            "complete",
+        ];
         let phase_allowed = self.phase.as_deref().is_none_or(|phase| {
             matches!(
                 phase,
@@ -667,21 +733,95 @@ impl ProgressEventV1 {
                     | "quotient_commitment"
                     | "openings"
                     | "proof_assembly"
-            ) || phase
-                .strip_prefix("fri_layer_")
-                .is_some_and(|layer| !layer.is_empty() && layer.bytes().all(|byte| byte.is_ascii_digit()))
+            ) || phase.strip_prefix("fri_layer_").is_some_and(|layer| {
+                !layer.is_empty() && layer.bytes().all(|byte| byte.is_ascii_digit())
+            })
         });
-        self.engine_release_identity == expected_release_identity
-            && is_safe_release_identity(&self.engine_release_identity)
+        let event_stage_allowed = matches!(
+            (self.event.as_str(), self.stage.as_str()),
+            (
+                "doctor_started" | "doctor_paths_validated" | "doctor_inputs_validated",
+                "validation"
+            ) | (
+                "doctor_estimating" | "resource_estimate",
+                "resource_estimate"
+            ) | ("run_started" | "resume_started", "orchestration")
+                | ("phase" | "run_proving" | "resume_proving", "proving")
+                | (
+                    "run_verifying" | "resume_verifying" | "verify_started",
+                    "verification"
+                )
+                | ("diagnostics_started", "diagnostics")
+                | ("policy_started", "policy")
+                | (
+                    "doctor_completed"
+                        | "run_interrupted"
+                        | "run_completed"
+                        | "resume_interrupted"
+                        | "resume_completed"
+                        | "verify_completed"
+                        | "diagnostics_completed"
+                        | "policy_completed",
+                    "complete"
+                )
+        );
+        is_safe_release_identity(&self.engine_release_identity)
             && EVENTS.contains(&self.event.as_str())
             && STAGES.contains(&self.stage.as_str())
+            && event_stage_allowed
             && phase_allowed
-            && self.progress.is_none_or(|progress| progress.is_finite() && (0.0..=1.0).contains(&progress))
+            && self
+                .progress
+                .is_none_or(|progress| progress.is_finite() && (0.0..=1.0).contains(&progress))
             && match (self.completed_phases, self.total_phases) {
                 (Some(completed), Some(total)) => total > 0 && completed <= total,
                 (None, None) => true,
                 _ => false,
             }
+    }
+
+    pub fn validate(&self, expected_release_identity: &str) -> bool {
+        self.engine_release_identity == expected_release_identity && self.validate_shape()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProgressEventWireV1 {
+    schema_version: u32,
+    engine_release_identity: String,
+    event: String,
+    stage: String,
+    phase: Option<String>,
+    completed_phases: Option<u32>,
+    total_phases: Option<u32>,
+    progress: Option<f64>,
+    resource_usage: Option<ResourceUsageV1>,
+    checkpoint_durable: Option<bool>,
+}
+
+impl<'de> Deserialize<'de> for ProgressEventV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = ProgressEventWireV1::deserialize(deserializer)?;
+        let event = Self {
+            schema_version: wire.schema_version,
+            engine_release_identity: wire.engine_release_identity,
+            event: wire.event,
+            stage: wire.stage,
+            phase: wire.phase,
+            completed_phases: wire.completed_phases,
+            total_phases: wire.total_phases,
+            progress: wire.progress,
+            resource_usage: wire.resource_usage,
+            checkpoint_durable: wire.checkpoint_durable,
+        };
+        if event.schema_version != 1 || !event.validate_shape() {
+            return Err(serde::de::Error::custom("invalid ProgressEventV1"));
+        }
+        Ok(event)
     }
 }
 
@@ -753,6 +893,14 @@ pub struct EngineEstimateResultV1 {
     pub preflight: ResourcePreflightV1,
 }
 
+impl EngineEstimateResultV1 {
+    pub fn validate(&self, expected_release_identity: &str) -> bool {
+        self.schema_version == 1
+            && self.engine_release_identity == expected_release_identity
+            && is_safe_release_identity(&self.engine_release_identity)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EngineOperationReportV1 {
@@ -764,12 +912,30 @@ pub struct EngineOperationReportV1 {
     pub wall_time_millis: u64,
 }
 
+impl EngineOperationReportV1 {
+    pub fn validate(&self, expected_release_identity: &str) -> bool {
+        self.schema_version == 1
+            && self.engine_release_identity == expected_release_identity
+            && is_safe_release_identity(&self.engine_release_identity)
+            && self.wall_time_millis > 0
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EngineVerifyResultV1 {
     pub schema_version: u32,
     pub engine_release_identity: String,
     pub accepted: bool,
+}
+
+impl EngineVerifyResultV1 {
+    pub fn validate(&self, expected_release_identity: &str) -> bool {
+        self.schema_version == 1
+            && self.engine_release_identity == expected_release_identity
+            && is_safe_release_identity(&self.engine_release_identity)
+            && self.accepted
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -900,12 +1066,47 @@ pub struct SupportReportV1 {
     pub redaction_policy: SupportRedactionPolicyV1,
 }
 
+impl SupportReportV1 {
+    pub fn validate(&self) -> bool {
+        self.schema_version == 1
+            && self.release.validate()
+            && platform_is_allowlisted(&self.platform)
+            && self.compatibility_profile == ProfileIdentifierV1::TinyzkpP3GoldilocksV1
+            && self.reasons.iter().all(ReasonV1::validate)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ArtifactDescriptorV1 {
     pub name: String,
     pub sha256: String,
     pub size_bytes: u64,
+}
+
+/// Exact Lemon Squeezy catalog identifiers bound into a qualified release.
+/// Runtime entitlement transport remains behind Guard's provider adapter.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MerchantCatalogIdentityV1 {
+    pub merchant: String,
+    pub entitlement_mode: String,
+    pub store_id: String,
+    pub product_id: String,
+    pub monthly_variant_id: String,
+    pub annual_variant_id: String,
+}
+
+impl MerchantCatalogIdentityV1 {
+    pub fn validate(&self) -> bool {
+        self.merchant == "lemon_squeezy"
+            && self.entitlement_mode == "lemon_squeezy_subscription_license_keys"
+            && is_decimal_identifier(&self.store_id)
+            && is_decimal_identifier(&self.product_id)
+            && is_decimal_identifier(&self.monthly_variant_id)
+            && is_decimal_identifier(&self.annual_variant_id)
+            && self.monthly_variant_id != self.annual_variant_id
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -923,7 +1124,41 @@ pub struct GuardChannelV1 {
     pub eula_sha256: String,
     pub release_date: String,
     pub compatibility_profile: String,
+    pub merchant_catalog: MerchantCatalogIdentityV1,
     pub qualification: String,
+}
+
+impl GuardChannelV1 {
+    pub fn validate(&self) -> bool {
+        self.schema_version == 1
+            && is_safe_release_identity(&self.guard_version)
+            && is_safe_release_identity(&self.release_identity)
+            && is_git_sha(&self.guard_source_sha)
+            && is_git_sha(&self.engine_source_sha)
+            && is_lower_hex_digest(&self.engine_artifact_sha256)
+            && !self.artifacts.is_empty()
+            && self.artifacts.iter().all(|artifact| {
+                safe_artifact_name(&artifact.name)
+                    && is_lower_hex_digest(&artifact.sha256)
+                    && artifact.size_bytes > 0
+            })
+            && all_unique(self.artifacts.iter().map(|artifact| artifact.name.as_str()))
+            && self
+                .oci_digest
+                .strip_prefix("sha256:")
+                .is_some_and(is_lower_hex_digest)
+            && self.schemas.len() == PUBLISHED_SCHEMA_NAMES.len()
+            && PUBLISHED_SCHEMA_NAMES.iter().all(|name| {
+                self.schemas
+                    .get(*name)
+                    .is_some_and(|digest| is_lower_hex_digest(digest))
+            })
+            && is_lower_hex_digest(&self.eula_sha256)
+            && is_iso_date(&self.release_date)
+            && self.compatibility_profile == COMPATIBILITY_PROFILE
+            && self.merchant_catalog.validate()
+            && is_safe_release_identity(&self.qualification)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -933,6 +1168,25 @@ pub struct GuardReleaseIndexV1 {
     pub product: String,
     pub current_release_identity: String,
     pub releases: Vec<GuardReleaseIndexEntryV1>,
+}
+
+impl GuardReleaseIndexV1 {
+    pub fn validate(&self) -> bool {
+        self.schema_version == 1
+            && self.product == "tinyzkp-guard"
+            && is_safe_release_identity(&self.current_release_identity)
+            && self
+                .releases
+                .iter()
+                .filter(|release| release.state == GuardReleaseStateV1::Current)
+                .count()
+                == 1
+            && self.releases.iter().all(GuardReleaseIndexEntryV1::validate)
+            && self.releases.iter().any(|release| {
+                release.state == GuardReleaseStateV1::Current
+                    && release.release_identity == self.current_release_identity
+            })
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -950,6 +1204,27 @@ pub struct GuardReleaseIndexEntryV1 {
     pub advisory_url: Option<String>,
 }
 
+impl GuardReleaseIndexEntryV1 {
+    pub fn validate(&self) -> bool {
+        is_safe_release_identity(&self.guard_version)
+            && is_safe_release_identity(&self.release_identity)
+            && self.compatibility_profile == COMPATIBILITY_PROFILE
+            && is_https_url(&self.channel_url)
+            && is_lower_hex_digest(&self.channel_sha256)
+            && !self.artifacts.is_empty()
+            && self.artifacts.iter().all(|artifact| {
+                safe_artifact_name(&artifact.name)
+                    && is_https_url(&artifact.url)
+                    && is_lower_hex_digest(&artifact.sha256)
+            })
+            && self
+                .successor_release_identity
+                .as_deref()
+                .is_none_or(is_safe_release_identity)
+            && self.advisory_url.as_deref().is_none_or(is_https_url)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ImmutableReleaseArtifactV1 {
@@ -958,7 +1233,7 @@ pub struct ImmutableReleaseArtifactV1 {
     pub sha256: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GuardReleaseStateV1 {
     Current,
@@ -1018,25 +1293,106 @@ pub struct VersionResultV1 {
 /// Auto mode chooses the conventional path only at or below this exact 70%
 /// boundary.
 pub fn memory_selection_threshold(ram_budget_bytes: u64) -> u64 {
-    ram_budget_bytes.saturating_mul(7) / 10
+    let quotient = ram_budget_bytes / 10;
+    let remainder = ram_budget_bytes % 10;
+    quotient * 7 + remainder * 7 / 10
 }
 
 pub fn is_safe_release_identity(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
         && value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-')
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-' | b'+' | b'/')
         })
+        && !value.starts_with('/')
+        && !value.contains("..")
+        && !value.contains("//")
+}
+
+pub fn is_lower_hex_digest(value: &str) -> bool {
+    is_lower_hex_with_length(value, 64)
+}
+
+fn is_git_sha(value: &str) -> bool {
+    is_lower_hex_with_length(value, 40)
+}
+
+fn is_lower_hex_with_length(value: &str, length: usize) -> bool {
+    value.len() == length
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn is_decimal_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 20
+        && !value.starts_with('0')
+        && value.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn is_iso_date(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes
+            .iter()
+            .enumerate()
+            .any(|(index, byte)| index != 4 && index != 7 && !byte.is_ascii_digit())
+    {
+        return false;
+    }
+    let month = (bytes[5] - b'0') * 10 + bytes[6] - b'0';
+    let day = (bytes[8] - b'0') * 10 + bytes[9] - b'0';
+    (1..=12).contains(&month) && (1..=31).contains(&day)
+}
+
+fn all_unique<'a>(mut values: impl Iterator<Item = &'a str>) -> bool {
+    let mut seen = BTreeSet::new();
+    values.all(|value| seen.insert(value))
+}
+
+fn is_https_url(value: &str) -> bool {
+    value.len() <= 2048
+        && value.starts_with("https://")
+        && value.is_ascii()
+        && !value
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte == b' ')
+        && !value[8..].contains('@')
+}
+
+fn safe_artifact_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 255
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+        && value != "."
+        && value != ".."
+}
+
+fn platform_is_allowlisted(platform: &PlatformV1) -> bool {
+    matches!(
+        platform.operating_system.as_str(),
+        "linux" | "macos" | "windows" | "other"
+    ) && matches!(
+        platform.architecture.as_str(),
+        "x86_64" | "aarch64" | "other"
+    )
 }
 
 /// Capacity for which `required` uses no more than 90%, rounded upward.
 pub fn required_scratch_capacity_with_headroom(required: u64) -> Option<u64> {
-    required
-        .checked_mul(10)
-        .and_then(|value| value.checked_add(8))
-        .map(|value| value / 9)
+    let extra = required / 9 + u64::from(!required.is_multiple_of(9));
+    required.checked_add(extra)
 }
 
+#[allow(
+    clippy::result_large_err,
+    reason = "the public preflight API returns the complete typed wire reason without allocation indirection"
+)]
 pub fn select_and_preflight(
     manifest: &JobManifestV1,
     estimates: &ResourceEstimatesV1,
@@ -1046,9 +1402,7 @@ pub fn select_and_preflight(
     let selected = match manifest.mode {
         RequestedModeV1::Conventional => SelectedModeV1::Conventional,
         RequestedModeV1::Bounded => SelectedModeV1::Bounded,
-        RequestedModeV1::Auto
-            if estimates.conventional.peak_resident_bytes <= threshold =>
-        {
+        RequestedModeV1::Auto if estimates.conventional.peak_resident_bytes <= threshold => {
             SelectedModeV1::Conventional
         }
         RequestedModeV1::Auto => SelectedModeV1::Bounded,
@@ -1058,13 +1412,11 @@ pub fn select_and_preflight(
         SelectedModeV1::Bounded => &estimates.bounded,
     };
     if estimate.peak_resident_bytes > manifest.ram_budget_bytes {
-        return Err(
-            ReasonV1::new(ReasonCodeV1::RamBudgetInsufficient).resource(
-                estimate.peak_resident_bytes,
-                None,
-                Some(manifest.ram_budget_bytes),
-            ),
-        );
+        return Err(ReasonV1::new(ReasonCodeV1::RamBudgetInsufficient).resource(
+            estimate.peak_resident_bytes,
+            None,
+            Some(manifest.ram_budget_bytes),
+        ));
     }
     let scratch_required_with_headroom_bytes = if selected == SelectedModeV1::Bounded {
         let needed = required_scratch_capacity_with_headroom(estimate.scratch_high_water_bytes)
@@ -1118,7 +1470,425 @@ pub fn public_schema<T: JsonSchema>(name: &str) -> Value {
         "$schema".to_owned(),
         json!("https://json-schema.org/draft/2020-12/schema"),
     );
+    harden_schema(&mut schema);
+    if name == "job-manifest-v1.schema.json" {
+        harden_job_manifest_schema(&mut schema);
+    }
+    if matches!(
+        name,
+        "compatibility-report-v1.schema.json" | COMPATIBILITY_MANIFEST_SCHEMA_NAME
+    ) {
+        let manifest_root = if name == COMPATIBILITY_MANIFEST_SCHEMA_NAME {
+            ""
+        } else {
+            "/$defs/CompatibilityManifestV1"
+        };
+        harden_compatibility_manifest_at(&mut schema, manifest_root);
+        set_const(
+            &mut schema,
+            "/$defs/PlatformV1/properties/operating_system",
+            json!("linux"),
+        );
+        set_const(
+            &mut schema,
+            "/$defs/PlatformV1/properties/architecture",
+            json!("x86_64"),
+        );
+        for (field, value) in [
+            ("minimum_rows", MIN_ROWS),
+            ("maximum_rows", MAX_ROWS),
+            ("maximum_trace_width", u64::from(MAX_TRACE_WIDTH)),
+            (
+                "maximum_constraint_degree",
+                u64::from(MAX_CONSTRAINT_DEGREE),
+            ),
+        ] {
+            set_const(
+                &mut schema,
+                &format!("/$defs/CompatibilityLimitsV1/properties/{field}"),
+                json!(value),
+            );
+        }
+    }
+    if name == "guard-channel-v1.schema.json" {
+        if let Some(schemas) = schema
+            .pointer_mut("/properties/schemas")
+            .and_then(Value::as_object_mut)
+        {
+            schemas.insert("minProperties".into(), json!(PUBLISHED_SCHEMA_NAMES.len()));
+            schemas.insert("maxProperties".into(), json!(PUBLISHED_SCHEMA_NAMES.len()));
+            schemas.insert(
+                "propertyNames".into(),
+                json!({"enum": PUBLISHED_SCHEMA_NAMES}),
+            );
+            if let Some(additional) = schemas
+                .get_mut("additionalProperties")
+                .and_then(Value::as_object_mut)
+            {
+                additional.insert("pattern".into(), json!(r"^[0-9a-f]{64}$"));
+            }
+        }
+        if let Some(artifacts) = schema
+            .pointer_mut("/properties/artifacts")
+            .and_then(Value::as_object_mut)
+        {
+            artifacts.insert("minItems".into(), json!(1));
+            artifacts.insert("uniqueItems".into(), json!(true));
+        }
+        set_min_max(
+            &mut schema,
+            "/$defs/ArtifactDescriptorV1/properties/size_bytes",
+            1,
+            u64::MAX,
+        );
+    }
     schema
+}
+
+fn harden_schema(value: &mut Value) {
+    match value {
+        Value::Array(values) => values.iter_mut().for_each(harden_schema),
+        Value::Object(object) => {
+            if let Some(properties) = object.get_mut("properties").and_then(Value::as_object_mut) {
+                for (name, property) in properties.iter_mut() {
+                    let Some(property) = property.as_object_mut() else {
+                        continue;
+                    };
+                    match name.as_str() {
+                        "schema_version" => {
+                            property.insert("const".into(), json!(1));
+                        }
+                        "compatibility_profile" => {
+                            property.insert("const".into(), json!(COMPATIBILITY_PROFILE));
+                        }
+                        "plonky3_version" => {
+                            property.insert("const".into(), json!(PLONKY3_VERSION));
+                        }
+                        "field" => {
+                            property.insert("const".into(), json!(FIELD));
+                        }
+                        "extension_degree" => {
+                            property.insert("const".into(), json!(EXTENSION_DEGREE));
+                        }
+                        "permutation" => {
+                            property.insert("const".into(), json!(PERMUTATION));
+                        }
+                        "verifier" => {
+                            property.insert("const".into(), json!(VERIFIER));
+                        }
+                        "engine_release_identity"
+                        | "release_identity"
+                        | "current_release_identity"
+                        | "required_release_identity"
+                        | "successor_release_identity"
+                        | "guard_source_identity"
+                        | "engine_source_identity" => {
+                            property.insert(
+                                "pattern".into(),
+                                json!(r"^(?!/)(?!.*\.\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$"),
+                            );
+                        }
+                        "guard_source_sha" | "engine_source_sha" => {
+                            property.insert("pattern".into(), json!(r"^[0-9a-f]{40}$"));
+                        }
+                        "sha256" | "channel_sha256" | "engine_artifact_sha256" | "eula_sha256" => {
+                            property.insert("pattern".into(), json!(r"^[0-9a-f]{64}$"));
+                        }
+                        "oci_digest" => {
+                            property.insert("pattern".into(), json!(r"^sha256:[0-9a-f]{64}$"));
+                        }
+                        "url" | "channel_url" | "advisory_url" => {
+                            property.insert("format".into(), json!("uri"));
+                            property.insert("pattern".into(), json!(r"^https://"));
+                            property.insert("maxLength".into(), json!(2048));
+                        }
+                        "merchant" => {
+                            property.insert("const".into(), json!("lemon_squeezy"));
+                        }
+                        "entitlement_mode" => {
+                            property.insert(
+                                "const".into(),
+                                json!("lemon_squeezy_subscription_license_keys"),
+                            );
+                        }
+                        "store_id" | "product_id" | "monthly_variant_id" | "annual_variant_id" => {
+                            property.insert("pattern".into(), json!(r"^[1-9][0-9]{0,19}$"));
+                        }
+                        "release_date" => {
+                            property.insert(
+                                "pattern".into(),
+                                json!(r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"),
+                            );
+                        }
+                        "relative_path"
+                        | "air_package"
+                        | "trace_manifest"
+                        | "chunks_dir"
+                        | "public_inputs"
+                        | "input_root"
+                        | "job_root"
+                        | "output_root"
+                        | "scratch_root"
+                        | "job_dir"
+                        | "output_dir"
+                        | "scratch_dir"
+                        | "checkpoint_relative_path" => {
+                            property.insert(
+                                "pattern".into(),
+                                json!(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$"),
+                            );
+                        }
+                        "operating_system" => {
+                            property.insert(
+                                "enum".into(),
+                                json!(["linux", "macos", "windows", "other"]),
+                            );
+                        }
+                        "architecture" => {
+                            property.insert("enum".into(), json!(["x86_64", "aarch64", "other"]));
+                        }
+                        _ => {}
+                    }
+                }
+                if properties.contains_key("code")
+                    && properties.contains_key("class")
+                    && properties.contains_key("docs_url")
+                {
+                    harden_reason_object(object);
+                } else if properties.contains_key("event")
+                    && properties.contains_key("stage")
+                    && properties.contains_key("engine_release_identity")
+                {
+                    harden_progress_object(object);
+                }
+            }
+            object.values_mut().for_each(harden_schema);
+        }
+        _ => {}
+    }
+}
+
+fn harden_reason_object(object: &mut serde_json::Map<String, Value>) {
+    const CODES: &[ReasonCodeV1] = &[
+        ReasonCodeV1::UnsupportedPlatform,
+        ReasonCodeV1::UnsupportedProfile,
+        ReasonCodeV1::UnsupportedAirFeature,
+        ReasonCodeV1::ManifestContractInvalid,
+        ReasonCodeV1::UnsafePath,
+        ReasonCodeV1::InputLimitExceeded,
+        ReasonCodeV1::RamBudgetInsufficient,
+        ReasonCodeV1::ScratchBudgetInsufficient,
+        ReasonCodeV1::ScratchSpaceInsufficient,
+        ReasonCodeV1::JobStateExists,
+        ReasonCodeV1::InterruptedResumable,
+        ReasonCodeV1::CheckpointMissing,
+        ReasonCodeV1::CheckpointCorrupt,
+        ReasonCodeV1::CheckpointReleaseMismatch,
+        ReasonCodeV1::JobNotResumable,
+        ReasonCodeV1::VerificationRejected,
+        ReasonCodeV1::ReleaseNotActivated,
+        ReasonCodeV1::LicenseInactive,
+        ReasonCodeV1::LicenseProviderUnavailable,
+        ReasonCodeV1::EngineArtifactMismatch,
+        ReasonCodeV1::EngineProtocolInvalid,
+        ReasonCodeV1::ReleaseIdentityMismatch,
+        ReasonCodeV1::InternalError,
+    ];
+    let rules: Vec<_> = CODES
+        .iter()
+        .copied()
+        .map(|code| {
+            let canonical = ReasonV1::new(code);
+            let mut context = serde_json::Map::new();
+            let resource = matches!(
+                code,
+                ReasonCodeV1::InputLimitExceeded
+                    | ReasonCodeV1::RamBudgetInsufficient
+                    | ReasonCodeV1::ScratchBudgetInsufficient
+                    | ReasonCodeV1::ScratchSpaceInsufficient
+            );
+            if !resource {
+                for field in ["required_bytes", "available_bytes", "limit_bytes"] {
+                    context.insert(field.into(), json!({"type": "null"}));
+                }
+            }
+            if code == ReasonCodeV1::UnsupportedPlatform {
+                context.insert("expected_platform".into(), json!({"const": "linux_x86_64"}));
+            } else {
+                context.insert("expected_platform".into(), json!({"type": "null"}));
+                context.insert("detected_platform".into(), json!({"type": "null"}));
+            }
+            if code == ReasonCodeV1::UnsupportedProfile {
+                context.insert(
+                    "expected_profile".into(),
+                    json!({"const": "tinyzkp_p3_goldilocks_v1"}),
+                );
+            } else {
+                context.insert("expected_profile".into(), json!({"type": "null"}));
+                context.insert("detected_profile".into(), json!({"type": "null"}));
+            }
+            context.insert("class".into(), json!({"const": canonical.class}));
+            context.insert("summary".into(), json!({"const": canonical.summary}));
+            context.insert(
+                "remediation".into(),
+                json!({"const": canonical.remediation}),
+            );
+            context.insert("docs_url".into(), json!({"const": canonical.docs_url}));
+            json!({
+                "if": {"properties": {"code": {"const": code.as_str()}}},
+                "then": {"properties": context}
+            })
+        })
+        .collect();
+    object.insert("allOf".into(), Value::Array(rules));
+}
+
+fn harden_progress_object(object: &mut serde_json::Map<String, Value>) {
+    let Some(properties) = object.get_mut("properties").and_then(Value::as_object_mut) else {
+        return;
+    };
+    properties.insert(
+        "event".into(),
+        json!({"enum": [
+            "doctor_started", "doctor_paths_validated", "doctor_inputs_validated",
+            "doctor_estimating", "doctor_completed", "resource_estimate", "phase",
+            "run_started", "run_proving", "run_verifying", "run_interrupted", "run_completed",
+            "resume_started", "resume_proving", "resume_verifying", "resume_interrupted",
+            "resume_completed", "verify_started", "verify_completed", "diagnostics_started",
+            "diagnostics_completed", "policy_started", "policy_completed"
+        ], "type": "string"}),
+    );
+    properties.insert(
+        "stage".into(),
+        json!({"enum": [
+            "validation", "resource_estimate", "orchestration", "proving", "verification",
+            "diagnostics", "policy", "complete"
+        ], "type": "string"}),
+    );
+    properties.insert(
+        "phase".into(),
+        json!({"anyOf": [
+            {"enum": ["trace", "trace_lde", "trace_commitment", "quotient", "quotient_lde",
+                "quotient_commitment", "openings", "proof_assembly"]},
+            {"pattern": "^fri_layer_[0-9]+$", "type": "string"},
+            {"type": "null"}
+        ]}),
+    );
+}
+
+fn harden_job_manifest_schema(schema: &mut Value) {
+    set_const(
+        schema,
+        "/properties/compatibility_profile",
+        json!(COMPATIBILITY_PROFILE),
+    );
+    set_min_max(
+        schema,
+        "/properties/ram_budget_bytes",
+        16 * 1024 * 1024,
+        u64::MAX,
+    );
+    set_min_max(schema, "/properties/scratch_budget_bytes", 1, u64::MAX);
+    set_min_max(schema, "/properties/max_threads", 1, 256);
+    set_const(
+        schema,
+        "/$defs/WorkloadInputV1/properties/field",
+        json!(FIELD),
+    );
+    set_const(
+        schema,
+        "/$defs/WorkloadInputV1/properties/extension_degree",
+        json!(EXTENSION_DEGREE),
+    );
+    set_const(
+        schema,
+        "/$defs/WorkloadInputV1/properties/permutation",
+        json!(PERMUTATION),
+    );
+    set_const(
+        schema,
+        "/$defs/WorkloadInputV1/properties/verifier",
+        json!(VERIFIER),
+    );
+    if let Some(rows) = schema
+        .pointer_mut("/$defs/WorkloadInputV1/properties/logical_rows")
+        .and_then(Value::as_object_mut)
+    {
+        rows.insert(
+            "enum".into(),
+            Value::Array((10..=24).map(|power| json!(1u64 << power)).collect()),
+        );
+    }
+    set_min_max(
+        schema,
+        "/$defs/WorkloadInputV1/properties/trace_width",
+        1,
+        u64::from(MAX_TRACE_WIDTH),
+    );
+    set_min_max(
+        schema,
+        "/$defs/WorkloadInputV1/properties/max_constraint_degree",
+        1,
+        u64::from(MAX_CONSTRAINT_DEGREE),
+    );
+    for feature in [
+        "uses_lookups",
+        "uses_buses",
+        "uses_permutations",
+        "uses_multi_table",
+        "uses_preprocessed_columns",
+        "uses_periodic_columns",
+        "uses_recursion",
+        "uses_gpu",
+    ] {
+        set_const(
+            schema,
+            &format!("/$defs/AirFeaturesV1/properties/{feature}"),
+            json!(false),
+        );
+    }
+}
+
+fn harden_compatibility_manifest_at(schema: &mut Value, root: &str) {
+    set_const(
+        schema,
+        &format!("{root}/properties/profile"),
+        json!(COMPATIBILITY_PROFILE),
+    );
+    set_const(
+        schema,
+        &format!("{root}/properties/plonky3_version"),
+        json!(PLONKY3_VERSION),
+    );
+    set_const(schema, &format!("{root}/properties/field"), json!(FIELD));
+    set_const(
+        schema,
+        &format!("{root}/properties/extension_degree"),
+        json!(EXTENSION_DEGREE),
+    );
+    set_const(
+        schema,
+        &format!("{root}/properties/permutation"),
+        json!(PERMUTATION),
+    );
+    set_const(
+        schema,
+        &format!("{root}/properties/verifier"),
+        json!(VERIFIER),
+    );
+}
+
+fn set_const(schema: &mut Value, pointer: &str, constant: Value) {
+    if let Some(property) = schema.pointer_mut(pointer).and_then(Value::as_object_mut) {
+        property.insert("const".into(), constant);
+    }
+}
+
+fn set_min_max(schema: &mut Value, pointer: &str, minimum: u64, maximum: u64) {
+    if let Some(property) = schema.pointer_mut(pointer).and_then(Value::as_object_mut) {
+        property.insert("minimum".into(), json!(minimum));
+        property.insert("maximum".into(), json!(maximum));
+    }
 }
 
 pub fn schema_by_name(name: &str) -> Option<Value> {
@@ -1135,6 +1905,7 @@ pub fn schema_by_name(name: &str) -> Option<Value> {
         "guard-channel-v1.schema.json" => public_schema::<GuardChannelV1>(name),
         "guard-release-index-v1.schema.json" => public_schema::<GuardReleaseIndexV1>(name),
         "policy-baseline-v1.schema.json" => public_schema::<PolicyBaselineV1>(name),
+        COMPATIBILITY_MANIFEST_SCHEMA_NAME => public_schema::<CompatibilityManifestV1>(name),
         _ => return None,
     })
 }
@@ -1308,11 +2079,18 @@ mod tests {
         for name in PUBLIC_SCHEMA_NAMES {
             assert!(schema_by_name(name).is_some());
         }
-        let reason = ReasonV1::new(ReasonCodeV1::InterruptedResumable);
+        assert_eq!(PUBLIC_SCHEMA_NAMES.len(), 12);
+        assert_eq!(PUBLISHED_SCHEMA_NAMES.len(), 13);
         assert_eq!(
-            reason.docs_url,
-            "/troubleshooting#interrupted_resumable"
+            PUBLISHED_SCHEMA_NAMES.last().copied(),
+            Some(COMPATIBILITY_MANIFEST_SCHEMA_NAME)
         );
+        assert!(schema_by_name(COMPATIBILITY_MANIFEST_SCHEMA_NAME).is_some());
+        let reason = ReasonV1::new(ReasonCodeV1::InterruptedResumable);
+        assert_eq!(reason.docs_url, "/troubleshooting#interrupted_resumable");
+        let mut tampered = serde_json::to_value(&reason).unwrap();
+        tampered["summary"] = json!("untrusted detail");
+        assert!(serde_json::from_value::<ReasonV1>(tampered).is_err());
     }
 
     #[test]
@@ -1339,9 +2117,111 @@ mod tests {
         let (_, preflight) =
             select_and_preflight(&job, &estimates(700, 200, 900), Some(1_000)).unwrap();
         assert_eq!(preflight.scratch_required_with_headroom_bytes, Some(1_000));
-        let error =
-            select_and_preflight(&job, &estimates(700, 200, 900), Some(999)).unwrap_err();
+        let error = select_and_preflight(&job, &estimates(700, 200, 900), Some(999)).unwrap_err();
         assert_eq!(error.code, ReasonCodeV1::ScratchSpaceInsufficient);
+    }
+
+    #[test]
+    fn resource_arithmetic_matches_wide_integer_reference_at_u64_edges() {
+        for value in [
+            0,
+            1,
+            9,
+            10,
+            11,
+            u64::MAX / 10,
+            u64::MAX / 2,
+            u64::MAX - 1,
+            u64::MAX,
+        ] {
+            assert_eq!(
+                memory_selection_threshold(value),
+                ((u128::from(value) * 7) / 10) as u64
+            );
+            let wide = (u128::from(value) * 10).div_ceil(9);
+            let expected = u64::try_from(wide).ok();
+            assert_eq!(required_scratch_capacity_with_headroom(value), expected);
+        }
+    }
+
+    #[test]
+    fn strict_json_rejects_duplicate_keys_and_progress_vocabulary_is_closed() {
+        assert!(parse_strict_json::<serde_json::Value>(br#"{"a":1,"a":2}"#).is_err());
+        let invalid = serde_json::json!({
+            "schema_version": 1,
+            "engine_release_identity": "release",
+            "event": "arbitrary",
+            "stage": "proving",
+            "phase": null,
+            "completed_phases": null,
+            "total_phases": null,
+            "progress": null,
+            "resource_usage": null,
+            "checkpoint_durable": null
+        });
+        assert!(serde_json::from_value::<ProgressEventV1>(invalid).is_err());
+    }
+
+    #[test]
+    fn schemas_exclude_obvious_non_v1_and_unbounded_values() {
+        let job = schema_by_name("job-manifest-v1.schema.json").unwrap();
+        assert_eq!(
+            job.pointer("/properties/schema_version/const"),
+            Some(&json!(1))
+        );
+        assert_eq!(
+            job.pointer("/properties/compatibility_profile/const"),
+            Some(&json!(COMPATIBILITY_PROFILE))
+        );
+        assert_eq!(
+            job.pointer("/$defs/WorkloadInputV1/properties/field/const"),
+            Some(&json!(FIELD))
+        );
+        assert_eq!(
+            job.pointer("/$defs/WorkloadInputV1/properties/trace_width/maximum"),
+            Some(&json!(MAX_TRACE_WIDTH))
+        );
+        assert_eq!(
+            job.pointer("/$defs/AirFeaturesV1/properties/uses_lookups/const"),
+            Some(&json!(false))
+        );
+        assert!(job
+            .pointer("/properties/job_dir/pattern")
+            .and_then(Value::as_str)
+            .is_some_and(|pattern| pattern.contains(r"\.\.")));
+
+        let reason = schema_by_name("reason-v1.schema.json").unwrap();
+        assert_eq!(
+            reason
+                .pointer("/allOf")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(23)
+        );
+        let progress = schema_by_name("progress-event-v1.schema.json").unwrap();
+        assert!(progress
+            .pointer("/properties/event/enum")
+            .and_then(Value::as_array)
+            .is_some_and(|values| values.contains(&json!("run_started"))
+                && !values.contains(&json!("arbitrary"))));
+        let channel = schema_by_name("guard-channel-v1.schema.json").unwrap();
+        assert_eq!(
+            channel.pointer("/$defs/MerchantCatalogIdentityV1/properties/entitlement_mode/const"),
+            Some(&json!("lemon_squeezy_subscription_license_keys"))
+        );
+        assert_eq!(
+            channel.pointer("/$defs/MerchantCatalogIdentityV1/properties/merchant/const"),
+            Some(&json!("lemon_squeezy"))
+        );
+        assert_eq!(
+            channel.pointer("/properties/schemas/minProperties"),
+            Some(&json!(PUBLISHED_SCHEMA_NAMES.len()))
+        );
+        let compatibility = schema_by_name(COMPATIBILITY_MANIFEST_SCHEMA_NAME).unwrap();
+        assert_eq!(
+            compatibility.pointer("/properties/profile/const"),
+            Some(&json!(COMPATIBILITY_PROFILE))
+        );
     }
 
     #[test]
@@ -1354,5 +2234,30 @@ mod tests {
         assert_eq!(ExitClassV1::VerificationFailure.exit_code(), 15);
         assert_eq!(ExitClassV1::LicenseFailure.exit_code(), 16);
         assert_eq!(ExitClassV1::InternalError.exit_code(), 70);
+    }
+
+    #[test]
+    fn published_job_manifest_sample_is_contract_valid() {
+        let manifest: JobManifestV1 = parse_strict_json(include_bytes!(
+            "../../../examples/plonky3/job-manifest-v1.example.json"
+        ))
+        .unwrap();
+        assert!(manifest.compatibility_reasons().is_empty());
+        assert_eq!(manifest.mode, RequestedModeV1::Auto);
+    }
+
+    #[test]
+    fn merchant_catalog_identity_is_exact_and_variant_distinct() {
+        let mut catalog = MerchantCatalogIdentityV1 {
+            merchant: "lemon_squeezy".into(),
+            entitlement_mode: "lemon_squeezy_subscription_license_keys".into(),
+            store_id: "123".into(),
+            product_id: "456".into(),
+            monthly_variant_id: "789".into(),
+            annual_variant_id: "790".into(),
+        };
+        assert!(catalog.validate());
+        catalog.annual_variant_id = catalog.monthly_variant_id.clone();
+        assert!(!catalog.validate());
     }
 }

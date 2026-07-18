@@ -1,3 +1,4 @@
+use crate::protocol::{emit_progress, ProtocolFailure};
 use anyhow::{bail, Context, Result};
 use hc_plonky3::contracts::{
     air_package_schema, air_proof_bundle_schema, benchmark_report_schema, proof_bundle_schema,
@@ -9,41 +10,29 @@ use hc_plonky3::contracts::{
     MAX_TRACE_UNCOMPRESSED_BYTES, MIN_CUSTOM_TRACE_ROWS,
 };
 use hc_plonky3::{
-    plan_declarative_statement, prove_resource_with_policy_observed_with_cancellation,
+    plan_declarative_statement,
+    prove_resource_with_policy_observed_with_cancellation_at_checkpoint_dir,
     resume_resource_bounded_with_cancellation_observed, InternalProofBundle,
     ResourceBoundedUniStarkProver, UploadedTraceWorkload, WorkloadKind, COMPATIBILITY_PROFILE,
     PLONKY3_VERSION,
 };
-use hc_stream::{
-    CheckpointManifestV2, ExecutionMode, ResourceEstimate, ResourceMode, ResourcePolicyV1,
-};
+use hc_stream::{CheckpointManifestV2, ExecutionMode, ResourceMode, ResourcePolicyV1};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum AirOperationModeV1 {
-    Conventional,
-    Bounded,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct AirOperationReportV1 {
-    schema_version: u32,
-    selected_mode: AirOperationModeV1,
-    peak_resident_bytes: u64,
-    scratch_high_water_bytes: u64,
-    wall_time_millis: u64,
-}
+use tinyzkp_contracts::{
+    parse_strict_json, EngineEstimateResultV1, EngineOperationReportV1, EngineProgressEventV1,
+    EngineVerifyResultV1, ReasonCodeV1, ReasonV1, ResourceEstimateV1, ResourceEstimatesV1,
+    ResourcePreflightV1, ResourceUsageV1, SelectedModeV1,
+};
 
 pub fn validate_air(air_path: &Path) -> Result<()> {
     let air: AirPackageV1 = read_json_limited(air_path, MAX_AIR_JSON_BYTES)?;
-    air.validate().map_err(anyhow::Error::msg)?;
+    air.validate()
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
@@ -60,12 +49,17 @@ pub fn validate_air(air_path: &Path) -> Result<()> {
     Ok(())
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "each argument maps directly to one explicit CLI file contract"
+)]
 pub fn prove_air(
     air_path: &Path,
     trace_manifest_path: &Path,
     chunks_dir: &Path,
     public_inputs_path: &Path,
     policy_path: &Path,
+    checkpoint_dir: &Path,
     output: &Path,
     reference: bool,
 ) -> Result<()> {
@@ -75,20 +69,21 @@ pub fn prove_air(
     let public_inputs: PublicInputsV1 =
         read_json_limited(public_inputs_path, MAX_MANIFEST_JSON_BYTES)?;
     let policy: ResourcePolicyV1 = read_json_limited(policy_path, MAX_MANIFEST_JSON_BYTES)?;
-    air.validate().map_err(anyhow::Error::msg)?;
+    air.validate()
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     trace_manifest
         .validate_for_air(&air)
-        .map_err(anyhow::Error::msg)?;
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     public_inputs
         .validate_for_air(&air)
-        .map_err(anyhow::Error::msg)?;
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     let workload = UploadedTraceWorkload::new(
         air.clone(),
         trace_manifest.clone(),
         public_inputs.values.clone(),
         chunks_dir,
     )
-    .map_err(anyhow::Error::msg)?;
+    .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     let mut execution_policy = policy;
     if reference {
         execution_policy.mode = ResourceMode::Memory;
@@ -99,13 +94,15 @@ pub fn prove_air(
         .context("failed to install the prover cancellation handler")?;
     let started = Instant::now();
     let mut scratch_high_water_bytes = 0;
-    let planned = prove_resource_with_policy_observed_with_cancellation(
+    let checkpoint_path = checkpoint_dir.join("checkpoint.json");
+    let planned = prove_resource_with_policy_observed_with_cancellation_at_checkpoint_dir(
         &workload,
         &execution_policy,
+        checkpoint_dir,
         cancellation,
         |event| observe_air_operation(event, &mut scratch_high_water_bytes),
     )
-    .map_err(anyhow::Error::msg)?;
+    .map_err(|error| map_prover_error(error, checkpoint_path.is_file()))?;
     let selected_mode = planned.selected_mode;
     let bundle = AirProofBundleV1::from_proof(
         air,
@@ -114,7 +111,7 @@ pub fn prove_air(
         planned.proof_bytes,
         hc_plonky3::release_identity(),
     )
-    .map_err(anyhow::Error::msg)?;
+    .map_err(|_| ProtocolFailure::new(ReasonCodeV1::InternalError))?;
     write_json_atomic(output, &bundle)?;
     emit_air_operation_report(selected_mode, scratch_high_water_bytes, started.elapsed())?;
     Ok(())
@@ -122,8 +119,14 @@ pub fn prove_air(
 
 pub fn verify_air(bundle_path: &Path) -> Result<()> {
     let bundle: AirProofBundleV1 = read_json_limited(bundle_path, MAX_AIR_BUNDLE_JSON_BYTES)?;
-    bundle.verify().map_err(anyhow::Error::msg)?;
-    println!("declarative AIR proof accepted by the official p3-uni-stark verifier");
+    bundle
+        .verify()
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::VerificationRejected))?;
+    write_stdout_result(&EngineVerifyResultV1 {
+        schema_version: 1,
+        engine_release_identity: hc_plonky3::release_identity(),
+        accepted: true,
+    })?;
     Ok(())
 }
 
@@ -139,29 +142,40 @@ pub fn estimate_air(
     let public_inputs: PublicInputsV1 =
         read_json_limited(public_inputs_path, MAX_MANIFEST_JSON_BYTES)?;
     let policy: ResourcePolicyV1 = read_json_limited(policy_path, MAX_MANIFEST_JSON_BYTES)?;
+    air.validate()
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     trace_manifest
         .validate_for_air(&air)
-        .map_err(anyhow::Error::msg)?;
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     public_inputs
         .validate_for_air(&air)
-        .map_err(anyhow::Error::msg)?;
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     let plan = plan_declarative_statement(
         air,
         trace_manifest.logical_rows,
         &public_inputs.values,
         &policy,
     )
-    .map_err(anyhow::Error::msg)?;
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&serde_json::json!({
-            "schema_version": 1,
-            "selected_mode": plan.selected_mode,
-            "conventional_estimate": plan.conventional_estimate,
-            "bounded_estimate": plan.bounded_estimate,
-            "preflight": plan.preflight,
-        }))?
-    );
+    .map_err(|error| map_prover_error(error, false))?;
+    let selected_mode = map_selected_mode(plan.selected_mode);
+    write_stdout_result(&EngineEstimateResultV1 {
+        schema_version: 1,
+        engine_release_identity: hc_plonky3::release_identity(),
+        selected_mode,
+        estimates: ResourceEstimatesV1 {
+            conventional: resource_estimate(plan.conventional_estimate),
+            bounded: resource_estimate(plan.bounded_estimate),
+        },
+        preflight: ResourcePreflightV1 {
+            ram_budget_bytes: policy.max_resident_bytes,
+            scratch_budget_bytes: policy.max_scratch_bytes,
+            available_scratch_bytes: Some(plan.preflight.available_scratch_bytes),
+            memory_selection_threshold_bytes: plan.preflight.memory_selection_threshold_bytes,
+            scratch_required_with_headroom_bytes: plan
+                .preflight
+                .scratch_required_with_headroom_bytes,
+        },
+    })?;
     Ok(())
 }
 
@@ -178,64 +192,41 @@ pub fn resume_air(
         read_json_limited(trace_manifest_path, MAX_TRACE_MANIFEST_JSON_BYTES)?;
     let public_inputs: PublicInputsV1 =
         read_json_limited(public_inputs_path, MAX_MANIFEST_JSON_BYTES)?;
-    air.validate().map_err(anyhow::Error::msg)?;
+    air.validate()
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     trace_manifest
         .validate_for_air(&air)
-        .map_err(anyhow::Error::msg)?;
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     public_inputs
         .validate_for_air(&air)
-        .map_err(anyhow::Error::msg)?;
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     let workload = UploadedTraceWorkload::new(
         air.clone(),
         trace_manifest.clone(),
         public_inputs.values.clone(),
         chunks_dir,
     )
-    .map_err(anyhow::Error::msg)?;
-    let checkpoint = CheckpointManifestV2::read(checkpoint_path).map_err(anyhow::Error::msg)?;
-    emit_event(
-        "resume_air_started",
-        serde_json::json!({
-            "phase": checkpoint.completed_phase.to_string(),
-            "checkpoint": checkpoint_path,
-            "air_digest_hex": hex_lower(&air.digest().map_err(anyhow::Error::msg)?),
-        }),
-    );
+    .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
+    let checkpoint = CheckpointManifestV2::read(checkpoint_path)
+        .map_err(|error| map_stream_error(error, true))?;
+    if checkpoint.release_hash
+        != *blake3::hash(hc_plonky3::release_identity().as_bytes()).as_bytes()
+    {
+        return Err(ProtocolFailure::new(ReasonCodeV1::CheckpointReleaseMismatch).into());
+    }
     let cancellation = hc_plonky3::CancellationToken::new();
     let handler_token = cancellation.clone();
     ctrlc::set_handler(move || handler_token.cancel())
         .context("failed to install the declarative AIR resume cancellation handler")?;
     let started = Instant::now();
     let mut scratch_high_water_bytes = 0;
-    let proof_bytes = match resume_resource_bounded_with_cancellation_observed(
+    let proof_bytes = resume_resource_bounded_with_cancellation_observed(
         checkpoint_path,
         &workload,
         cancellation,
         |event| observe_air_operation(event, &mut scratch_high_water_bytes),
-    ) {
-        Ok(proof_bytes) => proof_bytes,
-        Err(hc_plonky3::BoundedProverError::Cancelled) => {
-            emit_event(
-                "resume_air_cancelled",
-                serde_json::json!({
-                    "phase": "checkpoint_boundary",
-                    "checkpoint": checkpoint_path,
-                }),
-            );
-            bail!("declarative AIR proof resume was cancelled")
-        }
-        Err(error) => {
-            emit_event(
-                "resume_air_failed",
-                serde_json::json!({
-                    "phase": checkpoint.completed_phase.to_string(),
-                    "checkpoint": checkpoint_path,
-                    "error": error.to_string(),
-                }),
-            );
-            return Err(anyhow::Error::msg(error));
-        }
-    };
+    )
+    .map_err(|error| map_prover_error(error, checkpoint_path.is_file()))?;
     let bundle = AirProofBundleV1::from_proof(
         air,
         trace_manifest,
@@ -243,16 +234,8 @@ pub fn resume_air(
         proof_bytes,
         hc_plonky3::release_identity(),
     )
-    .map_err(anyhow::Error::msg)?;
+    .map_err(|_| ProtocolFailure::new(ReasonCodeV1::InternalError))?;
     write_json_atomic(output, &bundle)?;
-    emit_event(
-        "resume_air_completed",
-        serde_json::json!({
-            "phase": "proof_assembly",
-            "output": output,
-            "proof_digest_hex": bundle.proof_digest_hex,
-        }),
-    );
     emit_air_operation_report(
         ExecutionMode::Scratch,
         scratch_high_water_bytes,
@@ -314,7 +297,7 @@ pub fn pack_trace(
         for encoded in raw.chunks_exact(8) {
             let value = u64::from_le_bytes(encoded.try_into().expect("eight-byte chunk"));
             if value >= hc_plonky3::GOLDILOCKS_MODULUS_U64 {
-                bail!("trace contains a noncanonical Goldilocks value in chunk {index}");
+                return Err(ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid).into());
             }
         }
         trace_hasher.update(&raw);
@@ -414,60 +397,14 @@ pub fn prove(manifest_path: &Path, output: &Path) -> Result<()> {
 
 pub fn verify(bundle_path: &Path) -> Result<()> {
     let bundle: ProofBundleV1 = read_json_limited(bundle_path, MAX_BUNDLE_JSON_BYTES)?;
-    bundle.verify().map_err(anyhow::Error::msg)?;
-    println!("proof accepted by the official p3-uni-stark verifier");
-    Ok(())
-}
-
-pub fn doctor(policy_path: Option<&Path>, manifest_path: Option<&Path>) -> Result<()> {
-    let (policy, estimate) = match (policy_path, manifest_path) {
-        (Some(policy_path), None) => {
-            let policy: ResourcePolicyV1 = read_json_limited(policy_path, MAX_MANIFEST_JSON_BYTES)?;
-            let estimate = ResourceEstimate {
-                peak_resident_bytes: 16 * 1024 * 1024,
-                scratch_high_water_bytes: 1,
-                total_read_bytes: 0,
-                total_write_bytes: 0,
-                phases: vec![],
-            };
-            (policy, estimate)
-        }
-        (None, Some(manifest_path)) => {
-            let manifest: WorkloadManifestV1 =
-                read_json_limited(manifest_path, MAX_MANIFEST_JSON_BYTES)?;
-            manifest.validate().map_err(anyhow::Error::msg)?;
-            let digest = manifest.digest().map_err(anyhow::Error::msg)?;
-            let estimate =
-                hc_plonky3::estimate_builtin_manifest(&manifest).map_err(anyhow::Error::msg)?;
-            let report = match hc_plonky3::preflight_builtin_manifest(&manifest) {
-                Ok(report) => report,
-                Err(error) => {
-                    emit_event(
-                        "doctor_failed",
-                        serde_json::json!({
-                            "manifest_digest_hex": hex_lower(&digest),
-                            "estimate": estimate,
-                            "error": error.to_string(),
-                        }),
-                    );
-                    return Err(anyhow::Error::msg(error));
-                }
-            };
-            let mut payload = serde_json::to_value(report)?;
-            if let Some(object) = payload.as_object_mut() {
-                object.insert(
-                    "manifest_digest_hex".into(),
-                    serde_json::Value::String(hex_lower(&digest)),
-                );
-            }
-            println!("{}", serde_json::to_string_pretty(&payload)?);
-            return Ok(());
-        }
-        _ => bail!("doctor requires exactly one of --policy or --manifest"),
-    };
-    let report = policy.preflight(estimate).map_err(anyhow::Error::msg)?;
-    println!("{}", serde_json::to_string_pretty(&report)?);
-    Ok(())
+    bundle
+        .verify()
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::VerificationRejected))?;
+    write_stdout_result(&EngineVerifyResultV1 {
+        schema_version: 1,
+        engine_release_identity: hc_plonky3::release_identity(),
+        accepted: true,
+    })
 }
 
 pub fn resume(checkpoint_path: &Path, output: &Path) -> Result<()> {
@@ -597,6 +534,11 @@ pub fn export_schemas(output_dir: &Path) -> Result<()> {
         &output_dir.join("air-proof-bundle-v1.schema.json"),
         &air_proof_bundle_schema(),
     )?;
+    for name in tinyzkp_contracts::PUBLISHED_SCHEMA_NAMES {
+        let schema = tinyzkp_contracts::schema_by_name(name)
+            .ok_or_else(|| ProtocolFailure::new(ReasonCodeV1::InternalError))?;
+        write_json_atomic(&output_dir.join(name), &schema)?;
+    }
     println!("generated schemas in {}", output_dir.display());
     Ok(())
 }
@@ -712,16 +654,17 @@ fn parse_proc_peak_rss_bytes(status: &str) -> Option<u64> {
 }
 
 fn read_json_limited<T: DeserializeOwned>(path: &Path, max_bytes: usize) -> Result<T> {
-    let metadata = fs::metadata(path).with_context(|| format!("stat {}", path.display()))?;
-    if metadata.len() > max_bytes as u64 {
-        bail!(
-            "{} exceeds the {} byte contract limit",
-            path.display(),
-            max_bytes
-        );
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| ProtocolFailure::new(ReasonCodeV1::UnsafePath))?;
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
+        return Err(ProtocolFailure::new(ReasonCodeV1::UnsafePath).into());
     }
-    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    serde_json::from_slice(&bytes).with_context(|| format!("parse {}", path.display()))
+    if metadata.len() > max_bytes as u64 {
+        return Err(ProtocolFailure::new(ReasonCodeV1::InputLimitExceeded).into());
+    }
+    let bytes = fs::read(path).map_err(|_| ProtocolFailure::new(ReasonCodeV1::UnsafePath))?;
+    parse_strict_json(&bytes)
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid).into())
 }
 
 fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
@@ -784,31 +727,36 @@ fn emit_event(kind: &str, fields: serde_json::Value) {
 }
 
 fn emit_backend_event(event: &hc_plonky3::ProverEventV1) {
-    let mut value = serde_json::to_value(event).expect("prover event is serializable");
-    if let Some(object) = value.as_object_mut() {
-        if let Some(phase) = object.get_mut("phase") {
-            if let Ok(typed_phase) =
-                serde_json::from_value::<hc_stream::PipelinePhaseV1>(phase.clone())
-            {
-                *phase = serde_json::Value::String(typed_phase.to_string());
-            }
+    let release = hc_plonky3::release_identity();
+    let typed = match event {
+        hc_plonky3::ProverEventV1::ResourceEstimate { .. } => {
+            EngineProgressEventV1::simple(&release, "resource_estimate", "resource_estimate")
         }
-        if let (Some(completed), Some(total)) = (
-            object
-                .get("completed_phases")
-                .and_then(|value| value.as_u64()),
-            object.get("total_phases").and_then(|value| value.as_u64()),
-        ) {
-            if total > 0 {
-                object.insert(
-                    "progress".into(),
-                    serde_json::Value::from(completed as f64 / total as f64),
-                );
-            }
-        }
-        object.insert("schema_version".into(), serde_json::Value::from(1));
-    }
-    eprintln!("{value}");
+        hc_plonky3::ProverEventV1::Phase {
+            phase,
+            completed_phases,
+            total_phases,
+            checkpoint_path,
+            resource_usage,
+        } => EngineProgressEventV1 {
+            schema_version: 1,
+            engine_release_identity: release.clone(),
+            event: "phase".into(),
+            stage: "proving".into(),
+            phase: Some(phase.to_string()),
+            completed_phases: Some(*completed_phases),
+            total_phases: Some(*total_phases),
+            progress: (*total_phases > 0)
+                .then_some(f64::from(*completed_phases) / f64::from(*total_phases)),
+            resource_usage: Some(ResourceUsageV1 {
+                resident_bytes: resource_usage.resident_bytes,
+                scratch_bytes: resource_usage.scratch_bytes,
+            }),
+            checkpoint_durable: Some(checkpoint_path.is_some()),
+        },
+    };
+    debug_assert!(typed.validate(&release));
+    emit_progress(&typed);
 }
 
 fn observe_air_operation(event: &hc_plonky3::ProverEventV1, scratch_high_water_bytes: &mut u64) {
@@ -823,20 +771,136 @@ fn emit_air_operation_report(
     scratch_high_water_bytes: u64,
     elapsed: std::time::Duration,
 ) -> Result<()> {
-    let report = AirOperationReportV1 {
+    let report = EngineOperationReportV1 {
         schema_version: 1,
-        selected_mode: match selected_mode {
-            ExecutionMode::Memory => AirOperationModeV1::Conventional,
-            ExecutionMode::Scratch => AirOperationModeV1::Bounded,
-        },
+        engine_release_identity: hc_plonky3::release_identity(),
+        selected_mode: map_selected_mode(selected_mode),
         peak_resident_bytes: process_peak_rss_bytes(),
         scratch_high_water_bytes,
         wall_time_millis: u64::try_from(elapsed.as_millis())
             .unwrap_or(u64::MAX)
             .max(1),
     };
-    println!("{}", serde_json::to_string(&report)?);
+    write_stdout_result(&report)
+}
+
+fn map_selected_mode(mode: ExecutionMode) -> SelectedModeV1 {
+    match mode {
+        ExecutionMode::Memory => SelectedModeV1::Conventional,
+        ExecutionMode::Scratch => SelectedModeV1::Bounded,
+    }
+}
+
+fn resource_estimate(estimate: hc_stream::ResourceEstimate) -> ResourceEstimateV1 {
+    ResourceEstimateV1 {
+        peak_resident_bytes: estimate.peak_resident_bytes,
+        scratch_high_water_bytes: estimate.scratch_high_water_bytes,
+        total_read_bytes: estimate.total_read_bytes,
+        total_write_bytes: estimate.total_write_bytes,
+    }
+}
+
+fn write_stdout_result<T: Serialize>(value: &T) -> Result<()> {
+    let mut stdout = std::io::stdout().lock();
+    serde_json::to_writer(&mut stdout, value)
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::InternalError))?;
+    stdout
+        .write_all(b"\n")
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::InternalError))?;
+    stdout
+        .flush()
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::InternalError))?;
     Ok(())
+}
+
+fn map_prover_error(
+    error: hc_plonky3::BoundedProverError,
+    checkpoint_present: bool,
+) -> ProtocolFailure {
+    use hc_plonky3::BoundedProverError;
+    match error {
+        BoundedProverError::UnsupportedProfile => {
+            ProtocolFailure::new(ReasonCodeV1::UnsupportedProfile)
+        }
+        BoundedProverError::Verification(_) => {
+            ProtocolFailure::new(ReasonCodeV1::VerificationRejected)
+        }
+        BoundedProverError::InvalidCheckpoint | BoundedProverError::CheckpointPayload(_) => {
+            ProtocolFailure::new(ReasonCodeV1::CheckpointCorrupt)
+        }
+        BoundedProverError::CheckpointStateExists => {
+            ProtocolFailure::new(ReasonCodeV1::JobStateExists)
+        }
+        BoundedProverError::Cancelled if checkpoint_present => ProtocolFailure::interrupted(true),
+        BoundedProverError::Cancelled => ProtocolFailure::new(ReasonCodeV1::InternalError),
+        BoundedProverError::Stream(error) => map_stream_error(error, checkpoint_present),
+        BoundedProverError::Workload(_) => {
+            ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid)
+        }
+        BoundedProverError::Io(error) if error.kind() == std::io::ErrorKind::StorageFull => {
+            ProtocolFailure::new(ReasonCodeV1::ScratchSpaceInsufficient)
+        }
+        _ => ProtocolFailure::new(ReasonCodeV1::InternalError),
+    }
+}
+
+fn map_stream_error(error: hc_stream::StreamError, checkpoint_context: bool) -> ProtocolFailure {
+    match error {
+        hc_stream::StreamError::InvalidPolicy(_) => {
+            ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid)
+        }
+        hc_stream::StreamError::ResourceLimit {
+            resource: "resident memory",
+            required,
+            cap,
+        } => ProtocolFailure {
+            reason: ReasonV1::new(ReasonCodeV1::RamBudgetInsufficient).resource(
+                required,
+                None,
+                Some(cap),
+            ),
+            resumable: false,
+            checkpoint_present: false,
+        },
+        hc_stream::StreamError::ResourceLimit {
+            resource,
+            required,
+            cap,
+        } if resource.starts_with("available scratch") => ProtocolFailure {
+            reason: ReasonV1::new(ReasonCodeV1::ScratchSpaceInsufficient).resource(
+                required,
+                Some(cap),
+                None,
+            ),
+            resumable: false,
+            checkpoint_present: false,
+        },
+        hc_stream::StreamError::ResourceLimit { required, cap, .. } => ProtocolFailure {
+            reason: ReasonV1::new(ReasonCodeV1::ScratchBudgetInsufficient).resource(
+                required,
+                None,
+                Some(cap),
+            ),
+            resumable: false,
+            checkpoint_present: false,
+        },
+        hc_stream::StreamError::Corrupt(_) | hc_stream::StreamError::CheckpointMismatch => {
+            ProtocolFailure::new(ReasonCodeV1::CheckpointCorrupt)
+        }
+        hc_stream::StreamError::UnsafePath => ProtocolFailure::new(ReasonCodeV1::UnsafePath),
+        hc_stream::StreamError::Io(error) if error.kind() == std::io::ErrorKind::StorageFull => {
+            ProtocolFailure::new(ReasonCodeV1::ScratchSpaceInsufficient)
+        }
+        hc_stream::StreamError::Io(error)
+            if checkpoint_context && error.kind() == std::io::ErrorKind::NotFound =>
+        {
+            ProtocolFailure::new(ReasonCodeV1::CheckpointMissing)
+        }
+        hc_stream::StreamError::Json(_) if checkpoint_context => {
+            ProtocolFailure::new(ReasonCodeV1::CheckpointCorrupt)
+        }
+        _ => ProtocolFailure::new(ReasonCodeV1::InternalError),
+    }
 }
 
 fn hex_lower(bytes: &[u8]) -> String {

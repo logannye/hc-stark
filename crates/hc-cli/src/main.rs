@@ -1,14 +1,16 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 mod commands;
 #[cfg(feature = "legacy-research")]
 mod config;
+mod protocol;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "hc-cli",
+    name = "tinyzkp-engine",
     about = "TinyZKP resource-bounded Plonky3 backend",
     version
 )]
@@ -21,6 +23,11 @@ struct Cli {
 enum Commands {
     /// Emit machine-readable CLI and backend release identity.
     Release,
+    /// Validate compatibility and resources without reading trace chunk contents.
+    Doctor {
+        #[arg(long)]
+        job: PathBuf,
+    },
     /// Official Plonky3 proof workflows.
     Plonky3 {
         #[command(subcommand)]
@@ -90,6 +97,9 @@ enum Plonky3Command {
         public_inputs: PathBuf,
         #[arg(long)]
         policy: PathBuf,
+        /// Dedicated directory whose checkpoint is exactly `checkpoint.json`.
+        #[arg(long)]
+        checkpoint_dir: PathBuf,
         #[arg(long)]
         output: PathBuf,
         /// Use the conventional in-memory prover for fixed-host comparison evidence.
@@ -143,16 +153,6 @@ enum Plonky3Command {
         #[arg(long)]
         bundle: PathBuf,
     },
-    Doctor {
-        #[arg(
-            long,
-            conflicts_with = "manifest",
-            required_unless_present = "manifest"
-        )]
-        policy: Option<PathBuf>,
-        #[arg(long, conflicts_with = "policy", required_unless_present = "policy")]
-        manifest: Option<PathBuf>,
-    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -197,7 +197,17 @@ enum LegacyResearchCommand {
     },
 }
 
-fn main() -> Result<()> {
+fn main() -> ExitCode {
+    match run() {
+        Ok(code) => ExitCode::from(code),
+        Err(error) => {
+            let failure = protocol::failure_from_anyhow(&error);
+            ExitCode::from(protocol::write_error(&failure))
+        }
+    }
+}
+
+fn run() -> Result<u8> {
     match Cli::parse().command {
         Commands::Release => {
             let release_sha = hc_plonky3::release_identity();
@@ -218,8 +228,9 @@ fn main() -> Result<()> {
                     "dependency_lock_sha256": hc_plonky3::DEPENDENCY_LOCK_SHA256,
                 }))?
             );
-            Ok(())
+            Ok(0)
         }
+        Commands::Doctor { job } => commands::doctor::run(&job),
         Commands::Plonky3 { command } => match command {
             Plonky3Command::ValidateAir { air } => commands::plonky3::validate_air(&air),
             Plonky3Command::PackTrace {
@@ -228,19 +239,14 @@ fn main() -> Result<()> {
                 rows,
                 output_dir,
                 chunk_bytes,
-            } => commands::plonky3::pack_trace(
-                &air,
-                &trace,
-                rows,
-                &output_dir,
-                chunk_bytes,
-            ),
+            } => commands::plonky3::pack_trace(&air, &trace, rows, &output_dir, chunk_bytes),
             Plonky3Command::ProveAir {
                 air,
                 trace_manifest,
                 chunks_dir,
                 public_inputs,
                 policy,
+                checkpoint_dir,
                 output,
                 reference,
             } => commands::plonky3::prove_air(
@@ -249,6 +255,7 @@ fn main() -> Result<()> {
                 &chunks_dir,
                 &public_inputs,
                 &policy,
+                &checkpoint_dir,
                 &output,
                 reference,
             ),
@@ -273,12 +280,7 @@ fn main() -> Result<()> {
                 trace_manifest,
                 public_inputs,
                 policy,
-            } => commands::plonky3::estimate_air(
-                &air,
-                &trace_manifest,
-                &public_inputs,
-                &policy,
-            ),
+            } => commands::plonky3::estimate_air(&air, &trace_manifest, &public_inputs, &policy),
             Plonky3Command::Prove { manifest, output } => {
                 commands::plonky3::prove(&manifest, &output)
             }
@@ -286,28 +288,30 @@ fn main() -> Result<()> {
                 commands::plonky3::resume(&checkpoint, &output)
             }
             Plonky3Command::Verify { bundle } => commands::plonky3::verify(&bundle),
-            Plonky3Command::Doctor { policy, manifest } => {
-                commands::plonky3::doctor(policy.as_deref(), manifest.as_deref())
-            }
-        },
-        Commands::Benchmark { command } => match command {
+        }
+        .map(|()| 0),
+        Commands::Benchmark { command } => (match command {
             BenchmarkCommand::Plonky3 {
                 manifest,
                 mode,
                 report,
             } => commands::plonky3::benchmark_guidance(&manifest, mode.as_str(), &report),
-        },
-        Commands::Schema { output_dir } => commands::plonky3::export_schemas(&output_dir),
-        Commands::Prove | Commands::Verify => bail!(
-            "legacy TinyZKP proving and verification are disabled; use `hc-cli plonky3 --help` or build with `--features legacy-research` for offline reproduction"
-        ),
+        })
+        .map(|()| 0),
+        Commands::Schema { output_dir } => {
+            commands::plonky3::export_schemas(&output_dir).map(|()| 0)
+        }
+        Commands::Prove | Commands::Verify => Err(protocol::ProtocolFailure::new(
+            tinyzkp_contracts::ReasonCodeV1::ManifestContractInvalid,
+        )
+        .into()),
         Commands::BenchmarkWorker {
             manifest,
             mode,
             output,
-        } => commands::plonky3::benchmark_worker(&manifest, &mode, &output),
+        } => commands::plonky3::benchmark_worker(&manifest, &mode, &output).map(|()| 0),
         #[cfg(feature = "legacy-research")]
-        Commands::LegacyResearch { command } => run_legacy(command),
+        Commands::LegacyResearch { command } => run_legacy(command).map(|()| 0),
     }
 }
 

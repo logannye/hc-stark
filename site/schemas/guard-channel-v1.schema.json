@@ -1,8 +1,5 @@
 {
-  "$id": "https://tinyzkp.com/schemas/guard-channel-v1.schema.json",
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "definitions": {
+  "$defs": {
     "ArtifactDescriptorV1": {
       "additionalProperties": false,
       "properties": {
@@ -10,11 +7,13 @@
           "type": "string"
         },
         "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
           "type": "string"
         },
         "size_bytes": {
           "format": "uint64",
-          "minimum": 0.0,
+          "maximum": 18446744073709551615,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -24,73 +23,148 @@
         "size_bytes"
       ],
       "type": "object"
+    },
+    "MerchantCatalogIdentityV1": {
+      "additionalProperties": false,
+      "description": "Exact Lemon Squeezy catalog identifiers bound into a qualified release.\nRuntime entitlement transport remains behind Guard's provider adapter.",
+      "properties": {
+        "annual_variant_id": {
+          "pattern": "^[1-9][0-9]{0,19}$",
+          "type": "string"
+        },
+        "entitlement_mode": {
+          "const": "lemon_squeezy_subscription_license_keys",
+          "type": "string"
+        },
+        "merchant": {
+          "const": "lemon_squeezy",
+          "type": "string"
+        },
+        "monthly_variant_id": {
+          "pattern": "^[1-9][0-9]{0,19}$",
+          "type": "string"
+        },
+        "product_id": {
+          "pattern": "^[1-9][0-9]{0,19}$",
+          "type": "string"
+        },
+        "store_id": {
+          "pattern": "^[1-9][0-9]{0,19}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "merchant",
+        "entitlement_mode",
+        "store_id",
+        "product_id",
+        "monthly_variant_id",
+        "annual_variant_id"
+      ],
+      "type": "object"
     }
   },
+  "$id": "https://tinyzkp.com/schemas/guard-channel-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
   "properties": {
     "artifacts": {
       "items": {
-        "$ref": "#/definitions/ArtifactDescriptorV1"
+        "$ref": "#/$defs/ArtifactDescriptorV1"
       },
-      "type": "array"
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
     },
     "compatibility_profile": {
       "const": "tinyzkp-p3-goldilocks-v1",
       "type": "string"
     },
     "engine_artifact_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
       "type": "string"
     },
     "engine_source_sha": {
+      "pattern": "^[0-9a-f]{40}$",
       "type": "string"
     },
     "eula_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
       "type": "string"
     },
     "guard_source_sha": {
+      "pattern": "^[0-9a-f]{40}$",
       "type": "string"
     },
     "guard_version": {
       "type": "string"
     },
+    "merchant_catalog": {
+      "$ref": "#/$defs/MerchantCatalogIdentityV1"
+    },
     "oci_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
       "type": "string"
     },
     "qualification": {
       "type": "string"
     },
     "release_date": {
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
       "type": "string"
     },
     "release_identity": {
+      "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
       "type": "string"
     },
     "schema_version": {
       "const": 1,
       "format": "uint32",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": "integer"
     },
     "schemas": {
       "additionalProperties": {
+        "pattern": "^[0-9a-f]{64}$",
         "type": "string"
+      },
+      "maxProperties": 13,
+      "minProperties": 13,
+      "propertyNames": {
+        "enum": [
+          "job-manifest-v1.schema.json",
+          "doctor-report-v1.schema.json",
+          "compatibility-report-v1.schema.json",
+          "reason-v1.schema.json",
+          "error-envelope-v1.schema.json",
+          "progress-event-v1.schema.json",
+          "job-result-v1.schema.json",
+          "support-report-v1.schema.json",
+          "job-inspect-result-v1.schema.json",
+          "guard-channel-v1.schema.json",
+          "guard-release-index-v1.schema.json",
+          "policy-baseline-v1.schema.json",
+          "compatibility-manifest-v1.schema.json"
+        ]
       },
       "type": "object"
     }
   },
   "required": [
-    "artifacts",
-    "compatibility_profile",
-    "engine_artifact_sha256",
-    "engine_source_sha",
-    "eula_sha256",
-    "guard_source_sha",
-    "guard_version",
-    "oci_digest",
-    "qualification",
-    "release_date",
-    "release_identity",
     "schema_version",
-    "schemas"
+    "guard_version",
+    "release_identity",
+    "guard_source_sha",
+    "engine_source_sha",
+    "engine_artifact_sha256",
+    "artifacts",
+    "oci_digest",
+    "schemas",
+    "eula_sha256",
+    "release_date",
+    "compatibility_profile",
+    "merchant_catalog",
+    "qualification"
   ],
   "title": "GuardChannelV1",
   "type": "object"

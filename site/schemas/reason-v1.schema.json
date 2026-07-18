@@ -1,0 +1,1175 @@
+{
+  "$defs": {
+    "ExitClassV1": {
+      "enum": [
+        "incompatible",
+        "invalid_input",
+        "insufficient_resources",
+        "resumable_interruption",
+        "corrupt_checkpoint",
+        "verification_failure",
+        "license_failure",
+        "internal_error"
+      ],
+      "type": "string"
+    },
+    "PlatformIdentifierV1": {
+      "enum": [
+        "linux_x86_64",
+        "linux_other",
+        "macos",
+        "windows",
+        "other"
+      ],
+      "type": "string"
+    },
+    "ProfileIdentifierV1": {
+      "enum": [
+        "tinyzkp_p3_goldilocks_v1",
+        "other"
+      ],
+      "type": "string"
+    },
+    "ReasonCodeV1": {
+      "description": "The complete public reason vocabulary. New internal detail must map to one\nof these values until a new public contract version is released.",
+      "enum": [
+        "unsupported_platform",
+        "unsupported_profile",
+        "unsupported_air_feature",
+        "manifest_contract_invalid",
+        "unsafe_path",
+        "input_limit_exceeded",
+        "ram_budget_insufficient",
+        "scratch_budget_insufficient",
+        "scratch_space_insufficient",
+        "job_state_exists",
+        "interrupted_resumable",
+        "checkpoint_missing",
+        "checkpoint_corrupt",
+        "checkpoint_release_mismatch",
+        "job_not_resumable",
+        "verification_rejected",
+        "release_not_activated",
+        "license_inactive",
+        "license_provider_unavailable",
+        "engine_artifact_mismatch",
+        "engine_protocol_invalid",
+        "release_identity_mismatch",
+        "internal_error"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "https://tinyzkp.com/schemas/reason-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "unsupported_platform"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "incompatible"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#unsupported_platform"
+          },
+          "expected_platform": {
+            "const": "linux_x86_64"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "use_supported_profile"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "Production proving requires Linux x86-64."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "unsupported_profile"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "incompatible"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#unsupported_profile"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "const": "tinyzkp_p3_goldilocks_v1"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "use_supported_profile"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The declared proof profile is unsupported."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "unsupported_air_feature"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "incompatible"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#unsupported_air_feature"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "use_supported_profile"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The AIR uses a feature outside the v1 profile."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "manifest_contract_invalid"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "invalid_input"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#manifest_contract_invalid"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "repair_local_input"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The job manifest or declaration is invalid."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "unsafe_path"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "invalid_input"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#unsafe_path"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "repair_local_input"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "A configured path is unsafe."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "input_limit_exceeded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "class": {
+            "const": "invalid_input"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#input_limit_exceeded"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "repair_local_input"
+          },
+          "summary": {
+            "const": "A local input exceeds a published limit."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "ram_budget_insufficient"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "class": {
+            "const": "insufficient_resources"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#ram_budget_insufficient"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "increase_budget_or_capacity"
+          },
+          "summary": {
+            "const": "The RAM budget is below the required capacity."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "scratch_budget_insufficient"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "class": {
+            "const": "insufficient_resources"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#scratch_budget_insufficient"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "increase_budget_or_capacity"
+          },
+          "summary": {
+            "const": "The scratch budget is below the estimate plus headroom."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "scratch_space_insufficient"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "class": {
+            "const": "insufficient_resources"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#scratch_space_insufficient"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "increase_budget_or_capacity"
+          },
+          "summary": {
+            "const": "Available scratch space is below the estimate plus headroom."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "job_state_exists"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "invalid_input"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#job_state_exists"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "repair_local_input"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The requested job directory already contains state."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "interrupted_resumable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "resumable_interruption"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#interrupted_resumable"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "resume_exact_release"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The proof was interrupted and can resume."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "checkpoint_missing"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "corrupt_checkpoint"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#checkpoint_missing"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "restore_or_restart_job"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The expected checkpoint is missing."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "checkpoint_corrupt"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "corrupt_checkpoint"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#checkpoint_corrupt"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "restore_or_restart_job"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The checkpoint is corrupt."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "checkpoint_release_mismatch"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "corrupt_checkpoint"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#checkpoint_release_mismatch"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "restore_or_restart_job"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The checkpoint belongs to another exact release."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "job_not_resumable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "invalid_input"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#job_not_resumable"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "repair_local_input"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The job is not in a resumable state."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "verification_rejected"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "verification_failure"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#verification_rejected"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "retain_artifacts_and_report"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The ordinary verifier rejected the proof."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "release_not_activated"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "license_failure"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#release_not_activated"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "activate_eligible_release"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "This exact release is not activated."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "license_inactive"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "license_failure"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#license_inactive"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "activate_eligible_release"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The subscription license is inactive."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "license_provider_unavailable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "license_failure"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#license_provider_unavailable"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "activate_eligible_release"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The license provider is unavailable."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "engine_artifact_mismatch"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "internal_error"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#engine_artifact_mismatch"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "generate_support_report"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The engine artifact does not match the release."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "engine_protocol_invalid"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "internal_error"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#engine_protocol_invalid"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "generate_support_report"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The local engine protocol is invalid."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "release_identity_mismatch"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "internal_error"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#release_identity_mismatch"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "generate_support_report"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "Release identities do not match."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "internal_error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "available_bytes": {
+            "type": "null"
+          },
+          "class": {
+            "const": "internal_error"
+          },
+          "detected_platform": {
+            "type": "null"
+          },
+          "detected_profile": {
+            "type": "null"
+          },
+          "docs_url": {
+            "const": "/troubleshooting#internal_error"
+          },
+          "expected_platform": {
+            "type": "null"
+          },
+          "expected_profile": {
+            "type": "null"
+          },
+          "limit_bytes": {
+            "type": "null"
+          },
+          "remediation": {
+            "const": "generate_support_report"
+          },
+          "required_bytes": {
+            "type": "null"
+          },
+          "summary": {
+            "const": "The local program encountered an internal error."
+          }
+        }
+      }
+    }
+  ],
+  "description": "No free-form diagnostic context is allowed on the public error boundary.",
+  "properties": {
+    "available_bytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "class": {
+      "$ref": "#/$defs/ExitClassV1"
+    },
+    "code": {
+      "$ref": "#/$defs/ReasonCodeV1"
+    },
+    "detected_platform": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PlatformIdentifierV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "detected_profile": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProfileIdentifierV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "docs_url": {
+      "type": "string"
+    },
+    "expected_platform": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PlatformIdentifierV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "expected_profile": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProfileIdentifierV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "limit_bytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "remediation": {
+      "type": "string"
+    },
+    "required_bytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "class",
+    "summary",
+    "remediation",
+    "docs_url"
+  ],
+  "title": "ReasonV1",
+  "type": "object"
+}

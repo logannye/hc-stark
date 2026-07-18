@@ -1,22 +1,20 @@
 {
   "$defs": {
-    "ArtifactReferenceV1": {
-      "additionalProperties": false,
-      "properties": {
-        "relative_path": {
-          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
-          "type": "string"
-        },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
-        }
-      },
-      "required": [
-        "relative_path",
-        "sha256"
+    "ArtifactVerificationV1": {
+      "enum": [
+        "verified",
+        "failed",
+        "not_checked"
       ],
-      "type": "object"
+      "type": "string"
+    },
+    "CoarseActivationStatusV1": {
+      "enum": [
+        "activated_for_exact_release",
+        "not_activated_for_exact_release",
+        "not_checked"
+      ],
+      "type": "string"
     },
     "ExitClassV1": {
       "enum": [
@@ -31,39 +29,6 @@
       ],
       "type": "string"
     },
-    "JobStatusV1": {
-      "enum": [
-        "succeeded",
-        "interrupted"
-      ],
-      "type": "string"
-    },
-    "ObservedResourcesV1": {
-      "additionalProperties": false,
-      "properties": {
-        "peak_resident_bytes": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "scratch_high_water_bytes": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "wall_time_millis": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "peak_resident_bytes",
-        "scratch_high_water_bytes",
-        "wall_time_millis"
-      ],
-      "type": "object"
-    },
     "PlatformIdentifierV1": {
       "enum": [
         "linux_x86_64",
@@ -73,6 +38,33 @@
         "other"
       ],
       "type": "string"
+    },
+    "PlatformV1": {
+      "additionalProperties": false,
+      "properties": {
+        "architecture": {
+          "enum": [
+            "x86_64",
+            "aarch64",
+            "other"
+          ],
+          "type": "string"
+        },
+        "operating_system": {
+          "enum": [
+            "linux",
+            "macos",
+            "windows",
+            "other"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "operating_system",
+        "architecture"
+      ],
+      "type": "object"
     },
     "ProfileIdentifierV1": {
       "enum": [
@@ -1325,6 +1317,50 @@
       ],
       "type": "string"
     },
+    "SupportRedactionPolicyV1": {
+      "enum": [
+        "no_paths_no_content_no_digests_no_identifiers_v1"
+      ],
+      "type": "string"
+    },
+    "SupportSafeObservationsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "attempt_count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "peak_resident_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "scratch_high_water_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wall_time_millis": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "VerifierOutcomeV1": {
       "enum": [
         "accepted",
@@ -1334,55 +1370,64 @@
       "type": "string"
     }
   },
-  "$id": "https://tinyzkp.com/schemas/job-result-v1.schema.json",
+  "$id": "https://tinyzkp.com/schemas/support-report-v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "description": "Path-free and content-free diagnostic record safe to attach to an issue.",
   "properties": {
-    "checkpoint_relative_path": {
-      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
+    "activation": {
+      "$ref": "#/$defs/CoarseActivationStatusV1"
+    },
+    "artifact_verification": {
+      "$ref": "#/$defs/ArtifactVerificationV1"
+    },
+    "checkpoint_release_match": {
       "type": [
-        "string",
+        "boolean",
         "null"
       ]
     },
+    "compatibility_profile": {
+      "$ref": "#/$defs/ProfileIdentifierV1",
+      "const": "tinyzkp-p3-goldilocks-v1"
+    },
     "estimates": {
-      "$ref": "#/$defs/ResourceEstimatesV1"
-    },
-    "observed_resources": {
       "anyOf": [
         {
-          "$ref": "#/$defs/ObservedResourcesV1"
+          "$ref": "#/$defs/ResourceEstimatesV1"
         },
         {
           "type": "null"
         }
       ]
     },
-    "proof": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ArtifactReferenceV1"
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "observations": {
+      "$ref": "#/$defs/SupportSafeObservationsV1"
     },
-    "reason": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ReasonV1"
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "platform": {
+      "$ref": "#/$defs/PlatformV1"
+    },
+    "reasons": {
+      "items": {
+        "$ref": "#/$defs/ReasonV1"
+      },
+      "type": "array"
+    },
+    "redaction_policy": {
+      "$ref": "#/$defs/SupportRedactionPolicyV1"
     },
     "release": {
       "$ref": "#/$defs/ReleaseIdentityV1"
     },
     "requested_mode": {
-      "$ref": "#/$defs/RequestedModeV1"
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RequestedModeV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "resumable": {
       "type": "boolean"
@@ -1394,25 +1439,38 @@
       "type": "integer"
     },
     "selected_mode": {
-      "$ref": "#/$defs/SelectedModeV1"
-    },
-    "status": {
-      "$ref": "#/$defs/JobStatusV1"
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SelectedModeV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "verifier_outcome": {
-      "$ref": "#/$defs/VerifierOutcomeV1"
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VerifierOutcomeV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
     "schema_version",
-    "status",
-    "requested_mode",
-    "selected_mode",
-    "estimates",
     "release",
-    "verifier_outcome",
-    "resumable"
+    "platform",
+    "compatibility_profile",
+    "reasons",
+    "observations",
+    "resumable",
+    "artifact_verification",
+    "activation",
+    "redaction_policy"
   ],
-  "title": "JobResultV1",
+  "title": "SupportReportV1",
   "type": "object"
 }

@@ -53,4 +53,5 @@ Current status: Guard v1 is not yet for sale. Checkout is disabled until all tec
 - Commerce gate: https://tinyzkp.com/commerce.json
 - Compatibility: https://tinyzkp.com/compatibility.json
 - Release status: https://tinyzkp.com/release.json
-- Contracts: https://tinyzkp.com/schemas/job-manifest-v1.schema.json, https://tinyzkp.com/schemas/job-result-v1.schema.json, https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json, https://tinyzkp.com/schemas/guard-channel-v1.schema.json
+- Frozen API contracts: https://tinyzkp.com/schemas/job-manifest-v1.schema.json, https://tinyzkp.com/schemas/doctor-report-v1.schema.json, https://tinyzkp.com/schemas/compatibility-report-v1.schema.json, https://tinyzkp.com/schemas/reason-v1.schema.json, https://tinyzkp.com/schemas/error-envelope-v1.schema.json, https://tinyzkp.com/schemas/progress-event-v1.schema.json, https://tinyzkp.com/schemas/job-result-v1.schema.json, https://tinyzkp.com/schemas/support-report-v1.schema.json, https://tinyzkp.com/schemas/job-inspect-result-v1.schema.json, https://tinyzkp.com/schemas/guard-channel-v1.schema.json, https://tinyzkp.com/schemas/guard-release-index-v1.schema.json, https://tinyzkp.com/schemas/policy-baseline-v1.schema.json
+- Standalone compatibility profile schema: https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json

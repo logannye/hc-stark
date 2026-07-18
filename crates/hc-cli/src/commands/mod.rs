@@ -1,5 +1,6 @@
 #[cfg(feature = "legacy-research")]
 pub mod bench;
+pub mod doctor;
 #[cfg(feature = "legacy-research")]
 pub mod inspect;
 pub mod plonky3;

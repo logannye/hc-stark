@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "GuardReleaseIndexEntryV1": {
+      "additionalProperties": false,
+      "properties": {
+        "advisory_url": {
+          "format": "uri",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/ImmutableReleaseArtifactV1"
+          },
+          "type": "array"
+        },
+        "channel_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "channel_url": {
+          "format": "uri",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "type": "string"
+        },
+        "compatibility_profile": {
+          "const": "tinyzkp-p3-goldilocks-v1",
+          "type": "string"
+        },
+        "guard_version": {
+          "type": "string"
+        },
+        "release_date": {
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+          "type": "string"
+        },
+        "release_identity": {
+          "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/GuardReleaseStateV1"
+        },
+        "successor_release_identity": {
+          "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "guard_version",
+        "release_identity",
+        "compatibility_profile",
+        "release_date",
+        "channel_url",
+        "channel_sha256",
+        "artifacts",
+        "state"
+      ],
+      "type": "object"
+    },
+    "GuardReleaseStateV1": {
+      "enum": [
+        "current",
+        "superseded",
+        "withdrawn"
+      ],
+      "type": "string"
+    },
+    "ImmutableReleaseArtifactV1": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "sha256"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://tinyzkp.com/schemas/guard-release-index-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "current_release_identity": {
+      "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
+      "type": "string"
+    },
+    "product": {
+      "type": "string"
+    },
+    "releases": {
+      "items": {
+        "$ref": "#/$defs/GuardReleaseIndexEntryV1"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "product",
+    "current_release_identity",
+    "releases"
+  ],
+  "title": "GuardReleaseIndexV1",
+  "type": "object"
+}
