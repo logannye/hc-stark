@@ -45,6 +45,11 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 -m pip install -r scripts/benchmark/requirements.txt
+      - name: Materialize the reviewed Git executable
+        run: |
+          python3 scripts/ci/materialize_anchored_git.py \
+            --output "$RUNNER_TEMP/tinyzkp-anchored-git" \
+            --github-env "$GITHUB_ENV"
       - name: Require every pre-signing backend-v1 gate
         run: python3 scripts/ci/backend_prerelease_ready.py
 
@@ -67,6 +72,11 @@ jobs:
           python-version: "3.12"
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - run: python3 -m pip install -r scripts/benchmark/requirements.txt
+      - name: Materialize the reviewed Git executable
+        run: |
+          python3 scripts/ci/materialize_anchored_git.py \
+            --output "$RUNNER_TEMP/tinyzkp-anchored-git" \
+            --github-env "$GITHUB_ENV"
       - name: Build locked public engine
         run: cargo build --locked --release -p hc-cli --bin hc-cli
       - name: Assemble release payload

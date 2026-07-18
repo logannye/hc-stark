@@ -66,6 +66,12 @@ jobs:
             scripts/benchmark/test_run_plonky3_cgroup.py \
             scripts/benchmark/test_validate_release_gate.py -q
 
+      - name: Materialize the reviewed Git executable for evidence tests
+        run: |
+          python3 scripts/ci/materialize_anchored_git.py \
+            --output "$RUNNER_TEMP/tinyzkp-anchored-git" \
+            --github-env "$GITHUB_ENV"
+
       - name: Release evidence and launch-gate tests
         run: |
           python3 -m pytest \
@@ -76,6 +82,7 @@ jobs:
             scripts/ci/test_backend_prerelease_ready.py \
             scripts/ci/test_launch_gate_audit.py \
             scripts/ci/test_release_distribution_contract.py \
+            scripts/ci/test_materialize_anchored_git.py \
             scripts/ci/test_source_tree_identity.py \
             scripts/ci/test_strict_json.py \
             scripts/ci/test_check_pinned_actions.py \

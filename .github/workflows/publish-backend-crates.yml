@@ -33,6 +33,11 @@ jobs:
       - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
         with:
           cosign-release: v2.4.3
+      - name: Materialize the reviewed Git executable
+        run: |
+          python3 scripts/ci/materialize_anchored_git.py \
+            --output "$RUNNER_TEMP/tinyzkp-anchored-git" \
+            --github-env "$GITHUB_ENV"
       - name: Download and verify final backend evidence
         env:
           GH_TOKEN: ${{ github.token }}
