@@ -38,6 +38,16 @@ import run_evidenced_command  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "release" / "backend-v1-gates.json"
+SIGNED_RELEASE_CHECKSUM_NAMES = {
+    "backend-v1-gates.json",
+    "engine-identity.json",
+    "engine-release.json",
+    "plonky3-compatibility-v1.json",
+    "tinyzkp-engine.spdx.json",
+    "tinyzkp-engine-linux-x86_64",
+    "tinyzkp-engine.oci.tar",
+}
+CHECKSUM_LINE = re.compile(r"^([0-9a-f]{64}) [ *]([^/\0]+)$")
 
 EXPECTED_KINDS = {
     "clean_release_source": "source_scan",
@@ -52,9 +62,9 @@ EXPECTED_KINDS = {
     "plonky3_specialist_review": "review",
     "implementation_review_no_high_findings": "review",
     "external_design_partner_integration": "partner",
-    "replacement_sdk_contracts": "test_run",
+    "air_job_contracts": "test_run",
     "signed_release_sbom_and_checksums": "signed_release",
-    "api_mcp_site_cli_identity_match": "identity_parity",
+    "engine_cli_oci_identity_match": "identity_parity",
 }
 CRASH_PHASES = (
     "trace",
@@ -94,9 +104,9 @@ FUZZ_TARGETS = {
     "resume_checkpoint_v2",
     "air_package_v1",
     "trace_manifest_v1",
-    "hosted_proof_bundle_v1",
+    "air_proof_bundle_v1",
     "zstd_trace_chunk_v1",
-    "beta_api_request_v1",
+    "public_inputs_v1",
 }
 FUZZ_SMOKE_SEED_LIMIT = 16
 FUZZ_RELEASE_MIN_SECONDS = 60
@@ -1970,94 +1980,12 @@ def validate_test_run_evidence(
     expected_tools = {str(primary)} if isinstance(primary, str) else set()
     if primary == "bash":
         expected_tools.update({"cargo", "rustc"})
-    if expected_gate == "replacement_sdk_contracts":
-        expected_tools.update({"python3", "node", "wasm-pack"})
     if primary == "cargo":
         expected_tools.add("rustc")
     boundary = report.get("write_boundary")
     network_boundary = report.get("network_boundary")
     gate_inputs = report.get("gate_inputs")
     expected_gate_inputs: dict[str, object] = {}
-    sdk_lock_matches = True
-    sdk_runtime_valid = True
-    if expected_gate == "replacement_sdk_contracts":
-        try:
-            expected_sdk_lock = run_evidenced_command.sdk_python_lock_identity(
-                root, release_sha
-            )
-        except (OSError, ValueError):
-            sdk_lock_matches = False
-        else:
-            expected_gate_inputs = {
-                "sdk_python_lock": expected_sdk_lock,
-                "sdk_python_wheelhouse": expected_sdk_lock,
-            }
-            sdk_lock_matches = (
-                isinstance(reparsed, dict)
-                and reparsed.get("python_wheel_count")
-                == expected_sdk_lock.get("wheel_count")
-                and reparsed.get("python_wheel_set_sha256")
-                == expected_sdk_lock.get("wheel_set_sha256")
-            )
-        try:
-            expected_npm_lock = run_evidenced_command.sdk_npm_lock_identity(
-                root, release_sha
-            )
-            full_python = run_evidenced_command.verify_sdk_python_wheelhouse.committed_lock_identity(
-                root, release_sha, evidence_runtime.commit_blob
-            )
-            full_npm = run_evidenced_command.verify_sdk_npm_tarballs.committed_lock_identity(
-                root, release_sha, evidence_runtime.commit_blob
-            )
-            expected_python_runtime = run_evidenced_command.sdk_python_runtime_anchor(
-                root, release_sha
-            )
-        except (OSError, ValueError):
-            sdk_lock_matches = False
-        else:
-            python_runtime = gate_inputs.get("python_runtime") if isinstance(gate_inputs, dict) else None
-            sdk_runtime_valid = (
-                isinstance(python_runtime, dict)
-                and set(python_runtime) == {
-                    "schema_version", "interpreter_sha256", "stdlib_roots", "file_count",
-                    "total_bytes", "files_sha256", "mapped_file_count"
-                }
-                and exact_int(python_runtime.get("schema_version"), 1)
-                and lower_hex(python_runtime.get("interpreter_sha256"), 64)
-                and isinstance(python_runtime.get("stdlib_roots"), list)
-                and bool(python_runtime.get("stdlib_roots"))
-                and all(isinstance(value, str) and Path(value).is_absolute() for value in python_runtime.get("stdlib_roots", []))
-                and exact_int(python_runtime.get("file_count")) and python_runtime.get("file_count", 0) > 0
-                and exact_int(python_runtime.get("total_bytes")) and python_runtime.get("total_bytes", 0) > 0
-                and lower_hex(python_runtime.get("files_sha256"), 64)
-                and exact_int(python_runtime.get("mapped_file_count")) and python_runtime.get("mapped_file_count", 0) > 0
-                and isinstance(tools, dict)
-                and isinstance(tools.get("python3"), dict)
-                and python_runtime.get("interpreter_sha256") == tools["python3"].get("sha256")
-                and type_sensitive_equal(python_runtime, expected_python_runtime)
-            )
-            descriptor_records = [
-                {"filename": item["filename"], "bytes": item["bytes"], "sha256": item["sha256"], "seals": evidence_runtime.MEMFD_SEALS}
-                for item in [*full_python["wheels"], *full_npm["packages"]]
-            ]
-            sealed = {
-                "kind": "sealed-memfd-dependencies-v1",
-                "python_count": len(full_python["wheels"]),
-                "npm_count": len(full_npm["packages"]),
-                "descriptor_set_sha256": evidence_runtime.canonical_json_sha256(descriptor_records),
-                "required_seals": evidence_runtime.MEMFD_SEALS,
-            }
-            expected_gate_inputs.update({
-                "sdk_npm_lock": expected_npm_lock,
-                "sdk_npm_tarballs": expected_npm_lock,
-                "sealed_dependencies": sealed,
-                "python_runtime": python_runtime,
-            })
-            sdk_lock_matches = sdk_lock_matches and (
-                isinstance(reparsed, dict)
-                and reparsed.get("npm_tarball_count") == expected_npm_lock.get("tarball_count")
-                and reparsed.get("npm_tarball_set_sha256") == expected_npm_lock.get("tarball_set_sha256")
-            )
     anchored_generic_tools = True
     try:
         generic_anchors = evidence_runtime.gate_tool_anchors(root, release_sha)
@@ -2154,23 +2082,8 @@ def validate_test_run_evidence(
         or not exact_int(boundary.get("abi_version"))
         or boundary.get("abi_version", 0) < 3
         or boundary.get("source_write_allowed") is not False
-        or boundary.get("writable_paths") != ["cargo-target", "sdk-work", "tmp"]
-        or (
-            expected_gate == "replacement_sdk_contracts"
-            and (
-                not isinstance(network_boundary, dict)
-                or set(network_boundary) != {
-                    "kind", "parent_namespace_inode", "child_namespace_inode", "interfaces", "external_routes"
-                }
-                or network_boundary.get("kind") != "linux-network-namespace-v1"
-                or not exact_int(network_boundary.get("parent_namespace_inode"))
-                or not exact_int(network_boundary.get("child_namespace_inode"))
-                or network_boundary.get("parent_namespace_inode") == network_boundary.get("child_namespace_inode")
-                or network_boundary.get("interfaces") != ["lo"]
-                or network_boundary.get("external_routes") is not False
-            )
-        )
-        or (expected_gate != "replacement_sdk_contracts" and network_boundary is not None)
+        or boundary.get("writable_paths") != ["cargo-target", "gate-work", "tmp"]
+        or network_boundary is not None
         or not exact_int(report.get("immutable_file_count"))
         or report.get("immutable_file_count", 0) <= 0
         or not type_sensitive_equal(
@@ -2184,8 +2097,6 @@ def validate_test_run_evidence(
         or not anchored_cargo
         or not anchored_generic_tools
         or not type_sensitive_equal(gate_inputs, expected_gate_inputs)
-        or not sdk_lock_matches
-        or not sdk_runtime_valid
         or any(
             not isinstance(value, dict)
             or set(value) != {"path", "sha256", "version"}
@@ -2197,10 +2108,6 @@ def validate_test_run_evidence(
         )
     ):
         failures.append("evidenced command report is incomplete or release-skewed")
-    if expected_gate == "replacement_sdk_contracts" and not (
-        run_evidenced_command.sdk_python_lock_ready(root, release_sha)
-    ):
-        failures.append("replacement SDK Python dependency evidence is not hash-locked")
     return failures
 
 
@@ -2233,7 +2140,7 @@ def validate_partner_evidence(
         or adapter.get("profile") != "tinyzkp-p3-goldilocks-v1"
         or adapter.get("plonky3_version") != "0.6.1"
         or adapter.get("dependency_lock_sha256")
-        != "c1afc52e0c067eaaecddc2463a37713189ece1456df806b83fe7fcd9e9cb8420"
+        != "0e9a8928370fdd4c4218a98a642f734e955d3801ade78f52ebec31ddbcd18a78"
         or adapter.get("release_sha") != release_sha
         or adapter.get("official_verification") is not True
         or adapter.get("bounded_equals_conventional") is not True
@@ -2315,10 +2222,22 @@ def validate_identity_evidence(
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         return [f"release identity report is unavailable: {error}"]
     surfaces = report.get("surfaces")
-    expected_surfaces = {"api", "mcp", "site", "cli"}
+    expected_surfaces = {"engine_cli", "engine_oci"}
     if (
-        not exact_int(report.get("schema_version"), 1)
+        set(report)
+        != {
+            "schema_version",
+            "release_sha",
+            "release_ref",
+            "profile",
+            "checked_at",
+            "surfaces",
+            "compatibility",
+        }
+        or not exact_int(report.get("schema_version"), 1)
         or report.get("release_sha") != release_sha
+        or not isinstance(report.get("release_ref"), str)
+        or not report.get("release_ref", "").startswith("backend-v")
         or report.get("profile") != "tinyzkp-p3-goldilocks-v1"
         or not isinstance(report.get("checked_at"), str)
         or not report.get("checked_at")
@@ -2328,51 +2247,178 @@ def validate_identity_evidence(
         return ["release identity report is incomplete or release-skewed"]
 
     failures: list[str] = []
-    package_versions: set[str] = set()
     report_identities: dict[str, str] = {}
-    expected_urls = {
-        "site": "https://tinyzkp.com/api/release",
-        "api": "https://api.tinyzkp.com/version",
-        "mcp": "https://mcp.tinyzkp.com/version",
-    }
-    for name in sorted(expected_surfaces):
-        payload = surfaces.get(name)
-        if not isinstance(payload, dict):
-            failures.append(f"release identity surface is malformed: {name}")
-            continue
-        version = payload.get("package_version")
-        identity = payload.get("release_sha")
-        if (
-            payload.get("service") != name
-            or identity != release_sha
-            or not isinstance(version, str)
-            or not version
-            or (name in expected_urls and payload.get("url") != expected_urls[name])
-            or (
-                name == "cli"
-                and (
-                    not isinstance(payload.get("artifact"), str)
-                    or not payload.get("artifact")
-                )
-            )
-        ):
-            failures.append(f"release identity surface is incomplete or skewed: {name}")
-            continue
-        package_versions.add(version)
-        report_identities[name] = identity
-    if len(package_versions) != 1:
-        failures.append("release package versions do not match across surfaces")
-    if metadata.get("identities") != report_identities:
-        failures.append("release identity metadata does not match the machine report")
-    benchmark = report.get("benchmark")
-    if benchmark is not None and (
-        not isinstance(benchmark, dict)
-        or benchmark.get("release_sha") != release_sha
-        or benchmark.get("dependency_profile") != "tinyzkp-p3-goldilocks-v1"
-        or benchmark.get("verification_succeeded") is not True
+    cli = surfaces.get("engine_cli")
+    if (
+        not isinstance(cli, dict)
+        or set(cli)
+        != {
+            "service",
+            "release_sha",
+            "artifact",
+            "artifact_sha256",
+            "identity_artifact",
+            "identity_artifact_sha256",
+            "package_version",
+        }
+        or cli.get("service") != "engine_cli"
+        or cli.get("release_sha") != release_sha
+        or Path(str(cli.get("artifact"))).name
+        != "tinyzkp-engine-linux-x86_64"
+        or not lower_hex(cli.get("artifact_sha256"), 64)
+        or Path(str(cli.get("identity_artifact"))).name != "engine-release.json"
+        or not lower_hex(cli.get("identity_artifact_sha256"), 64)
+        or not bounded_string(cli.get("package_version"), maximum=128)
     ):
-        failures.append("benchmark release identity is incomplete or skewed")
+        failures.append("release identity surface is incomplete or skewed: engine_cli")
+    else:
+        report_identities["engine_cli"] = release_sha
+
+    oci = surfaces.get("engine_oci")
+    if (
+        not isinstance(oci, dict)
+        or set(oci)
+        != {
+            "service",
+            "release_sha",
+            "artifact",
+            "artifact_sha256",
+            "manifest_digest",
+            "config_digest",
+            "platform",
+            "entrypoint",
+        }
+        or oci.get("service") != "engine_oci"
+        or oci.get("release_sha") != release_sha
+        or Path(str(oci.get("artifact"))).name != "tinyzkp-engine.oci.tar"
+        or not lower_hex(oci.get("artifact_sha256"), 64)
+        or not isinstance(oci.get("manifest_digest"), str)
+        or not str(oci.get("manifest_digest")).startswith("sha256:")
+        or not lower_hex(str(oci.get("manifest_digest")).removeprefix("sha256:"), 64)
+        or not isinstance(oci.get("config_digest"), str)
+        or not str(oci.get("config_digest")).startswith("sha256:")
+        or not lower_hex(str(oci.get("config_digest")).removeprefix("sha256:"), 64)
+        or oci.get("platform") != "linux/amd64"
+        or oci.get("entrypoint") != ["/usr/local/bin/tinyzkp-engine"]
+    ):
+        failures.append("release identity surface is incomplete or skewed: engine_oci")
+    else:
+        report_identities["engine_oci"] = release_sha
+
+    compatibility = report.get("compatibility")
+    if (
+        not isinstance(compatibility, dict)
+        or set(compatibility)
+        != {
+            "artifact",
+            "artifact_sha256",
+            "profile_id",
+            "plonky3_version",
+            "release_status",
+        }
+        or Path(str(compatibility.get("artifact"))).name
+        != "plonky3-compatibility-v1.json"
+        or not lower_hex(compatibility.get("artifact_sha256"), 64)
+        or compatibility.get("profile_id") != "tinyzkp-p3-goldilocks-v1"
+        or compatibility.get("plonky3_version") != "0.6.1"
+        or not bounded_string(compatibility.get("release_status"), maximum=128)
+    ):
+        failures.append("compatibility identity is incomplete or skewed")
+
+    if set(metadata) != {"identities"} or metadata.get("identities") != report_identities:
+        failures.append("release identity metadata does not match the machine report")
     return failures
+
+
+def checksum_inventory(path: Path) -> dict[str, str] | None:
+    entries: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    for line in lines:
+        match = CHECKSUM_LINE.fullmatch(line)
+        if match is None:
+            return None
+        digest, name = match.groups()
+        if name in entries:
+            return None
+        artifact = path.parent / name
+        try:
+            metadata = os.lstat(artifact)
+        except OSError:
+            return None
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            return None
+        observed = hashlib.sha256()
+        try:
+            with artifact.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    observed.update(chunk)
+        except OSError:
+            return None
+        if observed.hexdigest() != digest:
+            return None
+        entries[name] = digest
+    return entries
+
+
+def validate_identity_checksum_binding(
+    identity_report: Path, checksums: Path
+) -> list[str]:
+    try:
+        report = read_object(identity_report)
+        surfaces = report["surfaces"]
+        compatibility = report["compatibility"]
+        reported = {
+            Path(surfaces["engine_cli"]["artifact"]).name: surfaces["engine_cli"][
+                "artifact_sha256"
+            ],
+            Path(surfaces["engine_cli"]["identity_artifact"]).name: surfaces[
+                "engine_cli"
+            ]["identity_artifact_sha256"],
+            Path(surfaces["engine_oci"]["artifact"]).name: surfaces["engine_oci"][
+                "artifact_sha256"
+            ],
+            Path(compatibility["artifact"]).name: compatibility["artifact_sha256"],
+        }
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        return ["engine identity cannot be bound to the signed checksums"]
+    inventory = checksum_inventory(checksums)
+    if inventory is None or any(inventory.get(name) != digest for name, digest in reported.items()):
+        return ["engine identity does not match the signed artifact checksums"]
+    return []
+
+
+def validate_postbuild_bindings(
+    gates: dict[str, object], *, root: Path
+) -> list[str]:
+    try:
+        identity_gate = gates["engine_cli_oci_identity_match"]
+        signed_gate = gates["signed_release_sbom_and_checksums"]
+        if not isinstance(identity_gate, dict) or not isinstance(signed_gate, dict):
+            raise ValueError
+        identity_artifacts = identity_gate["artifacts"]
+        signed_artifacts = signed_gate["artifacts"]
+        if not isinstance(identity_artifacts, list) or not isinstance(
+            signed_artifacts, list
+        ):
+            raise ValueError
+        identity_descriptor = next(
+            item
+            for item in identity_artifacts
+            if isinstance(item, dict) and item.get("role") == "identity_report"
+        )
+        checksums_descriptor = next(
+            item
+            for item in signed_artifacts
+            if isinstance(item, dict) and item.get("role") == "checksums"
+        )
+        identity_path, _ = safe_artifact(root, identity_descriptor)
+        checksums_path, _ = safe_artifact(root, checksums_descriptor)
+    except (KeyError, OSError, StopIteration, TypeError, ValueError):
+        return ["post-build engine identity binding is incomplete"]
+    return validate_identity_checksum_binding(identity_path, checksums_path)
 
 
 def validate_gate(
@@ -2533,6 +2579,11 @@ def validate_gate(
     elif expected_kind == "signed_release":
         role_paths = {descriptor.get("role"): path for path, descriptor in resolved}
         roles = set(role_paths)
+        inventory = (
+            checksum_inventory(role_paths["checksums"])
+            if "checksums" in role_paths
+            else None
+        )
         command = metadata.get("verification_command")
         command_valid = (
             isinstance(command, list)
@@ -2572,7 +2623,10 @@ def validate_gate(
             or metadata.get("signer_oidc_issuer") != SIGSTORE_ISSUER
             or not command_valid
             or not exact_int(metadata.get("checksum_entries"))
-            or metadata.get("checksum_entries", 0) < 9
+            or metadata.get("checksum_entries")
+            != len(SIGNED_RELEASE_CHECKSUM_NAMES)
+            or inventory is None
+            or set(inventory) != SIGNED_RELEASE_CHECKSUM_NAMES
             or not {"sbom", "checksums", "signature"}.issubset(roles)
         ):
             failures.append(f"{name}: signed SBOM/checksum evidence is incomplete")
@@ -3348,7 +3402,11 @@ def evidence_failures(evidence: dict[str, object], *, root: Path = ROOT) -> list
             continue
         gate_release_sha = (
             release_sha
-            if name == "signed_release_sbom_and_checksums"
+            if name
+            in {
+                "signed_release_sbom_and_checksums",
+                "engine_cli_oci_identity_match",
+            }
             else source_release_sha
         )
         problems.extend(
@@ -3360,6 +3418,7 @@ def evidence_failures(evidence: dict[str, object], *, root: Path = ROOT) -> list
                 source_tree_sha256=source_tree_sha256,
             )
         )
+    problems.extend(validate_postbuild_bindings(gates, root=root))
     problems.extend(
         validate_resource_matrix_binding(
             gates,

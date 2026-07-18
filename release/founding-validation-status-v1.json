@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "status": "not_started",
+  "permanent_organization_cap": 3,
+  "accepted_organizations": 0,
+  "external_workloads": 0,
+  "organizations_with_external_workloads": 0,
+  "standard_annual_price_acceptances": 0,
+  "ordinary_paid_annual_subscriptions": 0,
+  "customer_specific_branches": 0,
+  "assistance_limit_minutes_per_organization": 240,
+  "witness_data_accepted": false,
+  "market_gate_passed": false,
+  "public_evidence": [],
+  "policy": "Record only scrubbed, digest-bound evidence under docs/validation/FOUNDING_VALIDATION_PROTOCOL.md."
+}

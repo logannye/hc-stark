@@ -1,48 +1,84 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TinyZKP — Memory-bounded STARK proving infrastructure</title>
-<meta name="description" content="TinyZKP is building a resource-bounded Plonky3 proving backend with deterministic SSD scratch and checkpoint recovery.">
-<link rel="canonical" href="https://tinyzkp.com"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/shared.css"><link rel="stylesheet" href="/recovery.css">
-<meta property="og:title" content="TinyZKP — Prove larger STARK traces within a RAM budget">
-<meta property="og:description" content="Open-source bounded-memory STARK infrastructure with deterministic SSD scratch.">
-<meta property="og:url" content="https://tinyzkp.com/"><meta property="og:type" content="website">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TinyZKP Guard — Finish Plonky3 proof jobs within a RAM budget</title>
+  <meta name="description" content="TinyZKP Guard is a customer-operated supervisor for supported Plonky3 proof jobs that need bounded RAM, SSD scratch, and deterministic resume.">
+  <link rel="canonical" href="https://tinyzkp.com">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/shared.css">
+  <meta property="og:title" content="TinyZKP Guard — Keep proof jobs moving when RAM runs out">
+  <meta property="og:description" content="Customer-operated, SSD-backed execution for a narrow supported Plonky3 profile.">
+  <meta property="og:url" content="https://tinyzkp.com/">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://tinyzkp.com/guard-social.png">
+  <meta property="og:image:width" content="1731">
+  <meta property="og:image:height" content="909">
+  <meta property="og:image:alt" content="TinyZKP Guard routes proof jobs from constrained RAM into SSD-backed execution and a verified proof.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="TinyZKP Guard">
+  <meta name="twitter:description" content="Keep proof jobs moving when RAM runs out.">
+  <meta name="twitter:image" content="https://tinyzkp.com/guard-social.png">
+  <script src="/shared.js" defer></script>
 </head>
 <body>
-<nav class="recovery-nav"><div class="container"><a class="logo" href="/"><span>Tiny</span>ZKP</a><div class="links">
-<a href="/engine">Engine</a><a href="/benchmarks">Benchmarks</a><a href="/plonky3">Plonky3</a><a href="/security">Security</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/status">Status</a><a href="/contact">Contact</a>
-</div></div></nav>
-<main><div class="container">
-<div class="upgrade"><strong>Backend recovery in progress.</strong> Hosted proving, account creation, verification, and paid checkout are disabled while the resource-bounded Plonky3 backend is implemented and independently reviewed.</div>
-<section class="hero"><div><div class="eyebrow">Memory-bounded STARK infrastructure</div>
-<h1>Prove larger STARK traces within a RAM budget.</h1>
-<p class="lede">TinyZKP is building an MIT-licensed proving backend for teams whose Plonky3 workloads are limited by resident memory. The implemented prototype preserves the official proof format and verifier; full-pipeline movement of matrices, transforms, commitments, and FRI layers through deterministic SSD scratch remains release-gated work.</p>
-<div class="actions"><a class="cta" href="/contact?intent=benchmark_workload">Benchmark your workload</a><a class="cta secondary" href="https://github.com/logannye/hc-stark">Run the open-source benchmark</a></div>
-</div><aside class="panel"><h2>Current release posture</h2><div class="facts">
-<div class="fact"><span>Hosted proving</span><strong>Maintenance</strong></div><div class="fact"><span>Proof format</span><strong>Official Plonky3</strong></div><div class="fact"><span>Verifier</span><strong>Unmodified upstream</strong></div><div class="fact"><span>Core license</span><strong>MIT</strong></div><div class="fact"><span>Pinned adapter</span><strong>Plonky3 0.6.1</strong></div>
-</div></aside></section>
+<header class="site-header"><div class="container nav-shell">
+  <a class="brand" href="/"><span>Tiny</span>ZKP</a>
+  <button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button>
+  <nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary">
+    <a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a>
+    <a class="button nav-buy" data-checkout="annual" data-closed-label="Not yet for sale" data-live-label="Buy Guard">Not yet for sale</a>
+  </nav>
+</div></header>
+<main>
+  <section class="hero"><div class="container hero-grid">
+    <div>
+      <div class="eyebrow">Local proving · bounded resources · ordinary verifier</div>
+      <h1>Keep proof jobs moving when RAM runs out.</h1>
+      <p class="lede">TinyZKP Guard supervises supported Plonky3 proof jobs on your Linux machine. It preflights RAM and local NVMe scratch, chooses the appropriate execution path, and resumes interrupted bounded runs without changing the proof format or verifier.</p>
+      <div class="actions"><a class="button" href="/docs#doctor">Run the free doctor</a><a class="button secondary" data-checkout="annual" data-closed-label="Not yet for sale" data-live-label="Buy Guard annually">Not yet for sale</a></div>
+      <p class="trust-line">Your workload and witness stay on your compute. No hosted proving, usage meter, account database, or TinyZKP control plane.</p>
+    </div>
+    <aside class="panel" aria-label="Product boundary"><div class="signal">
+      <div class="signal-row"><span>Production profile</span><strong>Linux x86-64 · Plonky3 0.6.1</strong></div>
+      <div class="signal-row"><span>Execution</span><strong>Conventional or bounded</strong></div>
+      <div class="signal-row"><span>Durable storage</span><strong>Customer NVMe scratch</strong></div>
+      <div class="signal-row"><span>Proof verification</span><strong>Ordinary Plonky3 verifier</strong></div>
+      <div class="signal-row"><span>Commercial launch</span><strong><i class="dot"></i>Evidence gates open</strong></div>
+    </div></aside>
+  </div></section>
 
-<section class="section"><div class="eyebrow">Why TinyZKP</div><h2>Memory is a product constraint, not a benchmark footnote.</h2>
-<p class="intro">The engine is being designed around an explicit <code>ResourcePolicy</code>. The current resource layer preflights RAM and scratch, selects memory or scratch mode, and provides checksummed stores and checkpoint contracts. End-to-end deterministic continuation is not yet implemented.</p>
-<div class="grid"><article class="card"><div class="kicker">Bounded resident RAM</div><h3>Configure the ceiling</h3><p>The current DFT prototype exercises memory and scratch paths. Tiled double-buffered transforms and an end-to-end ceiling across trace, quotient, and FRI remain release gates.</p></article>
-<article class="card"><div class="kicker">Verifier compatibility</div><h3>Keep the trusted boundary upstream</h3><p>The prototype emits official Plonky3 proof types that are accepted by the unmodified upstream verifier. TinyZKP does not introduce a new transcript, verifier, or proof security profile.</p></article>
-<article class="card"><div class="kicker">Operational recovery</div><h3>Make long jobs resumable</h3><p>Owner-only scratch, atomic manifests, chunk checksums, explicit retention, phase checkpoints, and official challenger-state restoration define the planned recovery contract.</p></article></div>
-<div class="pipeline"><div class="phase"><strong>Trace</strong>planned block stream</div><div class="phase"><strong>LDE</strong>planned tiled transform</div><div class="phase"><strong>Quotient</strong>planned block evaluation</div><div class="phase"><strong>FRI</strong>planned persisted layers</div><div class="phase"><strong>Openings</strong>planned sorted scans</div></div>
-<div class="truth"><strong>Measured-claims policy:</strong> every published performance number must include hardware, source commit, security profile, input, command, raw data, and reproduction instructions. Component-only memory results are never described as full-pipeline proving.</div>
-</section>
+  <section class="section"><div class="container">
+    <div class="section-head"><div class="eyebrow">One narrow job</div><h2>A memory safety net for proof infrastructure.</h2><p>TinyZKP is for teams that already have a supported Plonky3 workload and a concrete OOM, machine-cost, or restart problem. It is not a new proof system, hosted prover, or generic ZK platform.</p></div>
+    <div class="grid">
+      <article class="card"><span class="tag">Preflight</span><h3>Know the resource envelope first</h3><p>Doctor validates compatibility and estimates conventional RAM, bounded RAM, and scratch before expensive work begins.</p></article>
+      <article class="card"><span class="tag">Execute</span><h3>Use RAM or SSD deliberately</h3><p>Auto mode keeps the conventional fast path when it fits safely, then selects bounded execution when the estimate crosses the configured ceiling.</p></article>
+      <article class="card"><span class="tag">Recover</span><h3>Resume an interrupted run</h3><p>Exact-release-bound, checksummed job state makes interruption recoverable without silently consuming stale or corrupt checkpoints.</p></article>
+    </div>
+    <div class="flow" aria-label="Local execution flow"><div><strong>01 · Check</strong>Validate profile and paths</div><div><strong>02 · Plan</strong>Estimate RAM and scratch</div><div><strong>03 · Run</strong>Prove on customer compute</div><div><strong>04 · Verify</strong>Use the ordinary verifier</div></div>
+  </div></section>
 
-<section class="section"><div class="eyebrow">Designed for proving teams</div><h2>Integrate where RAM pressure is already costing you.</h2><p class="intro">Evaluations are available during recovery for teams with a reproducible prover-memory bottleneck. Certified and Fleet/OEM contracts begin only after backend v1 passes its review and release gates.</p>
-<div class="grid"><article class="card"><h3>Founding Evaluation</h3><p class="price">$25K</p><p class="unit">first two customers · 3 weeks</p><p>One workload, conventional baseline, bounded prototype, reproducible report, and production recommendation. Standard evaluations are $40K after the founding cohort.</p></article>
-<article class="card"><h3>TinyZKP Certified</h3><p class="price">$60K</p><p class="unit">post-release · per year prepaid</p><p>Signed LTS builds, one supported workload, compatibility and security notices, quarterly automated performance reports, and tightly bounded support.</p></article>
-<article class="card"><h3>TinyZKP Fleet / OEM</h3><p class="price">$125K+</p><p class="unit">post-release · annual minimum prepaid</p><p>Private deployment, resource policy, checkpoint operations, observability, release coordination, and commercial SLA. Custom engineering is separately scoped.</p></article></div>
-<div class="actions"><a class="cta" href="/contact?intent=memory_bounded_evaluation">Discuss an evaluation</a><a class="cta secondary" href="/pricing">Review commercial terms</a></div>
-</section>
+  <section class="section"><div class="container">
+    <div class="section-head"><div class="eyebrow">Technical differentiation</div><h2>The proof remains ordinary. The execution becomes operationally survivable.</h2></div>
+    <div class="grid two">
+      <article class="card"><h3>What TinyZKP changes</h3><ul><li>Resident-memory planning and enforcement</li><li>Checksummed external-memory scratch</li><li>Deterministic checkpoints and resume</li><li>Machine-readable reports for CI and schedulers</li></ul></article>
+      <article class="card"><h3>What TinyZKP does not change</h3><ul><li>The supported AIR semantics</li><li>The released proof format</li><li>The ordinary Plonky3 verification path</li><li>Ownership or location of customer data</li></ul></article>
+    </div>
+    <div class="notice"><strong>Claim discipline:</strong> TinyZKP does not claim exclusivity, zero-knowledge privacy, arbitrary Plonky3 compatibility, or production performance beyond published candidate evidence.</div>
+  </div></section>
 
-<section class="section"><div class="eyebrow">Relaunch gate</div><h2>No paid proving before the evidence is ready.</h2>
-<div class="grid two"><article class="card"><h3>Correctness gate</h3><ul><li>Official Plonky3 verifier accepts both reference workloads</li><li>Memory and scratch modes agree for frozen deterministic profiles</li><li>Parser fuzzing and crash/resume suites pass</li><li>CLI, dependency profile, API, MCP, and site release identities agree</li></ul></article>
-<article class="card"><h3>Performance and business gate</h3><ul><li>1M rows use at least 4× less RAM within 3× baseline wall time</li><li>10M rows remain within 2 GiB RSS and the preflight scratch estimate</li><li>At least one external design-partner integration</li><li>Hosted capacity remains unavailable until measured gross margin exceeds 80%</li></ul></article></div>
-</section></div></main>
-<footer><div class="container"><div class="left">TinyZKP · Transparent verifiable computation · MIT core</div><div class="right"><a href="https://github.com/logannye/hc-stark">Source</a><a href="/status">Status</a><a href="/security">Security</a><a href="/contact">Contact</a></div></div></footer>
-</body></html>
+  <section class="section"><div class="container">
+    <div class="section-head"><div class="eyebrow">Two choices</div><h2>Free engine. Paid operational guardrails.</h2><p>The MIT Community engine is the evaluation path. Guard is an organization subscription for qualified releases and the local supervisor—without usage charges or hosted operations.</p></div>
+    <div class="actions"><a class="button" href="/pricing">Compare Community and Guard</a><a class="button secondary" href="/compatibility">Check the v1 boundary</a></div>
+  </div></section>
+</main>
+<footer class="site-footer"><div class="container"><div class="footer-grid">
+  <div><a class="brand" href="/"><span>Tiny</span>ZKP</a><p>Resource-bounded, customer-operated proving infrastructure for a deliberately narrow Plonky3 profile.</p></div>
+  <div><h2>Product</h2><a href="/guard">Guard</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a></div>
+  <div><h2>Technical</h2><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Documentation</a></div>
+  <div><h2>Company</h2><a href="/security">Security</a><a href="/support">Support</a><a href="/terms">Legal</a></div>
+</div><div class="footer-note">TinyZKP Guard is not yet for sale. Checkout remains closed until technical, legal, merchant, and customer-validation gates pass.</div></div></footer>
+</body>
+</html>

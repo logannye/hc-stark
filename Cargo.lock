@@ -2104,7 +2104,6 @@ dependencies = [
  "clap",
  "ctrlc",
  "hc-bench",
- "hc-beta-client",
  "hc-commit",
  "hc-core",
  "hc-fri",

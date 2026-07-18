@@ -96,11 +96,11 @@ serialized in canonical row order so thread count cannot change proof bytes.
 
 ## Evidence cadence
 
-The weekly fixed-host workflow runs both 1,048,576-row workloads. Before
-proving, it requires exactly eight logical CPUs, 16-GB-class RAM,
-non-rotational NVMe with at least 500 GB available, and a runner-owned
-mode-0700 scratch root. The
-16,777,216-row ceiling gate is manual/release-candidate work, not a weekly cost.
+The fixed-host workflow is manual and runs during a scheduled quarterly
+qualification day. It covers both 1,048,576-row workloads and the
+16,777,216-row ceiling matrix for a release candidate. Before proving, it
+requires exactly eight logical CPUs, 16-GB-class RAM, non-rotational NVMe with
+at least 500 GB available, and a runner-owned mode-0700 scratch root.
 An opt-in 134,217,728-row run is exploratory and can never satisfy or bypass a
 release gate. Every run gets a unique owner-only scratch directory and a
 normalized manifest; release validation hashes that manifest and proves that

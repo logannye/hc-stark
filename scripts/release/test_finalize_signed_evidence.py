@@ -46,7 +46,7 @@ def test_bad_sigstore_verification_fails_closed(tmp_path):
 
 
 def test_checksum_manifest_requires_every_production_artifact(tmp_path):
-    sbom = tmp_path / "tinyzkp-backend.spdx.json"
+    sbom = tmp_path / "tinyzkp-engine.spdx.json"
     sbom.write_text("{}", encoding="utf-8")
     checksums = tmp_path / "SHA256SUMS"
     checksums.write_text(f"{sha256(sbom)}  {sbom.name}\n", encoding="utf-8")
@@ -55,9 +55,32 @@ def test_checksum_manifest_requires_every_production_artifact(tmp_path):
             checksums, sbom, module.REQUIRED_CHECKSUM_ENTRIES
         )
     except ValueError as error:
-        assert "omits required release artifacts" in str(error)
+        assert "release artifact inventory differs" in str(error)
     else:
         raise AssertionError("partial release checksum manifest was accepted")
+
+
+def test_checksum_manifest_rejects_unexpected_public_artifact(tmp_path):
+    names = set(module.REQUIRED_CHECKSUM_ENTRIES) | {"hc-server-linux-x86_64"}
+    for name in names:
+        (tmp_path / name).write_bytes(name.encode())
+    checksums = tmp_path / "SHA256SUMS"
+    checksums.write_text(
+        "".join(
+            f"{sha256(tmp_path / name)}  {name}\n" for name in sorted(names)
+        ),
+        encoding="utf-8",
+    )
+    try:
+        module.verify_checksum_manifest(
+            checksums,
+            tmp_path / "tinyzkp-engine.spdx.json",
+            module.REQUIRED_CHECKSUM_ENTRIES,
+        )
+    except ValueError as error:
+        assert "unexpected hc-server-linux-x86_64" in str(error)
+    else:
+        raise AssertionError("unexpected server binary was accepted")
 
 
 def test_spdx_sbom_requires_document_identity(tmp_path):
@@ -76,7 +99,7 @@ def test_spdx_sbom_requires_document_identity(tmp_path):
                 "spdxVersion": "SPDX-2.3",
                 "dataLicense": "CC0-1.0",
                 "SPDXID": "SPDXRef-DOCUMENT",
-                "name": "tinyzkp-backend",
+                "name": "tinyzkp-engine",
                 "documentNamespace": "https://tinyzkp.com/sbom/test",
             }
         ),
@@ -162,9 +185,11 @@ def test_finalization_binds_source_commit_without_requiring_sha_self_reference(
     sbom = tmp_path / "sbom.json"
     checksums = tmp_path / "SHA256SUMS"
     signature = tmp_path / "signature.json"
+    identity_report = tmp_path / "engine-identity.json"
     sbom.write_text("{}")
     checksums.write_text("placeholder")
     signature.write_text("{}")
+    identity_report.write_text("{}")
     cosign = tmp_path / "cosign"
     cosign.write_text("#!/bin/sh\nexit 0\n")
     cosign.chmod(0o700)
@@ -172,6 +197,14 @@ def test_finalization_binds_source_commit_without_requiring_sha_self_reference(
     monkeypatch.setattr(module, "verify_spdx_sbom", lambda _path: None)
     monkeypatch.setattr(module, "verify_checksum_manifest", lambda *_args, **_kwargs: 9)
     monkeypatch.setattr(module.final_gate, "evidence_failures", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        module.final_gate, "validate_identity_evidence", lambda *_args, **_kwargs: []
+    )
+    monkeypatch.setattr(
+        module.final_gate,
+        "validate_identity_checksum_binding",
+        lambda *_args, **_kwargs: [],
+    )
     monkeypatch.setattr(
         module.final_gate.evidence_runtime,
         "run_anchored_cosign",
@@ -185,6 +218,7 @@ def test_finalization_binds_source_commit_without_requiring_sha_self_reference(
         sbom=sbom,
         checksums=checksums,
         signature=signature,
+        identity_report=identity_report,
         output_evidence=tmp_path / "final-evidence.json",
         output_config=tmp_path / "final-config.json",
         cosign=str(cosign),
@@ -197,3 +231,8 @@ def test_finalization_binds_source_commit_without_requiring_sha_self_reference(
     assert signed["source_tree_sha256"] == source_tree_sha256
     assert signed["release_tree_sha256"] == source_tree_sha256
     assert signed["evidence_only_delta_verified"] is True
+    identity_gate = evidence["gates"][module.prerelease.IDENTITY_GATE]
+    assert identity_gate["metadata"]["identities"] == {
+        "engine_cli": release_sha,
+        "engine_oci": release_sha,
+    }

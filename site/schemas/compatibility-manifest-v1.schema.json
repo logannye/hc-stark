@@ -1,0 +1,168 @@
+{
+  "$id": "https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "CompatibilityLimitsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "maximum_constraint_degree": {
+          "const": 3,
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "maximum_rows": {
+          "const": 16777216,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "maximum_trace_width": {
+          "const": 256,
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "minimum_rows": {
+          "const": 1024,
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "maximum_constraint_degree",
+        "maximum_rows",
+        "maximum_trace_width",
+        "minimum_rows"
+      ],
+      "type": "object"
+    },
+    "PlatformV1": {
+      "additionalProperties": false,
+      "properties": {
+        "architecture": {
+          "const": "x86_64",
+          "type": "string"
+        },
+        "operating_system": {
+          "const": "linux",
+          "type": "string"
+        }
+      },
+      "required": [
+        "architecture",
+        "operating_system"
+      ],
+      "type": "object"
+    },
+    "ReleaseIdentityV1": {
+      "additionalProperties": false,
+      "properties": {
+        "compatibility_profile": {
+          "type": "string"
+        },
+        "engine_artifact_sha256": {
+          "type": "string"
+        },
+        "engine_source_identity": {
+          "type": "string"
+        },
+        "guard_source_identity": {
+          "type": "string"
+        },
+        "guard_version": {
+          "type": "string"
+        },
+        "qualification": {
+          "type": "string"
+        },
+        "release_identity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "compatibility_profile",
+        "engine_artifact_sha256",
+        "engine_source_identity",
+        "guard_source_identity",
+        "guard_version",
+        "qualification",
+        "release_identity"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "declarative_operators": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "explicitly_unsupported": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "extension_degree": {
+      "const": 2,
+      "format": "uint8",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "field": {
+      "const": "goldilocks",
+      "type": "string"
+    },
+    "limits": {
+      "$ref": "#/definitions/CompatibilityLimitsV1"
+    },
+    "permutation": {
+      "const": "poseidon2_width_8",
+      "type": "string"
+    },
+    "platform": {
+      "$ref": "#/definitions/PlatformV1"
+    },
+    "plonky3_version": {
+      "const": "0.6.1",
+      "type": "string"
+    },
+    "profile": {
+      "const": "tinyzkp-p3-goldilocks-v1",
+      "type": "string"
+    },
+    "release": {
+      "$ref": "#/definitions/ReleaseIdentityV1"
+    },
+    "schema_version": {
+      "const": 1,
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "verifier": {
+      "const": "p3_uni_stark_0.6.1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "declarative_operators",
+    "explicitly_unsupported",
+    "extension_degree",
+    "field",
+    "limits",
+    "permutation",
+    "platform",
+    "plonky3_version",
+    "profile",
+    "release",
+    "schema_version",
+    "verifier"
+  ],
+  "title": "CompatibilityManifestV1",
+  "type": "object"
+}

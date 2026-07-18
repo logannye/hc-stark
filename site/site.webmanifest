@@ -5,36 +5,13 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#050a12",
-  "theme_color": "#050a12",
-  "description": "Resource-bounded Plonky3 proving infrastructure with deterministic SSD scratch.",
+  "background_color": "#061019",
+  "theme_color": "#061019",
+  "description": "Customer-operated, resource-bounded proving infrastructure for a narrow Plonky3 profile.",
   "categories": ["developer", "business", "security"],
-  "icons": [
-    {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/og-image.png",
-      "sizes": "1200x630",
-      "type": "image/png",
-      "purpose": "any"
-    }
-  ],
+  "icons": [{"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}],
   "shortcuts": [
-    {
-      "name": "Benchmark your workload",
-      "short_name": "Benchmark",
-      "description": "Review the reproducible benchmark contract and release gates.",
-      "url": "/benchmarks"
-    },
-    {
-      "name": "Apply for an evaluation",
-      "short_name": "Evaluation",
-      "description": "Submit one reproducible Plonky3 memory bottleneck.",
-      "url": "/contact?intent=memory_bounded_evaluation"
-    }
+    {"name": "Run the free doctor", "short_name": "Doctor", "description": "Evaluate compatibility and resources before purchase.", "url": "/docs#doctor"},
+    {"name": "Check compatibility", "short_name": "Compatibility", "description": "Review the exact supported Plonky3 v1 profile.", "url": "/compatibility"}
   ]
 }

@@ -33,6 +33,11 @@ jobs:
       - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
         with:
           cosign-release: v2.4.3
+      - name: Materialize the reviewed Git executable
+        run: |
+          python3 scripts/ci/materialize_anchored_git.py \
+            --output "$RUNNER_TEMP/tinyzkp-anchored-git" \
+            --github-env "$GITHUB_ENV"
       - name: Download and verify final backend evidence
         env:
           GH_TOKEN: ${{ github.token }}
@@ -40,14 +45,12 @@ jobs:
           install -d release-artifacts
           gh release download "$BACKEND_TAG" \
             --dir release-artifacts \
-            --pattern hc-cli-linux-x86_64 \
-            --pattern hc-server-linux-x86_64 \
-            --pattern hc-mcp-http-linux-x86_64 \
-            --pattern hc-mcp-stdio-linux-x86_64 \
-            --pattern tinyzkp-maintenance.oci.tar \
-            --pattern tinyzkp-backend.spdx.json \
+            --pattern tinyzkp-engine-linux-x86_64 \
+            --pattern tinyzkp-engine.oci.tar \
+            --pattern tinyzkp-engine.spdx.json \
             --pattern backend-v1-gates.json \
-            --pattern cli-release.json \
+            --pattern engine-identity.json \
+            --pattern engine-release.json \
             --pattern backend-v1-final-evidence.json \
             --pattern backend-v1-final-gates.json \
             --pattern SHA256SUMS \

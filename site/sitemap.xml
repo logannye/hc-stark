@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://tinyzkp.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
-  <url><loc>https://tinyzkp.com/engine</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>
-  <url><loc>https://tinyzkp.com/benchmarks</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>
-  <url><loc>https://tinyzkp.com/plonky3</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://tinyzkp.com/security</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://tinyzkp.com/docs</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://tinyzkp.com/pricing</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
-  <url><loc>https://tinyzkp.com/status</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
-  <url><loc>https://tinyzkp.com/contact</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://tinyzkp.com/</loc></url>
+  <url><loc>https://tinyzkp.com/guard</loc></url>
+  <url><loc>https://tinyzkp.com/compatibility</loc></url>
+  <url><loc>https://tinyzkp.com/benchmarks</loc></url>
+  <url><loc>https://tinyzkp.com/pricing</loc></url>
+  <url><loc>https://tinyzkp.com/docs</loc></url>
+  <url><loc>https://tinyzkp.com/security</loc></url>
+  <url><loc>https://tinyzkp.com/releases</loc></url>
+  <url><loc>https://tinyzkp.com/support</loc></url>
 </urlset>

@@ -37,11 +37,11 @@ def test_validate_production_bindings_accepts_complete_set():
     assert failures == []
 
 
-def test_validate_production_bindings_requires_only_internal_secret():
+def test_validate_production_bindings_requires_no_application_secrets():
     bindings = {}
     failures = []
     check.validate_production_bindings(bindings, failures)
-    assert failures == ["production Pages binding INTERNAL_SECRET is missing or placeholder"]
+    assert failures == []
 
 
 def test_static_check_classifies_current_site_bindings():
@@ -51,8 +51,8 @@ def test_static_check_classifies_current_site_bindings():
     refs = check.validate_functions(failures)
     assert failures == []
     assert check.REQUIRED_BINDINGS <= refs
-    assert "WEBHOOK_BASE_URL" in refs
-    assert "og-image.png" in check.REQUIRED_FILES
+    assert refs == {"ASSETS"}
+    assert "guard-social.png" in check.REQUIRED_FILES
     assert "favicon.svg" in check.REQUIRED_FILES
 
 

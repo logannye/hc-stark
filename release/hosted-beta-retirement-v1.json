@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "retired",
+  "retired_at": "2026-07-17",
+  "archive_tag": "archive/hosted-beta-2026-07-17",
+  "policy": "Hosted proving, paid public beta, MCP commerce, usage credits, top-ups, worker fleets, and customer proof storage are not TinyZKP production products.",
+  "production_activation_allowed": false,
+  "replacement": {
+    "product": "TinyZKP Guard",
+    "execution": "customer_controlled",
+    "data_plane": "local_only",
+    "commerce": "merchant_of_record",
+    "checkout_gate": "release/guard-launch-gates-v1.json"
+  }
+}

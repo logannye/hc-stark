@@ -1,8 +1,8 @@
 use crate::contracts::{AirConstraintKindV1, AirExpressionV1, AirPackageV1, TraceManifestV1};
 use crate::{
-    estimate_resource_bounded_workload, verify_resource_bounded_proof, GeneratedTraceV1,
-    GoldilocksWord, ResourceBoundedWorkload, WorkloadError, WorkloadIdentityV1,
-    GOLDILOCKS_MODULUS_U64,
+    estimate_resource_bounded_workload, plan_resource_workload, verify_resource_bounded_proof,
+    GeneratedTraceV1, GoldilocksWord, ResourceBoundedWorkload, ResourceExecutionPlanV1,
+    WorkloadError, WorkloadIdentityV1, GOLDILOCKS_MODULUS_U64,
 };
 use hc_stream::{ArtifactDigest, MatrixStore, ResourceEstimate, ResourcePolicyV1};
 use p3_air::{Air, AirBuilder, BaseAir, WindowAccess};
@@ -391,6 +391,19 @@ pub fn estimate_declarative_statement(
     estimate_resource_bounded_workload(&statement, policy).map_err(|_| WorkloadError::InvalidShape)
 }
 
+/// Mode-aware conventional/bounded plan for a declarative AIR statement.
+/// Trace bytes are not read; the caller must separately validate the trace
+/// manifest before presenting this estimate as applicable to an upload.
+pub fn plan_declarative_statement(
+    air: AirPackageV1,
+    rows: u64,
+    public_values: &[u64],
+    policy: &ResourcePolicyV1,
+) -> std::result::Result<ResourceExecutionPlanV1, crate::BoundedProverError> {
+    let statement = DeclarativeStatement::new(air, rows, public_values)?;
+    plan_resource_workload(&statement, policy)
+}
+
 fn open_validated_chunk(
     path: &Path,
     expected_bytes: u64,
@@ -731,5 +744,56 @@ mod tests {
         let reference = prove_resource_reference(&workload).unwrap();
         assert_eq!(bounded, reference);
         verify_resource_bounded_proof(&workload, &bounded).unwrap();
+    }
+
+    #[test]
+    fn uploaded_declarative_trace_resumes_from_its_bound_checkpoint() {
+        let dir = tempdir().unwrap();
+        let chunks = dir.path().join("chunks");
+        fs::create_dir(&chunks).unwrap();
+        let air = fibonacci_air();
+        let (manifest, public) = packed_fibonacci(&chunks);
+        let workload = UploadedTraceWorkload::new(air, manifest, public, &chunks).unwrap();
+        let scratch = dir.path().join("scratch");
+        let policy = ResourcePolicyV1 {
+            mode: ResourceMode::Scratch,
+            max_resident_bytes: 128 * 1024 * 1024,
+            max_scratch_bytes: 2 * 1024 * 1024 * 1024,
+            scratch_dir: scratch.clone(),
+            max_threads: 1,
+            checkpoint_policy: CheckpointPolicy::RetainOnFailure,
+        };
+        let cancellation = crate::CancellationToken::new();
+        let observer_token = cancellation.clone();
+        let interrupted = crate::prove_resource_bounded_observed_with_cancellation(
+            &workload,
+            &policy,
+            cancellation,
+            move |event| {
+                if matches!(
+                    event,
+                    crate::ProverEventV1::Phase {
+                        phase: hc_stream::PipelinePhaseV1::Trace,
+                        ..
+                    }
+                ) {
+                    observer_token.cancel();
+                }
+            },
+        );
+        assert!(matches!(
+            interrupted,
+            Err(crate::BoundedProverError::Cancelled)
+        ));
+        let checkpoint = fs::read_dir(&scratch)
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .map(|entry| entry.path().join("checkpoint.json"))
+            .find(|path| path.is_file())
+            .unwrap();
+        let resumed = crate::resume_resource_bounded_with(&checkpoint, &workload).unwrap();
+        let reference = prove_resource_reference(&workload).unwrap();
+        assert_eq!(resumed, reference);
+        verify_resource_bounded_proof(&workload, &resumed).unwrap();
     }
 }

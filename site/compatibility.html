@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TinyZKP Compatibility — Supported Plonky3 v1 profile</title>
+  <meta name="description" content="The exact operating system, Plonky3, field, hash, AIR, row, and workload boundary planned for TinyZKP Guard v1.">
+  <link rel="canonical" href="https://tinyzkp.com/compatibility"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><script src="/shared.js" defer></script>
+</head>
+<body>
+<header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a><a class="button nav-buy" data-checkout="annual" data-closed-label="Not yet for sale" data-live-label="Buy Guard">Not yet for sale</a></nav></div></header>
+<main><section class="page-hero"><div class="container"><div class="eyebrow">Compatibility profile v1</div><h1>Narrow support is part of the product.</h1><p class="lede">Guard v1 targets one frozen profile and remains release-gated until that profile is fully qualified. The free doctor exists to reject ambiguity before a purchase or long proof job.</p><div class="actions"><a class="button" href="/docs#doctor">Run compatibility doctor</a><a class="button secondary" href="/compatibility.json">Read the JSON profile</a></div></div></section>
+<section class="content container">
+  <div class="notice"><strong>Release-gated profile:</strong> the FRI configuration becomes production-supported only after specialist review and complete profile-specific correctness, resource, recovery, and external-workload evidence.</div>
+  <h2>Supported v1 envelope</h2>
+  <div class="table-wrap"><table><thead><tr><th>Dimension</th><th>v1 support</th></tr></thead><tbody><tr><td>Platform</td><td>Linux x86-64; local NVMe scratch; cgroup v2 test envelope</td></tr><tr><td>Framework</td><td>Plonky3 0.6.1; <code>p3-uni-stark</code></td></tr><tr><td>Field and extension</td><td>Goldilocks; degree-two extension</td></tr><tr><td>Permutation</td><td>Poseidon2, width 8</td></tr><tr><td>AIR contract</td><td><code>AirPackageV1</code> with current, next, public, and constant expressions</td></tr><tr><td>Operations</td><td>Addition, subtraction, multiplication</td></tr><tr><td>Limits</td><td>Degree ≤ 3; width ≤ 256; rows from 2<sup>10</sup> through 2<sup>24</sup></td></tr><tr><td>Inputs</td><td>Declarative AIR package plus uploaded trace manifest within documented size limits</td></tr></tbody></table></div>
+  <h2>Explicitly unsupported in v1</h2>
+  <div class="grid"><article class="card"><h3>Proof features</h3><ul><li>Lookups and buses</li><li>Permutations and multi-table AIRs</li><li>Preprocessed or periodic columns</li><li>Recursion profiles</li></ul></article><article class="card"><h3>Alternative stacks</h3><ul><li>Custom fields or hashes</li><li>Arbitrary Plonky3 forks</li><li>Other proving frameworks</li><li>Unqualified FRI profiles</li></ul></article><article class="card"><h3>Platforms</h3><ul><li>Windows production proving</li><li>macOS production proving</li><li>GPUs</li><li>Network filesystems as scratch</li></ul></article></div>
+  <h2>Compatibility is fail-closed</h2>
+  <p>A job with a missing or unknown field, unsupported feature, mismatched release, unsafe path, or out-of-envelope size is rejected. Guard never guesses that an adjacent profile is equivalent.</p>
+  <h2>What the doctor returns</h2>
+  <p>The doctor emits a versioned JSON report describing profile compatibility, estimated conventional and bounded RAM, estimated scratch, free-space headroom, detected platform, and any blocking reason. The report must be scrubbed before sharing; it is designed not to contain witness values or license material.</p>
+</section></main>
+<footer class="site-footer"><div class="container"><div class="footer-grid"><div><a class="brand" href="/"><span>Tiny</span>ZKP</a><p>Support is deliberately bounded to an evidenced profile.</p></div><div><h2>Product</h2><a href="/guard">Guard</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a></div><div><h2>Technical</h2><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Documentation</a></div><div><h2>Company</h2><a href="/security">Security</a><a href="/support">Support</a><a href="/terms">Legal</a></div></div><div class="footer-note">Compatibility expands only after the complete profile-specific evidence gate is repeated.</div></div></footer>
+</body></html>

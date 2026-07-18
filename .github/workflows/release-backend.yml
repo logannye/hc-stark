@@ -1,4 +1,4 @@
-name: Release Plonky3 backend
+name: Release TinyZKP engine
 
 on:
   push:
@@ -45,6 +45,11 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 -m pip install -r scripts/benchmark/requirements.txt
+      - name: Materialize the reviewed Git executable
+        run: |
+          python3 scripts/ci/materialize_anchored_git.py \
+            --output "$RUNNER_TEMP/tinyzkp-anchored-git" \
+            --github-env "$GITHUB_ENV"
       - name: Require every pre-signing backend-v1 gate
         run: python3 scripts/ci/backend_prerelease_ready.py
 
@@ -67,34 +72,47 @@ jobs:
           python-version: "3.12"
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - run: python3 -m pip install -r scripts/benchmark/requirements.txt
-      - name: Build locked production binaries
-        run: cargo build --locked --release -p hc-cli -p hc-server -p hc-mcp --bins
+      - name: Materialize the reviewed Git executable
+        run: |
+          python3 scripts/ci/materialize_anchored_git.py \
+            --output "$RUNNER_TEMP/tinyzkp-anchored-git" \
+            --github-env "$GITHUB_ENV"
+      - name: Build locked public engine
+        run: cargo build --locked --release -p hc-cli --bin hc-cli
       - name: Assemble release payload
         run: |
           install -d release-artifacts
-          install -m 0755 target/release/hc-cli release-artifacts/hc-cli-linux-x86_64
-          install -m 0755 target/release/hc-server release-artifacts/hc-server-linux-x86_64
-          install -m 0755 target/release/hc-mcp-http release-artifacts/hc-mcp-http-linux-x86_64
-          install -m 0755 target/release/hc-mcp-stdio release-artifacts/hc-mcp-stdio-linux-x86_64
+          install -m 0755 target/release/hc-cli release-artifacts/tinyzkp-engine-linux-x86_64
           cp release/plonky3-compatibility-v1.json release-artifacts/
           cp release/backend-v1-gates.json release-artifacts/
           env -u HC_RELEASE_SHA -u HC_RELEASE_REF -u HC_RELEASE_BUILD_URL \
-            release-artifacts/hc-cli-linux-x86_64 release > release-artifacts/cli-release.json
-          test "$(jq -r .release_sha release-artifacts/cli-release.json)" = "$HC_RELEASE_SHA"
-          test "$(jq -r .release_ref release-artifacts/cli-release.json)" = "$HC_RELEASE_REF"
-      - name: Build maintenance OCI image archive
+            release-artifacts/tinyzkp-engine-linux-x86_64 release > release-artifacts/engine-release.json
+          test "$(jq -r .release_sha release-artifacts/engine-release.json)" = "$HC_RELEASE_SHA"
+          test "$(jq -r .release_ref release-artifacts/engine-release.json)" = "$HC_RELEASE_REF"
+      - name: Build customer-operated engine OCI archive
         run: |
           docker buildx build \
+            --platform linux/amd64 \
             --build-arg HC_RELEASE_SHA \
             --build-arg HC_RELEASE_REF \
             --build-arg HC_RELEASE_BUILD_URL \
-            --output type=oci,dest=release-artifacts/tinyzkp-maintenance.oci.tar .
+            --output type=oci,dest=release-artifacts/tinyzkp-engine.oci.tar .
+      - name: Bind engine CLI and OCI release identities
+        run: |
+          python3 scripts/release/build_engine_identity_report.py \
+            --release-sha "$HC_RELEASE_SHA" \
+            --release-ref "$HC_RELEASE_REF" \
+            --engine release-artifacts/tinyzkp-engine-linux-x86_64 \
+            --engine-release release-artifacts/engine-release.json \
+            --oci-archive release-artifacts/tinyzkp-engine.oci.tar \
+            --compatibility-manifest release-artifacts/plonky3-compatibility-v1.json \
+            --output release-artifacts/engine-identity.json
       - name: Generate SPDX SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: release-artifacts
           format: spdx-json
-          output-file: release-artifacts/tinyzkp-backend.spdx.json
+          output-file: release-artifacts/tinyzkp-engine.spdx.json
       - name: Create checksums
         working-directory: release-artifacts
         run: find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
@@ -109,26 +127,14 @@ jobs:
           python3 scripts/release/finalize_signed_evidence.py \
             --candidate-config release/backend-v1-gates.json \
             --release-sha "$HC_RELEASE_SHA" \
-            --sbom release-artifacts/tinyzkp-backend.spdx.json \
+            --sbom release-artifacts/tinyzkp-engine.spdx.json \
             --checksums release-artifacts/SHA256SUMS \
             --signature release-artifacts/SHA256SUMS.sigstore.json \
+            --identity-report release-artifacts/engine-identity.json \
             --output-evidence release-artifacts/backend-v1-final-evidence.json \
             --output-config release-artifacts/backend-v1-final-gates.json
           python3 scripts/ci/backend_release_ready.py \
             --config release-artifacts/backend-v1-final-gates.json
-          python3 scripts/release/build_commercial_authorization.py \
-            --config release-artifacts/backend-v1-final-gates.json \
-            --verified-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --output-report release-artifacts/backend-v1-release-ready-report.json \
-            --output-authorization release-artifacts/backend-v1-commercial-authorization.json
-          cosign sign-blob --yes \
-            --bundle release-artifacts/backend-v1-commercial-authorization.sigstore.json \
-            release-artifacts/backend-v1-commercial-authorization.json
-          cosign verify-blob \
-            --bundle release-artifacts/backend-v1-commercial-authorization.sigstore.json \
-            --certificate-identity-regexp '^https://github\.com/logannye/hc-stark/\.github/workflows/release-backend\.yml@refs/tags/backend-v[^/]+$' \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            release-artifacts/backend-v1-commercial-authorization.json
       - name: Attest released files
         uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
         with:
@@ -139,9 +145,6 @@ jobs:
           subject-path: |
             release-artifacts/backend-v1-final-evidence.json
             release-artifacts/backend-v1-final-gates.json
-            release-artifacts/backend-v1-release-ready-report.json
-            release-artifacts/backend-v1-commercial-authorization.json
-            release-artifacts/backend-v1-commercial-authorization.sigstore.json
       - name: Publish draft GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:

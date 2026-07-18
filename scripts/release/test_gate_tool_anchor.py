@@ -35,9 +35,7 @@ def candidate():
 def test_expected_tools_are_derived_from_every_frozen_gate():
     assert anchor.expected_tool_names() == {
         "bash",
-        "node",
         "python3",
-        "wasm-pack",
     }
 
 
@@ -51,7 +49,7 @@ def test_candidate_is_unreviewed_closed_schema_and_exact_tool_set():
         anchor.validate_candidate(trusted)
 
     missing = deepcopy(value)
-    del missing["tools"]["node"]
+    del missing["tools"]["python3"]
     with pytest.raises(ValueError, match="exactly the evidence-gate tools"):
         anchor.validate_candidate(missing)
 

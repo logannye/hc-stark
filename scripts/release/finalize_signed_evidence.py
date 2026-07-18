@@ -28,17 +28,7 @@ SIGSTORE_IDENTITY_REGEXP = (
     r"^https://github\.com/logannye/hc-stark/\.github/workflows/"
     r"release-backend\.yml@refs/tags/backend-v[^/]+$"
 )
-REQUIRED_CHECKSUM_ENTRIES = {
-    "hc-cli-linux-x86_64",
-    "hc-server-linux-x86_64",
-    "hc-mcp-http-linux-x86_64",
-    "hc-mcp-stdio-linux-x86_64",
-    "tinyzkp-maintenance.oci.tar",
-    "tinyzkp-backend.spdx.json",
-    "plonky3-compatibility-v1.json",
-    "backend-v1-gates.json",
-    "cli-release.json",
-}
+REQUIRED_CHECKSUM_ENTRIES = set(final_gate.SIGNED_RELEASE_CHECKSUM_NAMES)
 
 
 def sha256(path: Path) -> str:
@@ -113,10 +103,16 @@ def verify_checksum_manifest(
     if required_names is not None:
         actual_names = {path.name for path in listed}
         missing = required_names - actual_names
-        if missing:
+        unexpected = actual_names - required_names
+        if missing or unexpected:
+            details = []
+            if missing:
+                details.append("missing " + ", ".join(sorted(missing)))
+            if unexpected:
+                details.append("unexpected " + ", ".join(sorted(unexpected)))
             raise ValueError(
-                "checksum manifest omits required release artifacts: "
-                + ", ".join(sorted(missing))
+                "checksum manifest release artifact inventory differs: "
+                + "; ".join(details)
             )
     return entries
 
@@ -160,6 +156,7 @@ def finalize(
     sbom: Path,
     checksums: Path,
     signature: Path,
+    identity_report: Path,
     output_evidence: Path,
     output_config: Path,
     cosign: str,
@@ -189,10 +186,29 @@ def finalize(
     sbom = safe_file(root, sbom)
     checksums = safe_file(root, checksums)
     signature = safe_file(root, signature)
+    identity_report = safe_file(root, identity_report)
     verify_spdx_sbom(sbom)
     checksum_entries = verify_checksum_manifest(
         checksums, sbom, REQUIRED_CHECKSUM_ENTRIES
     )
+    identity_metadata = {
+        "identities": {
+            "engine_cli": release_sha,
+            "engine_oci": release_sha,
+        }
+    }
+    identity_failures = final_gate.validate_identity_evidence(
+        [(identity_report, {"role": "identity_report"})],
+        identity_metadata,
+        release_sha,
+    )
+    identity_failures.extend(
+        final_gate.validate_identity_checksum_binding(identity_report, checksums)
+    )
+    if identity_failures:
+        raise ValueError(
+            "engine identity evidence is invalid: " + "; ".join(identity_failures)
+        )
     verification_command = [
         cosign,
         "verify-blob",
@@ -218,6 +234,17 @@ def finalize(
     evidence["source_release_sha"] = source_release_sha
     evidence["release_sha"] = release_sha
     gates = evidence["gates"]
+    gates[prerelease.IDENTITY_GATE] = {
+        "kind": final_gate.EXPECTED_KINDS[prerelease.IDENTITY_GATE],
+        "metadata": identity_metadata,
+        "artifacts": [
+            {
+                "role": "identity_report",
+                "path": relative_path(root, identity_report),
+                "sha256": sha256(identity_report),
+            }
+        ],
+    }
     gates[prerelease.SIGNED_GATE] = {
         "kind": "signed_release",
         "metadata": {
@@ -295,6 +322,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--sbom", type=Path, required=True)
     parser.add_argument("--checksums", type=Path, required=True)
     parser.add_argument("--signature", type=Path, required=True)
+    parser.add_argument("--identity-report", type=Path, required=True)
     parser.add_argument("--output-evidence", type=Path, required=True)
     parser.add_argument("--output-config", type=Path, required=True)
     parser.add_argument("--cosign", default="cosign")
@@ -307,6 +335,7 @@ def main(argv: list[str]) -> int:
             sbom=args.sbom,
             checksums=args.checksums,
             signature=args.signature,
+            identity_report=args.identity_report,
             output_evidence=args.output_evidence,
             output_config=args.output_config,
             cosign=args.cosign,

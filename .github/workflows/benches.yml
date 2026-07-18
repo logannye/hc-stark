@@ -1,8 +1,6 @@
 name: Fixed-host Plonky3 reports
 
 on:
-  schedule:
-    - cron: "0 3 * * 0"
   workflow_dispatch:
     inputs:
       release_matrix:
@@ -24,7 +22,7 @@ env:
 
 jobs:
   one-million-rows:
-    if: github.event_name == 'schedule' || !inputs.release_matrix
+    if: github.event_name == 'workflow_dispatch' && !inputs.release_matrix && !inputs.exploratory_128m
     # Release evidence must come from the labeled 8-vCPU/16-GB NVMe host, not a
     # variable GitHub-hosted runner. The job remains queued until that host is
     # deliberately provisioned and online.

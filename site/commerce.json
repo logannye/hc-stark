@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "provider": "lemon_squeezy",
+  "checkout_enabled": false,
+  "launch_gate_status": "blocked",
+  "canonical_launch_gate": "release/guard-launch-gates-v1.json",
+  "configuration_source": "reviewed_release_build",
+  "variants": {
+    "annual": {"reviewed": false, "checkout_url": null},
+    "monthly": {"reviewed": false, "checkout_url": null}
+  },
+  "customer_portal_url": null,
+  "note": "Checkout must remain disabled until every canonical launch gate has reviewed evidence. Do not add a checkout URL directly to page markup."
+}

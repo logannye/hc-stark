@@ -395,7 +395,7 @@ def main() -> int:
         "production example still advertises unreviewed HTTP backup ingest",
     )
     require(
-        "unexpected recovery secrets"
+        "unexpected static-site secrets"
         in text("scripts/ci/cloudflare_pages_secret_check.py"),
         "Cloudflare live inventory no longer rejects arbitrary secrets",
     )
@@ -415,15 +415,22 @@ def main() -> int:
         "cancel-in-progress: false",
         "fetch-depth: 0",
         "finalize_signed_evidence.py",
-        "build_commercial_authorization.py",
-        "backend-v1-commercial-authorization.json",
-        "backend-v1-commercial-authorization.sigstore.json",
-        "backend-v1-release-ready-report.json",
+        "build_engine_identity_report.py",
+        "engine-identity.json",
         "cargo build --locked",
-        "tinyzkp-backend.spdx.json",
+        "tinyzkp-engine.spdx.json",
         "cosign sign-blob",
     ):
         require(marker in release_workflow, f"release workflow lost integrity control: {marker}")
+    for retired in (
+        "build_commercial_authorization.py",
+        "backend-v1-commercial-authorization",
+        "backend-v1-release-ready-report",
+    ):
+        require(
+            retired not in release_workflow,
+            f"release workflow reactivated retired billing authorization: {retired}",
+        )
     require(
         reviewed_action_count(
             release_workflow,
@@ -558,14 +565,11 @@ def main() -> int:
     for failure in fixed_host_workflow_failures(benches_workflow):
         require(False, failure)
 
-    for workflow_path in (
-        ".github/workflows/publish-backend-crates.yml",
-        ".github/workflows/publish-sdks.yml",
-    ):
+    for workflow_path in (".github/workflows/publish-backend-crates.yml",):
         publish_workflow = text(workflow_path)
         for marker in (
             "fetch-depth: 0",
-            "tinyzkp-backend.spdx.json",
+            "tinyzkp-engine.spdx.json",
             "--certificate-identity-regexp",
             "--certificate-oidc-issuer",
             "gh attestation verify release-artifacts/backend-v1-final-evidence.json",

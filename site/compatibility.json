@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "profile": "tinyzkp-p3-goldilocks-v1",
+  "platform": {
+    "operating_system": "linux",
+    "architecture": "x86_64"
+  },
+  "plonky3_version": "0.6.1",
+  "field": "goldilocks",
+  "extension_degree": 2,
+  "permutation": "poseidon2_width_8",
+  "verifier": "p3_uni_stark_0.6.1",
+  "declarative_operators": [
+    "current",
+    "next",
+    "public",
+    "constant",
+    "add",
+    "subtract",
+    "multiply"
+  ],
+  "limits": {
+    "minimum_rows": 1024,
+    "maximum_rows": 16777216,
+    "maximum_trace_width": 256,
+    "maximum_constraint_degree": 3
+  },
+  "explicitly_unsupported": [
+    "lookups",
+    "buses",
+    "AIR permutations",
+    "multi-table AIRs",
+    "preprocessed columns",
+    "periodic columns",
+    "custom fields",
+    "recursion profiles",
+    "GPUs",
+    "arbitrary Plonky3 forks",
+    "Windows",
+    "macOS production proving"
+  ],
+  "release": {
+    "guard_version": "0.1.0",
+    "guard_source_identity": "unqualified",
+    "engine_source_identity": "unqualified",
+    "engine_artifact_sha256": "unqualified",
+    "release_identity": "tinyzkp-guard/0.1.0+guard.unqualified.engine.unqualified.artifact.unqualified",
+    "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
+    "qualification": "blocked_pending_external_review_and_evidence"
+  }
+}

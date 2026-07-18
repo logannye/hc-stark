@@ -16,46 +16,30 @@ stable source-tree digest. Both release jobs use full Git history so this proof
 cannot silently degrade under a shallow checkout.
 
 Release evidence has two explicit stages. A candidate config has `status` set
-to `candidate` and contains exactly the fourteen gates that can exist before
-artifact signing; validate it with `backend_prerelease_ready.py`. The backend
-release workflow then builds and signs the artifacts, verifies the Sigstore
-bundle, and runs `finalize_signed_evidence.py`. That command is the only
-supported way to add the signed-release gate and emit the final `ready` config.
-The full `backend_release_ready.py` gate is rerun against those generated files
-before a draft release can be created.
+to `candidate` and contains exactly the thirteen gates that can exist before
+artifact construction; validate it with `backend_prerelease_ready.py`. The
+release workflow then builds the engine CLI and OCI archive, creates their
+typed identity report, signs the exact artifact inventory, verifies the
+Sigstore bundle, and runs `finalize_signed_evidence.py`. That command adds the
+post-build identity and signed-release gates and emits the final `ready`
+config. The full `backend_release_ready.py` gate is rerun against those files
+before a draft release can be created. No billing or commercial authorization
+artifact is part of the public engine release.
 
-After that independent rerun succeeds, `build_commercial_authorization.py`
-revalidates the final config/evidence, the signed checksum manifest, the SPDX
-SBOM, and the frozen Sigstore workflow identity. It emits an owner-only typed
-release-ready report plus the exact eleven-field commercial authorization
-consumed by TinyZKP annual contract billing. The authorization binds the final
-release SHA, stable source-tree digest, final evidence, validator report,
-signed checksum manifest, and Sigstore bundle by SHA-256. Both new files are
-included in the release workflow's GitHub artifact attestation. The workflow
-also keyless-signs the authorization itself and immediately verifies the
-resulting `backend-v1-commercial-authorization.sigstore.json` against the
-frozen release-workflow identity and GitHub OIDC issuer. The billing operator
-must install and independently verify both files. They are not
-inserted into the already signed checksum manifest, which would introduce an
-ordering/self-reference cycle. An operator must verify the GitHub attestation,
-install the authorization with mode `0600`, recompute its SHA-256 locally, and
-configure that exact digest. A handwritten authorization is not a supported
-release path.
-
-Signed finalization requires the checksum manifest to cover every production
-CLI/API/MCP binary, the maintenance OCI archive, compatibility profile,
-candidate gate file, embedded CLI identity, and a valid SPDX JSON SBOM. Cosign
+Signed finalization requires the checksum manifest to contain exactly the
+public engine binary, customer-operated engine OCI archive, compatibility
+profile, candidate gate file, engine identity files, and valid SPDX JSON SBOM.
+Hosted API, MCP, beta, SDK, and billing artifacts are rejected. Cosign
 verification pins both GitHub's OIDC issuer and the TinyZKP
 `release-backend.yml@refs/tags/backend-v*` workflow certificate identity; a
 valid signature from an unrelated keyless principal is rejected.
 
-Crate and SDK publication redownload every checksummed artifact and perform a
+Crate publication redownloads every checksummed artifact and performs a
 complete checksum verification without `--ignore-missing`. They repeat the
 pinned Cosign identity/issuer check, verify the GitHub attestations for final
 evidence and config against the release workflow, tag ref, source digest, and
 GitHub-hosted runner policy, and require both the tag target and checked-out
-`HEAD` to equal the final evidenced SHA. Downstream WASM and MCP builds check
-out that SHA directly rather than resolving the tag again.
+`HEAD` to equal the final evidenced SHA.
 
 Do not hand-author digests. Run `build_candidate_evidence.py template` to create
 an unhashed input skeleton, fill its required metadata/roles, then run
@@ -64,73 +48,38 @@ fields, unknown or missing gates, duplicate roles, symlinks, unsafe paths, and
 semantically invalid evidence before emitting an owner-only candidate manifest
 and config.
 
-For source, compatibility, verifier, deterministic-proof, and SDK gates, run
-the exact template command through `run_evidenced_command.py`. The resulting
-`test_report` binds the command, release SHA, compatibility profile, execution
-profile, exit status, timestamps, duration, and SHA-256 of the separately
-hashed `test_log`; typed metadata alone cannot claim a successful test run.
-
-The SDK gate has a separate, explicit network preparation step. On the
-reviewed CPython 3.12 glibc x86_64 host, materialize the ten committed Python
-wheels and seven committed npm tarballs into separate empty owner-only
-directories before starting evidence execution. Preparation rejects proxies,
-redirects, URL skew, digest/size skew, and unsafe archive metadata. The evidence
-runner never downloads dependencies. It copies verified bytes into sealed
-Linux memfds, makes the mutable source directories inaccessible to the child,
-and executes the SDK gate inside a fresh isolated IP network namespace plus the
-Landlock write boundary. This boundary does not yet deny pathname Unix-domain
-socket connections, so it is one of the explicit blockers below rather than a
-complete no-network sandbox:
+For source, compatibility, verifier, deterministic-proof, and AIR job-contract
+gates, run the exact template command through `run_evidenced_command.py`. The
+resulting `test_report` binds the command, release SHA, compatibility profile,
+execution profile, exit status, timestamps, duration, and SHA-256 of the
+separately hashed `test_log`; typed metadata alone cannot claim a successful
+test run. The AIR contract gate is local and has no SDK dependency inputs:
 
 ```bash
-install -d -m 0700 release/evidence/sdk-python-wheelhouse
-python3.12 scripts/ci/verify_sdk_python_wheelhouse.py materialize \
-  --wheelhouse release/evidence/sdk-python-wheelhouse
-python3.12 scripts/ci/verify_sdk_npm_tarballs.py \
-  --materialize release/evidence/sdk-npm-tarballs
-python3.12 scripts/release/run_evidenced_command.py \
-  --gate replacement_sdk_contracts \
+python3 scripts/release/run_evidenced_command.py \
+  --gate air_job_contracts \
   --release-sha "$HC_RELEASE_SHA" \
-  --sdk-python-wheelhouse release/evidence/sdk-python-wheelhouse \
-  --sdk-npm-tarballs release/evidence/sdk-npm-tarballs \
-  --report release/evidence/sdk-contracts/test-report.json \
-  --log release/evidence/sdk-contracts/test.log
+  --report release/evidence/air-job-contracts/test-report.json \
+  --log release/evidence/air-job-contracts/test.log
 ```
 
-The wheelhouse location is not an authorization or dependency override. Every
-byte and package field is recomputed from the exact release commit, and the
-runner rejects extra files, path overlap, missing memfd seals, platform skew,
-network-namespace failure, and the old environment-flag shortcut. npm is never
-executed: the reviewed extractor creates `node_modules`, and the FD-held Node
-interpreter invokes the exact TypeScript compiler and tests directly.
+Release-identity evidence is created after both public artifacts exist. Generate
+the owner-only `identity_report` with:
 
-The SDK gate also requires the fixed Linux Python runtime to match the reviewed
-committed anchor. The repository intentionally ships that anchor as
-`unconfigured`. `python3.12 scripts/ci/capture_sdk_python_runtime.py` emits only
-a read-only candidate; its output alone must not be promoted to `reviewed`.
-Before promotion, the evidence host still needs a hermetic or immutable Python
-runtime (including stdlib/shared libraries and the copied venv interpreter), a
-dedicated unprivileged identity with no supplementary groups, and denial or
-isolation of pathname Unix-domain sockets. These controls close same-UID
-swap-and-restore and host-socket escape paths that aggregate pre/post hashing
-cannot close.
+```bash
+python3 scripts/release/build_engine_identity_report.py \
+  --release-sha "$HC_RELEASE_SHA" \
+  --release-ref "$HC_RELEASE_REF" \
+  --engine release-artifacts/tinyzkp-engine-linux-x86_64 \
+  --engine-release release-artifacts/engine-release.json \
+  --oci-archive release-artifacts/tinyzkp-engine.oci.tar \
+  --compatibility-manifest release-artifacts/plonky3-compatibility-v1.json \
+  --output release-artifacts/engine-identity.json
+```
 
-Ambient Cargo state is also excluded: the runner supplies an empty private
-`CARGO_HOME`, so user config, rustc wrappers, linker overrides, source
-replacement, and mutable registry caches cannot affect evidence. Consequently,
-the SDK gate remains fail-closed until Cargo dependencies are committed as a
-reviewed vendor tree/config and wasm-pack's matching wasm-bindgen helper is
-added to the committed tool inventory. The native linker, `cc`, `ar`, build
-scripts, Rust sysroot libraries, and any other descendant executable must also
-be hermetic or added to the reviewed inventory. Neither an ambient cache nor a
-helper download can satisfy the SDK evidence gate.
-
-Release-identity evidence must use the `identity_report` role. Generate it with
-`release_identity_check.py --expected-sha <sha> --cli-release-file <file>
---benchmark-report <report> --output <file>`. The checker reads the deployed
-site, API, and MCP identities, binds the local CLI and optional benchmark to the
-same release, rejects package-version skew, and writes the typed report with
-owner-only permissions. A manually copied identity map is not sufficient.
+The checker binds the engine metadata, OCI configuration and digests,
+compatibility profile, non-root runtime contract, and signed artifact hashes.
+A manually copied identity map or pre-build placeholder is not sufficient.
 
 Generate the deterministic preliminary Rust dependency SBOM, then use
 `scripts/release/build_review_bundle.py` to assemble review materials. The
@@ -155,11 +104,11 @@ created="$(git show -s --format=%cI "$HC_RELEASE_SHA")"
 python3 scripts/release/build_preliminary_sbom.py \
   --release-sha "$HC_RELEASE_SHA" \
   --created "$created" \
-  --output raw-reports/tinyzkp-backend-preliminary.spdx.json
+  --output raw-reports/tinyzkp-engine-preliminary.spdx.json
 python3 scripts/release/build_review_bundle.py \
   --release-sha "$HC_RELEASE_SHA" \
-  --sbom raw-reports/tinyzkp-backend-preliminary.spdx.json \
-  --output raw-reports/tinyzkp-backend-review.zip
+  --sbom raw-reports/tinyzkp-engine-preliminary.spdx.json \
+  --output raw-reports/tinyzkp-engine-review.zip
 ```
 
 External review and design-partner records must be added by an authorized

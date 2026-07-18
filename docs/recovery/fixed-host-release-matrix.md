@@ -101,7 +101,7 @@ without this authority-limiting manifest is not admissible release evidence.
 
 The `Fixed-host Plonky3 reports` workflow exposes a manual `release_matrix`
 input. Selecting it runs the single controller job and suppresses the older
-fragmented jobs. Scheduled 1M jobs remain useful telemetry, but their separate
-artifacts are not the stable-host-bound backend release matrix. The controller
-artifact is still first-party evidence; a different authorized reproducer must
-run and sign the independent record.
+fragmented jobs. There is no scheduled benchmark workload: the controller runs
+only during deliberate qualification so TinyZKP does not require an always-on
+self-hosted runner. The controller artifact is still first-party evidence; a
+different authorized reproducer must run and sign the independent record.

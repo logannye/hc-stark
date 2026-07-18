@@ -22,6 +22,7 @@ ACTION_ALLOWLIST = {
     "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
     "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
     "anchore/sbom-action": "e22c389904149dbc22b58101806040fa8d37a610",
+    "cloudflare/wrangler-action": "9acf94ace14e7dc412b076f2c5c20b8ce93c79cd",
     "docker/setup-buildx-action": "bb05f3f5519dd87d3ba754cc423b652a5edd6d2c",
     "dtolnay/rust-toolchain": "4be7066ada62dd38de10e7b70166bc74ed198c30",
     "sigstore/cosign-installer": "f713795cb21599bc4e5c4b58cbad1da852d7eeb9",

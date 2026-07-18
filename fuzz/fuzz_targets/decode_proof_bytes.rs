@@ -2,10 +2,7 @@
 
 use libfuzzer_sys::fuzz_target;
 
-use hc_sdk::{
-    proof::decode_proof_bytes,
-    types::ProofBytes,
-};
+use hc_sdk::{proof::decode_proof_bytes, types::ProofBytes};
 
 fuzz_target!(|data: &[u8]| {
     // Treat input as "opaque proof bytes" with a plausible version.
@@ -16,5 +13,3 @@ fuzz_target!(|data: &[u8]| {
     };
     let _ = decode_proof_bytes(&proof);
 });
-
-

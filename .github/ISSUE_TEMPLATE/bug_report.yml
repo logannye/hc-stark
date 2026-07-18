@@ -1,0 +1,54 @@
+name: Supported-profile defect
+description: Report a reproducible TinyZKP engine or Guard defect without sensitive data.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form only for the published compatibility profile. Do not attach witnesses, traces, proofs containing confidential data, license keys, customer information, credentials, or proprietary AIR source.
+  - type: input
+    id: release
+    attributes:
+      label: Exact release identity
+      description: Paste the release SHA from `version --json` or `hc-cli release`.
+      placeholder: 40 lowercase hexadecimal characters
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Scrubbed compatibility result
+      description: Include only the profile, platform, supported status, and reason codes.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal non-sensitive reproduction
+      description: Use a synthetic or public workload. Never upload a real witness or private trace.
+    validations:
+      required: true
+  - type: textarea
+    id: verifier
+    attributes:
+      label: Official verifier result
+      description: Include the boolean result and non-sensitive error class, if available.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Scrubbed diagnostics
+      description: Remove absolute user paths, hostnames, license material, witnesses, public customer identifiers, and secrets.
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Data-safety confirmation
+      options:
+        - label: I confirmed this report contains no witness, trace, proof secret, license key, credential, customer data, or proprietary source.
+          required: true
+        - label: I reproduced this on the published supported profile.
+          required: true

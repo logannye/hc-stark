@@ -58,8 +58,6 @@ def expected_tool_names() -> frozenset[str]:
         command = list(spec["command"])
         primary = str(command[0])
         names.add(primary)
-        if primary == "bash" and "sdk_contract_gate.sh" in str(command[1]):
-            names.update({"python3", "node", "wasm-pack"})
     names.difference_update({"cargo", "rustc"})
     return frozenset(names)
 

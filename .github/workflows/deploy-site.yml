@@ -1,0 +1,49 @@
+name: Deploy TinyZKP static site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "release/guard-launch-gates-v1.json"
+      - "scripts/ci/guard_launch_gate.py"
+      - "scripts/ci/site_route_check.py"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tinyzkp-site-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.TINYZKP_SITE_AUTODEPLOY == 'enabled'
+    runs-on: ubuntu-latest
+    environment: tinyzkp-production
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      - name: Validate fail-closed commerce and static routes
+        run: |
+          python3 scripts/ci/guard_launch_gate.py
+          python3 scripts/ci/site_route_check.py
+          node --check site/_worker.js
+
+      - name: Deploy exact main revision to Cloudflare Pages
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy site
+            --project-name tinyzkp
+            --branch main
+            --commit-hash ${{ github.sha }}
+            --commit-message "Guard static site ${{ github.sha }}"

@@ -17,7 +17,7 @@ SPEC.loader.exec_module(module)
 def test_template_contains_exact_unsigned_gate_set():
     value = module.template()
     assert set(value["gates"]) == module.prerelease.EXPECTED_GATES
-    assert module.prerelease.SIGNED_GATE not in value["gates"]
+    assert module.prerelease.POSTBUILD_GATES.isdisjoint(value["gates"])
     for name, gate in value["gates"].items():
         assert [artifact["role"] for artifact in gate["artifacts"]] == module.GATE_ROLES[name]
     assert len(value["gates"]["one_million_row_resource_gate"]["artifacts"]) == 11
