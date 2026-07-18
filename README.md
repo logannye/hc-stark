@@ -112,6 +112,14 @@ tinyzkp-engine plonky3 prove-air \
   --checkpoint-dir <job-directory/checkpoint> \
   --output <air-proof-bundle-v1.json>
 
+tinyzkp-engine plonky3 inspect-checkpoint \
+  --checkpoint <job-directory/checkpoint/checkpoint.json> \
+  --air <air-package-v1.json> \
+  --trace-manifest <trace-manifest-v1.json> \
+  --chunks-dir <trace-chunks> \
+  --public-inputs <public-inputs-v1.json> \
+  --policy <resource-policy-v1.json>
+
 tinyzkp-engine plonky3 resume-air \
   --air <air-package-v1.json> \
   --trace-manifest <trace-manifest-v1.json> \
@@ -123,7 +131,9 @@ tinyzkp-engine plonky3 resume-air \
 tinyzkp-engine plonky3 verify-air --bundle <air-proof-bundle-v1.json>
 ```
 
-`resume-air` validates every checkpoint identity and durable artifact,
+`inspect-checkpoint` performs the same identity and durable-artifact checks
+without changing job state. `resume-air` then validates every checkpoint
+identity and durable artifact,
 reconstructs the uploaded declarative workload, restores the official
 challenger state, and continues from the last completed phase. Exact-release
 crash/resume tests require the resulting proof bytes to match an uninterrupted

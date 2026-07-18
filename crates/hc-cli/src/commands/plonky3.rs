@@ -10,7 +10,7 @@ use hc_plonky3::contracts::{
     MAX_TRACE_UNCOMPRESSED_BYTES, MIN_CUSTOM_TRACE_ROWS,
 };
 use hc_plonky3::{
-    plan_declarative_statement,
+    inspect_resource_bounded_checkpoint, plan_declarative_statement,
     prove_resource_with_policy_observed_with_cancellation_at_checkpoint_dir,
     resume_resource_bounded_with_cancellation_observed, InternalProofBundle,
     ResourceBoundedUniStarkProver, UploadedTraceWorkload, WorkloadKind, COMPATIBILITY_PROFILE,
@@ -24,9 +24,9 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tinyzkp_contracts::{
-    parse_strict_json, EngineEstimateResultV1, EngineOperationReportV1, EngineProgressEventV1,
-    EngineVerifyResultV1, ReasonCodeV1, ReasonV1, ResourceEstimateV1, ResourceEstimatesV1,
-    ResourcePreflightV1, ResourceUsageV1, SelectedModeV1,
+    parse_strict_json, EngineCheckpointInspectResultV1, EngineEstimateResultV1,
+    EngineOperationReportV1, EngineProgressEventV1, EngineVerifyResultV1, ReasonCodeV1, ReasonV1,
+    ResourceEstimateV1, ResourceEstimatesV1, ResourcePreflightV1, ResourceUsageV1, SelectedModeV1,
 };
 
 pub fn validate_air(air_path: &Path) -> Result<()> {
@@ -330,6 +330,57 @@ pub fn pack_trace(
     let manifest_path = output_dir.join("trace-manifest-v1.json");
     write_json_atomic(&manifest_path, &manifest)?;
     println!("{}", manifest_path.display());
+    Ok(())
+}
+
+pub fn inspect_checkpoint(
+    checkpoint_path: &Path,
+    air_path: &Path,
+    trace_manifest_path: &Path,
+    chunks_dir: &Path,
+    public_inputs_path: &Path,
+    policy_path: &Path,
+) -> Result<()> {
+    let checkpoint_present = match fs::symlink_metadata(checkpoint_path) {
+        Ok(metadata) => metadata.file_type().is_file(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(ProtocolFailure::new(ReasonCodeV1::CheckpointMissing).into())
+        }
+        Err(_) => false,
+    };
+    let air: AirPackageV1 = read_json_limited(air_path, MAX_AIR_JSON_BYTES)?;
+    let trace_manifest: TraceManifestV1 =
+        read_json_limited(trace_manifest_path, MAX_TRACE_MANIFEST_JSON_BYTES)?;
+    let public_inputs: PublicInputsV1 =
+        read_json_limited(public_inputs_path, MAX_MANIFEST_JSON_BYTES)?;
+    let policy: ResourcePolicyV1 = read_json_limited(policy_path, MAX_MANIFEST_JSON_BYTES)?;
+    air.validate()
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
+    trace_manifest
+        .validate_for_air(&air)
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
+    public_inputs
+        .validate_for_air(&air)
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
+    policy
+        .validate()
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
+    let workload =
+        UploadedTraceWorkload::new(air, trace_manifest, public_inputs.values, chunks_dir)
+            .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
+    workload
+        .validate_trace_chunks()
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
+    inspect_resource_bounded_checkpoint(checkpoint_path, &workload, &policy)
+        .map_err(|error| map_checkpoint_inspection_error(error, checkpoint_present))?;
+    write_stdout_result(&EngineCheckpointInspectResultV1 {
+        schema_version: 1,
+        engine_release_identity: hc_plonky3::release_identity(),
+        compatibility_profile: COMPATIBILITY_PROFILE.to_owned(),
+        valid: true,
+        checkpoint_release_identity_match: true,
+        selected_mode: SelectedModeV1::Bounded,
+    })?;
     Ok(())
 }
 
@@ -825,6 +876,9 @@ fn map_prover_error(
         BoundedProverError::Verification(_) => {
             ProtocolFailure::new(ReasonCodeV1::VerificationRejected)
         }
+        BoundedProverError::CheckpointReleaseMismatch => {
+            ProtocolFailure::new(ReasonCodeV1::CheckpointReleaseMismatch)
+        }
         BoundedProverError::InvalidCheckpoint | BoundedProverError::CheckpointPayload(_) => {
             ProtocolFailure::new(ReasonCodeV1::CheckpointCorrupt)
         }
@@ -840,6 +894,30 @@ fn map_prover_error(
         BoundedProverError::Io(error) if error.kind() == std::io::ErrorKind::StorageFull => {
             ProtocolFailure::new(ReasonCodeV1::ScratchSpaceInsufficient)
         }
+        _ => ProtocolFailure::new(ReasonCodeV1::InternalError),
+    }
+}
+
+fn map_checkpoint_inspection_error(
+    error: hc_plonky3::BoundedProverError,
+    checkpoint_present: bool,
+) -> ProtocolFailure {
+    use hc_plonky3::BoundedProverError;
+    match error {
+        BoundedProverError::CheckpointReleaseMismatch => {
+            ProtocolFailure::new(ReasonCodeV1::CheckpointReleaseMismatch)
+        }
+        BoundedProverError::Stream(hc_stream::StreamError::UnsafePath) => {
+            ProtocolFailure::new(ReasonCodeV1::UnsafePath)
+        }
+        BoundedProverError::Stream(hc_stream::StreamError::Io(error))
+            if !checkpoint_present && error.kind() == std::io::ErrorKind::NotFound =>
+        {
+            ProtocolFailure::new(ReasonCodeV1::CheckpointMissing)
+        }
+        BoundedProverError::InvalidCheckpoint
+        | BoundedProverError::CheckpointPayload(_)
+        | BoundedProverError::Stream(_) => ProtocolFailure::new(ReasonCodeV1::CheckpointCorrupt),
         _ => ProtocolFailure::new(ReasonCodeV1::InternalError),
     }
 }

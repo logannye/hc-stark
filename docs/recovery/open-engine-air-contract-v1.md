@@ -43,7 +43,8 @@ tinyzkp-engine doctor --job <job-manifest-v1.json>
 ```
 
 The sample at `examples/plonky3/job-manifest-v1.example.json` documents every
-v1 field. All paths are relative. Workload paths resolve beneath
+v1 field. The `--job` argument and every path inside the manifest must be
+relative; absolute manifest paths are rejected. Workload paths resolve beneath
 `roots.input_root`; job, output, and scratch paths resolve beneath their
 respective roots.
 
@@ -100,6 +101,31 @@ checkpoint directory rather than silently reusing or overwriting job state.
 `--reference` forces the conventional path for differential evidence while
 retaining the configured resident-memory cap.
 
+Inspect a bounded checkpoint before offering resume:
+
+```text
+tinyzkp-engine plonky3 inspect-checkpoint \
+  --checkpoint <job-directory/checkpoint/checkpoint.json> \
+  --air <air.json> \
+  --trace-manifest <trace-manifest.json> \
+  --chunks-dir <packed-trace-directory> \
+  --public-inputs <public-inputs.json> \
+  --policy <resource-policy.json>
+```
+
+Inspection is strictly read-only. It validates `CheckpointManifestV2`
+structure, the compressed and uncompressed trace chunk digests, canonical
+Goldilocks values, every durable artifact digest, and exact backend, profile,
+dependency-lock, engine-release, workload, input, and resource-policy
+identity. The supplied policy must be the exact policy used to create the
+checkpoint; reading the policy embedded in the checkpoint alone would prove
+only internal consistency, not that it matches the caller's current job.
+Inspection neither creates nor repairs state. Success is exactly one
+`EngineCheckpointInspectResultV1`; the result contains no paths, input
+identifiers, digests, policy details, witness values, or license material.
+Missing, malformed, truncated, corrupt, unsafe, and stale-release checkpoints
+fail closed through the finite reason vocabulary.
+
 Resume the same exact release:
 
 ```text
@@ -150,6 +176,7 @@ The focused contract tests are:
 ```text
 cargo test --locked -p tinyzkp-contracts
 cargo test --locked -p hc-cli --test cli_roundtrip plonky3_air_job_contracts -- --exact
+cargo test --locked -p hc-cli --test cli_roundtrip checkpoint_inspection_is_complete_typed_and_read_only -- --exact
 cargo test --locked -p hc-cli --test cli_roundtrip declarative_air_sigterm_uses_exact_checkpoint_dir_and_typed_resume_protocol -- --exact
 cargo test --locked -p hc-cli --test cli_roundtrip schemas_are_exported_from_rust_contracts -- --exact
 ```

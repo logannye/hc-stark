@@ -11,10 +11,11 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use tinyzkp_contracts::{
-    parse_strict_json, select_and_preflight, DoctorReportV1, EngineProgressEventV1, ExitClassV1,
-    JobManifestV1, PlatformIdentifierV1, ReasonCodeV1, ReasonV1, RequestedModeV1,
-    ResourceEstimateV1, ResourceEstimatesV1, ResourcePreflightV1, COMPATIBILITY_PROFILE,
-    MAX_AIR_BYTES, MAX_MANIFEST_BYTES, MAX_PUBLIC_INPUT_BYTES, MAX_TRACE_COMPRESSED_BYTES,
+    declaration_failure_preflight, failed_resource_preflight, parse_strict_json,
+    select_and_preflight, DoctorReportV1, EngineProgressEventV1, ExitClassV1, JobManifestV1,
+    PlatformIdentifierV1, ReasonCodeV1, ReasonV1, RequestedModeV1, ResourceEstimateV1,
+    ResourceEstimatesV1, ResourcePreflightV1, COMPATIBILITY_PROFILE, MAX_AIR_BYTES,
+    MAX_MANIFEST_BYTES, MAX_PUBLIC_INPUT_BYTES, MAX_TRACE_COMPRESSED_BYTES,
     MAX_TRACE_MANIFEST_BYTES,
 };
 
@@ -147,6 +148,11 @@ fn run_with_host(
         "doctor_inputs_validated",
         "validation",
     ));
+    let resource_minimum_reasons: Vec<_> = declared_reasons
+        .iter()
+        .filter(|reason| reason.class == ExitClassV1::InsufficientResources)
+        .cloned()
+        .collect();
     let policy = ResourcePolicyV1 {
         mode: match manifest.mode {
             RequestedModeV1::Auto => ResourceMode::Auto,
@@ -159,6 +165,15 @@ fn run_with_host(
         max_threads: usize::from(manifest.max_threads),
         checkpoint_policy: CheckpointPolicy::RetainOnFailure,
     };
+    // Estimation itself requires a structurally valid policy. For a manifest
+    // below the hard declaration minima, clamp only this read-only estimation
+    // copy so the complete exit-12 report can still include both estimates.
+    let mut estimation_policy = policy;
+    if !resource_minimum_reasons.is_empty() {
+        estimation_policy.max_resident_bytes =
+            estimation_policy.max_resident_bytes.max(16 * 1024 * 1024);
+        estimation_policy.max_scratch_bytes = estimation_policy.max_scratch_bytes.max(1);
+    }
     emit_progress(&EngineProgressEventV1::simple(
         &hc_plonky3::release_identity(),
         "doctor_estimating",
@@ -168,7 +183,7 @@ fn run_with_host(
         air,
         trace.logical_rows,
         &public_inputs.values,
-        &policy,
+        &estimation_policy,
     )
     .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     let estimates = ResourceEstimatesV1 {
@@ -180,10 +195,6 @@ fn run_with_host(
         None => fs2::available_space(&paths.scratch_measurement_root).ok(),
     };
 
-    let resource_minimum_reasons: Vec<_> = declared_reasons
-        .into_iter()
-        .filter(|reason| reason.class == ExitClassV1::InsufficientResources)
-        .collect();
     if !resource_minimum_reasons.is_empty() {
         return write_report(
             &manifest,
@@ -207,21 +218,13 @@ fn run_with_host(
             0,
         ),
         Err(reason) => {
-            let required = reason.required_bytes;
+            let preflight = failed_resource_preflight(&manifest, available, &reason);
             write_report(
                 &manifest,
                 false,
                 None,
                 Some(estimates),
-                ResourcePreflightV1 {
-                    ram_budget_bytes: manifest.ram_budget_bytes,
-                    scratch_budget_bytes: manifest.scratch_budget_bytes,
-                    available_scratch_bytes: available,
-                    memory_selection_threshold_bytes: tinyzkp_contracts::memory_selection_threshold(
-                        manifest.ram_budget_bytes,
-                    ),
-                    scratch_required_with_headroom_bytes: required,
-                },
+                preflight,
                 vec![reason],
                 ExitClassV1::InsufficientResources.exit_code(),
             )
@@ -238,9 +241,10 @@ fn write_report(
     reasons: Vec<ReasonV1>,
     exit_code: u8,
 ) -> Result<u8> {
+    let release_identity = hc_plonky3::release_identity();
     let report = DoctorReportV1 {
         schema_version: 1,
-        engine_release_identity: hc_plonky3::release_identity(),
+        engine_release_identity: release_identity.clone(),
         compatibility_profile: COMPATIBILITY_PROFILE.to_owned(),
         ready,
         requested_mode: manifest.mode,
@@ -249,6 +253,9 @@ fn write_report(
         preflight,
         reasons,
     };
+    if !report.validate_for_manifest(&release_identity, manifest) {
+        return Err(ProtocolFailure::new(ReasonCodeV1::InternalError).into());
+    }
     let mut stdout = std::io::stdout().lock();
     serde_json::to_writer(&mut stdout, &report)
         .map_err(|_| ProtocolFailure::new(ReasonCodeV1::InternalError))?;
@@ -270,15 +277,7 @@ fn empty_preflight(
     manifest: &JobManifestV1,
     available_scratch_bytes: Option<u64>,
 ) -> ResourcePreflightV1 {
-    ResourcePreflightV1 {
-        ram_budget_bytes: manifest.ram_budget_bytes,
-        scratch_budget_bytes: manifest.scratch_budget_bytes,
-        available_scratch_bytes,
-        memory_selection_threshold_bytes: tinyzkp_contracts::memory_selection_threshold(
-            manifest.ram_budget_bytes,
-        ),
-        scratch_required_with_headroom_bytes: None,
-    }
+    declaration_failure_preflight(manifest, available_scratch_bytes)
 }
 
 fn platform_identifier(operating_system: &str, architecture: &str) -> PlatformIdentifierV1 {
@@ -385,19 +384,10 @@ fn resolve_job_paths(
 }
 
 fn resolve_manifest_path(cwd: &Path, path: &Path) -> Result<PathBuf> {
-    if !path.is_absolute() {
-        return resolve_existing(cwd, path, ExpectedKind::File, MAX_MANIFEST_BYTES);
-    }
-    let metadata =
-        fs::symlink_metadata(path).map_err(|_| ProtocolFailure::new(ReasonCodeV1::UnsafePath))?;
-    if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
+    if path.is_absolute() {
         return Err(ProtocolFailure::new(ReasonCodeV1::UnsafePath).into());
     }
-    if metadata.len() > MAX_MANIFEST_BYTES {
-        return Err(ProtocolFailure::new(ReasonCodeV1::InputLimitExceeded).into());
-    }
-    path.canonicalize()
-        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::UnsafePath).into())
+    resolve_existing(cwd, path, ExpectedKind::File, MAX_MANIFEST_BYTES)
 }
 
 #[derive(Clone, Copy)]
@@ -716,6 +706,21 @@ mod tests {
     }
 
     #[test]
+    fn absolute_job_manifest_path_is_rejected() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let job = fixture(root);
+        let manifest = root.join("job.json");
+        fs::write(&manifest, serde_json::to_vec(&job).unwrap()).unwrap();
+        let error = resolve_manifest_path(root, &manifest).unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<ProtocolFailure>().unwrap().reason.code,
+            ReasonCodeV1::UnsafePath
+        );
+        assert!(resolve_manifest_path(root, Path::new("job.json")).is_ok());
+    }
+
+    #[test]
     fn root_overlap_and_missing_chunk_are_rejected() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
@@ -728,5 +733,33 @@ mod tests {
         let trace: TraceManifestV1 =
             read_json_limited(&root.join("inputs/trace.json"), MAX_TRACE_MANIFEST_BYTES).unwrap();
         assert!(validate_trace_chunks(&paths.chunks_dir, &trace).is_err());
+    }
+
+    #[test]
+    fn failed_preflight_reports_scratch_required_only_for_scratch_failures() {
+        let temp = tempfile::tempdir().unwrap();
+        let job = fixture(temp.path());
+        let ram = ReasonV1::new(ReasonCodeV1::RamBudgetInsufficient).resource(
+            256 * 1024 * 1024,
+            None,
+            Some(job.ram_budget_bytes),
+        );
+        assert_eq!(
+            failed_resource_preflight(&job, Some(900), &ram).scratch_required_with_headroom_bytes,
+            None
+        );
+
+        for code in [
+            ReasonCodeV1::ScratchBudgetInsufficient,
+            ReasonCodeV1::ScratchSpaceInsufficient,
+        ] {
+            let scratch =
+                ReasonV1::new(code).resource(1_000, Some(900), Some(job.scratch_budget_bytes));
+            assert_eq!(
+                failed_resource_preflight(&job, Some(900), &scratch)
+                    .scratch_required_with_headroom_bytes,
+                Some(1_000)
+            );
+        }
     }
 }

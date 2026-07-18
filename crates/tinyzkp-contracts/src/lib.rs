@@ -572,7 +572,84 @@ impl DoctorReportV1 {
             && is_safe_release_identity(&self.engine_release_identity)
             && self.compatibility_profile == COMPATIBILITY_PROFILE
             && self.reasons.iter().all(ReasonV1::validate)
+            && self.preflight.memory_selection_threshold_bytes
+                == memory_selection_threshold(self.preflight.ram_budget_bytes)
             && self.ready == (self.selected_mode.is_some() && self.reasons.is_empty())
+            && (!self.ready || self.estimates.is_some())
+            && match self.selected_mode {
+                Some(SelectedModeV1::Conventional) => self
+                    .preflight
+                    .scratch_required_with_headroom_bytes
+                    .is_none(),
+                Some(SelectedModeV1::Bounded) => self
+                    .preflight
+                    .scratch_required_with_headroom_bytes
+                    .is_some(),
+                None => true,
+            }
+    }
+
+    /// Validate all doctor semantics that can be recomputed from the original
+    /// job contract, including exact auto selection and resource preflight.
+    pub fn validate_for_manifest(
+        &self,
+        expected_release_identity: &str,
+        manifest: &JobManifestV1,
+    ) -> bool {
+        if !self.validate(expected_release_identity)
+            || self.requested_mode != manifest.mode
+            || self.preflight.ram_budget_bytes != manifest.ram_budget_bytes
+            || self.preflight.scratch_budget_bytes != manifest.scratch_budget_bytes
+        {
+            return false;
+        }
+        let Some(estimates) = &self.estimates else {
+            return !self.ready
+                && self.selected_mode.is_none()
+                && !self.reasons.is_empty()
+                && self
+                    .reasons
+                    .iter()
+                    .all(|reason| reason.class == ExitClassV1::Incompatible)
+                && self
+                    .preflight
+                    .scratch_required_with_headroom_bytes
+                    .is_none();
+        };
+        let declaration_resource_reasons: Vec<_> = manifest
+            .compatibility_reasons()
+            .into_iter()
+            .filter(|reason| reason.class == ExitClassV1::InsufficientResources)
+            .collect();
+        if !declaration_resource_reasons.is_empty() {
+            return !self.ready
+                && self.selected_mode.is_none()
+                && self.reasons == declaration_resource_reasons
+                && self.preflight
+                    == declaration_failure_preflight(
+                        manifest,
+                        self.preflight.available_scratch_bytes,
+                    );
+        }
+        match select_and_preflight(manifest, estimates, self.preflight.available_scratch_bytes) {
+            Ok((selected_mode, preflight)) => {
+                self.ready
+                    && self.selected_mode == Some(selected_mode)
+                    && self.preflight == preflight
+                    && self.reasons.is_empty()
+            }
+            Err(reason) => {
+                !self.ready
+                    && self.selected_mode.is_none()
+                    && self.reasons.as_slice() == [reason.clone()]
+                    && self.preflight
+                        == failed_resource_preflight(
+                            manifest,
+                            self.preflight.available_scratch_bytes,
+                            &reason,
+                        )
+            }
+        }
     }
 }
 
@@ -918,6 +995,34 @@ impl EngineOperationReportV1 {
             && self.engine_release_identity == expected_release_identity
             && is_safe_release_identity(&self.engine_release_identity)
             && self.wall_time_millis > 0
+    }
+}
+
+/// Internal engine-to-Guard wire result for read-only checkpoint inspection.
+///
+/// This type is intentionally not one of the frozen public schema artifacts.
+/// It carries only the minimum non-sensitive facts Guard needs before deciding
+/// whether to offer a resume operation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EngineCheckpointInspectResultV1 {
+    pub schema_version: u32,
+    pub engine_release_identity: String,
+    pub compatibility_profile: String,
+    pub valid: bool,
+    pub checkpoint_release_identity_match: bool,
+    pub selected_mode: SelectedModeV1,
+}
+
+impl EngineCheckpointInspectResultV1 {
+    pub fn validate(&self, expected_release_identity: &str) -> bool {
+        self.schema_version == 1
+            && self.engine_release_identity == expected_release_identity
+            && is_safe_release_identity(&self.engine_release_identity)
+            && self.compatibility_profile == COMPATIBILITY_PROFILE
+            && self.valid
+            && self.checkpoint_release_identity_match
+            && self.selected_mode == SelectedModeV1::Bounded
     }
 }
 
@@ -1473,6 +1578,39 @@ pub fn select_and_preflight(
             scratch_required_with_headroom_bytes,
         },
     ))
+}
+
+pub fn failed_resource_preflight(
+    manifest: &JobManifestV1,
+    available_scratch_bytes: Option<u64>,
+    reason: &ReasonV1,
+) -> ResourcePreflightV1 {
+    let scratch_required_with_headroom_bytes = match reason.code {
+        ReasonCodeV1::ScratchBudgetInsufficient | ReasonCodeV1::ScratchSpaceInsufficient => {
+            reason.required_bytes
+        }
+        _ => None,
+    };
+    ResourcePreflightV1 {
+        ram_budget_bytes: manifest.ram_budget_bytes,
+        scratch_budget_bytes: manifest.scratch_budget_bytes,
+        available_scratch_bytes,
+        memory_selection_threshold_bytes: memory_selection_threshold(manifest.ram_budget_bytes),
+        scratch_required_with_headroom_bytes,
+    }
+}
+
+pub fn declaration_failure_preflight(
+    manifest: &JobManifestV1,
+    available_scratch_bytes: Option<u64>,
+) -> ResourcePreflightV1 {
+    ResourcePreflightV1 {
+        ram_budget_bytes: manifest.ram_budget_bytes,
+        scratch_budget_bytes: manifest.scratch_budget_bytes,
+        available_scratch_bytes,
+        memory_selection_threshold_bytes: memory_selection_threshold(manifest.ram_budget_bytes),
+        scratch_required_with_headroom_bytes: None,
+    }
 }
 
 pub fn public_schema<T: JsonSchema>(name: &str) -> Value {
@@ -2104,6 +2242,7 @@ mod tests {
             Some(COMPATIBILITY_MANIFEST_SCHEMA_NAME)
         );
         assert!(schema_by_name(COMPATIBILITY_MANIFEST_SCHEMA_NAME).is_some());
+        assert!(schema_by_name("engine-checkpoint-inspect-result-v1.schema.json").is_none());
         let reason = ReasonV1::new(ReasonCodeV1::InterruptedResumable);
         assert_eq!(reason.docs_url, "/troubleshooting#interrupted_resumable");
         let mut tampered = serde_json::to_value(&reason).unwrap();
@@ -2137,6 +2276,93 @@ mod tests {
         assert_eq!(preflight.scratch_required_with_headroom_bytes, Some(1_000));
         let error = select_and_preflight(&job, &estimates(700, 200, 900), Some(999)).unwrap_err();
         assert_eq!(error.code, ReasonCodeV1::ScratchSpaceInsufficient);
+    }
+
+    #[test]
+    fn doctor_reports_roundtrip_for_success_incompatible_and_resource_exits() {
+        fn roundtrip(report: &DoctorReportV1) -> DoctorReportV1 {
+            serde_json::from_slice(&serde_json::to_vec(report).unwrap()).unwrap()
+        }
+
+        let mut job = manifest(RequestedModeV1::Bounded);
+        job.ram_budget_bytes = 1_000_000_000;
+        let resource_estimates = estimates(700, 200, 900);
+        let (selected_mode, preflight) =
+            select_and_preflight(&job, &resource_estimates, Some(1_000)).unwrap();
+        let report = DoctorReportV1 {
+            schema_version: 1,
+            engine_release_identity: "release-1".into(),
+            compatibility_profile: COMPATIBILITY_PROFILE.into(),
+            ready: true,
+            requested_mode: job.mode,
+            selected_mode: Some(selected_mode),
+            estimates: Some(resource_estimates.clone()),
+            preflight,
+            reasons: Vec::new(),
+        };
+        assert!(roundtrip(&report).validate_for_manifest("release-1", &job));
+
+        let mut tampered = report.clone();
+        tampered.preflight.memory_selection_threshold_bytes += 1;
+        assert!(!tampered.validate_for_manifest("release-1", &job));
+
+        let incompatible = DoctorReportV1 {
+            schema_version: 1,
+            engine_release_identity: "release-1".into(),
+            compatibility_profile: COMPATIBILITY_PROFILE.into(),
+            ready: false,
+            requested_mode: job.mode,
+            selected_mode: None,
+            estimates: None,
+            preflight: declaration_failure_preflight(&job, None),
+            reasons: vec![ReasonV1::new(ReasonCodeV1::UnsupportedProfile)],
+        };
+        assert_eq!(incompatible.reasons[0].class.exit_code(), 10);
+        assert!(roundtrip(&incompatible).validate_for_manifest("release-1", &job));
+
+        let mut hard_minimum = job.clone();
+        hard_minimum.ram_budget_bytes = 100;
+        hard_minimum.scratch_budget_bytes = 0;
+        let minimum_reasons: Vec<_> = hard_minimum
+            .compatibility_reasons()
+            .into_iter()
+            .filter(|reason| reason.class == ExitClassV1::InsufficientResources)
+            .collect();
+        let minimum_failure = DoctorReportV1 {
+            schema_version: 1,
+            engine_release_identity: "release-1".into(),
+            compatibility_profile: COMPATIBILITY_PROFILE.into(),
+            ready: false,
+            requested_mode: hard_minimum.mode,
+            selected_mode: None,
+            estimates: Some(resource_estimates),
+            preflight: declaration_failure_preflight(&hard_minimum, Some(1_000)),
+            reasons: minimum_reasons,
+        };
+        assert_eq!(minimum_failure.reasons[0].class.exit_code(), 12);
+        assert!(roundtrip(&minimum_failure).validate_for_manifest("release-1", &hard_minimum));
+
+        let mut constrained = job.clone();
+        constrained.mode = RequestedModeV1::Conventional;
+        constrained.ram_budget_bytes = 16 * 1024 * 1024;
+        let runtime_estimates = estimates(32 * 1024 * 1024, 200, 900);
+        let reason =
+            select_and_preflight(&constrained, &runtime_estimates, Some(1_000)).unwrap_err();
+        assert_eq!(reason.code, ReasonCodeV1::RamBudgetInsufficient);
+        let failed = DoctorReportV1 {
+            schema_version: 1,
+            engine_release_identity: "release-1".into(),
+            compatibility_profile: COMPATIBILITY_PROFILE.into(),
+            ready: false,
+            requested_mode: constrained.mode,
+            selected_mode: None,
+            estimates: Some(runtime_estimates),
+            preflight: failed_resource_preflight(&constrained, Some(1_000), &reason),
+            reasons: vec![reason],
+        };
+        assert_eq!(failed.preflight.scratch_required_with_headroom_bytes, None);
+        assert_eq!(failed.reasons[0].class.exit_code(), 12);
+        assert!(roundtrip(&failed).validate_for_manifest("release-1", &constrained));
     }
 
     #[test]

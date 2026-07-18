@@ -29,9 +29,9 @@ pub use bounded_pcs::{
 pub use bounded_prover::EnvironmentAbortFailureInjector;
 pub use bounded_prover::{
     estimate_builtin_manifest, estimate_resource_bounded_workload,
-    estimate_resource_conventional_workload, plan_resource_workload, preflight_builtin_manifest,
-    prove_resource_bounded, prove_resource_bounded_observed,
-    prove_resource_bounded_observed_with_cancellation,
+    estimate_resource_conventional_workload, inspect_resource_bounded_checkpoint,
+    plan_resource_workload, preflight_builtin_manifest, prove_resource_bounded,
+    prove_resource_bounded_observed, prove_resource_bounded_observed_with_cancellation,
     prove_resource_bounded_observed_with_cancellation_at_checkpoint_dir,
     prove_resource_bounded_observed_with_control, prove_resource_reference,
     prove_resource_with_policy, prove_resource_with_policy_observed_with_cancellation,
@@ -40,8 +40,9 @@ pub use bounded_prover::{
     resume_resource_bounded_cancelable_observed, resume_resource_bounded_with,
     resume_resource_bounded_with_cancellation, resume_resource_bounded_with_cancellation_observed,
     resume_resource_bounded_with_control, verify_resource_bounded_proof, BoundedProverError,
-    CancellationToken, FailureInjector, NoopFailureInjector, PlannedResourceProofV1, ProverEventV1,
-    ResourceExecutionPlanV1, ResourceUsageV1, ResumedProofV1,
+    CancellationToken, CheckpointInspectionV1, FailureInjector, NoopFailureInjector,
+    PlannedResourceProofV1, ProverEventV1, ResourceExecutionPlanV1, ResourceUsageV1,
+    ResumedProofV1,
 };
 pub use checkpoint::{
     ChallengerSnapshotError, ChallengerSnapshotV1, ProfileChallenger, ProfilePermutation,

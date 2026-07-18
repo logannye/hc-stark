@@ -5,11 +5,14 @@ use hc_plonky3::contracts::{ProofBundleV1, WorkloadManifestV1};
 use hc_plonky3::{
     CancellationToken, ResourceBoundedUniStarkProver, UploadedTraceWorkload, WorkloadKind,
 };
-use hc_stream::{CheckpointPolicy, ResourceMode, ResourcePolicyV1};
+use hc_stream::{CheckpointManifestV2, CheckpointPolicy, ResourceMode, ResourcePolicyV1};
 use predicates::prelude::*;
 use serde_json::json;
+use std::collections::BTreeMap;
 #[cfg(unix)]
 use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
+use std::process::Output;
 #[cfg(unix)]
 use std::process::{Command, Stdio};
 use tempfile::tempdir;
@@ -21,6 +24,72 @@ unsafe extern "C" {
 
 #[cfg(unix)]
 const SIGTERM: i32 = 15;
+
+fn snapshot_tree(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
+    fn visit(root: &Path, current: &Path, snapshot: &mut BTreeMap<PathBuf, Option<Vec<u8>>>) {
+        let mut entries: Vec<_> = std::fs::read_dir(current)
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .collect();
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            let relative = path.strip_prefix(root).unwrap().to_path_buf();
+            let kind = entry.file_type().unwrap();
+            if kind.is_dir() {
+                snapshot.insert(relative, None);
+                visit(root, &path, snapshot);
+            } else {
+                snapshot.insert(relative, Some(std::fs::read(path).unwrap()));
+            }
+        }
+    }
+
+    let mut snapshot = BTreeMap::new();
+    visit(root, root, &mut snapshot);
+    snapshot
+}
+
+fn run_checkpoint_inspection(root: &Path, checkpoint: &Path) -> Output {
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "inspect-checkpoint",
+            "--checkpoint",
+            checkpoint.to_str().unwrap(),
+            "--air",
+            root.join("inputs/air.json").to_str().unwrap(),
+            "--trace-manifest",
+            root.join("inputs/trace.json").to_str().unwrap(),
+            "--chunks-dir",
+            root.join("inputs/chunks").to_str().unwrap(),
+            "--public-inputs",
+            root.join("inputs/public.json").to_str().unwrap(),
+            "--policy",
+            root.join("inspect-policy.json").to_str().unwrap(),
+        ])
+        .output()
+        .unwrap()
+}
+
+fn assert_checkpoint_inspection_failure(output: &Output, exit: i32, reason: &str) {
+    assert_eq!(
+        output.status.code(),
+        Some(exit),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    assert_eq!(
+        output.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1
+    );
+    assert!(output.stderr.is_empty());
+    let failure: tinyzkp_contracts::EngineErrorEnvelopeV1 =
+        serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(failure.error.reason.code.as_str(), reason);
+    assert!(!failure.error.resumable);
+}
 
 #[test]
 fn release_identity_is_machine_readable_and_profile_pinned() {
@@ -669,6 +738,179 @@ fn plonky3_air_job_contracts() {
 }
 
 #[test]
+fn checkpoint_inspection_is_complete_typed_and_read_only() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    write_doctor_job(root, "bounded", 128 * 1024 * 1024);
+    let air: AirPackageV1 =
+        serde_json::from_slice(&std::fs::read(root.join("inputs/air.json")).unwrap()).unwrap();
+    let trace: TraceManifestV1 =
+        serde_json::from_slice(&std::fs::read(root.join("inputs/trace.json")).unwrap()).unwrap();
+    let public_inputs: PublicInputsV1 =
+        serde_json::from_slice(&std::fs::read(root.join("inputs/public.json")).unwrap()).unwrap();
+    let workload =
+        UploadedTraceWorkload::new(air, trace, public_inputs.values, root.join("inputs/chunks"))
+            .unwrap();
+    let checkpoint_dir = root.join("inspection-job");
+    let policy = ResourcePolicyV1 {
+        mode: ResourceMode::Scratch,
+        max_resident_bytes: 128 * 1024 * 1024,
+        max_scratch_bytes: 2 * 1024 * 1024 * 1024,
+        scratch_dir: root.join("engine-scratch"),
+        max_threads: 1,
+        checkpoint_policy: CheckpointPolicy::RetainOnFailure,
+    };
+    std::fs::write(
+        root.join("inspect-policy.json"),
+        serde_json::to_vec_pretty(&policy).unwrap(),
+    )
+    .unwrap();
+    let cancellation = CancellationToken::new();
+    let observer_token = cancellation.clone();
+    let interrupted =
+        hc_plonky3::prove_resource_bounded_observed_with_cancellation_at_checkpoint_dir(
+            &workload,
+            &policy,
+            &checkpoint_dir,
+            cancellation,
+            move |event| {
+                if matches!(
+                    event,
+                    hc_plonky3::ProverEventV1::Phase {
+                        phase: hc_stream::PipelinePhaseV1::Trace,
+                        ..
+                    }
+                ) {
+                    observer_token.cancel();
+                }
+            },
+        );
+    assert!(matches!(
+        interrupted,
+        Err(hc_plonky3::BoundedProverError::Cancelled)
+    ));
+
+    let checkpoint = checkpoint_dir.join("checkpoint.json");
+    let original_checkpoint = std::fs::read(&checkpoint).unwrap();
+    let original_manifest: CheckpointManifestV2 =
+        serde_json::from_slice(&original_checkpoint).unwrap();
+    assert!(!original_manifest.artifacts.is_empty());
+
+    let before = snapshot_tree(root);
+    let valid = run_checkpoint_inspection(root, &checkpoint);
+    assert!(
+        valid.status.success(),
+        "{}",
+        String::from_utf8_lossy(&valid.stderr)
+    );
+    assert!(valid.stderr.is_empty());
+    assert_eq!(
+        valid.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1
+    );
+    let result: tinyzkp_contracts::EngineCheckpointInspectResultV1 =
+        serde_json::from_slice(&valid.stdout).unwrap();
+    assert!(result.validate(&hc_plonky3::release_identity()));
+    let result_value: serde_json::Value = serde_json::from_slice(&valid.stdout).unwrap();
+    let keys: std::collections::BTreeSet<_> =
+        result_value.as_object().unwrap().keys().cloned().collect();
+    assert_eq!(
+        keys,
+        [
+            "checkpoint_release_identity_match",
+            "compatibility_profile",
+            "engine_release_identity",
+            "schema_version",
+            "selected_mode",
+            "valid",
+        ]
+        .into_iter()
+        .map(ToOwned::to_owned)
+        .collect()
+    );
+    assert_eq!(snapshot_tree(root), before);
+
+    std::fs::write(&checkpoint, b"{").unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_corrupt",
+    );
+
+    std::fs::write(
+        &checkpoint,
+        &original_checkpoint[..original_checkpoint.len() / 2],
+    )
+    .unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_corrupt",
+    );
+
+    let mut stale = original_manifest.clone();
+    stale.release_hash = [0x5a; 32];
+    std::fs::write(&checkpoint, serde_json::to_vec_pretty(&stale).unwrap()).unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_release_mismatch",
+    );
+
+    std::fs::write(&checkpoint, &original_checkpoint).unwrap();
+
+    let policy_path = root.join("inspect-policy.json");
+    let original_policy = std::fs::read(&policy_path).unwrap();
+    let mut mismatched_policy = policy.clone();
+    mismatched_policy.max_scratch_bytes += 1;
+    std::fs::write(
+        &policy_path,
+        serde_json::to_vec_pretty(&mismatched_policy).unwrap(),
+    )
+    .unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_corrupt",
+    );
+    std::fs::write(&policy_path, &original_policy).unwrap();
+
+    let artifact_path = checkpoint_dir.join(&original_manifest.artifacts[0].relative_path);
+    let original_artifact = std::fs::read(&artifact_path).unwrap();
+    let mut corrupt_artifact = original_artifact.clone();
+    *corrupt_artifact.last_mut().unwrap() ^= 0x80;
+    std::fs::write(&artifact_path, &corrupt_artifact).unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_corrupt",
+    );
+    std::fs::write(&artifact_path, &original_artifact).unwrap();
+
+    std::fs::remove_file(&checkpoint).unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_missing",
+    );
+    std::fs::write(&checkpoint, &original_checkpoint).unwrap();
+
+    let chunk_path = root.join("inputs/chunks/chunk-000000.zst");
+    let original_chunk = std::fs::read(&chunk_path).unwrap();
+    let mut corrupt_chunk = original_chunk.clone();
+    *corrupt_chunk.last_mut().unwrap() ^= 0x01;
+    std::fs::write(&chunk_path, &corrupt_chunk).unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        11,
+        "manifest_contract_invalid",
+    );
+    std::fs::write(&chunk_path, &original_chunk).unwrap();
+
+    assert_eq!(snapshot_tree(root), before);
+}
+
+#[test]
 fn production_generic_commands_fail_with_typed_invalid_input() {
     for command in ["prove", "verify"] {
         cargo_bin_cmd!("hc-cli")
@@ -1076,8 +1318,26 @@ fn declarative_air_sigterm_uses_exact_checkpoint_dir_and_typed_resume_protocol()
 fn root_doctor_emits_one_complete_report_and_only_typed_progress() {
     let dir = tempdir().unwrap();
     let manifest = write_doctor_job(dir.path(), "auto", 4 * 1024 * 1024 * 1024);
-    let output = cargo_bin_cmd!("hc-cli")
+    let absolute = cargo_bin_cmd!("hc-cli")
         .args(["doctor", "--job", manifest.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(absolute.status.code(), Some(11));
+    assert_eq!(
+        absolute
+            .stdout
+            .iter()
+            .filter(|byte| **byte == b'\n')
+            .count(),
+        1
+    );
+    let failure: tinyzkp_contracts::EngineErrorEnvelopeV1 =
+        serde_json::from_slice(&absolute.stdout).unwrap();
+    assert_eq!(failure.error.reason.code.as_str(), "unsafe_path");
+
+    let output = cargo_bin_cmd!("hc-cli")
+        .current_dir(dir.path())
+        .args(["doctor", "--job", "job.json"])
         .output()
         .unwrap();
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -1109,7 +1369,8 @@ fn doctor_exit_ten_and_twelve_flush_complete_reports() {
     payload["compatibility_profile"] = json!("unsupported-profile");
     std::fs::write(&manifest, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
     let output = cargo_bin_cmd!("hc-cli")
-        .args(["doctor", "--job", manifest.to_str().unwrap()])
+        .current_dir(dir.path())
+        .args(["doctor", "--job", "job.json"])
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(10));
@@ -1125,7 +1386,8 @@ fn doctor_exit_ten_and_twelve_flush_complete_reports() {
     payload["ram_budget_bytes"] = json!(16 * 1024 * 1024);
     std::fs::write(&manifest, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
     let output = cargo_bin_cmd!("hc-cli")
-        .args(["doctor", "--job", manifest.to_str().unwrap()])
+        .current_dir(dir.path())
+        .args(["doctor", "--job", "job.json"])
         .output()
         .unwrap();
     let expected = if cfg!(all(target_os = "linux", target_arch = "x86_64")) {

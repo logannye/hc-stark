@@ -121,6 +121,21 @@ enum Plonky3Command {
         #[arg(long)]
         output: PathBuf,
     },
+    /// Validate a bounded checkpoint and all referenced artifacts without resuming it.
+    InspectCheckpoint {
+        #[arg(long)]
+        checkpoint: PathBuf,
+        #[arg(long)]
+        air: PathBuf,
+        #[arg(long)]
+        trace_manifest: PathBuf,
+        #[arg(long)]
+        chunks_dir: PathBuf,
+        #[arg(long)]
+        public_inputs: PathBuf,
+        #[arg(long)]
+        policy: PathBuf,
+    },
     /// Verify a declarative AIR proof with the official Plonky3 adapter.
     VerifyAir {
         #[arg(long)]
@@ -273,6 +288,21 @@ fn run() -> Result<u8> {
                 &public_inputs,
                 &checkpoint,
                 &output,
+            ),
+            Plonky3Command::InspectCheckpoint {
+                checkpoint,
+                air,
+                trace_manifest,
+                chunks_dir,
+                public_inputs,
+                policy,
+            } => commands::plonky3::inspect_checkpoint(
+                &checkpoint,
+                &air,
+                &trace_manifest,
+                &chunks_dir,
+                &public_inputs,
+                &policy,
             ),
             Plonky3Command::VerifyAir { bundle } => commands::plonky3::verify_air(&bundle),
             Plonky3Command::EstimateAir {

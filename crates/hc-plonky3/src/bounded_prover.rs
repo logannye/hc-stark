@@ -81,6 +81,8 @@ pub enum BoundedProverError {
     Serialization(String),
     #[error("checkpoint is not a compatible resumable TinyZKP Plonky3 state")]
     InvalidCheckpoint,
+    #[error("checkpoint belongs to a different exact TinyZKP engine release")]
+    CheckpointReleaseMismatch,
     #[error("checkpoint payload is malformed: {0}")]
     CheckpointPayload(String),
     #[error("the exact checkpoint directory already contains state")]
@@ -188,6 +190,18 @@ pub struct ResumedProofV1 {
     pub public_values: Vec<u64>,
     pub resource_policy: ResourcePolicyV1,
     pub proof_bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CheckpointInspectionV1 {
+    pub completed_phase: PipelinePhaseV1,
+    pub artifact_count: usize,
+}
+
+struct ValidatedCheckpointV1 {
+    manifest: CheckpointManifestV2,
+    descriptor: ResumeDescriptorV1,
+    job_dir: PathBuf,
 }
 
 /// A mode-aware plan for a statically linked or declarative workload.
@@ -2572,23 +2586,34 @@ where
     )
 }
 
-/// Resumes a statically linked workload with the same event and fault-control
-/// surface used by uninterrupted proving.
-pub fn resume_resource_bounded_with_control<W, Observe>(
+/// Validate a durable checkpoint and every referenced artifact without
+/// resuming execution or changing any job state.
+pub fn inspect_resource_bounded_checkpoint<W>(
     checkpoint_path: &Path,
     workload: &W,
-    cancellation: CancellationToken,
-    failure_injector: &dyn FailureInjector,
-    mut observe: Observe,
-) -> Result<Vec<u8>>
+    expected_policy: &ResourcePolicyV1,
+) -> Result<CheckpointInspectionV1>
 where
     W: ResourceBoundedWorkload,
-    W::Air: BaseAir<Val>
-        + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
-    Observe: FnMut(&ProverEventV1),
 {
-    check_cancelled(&cancellation)?;
+    expected_policy.validate()?;
+    let validated = validate_checkpoint_for_workload(checkpoint_path, workload)?;
+    if validated.descriptor.resource_policy != *expected_policy {
+        return Err(BoundedProverError::InvalidCheckpoint);
+    }
+    Ok(CheckpointInspectionV1 {
+        completed_phase: validated.manifest.completed_phase,
+        artifact_count: validated.manifest.artifacts.len(),
+    })
+}
+
+fn validate_checkpoint_for_workload<W>(
+    checkpoint_path: &Path,
+    workload: &W,
+) -> Result<ValidatedCheckpointV1>
+where
+    W: ResourceBoundedWorkload,
+{
     let manifest = CheckpointManifestV2::read(checkpoint_path)?;
     if !matches!(
         manifest.completed_phase,
@@ -2619,11 +2644,45 @@ where
         workload.input_digest(),
         descriptor.resource_policy.policy_hash()?,
     )?;
+    if manifest.release_hash != expected_identity.release_hash {
+        return Err(BoundedProverError::CheckpointReleaseMismatch);
+    }
     manifest.validate_identity(expected_identity)?;
     let job_dir = checkpoint_path
         .parent()
-        .ok_or(BoundedProverError::InvalidCheckpoint)?;
-    manifest.validate_artifacts(job_dir)?;
+        .ok_or(BoundedProverError::InvalidCheckpoint)?
+        .to_path_buf();
+    manifest.validate_artifacts(&job_dir)?;
+    Ok(ValidatedCheckpointV1 {
+        manifest,
+        descriptor,
+        job_dir,
+    })
+}
+
+/// Resumes a statically linked workload with the same event and fault-control
+/// surface used by uninterrupted proving.
+pub fn resume_resource_bounded_with_control<W, Observe>(
+    checkpoint_path: &Path,
+    workload: &W,
+    cancellation: CancellationToken,
+    failure_injector: &dyn FailureInjector,
+    mut observe: Observe,
+) -> Result<Vec<u8>>
+where
+    W: ResourceBoundedWorkload,
+    W::Air: BaseAir<Val>
+        + Air<SymbolicAirBuilder<Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    Observe: FnMut(&ProverEventV1),
+{
+    check_cancelled(&cancellation)?;
+    let ValidatedCheckpointV1 {
+        manifest,
+        descriptor,
+        job_dir,
+    } = validate_checkpoint_for_workload(checkpoint_path, workload)?;
+    let job_dir = job_dir.as_path();
     let rows = usize::try_from(descriptor.logical_rows)
         .map_err(|_| BoundedProverError::InvalidCheckpoint)?;
     let air = workload.air();
