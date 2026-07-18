@@ -19,6 +19,13 @@ columns, custom fields, recursion profiles, arbitrary Plonky3 forks, GPUs,
 Windows, and macOS proving are incompatible unless a later signed profile
 explicitly adds them.
 
+Demand alone cannot add a profile. The privacy-minimal gate in
+`docs/validation/PROFILE_EXPANSION_DEMAND_GATE.md` may only admit one candidate
+to a scheduled quarterly qualification window after at least five distinct
+qualified organizations share one structured incompatibility reason and at
+least three conditionally accept the standard USD 4,990 annual price. The
+complete profile-specific release gate must still be repeated.
+
 ## Commercial boundary
 
 - Community: MIT engine, verifier, schemas, reference workloads, doctor, and

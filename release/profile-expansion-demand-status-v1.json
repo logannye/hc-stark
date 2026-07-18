@@ -1,0 +1,23 @@
+{
+  "conditional_standard_annual_acceptances": 0,
+  "current_profile": "tinyzkp-p3-goldilocks-v1",
+  "distinct_qualified_organizations": 0,
+  "gate_id": "new-compatibility-profile-demand-v1",
+  "minimum_conditional_standard_annual_acceptances": 3,
+  "minimum_distinct_qualified_organizations": 5,
+  "organization_identifiers_included": false,
+  "proposed_profile_id": null,
+  "qualification_window": "quarterly",
+  "qualification_window_eligible": false,
+  "records_included": false,
+  "rejection_reason": null,
+  "schema_version": 1,
+  "source": {
+    "input_bytes": 92,
+    "input_sha256": "e08b9e3c1c2d3725ba1bab79e9c691638402f3bd056cd9fd11fda524756f9f96",
+    "schema_id": "profile-expansion-demand-input-v1",
+    "schema_sha256": "f51da35d3e87b6ce9c294f8ead2a9e9488dc8a756f3480e496af649b8828eedf"
+  },
+  "standard_annual_price_usd": 4990,
+  "status": "blocked"
+}
