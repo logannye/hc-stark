@@ -56,7 +56,8 @@ run_guard_result() {
     return "${command_status}"
   fi
 
-  if python3 "${TINYZKP_ACTION_PATH}/validate-result.py" error-envelope unused "${temporary}"; then
+  if python3 "${TINYZKP_ACTION_PATH}/validate-result.py" \
+    error-envelope "${command_status}" "${temporary}"; then
     cat -- "${temporary}"
   fi
   rm -f -- "${temporary}"

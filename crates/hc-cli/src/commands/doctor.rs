@@ -108,13 +108,6 @@ fn run_with_host(
         &paths.air_package,
         u64::try_from(MAX_AIR_JSON_BYTES).unwrap_or(MAX_AIR_BYTES),
     )?;
-    let trace: TraceManifestV1 = read_json_limited(
-        &paths.trace_manifest,
-        u64::try_from(MAX_TRACE_MANIFEST_JSON_BYTES).unwrap_or(MAX_TRACE_MANIFEST_BYTES),
-    )?;
-    let public_inputs: PublicInputsV1 =
-        read_json_limited(&paths.public_inputs, MAX_PUBLIC_INPUT_BYTES)?;
-
     match air.validate() {
         Ok(()) => {}
         Err(ContractError::ProfileMismatch) => {
@@ -133,6 +126,13 @@ fn run_with_host(
         }
         Err(_) => return Err(ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid).into()),
     }
+    let trace: TraceManifestV1 = read_json_limited(
+        &paths.trace_manifest,
+        u64::try_from(MAX_TRACE_MANIFEST_JSON_BYTES).unwrap_or(MAX_TRACE_MANIFEST_BYTES),
+    )?;
+    let public_inputs: PublicInputsV1 =
+        read_json_limited(&paths.public_inputs, MAX_PUBLIC_INPUT_BYTES)?;
+
     validate_contract(trace.validate_for_air(&air))?;
     validate_contract(public_inputs.validate_for_air(&air))?;
     if manifest.workload.logical_rows != trace.logical_rows
@@ -718,6 +718,71 @@ mod tests {
             ReasonCodeV1::UnsafePath
         );
         assert!(resolve_manifest_path(root, Path::new("job.json")).is_ok());
+    }
+
+    #[test]
+    fn air_profile_identity_mismatches_are_incompatible_but_malformed_air_is_invalid() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let job = fixture(root);
+        fs::write(root.join("job.json"), serde_json::to_vec(&job).unwrap()).unwrap();
+        let air_path = root.join("inputs/air.json");
+        let original: AirPackageV1 = serde_json::from_slice(&fs::read(&air_path).unwrap()).unwrap();
+
+        for mut incompatible in [
+            {
+                let mut air = original.clone();
+                air.backend = "other".into();
+                air
+            },
+            {
+                let mut air = original.clone();
+                air.profile = "other".into();
+                air
+            },
+            {
+                let mut air = original.clone();
+                air.field = "other".into();
+                air
+            },
+            {
+                let mut air = original.clone();
+                air.expected_verifier = "other".into();
+                air
+            },
+        ] {
+            fs::write(&air_path, serde_json::to_vec(&incompatible).unwrap()).unwrap();
+            assert_eq!(
+                run_with_host(
+                    root,
+                    Path::new("job.json"),
+                    "linux",
+                    "x86_64",
+                    Some(u64::MAX),
+                )
+                .unwrap(),
+                ExitClassV1::Incompatible.exit_code()
+            );
+            incompatible = original.clone();
+            fs::write(&air_path, serde_json::to_vec(&incompatible).unwrap()).unwrap();
+        }
+
+        let mut malformed = original;
+        malformed.constraints.clear();
+        malformed.profile = "other".into();
+        fs::write(&air_path, serde_json::to_vec(&malformed).unwrap()).unwrap();
+        let error = run_with_host(
+            root,
+            Path::new("job.json"),
+            "linux",
+            "x86_64",
+            Some(u64::MAX),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<ProtocolFailure>().unwrap().reason.code,
+            ReasonCodeV1::ManifestContractInvalid
+        );
     }
 
     #[test]
