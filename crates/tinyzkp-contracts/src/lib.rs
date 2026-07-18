@@ -1280,6 +1280,18 @@ pub struct ActivationResultV1 {
     pub organization: String,
 }
 
+/// Immutable build class carried by the Guard binary itself.
+///
+/// Promotion, sales, support, supersession, and withdrawal are deliberately
+/// absent: those states can change without rebuilding and belong to the
+/// signed release channel and launch evidence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GuardArtifactClassV1 {
+    Development,
+    SignedCandidate,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct VersionResultV1 {
@@ -1293,7 +1305,7 @@ pub struct VersionResultV1 {
     /// Guard channel and reviewed commerce evidence. It is intentionally
     /// public metadata, not a credential.
     pub merchant_catalog: MerchantCatalogIdentityV1,
-    pub commercial_release_blocked: bool,
+    pub artifact_class: GuardArtifactClassV1,
 }
 
 /// Auto mode chooses the conventional path only at or below this exact 70%
