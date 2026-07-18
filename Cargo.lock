@@ -2103,6 +2103,7 @@ dependencies = [
  "blake3",
  "clap",
  "ctrlc",
+ "fs2",
  "hc-bench",
  "hc-commit",
  "hc-core",
@@ -2120,6 +2121,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 1.0.69",
+ "tinyzkp-contracts",
  "toml",
  "zstd",
 ]
@@ -2384,6 +2387,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
+ "tinyzkp-contracts",
 ]
 
 [[package]]
@@ -5086,6 +5090,16 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "tinyzkp-contracts"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "tinyzkp-partner-adapter-example"
