@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "backend": "plonky3",
+  "profile": "tinyzkp-p3-goldilocks-v1",
+  "field": "goldilocks",
+  "expected_verifier": "p3_uni_stark_0.6.1",
+  "trace_width": 1,
+  "public_inputs": [],
+  "expressions": [
+    {"op": "current", "column": 0},
+    {"op": "next", "column": 0},
+    {"op": "sub", "left": 1, "right": 0}
+  ],
+  "constraints": [
+    {"kind": "transition", "expression": 2}
+  ]
+}

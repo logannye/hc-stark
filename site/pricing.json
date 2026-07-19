@@ -1,20 +1,36 @@
 {
-  "schema_version": 4,
-  "name": "TinyZKP Community and Guard",
   "canonical_url": "https://tinyzkp.com/pricing",
-  "effective_date": "2026-07-17",
-  "currency": "USD",
   "checkout_enabled": false,
-  "launch_gate": "release/guard-launch-gates-v1.json",
+  "commerce_state": "unconfigured",
+  "currency": "USD",
+  "effective_date": "2026-07-18",
   "hosted_proving": false,
-  "usage_metering": false,
+  "launch_gate": "release/guard-launch-state-v2.json",
+  "launch_state": "blocked",
+  "name": "TinyZKP Community and Guard",
+  "portal_state": "unconfigured",
+  "price_policy": {
+    "add_ons_allowed": false,
+    "annual_default": true,
+    "annual_usd": 4990,
+    "coupons_allowed": false,
+    "enterprise_variants_allowed": false,
+    "existing_subscribers_grandfathered": true,
+    "existing_variant_ids_repurposed": false,
+    "existing_variant_ids_retained": true,
+    "founding_discount": false,
+    "future_price_changes_use_new_variant_ids": false,
+    "general_availability_date": null,
+    "monthly_usd": 499,
+    "price_lock": "general_availability_plus_six_months",
+    "subscription_pause_offered": false,
+    "trials_allowed": false,
+    "usage_metering": false
+  },
   "products": [
     {
-      "id": "community",
-      "name": "TinyZKP Community",
-      "license": "MIT",
-      "price_usd": 0,
       "availability": "available",
+      "id": "community",
       "includes": [
         "proof engine and verifier",
         "public schemas and reference workloads",
@@ -22,28 +38,13 @@
         "resource estimators",
         "conventional and bounded proving primitives",
         "public benchmark evidence"
-      ]
+      ],
+      "license": "MIT",
+      "name": "TinyZKP Community",
+      "price_usd": 0
     },
     {
-      "id": "guard",
-      "name": "TinyZKP Guard",
-      "license": "commercial_object_code",
       "availability": "blocked_until_all_launch_gates_pass",
-      "organization_scope": "one_legal_organization_unlimited_internal_users_and_runners",
-      "prices": {
-        "monthly_usd": 499,
-        "annual_usd": 4990,
-        "annual_recommended": true
-      },
-      "includes": [
-        "automatic conventional or bounded execution",
-        "RAM and scratch preflight",
-        "checkpoint supervision and deterministic resume",
-        "CI resource-regression policies",
-        "signed artifacts and OCI images",
-        "SBOM and provenance",
-        "quarterly qualified releases"
-      ],
       "excludes": [
         "hosted proving",
         "usage metering",
@@ -57,13 +58,39 @@
         "resale",
         "OEM",
         "service-bureau use"
-      ]
+      ],
+      "id": "guard",
+      "includes": [
+        "foreground process and signal supervision",
+        "checkpoint lifecycle and deterministic resume supervision",
+        "support-safe diagnostics",
+        "CI resource-regression policies",
+        "signed artifacts and OCI images",
+        "SBOM and provenance",
+        "four qualification windows per year"
+      ],
+      "license": "commercial_object_code",
+      "name": "TinyZKP Guard",
+      "organization_scope": "one_legal_organization_unlimited_internal_users_and_runners",
+      "prices": {
+        "annual_recommended": true,
+        "annual_usd": 4990,
+        "monthly_usd": 499
+      }
     }
   ],
+  "reason_anchors": {
+    "legal": "/terms#legal-status",
+    "merchant": "/pricing#merchant-of-record-status",
+    "sales": "/pricing#sales-status"
+  },
+  "sales_state": "closed",
+  "schema_version": 5,
   "subscription_policy": {
     "activated_release_continues_offline": true,
     "active_subscription_required_for_new_release_activation": true,
     "cancellation_effective_at_period_end": true,
     "prorated_refunds": "only_if_required_by_law_or_merchant"
-  }
+  },
+  "usage_metering": false
 }

@@ -1,6 +1,14 @@
 import generate_sdk_schema_models as generator
+import pytest
 
 
+@pytest.mark.skipif(
+    not (
+        generator.Path(__file__).resolve().parents[2]
+        / "site/schemas/hosted-proof-bundle-v1.schema.json"
+    ).is_file(),
+    reason="hosted SDK schema generation is a retired release surface",
+)
 def test_models_are_deterministic_and_check_detects_drift(tmp_path):
     root = generator.Path(__file__).resolve().parents[2]
     definitions, roots, digest = generator.load_contracts(root / "site/schemas")

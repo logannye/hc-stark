@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TinyZKP Troubleshooting — Stable reason codes</title>
+  <meta name="description" content="Resolve TinyZKP compatibility, resource, checkpoint, verification, activation, identity, and internal failures by stable reason code.">
+  <link rel="canonical" href="https://tinyzkp.com/troubleshooting"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><script src="/shared.js" defer></script>
+</head>
+<body>
+<header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a><a class="button nav-buy" data-checkout="annual" data-closed-label="Not yet for sale" data-live-label="Buy Guard">Not yet for sale</a></nav></div></header>
+<main><section class="page-hero"><div class="container"><div class="eyebrow">ReasonV1 reference</div><h1>Fail closed, then follow the exact reason.</h1><p class="lede">Every machine-readable reason links to <code>/troubleshooting#&lt;reason_code&gt;</code>. Preserve the exact code and release identity when reporting a defect.</p></div></section>
+<section class="content container">
+  <div class="notice"><strong>Safe reporting:</strong> share only a manually inspected, redacted <code>SupportReportV1</code> with a synthetic reproduction. Never attach <code>DoctorReportV1</code>, witness or trace data, license keys, entitlements, credentials, environment files, private paths, or proprietary AIR source.</div>
+  <h2>Compatibility and input</h2>
+  <div class="reason-list">
+    <article class="card" id="unsupported_platform"><h3><code>unsupported_platform</code></h3><p>Use the qualified Linux x86-64 target. macOS and Windows may be used for documentation only, not production proving.</p></article>
+    <article class="card" id="unsupported_profile"><h3><code>unsupported_profile</code></h3><p>Compare every dependency and proof parameter with the signed compatibility manifest. Do not assume a nearby Plonky3 profile is equivalent.</p></article>
+    <article class="card" id="unsupported_air_feature"><h3><code>unsupported_air_feature</code></h3><p>Remove the unsupported feature or stop. Lookups, buses, permutations, multi-table, preprocessing, periodic columns, recursion, custom fields, and GPUs are outside v1.</p></article>
+    <article class="card" id="manifest_contract_invalid"><h3><code>manifest_contract_invalid</code></h3><p>Validate against the schema bundled with the exact release; reject unknown fields and do not silently coerce values.</p></article>
+    <article class="card" id="unsafe_path"><h3><code>unsafe_path</code></h3><p>Keep relative paths under declared roots. Remove traversal, symlinks, devices, and paths that escape the configured boundary.</p></article>
+    <article class="card" id="input_limit_exceeded"><h3><code>input_limit_exceeded</code></h3><p>Reduce the job to the documented row, width, degree, or input-size limit. Do not split into an unsupported multi-table design.</p></article>
+  </div>
+  <h2>Resource planning</h2>
+  <div class="reason-list">
+    <article class="card" id="ram_budget_insufficient"><h3><code>ram_budget_insufficient</code></h3><p>Increase the configured RAM budget or choose a supported bounded plan before ingestion.</p></article>
+    <article class="card" id="scratch_budget_insufficient"><h3><code>scratch_budget_insufficient</code></h3><p>Increase the declared scratch budget to the preflight estimate plus required headroom.</p></article>
+    <article class="card" id="scratch_space_insufficient"><h3><code>scratch_space_insufficient</code></h3><p>Free local scratch space or select a larger customer-controlled NVMe volume. Preserve at least 10% free-space headroom.</p></article>
+    <article class="card" id="job_state_exists"><h3><code>job_state_exists</code></h3><p>Do not overwrite an existing job directory. Resume it with the owning release or choose a new empty directory.</p></article>
+  </div>
+  <h2>Resume and checkpoint</h2>
+  <div class="reason-list">
+    <article class="card" id="interrupted_resumable"><h3><code>interrupted_resumable</code></h3><p>The interruption is recoverable. Preserve the job directory and run resume with the exact release.</p></article>
+    <article class="card" id="checkpoint_missing"><h3><code>checkpoint_missing</code></h3><p>Restore the complete owning job directory from your customer-managed backup or restart in a new directory.</p></article>
+    <article class="card" id="checkpoint_corrupt"><h3><code>checkpoint_corrupt</code></h3><p>Do not bypass integrity checks. Restore a verified checkpoint or restart; retain a sanitized integrity report for a defect.</p></article>
+    <article class="card" id="checkpoint_release_mismatch"><h3><code>checkpoint_release_mismatch</code></h3><p>Resume with the exact release recorded by the checkpoint. A newer release must never consume it silently.</p></article>
+    <article class="card" id="job_not_resumable"><h3><code>job_not_resumable</code></h3><p>The recorded phase cannot be resumed. Preserve diagnostics and start a new job only after confirming inputs are intact.</p></article>
+  </div>
+  <h2>Verification, activation, and identity</h2>
+  <div class="reason-list">
+    <article class="card" id="verification_rejected"><h3><code>verification_rejected</code></h3><p>Stop using the proof and preserve the bundle. Any supported-profile ordinary-verifier rejection is a release-freeze condition.</p></article>
+    <article class="card" id="release_not_activated"><h3><code>release_not_activated</code></h3><p>Activate the exact Guard release before disabling network access. Community doctor and verification paths do not require Guard activation.</p></article>
+    <article class="card" id="license_inactive"><h3><code>license_inactive</code></h3><p>Use the merchant portal to inspect subscription status. Do not send the key to TinyZKP or a public issue.</p></article>
+    <article class="card" id="license_provider_unavailable"><h3><code>license_provider_unavailable</code></h3><p>Retry initial activation later. A provider outage must not interrupt an already activated release or running proof.</p></article>
+    <article class="card" id="engine_artifact_mismatch"><h3><code>engine_artifact_mismatch</code></h3><p>Stop. Verify the signed channel, checksum, provenance, and exact engine SHA; never substitute a different binary.</p></article>
+    <article class="card" id="engine_protocol_invalid"><h3><code>engine_protocol_invalid</code></h3><p>Stop and preserve sanitized stdout/stderr framing. Guard must not guess or repair an invalid engine protocol.</p></article>
+    <article class="card" id="release_identity_mismatch"><h3><code>release_identity_mismatch</code></h3><p>Stop. Align Guard, engine, OCI digest, schemas, compatibility profile, channel manifest, and checkpoint identity.</p></article>
+    <article class="card" id="internal_error"><h3><code>internal_error</code></h3><p>Create and inspect a redacted <code>SupportReportV1</code>. If reproducible, open a defect with synthetic inputs and exact release identity.</p></article>
+  </div>
+</section></main>
+<footer class="site-footer"><div class="container"><div class="footer-grid"><div><a class="brand" href="/"><span>Tiny</span>ZKP</a><p>Stable, machine-readable failure guidance.</p></div><div><h2>Product</h2><a href="/doctor">Doctor</a><a href="/guard">Guard</a><a href="/releases">Releases</a></div><div><h2>Technical</h2><a href="/compatibility">Compatibility</a><a href="/docs">Documentation</a><a href="/benchmarks">Benchmarks</a></div><div><h2>Company</h2><a href="/security">Security</a><a href="/support">Support</a><a href="/terms">Legal</a></div></div><div class="footer-note">Reason codes are stable public contracts; prose may improve without changing their serialized value.</div></div></footer>
+</body></html>

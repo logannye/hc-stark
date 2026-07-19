@@ -7,13 +7,16 @@ transforms require it, while retaining the official Plonky3 proof format and
 unmodified verifier.
 
 > **Pre-release:** hosted proving, hosted verification, account creation,
-> public checkout, legacy usage meters, and MCP commerce are retired. Do not
+> public checkout, legacy usage meters, and MCP commerce are disabled and
+> excluded from active release and deployment paths. Their final decommission
+> is not claimed yet. Do not
 > use this repository as a production prover until every gate in
 > [`release/backend-v1-gates.json`](release/backend-v1-gates.json) is passed.
 > Guard checkout is independently fail-closed by the evidence-derived
 > [`release/guard-launch-state-v2.json`](release/guard-launch-state-v2.json),
-> whose reviewed source is
-> [`release/guard-launch-evidence-v2.json`](release/guard-launch-evidence-v2.json).
+> generated from
+> [`release/guard-launch-evidence-v2.json`](release/guard-launch-evidence-v2.json)
+> and verified against an independently protected trust policy.
 
 ## Product boundary
 
@@ -61,9 +64,13 @@ public engine container or default CI path.
 | `site` | Static Guard product, compatibility, evidence, documentation, and legal-status site |
 | `docs/recovery` | Architecture, delivery, release, and operating documentation |
 
-Historical server, MCP, billing, SDK, and hosted-beta sources remain available
-under the `archive/hosted-beta-2026-07-17` tag. They are not part of the active
-release payload.
+Server, MCP, billing, SDK, and hosted-beta sources remain temporarily on this
+branch pending the obligation inventory, verified final exports, replacement
+live smoke, and authorized decommission. Their workflows are disabled and
+their binaries are excluded from active release and deployment payloads. The
+`archive/hosted-beta-2026-07-17` tag preserves the historical snapshot; it is
+not evidence that the remaining source or external infrastructure has already
+been removed.
 
 ## Build and test
 
@@ -72,15 +79,15 @@ toolchains. Plonky3 and artifact-serialization dependencies are exact-pinned in 
 workspace and verified against [`release/plonky3-compatibility-v1.json`](release/plonky3-compatibility-v1.json).
 
 ```bash
-cargo test -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm
-cargo clippy -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm \
+cargo test --locked -p hc-stream -p hc-plonky3 -p hc-cli
+cargo clippy --locked -p hc-stream -p hc-plonky3 -p hc-cli \
   --all-targets -- -D warnings
-python3 scripts/ci/guard_launch_gate.py
+python3 scripts/ci/guard_launch_gate.py --check
 ```
 
-The recovery preflight deliberately does not run live canaries. After an
-authorized deployment, add `--live` and the expected release SHA. Do not use
-the legacy authenticated prove/verify smoke during recovery.
+The hosted API/MCP/billing launch audit is retired and cannot authorize Guard.
+The signed engine candidate, Guard candidate, static site, and OCI identities
+must instead pass the Guard evidence and joint promotion controls.
 
 ## CLI
 
@@ -97,7 +104,7 @@ Cargo package and development binary name. Run the compatibility doctor with a
 populated `JobManifestV1` before proving:
 
 ```bash
-tinyzkp-engine doctor --job <job-manifest-v1.json>
+tinyzkp-engine doctor --job job.json
 ```
 
 The declarative AIR proof path uses an exact caller-owned checkpoint directory:
@@ -146,8 +153,10 @@ reproduction is available only in an offline research build:
 cargo run -p hc-cli --features legacy-research -- legacy-research --help
 ```
 
-`hc-cli release` emits JSON for cross-checking the engine binary, OCI image,
-compatibility profile, and benchmark provenance before publication.
+The installed `tinyzkp-engine release` command emits JSON for cross-checking
+the engine binary, OCI image, compatibility profile, and benchmark provenance
+before publication. In a source-development checkout, its internal equivalent
+is `cargo run --locked -p hc-cli -- release`.
 
 ## Benchmark integrity
 
@@ -175,7 +184,7 @@ Release targets remain blocked until independently reproduced:
 - 16,777,216 rows: at most 2 GiB whole-process peak memory, successful official
   verification, and scratch usage within 10% of preflight;
 - deterministic crash recovery, parser/resource fuzzing, independent review,
-  one external design-partner integration, signed artifacts, SBOM, checksums,
+  one external non-reference workload, signed artifacts, SBOM, checksums,
   and release identity agreement.
 
 ## Self-hosted behavior
@@ -186,7 +195,7 @@ runtime TinyZKP dependency. Customer witnesses, scratch data, and proofs remain
 on customer-controlled storage.
 
 The separate commercial Guard supervisor may activate a signed release through
-the merchant-of-record. After activation, doctor, prove, resume, policy, and
+the merchant-of-record. After activation, doctor, run, resume, policy, and
 verify operations are offline. Cancellation prevents activation of future
 releases but does not disable an already activated release.
 
@@ -221,19 +230,27 @@ approval.
 See [`BUSINESS_GUIDE.md`](BUSINESS_GUIDE.md) for operating controls and
 [`docs/recovery/implementation-status.md`](docs/recovery/implementation-status.md)
 for the current gap ledger.
+Operators must follow
+[`docs/runbooks/release_provenance.md`](docs/runbooks/release_provenance.md),
+[`docs/validation/FOUNDING_VALIDATION_PROTOCOL.md`](docs/validation/FOUNDING_VALIDATION_PROTOCOL.md),
+and
+[`docs/runbooks/guard_commerce_setup.md`](docs/runbooks/guard_commerce_setup.md).
+Counsel intake is consolidated in
+[`docs/governance/GUARD_COUNSEL_PACKET.md`](docs/governance/GUARD_COUNSEL_PACKET.md);
+that packet is not legal approval.
 
 ## Security and disclosure
 
-Do not commit secrets, witness data, customer inputs, Stripe credentials,
+Do not commit secrets, witness data, customer inputs, payment-provider credentials,
 private keys, or production environment files. Scratch artifacts must be
 owner-only and are untrusted on reopen; manifests, chunks, release identity,
 dependency lock, workload, input, and policy must all be validated before
 resume.
 
-Report security issues through the address on
-[tinyzkp.com/security](https://tinyzkp.com/security). Performance claims and
-security claims require reproducible evidence; backend recovery is not a
-production certification.
+Report security issues through the private channel linked from
+[tinyzkp.com/security](https://tinyzkp.com/security). Performance and security
+claims require reproducible evidence; pre-release source is not a production
+certification.
 
 ## License
 

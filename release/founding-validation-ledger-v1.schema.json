@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tinyzkp.com/schemas/founding-validation-ledger-v1.schema.json",
+  "title": "Data-minimized founding validation ledger v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "program", "organizations"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "program": {"const": "tinyzkp-guard-founding-validation-v1"},
+    "organizations": {
+      "type": "array",
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organization_id",
+          "source_profile_evidence",
+          "doctor_report_sha256",
+          "compatibility_result",
+          "pain_category",
+          "assistance_minutes",
+          "written_4990_acceptance",
+          "purchase_outcome"
+        ],
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "pattern": "^org-[0-9a-f]{32}$"
+          },
+          "source_profile_evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "engine_source_sha",
+              "compatibility_profile",
+              "doctor_release_identity"
+            ],
+            "properties": {
+              "engine_source_sha": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "compatibility_profile": {
+                "const": "tinyzkp-p3-goldilocks-v1"
+              },
+              "doctor_release_identity": {
+                "type": "string",
+                "pattern": "^doctor-eval-v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+              }
+            }
+          },
+          "doctor_report_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "compatibility_result": {
+            "enum": ["compatible", "incompatible"]
+          },
+          "pain_category": {
+            "enum": ["out_of_memory", "memory_cost", "interruption_restart"]
+          },
+          "assistance_minutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 240
+          },
+          "written_4990_acceptance": {"type": "boolean"},
+          "purchase_outcome": {
+            "enum": ["not_offered", "declined", "paid_annual", "refunded"]
+          }
+        }
+      }
+    }
+  }
+}

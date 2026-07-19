@@ -1,5 +1,8 @@
 # TinyZKP reconciliation and production roadmap
 
+> **Legacy research — not production evidence.** This working reconciliation
+> record is not the supported Guard release contract or production evidence.
+
 Status: working strategy document for unifying the TinyZKP company story, the
 current `hc-stark` product repo, the older
 `space-efficient-zero-knowledge-proofs` research repo, and the live website.

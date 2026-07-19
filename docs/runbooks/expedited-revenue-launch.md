@@ -1,5 +1,8 @@
 # TinyZKP expedited containment and evaluation launch
 
+> **Superseded plan — not active release guidance.** Use the Guard release,
+> market-clock, commerce, and decommission controls in the current runbooks.
+
 Status: **authoritative operator runbook** for the backend-recovery launch.
 
 This runbook launches a fail-closed maintenance site, API, MCP service, and

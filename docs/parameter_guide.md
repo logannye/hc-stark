@@ -1,5 +1,8 @@
 # Parameter Guide
 
+> **Legacy research — not production evidence.** These standalone protocol
+> parameters are outside the supported Guard release contract.
+
 ## Security Parameters
 
 ### query_count

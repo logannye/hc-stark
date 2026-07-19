@@ -1,56 +1,78 @@
 {
-  "schema_version": 4,
-  "name": "TinyZKP",
-  "canonical_url": "https://tinyzkp.com",
-  "updated_at": "2026-07-17",
-  "service_status": "guard_prelaunch",
-  "positioning": {
-    "short": "Finish supported Plonky3 proof jobs within a RAM budget.",
-    "description": "A customer-operated supervisor and open proof engine for bounded-memory, SSD-backed, resumable execution without changing the released proof format or ordinary verifier.",
-    "primary_human_users": ["proof infrastructure lead", "protocol engineer", "technical founder"],
-    "primary_machine_users": ["CI runner", "scheduler", "local automation"],
-    "privacy_claim": "none",
-    "exclusivity_claim": "none"
-  },
   "availability": {
+    "community_doctor": false,
     "community_source": true,
-    "community_doctor": true,
-    "qualified_engine_artifact": false,
+    "contact_form": false,
+    "customer_accounts": false,
+    "event_collector": false,
     "guard_artifact": false,
     "guard_checkout": false,
     "hosted_proving": false,
     "hosted_verification": false,
-    "customer_accounts": false,
-    "contact_form": false,
-    "event_collector": false
+    "qualified_engine_artifact": false,
+    "signed_evaluation_doctor_binary": false,
+    "signed_evaluation_doctor_oci": false
   },
-  "supported_profile": "https://tinyzkp.com/compatibility.json",
-  "pricing": "https://tinyzkp.com/pricing.json",
+  "canonical_url": "https://tinyzkp.com",
   "commerce": "https://tinyzkp.com/commerce.json",
-  "release_status": "https://tinyzkp.com/release.json",
+  "commerce_state": "unconfigured",
   "contracts": {
-    "job_manifest_v1": "https://tinyzkp.com/schemas/job-manifest-v1.schema.json",
-    "doctor_report_v1": "https://tinyzkp.com/schemas/doctor-report-v1.schema.json",
-    "compatibility_report_v1": "https://tinyzkp.com/schemas/compatibility-report-v1.schema.json",
     "compatibility_manifest_v1": "https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json",
-    "reason_v1": "https://tinyzkp.com/schemas/reason-v1.schema.json",
+    "compatibility_report_v1": "https://tinyzkp.com/schemas/compatibility-report-v1.schema.json",
+    "doctor_report_v1": "https://tinyzkp.com/schemas/doctor-report-v1.schema.json",
     "error_envelope_v1": "https://tinyzkp.com/schemas/error-envelope-v1.schema.json",
-    "progress_event_v1": "https://tinyzkp.com/schemas/progress-event-v1.schema.json",
-    "job_result_v1": "https://tinyzkp.com/schemas/job-result-v1.schema.json",
-    "support_report_v1": "https://tinyzkp.com/schemas/support-report-v1.schema.json",
-    "job_inspect_result_v1": "https://tinyzkp.com/schemas/job-inspect-result-v1.schema.json",
     "guard_channel_v1": "https://tinyzkp.com/schemas/guard-channel-v1.schema.json",
     "guard_release_index_v1": "https://tinyzkp.com/schemas/guard-release-index-v1.schema.json",
-    "policy_baseline_v1": "https://tinyzkp.com/schemas/policy-baseline-v1.schema.json"
+    "job_inspect_result_v1": "https://tinyzkp.com/schemas/job-inspect-result-v1.schema.json",
+    "job_manifest_v1": "https://tinyzkp.com/schemas/job-manifest-v1.schema.json",
+    "job_result_v1": "https://tinyzkp.com/schemas/job-result-v1.schema.json",
+    "policy_baseline_v1": "https://tinyzkp.com/schemas/policy-baseline-v1.schema.json",
+    "progress_event_v1": "https://tinyzkp.com/schemas/progress-event-v1.schema.json",
+    "reason_v1": "https://tinyzkp.com/schemas/reason-v1.schema.json",
+    "support_report_v1": "https://tinyzkp.com/schemas/support-report-v1.schema.json"
   },
-  "primary_actions": [
-    {"label": "Run the free doctor", "url": "https://tinyzkp.com/docs#doctor"},
-    {"label": "Check compatibility", "url": "https://tinyzkp.com/compatibility"},
-    {"label": "Review release gates", "url": "https://tinyzkp.com/releases"}
-  ],
+  "evergreen_acquisition_pages": [],
+  "latest_release_index": null,
+  "launch_state": "blocked",
+  "market_clock": {
+    "signed_doctor_release_identity": null,
+    "source_sha256": "3817ecca5e0607f96b90d0ceb0baa623c30096544620bd4a76c63795436f6e25"
+  },
+  "name": "TinyZKP",
+  "portal_state": "unconfigured",
+  "positioning": {
+    "description": "A customer-operated supervisor and open proof engine for bounded-memory, SSD-backed, resumable execution without changing the released proof format or ordinary verifier.",
+    "exclusivity_claim": "none",
+    "primary_human_users": [
+      "proof infrastructure lead",
+      "protocol engineer",
+      "technical founder"
+    ],
+    "primary_machine_users": [
+      "CI runner",
+      "scheduler",
+      "local automation"
+    ],
+    "privacy_claim": "none",
+    "short": "Finish supported Plonky3 proof jobs within a RAM budget."
+  },
+  "pricing": "https://tinyzkp.com/pricing.json",
+  "primary_actions": [],
+  "reason_anchors": {
+    "launch": "https://tinyzkp.com/releases#launch-blockers",
+    "portal": "https://tinyzkp.com/support#merchant-portal",
+    "sales": "https://tinyzkp.com/pricing#sales-status"
+  },
+  "release_status": "https://tinyzkp.com/release.json",
+  "sales_state": "closed",
+  "schema_version": 5,
+  "service_status": "guard_prelaunch",
   "support": {
     "documentation": "https://tinyzkp.com/docs",
     "issues": "https://github.com/logannye/hc-stark/issues",
-    "security": "https://tinyzkp.com/security"
-  }
+    "security": "https://github.com/logannye/hc-stark/security/advisories/new",
+    "troubleshooting": "https://tinyzkp.com/troubleshooting"
+  },
+  "supported_profile": "https://tinyzkp.com/compatibility.json",
+  "updated_at": "2026-07-18"
 }

@@ -53,7 +53,7 @@ def test_local_preflight_builds_fast_static_gate_sequence():
         ("python", "scripts/ci/backend_recovery_gate.py"),
         ("python", "scripts/ci/server_card_check.py"),
         ("python", "scripts/ci/plonky3_compatibility_gate.py"),
-        ("python", "scripts/ci/launch_gate_audit.py"),
+        ("python", "scripts/ci/guard_launch_gate.py", "--check"),
         ("python", "billing/runtime_lock.py", "verify-metadata"),
         ("python", "scripts/ci/backup_restore_check.py"),
         ("python", "-m", "pytest", "billing/tests/test_backup_script.py"),
@@ -158,7 +158,11 @@ def test_production_adds_stricter_deploy_gates():
         node="node",
     )
 
-    assert ("python", "scripts/ci/launch_gate_audit.py") in commands(built)
+    assert (
+        "python",
+        "scripts/ci/guard_launch_gate.py",
+        "--check",
+    ) in commands(built)
     assert (
         "/usr/bin/python3",
         "billing/runtime_lock.py",

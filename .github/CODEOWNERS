@@ -1,7 +1,8 @@
 # TinyZKP ownership rules.
 #
 # This repo currently has a single maintainer, but paths are split by release
-# surface so future reviewers know which domain is being changed.
+# surface so future reviewers know which domain is being changed. CODEOWNERS
+# does not prove that external branch/environment protection is configured.
 
 * @logannye
 
@@ -42,3 +43,13 @@
 /clients/ @logannye
 /.github/workflows/ @logannye
 /CHANGELOG.md @logannye
+
+# Guard evidence, independently anchored trust roots, and promotion verifiers.
+/release/guard-* @logannye
+/release/guard-signing-public-key.pem @logannye
+/release/founding-validation-* @logannye
+/release/passive-operations-* @logannye
+/scripts/ci/guard_launch_gate.py @logannye
+/scripts/ci/guard_market_clock.py @logannye
+/scripts/ci/passive_operations_scorecard.py @logannye
+/scripts/ci/verify_*_candidate.py @logannye

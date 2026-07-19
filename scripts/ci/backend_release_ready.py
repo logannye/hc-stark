@@ -2287,6 +2287,7 @@ def validate_identity_evidence(
             "config_digest",
             "platform",
             "entrypoint",
+            "embedded_engine_sha256",
         }
         or oci.get("service") != "engine_oci"
         or oci.get("release_sha") != release_sha
@@ -2300,6 +2301,9 @@ def validate_identity_evidence(
         or not lower_hex(str(oci.get("config_digest")).removeprefix("sha256:"), 64)
         or oci.get("platform") != "linux/amd64"
         or oci.get("entrypoint") != ["/usr/local/bin/tinyzkp-engine"]
+        or not lower_hex(oci.get("embedded_engine_sha256"), 64)
+        or not isinstance(cli, dict)
+        or oci.get("embedded_engine_sha256") != cli.get("artifact_sha256")
     ):
         failures.append("release identity surface is incomplete or skewed: engine_oci")
     else:

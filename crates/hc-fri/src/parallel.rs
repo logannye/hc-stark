@@ -47,7 +47,7 @@ pub fn fold_layer_v5_parallel<F: FieldElement>(
     domain: &LayerDomain<F>,
     beta: F,
 ) -> HcResult<Vec<F>> {
-    if values.len() % 2 != 0 {
+    if !values.len().is_multiple_of(2) {
         return Err(HcError::invalid_argument("FRI layer size must be even"));
     }
     let half = values.len() / 2;

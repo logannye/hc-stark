@@ -15,6 +15,11 @@ ASSET_PATHS = (
     "/guard.html",
     "/compatibility.html",
     "/benchmarks.html",
+    "/doctor.html",
+    "/troubleshooting.html",
+    "/plonky3-out-of-memory.html",
+    "/resumable-plonky3-prover.html",
+    "/ssd-backed-plonky3-proving.html",
     "/pricing.html",
     "/docs.html",
     "/security.html",
@@ -30,6 +35,7 @@ ASSET_PATHS = (
     "/commerce.json",
     "/compatibility.json",
     "/release.json",
+    "/roi.js",
     "/guard-social.png",
 )
 

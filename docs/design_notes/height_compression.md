@@ -1,5 +1,8 @@
 # height_compression.md
 
+> **Legacy research — not production evidence.** This design note is historical
+> research, not the supported Guard release contract or production evidence.
+
 _Last updated: 2025-12-04_
 
 ---

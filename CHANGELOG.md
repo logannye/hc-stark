@@ -7,11 +7,20 @@ in [`docs/governance/release_policy.md`](docs/governance/release_policy.md).
 
 ## Unreleased
 
-Release theme: Reconciliation and positioning across the production repo, the
-legacy research repo, and TinyZKP.com.
+Release theme: customer-operated Guard launch controls, stable public engine
+contracts, and retirement of the hosted beta.
 
 ### Added
 
+- Stable Guard-facing public contracts and schemas for doctor, compatibility,
+  jobs, progress, support-safe diagnostics, reason/error envelopes, policy,
+  channels, and the signed release index.
+- Evidence-derived Guard launch state, live-hidden commerce, immutable
+  candidate/promotion workflows, market clock, passive-operations scorecard,
+  static revenue site, and signed Community doctor evaluation channel.
+- Guard counsel-review packet and Lemon Squeezy catalog/lifecycle runbook.
+- Evergreen Plonky3 OOM, SSD-backed proving, and resumable-prover acquisition
+  pages plus machine-readable discovery and offer metadata.
 - Public research-lineage page explaining why `hc-stark` is the production
   TinyZKP repo and `space-efficient-zero-knowledge-proofs` is legacy KZG/BN254
   research lineage.
@@ -97,6 +106,12 @@ legacy research repo, and TinyZKP.com.
 
 ### Changed
 
+- The active product is now the public MIT engine plus the separately licensed,
+  customer-operated Guard supervisor. Hosted proving, accounts, usage billing,
+  SDK publishing, and MCP commerce are retired launch surfaces.
+- The release policy now makes immutable engine/Guard publication, independent
+  trust anchors, exact legal/catalog evidence, founding purchases, and
+  clean-machine journeys the commercial authority.
 - README and business guide now position TinyZKP as one company with one current
   production repo and one research-lineage repo.
 - Compute page now separates live long state-transition proving from
@@ -115,6 +130,11 @@ legacy research repo, and TinyZKP.com.
 
 ### Fixed
 
+- Release checksum manifests are materialized outside their artifact directory
+  before being atomically moved into place, so a manifest cannot include its
+  own output file.
+- Integrated the full doctor/action contract tests with launch, containment,
+  release-index, profile-demand, site, and promotion checks in one CI path.
 - Removed public copy that could imply gated templates are part of the default
   production catalog.
 - Removed stale public docs that implied the hosted MCP endpoint always requires
