@@ -20,6 +20,16 @@ def test_hosted_beta_and_sdk_workflows_are_not_active():
         assert not (ROOT / ".github" / "workflows" / name).exists()
 
 
+def test_pull_request_ci_does_not_import_protected_launch_trust() -> None:
+    workflow = text(".github/workflows/ci.yml")
+    for variable in (
+        "GUARD_LAUNCH_TRUST_POLICY_SHA256",
+        "GUARD_MARKET_TRUST_POLICY_SHA256",
+        "GUARD_SIGNING_TRUST_POLICY_SHA256",
+    ):
+        assert variable not in workflow
+
+
 def test_engine_release_has_no_hosted_or_sdk_executables():
     workflow = text(".github/workflows/release-backend.yml")
     dockerfile = text("Dockerfile")
