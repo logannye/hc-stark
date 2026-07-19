@@ -78,6 +78,7 @@ jobs:
             scripts/ci/test_guard_launch_gate.py \
             scripts/ci/test_guard_github_action.py \
             scripts/ci/test_founding_validation_status.py \
+            scripts/ci/test_profile_expansion_demand_gate.py \
             scripts/ci/test_backend_release_ready.py \
             scripts/ci/test_backend_prerelease_ready.py \
             scripts/ci/test_launch_gate_audit.py \
@@ -96,6 +97,7 @@ jobs:
             scripts/release/test_run_crash_matrix.py \
             scripts/release/test_run_fuzz_smoke.py -q
           python3 scripts/ci/guard_launch_gate.py
+          python3 scripts/ci/profile_expansion_demand_gate.py
           python3 scripts/ci/check_pinned_actions.py
 
       - name: Static site contracts

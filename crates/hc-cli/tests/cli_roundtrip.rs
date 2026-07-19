@@ -5,11 +5,14 @@ use hc_plonky3::contracts::{ProofBundleV1, WorkloadManifestV1};
 use hc_plonky3::{
     CancellationToken, ResourceBoundedUniStarkProver, UploadedTraceWorkload, WorkloadKind,
 };
-use hc_stream::{CheckpointPolicy, ResourceMode, ResourcePolicyV1};
+use hc_stream::{CheckpointManifestV2, CheckpointPolicy, ResourceMode, ResourcePolicyV1};
 use predicates::prelude::*;
 use serde_json::json;
+use std::collections::BTreeMap;
 #[cfg(unix)]
 use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
+use std::process::Output;
 #[cfg(unix)]
 use std::process::{Command, Stdio};
 use tempfile::tempdir;
@@ -21,6 +24,72 @@ unsafe extern "C" {
 
 #[cfg(unix)]
 const SIGTERM: i32 = 15;
+
+fn snapshot_tree(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
+    fn visit(root: &Path, current: &Path, snapshot: &mut BTreeMap<PathBuf, Option<Vec<u8>>>) {
+        let mut entries: Vec<_> = std::fs::read_dir(current)
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .collect();
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            let relative = path.strip_prefix(root).unwrap().to_path_buf();
+            let kind = entry.file_type().unwrap();
+            if kind.is_dir() {
+                snapshot.insert(relative, None);
+                visit(root, &path, snapshot);
+            } else {
+                snapshot.insert(relative, Some(std::fs::read(path).unwrap()));
+            }
+        }
+    }
+
+    let mut snapshot = BTreeMap::new();
+    visit(root, root, &mut snapshot);
+    snapshot
+}
+
+fn run_checkpoint_inspection(root: &Path, checkpoint: &Path) -> Output {
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "inspect-checkpoint",
+            "--checkpoint",
+            checkpoint.to_str().unwrap(),
+            "--air",
+            root.join("inputs/air.json").to_str().unwrap(),
+            "--trace-manifest",
+            root.join("inputs/trace.json").to_str().unwrap(),
+            "--chunks-dir",
+            root.join("inputs/chunks").to_str().unwrap(),
+            "--public-inputs",
+            root.join("inputs/public.json").to_str().unwrap(),
+            "--policy",
+            root.join("inspect-policy.json").to_str().unwrap(),
+        ])
+        .output()
+        .unwrap()
+}
+
+fn assert_checkpoint_inspection_failure(output: &Output, exit: i32, reason: &str) {
+    assert_eq!(
+        output.status.code(),
+        Some(exit),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    assert_eq!(
+        output.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1
+    );
+    assert!(output.stderr.is_empty());
+    let failure: tinyzkp_contracts::EngineErrorEnvelopeV1 =
+        serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(failure.error.reason.code.as_str(), reason);
+    assert!(!failure.error.resumable);
+}
 
 #[test]
 fn release_identity_is_machine_readable_and_profile_pinned() {
@@ -38,7 +107,7 @@ fn release_identity_is_machine_readable_and_profile_pinned() {
     assert_eq!(payload["compatibility_profile"], "tinyzkp-p3-goldilocks-v1");
     assert_eq!(
         payload["dependency_lock_sha256"],
-        "0e9a8928370fdd4c4218a98a642f734e955d3801ade78f52ebec31ddbcd18a78"
+        "0a28ab40dba2786a5106d274623d174b4c845b15ddd594629ebd98aa08612257"
     );
 }
 
@@ -88,6 +157,116 @@ fn write_customer_air(dir: &std::path::Path) -> std::path::PathBuf {
     air
 }
 
+fn write_doctor_job(
+    dir: &std::path::Path,
+    mode: &str,
+    ram_budget_bytes: u64,
+) -> std::path::PathBuf {
+    write_doctor_job_with_rows(dir, mode, ram_budget_bytes, 1024)
+}
+
+fn write_doctor_job_with_rows(
+    dir: &std::path::Path,
+    mode: &str,
+    ram_budget_bytes: u64,
+    logical_rows: u64,
+) -> std::path::PathBuf {
+    for relative in ["inputs/chunks", "jobs", "outputs", "scratch"] {
+        std::fs::create_dir_all(dir.join(relative)).unwrap();
+    }
+    let generated_air = write_customer_air(dir);
+    let air_bytes = std::fs::read(&generated_air).unwrap();
+    let air: AirPackageV1 = serde_json::from_slice(&air_bytes).unwrap();
+    std::fs::write(dir.join("inputs/air.json"), air_bytes).unwrap();
+    let air_digest: String = air
+        .digest()
+        .unwrap()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let raw_trace = vec![0u8; usize::try_from(logical_rows).unwrap() * 8];
+    let compressed = zstd::stream::encode_all(raw_trace.as_slice(), 3).unwrap();
+    std::fs::write(dir.join("inputs/chunks/chunk-000000.zst"), &compressed).unwrap();
+    let trace_manifest = json!({
+        "schema_version": 1,
+        "air_digest_hex": air_digest.clone(),
+        "trace_digest_hex": format!("{}", blake3::hash(&raw_trace).to_hex()),
+        "logical_rows": logical_rows,
+        "trace_width": 1,
+        "field_encoding": "goldilocks_u64_le",
+        "compression": "zstd",
+        "chunk_uncompressed_bytes": raw_trace.len(),
+        "chunks": [{
+            "index": 0,
+            "compressed_bytes": compressed.len(),
+            "uncompressed_bytes": raw_trace.len(),
+            "blake3_hex": format!("{}", blake3::hash(&compressed).to_hex())
+        }]
+    });
+    std::fs::write(
+        dir.join("inputs/trace.json"),
+        serde_json::to_vec_pretty(&trace_manifest).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("inputs/public.json"),
+        serde_json::to_vec_pretty(&json!({
+            "schema_version": 1,
+            "air_digest_hex": air_digest,
+            "values": []
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let job = dir.join("job.json");
+    std::fs::write(
+        &job,
+        serde_json::to_vec_pretty(&json!({
+            "schema_version": 1,
+            "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
+            "workload": {
+                "air_package": "air.json",
+                "trace_manifest": "trace.json",
+                "chunks_dir": "chunks",
+                "public_inputs": "public.json",
+                "logical_rows": logical_rows,
+                "trace_width": 1,
+                "max_constraint_degree": 2,
+                "field": "goldilocks",
+                "extension_degree": 2,
+                "permutation": "poseidon2_width_8",
+                "verifier": "p3_uni_stark_0.6.1",
+                "features": {
+                    "uses_lookups": false,
+                    "uses_buses": false,
+                    "uses_permutations": false,
+                    "uses_multi_table": false,
+                    "uses_preprocessed_columns": false,
+                    "uses_periodic_columns": false,
+                    "uses_recursion": false,
+                    "uses_gpu": false
+                }
+            },
+            "mode": mode,
+            "ram_budget_bytes": ram_budget_bytes,
+            "scratch_budget_bytes": 2147483648u64,
+            "max_threads": 1,
+            "roots": {
+                "input_root": "inputs",
+                "job_root": "jobs",
+                "output_root": "outputs",
+                "scratch_root": "scratch"
+            },
+            "job_dir": "example",
+            "output_dir": "example",
+            "scratch_dir": "example"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    job
+}
+
 fn assert_air_operation_report(
     stdout: &[u8],
     selected_mode: &str,
@@ -99,8 +278,9 @@ fn assert_air_operation_report(
         "stdout must contain exactly one JSON report"
     );
     let report: serde_json::Value = serde_json::from_slice(stdout).unwrap();
-    assert_eq!(report.as_object().unwrap().len(), 5);
+    assert_eq!(report.as_object().unwrap().len(), 6);
     assert_eq!(report["schema_version"], 1);
+    assert_eq!(report["engine_release_identity"], "development-unreleased");
     assert_eq!(report["selected_mode"], selected_mode);
     assert!(report["wall_time_millis"]
         .as_u64()
@@ -191,7 +371,10 @@ fn pack_trace_rejects_noncanonical_field_values() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("noncanonical Goldilocks"));
+        .stdout(predicate::str::contains(
+            "\"code\":\"manifest_contract_invalid\"",
+        ))
+        .stderr(predicate::str::is_empty());
 }
 
 #[test]
@@ -271,14 +454,13 @@ fn declarative_air_cli_proves_estimates_and_officially_verifies() {
     );
     let estimate: serde_json::Value = serde_json::from_slice(&estimate.stdout).unwrap();
     assert_eq!(estimate["schema_version"], 1);
-    assert_eq!(estimate["selected_mode"], "scratch");
-    assert!(estimate["conventional_estimate"]["peak_resident_bytes"]
+    assert_eq!(estimate["selected_mode"], "bounded");
+    assert!(estimate["estimates"]["conventional"]["peak_resident_bytes"]
         .as_u64()
         .is_some_and(|bytes| bytes > 0));
-    assert!(estimate["bounded_estimate"]["scratch_high_water_bytes"]
+    assert!(estimate["estimates"]["bounded"]["scratch_high_water_bytes"]
         .as_u64()
         .is_some_and(|bytes| bytes > 0));
-    assert_eq!(estimate["preflight"]["selected_mode"], "scratch");
     let bundle = dir.path().join("air-proof-bundle.json");
     let proved = cargo_bin_cmd!("hc-cli")
         .args([
@@ -294,6 +476,8 @@ fn declarative_air_cli_proves_estimates_and_officially_verifies() {
             public_inputs.to_str().unwrap(),
             "--policy",
             policy.to_str().unwrap(),
+            "--checkpoint-dir",
+            dir.path().join("air-checkpoint").to_str().unwrap(),
             "--output",
             bundle.to_str().unwrap(),
         ])
@@ -314,7 +498,10 @@ fn declarative_air_cli_proves_estimates_and_officially_verifies() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("official p3-uni-stark verifier"));
+        .stdout(predicate::str::contains("\"accepted\":true"))
+        .stdout(predicate::str::contains(
+            "\"engine_release_identity\":\"development-unreleased\"",
+        ));
 
     let conventional_bundle = dir.path().join("air-proof-bundle-conventional.json");
     let conventional = cargo_bin_cmd!("hc-cli")
@@ -331,6 +518,8 @@ fn declarative_air_cli_proves_estimates_and_officially_verifies() {
             public_inputs.to_str().unwrap(),
             "--policy",
             policy.to_str().unwrap(),
+            "--checkpoint-dir",
+            dir.path().join("reference-checkpoint").to_str().unwrap(),
             "--output",
             conventional_bundle.to_str().unwrap(),
             "--reference",
@@ -422,11 +611,10 @@ fn plonky3_air_job_contracts() {
     assert!(estimated.status.success());
     let estimate: serde_json::Value = serde_json::from_slice(&estimated.stdout).unwrap();
     assert_eq!(estimate["schema_version"], 1);
-    assert_eq!(estimate["selected_mode"], "scratch");
-    assert!(estimate["conventional_estimate"]["peak_resident_bytes"].is_u64());
-    assert!(estimate["bounded_estimate"]["peak_resident_bytes"].is_u64());
-    assert!(estimate["bounded_estimate"]["scratch_high_water_bytes"].is_u64());
-    assert_eq!(estimate["preflight"]["selected_mode"], "scratch");
+    assert_eq!(estimate["selected_mode"], "bounded");
+    assert!(estimate["estimates"]["conventional"]["peak_resident_bytes"].is_u64());
+    assert!(estimate["estimates"]["bounded"]["peak_resident_bytes"].is_u64());
+    assert!(estimate["estimates"]["bounded"]["scratch_high_water_bytes"].is_u64());
 
     let proved_output = dir.path().join("contract-proof.json");
     let proved = cargo_bin_cmd!("hc-cli")
@@ -443,6 +631,8 @@ fn plonky3_air_job_contracts() {
             public_inputs_path.to_str().unwrap(),
             "--policy",
             policy_path.to_str().unwrap(),
+            "--checkpoint-dir",
+            dir.path().join("contract-checkpoint").to_str().unwrap(),
             "--output",
             proved_output.to_str().unwrap(),
         ])
@@ -536,10 +726,10 @@ fn plonky3_air_job_contracts() {
         .collect();
     assert!(events
         .iter()
-        .any(|event| event["event"] == "resume_air_started"));
+        .any(|event| event["event"] == "resource_estimate"));
     assert!(events
         .iter()
-        .any(|event| event["event"] == "resume_air_completed"));
+        .any(|event| event["event"] == "phase" && event["phase"] == "proof_assembly"));
     assert_air_operation_report(&resumed.stdout, "bounded", true);
     let bundle: AirProofBundleV1 =
         serde_json::from_slice(&std::fs::read(&output).unwrap()).unwrap();
@@ -548,15 +738,189 @@ fn plonky3_air_job_contracts() {
 }
 
 #[test]
-fn production_generic_commands_fail_with_migration_guidance() {
+fn checkpoint_inspection_is_complete_typed_and_read_only() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    write_doctor_job(root, "bounded", 128 * 1024 * 1024);
+    let air: AirPackageV1 =
+        serde_json::from_slice(&std::fs::read(root.join("inputs/air.json")).unwrap()).unwrap();
+    let trace: TraceManifestV1 =
+        serde_json::from_slice(&std::fs::read(root.join("inputs/trace.json")).unwrap()).unwrap();
+    let public_inputs: PublicInputsV1 =
+        serde_json::from_slice(&std::fs::read(root.join("inputs/public.json")).unwrap()).unwrap();
+    let workload =
+        UploadedTraceWorkload::new(air, trace, public_inputs.values, root.join("inputs/chunks"))
+            .unwrap();
+    let checkpoint_dir = root.join("inspection-job");
+    let policy = ResourcePolicyV1 {
+        mode: ResourceMode::Scratch,
+        max_resident_bytes: 128 * 1024 * 1024,
+        max_scratch_bytes: 2 * 1024 * 1024 * 1024,
+        scratch_dir: root.join("engine-scratch"),
+        max_threads: 1,
+        checkpoint_policy: CheckpointPolicy::RetainOnFailure,
+    };
+    std::fs::write(
+        root.join("inspect-policy.json"),
+        serde_json::to_vec_pretty(&policy).unwrap(),
+    )
+    .unwrap();
+    let cancellation = CancellationToken::new();
+    let observer_token = cancellation.clone();
+    let interrupted =
+        hc_plonky3::prove_resource_bounded_observed_with_cancellation_at_checkpoint_dir(
+            &workload,
+            &policy,
+            &checkpoint_dir,
+            cancellation,
+            move |event| {
+                if matches!(
+                    event,
+                    hc_plonky3::ProverEventV1::Phase {
+                        phase: hc_stream::PipelinePhaseV1::Trace,
+                        ..
+                    }
+                ) {
+                    observer_token.cancel();
+                }
+            },
+        );
+    assert!(matches!(
+        interrupted,
+        Err(hc_plonky3::BoundedProverError::Cancelled)
+    ));
+
+    let checkpoint = checkpoint_dir.join("checkpoint.json");
+    let original_checkpoint = std::fs::read(&checkpoint).unwrap();
+    let original_manifest: CheckpointManifestV2 =
+        serde_json::from_slice(&original_checkpoint).unwrap();
+    assert!(!original_manifest.artifacts.is_empty());
+
+    let before = snapshot_tree(root);
+    let valid = run_checkpoint_inspection(root, &checkpoint);
+    assert!(
+        valid.status.success(),
+        "{}",
+        String::from_utf8_lossy(&valid.stderr)
+    );
+    assert!(valid.stderr.is_empty());
+    assert_eq!(
+        valid.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1
+    );
+    let result: tinyzkp_contracts::EngineCheckpointInspectResultV1 =
+        serde_json::from_slice(&valid.stdout).unwrap();
+    assert!(result.validate(&hc_plonky3::release_identity()));
+    let result_value: serde_json::Value = serde_json::from_slice(&valid.stdout).unwrap();
+    let keys: std::collections::BTreeSet<_> =
+        result_value.as_object().unwrap().keys().cloned().collect();
+    assert_eq!(
+        keys,
+        [
+            "checkpoint_release_identity_match",
+            "compatibility_profile",
+            "engine_release_identity",
+            "schema_version",
+            "selected_mode",
+            "valid",
+        ]
+        .into_iter()
+        .map(ToOwned::to_owned)
+        .collect()
+    );
+    assert_eq!(snapshot_tree(root), before);
+
+    std::fs::write(&checkpoint, b"{").unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_corrupt",
+    );
+
+    std::fs::write(
+        &checkpoint,
+        &original_checkpoint[..original_checkpoint.len() / 2],
+    )
+    .unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_corrupt",
+    );
+
+    let mut stale = original_manifest.clone();
+    stale.release_hash = [0x5a; 32];
+    std::fs::write(&checkpoint, serde_json::to_vec_pretty(&stale).unwrap()).unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_release_mismatch",
+    );
+
+    std::fs::write(&checkpoint, &original_checkpoint).unwrap();
+
+    let policy_path = root.join("inspect-policy.json");
+    let original_policy = std::fs::read(&policy_path).unwrap();
+    let mut mismatched_policy = policy.clone();
+    mismatched_policy.max_scratch_bytes += 1;
+    std::fs::write(
+        &policy_path,
+        serde_json::to_vec_pretty(&mismatched_policy).unwrap(),
+    )
+    .unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_corrupt",
+    );
+    std::fs::write(&policy_path, &original_policy).unwrap();
+
+    let artifact_path = checkpoint_dir.join(&original_manifest.artifacts[0].relative_path);
+    let original_artifact = std::fs::read(&artifact_path).unwrap();
+    let mut corrupt_artifact = original_artifact.clone();
+    *corrupt_artifact.last_mut().unwrap() ^= 0x80;
+    std::fs::write(&artifact_path, &corrupt_artifact).unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_corrupt",
+    );
+    std::fs::write(&artifact_path, &original_artifact).unwrap();
+
+    std::fs::remove_file(&checkpoint).unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        14,
+        "checkpoint_missing",
+    );
+    std::fs::write(&checkpoint, &original_checkpoint).unwrap();
+
+    let chunk_path = root.join("inputs/chunks/chunk-000000.zst");
+    let original_chunk = std::fs::read(&chunk_path).unwrap();
+    let mut corrupt_chunk = original_chunk.clone();
+    *corrupt_chunk.last_mut().unwrap() ^= 0x01;
+    std::fs::write(&chunk_path, &corrupt_chunk).unwrap();
+    assert_checkpoint_inspection_failure(
+        &run_checkpoint_inspection(root, &checkpoint),
+        11,
+        "manifest_contract_invalid",
+    );
+    std::fs::write(&chunk_path, &original_chunk).unwrap();
+
+    assert_eq!(snapshot_tree(root), before);
+}
+
+#[test]
+fn production_generic_commands_fail_with_typed_invalid_input() {
     for command in ["prove", "verify"] {
         cargo_bin_cmd!("hc-cli")
             .arg(command)
             .assert()
             .failure()
-            .stderr(predicate::str::contains(
-                "legacy TinyZKP proving and verification are disabled",
-            ));
+            .stdout(predicate::str::contains(
+                "\"code\":\"manifest_contract_invalid\"",
+            ))
+            .stderr(predicate::str::is_empty());
     }
 }
 
@@ -607,7 +971,7 @@ fn plonky3_prove_and_official_verify_round_trip() {
         .args(["plonky3", "verify", "--bundle", bundle.to_str().unwrap()])
         .assert()
         .success()
-        .stdout(predicate::str::contains("official p3-uni-stark verifier"));
+        .stdout(predicate::str::contains("\"accepted\":true"));
 }
 
 #[test]
@@ -766,9 +1130,18 @@ fn sigterm_retains_resumable_checkpoint_and_resume_is_byte_identical() {
         let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) else {
             continue;
         };
-        if event["event"] == "phase" && event["phase"] == "trace" {
-            let path = event["checkpoint_path"].as_str().unwrap();
-            break std::path::PathBuf::from(path);
+        if event["event"] == "phase"
+            && event["phase"] == "trace"
+            && event["checkpoint_durable"] == true
+        {
+            let scratch = dir.path().join("scratch");
+            let path = std::fs::read_dir(scratch)
+                .unwrap()
+                .filter_map(Result::ok)
+                .map(|entry| entry.path().join("checkpoint.json"))
+                .find(|candidate| candidate.is_file())
+                .expect("durable trace event must correspond to a checkpoint");
+            break path;
         }
     };
 
@@ -818,77 +1191,227 @@ fn sigterm_retains_resumable_checkpoint_and_resume_is_byte_identical() {
     assert_eq!(resumed.proof_base64url, reference.proof_base64url);
 }
 
+#[cfg(unix)]
 #[test]
-fn doctor_accepts_a_complete_manifest_and_reports_all_pipeline_phases() {
+fn declarative_air_sigterm_uses_exact_checkpoint_dir_and_typed_resume_protocol() {
     let dir = tempdir().unwrap();
-    let manifest = write_fibonacci_manifest(dir.path());
-    let output = cargo_bin_cmd!("hc-cli")
+    let _job = write_doctor_job_with_rows(dir.path(), "bounded", 128 * 1024 * 1024, 16 * 1024);
+    let policy = dir.path().join("policy-exact-checkpoint.json");
+    std::fs::write(
+        &policy,
+        serde_json::to_vec_pretty(&json!({
+            "mode": "scratch",
+            "max_resident_bytes": 128 * 1024 * 1024,
+            "max_scratch_bytes": 2 * 1024 * 1024 * 1024u64,
+            "scratch_dir": dir.path().join("engine-scratch"),
+            "max_threads": 1,
+            "checkpoint_policy": "retain_on_failure"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let checkpoint_dir = dir.path().join("exact-checkpoint");
+    let interrupted_bundle = dir.path().join("interrupted-air-bundle.json");
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin!("hc-cli"))
         .args([
             "plonky3",
-            "doctor",
-            "--manifest",
-            manifest.to_str().unwrap(),
+            "prove-air",
+            "--air",
+            dir.path().join("inputs/air.json").to_str().unwrap(),
+            "--trace-manifest",
+            dir.path().join("inputs/trace.json").to_str().unwrap(),
+            "--chunks-dir",
+            dir.path().join("inputs/chunks").to_str().unwrap(),
+            "--public-inputs",
+            dir.path().join("inputs/public.json").to_str().unwrap(),
+            "--policy",
+            policy.to_str().unwrap(),
+            "--checkpoint-dir",
+            checkpoint_dir.to_str().unwrap(),
+            "--output",
+            interrupted_bundle.to_str().unwrap(),
         ])
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    let phases = report["estimate"]["phases"].as_array().unwrap();
-    assert!(phases.iter().any(|phase| phase["phase"] == "trace_lde"));
-    assert!(phases.iter().any(|phase| phase["phase"] == "fri"));
-}
+    let stderr = child.stderr.take().unwrap();
+    let mut reader = BufReader::new(stderr);
+    let mut captured_stderr = String::new();
+    loop {
+        let mut line = String::new();
+        assert_ne!(reader.read_line(&mut line).unwrap(), 0, "{captured_stderr}");
+        captured_stderr.push_str(&line);
+        let event: tinyzkp_contracts::ProgressEventV1 =
+            serde_json::from_str(&line).expect("every progress line must satisfy the public type");
+        assert!(event.validate("development-unreleased"));
+        if event.event == "phase"
+            && event.phase.as_deref() == Some("trace")
+            && event.checkpoint_durable == Some(true)
+        {
+            assert!(checkpoint_dir.join("checkpoint.json").is_file());
+            break;
+        }
+    }
 
-#[test]
-fn doctor_uses_the_same_auto_and_memory_preflight_as_the_prover() {
-    let dir = tempdir().unwrap();
-    let manifest = write_fibonacci_manifest(dir.path());
-    let mut payload: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
-    payload["logical_rows"] = json!(1 << 20);
-    payload["resource_policy"]["mode"] = json!("auto");
-    std::fs::write(&manifest, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
-
-    let output = cargo_bin_cmd!("hc-cli")
-        .args([
-            "plonky3",
-            "doctor",
-            "--manifest",
-            manifest.to_str().unwrap(),
-        ])
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(report["selected_mode"], "scratch");
-    assert!(report["estimate"]["phases"]
-        .as_array()
+    assert_eq!(unsafe { kill(child.id() as i32, SIGTERM) }, 0);
+    let status = child.wait().unwrap();
+    reader.read_to_string(&mut captured_stderr).unwrap();
+    let mut stdout = Vec::new();
+    child
+        .stdout
+        .take()
         .unwrap()
-        .iter()
-        .any(|phase| phase["phase"] == "trace_lde"));
+        .read_to_end(&mut stdout)
+        .unwrap();
+    assert_eq!(status.code(), Some(13), "{captured_stderr}");
+    assert_eq!(stdout.iter().filter(|byte| **byte == b'\n').count(), 1);
+    let failure: tinyzkp_contracts::EngineErrorEnvelopeV1 =
+        serde_json::from_slice(&stdout).unwrap();
+    assert_eq!(failure.error.reason.code.as_str(), "interrupted_resumable");
+    assert!(failure.error.resumable);
+    assert!(failure.error.checkpoint_present);
+    assert!(!interrupted_bundle.exists());
 
-    payload["resource_policy"]["mode"] = json!("memory");
-    payload["resource_policy"]["max_resident_bytes"] = json!(16 * 1024 * 1024);
-    std::fs::write(&manifest, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
+    let resumed_bundle = dir.path().join("resumed-air-bundle.json");
+    let resumed = cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "resume-air",
+            "--air",
+            dir.path().join("inputs/air.json").to_str().unwrap(),
+            "--trace-manifest",
+            dir.path().join("inputs/trace.json").to_str().unwrap(),
+            "--chunks-dir",
+            dir.path().join("inputs/chunks").to_str().unwrap(),
+            "--public-inputs",
+            dir.path().join("inputs/public.json").to_str().unwrap(),
+            "--checkpoint",
+            checkpoint_dir.join("checkpoint.json").to_str().unwrap(),
+            "--output",
+            resumed_bundle.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        resumed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&resumed.stderr)
+    );
+    assert_air_operation_report(&resumed.stdout, "bounded", true);
+    for line in String::from_utf8_lossy(&resumed.stderr).lines() {
+        let event: tinyzkp_contracts::ProgressEventV1 = serde_json::from_str(line).unwrap();
+        assert!(event.validate("development-unreleased"));
+    }
     cargo_bin_cmd!("hc-cli")
         .args([
             "plonky3",
-            "doctor",
-            "--manifest",
-            manifest.to_str().unwrap(),
+            "verify-air",
+            "--bundle",
+            resumed_bundle.to_str().unwrap(),
         ])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("resident memory"))
-        .stderr(predicate::str::contains("\"event\":\"doctor_failed\""))
-        .stderr(predicate::str::contains("\"estimate\""));
+        .success();
+}
+
+#[test]
+fn root_doctor_emits_one_complete_report_and_only_typed_progress() {
+    let dir = tempdir().unwrap();
+    let manifest = write_doctor_job(dir.path(), "auto", 4 * 1024 * 1024 * 1024);
+    let absolute = cargo_bin_cmd!("hc-cli")
+        .args(["doctor", "--job", manifest.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(absolute.status.code(), Some(11));
+    assert_eq!(
+        absolute
+            .stdout
+            .iter()
+            .filter(|byte| **byte == b'\n')
+            .count(),
+        1
+    );
+    let failure: tinyzkp_contracts::EngineErrorEnvelopeV1 =
+        serde_json::from_slice(&absolute.stdout).unwrap();
+    assert_eq!(failure.error.reason.code.as_str(), "unsafe_path");
+
+    let output = cargo_bin_cmd!("hc-cli")
+        .current_dir(dir.path())
+        .args(["doctor", "--job", "job.json"])
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        output.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1
+    );
+    if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        assert!(output.status.success());
+        assert_eq!(report["ready"], true);
+        assert!(report["estimates"]["conventional"]["peak_resident_bytes"].is_u64());
+        assert!(report["estimates"]["bounded"]["scratch_high_water_bytes"].is_u64());
+    } else {
+        assert_eq!(output.status.code(), Some(10));
+        assert_eq!(report["reasons"][0]["code"], "unsupported_platform");
+    }
+    for line in String::from_utf8_lossy(&output.stderr).lines() {
+        let event: tinyzkp_contracts::ProgressEventV1 = serde_json::from_str(line).unwrap();
+        assert!(event.validate("development-unreleased"));
+    }
+}
+
+#[test]
+fn doctor_exit_ten_and_twelve_flush_complete_reports() {
+    let dir = tempdir().unwrap();
+    let manifest = write_doctor_job(dir.path(), "auto", 4 * 1024 * 1024 * 1024);
+    let mut payload: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    payload["compatibility_profile"] = json!("unsupported-profile");
+    std::fs::write(&manifest, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
+    let output = cargo_bin_cmd!("hc-cli")
+        .current_dir(dir.path())
+        .args(["doctor", "--job", "job.json"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(10));
+    assert_eq!(
+        output.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["reasons"][0]["code"], "unsupported_profile");
+
+    payload["compatibility_profile"] = json!("tinyzkp-p3-goldilocks-v1");
+    payload["mode"] = json!("conventional");
+    payload["ram_budget_bytes"] = json!(16 * 1024 * 1024);
+    std::fs::write(&manifest, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
+    let output = cargo_bin_cmd!("hc-cli")
+        .current_dir(dir.path())
+        .args(["doctor", "--job", "job.json"])
+        .output()
+        .unwrap();
+    let expected = if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        12
+    } else {
+        10
+    };
+    assert_eq!(output.status.code(), Some(expected));
+    assert_eq!(
+        output.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let codes: Vec<_> = report["reasons"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|reason| reason["code"].as_str())
+        .collect();
+    if expected == 12 {
+        assert!(codes.contains(&"ram_budget_insufficient"));
+    } else {
+        assert!(codes.contains(&"unsupported_platform"));
+    }
 }
 
 #[test]
@@ -917,9 +1440,10 @@ fn proof_bundle_mutation_is_rejected_before_verification() {
         .args(["plonky3", "verify", "--bundle", bundle.to_str().unwrap()])
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "proof encoding or digest mismatch",
-        ));
+        .stdout(predicate::str::contains(
+            "\"code\":\"verification_rejected\"",
+        ))
+        .stderr(predicate::str::is_empty());
 }
 
 #[test]
@@ -939,6 +1463,26 @@ fn schemas_are_exported_from_rust_contracts() {
         "air-proof-bundle-v1.schema.json",
     ] {
         assert!(dir.path().join(file).is_file());
+    }
+    assert_eq!(tinyzkp_contracts::PUBLIC_SCHEMA_NAMES.len(), 12);
+    for file in tinyzkp_contracts::PUBLISHED_SCHEMA_NAMES {
+        let mut expected =
+            serde_json::to_vec_pretty(&tinyzkp_contracts::schema_by_name(file).unwrap()).unwrap();
+        expected.push(b'\n');
+        assert_eq!(
+            std::fs::read(dir.path().join(file)).unwrap(),
+            expected,
+            "{file}"
+        );
+        let checked_in = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../site/schemas")
+            .join(file);
+        assert_eq!(
+            std::fs::read(&checked_in).unwrap(),
+            expected,
+            "{} must be the exact exporter output",
+            checked_in.display()
+        );
     }
 }
 

@@ -11,6 +11,7 @@
     "crates/hc-height",
     "crates/hc-plonky3",
     "crates/hc-stream",
+    "crates/tinyzkp-contracts",
      "crates/hc-prover",
      "crates/hc-recursion",
      "crates/hc-replay",

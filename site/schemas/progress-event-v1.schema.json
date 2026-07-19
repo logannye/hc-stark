@@ -1,0 +1,152 @@
+{
+  "$defs": {
+    "ResourceUsageV1": {
+      "additionalProperties": false,
+      "properties": {
+        "resident_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "scratch_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "scratch_bytes"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://tinyzkp.com/schemas/progress-event-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "checkpoint_durable": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "completed_phases": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "engine_release_identity": {
+      "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
+      "type": "string"
+    },
+    "event": {
+      "enum": [
+        "doctor_started",
+        "doctor_paths_validated",
+        "doctor_inputs_validated",
+        "doctor_estimating",
+        "doctor_completed",
+        "resource_estimate",
+        "phase",
+        "run_started",
+        "run_proving",
+        "run_verifying",
+        "run_interrupted",
+        "run_completed",
+        "resume_started",
+        "resume_proving",
+        "resume_verifying",
+        "resume_interrupted",
+        "resume_completed",
+        "verify_started",
+        "verify_completed",
+        "diagnostics_started",
+        "diagnostics_completed",
+        "policy_started",
+        "policy_completed"
+      ],
+      "type": "string"
+    },
+    "phase": {
+      "anyOf": [
+        {
+          "enum": [
+            "trace",
+            "trace_lde",
+            "trace_commitment",
+            "quotient",
+            "quotient_lde",
+            "quotient_commitment",
+            "openings",
+            "proof_assembly"
+          ]
+        },
+        {
+          "pattern": "^fri_layer_[0-9]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "progress": {
+      "format": "double",
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "resource_usage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResourceUsageV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "schema_version": {
+      "const": 1,
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "stage": {
+      "enum": [
+        "validation",
+        "resource_estimate",
+        "orchestration",
+        "proving",
+        "verification",
+        "diagnostics",
+        "policy",
+        "complete"
+      ],
+      "type": "string"
+    },
+    "total_phases": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "engine_release_identity",
+    "event",
+    "stage"
+  ],
+  "title": "ProgressEventV1",
+  "type": "object"
+}

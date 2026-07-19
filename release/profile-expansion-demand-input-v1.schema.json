@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tinyzkp:internal:profile-expansion-demand-input-v1",
+  "title": "TinyZKP new compatibility profile demand input v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "current_profile",
+    "records"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "current_profile": {
+      "type": "string",
+      "const": "tinyzkp-p3-goldilocks-v1"
+    },
+    "records": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/record"
+      }
+    }
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "organization_id",
+        "qualification",
+        "proposed_profile_id",
+        "rejection_reason",
+        "conditional_annual_price_usd"
+      ],
+      "properties": {
+        "organization_id": {
+          "type": "string",
+          "pattern": "^org-[0-9a-f]{32}$"
+        },
+        "qualification": {
+          "type": "string",
+          "const": "technically_qualified"
+        },
+        "proposed_profile_id": {
+          "type": "string",
+          "pattern": "^tinyzkp-[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$",
+          "maxLength": 80
+        },
+        "rejection_reason": {
+          "type": "string",
+          "enum": [
+            "unsupported_air_feature",
+            "unsupported_platform",
+            "unsupported_profile"
+          ]
+        },
+        "conditional_annual_price_usd": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "const": 4990
+            }
+          ]
+        }
+      }
+    }
+  }
+}

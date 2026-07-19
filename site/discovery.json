@@ -30,9 +30,17 @@
   "release_status": "https://tinyzkp.com/release.json",
   "contracts": {
     "job_manifest_v1": "https://tinyzkp.com/schemas/job-manifest-v1.schema.json",
-    "job_result_v1": "https://tinyzkp.com/schemas/job-result-v1.schema.json",
+    "doctor_report_v1": "https://tinyzkp.com/schemas/doctor-report-v1.schema.json",
+    "compatibility_report_v1": "https://tinyzkp.com/schemas/compatibility-report-v1.schema.json",
     "compatibility_manifest_v1": "https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json",
+    "reason_v1": "https://tinyzkp.com/schemas/reason-v1.schema.json",
+    "error_envelope_v1": "https://tinyzkp.com/schemas/error-envelope-v1.schema.json",
+    "progress_event_v1": "https://tinyzkp.com/schemas/progress-event-v1.schema.json",
+    "job_result_v1": "https://tinyzkp.com/schemas/job-result-v1.schema.json",
+    "support_report_v1": "https://tinyzkp.com/schemas/support-report-v1.schema.json",
+    "job_inspect_result_v1": "https://tinyzkp.com/schemas/job-inspect-result-v1.schema.json",
     "guard_channel_v1": "https://tinyzkp.com/schemas/guard-channel-v1.schema.json",
+    "guard_release_index_v1": "https://tinyzkp.com/schemas/guard-release-index-v1.schema.json",
     "policy_baseline_v1": "https://tinyzkp.com/schemas/policy-baseline-v1.schema.json"
   },
   "primary_actions": [

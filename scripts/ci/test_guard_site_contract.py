@@ -111,9 +111,18 @@ def test_machine_assets_are_json_and_public_contracts_have_ids() -> None:
 
     for name in (
         "job-manifest-v1.schema.json",
+        "doctor-report-v1.schema.json",
+        "compatibility-report-v1.schema.json",
+        "reason-v1.schema.json",
+        "error-envelope-v1.schema.json",
+        "progress-event-v1.schema.json",
         "job-result-v1.schema.json",
-        "compatibility-manifest-v1.schema.json",
+        "support-report-v1.schema.json",
+        "job-inspect-result-v1.schema.json",
         "guard-channel-v1.schema.json",
+        "guard-release-index-v1.schema.json",
+        "policy-baseline-v1.schema.json",
+        "compatibility-manifest-v1.schema.json",
     ):
         schema = load_json(SITE / "schemas" / name)
         assert schema["$id"] == f"https://tinyzkp.com/schemas/{name}"
@@ -123,9 +132,10 @@ def test_compatibility_profile_id_is_canonical_across_contracts() -> None:
     profile_id = "tinyzkp-p3-goldilocks-v1"
     assert load_json(SITE / "compatibility.json")["profile"] == profile_id
     assert load_json(SITE / "release.json")["compatibility_profile"] == profile_id
+    assert load_json(SITE / "schemas" / "compatibility-report-v1.schema.json")["$defs"]["CompatibilityManifestV1"]["properties"]["profile"]["const"] == profile_id
     assert load_json(SITE / "schemas" / "compatibility-manifest-v1.schema.json")["properties"]["profile"]["const"] == profile_id
     assert load_json(SITE / "schemas" / "job-manifest-v1.schema.json")["properties"]["compatibility_profile"]["const"] == profile_id
-    assert load_json(SITE / "schemas" / "job-result-v1.schema.json")["definitions"]["ReleaseIdentityV1"]["properties"]["compatibility_profile"]["const"] == profile_id
+    assert load_json(SITE / "schemas" / "job-result-v1.schema.json")["$defs"]["ReleaseIdentityV1"]["properties"]["compatibility_profile"]["const"] == profile_id
     assert load_json(SITE / "schemas" / "guard-channel-v1.schema.json")["properties"]["compatibility_profile"]["const"] == profile_id
 
 
