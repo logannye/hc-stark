@@ -109,7 +109,7 @@ def test_post_write_smoke_failure_restores_caddy_pages_probe_and_containment(
     joined = [" ".join(command) for command in commands]
     assert sum("set-beta-writes.sh 0" in command for command in joined) == 2
     assert any("switch-beta-route.sh rollback" in command for command in joined)
-    assert any("AUDIT_MODE:containment" in command for command in joined)
+    assert any("AUDIT_MODE:guard_prelaunch" in command for command in joined)
     assert page_rollbacks == ["previous"]
     assert discovery_calls == 3
     assert not args.evidence.exists()

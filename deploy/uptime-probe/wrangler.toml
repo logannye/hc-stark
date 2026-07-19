@@ -9,7 +9,13 @@ compatibility_flags = ["global_fetch_strictly_public"]
 crons = ["*/2 * * * *"]
 
 [vars]
-AUDIT_MODE = "containment"
+AUDIT_MODE = "guard_prelaunch"
+# An unchanged incident pages once every six hours instead of every two minutes.
+ALERT_REMINDER_SECONDS = "21600"
+
+[[kv_namespaces]]
+binding = "ALERT_STATE"
+id = "204107410bc540aa97647c5289b18f89"
 
 # Set the email relay URL and its independent bearer token as secrets:
 #   wrangler secret put ALERT_WEBHOOK_URL
