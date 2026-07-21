@@ -1,6 +1,6 @@
-/** External backend-recovery canary. It runs off-host and pages only after one retry. */
+/** External production canary. It runs off-host and pages only after one retry. */
 
-const TARGETS = [
+const LEGACY_RECOVERY_TARGETS = [
   { name: "api-health", url: "https://api.tinyzkp.com/healthz", expect: 200 },
   { name: "api-ready", url: "https://api.tinyzkp.com/readyz", expect: 200 },
   { name: "webhook-health", url: "https://webhook.tinyzkp.com/health", expect: 200 },
@@ -11,23 +11,8 @@ const TARGETS = [
     contains: '"proving_available":false',
   },
   {
-    name: "published-recovery-status",
-    url: "https://tinyzkp.com/discovery.json",
-    expect: 200,
-    jsonField: "service_status",
-    jsonValue: "backend_recovery",
-  },
-  {
     name: "api-proving-contained",
     url: "https://api.tinyzkp.com/templates",
-    expect: 503,
-    contains: '"code":"protocol_upgrade"',
-  },
-  {
-    name: "checkout-contained",
-    url: "https://tinyzkp.com/api/create-checkout",
-    method: "POST",
-    body: "{}",
     expect: 503,
     contains: '"code":"protocol_upgrade"',
   },
@@ -39,22 +24,88 @@ const TARGETS = [
     expect: 200,
     contains: "protocolVersion",
   },
-  {
-    name: "site",
-    url: "https://tinyzkp.com/",
-    expect: 200,
-  },
-  {
-    name: "site-status",
-    url: "https://tinyzkp.com/status",
-    expect: 200,
-    contains: "Planned maintenance",
-  },
   { name: "mcp-version", url: "https://mcp.tinyzkp.com/version", expect: 200, contains: '"service":"mcp"' },
+];
+
+const BACKEND_RECOVERY_TARGETS = [
+  ...LEGACY_RECOVERY_TARGETS,
+  {
+    name: "published-recovery-status",
+    url: "https://tinyzkp.com/discovery.json",
+    expect: 200,
+    jsonField: "service_status",
+    jsonValue: "backend_recovery",
+  },
+  {
+    name: "checkout-contained",
+    url: "https://tinyzkp.com/api/create-checkout",
+    method: "POST",
+    body: "{}",
+    expect: 503,
+    contains: '"code":"protocol_upgrade"',
+  },
+  { name: "site", url: "https://tinyzkp.com/", expect: 200 },
+  { name: "site-status", url: "https://tinyzkp.com/status", expect: 200, contains: "Planned maintenance" },
   { name: "site-recovery-status", url: "https://tinyzkp.com/status", expect: 200, contains: "Backend recovery in progress" },
   { name: "site-security", url: "https://tinyzkp.com/security", expect: 200, contains: "release gates" },
   { name: "site-docs", url: "https://tinyzkp.com/docs", expect: 200, contains: "Maintenance API" },
 ];
+
+const GUARD_PRELAUNCH_TARGETS = [
+  ...LEGACY_RECOVERY_TARGETS,
+  {
+    name: "published-guard-status",
+    url: "https://tinyzkp.com/discovery.json",
+    expect: 200,
+    jsonField: "service_status",
+    jsonValue: "guard_prelaunch",
+  },
+  {
+    name: "checkout-contained",
+    url: "https://tinyzkp.com/api/create-checkout",
+    method: "POST",
+    body: "{}",
+    expect: 410,
+    contains: "This surface has been retired.",
+  },
+  { name: "site", url: "https://tinyzkp.com/", expect: 200 },
+  {
+    name: "site-commerce-contained",
+    url: "https://tinyzkp.com/commerce.json",
+    expect: 200,
+    jsonField: "checkout_enabled",
+    jsonValue: false,
+  },
+  {
+    name: "site-release-blocked",
+    url: "https://tinyzkp.com/release.json",
+    expect: 200,
+    jsonField: "status",
+    jsonValue: "blocked",
+  },
+  {
+    name: "site-pricing-contained",
+    url: "https://tinyzkp.com/pricing.json",
+    expect: 200,
+    jsonField: "checkout_enabled",
+    jsonValue: false,
+  },
+  {
+    name: "site-security",
+    url: "https://tinyzkp.com/security",
+    expect: 200,
+    contains: "Proof data stays out of TinyZKP infrastructure.",
+  },
+  {
+    name: "site-docs",
+    url: "https://tinyzkp.com/docs",
+    expect: 200,
+    contains: "Evaluate compatibility before you buy.",
+  },
+];
+
+// Compatibility alias for tooling that still imports the original recovery set.
+const TARGETS = BACKEND_RECOVERY_TARGETS;
 
 const PUBLIC_BETA_TARGETS = [
   { name: "api-health", url: "https://api.tinyzkp.com/healthz", expect: 200 },
@@ -87,13 +138,18 @@ const PUBLIC_BETA_TARGETS = [
 ];
 
 function targetsForMode(mode) {
-  if (!mode || mode === "containment") return TARGETS;
+  if (!mode || mode === "guard_prelaunch") return GUARD_PRELAUNCH_TARGETS;
+  if (mode === "containment") return BACKEND_RECOVERY_TARGETS;
   if (mode === "public_beta") return PUBLIC_BETA_TARGETS;
   throw new Error(`invalid AUDIT_MODE: ${mode}`);
 }
 
 const TIMEOUT_MS = 10_000;
 const RETRY_DELAY_MS = 5_000;
+const INCIDENT_KEY = "incident:external_probe_failed";
+const DEFAULT_ALERT_REMINDER_SECONDS = 6 * 60 * 60;
+const MIN_ALERT_REMINDER_SECONDS = 5 * 60;
+const MAX_ALERT_REMINDER_SECONDS = 24 * 60 * 60;
 
 async function probe(target) {
   const controller = new AbortController();
@@ -145,22 +201,113 @@ async function probeWithRetry(target) {
   return { ...(await probe(target)), retried: true };
 }
 
-async function alert(env, failures) {
-  if (!env.ALERT_WEBHOOK_URL || !env.ALERT_WEBHOOK_TOKEN) {
-    console.error("alert webhook configuration unset", JSON.stringify(failures));
-    return;
+function modeLabel(mode) {
+  if (mode === "containment") return "backend recovery";
+  if (mode === "public_beta") return "public beta";
+  if (mode === "guard_prelaunch") return "Guard prelaunch";
+  return mode || "production";
+}
+
+function failureFingerprint(failures) {
+  return JSON.stringify(
+    [...failures]
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(({ name, status, missing, error }) => ({
+        name,
+        status,
+        missing: missing || null,
+        error: error || null,
+      })),
+  );
+}
+
+function alertReminderSeconds(env) {
+  const configured = Number.parseInt(env.ALERT_REMINDER_SECONDS || "", 10);
+  if (
+    Number.isInteger(configured) &&
+    configured >= MIN_ALERT_REMINDER_SECONDS &&
+    configured <= MAX_ALERT_REMINDER_SECONDS
+  ) {
+    return configured;
   }
-  const text = "🔴 TinyZKP recovery surface failed: " + failures
+  return DEFAULT_ALERT_REMINDER_SECONDS;
+}
+
+async function postAlert(env, payload) {
+  if (!env.ALERT_WEBHOOK_URL || !env.ALERT_WEBHOOK_TOKEN) {
+    console.error("alert webhook configuration unset");
+    return false;
+  }
+  try {
+    const response = await fetch(env.ALERT_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.ALERT_WEBHOOK_TOKEN}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      console.error("alert webhook rejected delivery", response.status);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("alert webhook failed", error);
+    return false;
+  }
+}
+
+async function alert(env, failures, mode = "guard_prelaunch") {
+  const text = `🔴 TinyZKP ${modeLabel(mode)} surface failed: ` + failures
     .map((failure) => `${failure.name} (${failure.status})`)
     .join(", ");
-  await fetch(env.ALERT_WEBHOOK_URL, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env.ALERT_WEBHOOK_TOKEN}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ text, incident: "external_probe_failed" }),
-  }).catch((error) => console.error("alert webhook failed", error));
+  return postAlert(env, { text, incident: "external_probe_failed" });
+}
+
+async function reconcileAlertState(env, failures, mode, now = Date.now()) {
+  if (!env.ALERT_STATE) {
+    if (failures.length) await alert(env, failures, mode);
+    return;
+  }
+
+  let previous = null;
+  try {
+    previous = await env.ALERT_STATE.get(INCIDENT_KEY, "json");
+  } catch (error) {
+    console.error("cannot read alert incident state", error);
+    if (failures.length) await alert(env, failures, mode);
+    return;
+  }
+
+  if (!failures.length) {
+    if (!previous) return;
+    const delivered = await postAlert(env, {
+      text: `🟢 TinyZKP ${modeLabel(mode)} surface recovered.`,
+      incident: "external_probe_recovered",
+    });
+    if (delivered) await env.ALERT_STATE.delete(INCIDENT_KEY);
+    return;
+  }
+
+  const fingerprint = failureFingerprint(failures);
+  const reminderSeconds = alertReminderSeconds(env);
+  const previousAt = Number(previous?.last_alert_at_ms);
+  if (
+    previous?.fingerprint === fingerprint &&
+    Number.isFinite(previousAt) &&
+    now - previousAt < reminderSeconds * 1000
+  ) {
+    return;
+  }
+
+  const delivered = await alert(env, failures, mode);
+  if (!delivered) return;
+  await env.ALERT_STATE.put(
+    INCIDENT_KEY,
+    JSON.stringify({ fingerprint, last_alert_at_ms: now }),
+    { expirationTtl: Math.max(reminderSeconds * 4, 24 * 60 * 60) },
+  );
 }
 
 async function runProbes(env) {
@@ -169,13 +316,14 @@ async function runProbes(env) {
     targets = targetsForMode(env.AUDIT_MODE);
   } catch (error) {
     const failures = [{ name: "audit-mode", ok: false, status: 0, error: String(error) }];
-    await alert(env, failures);
+    await reconcileAlertState(env, failures, env.AUDIT_MODE || "invalid");
     return { ok: false, checked_at: new Date().toISOString(), mode: env.AUDIT_MODE, results: failures };
   }
   const results = await Promise.all(targets.map(probeWithRetry));
   const failures = results.filter((result) => !result.ok);
-  if (failures.length) await alert(env, failures);
-  return { ok: failures.length === 0, checked_at: new Date().toISOString(), mode: env.AUDIT_MODE || "containment", results };
+  const mode = env.AUDIT_MODE || "guard_prelaunch";
+  await reconcileAlertState(env, failures, mode);
+  return { ok: failures.length === 0, checked_at: new Date().toISOString(), mode, results };
 }
 
 export default {
@@ -191,4 +339,14 @@ export default {
   },
 };
 
-export { TARGETS, PUBLIC_BETA_TARGETS, targetsForMode, probe, alert };
+export {
+  TARGETS,
+  BACKEND_RECOVERY_TARGETS,
+  GUARD_PRELAUNCH_TARGETS,
+  PUBLIC_BETA_TARGETS,
+  targetsForMode,
+  probe,
+  alert,
+  failureFingerprint,
+  reconcileAlertState,
+};

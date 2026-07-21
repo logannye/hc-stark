@@ -153,7 +153,14 @@ def activate(args: argparse.Namespace) -> None:
         attempt(
             "restore containment probe",
             lambda: run(
-                [args.wrangler, "deploy", "--config", "deploy/uptime-probe/wrangler.toml", "--var", "AUDIT_MODE:containment"],
+                [
+                    args.wrangler,
+                    "deploy",
+                    "--config",
+                    "deploy/uptime-probe/wrangler.toml",
+                    "--var",
+                    "AUDIT_MODE:guard_prelaunch",
+                ],
                 cwd=root,
             ),
         )
