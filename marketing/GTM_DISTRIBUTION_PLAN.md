@@ -1,9 +1,17 @@
 # TinyZKP GTM and Distribution Plan
 
+> **Historical/retired evidence only.** Every implementation, completion,
+> availability, and revenue claim below is a snapshot of the former hosted
+> business and is not current TinyZKP operating guidance. The active
+> Community/Guard revenue-readiness workflow is documented in
+> `marketing/README.md`.
+
 > **Archived recovery-era material — do not execute, publish, submit, or use
 > for outreach.** It documents the retired self-serve agent/receipt business.
 > Current commercial operations prohibit email outreach and public checkout;
-> follow `commercial/no-email-evaluation-runbook.md` instead.
+> `commercial/no-email-evaluation-runbook.md` is also historical and is not an
+> alternative operating path. Current state is canonicalized in
+> `release/guard-launch-state-v2.json`.
 
 > Purpose: turn TinyZKP from a polished developer site into a self-reinforcing
 > distribution and revenue system for human buyers and AI-agent evaluators.

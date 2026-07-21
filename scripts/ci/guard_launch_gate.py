@@ -2912,11 +2912,11 @@ def derive(
         "itemListElement": [
             {
                 "@type": "Offer",
-                "name": "TinyZKP Community",
+                "name": "TinyZKP Community source",
                 "price": "0",
                 "priceCurrency": "USD",
                 "availability": "https://schema.org/InStock",
-                "url": "https://tinyzkp.com/doctor",
+                "url": "https://github.com/logannye/hc-stark",
             },
             {
                 "@type": "Offer",

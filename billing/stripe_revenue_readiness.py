@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Run the safe Stripe revenue-readiness sequence for TinyZKP."""
+"""Historical payment-readiness orchestrator; executable entry point retired.
+
+The recovery-era step builder and redaction helpers remain as audit evidence.
+The executable must not inspect accounts, run checkout monitors, mutate a
+catalog, or update the current Community/Guard readiness pipeline.
+"""
 
 from __future__ import annotations
 
@@ -21,6 +26,11 @@ DEFAULT_EXPECTED_DISPLAY_NAME = "LN Holdings"
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 SECRET_RE = re.compile(r"\b(?:sk|rk|pk|whsec)_(?:live|test)?_?[^\s'\"}]+")
 STRIPE_ID_RE = re.compile(r"\b(?:acct|cs|cus|pi|sub|price|prod|mtr|req)_[A-Za-z0-9_*]{8,}\b")
+RETIREMENT_NOTICE = (
+    "retired: the legacy payment-readiness runner cannot inspect or mutate the "
+    "current Guard business; use release/guard-launch-state-v2.json and the "
+    "Lemon Squeezy commerce gates"
+)
 
 
 @dataclass(frozen=True)
@@ -272,6 +282,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
+    # Fail before argument parsing, profile discovery, subprocess execution, or
+    # any local/external mutation. The historical implementation remains above
+    # solely so its former behavior can be audited.
+    _ = argv
+    print(f"FAIL {RETIREMENT_NOTICE}", file=sys.stderr)
+    return 2
+
+    # Historical implementation retained below; unreachable by design.
     args = build_parser().parse_args(argv)
     results = run_readiness(args)
     if args.json:

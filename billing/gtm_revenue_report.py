@@ -98,7 +98,10 @@ def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
 def load_pricing_model(path: Path = PRICING_PATH) -> PricingModel:
     with path.open(encoding="utf-8") as handle:
         pricing = json.load(handle)
-    if isinstance(pricing, dict) and pricing.get("service_status") == "backend_recovery":
+    if isinstance(pricing, dict) and (
+        pricing.get("service_status") == "backend_recovery"
+        or pricing.get("usage_metering") is False
+    ):
         return PricingModel({}, [], Decimal("0"), 0)
     plans = (pricing.get("plans") or []) if isinstance(pricing, dict) else []
     base_monthly_by_plan = {

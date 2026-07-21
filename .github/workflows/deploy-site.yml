@@ -4,28 +4,38 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - ".gitattributes"
+      - "BUSINESS_GUIDE.md"
+      - "README.md"
+      - "commercial/**"
+      - "docs/**"
+      - "marketing/**"
+      - "release/**"
       - "site/**"
-      - "release/guard-launch-*.json"
-      - "release/guard-candidate-build-authorization-v1.json"
-      - "release/guard-signing-trust-v1.json"
-      - "release/guard-signing-public-key.pem"
-      - "scripts/ci/guard_launch_gate.py"
-      - "scripts/ci/site_route_check.py"
-      - "scripts/ci/site_deploy_check.py"
+      - "scripts/ci/**"
+      - "scripts/commercial/**"
       - "scripts/deploy/**"
+      - "scripts/marketing/**"
+      - "toolchains/cloudflare/**"
+      - ".github/workflows/ci.yml"
       - ".github/workflows/deploy-site.yml"
   push:
     branches: [main]
     paths:
+      - ".gitattributes"
+      - "BUSINESS_GUIDE.md"
+      - "README.md"
+      - "commercial/**"
+      - "docs/**"
+      - "marketing/**"
+      - "release/**"
       - "site/**"
-      - "release/guard-launch-*.json"
-      - "release/guard-candidate-build-authorization-v1.json"
-      - "release/guard-signing-trust-v1.json"
-      - "release/guard-signing-public-key.pem"
-      - "scripts/ci/guard_launch_gate.py"
-      - "scripts/ci/site_route_check.py"
-      - "scripts/ci/site_deploy_check.py"
+      - "scripts/ci/**"
+      - "scripts/commercial/**"
       - "scripts/deploy/**"
+      - "scripts/marketing/**"
+      - "toolchains/cloudflare/**"
+      - ".github/workflows/ci.yml"
       - ".github/workflows/deploy-site.yml"
   workflow_dispatch:
 
@@ -49,6 +59,14 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+      - name: Anchor the installed Cosign executable
+        run: |
+          cosign_executable="$(command -v cosign)"
+          test -x "$cosign_executable"
+          echo "TINYZKP_COSIGN=$cosign_executable" >> "$GITHUB_ENV"
       - name: Validate source consistency and static-only routing
         run: |
           python3 -m pip install pytest
@@ -66,6 +84,7 @@ jobs:
             --trusted-policy-sha256 \
               "$(sha256sum release/guard-market-trust-v1.json | cut -d' ' -f1)"
           python3 scripts/ci/passive_operations_scorecard.py --check
+          python3 scripts/commercial/render_offers.py --check
           python3 scripts/ci/site_route_check.py
           python3 scripts/ci/site_deploy_check.py
           python3 -m pytest \
@@ -78,6 +97,13 @@ jobs:
             scripts/deploy/test_cloudflare_pages_release.py -q
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs
+          python3 scripts/ci/guard_pages_launch_preflight.py \
+            --source-guard-trust-sha256 \
+              "$(sha256sum release/guard-launch-trust-v1.json | cut -d' ' -f1)" \
+            --source-signing-trust-sha256 \
+              "$(sha256sum release/guard-signing-trust-v1.json | cut -d' ' -f1)" \
+            --source-market-trust-sha256 \
+              "$(sha256sum release/guard-market-trust-v1.json | cut -d' ' -f1)"
 
   preview:
     needs: static-contracts
@@ -127,6 +153,19 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+      - name: Anchor the installed Cosign executable
+        run: |
+          cosign_executable="$(command -v cosign)"
+          test -x "$cosign_executable"
+          echo "TINYZKP_COSIGN=$cosign_executable" >> "$GITHUB_ENV"
+      - name: Install production preflight dependencies
+        run: python3 -m pip install pytest
       - name: Validate independently anchored production evidence
         run: |
           # The validators require the protected values as soon as the
@@ -155,7 +194,58 @@ jobs:
       - name: Materialize reviewed ephemeral Node and Wrangler runtime
         run: |
           sudo install -d -m 0755 -o root -g root /var/lib/tinyzkp-runtime
-          sudo python3 scripts/ci/materialize_cloudflare_toolchain.py --download
+          case "$GITHUB_SHA" in
+            ""|*[!0-9a-f]*) echo "GITHUB_SHA is not lowercase hexadecimal" >&2; exit 1 ;;
+          esac
+          test "${#GITHUB_SHA}" -eq 40
+          toolchain_source="/var/lib/tinyzkp-runtime/source-$GITHUB_SHA"
+          if sudo test -e "$toolchain_source"; then
+            echo "refusing existing toolchain source root: $toolchain_source" >&2
+            exit 1
+          fi
+          sudo install -d -m 0700 -o root -g root "$toolchain_source"
+          git archive --format=tar "$GITHUB_SHA" -- \
+            scripts/ci/materialize_cloudflare_toolchain.py \
+            scripts/ci/cloudflare_toolchain_check.py \
+            release/cloudflare-production-toolchain-v1.json \
+            toolchains/cloudflare/package.json \
+            toolchains/cloudflare/package-lock.json | \
+            sudo tar --extract --directory="$toolchain_source"
+          if sudo find "$toolchain_source" -type l -print -quit | grep -q .; then
+            echo "toolchain source archive contains a symbolic link" >&2
+            exit 1
+          fi
+          test "$(sudo find "$toolchain_source" -type f | wc -l | tr -d ' ')" -eq 5
+          for toolchain_input in \
+            scripts/ci/materialize_cloudflare_toolchain.py \
+            scripts/ci/cloudflare_toolchain_check.py \
+            release/cloudflare-production-toolchain-v1.json \
+            toolchains/cloudflare/package.json \
+            toolchains/cloudflare/package-lock.json; do
+            committed_sha256="$(git show "$GITHUB_SHA:$toolchain_input" | sha256sum | cut -d' ' -f1)"
+            staged_sha256="$(sudo sha256sum "$toolchain_source/$toolchain_input" | cut -d' ' -f1)"
+            if test "$staged_sha256" != "$committed_sha256"; then
+              echo "staged toolchain input differs from commit: $toolchain_input" >&2
+              exit 1
+            fi
+          done
+          sudo chown -R root:root "$toolchain_source"
+          sudo find "$toolchain_source" -type d -exec chmod 0700 {} +
+          sudo find "$toolchain_source" -type f -exec chmod 0400 {} +
+          sudo python3 \
+            "$toolchain_source/scripts/ci/materialize_cloudflare_toolchain.py" \
+            --download
+      - name: Run protected production preflight and secret inventory
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python3 scripts/ci/guard_pages_launch_preflight.py \
+            --production \
+            --node-executable \
+              /var/lib/tinyzkp-runtime/node-v24.18.0-linux-x64/bin/node \
+            --wrangler-entrypoint \
+              /var/lib/tinyzkp-runtime/cloudflare-toolchain/node_modules/wrangler/bin/wrangler.js
       - name: Plan exact production deployment
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

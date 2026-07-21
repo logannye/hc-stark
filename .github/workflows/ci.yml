@@ -102,7 +102,18 @@ jobs:
             scripts/release/test_run_evidenced_command.py \
             scripts/release/test_run_crash_matrix.py \
             scripts/release/test_run_fuzz_smoke.py -q
-          python3 scripts/ci/guard_launch_gate.py
+          # These repository-derived digests validate source consistency only;
+          # protected production trust roots are evaluated in deploy-site.yml.
+          python3 scripts/ci/guard_launch_gate.py \
+            --check \
+            --trusted-policy-sha256 \
+              "$(sha256sum release/guard-launch-trust-v1.json | cut -d' ' -f1)" \
+            --trusted-signing-policy-sha256 \
+              "$(sha256sum release/guard-signing-trust-v1.json | cut -d' ' -f1)"
+          python3 scripts/ci/guard_market_clock.py \
+            --check \
+            --trusted-policy-sha256 \
+              "$(sha256sum release/guard-market-trust-v1.json | cut -d' ' -f1)"
           python3 scripts/ci/profile_expansion_demand_gate.py
           python3 scripts/ci/claim_containment_scan.py
           if test -f site/guard-release-index-v1.json; then
@@ -115,14 +126,29 @@ jobs:
 
       - name: Static site contracts
         run: |
+          python3 scripts/commercial/render_offers.py --check
           python3 scripts/ci/site_route_check.py
           python3 scripts/ci/site_deploy_check.py
           python3 -m pytest \
             scripts/ci/test_site_route_check.py \
             scripts/ci/test_guard_site_contract.py \
+            scripts/commercial/test_render_offers.py \
             scripts/ci/test_site_asset_manifest.py -q
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs
+
+      - name: Guard and static-site production preflight
+        run: |
+          python3 -m pytest scripts/ci/test_guard_pages_launch_preflight.py -q
+          # Repository-derived digests make source validation deterministic but
+          # never cross the protected production boundary as launch authority.
+          python3 scripts/ci/guard_pages_launch_preflight.py \
+            --source-guard-trust-sha256 \
+              "$(sha256sum release/guard-launch-trust-v1.json | cut -d' ' -f1)" \
+            --source-signing-trust-sha256 \
+              "$(sha256sum release/guard-signing-trust-v1.json | cut -d' ' -f1)" \
+            --source-market-trust-sha256 \
+              "$(sha256sum release/guard-market-trust-v1.json | cut -d' ' -f1)"
 
       - name: Customer-operated OCI image
         run: docker build --build-arg HC_RELEASE_SHA=${{ github.sha }} --build-arg HC_RELEASE_REF=ci -t tinyzkp-engine:ci .

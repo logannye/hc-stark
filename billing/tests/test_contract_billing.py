@@ -4,10 +4,23 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
+from pathlib import Path
 import subprocess
 from types import SimpleNamespace
 
 import contract_billing as billing
+
+
+LEGACY_OFFERS_PATH = (
+    Path(__file__).resolve().parent / "fixtures" / "legacy-commercial-offers-v3.json"
+)
+billing.OFFERS_PATH = LEGACY_OFFERS_PATH
+
+
+def test_active_guard_catalog_disables_legacy_contract_creation(monkeypatch):
+    monkeypatch.setattr(billing, "OFFERS_PATH", billing.ROOT / "site" / "pricing.json")
+    with pytest.raises(ValueError, match="unavailable for the active Guard catalog"):
+        billing.load_offers()
 
 
 def evidence(

@@ -2,11 +2,11 @@
 
 > Generated from `site/pricing.json`; do not edit by hand.
 
-| Offer | Price | Availability | Billing | Scope control |
+| Product | Price | Availability | License | Scope |
 |---|---:|---|---|---|
-| Founding Memory-Bounded Evaluation | $25,000 | Available during recovery · first two customers | 50_percent_upfront_50_percent_on_delivery | ≤15 engineering days |
-| Memory-Bounded Prover Evaluation | $40,000 | Available during recovery | 50_percent_upfront_50_percent_on_delivery | ≤15 engineering days |
-| TinyZKP Certified | $60,000 | Available after backend v1 review and release | annual_prepaid_send_invoice | ≤10 support hours/quarter |
-| TinyZKP Fleet / OEM | $125,000+ | Available after backend v1 review and release | annual_prepaid_send_invoice | Custom work separately scoped |
+| TinyZKP Community source | $0 | Available | MIT | Open engine and verifier source, public schemas, and reference workloads |
+| TinyZKP Guard annual | $4,990/year | Closed pending launch evidence | Commercial object code | One legal organization; unlimited internal users and runners |
+| TinyZKP Guard monthly | $499/month | Closed pending launch evidence | Commercial object code | One legal organization; unlimited internal users and runners |
 
-Public checkout is disabled. Evaluations use invoicing milestones; annual agreements are prepaid `send_invoice` contracts.
+Guard has no hosted proving, usage meter, trial, coupon, enterprise tier, SLA, or bundled engineering hours.
+Checkout URLs are published only when signed launch evidence derives `checkout_enabled: true`.

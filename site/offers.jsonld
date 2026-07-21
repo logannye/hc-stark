@@ -5,10 +5,10 @@
     {
       "@type": "Offer",
       "availability": "https://schema.org/InStock",
-      "name": "TinyZKP Community",
+      "name": "TinyZKP Community source",
       "price": "0",
       "priceCurrency": "USD",
-      "url": "https://tinyzkp.com/doctor"
+      "url": "https://github.com/logannye/hc-stark"
     },
     {
       "@type": "Offer",

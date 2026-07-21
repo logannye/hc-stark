@@ -39,9 +39,10 @@ activate that exact release while the merchant reports an active subscription.
 
 The $499/$4,990 prices are frozen through general availability plus six months;
 no GA date is declared yet. Annual is the default and founding customers use
-the same undiscounted annual variant. Any later price change uses new merchant
-variant IDs and grandfathers existing subscribers. Existing variant IDs remain
-intact and are never deleted or repurposed.
+the same undiscounted annual variant. Any later price change updates the price
+on the reviewed merchant variant and grandfathers existing subscribers at the
+price attached when their subscriptions were created. Existing variant IDs
+remain intact and are never deleted or repurposed.
 
 ## Founding validation
 

@@ -17,166 +17,92 @@ def load_module(name: str, rel_path: str):
     return module
 
 
+execution_renderer = load_module("render_gtm_execution_ledger_for_pipeline_test", "scripts/marketing/render_gtm_execution_ledger.py")
 renderer = load_module("render_gtm_pipeline_ledger", "scripts/marketing/render_gtm_pipeline_ledger.py")
 checker = load_module("gtm_pipeline_ledger_check", "scripts/ci/gtm_pipeline_ledger_check.py")
 
 
-def execution_task(index: int = 1):
-    return {
-        "task_id": f"outbound_send.{index:02d}.agent-{index}",
-        "channel": "founder_outbound",
-        "task_type": "manual_email",
-        "status": "ready_after_manual_contact_research",
-        "owner": "founder",
-        "target": f"Agent {index}",
-        "due_date": "2026-06-29",
-        "follow_up_date": "2026-07-06",
-        "primary_cta": f"https://tinyzkp.com/fit?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=find_route&workflow=agent-{index}",
-        "secondary_cta": f"https://tinyzkp.com/pilot?source=founder_outbound&medium=email&platform=direct&campaign=yc_agent_outbound&intent=paid_pilot_checkout&workflow=agent-{index}",
-        "source_artifact": "marketing/generated/outbound_send_queue.md",
-        "evidence_command": "python3 scripts/ci/outbound_send_queue_check.py",
-        "evidence_url": "",
-        "completed_at": "",
-        "next_action": "Research exactly one founder and send one human email.",
-        "blocker": "Requires manual contact research.",
-    }
+def execution_payload():
+    return execution_renderer.render_ledger(
+        pricing=json.loads((ROOT / "site" / "pricing.json").read_text(encoding="utf-8")),
+        commerce=json.loads((ROOT / "site" / "commerce.json").read_text(encoding="utf-8")),
+        release=json.loads((ROOT / "site" / "release.json").read_text(encoding="utf-8")),
+        launch_state=json.loads((ROOT / "release" / "guard-launch-state-v2.json").read_text(encoding="utf-8")),
+    )
 
 
-def execution_payload(count: int = checker.MIN_RECORDS):
-    tasks = [
-        {
-            "task_id": "revenue.pilot_checkout_launch",
-            "channel": "revenue",
-            "task_type": "live_checkout_verification",
-            "status": "ready_for_live_verification",
-            "owner": "founder",
-            "target": "$5K Production Pilot checkout",
-            "due_date": "2026-06-25",
-            "follow_up_date": "",
-            "primary_cta": "https://tinyzkp.com/pilot?source=gtm_execution_ledger&medium=ops&platform=direct&intent=paid_pilot_checkout",
-            "secondary_cta": "https://tinyzkp.com/contact?category=Paid%20Pilot&source=gtm_execution_ledger&medium=ops&platform=direct&intent=paid_pilot_contact",
-            "source_artifact": "site/functions/api/create-pilot-checkout.js",
-            "evidence_command": "python3 scripts/ci/production_launch_preflight.py --live",
-            "evidence_url": "",
-            "completed_at": "",
-            "next_action": "Deploy and verify pilot checkout.",
-            "blocker": "Requires Cloudflare Pages deploy access and live STRIPE_SECRET_KEY; inline price_data is available.",
-        },
-        {
-            "task_id": "revenue.stripe_catalog_hygiene",
-            "channel": "revenue",
-            "task_type": "stripe_catalog_audit",
-            "status": "external_secret_required",
-            "owner": "founder",
-            "target": "Current Stripe product and price catalog",
-            "due_date": "2026-06-25",
-            "follow_up_date": "",
-            "primary_cta": "https://tinyzkp.com/pricing?source=gtm_execution_ledger&medium=ops&platform=direct&intent=paid_signup",
-            "secondary_cta": "https://tinyzkp.com/pilot?source=gtm_execution_ledger&medium=ops&platform=direct&intent=paid_pilot_checkout",
-            "source_artifact": "billing/setup_stripe_products.sh",
-            "evidence_command": "python3 billing/stripe_revenue_ops_audit.py --stripe-bin /opt/homebrew/bin/stripe --strict-catalog",
-            "evidence_url": "",
-            "completed_at": "",
-            "next_action": "Run billing/setup_stripe_products.sh with write-capable Stripe access.",
-            "blocker": "Requires a write-capable live Stripe API key or CLI profile.",
-        }
-    ]
-    tasks.extend(execution_task(index) for index in range(1, count - 1))
-    return {"tasks": tasks}
-
-
-def write_pipeline(root: Path, execution=None, state=None):
+def write_pipeline(root: Path, execution=None, state=None, payload=None):
     execution = execution or execution_payload()
     state = state or renderer.normalize_state(execution, None)
+    payload = payload or renderer.render_pipeline(execution, state)
     generated = root / "marketing" / "generated"
-    generated.mkdir(parents=True)
+    generated.mkdir(parents=True, exist_ok=True)
     (generated / "gtm_execution_ledger.json").write_text(json.dumps(execution, indent=2) + "\n", encoding="utf-8")
-    (root / "marketing").mkdir(exist_ok=True)
     (root / "marketing" / "gtm_pipeline_state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
-    payload = renderer.render_pipeline(execution, state)
-    (generated / "gtm_pipeline_ledger.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    (generated / "gtm_pipeline_ledger.csv").write_text(renderer.render_csv(payload), encoding="utf-8")
-    (generated / "gtm_pipeline_ledger.md").write_text(renderer.render_markdown(payload), encoding="utf-8")
+    outputs = renderer.expected_outputs(payload)
+    for suffix, content in outputs.items():
+        (generated / f"gtm_pipeline_ledger.{suffix}").write_text(content, encoding="utf-8")
     return execution, state, payload
 
 
-def test_sync_state_preserves_manual_fields():
+def test_state_is_only_a_bounded_schedule_overlay():
     execution = execution_payload()
     state = renderer.normalize_state(execution, None)
-    first_outbound = "outbound_send.01.agent-1"
-    state["tasks"][first_outbound]["stage"] = "sent"
-    state["tasks"][first_outbound]["evidence_url"] = "https://mail.example/thread/1"
-    state["tasks"][first_outbound]["last_action_at"] = "2026-06-29"
+    first_id = execution["tasks"][0]["task_id"]
+    state["tasks"][first_id]["next_action_at"] = "2026-07-22"
 
     synced = renderer.normalize_state(execution, state)
 
-    assert synced["tasks"][first_outbound]["stage"] == "sent"
-    assert synced["tasks"][first_outbound]["evidence_url"] == "https://mail.example/thread/1"
-    assert synced["tasks"]["revenue.pilot_checkout_launch"]["stage"] == "ready_to_verify"
-    assert synced["tasks"]["revenue.stripe_catalog_hygiene"]["stage"] == "blocked_external_secret"
+    assert synced["schema_version"] == 2
+    assert set(synced["tasks"]) == {task["task_id"] for task in execution["tasks"]}
+    assert synced["tasks"][first_id] == {"next_action_at": "2026-07-22"}
+    assert "stage" not in synced["tasks"][first_id]
+    assert "actual_revenue_cents" not in synced["tasks"][first_id]
 
 
-def test_renderer_uses_stage_aware_next_actions():
-    task = {
-        "task_id": "mcp_submission.directory",
-        "channel": "mcp_distribution",
-        "task_type": "directory_submission",
-        "status": "manual_submission_required",
-        "owner": "founder",
-        "target": "Directory",
-        "due_date": "",
-        "primary_cta": "https://tinyzkp.com/signup?source=directory&medium=mcp_directory&platform=directory&intent=mcp_install",
-        "secondary_cta": "https://tinyzkp.com/mcp?source=gtm_execution_ledger&medium=ops&platform=direct&intent=mcp_install",
-        "source_artifact": "marketing/generated/mcp_submissions/directory.md",
-        "evidence_command": "python3 scripts/monitoring/gtm_distribution_monitor.py --offline",
-        "evidence_url": "",
-        "completed_at": "",
-        "next_action": "Submit marketing/generated/mcp_submissions/directory.md through the target account or PR flow.",
-        "blocker": "Requires account access.",
-    }
-    state_entry = renderer.default_state_entry(task)
-    state_entry["stage"] = "submitted"
-    state_entry["evidence_url"] = "https://example.com/submission/1"
+def test_pipeline_mirrors_gate_status_without_forecast_or_revenue():
+    execution = execution_payload()
+    state = renderer.normalize_state(execution, None)
 
-    record = renderer.pipeline_record(task, state_entry)
+    payload = renderer.render_pipeline(execution, state)
 
-    assert record["next_action"].startswith("Follow up on Directory review")
-    assert "Submit marketing/generated" not in record["next_action"]
+    assert payload["summary"]["blocking_records"] == len(execution["tasks"])
+    assert payload["summary"]["revenue_evidence_claimed"] is False
+    assert payload["summary"]["recorded_revenue_cents"] == 0
+    assert {record["task_id"] for record in payload["records"]} == {task["task_id"] for task in execution["tasks"]}
+    assert all(record["status"] == "blocked" for record in payload["records"])
+    serialized = json.dumps(payload).lower()
+    for marker in ("pipeline_value_cents", "probability_percent", "actual_revenue_cents", "primary_cta", "stripe", "pilot", "signup", "mcp"):
+        assert marker not in serialized
 
-    revenue_task = execution_payload()["tasks"][0]
-    revenue_state = renderer.default_state_entry(revenue_task)
-    revenue_state["stage"] = "live_monitoring"
-    revenue_record = renderer.pipeline_record(revenue_task, revenue_state)
-    assert revenue_record["probability_percent"] == 30
-    assert revenue_record["next_action"].startswith("Monitor pilot checkout starts")
 
-    catalog_task = execution_payload()["tasks"][1]
-    catalog_state = renderer.default_state_entry(catalog_task)
-    catalog_record = renderer.pipeline_record(catalog_task, catalog_state)
-    assert catalog_record["stage"] == "blocked_external_secret"
-    assert catalog_record["pipeline_value_cents"] == 0
+def test_pipeline_renderer_rejects_false_revenue_in_execution_input():
+    execution = execution_payload()
+    execution["business_state"]["revenue_evidence_claimed"] = True
+    execution["business_state"]["recorded_revenue_cents"] = 999_900
+    state = renderer.normalize_state(execution, None)
+
+    try:
+        renderer.render_pipeline(execution, state)
+    except ValueError as exc:
+        assert "must not claim revenue evidence" in str(exc)
+    else:
+        raise AssertionError("false revenue in execution input must fail pipeline rendering")
 
 
 def test_renderer_check_detects_stale_outputs(tmp_path):
     execution = execution_payload()
-    state = renderer.normalize_state(execution, None)
     generated = tmp_path / "marketing" / "generated"
     generated.mkdir(parents=True)
     execution_path = generated / "gtm_execution_ledger.json"
     state_path = tmp_path / "marketing" / "gtm_pipeline_state.json"
-    execution_path.write_text(json.dumps(execution), encoding="utf-8")
-
+    execution_path.write_text(json.dumps(execution, indent=2) + "\n", encoding="utf-8")
     args = [
-        "--execution-ledger",
-        str(execution_path),
-        "--state",
-        str(state_path),
-        "--json-output",
-        str(generated / "gtm_pipeline_ledger.json"),
-        "--csv-output",
-        str(generated / "gtm_pipeline_ledger.csv"),
-        "--md-output",
-        str(generated / "gtm_pipeline_ledger.md"),
+        "--execution-ledger", str(execution_path),
+        "--state", str(state_path),
+        "--json-output", str(generated / "gtm_pipeline_ledger.json"),
+        "--csv-output", str(generated / "gtm_pipeline_ledger.csv"),
+        "--md-output", str(generated / "gtm_pipeline_ledger.md"),
         "--sync-state",
     ]
     assert renderer.main(args) == 0
@@ -185,38 +111,115 @@ def test_renderer_check_detects_stale_outputs(tmp_path):
     assert renderer.main(args + ["--check"]) == 1
 
 
-def test_pipeline_checker_accepts_initial_no_pii_pipeline(tmp_path):
-    write_pipeline(tmp_path)
+def test_checker_accepts_bounded_guard_pipeline(tmp_path):
+    execution, _, _ = write_pipeline(tmp_path)
 
     checks = checker.validate(tmp_path)
 
     assert not [check for check in checks if check.status == "FAIL"]
     rows = list(csv.DictReader((tmp_path / "marketing" / "generated" / "gtm_pipeline_ledger.csv").read_text().splitlines()))
-    assert len(rows) == checker.MIN_RECORDS
-    assert rows[0]["stage"] == "ready_to_verify"
+    assert len(rows) == len(execution["tasks"])
+    assert set(rows[0]) == set(renderer.CSV_COLUMNS)
 
 
-def test_pipeline_checker_rejects_personal_email_in_state(tmp_path):
+def test_checker_rejects_legacy_sales_state_fields(tmp_path):
     execution, state, _ = write_pipeline(tmp_path)
-    state["tasks"]["outbound_send.01.agent-1"]["notes"] = "Email founder@example.com tomorrow"
+    first_id = execution["tasks"][0]["task_id"]
+    state["tasks"][first_id]["stage"] = "won"
+    state["tasks"][first_id]["actual_revenue_cents"] = 500_000
     (tmp_path / "marketing" / "gtm_pipeline_state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 
-    checks = checker.validate(tmp_path)
+    failures = "\n".join(check.detail for check in checker.validate(tmp_path) if check.status == "FAIL")
 
-    failed = "\n".join(check.detail for check in checks if check.status == "FAIL")
-    assert "must not include personal email addresses" in failed
+    assert "legacy sales stage" in failures
+    assert "may contain only next_action_at" in failures
 
 
-def test_pipeline_checker_rejects_won_without_revenue_and_evidence(tmp_path):
+def test_checker_rejects_free_form_state_fields(tmp_path):
     execution, state, _ = write_pipeline(tmp_path)
-    state["tasks"]["outbound_send.01.agent-1"]["stage"] = "won"
-    state["tasks"]["outbound_send.01.agent-1"]["completed_at"] = ""
-    state["tasks"]["outbound_send.01.agent-1"]["evidence_url"] = ""
-    state["tasks"]["outbound_send.01.agent-1"]["actual_revenue_cents"] = 0
+    first_id = execution["tasks"][0]["task_id"]
+    state["tasks"][first_id]["notes"] = "Use a retired route to collect demand."
     (tmp_path / "marketing" / "gtm_pipeline_state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 
-    checks = checker.validate(tmp_path)
+    failures = "\n".join(check.detail for check in checker.validate(tmp_path) if check.status == "FAIL")
 
-    failed = "\n".join(check.detail for check in checks if check.status == "FAIL")
-    assert "requires evidence_url" in failed
-    assert "requires actual_revenue_cents" in failed
+    assert "may contain only next_action_at" in failures
+
+
+def test_checker_rejects_extra_top_level_state_fields(tmp_path):
+    _, state, _ = write_pipeline(tmp_path)
+    state["actual_revenue_cents"] = 999_900
+    state["customer_notes"] = "paid annual customer"
+    (tmp_path / "marketing" / "gtm_pipeline_state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+    failures = "\n".join(check.detail for check in checker.validate(tmp_path) if check.status == "FAIL")
+
+    assert "pipeline state may contain only" in failures
+
+
+def test_renderer_and_checker_reject_duplicate_state_keys_before_hidden_data(tmp_path, capsys):
+    execution, state, _ = write_pipeline(tmp_path)
+    state_path = tmp_path / "marketing" / "gtm_pipeline_state.json"
+    state_path.write_text(
+        "{"
+        f'"schema_version":2,"mode":{json.dumps(state["mode"])},'
+        f'"updated_at":{json.dumps(state["updated_at"])},'
+        f'"operator_rules":{json.dumps(state["operator_rules"])},'
+        '"tasks":{"hidden":{"actual_revenue_cents":999900}},'
+        f'"tasks":{json.dumps(state["tasks"])}'
+        "}\n",
+        encoding="utf-8",
+    )
+    generated = tmp_path / "marketing" / "generated"
+    args = [
+        "--execution-ledger",
+        str(generated / "gtm_execution_ledger.json"),
+        "--state",
+        str(state_path),
+        "--json-output",
+        str(generated / "gtm_pipeline_ledger.json"),
+        "--csv-output",
+        str(generated / "gtm_pipeline_ledger.csv"),
+        "--md-output",
+        str(generated / "gtm_pipeline_ledger.md"),
+        "--check",
+    ]
+
+    assert renderer.main(args) == 1
+    assert "duplicate JSON key: tasks" in capsys.readouterr().err
+    failures = "\n".join(
+        check.detail for check in checker.validate(tmp_path) if check.status == "FAIL"
+    )
+    assert "duplicate JSON key: tasks" in failures
+    assert len(execution["tasks"]) == len(state["tasks"])
+
+
+def test_checker_rejects_tampered_pipeline_csv_and_markdown(tmp_path):
+    write_pipeline(tmp_path)
+    generated = tmp_path / "marketing" / "generated"
+    csv_path = generated / "gtm_pipeline_ledger.csv"
+    md_path = generated / "gtm_pipeline_ledger.md"
+    csv_path.write_text(csv_path.read_text(encoding="utf-8").replace(",blocked,", ",passed,"), encoding="utf-8")
+    markdown = md_path.read_text(encoding="utf-8")
+    md_path.write_text("\n".join(line for line in markdown.splitlines() if not line.startswith("| [")) + "\n", encoding="utf-8")
+
+    failures = "\n".join(check.detail for check in checker.validate(tmp_path) if check.status == "FAIL")
+
+    assert "CSV must exactly match" in failures
+    assert "markdown must exactly match" in failures
+
+
+def test_checker_rejects_extra_pipeline_revenue_and_customer_fields(tmp_path):
+    _, _, payload = write_pipeline(tmp_path)
+    payload["booked_revenue_cents"] = 999_900
+    payload["records"][0]["customer"] = "paid annual customer"
+    generated = tmp_path / "marketing" / "generated"
+    (generated / "gtm_pipeline_ledger.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    outputs = renderer.expected_outputs(payload)
+    (generated / "gtm_pipeline_ledger.csv").write_text(outputs["csv"], encoding="utf-8")
+    (generated / "gtm_pipeline_ledger.md").write_text(outputs["md"], encoding="utf-8")
+
+    failures = "\n".join(check.detail for check in checker.validate(tmp_path) if check.status == "FAIL")
+
+    assert "root fields must exactly match" in failures
+    assert "record fields must exactly match" in failures

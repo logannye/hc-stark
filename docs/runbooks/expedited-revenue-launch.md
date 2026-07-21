@@ -3,7 +3,8 @@
 > **Superseded plan — not active release guidance.** Use the Guard release,
 > market-clock, commerce, and decommission controls in the current runbooks.
 
-Status: **authoritative operator runbook** for the backend-recovery launch.
+Status: **historical archive only**. This runbook has no launch, billing,
+deployment, or customer-contact authority.
 
 This runbook launches a fail-closed maintenance site, API, MCP service, and
 no-email evaluation intake. It does **not** launch hosted proving, hosted

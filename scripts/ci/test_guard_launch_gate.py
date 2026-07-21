@@ -673,6 +673,19 @@ def test_signed_evaluation_doctor_indexes_only_doctor_before_engine_gate() -> No
     sitemap = gate._sitemap_bytes(routes).decode("utf-8")
     assert "https://tinyzkp.com/doctor" in sitemap
     assert "https://tinyzkp.com/plonky3-out-of-memory" not in sitemap
+    assert "<lastmod>" not in sitemap
+
+
+def test_free_structured_offer_points_to_available_community_source() -> None:
+    community = gate.derive(blocked_source())["offers"]["itemListElement"][0]
+    assert community == {
+        "@type": "Offer",
+        "name": "TinyZKP Community source",
+        "price": "0",
+        "priceCurrency": "USD",
+        "availability": "https://schema.org/InStock",
+        "url": "https://github.com/logannye/hc-stark",
+    }
 
 
 def test_complete_signed_semantic_evidence_derives_public_live(tmp_path: Path) -> None:

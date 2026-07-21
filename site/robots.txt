@@ -1,22 +1,7 @@
 User-agent: *
 Allow: /
-Disallow: /account
-Disallow: /agents
-Disallow: /agent-
-Disallow: /api/
-Disallow: /apps
-Disallow: /compute
-Disallow: /enterprise
-Disallow: /evaluation
-Disallow: /functions/
-Disallow: /mcp
-Disallow: /pilot
-Disallow: /receipts
-Disallow: /requests
-Disallow: /signup
-Disallow: /try
-Disallow: /vendor
-Disallow: /verify
+# Retired hosted-service paths intentionally remain crawlable so search engines
+# can observe their 410 responses and X-Robots-Tag retirement headers.
 
 Sitemap: https://tinyzkp.com/sitemap.xml
 Host: tinyzkp.com
