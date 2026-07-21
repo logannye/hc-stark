@@ -445,11 +445,6 @@ def test_production_environment_drops_inherited_injection_and_passes_step_env(
 def test_nonproduction_environment_strips_operator_and_merchant_credentials(
     tmp_path, monkeypatch
 ):
-    script = tmp_path / "environment.py"
-    script.write_text(
-        "import json, os; print(json.dumps(dict(os.environ), sort_keys=True))\n",
-        encoding="utf-8",
-    )
     secrets = {
         "CLOUDFLARE_API_TOKEN": "cloudflare-token",
         "CLOUDFLARE_ACCOUNT_ID": "cloudflare-account",
@@ -459,6 +454,17 @@ def test_nonproduction_environment_strips_operator_and_merchant_credentials(
         "UNRELATED_API_TOKEN": "other-token",
         "merchant_secret": "lowercase-secret",
     }
+    script = tmp_path / "environment.py"
+    script.write_text(
+        "import json, os\n"
+        f"forbidden = {tuple(secrets)!r}\n"
+        "print(json.dumps({\n"
+        "    'guard_trust': os.environ.get('TINYZKP_GUARD_TRUST_POLICY_SHA256'),\n"
+        "    'safe_test_value': os.environ.get('TINYZKP_SAFE_TEST_VALUE'),\n"
+        "    'forbidden_present': [key for key in forbidden if key in os.environ],\n"
+        "}, sort_keys=True))\n",
+        encoding="utf-8",
+    )
     for key, value in secrets.items():
         monkeypatch.setenv(key, value)
     monkeypatch.setenv("TINYZKP_GUARD_TRUST_POLICY_SHA256", "a" * 64)
@@ -467,12 +473,12 @@ def test_nonproduction_environment_strips_operator_and_merchant_credentials(
     result = preflight.run_step(
         preflight.Step("env", (sys.executable, str(script))), root=tmp_path
     )
-    environment = json.loads(result.stdout)
+    observed = json.loads(result.stdout)
 
     assert result.status == "PASS"
-    assert environment["TINYZKP_GUARD_TRUST_POLICY_SHA256"] == "a" * 64
-    assert environment["TINYZKP_SAFE_TEST_VALUE"] == "retained"
-    assert not (set(secrets) & set(environment))
+    assert observed["guard_trust"] == "a" * 64
+    assert observed["safe_test_value"] == "retained"
+    assert observed["forbidden_present"] == []
     with pytest.raises(preflight.PreflightError, match="credential environment"):
         preflight.nonproduction_subprocess_environment(
             {"CLOUDFLARE_API_TOKEN": "explicit-but-forbidden"}
