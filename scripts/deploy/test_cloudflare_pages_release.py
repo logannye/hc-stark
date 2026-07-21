@@ -109,6 +109,27 @@ def toolchain_provider(_node, _wrangler):
     return toolchain_identity()
 
 
+def test_release_toolchain_identity_requires_root_owned_runtime():
+    observed = {}
+
+    def validator(node, wrangler, **kwargs):
+        observed.update({"node": node, "wrangler": wrangler, **kwargs})
+        return toolchain_identity()
+
+    assert pages.toolchain_identity(
+        pages.PINNED_NODE,
+        pages.PINNED_WRANGLER,
+        validator=validator,
+    ) == toolchain_identity()
+    assert observed == {
+        "node": pages.PINNED_NODE,
+        "wrangler": pages.PINNED_WRANGLER,
+        "enforce_profile_paths": True,
+        "expected_owner_uid": 0,
+        "require_root_parent_chain": True,
+    }
+
+
 @contextmanager
 def source_materializer(_root, release, expected):
     assert expected == source_identity(release)
