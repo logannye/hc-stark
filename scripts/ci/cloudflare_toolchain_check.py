@@ -34,6 +34,7 @@ MAX_INSTALL_BYTES = 1024 * 1024 * 1024
 MAX_INSTALL_FILES = 50_000
 MATERIALIZATION_FILENAME = "materialization.json"
 MATERIALIZATION_SCHEMA_VERSION = 1
+PRODUCTION_RUNTIME_ROOT = pathlib.Path("/var/lib/tinyzkp-runtime")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 NODE_VERSION = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 PACKAGE_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
@@ -448,6 +449,72 @@ def _runtime_platform() -> tuple[str, str]:
     return sys.platform, architecture
 
 
+def _runtime_owner_uid(expected_owner_uid: int | None) -> int:
+    if expected_owner_uid is None:
+        return os.geteuid()
+    if (
+        type(expected_owner_uid) is not int
+        or expected_owner_uid < 0
+        or expected_owner_uid > 2**32 - 1
+    ):
+        raise ToolchainError("runtime owner UID is invalid")
+    return expected_owner_uid
+
+
+def _validate_directory_parent_chain(
+    directory: pathlib.Path, *, label: str, expected_owner_uid: int
+) -> None:
+    if not directory.is_absolute() or ".." in directory.parts:
+        raise ToolchainError(f"{label} parent chain must be absolute without traversal")
+    current = directory
+    while True:
+        try:
+            metadata = current.lstat()
+        except OSError as error:
+            raise ToolchainError(f"{label} parent chain is unavailable") from error
+        if stat.S_ISLNK(metadata.st_mode):
+            raise ToolchainError(f"{label} parent chain contains a symbolic link")
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise ToolchainError(f"{label} parent chain contains a non-directory")
+        if metadata.st_uid != expected_owner_uid:
+            raise ToolchainError(
+                f"{label} parent chain directory {current} is not owned by "
+                f"UID {expected_owner_uid}"
+            )
+        if stat.S_IMODE(metadata.st_mode) & 0o022:
+            raise ToolchainError(
+                f"{label} parent chain directory {current} is group/world-writable"
+            )
+        if current == current.parent:
+            break
+        current = current.parent
+
+
+def _validate_production_runtime_parent_chains(
+    node_executable: pathlib.Path,
+    wrangler_entrypoint: pathlib.Path,
+    *,
+    expected_owner_uid: int,
+) -> None:
+    if expected_owner_uid != 0:
+        raise ToolchainError("production runtime parent chains must be root-owned")
+    for path, label in (
+        (node_executable, "Node executable"),
+        (wrangler_entrypoint, "Wrangler entrypoint"),
+    ):
+        try:
+            path.relative_to(PRODUCTION_RUNTIME_ROOT)
+        except ValueError as error:
+            raise ToolchainError(
+                f"{label} is outside the fixed production runtime root"
+            ) from error
+        _validate_directory_parent_chain(
+            path.parent,
+            label=label,
+            expected_owner_uid=expected_owner_uid,
+        )
+
+
 def _read_runtime_file(
     path: pathlib.Path,
     *,
@@ -455,7 +522,9 @@ def _read_runtime_file(
     max_bytes: int,
     executable: bool = False,
     read_only: bool = False,
+    expected_owner_uid: int | None = None,
 ) -> tuple[bytes, os.stat_result]:
+    owner_uid = _runtime_owner_uid(expected_owner_uid)
     try:
         metadata = path.lstat()
     except OSError as error:
@@ -464,11 +533,12 @@ def _read_runtime_file(
         path.is_symlink()
         or not stat.S_ISREG(metadata.st_mode)
         or metadata.st_nlink != 1
-        or metadata.st_uid != os.geteuid()
+        or metadata.st_uid != owner_uid
         or stat.S_IMODE(metadata.st_mode) & 0o022
     ):
         raise ToolchainError(
-            f"{label} must be a current-owner, non-symlink regular file"
+            f"{label} must be owned by UID {owner_uid} and be a non-symlink "
+            "regular file"
         )
     if executable and not metadata.st_mode & stat.S_IXUSR:
         raise ToolchainError(f"{label} must be executable")
@@ -500,7 +570,10 @@ def _read_runtime_file(
     return b"".join(chunks), metadata
 
 
-def _installation_identity(install_root: pathlib.Path) -> dict[str, object]:
+def _installation_identity(
+    install_root: pathlib.Path, *, expected_owner_uid: int | None = None
+) -> dict[str, object]:
+    owner_uid = _runtime_owner_uid(expected_owner_uid)
     try:
         root_metadata = install_root.lstat()
     except OSError as error:
@@ -508,11 +581,12 @@ def _installation_identity(install_root: pathlib.Path) -> dict[str, object]:
     if (
         install_root.is_symlink()
         or not stat.S_ISDIR(root_metadata.st_mode)
-        or root_metadata.st_uid != os.geteuid()
+        or root_metadata.st_uid != owner_uid
         or stat.S_IMODE(root_metadata.st_mode) & 0o222
     ):
         raise ToolchainError(
-            "Wrangler installation root must be current-owner and read-only"
+            f"Wrangler installation root must be owned by UID {owner_uid} "
+            "and read-only"
         )
 
     records: list[dict[str, object]] = []
@@ -526,7 +600,7 @@ def _installation_identity(install_root: pathlib.Path) -> dict[str, object]:
         if (
             current_path.is_symlink()
             or not stat.S_ISDIR(current_metadata.st_mode)
-            or current_metadata.st_uid != os.geteuid()
+            or current_metadata.st_uid != owner_uid
             or stat.S_IMODE(current_metadata.st_mode) & 0o222
         ):
             raise ToolchainError(
@@ -556,6 +630,7 @@ def _installation_identity(install_root: pathlib.Path) -> dict[str, object]:
                 candidate,
                 label="Wrangler installation file",
                 max_bytes=MAX_INSTALL_BYTES,
+                expected_owner_uid=owner_uid,
             )
             if stat.S_IMODE(metadata.st_mode) & 0o222:
                 raise ToolchainError("Wrangler installation contains a writable file")
@@ -631,7 +706,9 @@ def _validate_materialization(
     node_sha256: str,
     wrangler_version: str,
     installation_identity: dict[str, object],
+    expected_owner_uid: int | None = None,
 ) -> str:
+    owner_uid = _runtime_owner_uid(expected_owner_uid)
     evidence_path = install_root.parent / MATERIALIZATION_FILENAME
     try:
         parent_metadata = evidence_path.parent.lstat()
@@ -640,17 +717,19 @@ def _validate_materialization(
     if (
         evidence_path.parent.is_symlink()
         or not stat.S_ISDIR(parent_metadata.st_mode)
-        or parent_metadata.st_uid != os.geteuid()
+        or parent_metadata.st_uid != owner_uid
         or stat.S_IMODE(parent_metadata.st_mode) & 0o222
     ):
         raise ToolchainError(
-            "toolchain materialization parent must be current-owner and read-only"
+            f"toolchain materialization parent must be owned by UID {owner_uid} "
+            "and read-only"
         )
     raw, _metadata = _read_runtime_file(
         evidence_path,
         label="toolchain materialization evidence",
         max_bytes=MAX_JSON_BYTES,
         read_only=True,
+        expected_owner_uid=owner_uid,
     )
     document = _strict_json_bytes(raw, label="toolchain materialization evidence")
     expected = materialization_document(
@@ -730,7 +809,10 @@ def validate_runtime(
     enforce_profile_paths: bool = True,
     root: pathlib.Path = ROOT,
     profile_path: pathlib.Path = PROFILE_PATH,
+    expected_owner_uid: int | None = None,
+    require_root_parent_chain: bool = False,
 ) -> dict[str, object]:
+    owner_uid = _runtime_owner_uid(expected_owner_uid)
     static_identity = validate_static(root=root, profile_path=profile_path)
     profile, _raw, _package_path, _lock_path = load_profile(
         root=root, profile_path=profile_path
@@ -760,6 +842,16 @@ def validate_runtime(
         raise ToolchainError(
             "Wrangler entrypoint is outside the supplied installation root"
         )
+    if require_root_parent_chain:
+        if not enforce_profile_paths:
+            raise ToolchainError(
+                "production parent-chain validation requires enforced profile paths"
+            )
+        _validate_production_runtime_parent_chains(
+            node_executable,
+            wrangler_entrypoint,
+            expected_owner_uid=owner_uid,
+        )
 
     node_raw, _node_metadata = _read_runtime_file(
         node_executable,
@@ -767,23 +859,28 @@ def validate_runtime(
         max_bytes=MAX_NODE_BYTES,
         executable=True,
         read_only=True,
+        expected_owner_uid=owner_uid,
     )
     if _sha256(node_raw) != profile["node"]["binary_sha256"]:
         raise ToolchainError(
             "Node executable bytes differ from the reviewed release artifact"
         )
     node_sha256 = _sha256(node_raw)
-    installation = _installation_identity(runtime_install_root)
+    installation = _installation_identity(
+        runtime_install_root, expected_owner_uid=owner_uid
+    )
     entrypoint_raw, _entrypoint_metadata = _read_runtime_file(
         wrangler_entrypoint,
         label="Wrangler entrypoint",
         max_bytes=MAX_JSON_BYTES,
+        expected_owner_uid=owner_uid,
     )
     package_path = runtime_install_root / "wrangler" / "package.json"
     package_raw, _package_metadata = _read_runtime_file(
         package_path,
         label="installed Wrangler package.json",
         max_bytes=MAX_JSON_BYTES,
+        expected_owner_uid=owner_uid,
     )
     package = _strict_json_bytes(package_raw, label="installed Wrangler package.json")
     if package.get("version") != profile["wrangler"]["version"]:
@@ -803,6 +900,7 @@ def validate_runtime(
         node_sha256=node_sha256,
         wrangler_version=profile["wrangler"]["version"],
         installation_identity=installation,
+        expected_owner_uid=owner_uid,
     )
 
     _exact_version(
@@ -848,7 +946,12 @@ def main(argv: list[str]) -> int:
         parser.error("runtime paths require --runtime")
     try:
         identity = (
-            validate_runtime(args.node_executable, args.wrangler_entrypoint)
+            validate_runtime(
+                args.node_executable,
+                args.wrangler_entrypoint,
+                expected_owner_uid=0,
+                require_root_parent_chain=True,
+            )
             if args.runtime
             else validate_static()
         )

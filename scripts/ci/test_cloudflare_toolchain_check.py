@@ -2,7 +2,9 @@ import base64
 import hashlib
 import io
 import json
+import os
 import pathlib
+import stat
 import tarfile
 from types import SimpleNamespace
 
@@ -226,6 +228,138 @@ def test_runtime_hashes_complete_read_only_install(tmp_path, monkeypatch):
         ).hexdigest()
     finally:
         _thaw_fixture_runtime(install)
+
+
+def test_runtime_owner_policy_accepts_explicit_root_and_defaults_to_current_user(
+    tmp_path, monkeypatch
+):
+    root, profile, _lock, node, install, entrypoint = _write_fixture(tmp_path)
+    evidence = _seal_fixture_runtime(root, profile, node, install)
+    monkeypatch.setattr(check, "_runtime_platform", lambda: ("linux", "x86_64"))
+    monkeypatch.setattr(check, "_exact_version", lambda *_args, **_kwargs: None)
+    original_lstat = pathlib.Path.lstat
+    runtime_root = node.parents[2]
+    reported_uid = {"value": os.geteuid() + 1}
+    production_parent_chain = set()
+    for directory in (node.parent, entrypoint.parent):
+        production_parent_chain.add(directory)
+        production_parent_chain.update(directory.parents)
+
+    def lstat_with_reported_runtime_owner(path):
+        metadata = original_lstat(path)
+        if (
+            path == runtime_root
+            or runtime_root in path.parents
+            or path in production_parent_chain
+        ):
+            fields = list(metadata)
+            fields[4] = reported_uid["value"]
+            if path in production_parent_chain:
+                fields[0] &= ~0o022
+            return os.stat_result(fields)
+        return metadata
+
+    monkeypatch.setattr(pathlib.Path, "lstat", lstat_with_reported_runtime_owner)
+    monkeypatch.setattr(check, "PRODUCTION_RUNTIME_ROOT", runtime_root)
+    try:
+        with pytest.raises(check.ToolchainError, match=f"UID {os.geteuid()}"):
+            check.validate_runtime(
+                node, entrypoint, root=root, profile_path=profile
+            )
+
+        reported_uid["value"] = 1
+        with pytest.raises(check.ToolchainError, match="UID 0"):
+            check.validate_runtime(
+                node,
+                entrypoint,
+                root=root,
+                profile_path=profile,
+                expected_owner_uid=0,
+                require_root_parent_chain=True,
+            )
+
+        reported_uid["value"] = 0
+        identity = check.validate_runtime(
+            node,
+            entrypoint,
+            root=root,
+            profile_path=profile,
+            expected_owner_uid=0,
+            require_root_parent_chain=True,
+        )
+        assert identity["materialization_sha256"] == hashlib.sha256(
+            evidence.read_bytes()
+        ).hexdigest()
+    finally:
+        _thaw_fixture_runtime(install)
+
+
+def test_runtime_cli_requires_root_owned_published_runtime(monkeypatch):
+    observed = {}
+
+    def validate_runtime(node, wrangler, **kwargs):
+        observed.update({"node": node, "wrangler": wrangler, **kwargs})
+        return {"node_version": "v24.18.0", "wrangler_version": "4.85.0"}
+
+    monkeypatch.setattr(check, "validate_runtime", validate_runtime)
+    assert check.main(
+        [
+            "--runtime",
+            "--node-executable",
+            "/reviewed/node",
+            "--wrangler-entrypoint",
+            "/reviewed/wrangler.js",
+        ]
+    ) == 0
+    assert observed == {
+        "node": pathlib.Path("/reviewed/node"),
+        "wrangler": pathlib.Path("/reviewed/wrangler.js"),
+        "expected_owner_uid": 0,
+        "require_root_parent_chain": True,
+    }
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("writable", "group/world-writable"),
+        ("wrong-owner", "not owned by UID 0"),
+        ("symlink", "symbolic link"),
+    ],
+)
+def test_production_parent_chain_rejects_unsafe_directory(
+    tmp_path, monkeypatch, mutation, message
+):
+    runtime_root = tmp_path / "var" / "lib" / "tinyzkp-runtime"
+    checked_directory = runtime_root / "node" / "bin"
+    checked_directory.mkdir(parents=True)
+    original_lstat = pathlib.Path.lstat
+    chain = {checked_directory, *checked_directory.parents}
+    target = runtime_root.parent
+
+    def lstat_with_adversarial_parent(path):
+        metadata = original_lstat(path)
+        if path not in chain:
+            return metadata
+        fields = list(metadata)
+        fields[0] = stat.S_IFDIR | 0o755
+        fields[4] = 0
+        if path == target:
+            if mutation == "writable":
+                fields[0] |= stat.S_IWGRP
+            elif mutation == "wrong-owner":
+                fields[4] = 1
+            else:
+                fields[0] = stat.S_IFLNK | 0o777
+        return os.stat_result(fields)
+
+    monkeypatch.setattr(pathlib.Path, "lstat", lstat_with_adversarial_parent)
+    with pytest.raises(check.ToolchainError, match=message):
+        check._validate_directory_parent_chain(
+            checked_directory,
+            label="production runtime",
+            expected_owner_uid=0,
+        )
 
 
 def test_runtime_rejects_mutation_symlink_and_wrong_node_bytes(tmp_path, monkeypatch):

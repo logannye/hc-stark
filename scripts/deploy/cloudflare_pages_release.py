@@ -637,7 +637,13 @@ def toolchain_identity(
     validator: Callable[..., dict[str, object]] = validate_runtime,
 ) -> dict[str, Any]:
     try:
-        identity = validator(node, wrangler, enforce_profile_paths=True)
+        identity = validator(
+            node,
+            wrangler,
+            enforce_profile_paths=True,
+            expected_owner_uid=0,
+            require_root_parent_chain=True,
+        )
     except ToolchainError as error:
         raise ReleaseError(
             "pinned Cloudflare toolchain provenance is invalid"
