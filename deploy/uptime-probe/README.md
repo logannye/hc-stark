@@ -29,7 +29,12 @@ That's it — nothing to deploy.
 
 ## Option B — Cloudflare Worker cron (in-repo, no third party)
 
-`worker.js` runs on Cloudflare's edge (off the box, off the laptop) every 2 minutes, retries once to filter blips, and POSTs to the authenticated TinyZKP email relay on a confirmed failure. You already use Cloudflare for the site, so there is no new vendor or SMTP server.
+`worker.js` runs on Cloudflare's edge (off the box, off the laptop) every 2 minutes,
+retries once to filter blips, and POSTs to the authenticated TinyZKP email relay
+on a confirmed failure. A KV incident record suppresses duplicate mail for an
+unchanged failure, sends at most one reminder every six hours, and emits one
+recovery message when the surface becomes healthy. You already use Cloudflare
+for the site, so there is no new vendor or SMTP server.
 
 ```bash
 cd deploy/uptime-probe
@@ -38,9 +43,20 @@ wrangler secret put ALERT_WEBHOOK_TOKEN
 wrangler deploy
 ```
 
-The tracked Worker defaults to `AUDIT_MODE=containment`. Activation deploys it
-with `--var AUDIT_MODE:public_beta`; rollback restores `containment`. Any other
-mode fails the entire probe instead of silently selecting a contract.
+The tracked Worker defaults to `AUDIT_MODE=guard_prelaunch`. The supported
+contracts are:
+
+- `guard_prelaunch`: Guard marketing and evaluation are public, checkout and
+  release artifacts remain blocked, and legacy recovery services are still
+  contained.
+- `containment`: the earlier backend-recovery site and service contract.
+- `public_beta`: the retired hosted-beta activation contract, retained only for
+  rollback compatibility.
+
+Any other mode fails the entire probe instead of silently selecting a contract.
+The production Worker must bind `ALERT_STATE` to its dedicated KV namespace;
+without the binding, probing still works but duplicate suppression deliberately
+fails open so a persistence outage cannot hide an incident.
 
 Verify it works by hitting the deployed worker URL in a browser — it runs the probe on demand and returns JSON (`200` if everything is up, `503` if a target is down). To force a page, point a target at a known-bad URL temporarily, or stop the API container and watch the webhook fire within ~2 min.
 
