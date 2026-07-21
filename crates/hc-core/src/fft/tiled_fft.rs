@@ -25,7 +25,7 @@ pub fn blocked_fft_in_place<F: TwoAdicField>(values: &mut [F], tile_size: usize)
             "values length must be a power of two",
         ));
     }
-    if n % tile_size != 0 {
+    if !n.is_multiple_of(tile_size) {
         return Err(HcError::invalid_argument(
             "tile_size must divide the input length",
         ));

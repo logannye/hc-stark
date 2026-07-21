@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "document_type": "GuardSigningTrustV1",
+  "status": "unconfigured",
+  "public_key_path": "release/guard-signing-public-key.pem",
+  "public_key_sha256": null
+}

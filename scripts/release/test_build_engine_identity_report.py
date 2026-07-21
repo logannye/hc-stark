@@ -25,18 +25,29 @@ def descriptor(payload):
     }
 
 
-def write_oci(path: Path, *, revision=RELEASE_SHA):
+def layer_with_engine(payload: bytes) -> bytes:
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w") as archive:
+        member = tarfile.TarInfo("usr/local/bin/tinyzkp-engine")
+        member.mode = 0o755
+        member.size = len(payload)
+        archive.addfile(member, io.BytesIO(payload))
+    return output.getvalue()
+
+
+def write_oci(path: Path, *, revision=RELEASE_SHA, engine_payload=b"engine"):
     config = canonical(
         {
             "architecture": "amd64",
             "os": "linux",
             "config": {
-                "User": "tinyzkp",
+                "User": identity.EXPECTED_USER,
                 "WorkingDir": "/work",
                 "Entrypoint": ["/usr/local/bin/tinyzkp-engine"],
                 "Cmd": ["--help"],
                 "Volumes": {"/scratch": {}, "/work": {}},
                 "Labels": {
+                    "org.opencontainers.image.source": identity.EXPECTED_SOURCE,
                     "org.opencontainers.image.revision": revision,
                     "org.opencontainers.image.version": RELEASE_REF,
                     "org.opencontainers.image.tinyzkp.profile": identity.PROFILE,
@@ -45,12 +56,17 @@ def write_oci(path: Path, *, revision=RELEASE_SHA):
         }
     )
     config_descriptor = descriptor(config)
+    layer = layer_with_engine(engine_payload)
+    layer_descriptor = {
+        **descriptor(layer),
+        "mediaType": "application/vnd.oci.image.layer.v1.tar",
+    }
     manifest = canonical(
         {
             "schemaVersion": 2,
             "mediaType": "application/vnd.oci.image.manifest.v1+json",
             "config": config_descriptor,
-            "layers": [],
+            "layers": [layer_descriptor],
         }
     )
     manifest_descriptor = {
@@ -64,6 +80,7 @@ def write_oci(path: Path, *, revision=RELEASE_SHA):
             {"schemaVersion": 2, "manifests": [manifest_descriptor]}
         ),
         f"blobs/sha256/{config_descriptor['digest'][7:]}": config,
+        f"blobs/sha256/{layer_descriptor['digest'][7:]}": layer,
         f"blobs/sha256/{manifest_descriptor['digest'][7:]}": manifest,
     }
     with tarfile.open(path, "w") as archive:
@@ -128,6 +145,10 @@ def test_report_binds_cli_oci_and_compatibility_artifacts(tmp_path):
         "release-artifacts/tinyzkp-engine-linux-x86_64"
     )
     assert report["surfaces"]["engine_oci"]["platform"] == "linux/amd64"
+    assert (
+        report["surfaces"]["engine_oci"]["embedded_engine_sha256"]
+        == hashlib.sha256(b"engine").hexdigest()
+    )
     assert report["compatibility"]["profile_id"] == identity.PROFILE
 
 
@@ -135,6 +156,21 @@ def test_report_rejects_oci_release_skew(tmp_path):
     engine, release, oci, compatibility = write_inputs(tmp_path)
     write_oci(oci, revision="c" * 40)
     with pytest.raises(ValueError, match="runtime identity"):
+        identity.build_report(
+            root=tmp_path,
+            release_sha=RELEASE_SHA,
+            release_ref=RELEASE_REF,
+            engine=engine,
+            engine_release=release,
+            oci_archive=oci,
+            compatibility_manifest=compatibility,
+        )
+
+
+def test_report_rejects_different_binary_inside_oci(tmp_path):
+    engine, release, oci, compatibility = write_inputs(tmp_path)
+    write_oci(oci, engine_payload=b"different-engine")
+    with pytest.raises(ValueError, match="embedded engine digest differs"):
         identity.build_report(
             root=tmp_path,
             release_sha=RELEASE_SHA,

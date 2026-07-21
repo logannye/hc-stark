@@ -3,11 +3,17 @@ from pathlib import Path
 import shutil
 import subprocess
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "release" / "stage_public_beta_site.sh"
 
 
+@pytest.mark.skipif(
+    not (ROOT / "site/recovery.css").is_file(),
+    reason="retired hosted-beta site assets are intentionally absent",
+)
 def test_stage_builds_exact_release_beta_surface(tmp_path: Path):
     containment_worker = (ROOT / "site" / "_worker.js").read_text()
     assert '"/dashboard"' not in containment_worker

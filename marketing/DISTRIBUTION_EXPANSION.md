@@ -1,5 +1,10 @@
 # TinyZKP Distribution Expansion — new channels beyond the MCP directories
 
+> **Historical/retired distribution evidence — do not execute, submit, or use
+> for outreach.** The channels, hosted endpoints, account funnels, package
+> claims, and `ready_to_submit` state below belong to the former business model.
+> They are not inputs to the current Community/Guard revenue-readiness ledgers.
+
 > Purpose: broaden reach past the MCP-directory set already covered
 > (Smithery, Official MCP Registry, mcp.so, Glama, mcpservers.org, PulseMCP,
 > Anthropic Connectors, Cursor, punkpeye/awesome-mcp-servers) into adjacent

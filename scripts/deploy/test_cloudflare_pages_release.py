@@ -474,7 +474,7 @@ def test_deployment_record_publish_failure_still_rolls_back_and_preserves_eviden
     assert failure["status"] == "deploy_failed_rolled_back"
 
 
-def test_canary_consumes_exact_record_and_runs_identity_then_containment(tmp_path):
+def test_canary_consumes_exact_record_and_runs_static_contracts_then_routes(tmp_path):
     api = FakeApi()
     record_path, deployed = deploy_record(tmp_path, api)
     commands = []
@@ -497,9 +497,10 @@ def test_canary_consumes_exact_record_and_runs_identity_then_containment(tmp_pat
     )
     assert result["status"] == "passed"
     assert len(commands) == 2
-    assert commands[0][1].endswith("scripts/ci/release_identity_check.py")
-    assert commands[0][-2:] == ("--expected-sha", NEW_SHA)
-    assert commands[1][1].endswith("scripts/monitoring/backend_recovery_canary.py")
+    assert commands[0][1].endswith("scripts/deploy/static_site_canary.py")
+    assert commands[0][-2:] == ("--mode", "contracts")
+    assert commands[1][1].endswith("scripts/deploy/static_site_canary.py")
+    assert commands[1][-2:] == ("--mode", "routes")
     canary = json.loads(output.read_text())
     assert canary["deployment_record_sha256"] == deployed["deployment_record_sha256"]
     assert canary["deployment_id"] == NEW_ID

@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "document_type": "GuardMarketEvidenceV1",
+  "evaluated_at": "2026-07-18T12:00:00Z",
+  "trust_policy": {
+    "path": "release/guard-market-trust-v1.json",
+    "sha256": "a72004286f167a5c585394b17eb99aa970f2b1a0c55a455605b72ff0736cd3cc"
+  },
+  "doctor_evaluation_release": {
+    "status": "blocked",
+    "reason_code": "signed-doctor-evaluation-release-missing",
+    "evidence": []
+  },
+  "community_announcement": {
+    "status": "blocked",
+    "reason_code": "moderator-approved-plonky3-announcement-missing",
+    "evidence": []
+  },
+  "ecosystem_submission": {
+    "status": "blocked",
+    "reason_code": "post-qualification-ecosystem-submission-not-made",
+    "evidence": []
+  },
+  "acquisition_policy": {
+    "community": "plonky3",
+    "announcement_limit": 1,
+    "ecosystem_submission_limit": 1,
+    "direct_messages_allowed": false,
+    "outbound_campaigns_allowed": false,
+    "recurring_campaigns_allowed": false,
+    "ongoing_blog_required": false,
+    "newsletter_allowed": false
+  }
+}

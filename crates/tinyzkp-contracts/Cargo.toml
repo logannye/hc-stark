@@ -1,0 +1,14 @@
+[package]
+name = "tinyzkp-contracts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Public local JSON contracts for TinyZKP engine and Guard interoperability"
+
+[dependencies]
+schemars = "=1.2.1"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
+thiserror.workspace = true

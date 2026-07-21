@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Aggregate the fast gates required for a TinyZKP reconciliation launch.
+"""Aggregate the fail-closed gates for legacy TinyZKP containment deploys.
 
-The individual checks stay as the source of truth. This script gives operators
-one deterministic command for local/CI preflight, plus opt-in live canaries for
-the post-deploy announcement gate.
+This compatibility entry point remains authoritative only while the legacy
+Hetzner, API, MCP, and billing obligations are unresolved. Guard and the static
+Cloudflare Pages business use ``guard_pages_launch_preflight.py``. Obsolete
+hosted-sales, SDK-publication, and contract-creation gates do not belong in a
+containment deployment.
 """
 
 from __future__ import annotations
@@ -160,7 +162,9 @@ def build_steps(
     args: argparse.Namespace, *, python: str = "python3", node: str = "node"
 ) -> list[Step]:
     if args.live and not args.production:
-        raise ValueError("live launch checks require the complete production preflight")
+        raise ValueError(
+            "legacy live containment checks require the complete production preflight"
+        )
     if args.production and not args.host_python:
         raise ValueError(
             "production preflight requires the explicit production host Python interpreter"
@@ -217,17 +221,11 @@ def build_steps(
         )
 
     steps = [
-        Step(
-            "recovery reconciliation invariants",
-            (python, "scripts/ci/recovery_reconciliation_invariants.py"),
-        ),
-        Step("backend recovery gate", (python, "scripts/ci/backend_recovery_gate.py")),
         Step("MCP recovery server-card", (python, "scripts/ci/server_card_check.py")),
         Step(
             "frozen Plonky3 compatibility profile",
             (python, "scripts/ci/plonky3_compatibility_gate.py"),
         ),
-        Step("launch gate audit", (python, "scripts/ci/launch_gate_audit.py")),
         Step(
             "billing runtime dependency metadata",
             (python, "billing/runtime_lock.py", "verify-metadata"),
@@ -302,18 +300,6 @@ def build_steps(
         Step(
             "commercial offer parity",
             (python, "scripts/commercial/render_offers.py", "--check"),
-        ),
-        Step(
-            "contract billing policy tests",
-            (
-                python,
-                "-m",
-                "pytest",
-                "billing/tests/test_contract_billing.py",
-                "billing/tests/test_configure_contract_portal.py",
-                "billing/tests/test_evaluation_start_ready.py",
-                "billing/tests/test_stripe_production_identity_check.py",
-            ),
         ),
         Step(
             "commercial scorecard policy tests",
@@ -2112,6 +2098,25 @@ def print_text(results: list[StepResult]) -> None:
                     print(f"       {line}")
 
 
+def print_containment_summary(results: list[StepResult], *, live: bool) -> None:
+    failures = [result for result in results if result.status != "PASS"]
+    print()
+    print(
+        f"Legacy containment production preflight: "
+        f"{len(results) - len(failures)} passed, {len(failures)} failed"
+    )
+    if live and not failures:
+        print(
+            "Legacy live containment canaries passed; this command grants no "
+            "Guard sales or public-announcement authority."
+        )
+    elif not live:
+        print(
+            "Legacy live containment canaries were not run; use --live after deploy "
+            "only to verify containment and decommission readiness."
+        )
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -2159,7 +2164,9 @@ def main(argv: list[str]) -> int:
         help="Stable deployment target identifier bound into one-time evidence",
     )
     parser.add_argument(
-        "--live", action="store_true", help="Run public live canaries; use after deploy"
+        "--live",
+        action="store_true",
+        help="Run legacy containment/decommission canaries after deploy",
     )
     parser.add_argument(
         "--site-url",
@@ -2369,16 +2376,7 @@ def main(argv: list[str]) -> int:
         )
     else:
         print_text(results)
-        print()
-        print(
-            f"Production launch preflight: {len(results) - len(failures)} passed, {len(failures)} failed"
-        )
-        if args.live and not failures:
-            print("Live canaries passed; public launch/announcement gate is clear.")
-        elif not args.live:
-            print(
-                "Live canaries were not run; use --live after deploy before public announcement."
-            )
+        print_containment_summary(results, live=args.live)
 
     return 1 if failures or evidence_failure else 0
 

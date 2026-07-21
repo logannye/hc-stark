@@ -122,10 +122,6 @@ pub struct AirPackageV1 {
 impl AirPackageV1 {
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1
-            || self.backend != "plonky3"
-            || self.profile != COMPATIBILITY_PROFILE
-            || self.field != "goldilocks"
-            || self.expected_verifier != "p3_uni_stark_0.6.1"
             || !(1..=MAX_TRACE_WIDTH).contains(&self.trace_width)
             || self.public_inputs.len() > MAX_PUBLIC_VALUES
             || self.expressions.is_empty()
@@ -190,6 +186,13 @@ impl AirPackageV1 {
         }
         if canonical_json_bytes_v1(self)?.len() > MAX_AIR_JSON_BYTES {
             return Err(ContractError::SizeLimit);
+        }
+        if self.backend != "plonky3"
+            || self.profile != COMPATIBILITY_PROFILE
+            || self.field != "goldilocks"
+            || self.expected_verifier != "p3_uni_stark_0.6.1"
+        {
+            return Err(ContractError::ProfileMismatch);
         }
         Ok(())
     }
@@ -1086,6 +1089,46 @@ mod tests {
         degree_four.constraints[0].expression = 3;
         assert!(matches!(
             degree_four.validate(),
+            Err(ContractError::InvalidAir)
+        ));
+    }
+
+    #[test]
+    fn declarative_air_distinguishes_profile_skew_from_malformed_structure() {
+        let original = customer_air();
+        for incompatible in [
+            {
+                let mut air = original.clone();
+                air.backend = "other".into();
+                air
+            },
+            {
+                let mut air = original.clone();
+                air.profile = "other".into();
+                air
+            },
+            {
+                let mut air = original.clone();
+                air.field = "other".into();
+                air
+            },
+            {
+                let mut air = original.clone();
+                air.expected_verifier = "other".into();
+                air
+            },
+        ] {
+            assert!(matches!(
+                incompatible.validate(),
+                Err(ContractError::ProfileMismatch)
+            ));
+        }
+
+        let mut malformed = original;
+        malformed.profile = "other".into();
+        malformed.constraints.clear();
+        assert!(matches!(
+            malformed.validate(),
             Err(ContractError::InvalidAir)
         ));
     }

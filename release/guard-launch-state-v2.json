@@ -1,0 +1,128 @@
+{
+  "blocking_gates": [
+    "engine_release_ready",
+    "five_unaided_installs",
+    "guard_artifact_published",
+    "guard_release_ready",
+    "hosted_infrastructure_decommissioned",
+    "legacy_obligations_resolved",
+    "legal_terms_approved",
+    "merchant_live_owner_smoke_passed",
+    "merchant_sandbox_lifecycle_passed",
+    "release_rehearsal_within_budget",
+    "three_external_workloads",
+    "two_standard_annual_customers"
+  ],
+  "checkout_enabled": false,
+  "commerce_state": "unconfigured",
+  "document_type": "GuardLaunchStateV2",
+  "evaluated_at": "2026-07-18T12:00:00Z",
+  "gate_status": {
+    "engine_release_ready": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-engine-release-ready",
+      "reason_code": "engine-release-evidence-missing",
+      "status": "blocked"
+    },
+    "five_unaided_installs": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-five-unaided-installs",
+      "reason_code": "clean-machine-evidence-missing",
+      "status": "blocked"
+    },
+    "guard_artifact_published": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-guard-artifact-published",
+      "reason_code": "guard-artifact-publication-missing",
+      "status": "blocked"
+    },
+    "guard_release_ready": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-guard-release-ready",
+      "reason_code": "guard-release-evidence-missing",
+      "status": "blocked"
+    },
+    "hosted_infrastructure_decommissioned": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-hosted-infrastructure-decommissioned",
+      "reason_code": "decommission-evidence-missing",
+      "status": "blocked"
+    },
+    "legacy_obligations_resolved": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-legacy-obligations-resolved",
+      "reason_code": "legacy-resolution-evidence-missing",
+      "status": "blocked"
+    },
+    "legal_terms_approved": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-legal-terms-approved",
+      "reason_code": "legal-approval-missing",
+      "status": "blocked"
+    },
+    "merchant_live_owner_smoke_passed": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-merchant-live-owner-smoke-passed",
+      "reason_code": "merchant-live-smoke-missing",
+      "status": "blocked"
+    },
+    "merchant_sandbox_lifecycle_passed": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-merchant-sandbox-lifecycle-passed",
+      "reason_code": "merchant-sandbox-evidence-missing",
+      "status": "blocked"
+    },
+    "release_rehearsal_within_budget": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-release-rehearsal-within-budget",
+      "reason_code": "release-rehearsal-evidence-missing",
+      "status": "blocked"
+    },
+    "three_external_workloads": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-three-external-workloads",
+      "reason_code": "external-workload-evidence-missing",
+      "status": "blocked"
+    },
+    "two_standard_annual_customers": {
+      "evidence": [],
+      "reason_anchor": "/releases#gate-two-standard-annual-customers",
+      "reason_code": "annual-customer-evidence-missing",
+      "status": "blocked"
+    }
+  },
+  "generated_from": "release/guard-launch-evidence-v2.json",
+  "launch_state": "blocked",
+  "legal_status": "blocked_pending_owner_and_counsel",
+  "merchant_of_record_status": "approval_pending",
+  "portal_state": "unconfigured",
+  "reason_anchors": {
+    "engine_release_ready": "/releases#gate-engine-release-ready",
+    "five_unaided_installs": "/releases#gate-five-unaided-installs",
+    "guard_artifact_published": "/releases#gate-guard-artifact-published",
+    "guard_release_ready": "/releases#gate-guard-release-ready",
+    "hosted_infrastructure_decommissioned": "/releases#gate-hosted-infrastructure-decommissioned",
+    "launch": "/releases#launch-blockers",
+    "legacy_obligations_resolved": "/releases#gate-legacy-obligations-resolved",
+    "legal": "/terms#legal-status",
+    "legal_terms_approved": "/releases#gate-legal-terms-approved",
+    "merchant": "/pricing#merchant-of-record-status",
+    "merchant_live_owner_smoke_passed": "/releases#gate-merchant-live-owner-smoke-passed",
+    "merchant_sandbox_lifecycle_passed": "/releases#gate-merchant-sandbox-lifecycle-passed",
+    "portal": "/support#merchant-portal",
+    "release_rehearsal_within_budget": "/releases#gate-release-rehearsal-within-budget",
+    "sales": "/pricing#sales-status",
+    "three_external_workloads": "/releases#gate-three-external-workloads",
+    "two_standard_annual_customers": "/releases#gate-two-standard-annual-customers"
+  },
+  "release_identity": {
+    "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
+    "engine_source_sha": null,
+    "guard_release": "tinyzkp-guard-v1",
+    "guard_source_sha": null,
+    "guard_version": null
+  },
+  "sales_state": "closed",
+  "schema_version": 2,
+  "source_sha256": "3dfa19f361c99a9f09ab9ac230ada6bd6b3f88d4e3e9cc4ec888b187d8bd75bc"
+}

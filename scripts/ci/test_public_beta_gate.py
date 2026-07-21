@@ -115,9 +115,12 @@ def test_generic_passing_json_cannot_satisfy_a_gate(tmp_path):
 
 
 def test_every_public_beta_gate_has_a_dedicated_validator():
-    required = json.loads(public_beta_gate.CHANNELS.read_text(encoding="utf-8"))[
+    channels = json.loads(public_beta_gate.CHANNELS.read_text(encoding="utf-8"))[
         "channels"
-    ]["public_beta"]["required_gate_ids"]
+    ]
+    if "public_beta" not in channels:
+        pytest.skip("the hosted public-beta channel is retired")
+    required = channels["public_beta"]["required_gate_ids"]
     registered = set(public_beta_gate.GATE_VALIDATORS) | {
         "fixed_host_1m",
         "fixed_host_16m",

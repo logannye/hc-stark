@@ -1,0 +1,377 @@
+name: Publish signed Community doctor evaluation release
+
+on:
+  workflow_dispatch:
+    inputs:
+      evaluation_tag:
+        description: Existing immutable doctor-eval-v* tag
+        required: true
+        type: string
+      expected_source_sha:
+        description: Exact reviewed 40-hex source commit
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: tinyzkp-doctor-evaluation-release
+  cancel-in-progress: false
+
+jobs:
+  signed-evaluation-release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: tinyzkp-evaluation-release
+    env:
+      EVALUATION_TAG: ${{ inputs.evaluation_tag }}
+      EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+      HC_RELEASE_SHA: ${{ inputs.expected_source_sha }}
+      HC_RELEASE_REF: ${{ inputs.evaluation_tag }}
+      HC_RELEASE_BUILD_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+
+      - name: Bind the separate evaluation tag and source
+        run: |
+          case "$EVALUATION_TAG" in doctor-eval-v*) ;; *) exit 1 ;; esac
+          test "${#EXPECTED_SOURCE_SHA}" = 40
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          test "$(git rev-parse "$EVALUATION_TAG^{commit}")" = "$EXPECTED_SOURCE_SHA"
+
+      - name: Recover an earlier exact staged bundle before authorizing a build
+        id: recovery
+        run: |
+          install -d release-artifacts
+          artifact_name="doctor-evaluation-$EXPECTED_SOURCE_SHA"
+          artifact_id="$(gh api \
+            "/repos/$GITHUB_REPOSITORY/actions/artifacts?name=$artifact_name&per_page=100" |
+            jq -r '[.artifacts[] | select(.expired == false)] |
+              sort_by(.created_at) | last | .id // empty')"
+          recovered=false
+          if test -n "$artifact_id"; then
+            gh api "/repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" \
+              > "$RUNNER_TEMP/evaluation-artifact.zip"
+            unzip -q "$RUNNER_TEMP/evaluation-artifact.zip" -d release-artifacts
+            recovered=true
+          elif gh release view "$EVALUATION_TAG" >/dev/null 2>&1; then
+            target="$(gh release view "$EVALUATION_TAG" --json targetCommitish --jq .targetCommitish)"
+            test "$(git rev-parse "$target^{commit}")" = "$EXPECTED_SOURCE_SHA"
+            test "$(gh release view "$EVALUATION_TAG" --json isDraft --jq .isDraft)" = false
+            test "$(gh release view "$EVALUATION_TAG" --json isPrerelease --jq .isPrerelease)" = true
+            gh release download "$EVALUATION_TAG" --dir release-artifacts
+            recovered=true
+          fi
+          if test "$recovered" = true; then
+            test -f release-artifacts/SHA256SUMS
+            test -f release-artifacts/SHA256SUMS.sigstore.json
+            test -f release-artifacts/doctor-evaluation-provenance-v1.json
+            cosign verify-blob \
+              --bundle release-artifacts/SHA256SUMS.sigstore.json \
+              --certificate-identity \
+                "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/evaluation-doctor.yml@refs/heads/main" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              release-artifacts/SHA256SUMS
+            (
+              cd release-artifacts
+              sha256sum --check --strict SHA256SUMS
+              expected_names="$(
+                { awk '{sub(/^\\.\\//, \"\", $2); print $2}' SHA256SUMS
+                  printf '%s\n' SHA256SUMS SHA256SUMS.sigstore.json; } | sort
+              )"
+              actual_names="$(find . -maxdepth 1 -type f -printf '%f\n' | sort)"
+              test "$actual_names" = "$expected_names"
+            )
+            test "$(jq -er .release_tag release-artifacts/doctor-evaluation-identity-v1.json)" = "$EVALUATION_TAG"
+            test "$(jq -er .engine_source_sha release-artifacts/doctor-evaluation-identity-v1.json)" = "$EXPECTED_SOURCE_SHA"
+          fi
+          echo "recovered=$recovered" >> "$GITHUB_OUTPUT"
+
+      - name: Run contract, doctor, and source-identity tests only
+        if: steps.recovery.outputs.recovered != 'true'
+        run: |
+          cargo test --locked -p tinyzkp-contracts
+          cargo test --locked -p hc-cli doctor
+          cargo test --locked -p hc-cli release_identity_is_machine_readable_and_profile_pinned
+          test "$(sha256sum Cargo.lock | cut -d' ' -f1)" = \
+            "0a28ab40dba2786a5106d274623d174b4c845b15ddd594629ebd98aa08612257"
+
+      - name: Build the open evaluation engine
+        if: steps.recovery.outputs.recovered != 'true'
+        run: cargo build --locked --release -p hc-cli --bin hc-cli
+
+      - name: Export the exact public schema inventory
+        if: steps.recovery.outputs.recovered != 'true'
+        run: |
+          install -d release-artifacts/schemas
+          target/release/hc-cli schema --output-dir release-artifacts/schemas
+          python3 - <<'PY'
+          from pathlib import Path
+          engine_schemas = {
+              "workload-manifest-v1.schema.json",
+              "proof-bundle-v1.schema.json",
+              "benchmark-report-v1.schema.json",
+              "air-package-v1.schema.json",
+              "trace-manifest-v1.schema.json",
+              "public-inputs-v1.schema.json",
+              "air-proof-bundle-v1.schema.json",
+          }
+          guard_schemas = {
+              "job-manifest-v1.schema.json",
+              "doctor-report-v1.schema.json",
+              "compatibility-report-v1.schema.json",
+              "reason-v1.schema.json",
+              "error-envelope-v1.schema.json",
+              "progress-event-v1.schema.json",
+              "job-result-v1.schema.json",
+              "support-report-v1.schema.json",
+              "job-inspect-result-v1.schema.json",
+              "guard-channel-v1.schema.json",
+              "guard-release-index-v1.schema.json",
+              "policy-baseline-v1.schema.json",
+              "compatibility-manifest-v1.schema.json",
+          }
+          expected = engine_schemas | guard_schemas
+          observed = {path.name for path in Path("release-artifacts/schemas").glob("*.json")}
+          if observed != expected:
+              raise SystemExit(f"schema inventory differs: {sorted(observed)}")
+          for name in expected:
+              if (Path("release-artifacts/schemas") / name).read_bytes() != (Path("site/schemas") / name).read_bytes():
+                  raise SystemExit(f"public schema parity differs: {name}")
+          PY
+
+      - name: Build and exercise a complete synthetic doctor job
+        if: steps.recovery.outputs.recovered != 'true'
+        run: |
+          install -d release-artifacts/sample-job/inputs
+          cp release/evaluation-doctor/sample-job/job.json release-artifacts/sample-job/
+          cp release/evaluation-doctor/sample-job/air-package-v1.json \
+            release-artifacts/sample-job/inputs/
+          truncate -s 8192 release-artifacts/sample-job/inputs/trace.bin
+          target/release/hc-cli plonky3 pack-trace \
+            --air release-artifacts/sample-job/inputs/air-package-v1.json \
+            --trace release-artifacts/sample-job/inputs/trace.bin \
+            --rows 1024 \
+            --output-dir release-artifacts/sample-job/inputs/packed
+          air_digest="$(target/release/hc-cli plonky3 validate-air \
+            --air release-artifacts/sample-job/inputs/air-package-v1.json | jq -er .air_digest_hex)"
+          jq -n --arg digest "$air_digest" \
+            '{schema_version:1,air_digest_hex:$digest,values:[]}' \
+            > release-artifacts/sample-job/inputs/public-inputs-v1.json
+          install -d release-artifacts/sample-job/jobs \
+            release-artifacts/sample-job/outputs \
+            release-artifacts/sample-job/scratch
+          install -m 0755 target/release/hc-cli release-artifacts/tinyzkp-engine-linux-x86_64
+          (
+            cd release-artifacts/sample-job
+            ../tinyzkp-engine-linux-x86_64 doctor --job job.json > doctor-report-v1.json
+          )
+          test "$(jq -er .schema_version release-artifacts/sample-job/doctor-report-v1.json)" = 1
+          test "$(jq -er .ready release-artifacts/sample-job/doctor-report-v1.json)" = true
+
+      - name: Build customer-operated evaluation OCI archive
+        if: steps.recovery.outputs.recovered != 'true'
+        run: |
+          install -d "$RUNNER_TEMP/engine-image-context"
+          install -m 0755 \
+            release-artifacts/tinyzkp-engine-linux-x86_64 \
+            "$RUNNER_TEMP/engine-image-context/tinyzkp-engine-linux-x86_64"
+          cp Dockerfile.release-runtime "$RUNNER_TEMP/engine-image-context/Dockerfile"
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg HC_RELEASE_SHA \
+            --build-arg HC_RELEASE_REF \
+            --build-arg HC_RELEASE_BUILD_URL \
+            --output type=oci,dest=release-artifacts/tinyzkp-engine-evaluation.oci.tar \
+            "$RUNNER_TEMP/engine-image-context"
+          python3 scripts/ci/verify_engine_oci_binary.py \
+            --release-sha "$HC_RELEASE_SHA" \
+            --release-ref "$HC_RELEASE_REF" \
+            --engine release-artifacts/tinyzkp-engine-linux-x86_64 \
+            --oci-archive release-artifacts/tinyzkp-engine-evaluation.oci.tar
+
+      - name: Smoke the exact evaluation OCI without network or root
+        if: steps.recovery.outputs.recovered != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends skopeo
+          skopeo copy \
+            oci-archive:release-artifacts/tinyzkp-engine-evaluation.oci.tar \
+            docker-daemon:tinyzkp-engine-evaluation:exact
+          chmod -R a+rX release-artifacts/sample-job
+          chmod -R a+rwX \
+            release-artifacts/sample-job/jobs \
+            release-artifacts/sample-job/outputs \
+            release-artifacts/sample-job/scratch
+          docker run --rm \
+            --network none \
+            --read-only \
+            --user 10001:10001 \
+            --mount "type=bind,src=$PWD/release-artifacts/sample-job,dst=/work" \
+            --mount "type=bind,src=$PWD/release-artifacts/sample-job/scratch,dst=/scratch" \
+            tinyzkp-engine-evaluation:exact \
+            doctor --job job.json > "$RUNNER_TEMP/oci-doctor-report-v1.json"
+          test "$(jq -er .schema_version "$RUNNER_TEMP/oci-doctor-report-v1.json")" = 1
+          test "$(jq -er .ready "$RUNNER_TEMP/oci-doctor-report-v1.json")" = true
+
+      - name: Package immutable evaluation identity
+        if: steps.recovery.outputs.recovered != 'true'
+        run: |
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -czf release-artifacts/tinyzkp-public-schemas.tar.gz \
+            -C release-artifacts schemas
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -czf release-artifacts/tinyzkp-synthetic-doctor-job.tar.gz \
+            -C release-artifacts sample-job
+          oci_digest="$(tar -xOf release-artifacts/tinyzkp-engine-evaluation.oci.tar index.json | jq -er '.manifests[0].digest')"
+          jq -n \
+            --arg release_tag "$EVALUATION_TAG" \
+            --arg engine_source_sha "$EXPECTED_SOURCE_SHA" \
+            --arg engine_sha256 "$(sha256sum release-artifacts/tinyzkp-engine-linux-x86_64 | cut -d' ' -f1)" \
+            --arg oci_digest "$oci_digest" \
+            --arg schemas_sha256 "$(sha256sum release-artifacts/tinyzkp-public-schemas.tar.gz | cut -d' ' -f1)" \
+            --arg sample_sha256 "$(sha256sum release-artifacts/tinyzkp-synthetic-doctor-job.tar.gz | cut -d' ' -f1)" \
+            '{schema_version:1,release_kind:"community_doctor_evaluation",prerelease:true,production_qualified:false,performance_qualified:false,release_tag:$release_tag,engine_source_sha:$engine_source_sha,engine_artifact_sha256:$engine_sha256,oci_digest:$oci_digest,schema_bundle_sha256:$schemas_sha256,synthetic_job_sha256:$sample_sha256,doctor_command:"tinyzkp-engine doctor --job job.json"}' \
+            > release-artifacts/doctor-evaluation-identity-v1.json
+          rm -rf release-artifacts/schemas release-artifacts/sample-job
+
+      - name: Generate explicit downloadable evaluation provenance
+        if: steps.recovery.outputs.recovered != 'true'
+        run: |
+          jq -n \
+            --arg source "$EXPECTED_SOURCE_SHA" \
+            --arg tag "$EVALUATION_TAG" \
+            --arg run "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg engine "$(sha256sum release-artifacts/tinyzkp-engine-linux-x86_64 | cut -d' ' -f1)" \
+            --arg oci "$(sha256sum release-artifacts/tinyzkp-engine-evaluation.oci.tar | cut -d' ' -f1)" \
+            --arg schemas "$(sha256sum release-artifacts/tinyzkp-public-schemas.tar.gz | cut -d' ' -f1)" \
+            --arg sample "$(sha256sum release-artifacts/tinyzkp-synthetic-doctor-job.tar.gz | cut -d' ' -f1)" \
+            --arg identity "$(sha256sum release-artifacts/doctor-evaluation-identity-v1.json | cut -d' ' -f1)" \
+            '{
+              schema_version: 1,
+              document_type: "DoctorEvaluationBuildProvenanceV1",
+              build_type: "https://tinyzkp.com/build-types/community-doctor-evaluation/v1",
+              builder: "evaluation-doctor.yml",
+              invocation_url: $run,
+              source: {repository: "https://github.com/logannye/hc-stark", git_sha: $source, tag: $tag},
+              subjects: [
+                {name: "tinyzkp-engine-linux-x86_64", sha256: $engine},
+                {name: "tinyzkp-engine-evaluation.oci.tar", sha256: $oci},
+                {name: "tinyzkp-public-schemas.tar.gz", sha256: $schemas},
+                {name: "tinyzkp-synthetic-doctor-job.tar.gz", sha256: $sample},
+                {name: "doctor-evaluation-identity-v1.json", sha256: $identity}
+              ],
+              runtime_image_source: "Dockerfile.release-runtime"
+            }' > release-artifacts/doctor-evaluation-provenance-v1.json
+
+      - name: Generate SBOM
+        if: steps.recovery.outputs.recovered != 'true'
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: release-artifacts
+          format: spdx-json
+          output-file: release-artifacts/tinyzkp-engine-evaluation.spdx.json
+      - if: steps.recovery.outputs.recovered != 'true'
+        working-directory: release-artifacts
+        run: |
+          checksum_tmp="$RUNNER_TEMP/doctor-evaluation-SHA256SUMS"
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 |
+            sort -z | xargs -0 sha256sum >"$checksum_tmp"
+          mv "$checksum_tmp" SHA256SUMS
+          cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+      - if: steps.recovery.outputs.recovered != 'true'
+        uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
+        with:
+          subject-checksums: release-artifacts/SHA256SUMS
+
+      - name: Stage the exact evaluation bundle for retry-safe publication
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: doctor-evaluation-${{ inputs.expected_source_sha }}
+          path: release-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish-evaluation-prerelease:
+    needs: signed-evaluation-release
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: tinyzkp-evaluation-release
+    permissions:
+      actions: read
+      contents: write
+    env:
+      EVALUATION_TAG: ${{ inputs.evaluation_tag }}
+      EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - name: Recover the protected staged evaluation bundle
+        run: |
+          install -d "$RUNNER_TEMP/release-artifacts"
+          gh run download "$GITHUB_RUN_ID" \
+            --name "doctor-evaluation-$EXPECTED_SOURCE_SHA" \
+            --dir "$RUNNER_TEMP/release-artifacts"
+          test -f "$RUNNER_TEMP/release-artifacts/SHA256SUMS"
+          (
+            cd "$RUNNER_TEMP/release-artifacts"
+            sha256sum --check --strict SHA256SUMS
+          )
+      - name: Create or repair only the exact public prerelease
+        run: |
+          assets="$RUNNER_TEMP/release-artifacts"
+          if gh release view "$EVALUATION_TAG" >/dev/null 2>&1; then
+            target="$(gh release view "$EVALUATION_TAG" --json targetCommitish --jq .targetCommitish)"
+            test "$(git rev-parse "$target^{commit}")" = "$EXPECTED_SOURCE_SHA"
+            test "$(gh release view "$EVALUATION_TAG" --json isDraft --jq .isDraft)" = false
+            test "$(gh release view "$EVALUATION_TAG" --json isPrerelease --jq .isPrerelease)" = true
+          else
+            gh release create "$EVALUATION_TAG" \
+              --target "$EXPECTED_SOURCE_SHA" \
+              --prerelease \
+              --title "Community doctor evaluation $EVALUATION_TAG" \
+              --notes "Evaluation only. This release qualifies the exact Community doctor contract and synthetic job. It is not Guard GA, a production FRI qualification, a performance claim, or a completed engine gate."
+          fi
+          install -d "$RUNNER_TEMP/remote-assets"
+          while IFS= read -r -d '' file; do
+            name="${file##*/}"
+            if gh release view "$EVALUATION_TAG" --json assets \
+              --jq '.assets[].name' | grep -Fxq "$name"
+            then
+              gh release download "$EVALUATION_TAG" \
+                --pattern "$name" \
+                --dir "$RUNNER_TEMP/remote-assets"
+              test "$(sha256sum "$file" | cut -d' ' -f1)" = \
+                "$(sha256sum "$RUNNER_TEMP/remote-assets/$name" | cut -d' ' -f1)"
+            else
+              gh release upload "$EVALUATION_TAG" "$file"
+            fi
+          done < <(find "$assets" -maxdepth 1 -type f -print0 | sort -z)
+          local_names="$(find "$assets" -maxdepth 1 -type f -printf '%f\n' | sort)"
+          remote_names="$(gh release view "$EVALUATION_TAG" --json assets --jq '.assets[].name' | sort)"
+          test "$remote_names" = "$local_names"
+          rm -rf "$RUNNER_TEMP/remote-assets"
+          install -d "$RUNNER_TEMP/remote-assets"
+          gh release download "$EVALUATION_TAG" --dir "$RUNNER_TEMP/remote-assets"
+          while IFS= read -r -d '' file; do
+            name="${file##*/}"
+            test "$(sha256sum "$file" | cut -d' ' -f1)" = \
+              "$(sha256sum "$RUNNER_TEMP/remote-assets/$name" | cut -d' ' -f1)"
+          done < <(find "$assets" -maxdepth 1 -type f -print0 | sort -z)

@@ -24,6 +24,7 @@ ARG HC_RELEASE_SHA
 ARG HC_RELEASE_REF
 ARG HC_RELEASE_BUILD_URL
 LABEL org.opencontainers.image.title="TinyZKP engine" \
+      org.opencontainers.image.source="https://github.com/logannye/hc-stark" \
       org.opencontainers.image.revision="${HC_RELEASE_SHA}" \
       org.opencontainers.image.version="${HC_RELEASE_REF}" \
       org.opencontainers.image.url="${HC_RELEASE_BUILD_URL}" \

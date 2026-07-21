@@ -1,0 +1,25 @@
+# syntax=docker/dockerfile:1.6
+
+# Release images are assembled from the already-built, checksum-bound engine
+# binary.  This Dockerfile must never compile source.
+FROM debian:12.11-slim@sha256:b1a741487078b369e78119849663d7f1a5341ef2768798f7b7406c4240f86aef
+ARG HC_RELEASE_SHA
+ARG HC_RELEASE_REF
+ARG HC_RELEASE_BUILD_URL
+LABEL org.opencontainers.image.title="TinyZKP engine" \
+      org.opencontainers.image.source="https://github.com/logannye/hc-stark" \
+      org.opencontainers.image.revision="${HC_RELEASE_SHA}" \
+      org.opencontainers.image.version="${HC_RELEASE_REF}" \
+      org.opencontainers.image.url="${HC_RELEASE_BUILD_URL}" \
+      org.opencontainers.image.tinyzkp.profile="tinyzkp-p3-goldilocks-v1"
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin tinyzkp \
+    && install -d -o tinyzkp -g tinyzkp -m 0700 /work /scratch
+COPY --chmod=0755 tinyzkp-engine-linux-x86_64 /usr/local/bin/tinyzkp-engine
+
+USER 10001:10001
+WORKDIR /work
+VOLUME ["/work", "/scratch"]
+STOPSIGNAL SIGTERM
+
+ENTRYPOINT ["/usr/local/bin/tinyzkp-engine"]
+CMD ["--help"]

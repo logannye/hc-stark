@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "JobInspectStatusV1": {
+      "enum": [
+        "running",
+        "interrupted",
+        "succeeded",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "RequestedModeV1": {
+      "enum": [
+        "auto",
+        "conventional",
+        "bounded"
+      ],
+      "type": "string"
+    },
+    "SelectedModeV1": {
+      "enum": [
+        "conventional",
+        "bounded"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "https://tinyzkp.com/schemas/job-inspect-result-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "attempt_count": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checkpoint_integrity": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "checkpoint_present": {
+      "type": "boolean"
+    },
+    "exact_release_match": {
+      "type": "boolean"
+    },
+    "manifest_integrity": {
+      "type": "boolean"
+    },
+    "requested_mode": {
+      "$ref": "#/$defs/RequestedModeV1"
+    },
+    "required_release_identity": {
+      "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
+      "type": "string"
+    },
+    "result_present": {
+      "type": "boolean"
+    },
+    "resumable": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "selected_mode": {
+      "$ref": "#/$defs/SelectedModeV1"
+    },
+    "status": {
+      "$ref": "#/$defs/JobInspectStatusV1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "status",
+    "requested_mode",
+    "selected_mode",
+    "required_release_identity",
+    "attempt_count",
+    "exact_release_match",
+    "manifest_integrity",
+    "checkpoint_present",
+    "result_present",
+    "resumable"
+  ],
+  "title": "JobInspectResultV1",
+  "type": "object"
+}

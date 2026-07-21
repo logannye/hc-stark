@@ -6,13 +6,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this form only for the published compatibility profile. Do not attach witnesses, traces, proofs containing confidential data, license keys, customer information, credentials, or proprietary AIR source.
+        Use this form only for the published compatibility profile. Do not attach witnesses, traces, proofs, checkpoints, scratch files, DoctorReportV1, license keys, entitlements, customer information, credentials, private paths, or proprietary AIR source.
   - type: input
     id: release
     attributes:
       label: Exact release identity
-      description: Paste the release SHA from `version --json` or `hc-cli release`.
-      placeholder: 40 lowercase hexadecimal characters
+      description: Paste the complete release identity from `tinyzkp version --json` or `tinyzkp-engine release`; do not substitute only a branch name.
+      placeholder: tinyzkp-guard/1.0.0+guard.<sha>.engine.<sha>.artifact.<sha256>
     validations:
       required: true
   - type: textarea
@@ -40,15 +40,13 @@ body:
     id: diagnostics
     attributes:
       label: Scrubbed diagnostics
-      description: Remove absolute user paths, hostnames, license material, witnesses, public customer identifiers, and secrets.
-    validations:
-      required: true
+      description: Optional. Include only a manually inspected SupportReportV1. Never attach DoctorReportV1; remove private paths, hostnames, license material, entitlements, witnesses, proofs, customer identifiers, environment variables, and secrets.
   - type: checkboxes
     id: confirmation
     attributes:
       label: Data-safety confirmation
       options:
-        - label: I confirmed this report contains no witness, trace, proof secret, license key, credential, customer data, or proprietary source.
+        - label: I confirmed this report contains no witness, trace, proof, checkpoint, scratch file, DoctorReportV1, license key, entitlement, credential, private path, customer data, or proprietary source.
           required: true
         - label: I reproduced this on the published supported profile.
           required: true

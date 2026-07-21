@@ -14,6 +14,9 @@ def test_manifest_is_complete_deterministic_and_covers_guard_surfaces():
         "/pricing.html",
         "/releases.html",
         "/support.html",
+        "/doctor.html",
+        "/troubleshooting.html",
+        "/roi.js",
         "/commerce.json",
         "/.well-known/security.txt",
     } <= paths

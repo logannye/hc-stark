@@ -1,0 +1,192 @@
+name: Import signed Guard release-index revision
+
+on:
+  workflow_dispatch:
+    inputs:
+      private_run_id:
+        description: Private tinyzkp-guard workflow run ID
+        required: true
+        type: string
+      expected_prior_index_sha256:
+        description: Exact currently published release-index SHA-256
+        required: true
+        type: string
+      expected_revised_index_sha256:
+        description: Exact signed revised release-index SHA-256
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: none
+
+concurrency:
+  group: tinyzkp-guard-release-index-revision
+  cancel-in-progress: false
+
+jobs:
+  import-exact-signed-bytes:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: tinyzkp-release-index-promotion
+    env:
+      PRIVATE_REPOSITORY: logannye/tinyzkp-guard
+      PRIVATE_RUN_ID: ${{ inputs.private_run_id }}
+      EXPECTED_PRIOR_SHA256: ${{ inputs.expected_prior_index_sha256 }}
+      EXPECTED_REVISED_SHA256: ${{ inputs.expected_revised_index_sha256 }}
+      TRUST_POLICY_SHA256: ${{ vars.GUARD_LAUNCH_TRUST_POLICY_SHA256 }}
+      SIGNING_TRUST_POLICY_SHA256: ${{ vars.GUARD_SIGNING_TRUST_POLICY_SHA256 }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+
+      - name: Require exact protected inputs and a clean qualified source
+        run: |
+          test -n "$TRUST_POLICY_SHA256"
+          test -n "$SIGNING_TRUST_POLICY_SHA256"
+          [[ "$PRIVATE_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]]
+          [[ "$EXPECTED_PRIOR_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_REVISED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          test -f site/guard-release-index-v1.json
+          test -f site/guard-release-index-v1.json.sig
+          test "$(sha256sum site/guard-release-index-v1.json | cut -d' ' -f1)" = \
+            "$EXPECTED_PRIOR_SHA256"
+
+      - name: Download the exact protected private handoff
+        env:
+          GH_TOKEN: ${{ secrets.GUARD_PRIVATE_HANDOFF_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN"
+          handoff_dir="$RUNNER_TEMP/guard-release-index-handoff"
+          install -d "$handoff_dir"
+          gh run download "$PRIVATE_RUN_ID" \
+            --repo "$PRIVATE_REPOSITORY" \
+            --name "guard-release-index-revision-$PRIVATE_RUN_ID" \
+            --dir "$handoff_dir"
+          test "$(find "$handoff_dir" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')" = 3
+          test "$(find "$handoff_dir" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" = 3
+          test -f "$handoff_dir/guard-release-index-v1.json"
+          test -f "$handoff_dir/guard-release-index-v1.json.sig"
+          test -f "$handoff_dir/guard-release-index-revision-handoff-v1.json"
+          test "$(sha256sum "$handoff_dir/guard-release-index-v1.json" | cut -d' ' -f1)" = \
+            "$EXPECTED_REVISED_SHA256"
+
+      - name: Verify signature, protected metadata, and restricted transition
+        run: |
+          handoff_dir="$RUNNER_TEMP/guard-release-index-handoff"
+          python3 scripts/ci/guard_release_index.py \
+            --prior-index site/guard-release-index-v1.json \
+            --revised-index "$handoff_dir/guard-release-index-v1.json" \
+            --handoff "$handoff_dir/guard-release-index-revision-handoff-v1.json" \
+            --signature "$handoff_dir/guard-release-index-v1.json.sig" \
+            --public-key release/guard-signing-public-key.pem \
+            --private-run-id "$PRIVATE_RUN_ID"
+          test "$(jq -er .prior_index_sha256 \
+            "$handoff_dir/guard-release-index-revision-handoff-v1.json")" = \
+            "$EXPECTED_PRIOR_SHA256"
+          test "$(jq -er .revised_index_sha256 \
+            "$handoff_dir/guard-release-index-revision-handoff-v1.json")" = \
+            "$EXPECTED_REVISED_SHA256"
+          test "$(jq -er .private_repository \
+            "$handoff_dir/guard-release-index-revision-handoff-v1.json")" = \
+            "$PRIVATE_REPOSITORY"
+
+      - name: Stage exact stable and immutable static-channel bytes
+        run: |
+          handoff_dir="$RUNNER_TEMP/guard-release-index-handoff"
+          prior_dir="site/release-index-revisions/$EXPECTED_PRIOR_SHA256"
+          revision_dir="site/release-index-revisions/$EXPECTED_REVISED_SHA256"
+          test -f "$prior_dir/guard-release-index-v1.json"
+          test "$(sha256sum "$prior_dir/guard-release-index-v1.json" | cut -d' ' -f1)" = \
+            "$EXPECTED_PRIOR_SHA256"
+          install -d "$revision_dir"
+          install -m 0644 "$handoff_dir/guard-release-index-v1.json" \
+            "$revision_dir/guard-release-index-v1.json"
+          install -m 0644 "$handoff_dir/guard-release-index-v1.json.sig" \
+            "$revision_dir/guard-release-index-v1.json.sig"
+          install -m 0644 \
+            "$handoff_dir/guard-release-index-revision-handoff-v1.json" \
+            "$revision_dir/guard-release-index-revision-handoff-v1.json"
+          install -m 0644 "$handoff_dir/guard-release-index-v1.json" \
+            site/guard-release-index-v1.json
+          install -m 0644 "$handoff_dir/guard-release-index-v1.json.sig" \
+            site/guard-release-index-v1.json.sig
+          install -m 0644 \
+            "$handoff_dir/guard-release-index-revision-handoff-v1.json" \
+            site/guard-release-index-revision-handoff-v1.json
+          cmp --silent site/guard-release-index-v1.json \
+            "$revision_dir/guard-release-index-v1.json"
+          cmp --silent site/guard-release-index-v1.json.sig \
+            "$revision_dir/guard-release-index-v1.json.sig"
+
+      - name: Regenerate public latest-index metadata and reverify all controls
+        run: |
+          python3 scripts/ci/guard_launch_gate.py \
+            --write \
+            --trusted-policy-sha256 "$TRUST_POLICY_SHA256" \
+            --trusted-signing-policy-sha256 "$SIGNING_TRUST_POLICY_SHA256"
+          python3 scripts/ci/guard_launch_gate.py \
+            --check \
+            --trusted-policy-sha256 "$TRUST_POLICY_SHA256" \
+            --trusted-signing-policy-sha256 "$SIGNING_TRUST_POLICY_SHA256"
+          cosign verify-blob \
+            --key release/guard-signing-public-key.pem \
+            --signature site/guard-release-index-v1.json.sig \
+            site/guard-release-index-v1.json
+          test "$(jq -er .latest_release_index.sha256 site/release.json)" = \
+            "$EXPECTED_REVISED_SHA256"
+          test "$(jq -er .latest_release_index.sha256 site/discovery.json)" = \
+            "$EXPECTED_REVISED_SHA256"
+          pytest -q scripts/ci/test_guard_release_index.py \
+            scripts/ci/test_guard_launch_gate.py
+
+      - name: Restrict the change to static index publication and generated metadata
+        run: |
+          git diff --name-only >"$RUNNER_TEMP/changed-files"
+          test -s "$RUNNER_TEMP/changed-files"
+          while IFS= read -r path; do
+            case "$path" in
+              site/guard-release-index-v1.json|\
+              site/guard-release-index-v1.json.sig|\
+              site/guard-release-index-revision-handoff-v1.json|\
+              site/release-index-revisions/*/guard-release-index-v1.json|\
+              site/release-index-revisions/*/guard-release-index-v1.json.sig|\
+              site/release-index-revisions/*/guard-release-index-revision-handoff-v1.json|\
+              site/release.json|\
+              site/discovery.json) ;;
+              *) echo "unexpected release-index import change: $path" >&2; exit 1 ;;
+            esac
+          done <"$RUNNER_TEMP/changed-files"
+
+      - name: Open a reviewable exact-byte publication pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="codex/guard-index-revision-$PRIVATE_RUN_ID"
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            site/guard-release-index-v1.json \
+            site/guard-release-index-v1.json.sig \
+            site/guard-release-index-revision-handoff-v1.json \
+            "site/release-index-revisions/$EXPECTED_REVISED_SHA256" \
+            site/release.json \
+            site/discovery.json
+          git commit -m "Publish signed Guard release-index revision"
+          git push --set-upstream origin "$branch"
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "Publish signed Guard release-index revision $PRIVATE_RUN_ID" \
+            --body "Imports the exact protected private handoff bytes. No Guard or engine artifact is rebuilt or replaced. Prior index: \`$EXPECTED_PRIOR_SHA256\`; revised index: \`$EXPECTED_REVISED_SHA256\`."

@@ -2140,7 +2140,7 @@ def validate_partner_evidence(
         or adapter.get("profile") != "tinyzkp-p3-goldilocks-v1"
         or adapter.get("plonky3_version") != "0.6.1"
         or adapter.get("dependency_lock_sha256")
-        != "0e9a8928370fdd4c4218a98a642f734e955d3801ade78f52ebec31ddbcd18a78"
+        != "0a28ab40dba2786a5106d274623d174b4c845b15ddd594629ebd98aa08612257"
         or adapter.get("release_sha") != release_sha
         or adapter.get("official_verification") is not True
         or adapter.get("bounded_equals_conventional") is not True
@@ -2287,6 +2287,7 @@ def validate_identity_evidence(
             "config_digest",
             "platform",
             "entrypoint",
+            "embedded_engine_sha256",
         }
         or oci.get("service") != "engine_oci"
         or oci.get("release_sha") != release_sha
@@ -2300,6 +2301,9 @@ def validate_identity_evidence(
         or not lower_hex(str(oci.get("config_digest")).removeprefix("sha256:"), 64)
         or oci.get("platform") != "linux/amd64"
         or oci.get("entrypoint") != ["/usr/local/bin/tinyzkp-engine"]
+        or not lower_hex(oci.get("embedded_engine_sha256"), 64)
+        or not isinstance(cli, dict)
+        or oci.get("embedded_engine_sha256") != cli.get("artifact_sha256")
     ):
         failures.append("release identity surface is incomplete or skewed: engine_oci")
     else:

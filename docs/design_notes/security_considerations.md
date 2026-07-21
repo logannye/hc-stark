@@ -1,5 +1,8 @@
 # security_considerations.md
 
+> **Legacy research — not production evidence.** This design note is historical
+> analysis and does not establish privacy or production claims for Guard.
+
 _Last updated: 2025-11-14_
 
 ---

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -21,8 +22,12 @@ PLONKY3_VERSION = "0.6.1"
 SHA1 = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MAX_JSON_BYTES = 1024 * 1024
+MAX_LAYER_BYTES = 512 * 1024 * 1024
+MAX_ENGINE_BYTES = 256 * 1024 * 1024
 EXPECTED_ENTRYPOINT = ["/usr/local/bin/tinyzkp-engine"]
 EXPECTED_VOLUMES = {"/scratch", "/work"}
+EXPECTED_SOURCE = "https://github.com/logannye/hc-stark"
+EXPECTED_USER = "10001:10001"
 
 
 def timestamp() -> str:
@@ -136,8 +141,98 @@ def descriptor_blob(
     return digest, value
 
 
+def descriptor_bytes(
+    archive: tarfile.TarFile,
+    members: dict[str, tarfile.TarInfo],
+    descriptor: object,
+    *,
+    label: str,
+) -> tuple[str, bytes]:
+    if not isinstance(descriptor, dict):
+        raise ValueError(f"OCI {label} descriptor is malformed")
+    digest = descriptor.get("digest")
+    size = descriptor.get("size")
+    if (
+        not isinstance(digest, str)
+        or not digest.startswith("sha256:")
+        or SHA256.fullmatch(digest.removeprefix("sha256:")) is None
+        or not isinstance(size, int)
+        or isinstance(size, bool)
+        or size <= 0
+        or size > MAX_LAYER_BYTES
+    ):
+        raise ValueError(f"OCI {label} descriptor identity is malformed")
+    member = members.get(f"blobs/sha256/{digest[7:]}")
+    if member is None or not member.isreg() or member.size != size:
+        raise ValueError(f"OCI {label} blob is missing or size-skewed: {digest}")
+    extracted = archive.extractfile(member)
+    if extracted is None:
+        raise ValueError(f"OCI {label} blob is unreadable: {digest}")
+    payload = extracted.read(MAX_LAYER_BYTES + 1)
+    if len(payload) != size or hashlib.sha256(payload).hexdigest() != digest[7:]:
+        raise ValueError(f"OCI {label} blob digest is skewed: {digest}")
+    return digest, payload
+
+
+def embedded_engine_sha256(
+    archive: tarfile.TarFile,
+    members: dict[str, tarfile.TarInfo],
+    layers: object,
+) -> str:
+    if not isinstance(layers, list) or not layers:
+        raise ValueError("OCI image layers are missing")
+    engine_payload: bytes | None = None
+    target = PurePosixPath("usr/local/bin/tinyzkp-engine")
+    whiteout = PurePosixPath("usr/local/bin/.wh.tinyzkp-engine")
+    for index, descriptor in enumerate(layers):
+        _digest, payload = descriptor_bytes(
+            archive,
+            members,
+            descriptor,
+            label=f"layer {index}",
+        )
+        try:
+            layer = tarfile.open(fileobj=io.BytesIO(payload), mode="r:*")
+        except tarfile.TarError as error:
+            raise ValueError(f"OCI layer {index} is unreadable") from error
+        with layer:
+            seen: set[PurePosixPath] = set()
+            for member in layer.getmembers():
+                normalized = member.name.removeprefix("./").lstrip("/")
+                pure = PurePosixPath(normalized)
+                if (
+                    not normalized
+                    or PurePosixPath(member.name).is_absolute()
+                    or ".." in pure.parts
+                    or pure in seen
+                ):
+                    raise ValueError(f"OCI layer {index} contains an unsafe path")
+                seen.add(pure)
+                if pure == whiteout:
+                    engine_payload = None
+                    continue
+                if pure != target:
+                    continue
+                if not member.isreg() or member.size <= 0 or member.size > MAX_ENGINE_BYTES:
+                    raise ValueError("OCI engine entry is not a bounded regular file")
+                extracted = layer.extractfile(member)
+                if extracted is None:
+                    raise ValueError("OCI engine entry is unreadable")
+                candidate = extracted.read(MAX_ENGINE_BYTES + 1)
+                if len(candidate) != member.size:
+                    raise ValueError("OCI engine entry is truncated")
+                engine_payload = candidate
+    if engine_payload is None:
+        raise ValueError("OCI image does not contain the TinyZKP engine binary")
+    return hashlib.sha256(engine_payload).hexdigest()
+
+
 def oci_identity(
-    path: Path, *, release_sha: str, release_ref: str
+    path: Path,
+    *,
+    release_sha: str,
+    release_ref: str,
+    expected_engine_sha256: str,
 ) -> dict[str, object]:
     try:
         archive = tarfile.open(path, mode="r:*")
@@ -160,7 +255,9 @@ def oci_identity(
         if index.get("schemaVersion") != 2 or not isinstance(descriptors, list):
             raise ValueError("OCI index is malformed")
 
-        candidates: list[tuple[str, str, dict[str, object]]] = []
+        candidates: list[
+            tuple[str, str, dict[str, object], dict[str, object]]
+        ] = []
         for descriptor in descriptors:
             manifest_digest, manifest = descriptor_blob(archive, members, descriptor)
             if manifest.get("schemaVersion") != 2:
@@ -169,11 +266,11 @@ def oci_identity(
                 archive, members, manifest.get("config")
             )
             if config.get("os") == "linux" and config.get("architecture") == "amd64":
-                candidates.append((manifest_digest, config_digest, config))
+                candidates.append((manifest_digest, config_digest, config, manifest))
         if len(candidates) != 1:
             raise ValueError("OCI archive must contain exactly one linux/amd64 image")
 
-        manifest_digest, config_digest, image = candidates[0]
+        manifest_digest, config_digest, image, manifest = candidates[0]
         config = image.get("config")
         if not isinstance(config, dict):
             raise ValueError("OCI image config is missing")
@@ -181,10 +278,11 @@ def oci_identity(
         volumes = config.get("Volumes")
         if (
             not isinstance(labels, dict)
+            or labels.get("org.opencontainers.image.source") != EXPECTED_SOURCE
             or labels.get("org.opencontainers.image.revision") != release_sha
             or labels.get("org.opencontainers.image.version") != release_ref
             or labels.get("org.opencontainers.image.tinyzkp.profile") != PROFILE
-            or config.get("User") != "tinyzkp"
+            or config.get("User") != EXPECTED_USER
             or config.get("WorkingDir") != "/work"
             or config.get("Entrypoint") != EXPECTED_ENTRYPOINT
             or config.get("Cmd") != ["--help"]
@@ -192,11 +290,19 @@ def oci_identity(
             or set(volumes) != EXPECTED_VOLUMES
         ):
             raise ValueError("OCI runtime identity or confinement contract is skewed")
+        embedded_sha256 = embedded_engine_sha256(
+            archive, members, manifest.get("layers")
+        )
+        if embedded_sha256 != expected_engine_sha256:
+            raise ValueError(
+                "OCI embedded engine digest differs from the released CLI binary"
+            )
         return {
             "manifest_digest": manifest_digest,
             "config_digest": config_digest,
             "platform": "linux/amd64",
             "entrypoint": EXPECTED_ENTRYPOINT,
+            "embedded_engine_sha256": embedded_sha256,
         }
 
 
@@ -256,8 +362,12 @@ def build_report(
     ):
         raise ValueError("compatibility manifest is incomplete or profile-skewed")
 
+    engine_sha256 = sha256_file(engine)
     oci = oci_identity(
-        oci_archive, release_sha=release_sha, release_ref=release_ref
+        oci_archive,
+        release_sha=release_sha,
+        release_ref=release_ref,
+        expected_engine_sha256=engine_sha256,
     )
     return {
         "schema_version": 1,
@@ -270,7 +380,7 @@ def build_report(
                 "service": "engine_cli",
                 "release_sha": release_sha,
                 "artifact": artifact_path(root, engine),
-                "artifact_sha256": sha256_file(engine),
+                "artifact_sha256": engine_sha256,
                 "identity_artifact": artifact_path(root, release_path),
                 "identity_artifact_sha256": sha256_file(release_path),
                 "package_version": release["package_version"],

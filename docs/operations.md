@@ -146,17 +146,22 @@ It fails on dangerous combinations such as Postgres usage reads without
 `HC_SERVER_PG_URL`, shared dispatch without a Postgres job index, or API/MCP
 auth reads without fail-closed tenant Postgres mirroring.
 
-### Launch gate audit
+### Legacy containment launch gate audit
 
-Before a coordinated reconciliation release, run the local launch-gate audit.
-It maps the roadmap phases to concrete repo evidence and keeps deploy/observe
-requirements explicit instead of treating local readiness as production
-completion:
+Before a coordinated legacy-containment release, run the local launch-gate
+audit. This path preserves the fail-closed API, MCP, billing, backup, and
+rollback obligations; it does not authorize Guard sales or hosted services:
 
 ```sh
 python3 scripts/ci/launch_gate_audit.py
 python3 scripts/ci/production_launch_preflight.py
 python3 scripts/ci/server_card_check.py
+```
+
+Guard and the static Cloudflare Pages business have a separate read-only gate:
+
+```sh
+python3 scripts/ci/guard_pages_launch_preflight.py
 ```
 
 ### Daily production audit modes
@@ -369,13 +374,15 @@ prior known release, use the explicit stop-only form instead:
 
 That form rejects a transaction which does have prior known containment.
 
-Hosted proving and authenticated proving smoke remain disabled. After API/MCP
-and Pages deploys finish, the public live canary is still blocked until a pinned,
-reviewed Wrangler/Node toolchain is provisioned outside the checkout and bound
-into production evidence; do not fall back to `npx` or an unpinned global tool.
+Hosted proving and authenticated proving smoke remain disabled. The command
+below exists only to verify containment and decommission readiness for the
+retired API, MCP, webhook, and legacy Pages surfaces. It does not authorize a
+Guard sale, launch, announcement, or hosted-service revival. Its production
+mode still requires a pinned, reviewed Wrangler/Node toolchain outside the
+checkout; do not fall back to `npx` or an unpinned global tool.
 
-For coordinated API, MCP, and website releases, pin the expected deployed
-commit and require all three surfaces to report it before announcing:
+For legacy containment verification, pin the expected deployed commit and
+require every retained compatibility surface to report it:
 
 ```sh
 CLOUDFLARE_API_TOKEN=REDACTED CLOUDFLARE_ACCOUNT_ID=REDACTED \
@@ -395,6 +402,11 @@ scripts/ci/run_production_preflight.sh \
 The API and MCP HTTP server report `HC_RELEASE_SHA` from `/version`. The Pages
 worker reports `TINYZKP_RELEASE_SHA` when set, otherwise Cloudflare's
 `CF_PAGES_COMMIT_SHA`, from `/api/release`.
+
+Guard deployment and announcement authority comes only from the protected
+Cloudflare Pages workflow, `scripts/ci/guard_pages_launch_preflight.py`, and the
+independently anchored signed Guard launch state. Passing the legacy command
+above cannot substitute for any Guard launch gate.
 
 ### Backup and restore gate
 
@@ -549,19 +561,20 @@ continue or announce the release.
 The static mode verifies `site/wrangler.toml`, the Advanced Mode `_worker.js`
 route table, every Pages API function handler, and classified Cloudflare
 bindings. Production mode also checks that the expected Pages bindings/secrets
-are exact: `INTERNAL_SECRET` is present, while legacy Stripe, demo, and any
-other unused secrets are absent. The worker dispatch test imports the real `_worker.js`
+are exact: the current static Guard surface requires an empty Pages secret
+inventory and rejects `INTERNAL_SECRET`, legacy Stripe, demo, or any other
+unexpected secret. The worker dispatch test imports the real `_worker.js`
 module with mocked Pages assets/cache APIs and verifies API dispatch, method
 405s, static asset passthrough, extensionless `.html` fallback, and baseline browser security headers on static and API responses.
-The analytics attribution test simulates browser CTA clicks and verifies that
-conversion links preserve first-touch source context while adding internal
-campaign/intent markers for signup, MCP, verifier, playground, pilot, rollout,
-and contact flows.
+The retained analytics-attribution test is compatibility evidence only; its
+historical signup, MCP, pilot, rollout, and contact scenarios do not authorize
+those retired routes or acquisition programs.
 
-### GTM distribution monitor
+### Historical GTM distribution monitor (retired)
 
-Run the offline GTM distribution monitor before changing MCP listings,
-machine-readable offer metadata, or agent-directory copy:
+Do not render, publish, submit, or monitor the retained MCP and agent-directory
+listings. The commands below are archived consistency checks only and cannot
+authorize distribution or alter current Guard readiness:
 
 ```sh
 python3 scripts/marketing/render_mcp_submissions.py
@@ -571,42 +584,43 @@ python3 scripts/monitoring/gtm_distribution_monitor.py --offline
 python3 -m pytest scripts/ci/test_gtm_distribution_monitor.py
 ```
 
-The renderer writes source-tagged submission drafts to
+Historically, the renderer wrote source-tagged submission drafts to
 `marketing/generated/mcp_submissions/` from
 `marketing/mcp_distribution_targets.json`; `--check` fails when generated drafts
-are stale. Offline monitor mode validates the target catalog, including
-source-tagged signup URLs for MCP directories and agent-IDE communities. After
-publishing or updating a live listing, run the online monitor without
-`--offline`; it checks canonical TinyZKP MCP/offer assets plus every `active`
-directory target with a `listing_url`.
+are stale. Neither offline nor online monitor mode is part of the active
+Community/Guard business. Current revenue readiness is enforced by
+`guard_pages_launch_preflight.py` and the deterministic Guard ledgers.
 
 ### Archived self-serve growth surfaces
 
 The former agent-offer, receipt-sharing, badge, self-serve package funnel,
 growth-monitor, and daily-growth cron paths are intentionally absent during
 backend recovery. Do not reinstall them or use their historical commands.
-Containment operations use `production_launch_preflight.py`, the no-email
-evaluation runbook, and the canonical cron in
-`deploy/hetzner/hc-billing.cron`.
+Legacy containment operations use `production_launch_preflight.py` and the
+canonical cron in `deploy/hetzner/hc-billing.cron`. The superseded evaluation
+runbook has no launch, billing, or customer-contact authority. Guard/Pages
+operations use `guard_pages_launch_preflight.py`.
 
-### Manual distribution asset gate
+### Historical manual distribution asset gate (retired)
 
-Run the manual distribution asset check before posting HN/X launch copy,
-sending founder outbound, or publishing integration tutorials:
+Do not post or send the retained HN/X, founder-outbound, or integration assets.
+The command below is historical consistency evidence only and grants no
+distribution or announcement authority:
 
 ```sh
 python3 scripts/ci/manual_distribution_assets_check.py
 python3 -m pytest scripts/ci/test_manual_distribution_assets_check.py
 ```
 
-This blocks stale MCP tool names, outdated pricing/verification claims, and
-bare TinyZKP conversion URLs that would lose source attribution.
+It checks the archived drafts for internal consistency; passing it does not
+make their retired claims or acquisition routes current.
 
-### GTM revenue report
+### Legacy GTM revenue report (containment only)
 
-Use the GTM revenue report to inspect which channels are producing accounts,
-activated accounts, paid-plan accounts, active base MRR, estimated usage
-revenue, paid proofs, Compute trace-step volume, and time-to-first-proof:
+This recovery-era report may be used only to reconcile retained hosted-service
+records while legacy obligations are being contained. It is not the Guard
+revenue ledger, and it cannot establish current accounts, MRR, usage revenue,
+or launch readiness:
 
 ```sh
 python3 billing/gtm_revenue_report.py \
@@ -614,9 +628,10 @@ python3 billing/gtm_revenue_report.py \
   --usage-db /opt/hc-stark/data/usage.sqlite
 ```
 
-The report groups by stored attribution source, medium, and platform. It does
-not print email addresses. Use `--json` when feeding the summary into a BI
-dashboard or scheduled internal digest.
+The report groups historical stored attribution without printing email
+addresses. Current Guard readiness and the intentionally zero-revenue closed
+checkout state come from the deterministic ledgers under `marketing/generated`
+and the signed Guard launch state.
 
 ### Billing cron during recovery
 
@@ -624,7 +639,8 @@ The canonical `/etc/cron.d/hc-billing` source is
 `deploy/hetzner/hc-billing.cron`. It runs only the encrypted backup and
 evaluation-application retention jobs. Legacy usage-meter emission, lifecycle
 email, checkout recovery, and growth automation remain disabled. Contract
-invoices are operator-created through the reviewed Stripe Invoicing workflow.
+invoicing is retired: `billing/contract_billing.py` fails closed against the
+active Community/Guard catalog and must not be used to create a Stripe invoice.
 
 ### Postgres migration helper (usage_pg_tools.py)
 
@@ -718,7 +734,25 @@ For customer-visible outages, use
 runbook defines SEV1/SEV2/SEV3 levels, incident categories, public update
 templates, billing safeguards, and rollback rules.
 
-### GTM Revenue Monitoring
+### Historical GTM Revenue Monitoring (retired)
+
+> **Do not execute any command in this section.** The account audit, checkout
+> monitor, pipeline sync, catalog setup, and one-off offer described below are
+> retained as recovery-era operations evidence only. They have no authority to
+> open current Guard sales or record revenue. The orchestrator and pipeline sync
+> entry points fail before account access or writes. Current state comes only
+> from `release/guard-launch-state-v2.json`; current commerce uses Lemon Squeezy.
+
+For current Guard revenue readiness, run the deterministic render/check chain:
+
+```bash
+python3 scripts/marketing/render_gtm_execution_ledger.py --check
+python3 scripts/ci/gtm_execution_ledger_check.py
+python3 scripts/marketing/render_gtm_pipeline_ledger.py --check
+python3 scripts/ci/gtm_pipeline_ledger_check.py
+```
+
+#### Archived commands and behavior
 
 Start with the safe readiness runner. It validates that the local Stripe CLI
 profile is the `LN Holdings` Stripe account used for TinyZKP before it runs the

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Plan or create tightly scoped Stripe invoices and annual contracts.
+"""Plan or create tightly scoped legacy Stripe invoices and annual contracts.
 
 The default is read-only. Writes require --apply, exact account identity, and
 TINYZKP_ALLOW_CONTRACT_BILLING_WRITE=1. This tool never creates Checkout links.
+The active Guard catalog intentionally disables this retired sales path.
 """
 
 from __future__ import annotations
@@ -179,7 +180,24 @@ def value(item: Any, key: str, default: Any = None) -> Any:
 
 def load_offers() -> dict[str, dict[str, Any]]:
     payload = json.loads(OFFERS_PATH.read_text(encoding="utf-8"))
-    return {offer["id"]: offer for offer in payload["offers"]}
+    offers = payload.get("offers") if isinstance(payload, dict) else None
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != 3
+        or not isinstance(offers, list)
+    ):
+        raise ValueError(
+            "legacy Stripe contract billing is unavailable for the active Guard catalog"
+        )
+    result: dict[str, dict[str, Any]] = {}
+    for offer in offers:
+        offer_id = offer.get("id") if isinstance(offer, dict) else None
+        if not isinstance(offer_id, str) or not offer_id or offer_id in result:
+            raise ValueError("legacy Stripe offer catalog is malformed")
+        result[offer_id] = offer
+    if not (EVALUATIONS | ANNUAL).issubset(result):
+        raise ValueError("legacy Stripe offer catalog is incomplete")
+    return result
 
 
 def canonical_timestamp(raw: str, field: str) -> str:

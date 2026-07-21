@@ -1,0 +1,54 @@
+{
+  "authorization_scope": "prepare_signed_guard_draft_only",
+  "authorization_state": "blocked",
+  "checkout_enabled": false,
+  "commercial_release_authorized": false,
+  "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
+  "document_type": "GuardCandidateBuildAuthorizationV1",
+  "engine": null,
+  "expected_public_candidate_tag": null,
+  "legal_artifacts": null,
+  "merchant_catalog": null,
+  "prior_qualified_release": null,
+  "public_candidate_authorization_commit": null,
+  "public_gate_source_sha256": "3dfa19f361c99a9f09ab9ac230ada6bd6b3f88d4e3e9cc4ec888b187d8bd75bc",
+  "release_change_class": "proof_critical",
+  "release_identity": {
+    "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
+    "engine_source_sha": null,
+    "guard_release": "tinyzkp-guard-v1",
+    "guard_source_sha": null,
+    "guard_version": null
+  },
+  "remaining_launch_blockers": [
+    "engine_release_ready",
+    "five_unaided_installs",
+    "guard_artifact_published",
+    "guard_release_ready",
+    "hosted_infrastructure_decommissioned",
+    "legacy_obligations_resolved",
+    "legal_terms_approved",
+    "merchant_live_owner_smoke_passed",
+    "merchant_sandbox_lifecycle_passed",
+    "release_rehearsal_within_budget",
+    "three_external_workloads",
+    "two_standard_annual_customers"
+  ],
+  "reviewed_evidence": {
+    "launch_evidence_sha256": "3dfa19f361c99a9f09ab9ac230ada6bd6b3f88d4e3e9cc4ec888b187d8bd75bc",
+    "launch_trust_policy_sha256": "a72004286f167a5c585394b17eb99aa970f2b1a0c55a455605b72ff0736cd3cc",
+    "required_passed_gates": [
+      "engine_release_ready",
+      "legal_terms_approved",
+      "merchant_sandbox_lifecycle_passed",
+      "release_rehearsal_within_budget"
+    ]
+  },
+  "schema_version": 1,
+  "signing_trust": {
+    "policy_path": "release/guard-signing-trust-v1.json",
+    "policy_sha256": "3083096ed287330e3276e772cb1f30d8e1622443d78b0118c22754a44f304ec2",
+    "public_key_path": "release/guard-signing-public-key.pem",
+    "public_key_sha256": null
+  }
+}

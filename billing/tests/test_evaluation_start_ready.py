@@ -1,11 +1,18 @@
 import hashlib
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import contract_billing as billing
 import evaluation_start_ready as readiness
+
+
+LEGACY_OFFERS_PATH = (
+    Path(__file__).resolve().parent / "fixtures" / "legacy-commercial-offers-v3.json"
+)
+billing.OFFERS_PATH = LEGACY_OFFERS_PATH
 
 
 def acceptance_matrix():

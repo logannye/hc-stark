@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
+  "workload": {
+    "air_package": "air-package-v1.json",
+    "trace_manifest": "packed/trace-manifest-v1.json",
+    "chunks_dir": "packed",
+    "public_inputs": "public-inputs-v1.json",
+    "logical_rows": 1024,
+    "trace_width": 1,
+    "max_constraint_degree": 1,
+    "field": "goldilocks",
+    "extension_degree": 2,
+    "permutation": "poseidon2_width_8",
+    "verifier": "p3_uni_stark_0.6.1",
+    "features": {
+      "uses_lookups": false,
+      "uses_buses": false,
+      "uses_permutations": false,
+      "uses_multi_table": false,
+      "uses_preprocessed_columns": false,
+      "uses_periodic_columns": false,
+      "uses_recursion": false,
+      "uses_gpu": false
+    }
+  },
+  "mode": "auto",
+  "ram_budget_bytes": 536870912,
+  "scratch_budget_bytes": 8589934592,
+  "max_threads": 1,
+  "roots": {
+    "input_root": "inputs",
+    "job_root": "jobs",
+    "output_root": "outputs",
+    "scratch_root": "scratch"
+  },
+  "job_dir": "evaluation",
+  "output_dir": "evaluation",
+  "scratch_dir": "evaluation"
+}

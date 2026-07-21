@@ -184,6 +184,72 @@ impl UploadedTraceWorkload {
     fn chunk_path(&self, index: u32) -> PathBuf {
         self.chunks_dir.join(format!("chunk-{index:06}.zst"))
     }
+
+    /// Fully validate every supplied trace chunk without creating scratch
+    /// state or materializing the trace.
+    ///
+    /// Construction validates the AIR/manifest/public-input identity. This
+    /// additional pass binds that identity to the actual compressed and
+    /// uncompressed chunk bytes before a checkpoint is accepted for resume.
+    pub fn validate_trace_chunks(&self) -> Result<(), WorkloadError> {
+        let width =
+            usize::try_from(self.manifest.trace_width).map_err(|_| WorkloadError::InvalidShape)?;
+        let row_bytes = width.checked_mul(8).ok_or(WorkloadError::InvalidShape)?;
+        let expected_total = self
+            .manifest
+            .logical_rows
+            .checked_mul(row_bytes as u64)
+            .ok_or(WorkloadError::InvalidShape)?;
+        let mut total_uncompressed = 0u64;
+        let mut raw_hasher = blake3::Hasher::new();
+        let mut buffer = vec![0u8; 64 * 1024];
+
+        for chunk in &self.manifest.chunks {
+            let path = self.chunk_path(chunk.index);
+            let file = open_validated_chunk(&path, chunk.compressed_bytes, &chunk.blake3_hex)?;
+            let mut decoder =
+                zstd::stream::read::Decoder::new(file).map_err(|_| WorkloadError::InvalidShape)?;
+            let mut remaining = chunk.uncompressed_bytes;
+            while remaining > 0 {
+                let read_len = usize::try_from(remaining.min(buffer.len() as u64))
+                    .map_err(|_| WorkloadError::InvalidShape)?;
+                decoder
+                    .read_exact(&mut buffer[..read_len])
+                    .map_err(|_| WorkloadError::InvalidShape)?;
+                if !buffer[..read_len].chunks_exact(8).remainder().is_empty()
+                    || buffer[..read_len].chunks_exact(8).any(|encoded| {
+                        u64::from_le_bytes(
+                            encoded
+                                .try_into()
+                                .expect("chunks_exact(8) always yields eight bytes"),
+                        ) >= GOLDILOCKS_MODULUS_U64
+                    })
+                {
+                    return Err(WorkloadError::InvalidShape);
+                }
+                raw_hasher.update(&buffer[..read_len]);
+                remaining -= read_len as u64;
+                total_uncompressed = total_uncompressed
+                    .checked_add(read_len as u64)
+                    .ok_or(WorkloadError::InvalidShape)?;
+            }
+            let mut extra = [0u8; 1];
+            if decoder
+                .read(&mut extra)
+                .map_err(|_| WorkloadError::InvalidShape)?
+                != 0
+            {
+                return Err(WorkloadError::InvalidShape);
+            }
+        }
+
+        if total_uncompressed != expected_total
+            || hex_lower(raw_hasher.finalize().as_bytes()) != self.manifest.trace_digest_hex
+        {
+            return Err(WorkloadError::InvalidShape);
+        }
+        Ok(())
+    }
 }
 
 impl ResourceBoundedWorkload for UploadedTraceWorkload {
@@ -389,6 +455,22 @@ pub fn estimate_declarative_statement(
 ) -> Result<ResourceEstimate, WorkloadError> {
     let statement = DeclarativeStatement::new(air, rows, public_values)?;
     estimate_resource_bounded_workload(&statement, policy).map_err(|_| WorkloadError::InvalidShape)
+}
+
+/// Return both conventional and bounded estimates without performing resource
+/// preflight. The exact-contract doctor uses this so an insufficient budget
+/// still produces a complete, actionable report instead of losing the
+/// estimates inside an error.
+pub fn estimate_declarative_execution_paths(
+    air: AirPackageV1,
+    rows: u64,
+    public_values: &[u64],
+    policy: &ResourcePolicyV1,
+) -> std::result::Result<(ResourceEstimate, ResourceEstimate), crate::BoundedProverError> {
+    let statement = DeclarativeStatement::new(air, rows, public_values)?;
+    let conventional = crate::estimate_resource_conventional_workload(&statement)?;
+    let bounded = crate::estimate_resource_bounded_workload(&statement, policy)?;
+    Ok((conventional, bounded))
 }
 
 /// Mode-aware conventional/bounded plan for a declarative AIR statement.

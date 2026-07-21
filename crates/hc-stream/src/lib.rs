@@ -110,6 +110,7 @@ pub struct PreflightReport {
     pub selected_mode: ExecutionMode,
     pub available_scratch_bytes: u64,
     pub memory_selection_threshold_bytes: u64,
+    pub scratch_required_with_headroom_bytes: Option<u64>,
     pub estimate: ResourceEstimate,
 }
 
@@ -147,7 +148,7 @@ impl ResourcePolicyV1 {
     }
 
     pub fn memory_selection_threshold(&self) -> u64 {
-        self.max_resident_bytes.saturating_mul(7) / 10
+        tinyzkp_contracts::memory_selection_threshold(self.max_resident_bytes)
     }
 
     pub fn select_mode(&self, estimate: &ResourceEstimate) -> Result<ExecutionMode> {
@@ -220,19 +221,38 @@ impl ResourcePolicyV1 {
             drop(probe_file);
             fs::remove_file(&probe)?;
             let available = fs2::available_space(&self.scratch_dir)?;
-            if selected_mode == ExecutionMode::Scratch
-                && estimate.scratch_high_water_bytes > available
-            {
-                return Err(StreamError::ResourceLimit {
-                    resource: "available scratch storage",
-                    required: estimate.scratch_high_water_bytes,
-                    cap: available,
-                });
-            }
+            let scratch_required_with_headroom_bytes = if selected_mode == ExecutionMode::Scratch {
+                let needed = tinyzkp_contracts::required_scratch_capacity_with_headroom(
+                    estimate.scratch_high_water_bytes,
+                )
+                .ok_or(StreamError::ResourceLimit {
+                    resource: "scratch storage including headroom",
+                    required: u64::MAX,
+                    cap: self.max_scratch_bytes,
+                })?;
+                if needed > self.max_scratch_bytes {
+                    return Err(StreamError::ResourceLimit {
+                        resource: "scratch storage including headroom",
+                        required: needed,
+                        cap: self.max_scratch_bytes,
+                    });
+                }
+                if needed > available {
+                    return Err(StreamError::ResourceLimit {
+                        resource: "available scratch storage including headroom",
+                        required: needed,
+                        cap: available,
+                    });
+                }
+                Some(needed)
+            } else {
+                None
+            };
             Ok(PreflightReport {
                 selected_mode,
                 available_scratch_bytes: available,
                 memory_selection_threshold_bytes: self.memory_selection_threshold(),
+                scratch_required_with_headroom_bytes,
                 estimate,
             })
         }
@@ -251,14 +271,22 @@ impl ResourcePolicyV1 {
                 cap: self.max_resident_bytes,
             });
         }
-        if selected_mode == ExecutionMode::Scratch
-            && estimate.scratch_high_water_bytes > self.max_scratch_bytes
-        {
-            return Err(StreamError::ResourceLimit {
-                resource: "scratch storage",
-                required: estimate.scratch_high_water_bytes,
+        if selected_mode == ExecutionMode::Scratch {
+            let needed = tinyzkp_contracts::required_scratch_capacity_with_headroom(
+                estimate.scratch_high_water_bytes,
+            )
+            .ok_or(StreamError::ResourceLimit {
+                resource: "scratch storage including headroom",
+                required: u64::MAX,
                 cap: self.max_scratch_bytes,
-            });
+            })?;
+            if needed > self.max_scratch_bytes {
+                return Err(StreamError::ResourceLimit {
+                    resource: "scratch storage including headroom",
+                    required: needed,
+                    cap: self.max_scratch_bytes,
+                });
+            }
         }
         Ok(())
     }

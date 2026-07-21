@@ -32,6 +32,8 @@ clap = { version = "4.5", features = ["derive"] }
 ctrlc = { version = "3.4", features = ["termination"] }
 hc-plonky3 = { path = "../hc-plonky3" }
 hc-stream = { path = "../hc-stream" }
+tinyzkp-contracts = { path = "../tinyzkp-contracts" }
+fs2 = "0.4"
 hc-commit = { path = "../hc-commit", optional = true }
 hc-core = { path = "../hc-core", optional = true }
 hc-bench = { path = "../hc-bench", optional = true }
@@ -49,6 +51,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = { version = "0.8", optional = true }
 zstd = "0.13"
+thiserror.workspace = true
 
 [dev-dependencies]
 assert_cmd = "2.0"

@@ -85,7 +85,10 @@ pub fn try_fold_goldilocks<F: FieldElement>(values: &[F], beta: F) -> Option<Vec
 fn fold_goldilocks_simd(values: &[GoldilocksField], beta: GoldilocksField) -> Vec<GoldilocksField> {
     use hc_core::field::PackedField;
 
-    debug_assert!(values.len() % 2 == 0, "fold_layer: length must be even");
+    debug_assert!(
+        values.len().is_multiple_of(2),
+        "fold_layer: length must be even"
+    );
     let pair_count = values.len() / 2;
     let mut out: Vec<GoldilocksField> = Vec::with_capacity(pair_count);
 
@@ -187,7 +190,7 @@ fn fold_goldilocks_simd_v5(
 ) -> HcResult<Vec<GoldilocksField>> {
     use hc_core::field::PackedField;
 
-    if values.len() % 2 != 0 {
+    if !values.len().is_multiple_of(2) {
         return Err(HcError::invalid_argument("FRI layer size must be even"));
     }
     let half = values.len() / 2;

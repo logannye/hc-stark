@@ -1,45 +1,50 @@
 {
-  "$id": "https://tinyzkp.com/schemas/job-manifest-v1.schema.json",
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "definitions": {
+  "$defs": {
     "AirFeaturesV1": {
       "additionalProperties": false,
       "properties": {
         "uses_buses": {
+          "const": false,
           "type": "boolean"
         },
         "uses_gpu": {
+          "const": false,
           "type": "boolean"
         },
         "uses_lookups": {
+          "const": false,
           "type": "boolean"
         },
         "uses_multi_table": {
+          "const": false,
           "type": "boolean"
         },
         "uses_periodic_columns": {
+          "const": false,
           "type": "boolean"
         },
         "uses_permutations": {
+          "const": false,
           "type": "boolean"
         },
         "uses_preprocessed_columns": {
+          "const": false,
           "type": "boolean"
         },
         "uses_recursion": {
+          "const": false,
           "type": "boolean"
         }
       },
       "required": [
-        "uses_buses",
-        "uses_gpu",
         "uses_lookups",
-        "uses_multi_table",
-        "uses_periodic_columns",
+        "uses_buses",
         "uses_permutations",
+        "uses_multi_table",
         "uses_preprocessed_columns",
-        "uses_recursion"
+        "uses_periodic_columns",
+        "uses_recursion",
+        "uses_gpu"
       ],
       "type": "object"
     },
@@ -47,15 +52,19 @@
       "additionalProperties": false,
       "properties": {
         "input_root": {
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
           "type": "string"
         },
         "job_root": {
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
           "type": "string"
         },
         "output_root": {
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
           "type": "string"
         },
         "scratch_root": {
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
           "type": "string"
         }
       },
@@ -79,124 +88,162 @@
       "additionalProperties": false,
       "properties": {
         "air_package": {
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
           "type": "string"
         },
         "chunks_dir": {
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
           "type": "string"
         },
         "extension_degree": {
+          "const": 2,
           "format": "uint8",
-          "minimum": 0.0,
+          "maximum": 255,
+          "minimum": 0,
           "type": "integer"
         },
         "features": {
-          "$ref": "#/definitions/AirFeaturesV1"
+          "$ref": "#/$defs/AirFeaturesV1"
         },
         "field": {
+          "const": "goldilocks",
           "type": "string"
         },
         "logical_rows": {
+          "enum": [
+            1024,
+            2048,
+            4096,
+            8192,
+            16384,
+            32768,
+            65536,
+            131072,
+            262144,
+            524288,
+            1048576,
+            2097152,
+            4194304,
+            8388608,
+            16777216
+          ],
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "max_constraint_degree": {
           "format": "uint8",
-          "minimum": 0.0,
+          "maximum": 3,
+          "minimum": 1,
           "type": "integer"
         },
         "permutation": {
+          "const": "poseidon2_width_8",
           "type": "string"
         },
         "public_inputs": {
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
           "type": "string"
         },
         "trace_manifest": {
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
           "type": "string"
         },
         "trace_width": {
           "format": "uint32",
-          "minimum": 0.0,
+          "maximum": 256,
+          "minimum": 1,
           "type": "integer"
         },
         "verifier": {
+          "const": "p3_uni_stark_0.6.1",
           "type": "string"
         }
       },
       "required": [
         "air_package",
-        "chunks_dir",
-        "extension_degree",
-        "features",
-        "field",
-        "logical_rows",
-        "max_constraint_degree",
-        "permutation",
-        "public_inputs",
         "trace_manifest",
+        "chunks_dir",
+        "public_inputs",
+        "logical_rows",
         "trace_width",
-        "verifier"
+        "max_constraint_degree",
+        "field",
+        "extension_degree",
+        "permutation",
+        "verifier",
+        "features"
       ],
       "type": "object"
     }
   },
+  "$id": "https://tinyzkp.com/schemas/job-manifest-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Field-compatible with the original Guard `JobManifestV1`.",
   "properties": {
     "compatibility_profile": {
       "const": "tinyzkp-p3-goldilocks-v1",
       "type": "string"
     },
     "job_dir": {
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
       "type": "string"
     },
     "max_threads": {
       "format": "uint16",
-      "minimum": 0.0,
+      "maximum": 256,
+      "minimum": 1,
       "type": "integer"
     },
     "mode": {
-      "$ref": "#/definitions/RequestedModeV1"
+      "$ref": "#/$defs/RequestedModeV1"
     },
     "output_dir": {
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
       "type": "string"
     },
     "ram_budget_bytes": {
       "format": "uint64",
-      "minimum": 0.0,
+      "maximum": 18446744073709551615,
+      "minimum": 16777216,
       "type": "integer"
     },
     "roots": {
-      "$ref": "#/definitions/JobRootsV1"
+      "$ref": "#/$defs/JobRootsV1"
     },
     "schema_version": {
       "const": 1,
       "format": "uint32",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": "integer"
     },
     "scratch_budget_bytes": {
       "format": "uint64",
-      "minimum": 0.0,
+      "maximum": 18446744073709551615,
+      "minimum": 1,
       "type": "integer"
     },
     "scratch_dir": {
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,1024}$",
       "type": "string"
     },
     "workload": {
-      "$ref": "#/definitions/WorkloadInputV1"
+      "$ref": "#/$defs/WorkloadInputV1"
     }
   },
   "required": [
-    "compatibility_profile",
-    "job_dir",
-    "max_threads",
-    "mode",
-    "output_dir",
-    "ram_budget_bytes",
-    "roots",
     "schema_version",
+    "compatibility_profile",
+    "workload",
+    "mode",
+    "ram_budget_bytes",
     "scratch_budget_bytes",
-    "scratch_dir",
-    "workload"
+    "max_threads",
+    "roots",
+    "job_dir",
+    "output_dir",
+    "scratch_dir"
   ],
   "title": "JobManifestV1",
   "type": "object"

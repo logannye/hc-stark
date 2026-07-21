@@ -103,12 +103,15 @@ release, preserve the failure record, revoke normal release activity, and have
 a second operator review the recorded target before retrying remediation. Do
 not announce or continue the release.
 
-## 3. Consume the record in the post-deploy canary
+## 3. Consume the record in the static post-deploy canary
 
 The canary refuses an unreviewed record digest or a record whose new deployment
-is no longer Cloudflare's canonical production deployment. It then runs the
-fixed release-identity canary for site/API/MCP same-SHA parity followed by the
-backend-recovery containment canary. Canary is a write-capable transaction:
+is no longer Cloudflare's canonical production deployment. It compares
+`release.json`, `commerce.json`, `pricing.json`, and `discovery.json` byte for
+byte with the reviewed static source, checks that their generated states
+agree, then tests every public static route and representative retired GET and
+POST routes. It makes no API, MCP, webhook, database, or hosted-prover request.
+Canary is a write-capable transaction:
 failure automatically rolls Pages back to the deployment record's exact prior
 deployment and verifies the restored canonical state. Therefore the write
 switch and exact reviewed deployment-record hash are mandatory even though a
@@ -128,8 +131,8 @@ python3 scripts/deploy/cloudflare_pages_release.py canary \
 unset TINYZKP_ALLOW_CLOUDFLARE_PAGES_WRITE
 ```
 
-Do not announce the release unless this command reports `passed` and the
-broader live production preflight also passes. `failed_rolled_back` means the
+Do not announce the release unless this command reports `passed`.
+`failed_rolled_back` means the
 new site was removed from production and the recorded prior site was verified.
 `failed_rollback_failed` is a critical incident: treat the production state as
 unknown and use the evidence record for a separately reviewed recovery.
@@ -165,9 +168,16 @@ The only rollback write surface is Cloudflare's documented
 `POST /accounts/{account_id}/pages/projects/tinyzkp/deployments/{recorded_prior_id}/rollback`.
 The wrapper verifies that Cloudflare's canonical deployment and API result both
 equal that exact recorded target before creating
-`rolled_back_pending_canary` evidence. Coordinate API/MCP rollback and rerun
-containment canaries as required; a website-only rollback does not itself
-restore cross-surface same-SHA parity.
+`rolled_back_pending_canary` evidence. Rerun the static contract and route
+canaries after a manual rollback. The production website has no API/MCP
+same-SHA dependency.
+
+Cloudflare Web Analytics may be enabled only through the Pages dashboard after
+owner review. The static CSP permits Cloudflare's documented auto-injected
+`https://static.cloudflareinsights.com/beacon.min.js` and the documented
+`https://cloudflareinsights.com` report endpoint. Do not add a manual beacon,
+token, custom collector, event taxonomy, user identifier, CRM, or
+proof-workflow telemetry.
 
 References: [Wrangler Pages deploy options](https://developers.cloudflare.com/workers/wrangler/commands/pages/),
 [Pages project identity](https://developers.cloudflare.com/api/resources/pages/subresources/projects/methods/get/),

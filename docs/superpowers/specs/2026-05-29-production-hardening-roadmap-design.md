@@ -1,5 +1,8 @@
 # TinyZKP / hc-stark — Production-Hardening Master Roadmap
 
+> **Legacy research — not production evidence.** This superseded roadmap does
+> not describe the supported Guard release or its qualified claims.
+
 - **Status:** Approved (shape); per-phase specs/plans to follow
 - **Date:** 2026-05-29
 - **Author:** Logan Nye

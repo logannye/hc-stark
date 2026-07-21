@@ -1,5 +1,8 @@
 # Phase 0.1b — Honest Customer-Facing Copy Implementation Plan
 
+> **Legacy research — not production evidence.** This superseded implementation
+> plan is retained for history and does not authorize current product claims.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Make every customer-facing surface (site, README, docs, the `tinyzkp-proofs` skill, MCP directory cards, marketing drafts) tell the truth that Phase 0.1a established in code: only `accumulator_step` is a live, predicate-enforcing proof; the other template types and the unbacked security/feature claims are removed. Also rebuild the `/try` playground around `accumulator_step` (functional, not just copy) and mark the Solidity verifier non-functional.

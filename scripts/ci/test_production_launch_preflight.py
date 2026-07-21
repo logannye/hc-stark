@@ -49,11 +49,8 @@ def test_local_preflight_builds_fast_static_gate_sequence():
     built = preflight.build_steps(args(), python="python", node="node")
 
     assert commands(built) == [
-        ("python", "scripts/ci/recovery_reconciliation_invariants.py"),
-        ("python", "scripts/ci/backend_recovery_gate.py"),
         ("python", "scripts/ci/server_card_check.py"),
         ("python", "scripts/ci/plonky3_compatibility_gate.py"),
-        ("python", "scripts/ci/launch_gate_audit.py"),
         ("python", "billing/runtime_lock.py", "verify-metadata"),
         ("python", "scripts/ci/backup_restore_check.py"),
         ("python", "-m", "pytest", "billing/tests/test_backup_script.py"),
@@ -97,15 +94,6 @@ def test_local_preflight_builds_fast_static_gate_sequence():
         ),
         ("python", "-m", "pytest", "billing/tests/test_site_pricing_parity.py"),
         ("python", "scripts/commercial/render_offers.py", "--check"),
-        (
-            "python",
-            "-m",
-            "pytest",
-            "billing/tests/test_contract_billing.py",
-            "billing/tests/test_configure_contract_portal.py",
-            "billing/tests/test_evaluation_start_ready.py",
-            "billing/tests/test_stripe_production_identity_check.py",
-        ),
         (
             "python",
             "-m",
@@ -158,7 +146,6 @@ def test_production_adds_stricter_deploy_gates():
         node="node",
     )
 
-    assert ("python", "scripts/ci/launch_gate_audit.py") in commands(built)
     assert (
         "/usr/bin/python3",
         "billing/runtime_lock.py",
@@ -456,6 +443,21 @@ def test_run_step_reports_missing_command():
     assert result.status == "FAIL"
     assert result.returncode is None
     assert result.error
+
+
+def test_containment_summary_never_grants_launch_authority(capsys):
+    passed = preflight.StepResult("legacy canary", "PASS", ("true",))
+
+    preflight.print_containment_summary([passed], live=True)
+    live_output = capsys.readouterr().out
+    assert "Legacy live containment canaries passed" in live_output
+    assert "no Guard sales or public-announcement authority" in live_output
+    assert "gate is clear" not in live_output
+
+    preflight.print_containment_summary([passed], live=False)
+    nonlive_output = capsys.readouterr().out
+    assert "verify containment and decommission readiness" in nonlive_output
+    assert "before public announcement" not in nonlive_output
 
 
 def test_production_step_environment_drops_language_and_loader_injection(

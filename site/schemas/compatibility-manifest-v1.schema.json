@@ -1,41 +1,39 @@
 {
-  "$id": "https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json",
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
-  "definitions": {
+  "$defs": {
     "CompatibilityLimitsV1": {
       "additionalProperties": false,
       "properties": {
         "maximum_constraint_degree": {
           "const": 3,
           "format": "uint8",
-          "minimum": 0.0,
+          "maximum": 255,
+          "minimum": 0,
           "type": "integer"
         },
         "maximum_rows": {
           "const": 16777216,
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "maximum_trace_width": {
           "const": 256,
           "format": "uint32",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         },
         "minimum_rows": {
           "const": 1024,
           "format": "uint64",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": "integer"
         }
       },
       "required": [
-        "maximum_constraint_degree",
+        "minimum_rows",
         "maximum_rows",
         "maximum_trace_width",
-        "minimum_rows"
+        "maximum_constraint_degree"
       ],
       "type": "object"
     },
@@ -44,16 +42,27 @@
       "properties": {
         "architecture": {
           "const": "x86_64",
+          "enum": [
+            "x86_64",
+            "aarch64",
+            "other"
+          ],
           "type": "string"
         },
         "operating_system": {
           "const": "linux",
+          "enum": [
+            "linux",
+            "macos",
+            "windows",
+            "other"
+          ],
           "type": "string"
         }
       },
       "required": [
-        "architecture",
-        "operating_system"
+        "operating_system",
+        "architecture"
       ],
       "type": "object"
     },
@@ -61,15 +70,19 @@
       "additionalProperties": false,
       "properties": {
         "compatibility_profile": {
+          "const": "tinyzkp-p3-goldilocks-v1",
           "type": "string"
         },
         "engine_artifact_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
           "type": "string"
         },
         "engine_source_identity": {
+          "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
           "type": "string"
         },
         "guard_source_identity": {
+          "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
           "type": "string"
         },
         "guard_version": {
@@ -79,21 +92,25 @@
           "type": "string"
         },
         "release_identity": {
+          "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._:+/-]{1,256}$",
           "type": "string"
         }
       },
       "required": [
-        "compatibility_profile",
-        "engine_artifact_sha256",
-        "engine_source_identity",
-        "guard_source_identity",
         "guard_version",
-        "qualification",
-        "release_identity"
+        "guard_source_identity",
+        "engine_source_identity",
+        "engine_artifact_sha256",
+        "release_identity",
+        "compatibility_profile",
+        "qualification"
       ],
       "type": "object"
     }
   },
+  "$id": "https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
   "properties": {
     "declarative_operators": {
       "items": {
@@ -110,7 +127,8 @@
     "extension_degree": {
       "const": 2,
       "format": "uint8",
-      "minimum": 0.0,
+      "maximum": 255,
+      "minimum": 0,
       "type": "integer"
     },
     "field": {
@@ -118,14 +136,14 @@
       "type": "string"
     },
     "limits": {
-      "$ref": "#/definitions/CompatibilityLimitsV1"
+      "$ref": "#/$defs/CompatibilityLimitsV1"
     },
     "permutation": {
       "const": "poseidon2_width_8",
       "type": "string"
     },
     "platform": {
-      "$ref": "#/definitions/PlatformV1"
+      "$ref": "#/$defs/PlatformV1"
     },
     "plonky3_version": {
       "const": "0.6.1",
@@ -136,12 +154,12 @@
       "type": "string"
     },
     "release": {
-      "$ref": "#/definitions/ReleaseIdentityV1"
+      "$ref": "#/$defs/ReleaseIdentityV1"
     },
     "schema_version": {
       "const": 1,
       "format": "uint32",
-      "minimum": 0.0,
+      "minimum": 0,
       "type": "integer"
     },
     "verifier": {
@@ -150,18 +168,18 @@
     }
   },
   "required": [
-    "declarative_operators",
-    "explicitly_unsupported",
-    "extension_degree",
-    "field",
-    "limits",
-    "permutation",
+    "schema_version",
+    "profile",
     "platform",
     "plonky3_version",
-    "profile",
-    "release",
-    "schema_version",
-    "verifier"
+    "field",
+    "extension_degree",
+    "permutation",
+    "verifier",
+    "declarative_operators",
+    "limits",
+    "explicitly_unsupported",
+    "release"
   ],
   "title": "CompatibilityManifestV1",
   "type": "object"

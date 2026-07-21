@@ -100,7 +100,7 @@ pub fn merkle_path_from_hashes(hashes: Arc<Vec<HashDigest>>, index: usize) -> Hc
             production; removal tracked as a follow-up"
 )]
 pub fn fold_layer<F: FieldElement>(values: &[F], beta: F) -> HcResult<Vec<F>> {
-    if values.len() % 2 != 0 {
+    if !values.len().is_multiple_of(2) {
         return Err(HcError::invalid_argument(
             "FRI layer size must be even for folding",
         ));
@@ -204,7 +204,7 @@ pub fn fold_layer_v5<E: FieldElement>(
     domain: &LayerDomain<E>,
     beta: E,
 ) -> HcResult<Vec<E>> {
-    if values.len() % 2 != 0 {
+    if !values.len().is_multiple_of(2) {
         return Err(HcError::invalid_argument("FRI layer size must be even"));
     }
     let half = values.len() / 2;

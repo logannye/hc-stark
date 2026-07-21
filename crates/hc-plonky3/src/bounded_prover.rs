@@ -81,8 +81,12 @@ pub enum BoundedProverError {
     Serialization(String),
     #[error("checkpoint is not a compatible resumable TinyZKP Plonky3 state")]
     InvalidCheckpoint,
+    #[error("checkpoint belongs to a different exact TinyZKP engine release")]
+    CheckpointReleaseMismatch,
     #[error("checkpoint payload is malformed: {0}")]
     CheckpointPayload(String),
+    #[error("the exact checkpoint directory already contains state")]
+    CheckpointStateExists,
     #[error("proving was cancelled")]
     Cancelled,
     #[error(transparent)]
@@ -186,6 +190,18 @@ pub struct ResumedProofV1 {
     pub public_values: Vec<u64>,
     pub resource_policy: ResourcePolicyV1,
     pub proof_bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CheckpointInspectionV1 {
+    pub completed_phase: PipelinePhaseV1,
+    pub artifact_count: usize,
+}
+
+struct ValidatedCheckpointV1 {
+    manifest: CheckpointManifestV2,
+    descriptor: ResumeDescriptorV1,
+    job_dir: PathBuf,
 }
 
 /// A mode-aware plan for a statically linked or declarative workload.
@@ -838,6 +854,59 @@ pub fn prove_resource_with_policy_observed_with_cancellation<W, Observe>(
     workload: &W,
     policy: &ResourcePolicyV1,
     cancellation: CancellationToken,
+    observe: Observe,
+) -> Result<PlannedResourceProofV1>
+where
+    W: ResourceBoundedWorkload + Sync,
+    W::Air: BaseAir<Val>
+        + Air<SymbolicAirBuilder<Val>>
+        + for<'a> Air<ProverConstraintFolder<'a, GoldilocksConfig<Radix2DitParallel<Val>>>>
+        + for<'a> Air<VerifierConstraintFolder<'a, GoldilocksConfig<Radix2DitParallel<Val>>>>
+        + for<'a> Air<p3_air::DebugConstraintBuilder<'a, Val>>,
+    Observe: FnMut(&ProverEventV1),
+{
+    prove_resource_with_policy_observed_with_cancellation_inner(
+        workload,
+        policy,
+        None,
+        cancellation,
+        observe,
+    )
+}
+
+/// Execute with an exact caller-owned checkpoint directory. In bounded mode,
+/// the durable checkpoint is always `<checkpoint_dir>/checkpoint.json`; the
+/// implementation never scans for or invents another job directory.
+pub fn prove_resource_with_policy_observed_with_cancellation_at_checkpoint_dir<W, Observe>(
+    workload: &W,
+    policy: &ResourcePolicyV1,
+    checkpoint_dir: &Path,
+    cancellation: CancellationToken,
+    observe: Observe,
+) -> Result<PlannedResourceProofV1>
+where
+    W: ResourceBoundedWorkload + Sync,
+    W::Air: BaseAir<Val>
+        + Air<SymbolicAirBuilder<Val>>
+        + for<'a> Air<ProverConstraintFolder<'a, GoldilocksConfig<Radix2DitParallel<Val>>>>
+        + for<'a> Air<VerifierConstraintFolder<'a, GoldilocksConfig<Radix2DitParallel<Val>>>>
+        + for<'a> Air<p3_air::DebugConstraintBuilder<'a, Val>>,
+    Observe: FnMut(&ProverEventV1),
+{
+    prove_resource_with_policy_observed_with_cancellation_inner(
+        workload,
+        policy,
+        Some(checkpoint_dir),
+        cancellation,
+        observe,
+    )
+}
+
+fn prove_resource_with_policy_observed_with_cancellation_inner<W, Observe>(
+    workload: &W,
+    policy: &ResourcePolicyV1,
+    checkpoint_dir: Option<&Path>,
+    cancellation: CancellationToken,
     mut observe: Observe,
 ) -> Result<PlannedResourceProofV1>
 where
@@ -875,12 +944,23 @@ where
             })
         }
         ExecutionMode::Scratch => {
-            let proof_bytes = prove_resource_bounded_observed_with_cancellation(
-                workload,
-                policy,
-                cancellation,
-                &mut observe,
-            )?;
+            let proof_bytes = match checkpoint_dir {
+                Some(checkpoint_dir) => {
+                    prove_resource_bounded_observed_with_cancellation_at_checkpoint_dir(
+                        workload,
+                        policy,
+                        checkpoint_dir,
+                        cancellation,
+                        &mut observe,
+                    )?
+                }
+                None => prove_resource_bounded_observed_with_cancellation(
+                    workload,
+                    policy,
+                    cancellation,
+                    &mut observe,
+                )?,
+            };
             Ok(PlannedResourceProofV1 {
                 selected_mode: ExecutionMode::Scratch,
                 proof_bytes,
@@ -941,6 +1021,30 @@ where
     )
 }
 
+pub fn prove_resource_bounded_observed_with_cancellation_at_checkpoint_dir<W, Observe>(
+    workload: &W,
+    policy: &ResourcePolicyV1,
+    checkpoint_dir: &Path,
+    cancellation: CancellationToken,
+    observe: Observe,
+) -> Result<Vec<u8>>
+where
+    W: ResourceBoundedWorkload,
+    W::Air: BaseAir<Val>
+        + Air<SymbolicAirBuilder<Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    Observe: FnMut(&ProverEventV1),
+{
+    prove_resource_bounded_observed_with_control_inner(
+        workload,
+        policy,
+        Some(checkpoint_dir),
+        cancellation,
+        default_failure_injector(),
+        observe,
+    )
+}
+
 /// Executes the bounded prover with explicit cancellation, phase observation,
 /// and durable-boundary fault injection. Release callers use the wrapper above,
 /// which supplies [`NoopFailureInjector`]; tests can inject deterministic faults
@@ -948,6 +1052,31 @@ where
 pub fn prove_resource_bounded_observed_with_control<W, Observe>(
     workload: &W,
     policy: &ResourcePolicyV1,
+    cancellation: CancellationToken,
+    failure_injector: &dyn FailureInjector,
+    observe: Observe,
+) -> Result<Vec<u8>>
+where
+    W: ResourceBoundedWorkload,
+    W::Air: BaseAir<Val>
+        + Air<SymbolicAirBuilder<Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    Observe: FnMut(&ProverEventV1),
+{
+    prove_resource_bounded_observed_with_control_inner(
+        workload,
+        policy,
+        None,
+        cancellation,
+        failure_injector,
+        observe,
+    )
+}
+
+fn prove_resource_bounded_observed_with_control_inner<W, Observe>(
+    workload: &W,
+    policy: &ResourcePolicyV1,
+    checkpoint_dir: Option<&Path>,
     cancellation: CancellationToken,
     failure_injector: &dyn FailureInjector,
     mut observe: Observe,
@@ -993,7 +1122,10 @@ where
     let fri_rounds = rows.trailing_zeros();
     let total_phases = 8 + fri_rounds;
     let mut completed_phases = 0u32;
-    let job_dir = create_job_dir(&policy.scratch_dir)?;
+    let job_dir = match checkpoint_dir {
+        Some(checkpoint_dir) => create_exact_job_dir(checkpoint_dir)?,
+        None => create_job_dir(&policy.scratch_dir)?,
+    };
     let mut local_policy = policy.clone();
     local_policy.scratch_dir = job_dir.join("artifacts");
     create_private_dir(&local_policy.scratch_dir)?;
@@ -2454,23 +2586,34 @@ where
     )
 }
 
-/// Resumes a statically linked workload with the same event and fault-control
-/// surface used by uninterrupted proving.
-pub fn resume_resource_bounded_with_control<W, Observe>(
+/// Validate a durable checkpoint and every referenced artifact without
+/// resuming execution or changing any job state.
+pub fn inspect_resource_bounded_checkpoint<W>(
     checkpoint_path: &Path,
     workload: &W,
-    cancellation: CancellationToken,
-    failure_injector: &dyn FailureInjector,
-    mut observe: Observe,
-) -> Result<Vec<u8>>
+    expected_policy: &ResourcePolicyV1,
+) -> Result<CheckpointInspectionV1>
 where
     W: ResourceBoundedWorkload,
-    W::Air: BaseAir<Val>
-        + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
-    Observe: FnMut(&ProverEventV1),
 {
-    check_cancelled(&cancellation)?;
+    expected_policy.validate()?;
+    let validated = validate_checkpoint_for_workload(checkpoint_path, workload)?;
+    if validated.descriptor.resource_policy != *expected_policy {
+        return Err(BoundedProverError::InvalidCheckpoint);
+    }
+    Ok(CheckpointInspectionV1 {
+        completed_phase: validated.manifest.completed_phase,
+        artifact_count: validated.manifest.artifacts.len(),
+    })
+}
+
+fn validate_checkpoint_for_workload<W>(
+    checkpoint_path: &Path,
+    workload: &W,
+) -> Result<ValidatedCheckpointV1>
+where
+    W: ResourceBoundedWorkload,
+{
     let manifest = CheckpointManifestV2::read(checkpoint_path)?;
     if !matches!(
         manifest.completed_phase,
@@ -2501,11 +2644,45 @@ where
         workload.input_digest(),
         descriptor.resource_policy.policy_hash()?,
     )?;
+    if manifest.release_hash != expected_identity.release_hash {
+        return Err(BoundedProverError::CheckpointReleaseMismatch);
+    }
     manifest.validate_identity(expected_identity)?;
     let job_dir = checkpoint_path
         .parent()
-        .ok_or(BoundedProverError::InvalidCheckpoint)?;
-    manifest.validate_artifacts(job_dir)?;
+        .ok_or(BoundedProverError::InvalidCheckpoint)?
+        .to_path_buf();
+    manifest.validate_artifacts(&job_dir)?;
+    Ok(ValidatedCheckpointV1 {
+        manifest,
+        descriptor,
+        job_dir,
+    })
+}
+
+/// Resumes a statically linked workload with the same event and fault-control
+/// surface used by uninterrupted proving.
+pub fn resume_resource_bounded_with_control<W, Observe>(
+    checkpoint_path: &Path,
+    workload: &W,
+    cancellation: CancellationToken,
+    failure_injector: &dyn FailureInjector,
+    mut observe: Observe,
+) -> Result<Vec<u8>>
+where
+    W: ResourceBoundedWorkload,
+    W::Air: BaseAir<Val>
+        + Air<SymbolicAirBuilder<Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    Observe: FnMut(&ProverEventV1),
+{
+    check_cancelled(&cancellation)?;
+    let ValidatedCheckpointV1 {
+        manifest,
+        descriptor,
+        job_dir,
+    } = validate_checkpoint_for_workload(checkpoint_path, workload)?;
+    let job_dir = job_dir.as_path();
     let rows = usize::try_from(descriptor.logical_rows)
         .map_err(|_| BoundedProverError::InvalidCheckpoint)?;
     let air = workload.air();
@@ -3062,6 +3239,34 @@ fn create_job_dir(root: &Path) -> Result<PathBuf> {
     create_unique_job_dir(root, "bounded-prover", &PROVER_JOB_COUNTER).map_err(Into::into)
 }
 
+fn create_exact_job_dir(path: &Path) -> Result<PathBuf> {
+    let scratch_root = path
+        .parent()
+        .ok_or(StreamError::UnsafePath)?
+        .canonicalize()
+        .map_err(|_| StreamError::UnsafePath)?;
+    let configured_name = path.file_name().ok_or(StreamError::UnsafePath)?;
+    if !matches!(
+        path.components().next_back(),
+        Some(std::path::Component::Normal(_))
+    ) {
+        return Err(StreamError::UnsafePath.into());
+    }
+    let exact = scratch_root.join(configured_name);
+    if exact.exists() {
+        let metadata = fs::symlink_metadata(&exact)?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(StreamError::UnsafePath.into());
+        }
+        if fs::read_dir(&exact)?.next().is_some() {
+            return Err(BoundedProverError::CheckpointStateExists);
+        }
+    } else {
+        create_private_dir(&exact)?;
+    }
+    Ok(exact)
+}
+
 fn create_private_dir(path: &Path) -> Result<()> {
     if path.exists() {
         let metadata = fs::symlink_metadata(path)?;
@@ -3439,7 +3644,7 @@ mod tests {
         assert!(matches!(
             prove_resource_bounded(&workload, &constrained),
             Err(BoundedProverError::Stream(StreamError::ResourceLimit {
-                resource: "scratch storage",
+                resource: "scratch storage including headroom",
                 ..
             }))
         ));

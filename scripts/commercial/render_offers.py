@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Render commercial artifacts from site/pricing.json and detect drift."""
+"""Render the current Community/Guard offer catalog and detect drift."""
 
 from __future__ import annotations
 
 import argparse
-from html import escape
+from html.parser import HTMLParser
 import json
 from pathlib import Path
+import re
 import sys
 
 
@@ -15,13 +16,40 @@ SOURCE = ROOT / "site" / "pricing.json"
 PRICING_HTML = ROOT / "site" / "pricing.html"
 JSON_LD = ROOT / "site" / "offers.jsonld"
 SALES_MATRIX = ROOT / "commercial" / "generated" / "offer-matrix.md"
-BEGIN = "<!-- BEGIN GENERATED OFFERS -->"
-END = "<!-- END GENERATED OFFERS -->"
-PUBLIC_IDS = (
-    "founding_evaluation",
-    "standard_evaluation",
-    "tinyzkp_certified",
-    "tinyzkp_fleet_oem",
+COMMUNITY_SOURCE_URL = "https://github.com/logannye/hc-stark"
+COMMUNITY_INCLUDES = (
+    "proof engine and verifier",
+    "public schemas and reference workloads",
+    "compatibility checker and doctor",
+    "resource estimators",
+    "conventional and bounded proving primitives",
+    "public benchmark evidence",
+)
+GUARD_INCLUDES = (
+    "foreground process and signal supervision",
+    "checkpoint lifecycle and deterministic resume supervision",
+    "support-safe diagnostics",
+    "CI resource-regression policies",
+    "signed artifacts and OCI images",
+    "SBOM and provenance",
+    "four qualification windows per year",
+)
+GUARD_EXCLUDES = (
+    "hosted proving",
+    "usage metering",
+    "SLA",
+    "onboarding calls",
+    "custom AIR development",
+    "architecture review",
+    "security questionnaires",
+    "SSO",
+    "redistribution",
+    "resale",
+    "OEM",
+    "service-bureau use",
+)
+GUARD_ORGANIZATION_SCOPE = (
+    "one_legal_organization_unlimited_internal_users_and_runners"
 )
 
 
@@ -36,166 +64,337 @@ def load_source() -> dict[str, object]:
     return value
 
 
-def validate(source: dict[str, object]) -> list[str]:
+def products_by_id(source: dict[str, object]) -> dict[str, dict[str, object]]:
+    products = source.get("products")
+    if not isinstance(products, list):
+        raise ValueError("products must be a list")
+    result: dict[str, dict[str, object]] = {}
+    for index, product in enumerate(products):
+        if not isinstance(product, dict):
+            raise ValueError(f"products[{index}] must be an object")
+        product_id = product.get("id")
+        if not isinstance(product_id, str) or not product_id:
+            raise ValueError(f"products[{index}].id must be a non-empty string")
+        if product_id in result:
+            raise ValueError(f"duplicate product id: {product_id}")
+        result[product_id] = product
+    return result
+
+
+def _exact(value: object, expected: object) -> bool:
+    """Compare JSON contract values without treating bool as an integer."""
+
+    return type(value) is type(expected) and value == expected
+
+
+class PricingDOMParser(HTMLParser):
+    """Collect visible copy from the two explicitly identified pricing cards."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.all_text: list[str] = []
+        self.cards: dict[str, list[str]] = {}
+        self.card_counts: dict[str, int] = {}
+        self._product_id: str | None = None
+        self._article_depth = 0
+        self._hidden_text_depth = 0
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        if tag in {"script", "style"}:
+            self._hidden_text_depth += 1
+            return
+        attributes = dict(attrs)
+        if tag == "article" and self._product_id is None:
+            product_id = attributes.get("data-offer-product")
+            if product_id is not None:
+                self._product_id = product_id
+                self._article_depth = 1
+                self.cards.setdefault(product_id, [])
+                self.card_counts[product_id] = self.card_counts.get(product_id, 0) + 1
+                return
+        if tag == "article" and self._product_id is not None:
+            self._article_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style"}:
+            if self._hidden_text_depth:
+                self._hidden_text_depth -= 1
+            return
+        if tag != "article" or self._product_id is None:
+            return
+        self._article_depth -= 1
+        if self._article_depth == 0:
+            self._product_id = None
+
+    def handle_data(self, data: str) -> None:
+        if self._hidden_text_depth:
+            return
+        self.all_text.append(data)
+        if self._product_id is not None:
+            self.cards[self._product_id].append(data)
+
+
+def _visible_text(parts: list[str]) -> str:
+    return re.sub(r"\s+", " ", " ".join(parts)).strip()
+
+
+def validate_pricing_html(
+    source: dict[str, object], html: str
+) -> list[str]:
     failures: list[str] = []
-    expected_flags = {
-        "service_status": "backend_recovery",
-        "hosted_proving_available": False,
-        "hosted_verification_available": False,
-        "account_creation_enabled": False,
-        "checkout_enabled": False,
-    }
-    for field, expected in expected_flags.items():
-        if source.get(field) != expected:
-            failures.append(f"{field} must be {expected!r}")
-    offers = source.get("offers")
-    if not isinstance(offers, list):
-        return failures + ["offers must be a list"]
-    by_id = {offer.get("id"): offer for offer in offers if isinstance(offer, dict)}
-    expected_prices = {
-        "founding_evaluation": 25_000,
-        "standard_evaluation": 40_000,
-        "tinyzkp_certified": 60_000,
-        "tinyzkp_fleet_oem": 125_000,
-        "reserved_hosted_capacity": 15_000,
-    }
-    for offer_id, expected in expected_prices.items():
-        offer = by_id.get(offer_id)
-        if not isinstance(offer, dict):
-            failures.append(f"missing offer {offer_id}")
-            continue
-        actual = offer.get("price", offer.get("minimum_price"))
-        if actual != expected:
-            failures.append(f"{offer_id} price must be {expected}")
-    expected_availability = {
-        "founding_evaluation": "first_two_customers",
-        "standard_evaluation": "contracted_during_recovery",
-        "tinyzkp_certified": "after_backend_v1_release",
-        "tinyzkp_fleet_oem": "after_backend_v1_release",
-        "reserved_hosted_capacity": "unavailable_until_review_demand_and_margin_gates",
-    }
-    for offer_id, expected in expected_availability.items():
-        offer = by_id.get(offer_id, {})
-        if offer.get("availability") != expected:
-            failures.append(f"{offer_id} availability must be {expected}")
-        if offer_id in PUBLIC_IDS and not str(offer.get("availability_label", "")).strip():
-            failures.append(f"{offer_id} requires an availability label")
-    certified = by_id.get("tinyzkp_certified", {})
-    if certified.get("included_support_hours_per_quarter") != 10:
-        failures.append("Certified support cap must be ten hours per quarter")
-    fleet = by_id.get("tinyzkp_fleet_oem", {})
-    if fleet.get("custom_engineering_minimum_hourly_rate") != 300:
-        failures.append("custom engineering floor must be $300/hour")
-    hosted = by_id.get("reserved_hosted_capacity", {})
-    if hosted.get("required_projected_gross_margin_percent") != 80:
-        failures.append("hosted margin gate must be 80%")
-    stripe = source.get("stripe_policy", {})
-    if not isinstance(stripe, dict) or stripe.get("api_version") != "2026-02-25.clover":
-        failures.append("Stripe API version must be 2026-02-25.clover")
-    if isinstance(stripe, dict) and stripe.get("public_checkout") is not False:
-        failures.append("public Stripe Checkout must remain disabled")
+    try:
+        products = products_by_id(source)
+    except ValueError as error:
+        return [str(error)]
+    if set(products) != {"community", "guard"}:
+        return ["pricing DOM parity requires exactly community and guard"]
+
+    parser = PricingDOMParser()
+    parser.feed(html)
+    if set(parser.cards) != {"community", "guard"} or parser.card_counts != {
+        "community": 1,
+        "guard": 1,
+    }:
+        failures.append(
+            "pricing.html must contain exactly one identified Community and Guard card"
+        )
+        return failures
+
+    community_text = _visible_text(parser.cards["community"])
+    guard_text = _visible_text(parser.cards["guard"])
+    community = products["community"]
+    guard = products["guard"]
+    prices = guard.get("prices")
+    if not isinstance(prices, dict):
+        return failures + ["guard prices must be an object"]
+
+    for expected in (str(community["name"]), "$0", "MIT licensed"):
+        if expected not in community_text:
+            failures.append(f"pricing.html Community card is missing {expected!r}")
+    for included in community.get("includes", []):
+        if str(included).casefold() not in community_text.casefold():
+            failures.append(
+                f"pricing.html Community card is missing reviewed inclusion {included!r}"
+            )
+
+    annual = int(prices["annual_usd"])
+    monthly = int(prices["monthly_usd"])
+    savings = monthly * 12 - annual
+    guard_required = (
+        str(guard["name"]),
+        f"${annual:,} / year",
+        f"Annual recommended · save ${savings:,} versus monthly",
+        "One legal organization; unlimited internal users and runners",
+        f"Monthly: ${monthly:,}",
+    )
+    for expected in guard_required:
+        if expected not in guard_text:
+            failures.append(f"pricing.html Guard card is missing {expected!r}")
+    for included in guard.get("includes", []):
+        if str(included).casefold() not in guard_text.casefold():
+            failures.append(
+                f"pricing.html Guard card is missing reviewed inclusion {included!r}"
+            )
+    page_text = _visible_text(parser.all_text)
+    for excluded in guard.get("excludes", []):
+        if str(excluded).casefold() not in page_text.casefold():
+            failures.append(
+                f"pricing.html is missing reviewed exclusion {excluded!r}"
+            )
     return failures
 
 
-def offers_by_id(source: dict[str, object]) -> dict[str, dict[str, object]]:
-    return {
-        str(offer["id"]): offer
-        for offer in source["offers"]
-        if isinstance(offer, dict) and "id" in offer
+def validate(source: dict[str, object]) -> list[str]:
+    failures: list[str] = []
+    expected_top_level = {
+        "schema_version": 5,
+        "name": "TinyZKP Community and Guard",
+        "canonical_url": "https://tinyzkp.com/pricing",
+        "currency": "USD",
+        "hosted_proving": False,
+        "usage_metering": False,
     }
+    for field, expected in expected_top_level.items():
+        if not _exact(source.get(field), expected):
+            failures.append(f"{field} must be {expected!r}")
 
+    checkout_enabled = source.get("checkout_enabled")
+    if not isinstance(checkout_enabled, bool):
+        failures.append("checkout_enabled must be a boolean")
+        checkout_enabled = False
+    sales_state = source.get("sales_state")
+    if checkout_enabled and sales_state != "live":
+        failures.append("enabled checkout requires sales_state 'live'")
+    if not checkout_enabled and sales_state not in {"closed", "frozen"}:
+        failures.append("disabled checkout requires sales_state 'closed' or 'frozen'")
 
-def render_cards(source: dict[str, object]) -> str:
-    offers = offers_by_id(source)
-    cards: list[str] = []
-    for offer_id in PUBLIC_IDS:
-        offer = offers[offer_id]
-        raw_price = offer.get("price", offer.get("minimum_price"))
-        price = money(int(raw_price), suffix="+" if "minimum_price" in offer else "")
-        deliverables = "".join(f"<li>{escape(str(item))}</li>" for item in offer["deliverables"])
-        cards.append(
-            f'<article class="card"><div class="kicker">{escape(str(offer["kicker"]))}</div>'
-            f'<h3>{escape(str(offer["name"]))}</h3><p class="price">{price}</p>'
-            f'<p class="unit">{escape(str(offer["unit"]))}</p>'
-            f'<p class="small"><strong>Availability:</strong> {escape(str(offer["availability_label"]))}</p>'
-            f'<ul>{deliverables}</ul></article>'
+    try:
+        products = products_by_id(source)
+    except ValueError as error:
+        failures.append(str(error))
+        return failures
+    if list(products) != ["community", "guard"]:
+        failures.append("products must contain exactly community then guard")
+        return failures
+
+    community = products["community"]
+    if community.get("name") != "TinyZKP Community":
+        failures.append("community name must be 'TinyZKP Community'")
+    if not _exact(community.get("price_usd"), 0):
+        failures.append("community price_usd must be 0")
+    if community.get("license") != "MIT":
+        failures.append("community license must be MIT")
+    if community.get("availability") != "available":
+        failures.append("community availability must be available")
+    if community.get("includes") != list(COMMUNITY_INCLUDES):
+        failures.append("community includes must match the reviewed product scope")
+
+    guard = products["guard"]
+    if guard.get("name") != "TinyZKP Guard":
+        failures.append("guard name must be 'TinyZKP Guard'")
+    prices = guard.get("prices")
+    if not isinstance(prices, dict):
+        failures.append("guard prices must be an object")
+        prices = {}
+    if not _exact(prices.get("monthly_usd"), 499):
+        failures.append("guard monthly_usd must be 499")
+    if not _exact(prices.get("annual_usd"), 4_990):
+        failures.append("guard annual_usd must be 4990")
+    if prices.get("annual_recommended") is not True:
+        failures.append("guard annual_recommended must be true")
+    expected_guard_availability = {
+        "live": "available",
+        "frozen": "sales_frozen",
+        "closed": "blocked_until_all_launch_gates_pass",
+    }.get(str(sales_state))
+    if guard.get("availability") != expected_guard_availability:
+        failures.append(
+            f"guard availability must be {expected_guard_availability!r}"
         )
-    return f"{BEGIN}\n" + "\n".join(cards) + f"\n{END}"
+    if guard.get("license") != "commercial_object_code":
+        failures.append("guard license must be commercial_object_code")
+    if guard.get("organization_scope") != GUARD_ORGANIZATION_SCOPE:
+        failures.append("guard organization_scope must match the reviewed scope")
+    if guard.get("includes") != list(GUARD_INCLUDES):
+        failures.append("guard includes must match the reviewed product scope")
+    if guard.get("excludes") != list(GUARD_EXCLUDES):
+        failures.append("guard excludes must match the reviewed product boundary")
 
+    policy = source.get("price_policy")
+    if not isinstance(policy, dict):
+        failures.append("price_policy must be an object")
+        policy = {}
+    expected_policy = {
+        "monthly_usd": 499,
+        "annual_usd": 4_990,
+        "annual_default": True,
+        "usage_metering": False,
+        "trials_allowed": False,
+        "coupons_allowed": False,
+        "add_ons_allowed": False,
+        "enterprise_variants_allowed": False,
+        "subscription_pause_offered": False,
+        "existing_subscribers_grandfathered": True,
+        "existing_variant_ids_retained": True,
+        "existing_variant_ids_repurposed": False,
+        "future_price_changes_use_new_variant_ids": False,
+    }
+    for field, expected in expected_policy.items():
+        if not _exact(policy.get(field), expected):
+            failures.append(f"price_policy.{field} must be {expected!r}")
 
-def replace_generated(html: str, rendered: str) -> str:
-    if html.count(BEGIN) != 1 or html.count(END) != 1:
-        raise ValueError("pricing.html must contain exactly one generated-offer marker pair")
-    before, tail = html.split(BEGIN, 1)
-    _, after = tail.split(END, 1)
-    return before + rendered + after
+    if source.get("checkout_enabled") is True:
+        if source.get("launch_state") != "qualified":
+            failures.append("live checkout requires launch_state qualified")
+        if source.get("commerce_state") != "public_live":
+            failures.append("live checkout requires commerce_state public_live")
+        if source.get("portal_state") != "live":
+            failures.append("live checkout requires portal_state live")
+    elif sales_state == "frozen":
+        if source.get("commerce_state") != "sales_frozen":
+            failures.append("frozen sales require commerce_state sales_frozen")
+        if source.get("portal_state") != "live":
+            failures.append("frozen sales require portal_state live")
+    return failures
 
 
 def render_jsonld(source: dict[str, object]) -> str:
-    items = []
-    for offer_id in PUBLIC_IDS:
-        offer = offers_by_id(source)[offer_id]
-        price = int(offer.get("price", offer.get("minimum_price")))
-        items.append({
+    products = products_by_id(source)
+    guard_prices = products["guard"]["prices"]
+    guard_availability = (
+        "https://schema.org/InStock"
+        if source["checkout_enabled"]
+        else "https://schema.org/OutOfStock"
+    )
+    items = [
+        {
             "@type": "Offer",
-            "name": offer["name"],
-            "price": str(price),
+            "availability": "https://schema.org/InStock",
+            "name": "TinyZKP Community source",
+            "price": "0",
             "priceCurrency": source["currency"],
-            "url": offer["contact_url"],
-            "availability": (
-                "https://schema.org/PreOrder"
-                if offer["availability"] == "after_backend_v1_release"
-                else "https://schema.org/LimitedAvailability"
-            ),
-        })
+            "url": COMMUNITY_SOURCE_URL,
+        },
+        {
+            "@type": "Offer",
+            "availability": guard_availability,
+            "name": "TinyZKP Guard annual subscription",
+            "price": str(guard_prices["annual_usd"]),
+            "priceCurrency": source["currency"],
+            "url": source["canonical_url"],
+        },
+        {
+            "@type": "Offer",
+            "availability": guard_availability,
+            "name": "TinyZKP Guard monthly subscription",
+            "price": str(guard_prices["monthly_usd"]),
+            "priceCurrency": source["currency"],
+            "url": source["canonical_url"],
+        },
+    ]
     payload = {
         "@context": "https://schema.org",
         "@type": "OfferCatalog",
-        "name": source["name"],
-        "url": source["url"],
         "itemListElement": items,
+        "name": source["name"],
+        "url": source["canonical_url"],
     }
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
 def render_sales_matrix(source: dict[str, object]) -> str:
+    products = products_by_id(source)
+    guard = products["guard"]
+    prices = guard["prices"]
+    guard_status = (
+        "Available"
+        if source["checkout_enabled"]
+        else "Sales frozen"
+        if source["sales_state"] == "frozen"
+        else "Closed pending launch evidence"
+    )
     lines = [
         "# TinyZKP offer matrix",
         "",
         "> Generated from `site/pricing.json`; do not edit by hand.",
         "",
-        "| Offer | Price | Availability | Billing | Scope control |",
+        "| Product | Price | Availability | License | Scope |",
         "|---|---:|---|---|---|",
+        "| TinyZKP Community source | $0 | Available | MIT | Open engine and verifier source, public schemas, and reference workloads |",
+        f"| TinyZKP Guard annual | {money(int(prices['annual_usd']))}/year | {guard_status} | Commercial object code | One legal organization; unlimited internal users and runners |",
+        f"| TinyZKP Guard monthly | {money(int(prices['monthly_usd']))}/month | {guard_status} | Commercial object code | One legal organization; unlimited internal users and runners |",
+        "",
+        "Guard has no hosted proving, usage meter, trial, coupon, enterprise tier, SLA, or bundled engineering hours.",
+        "Checkout URLs are published only when signed launch evidence derives `checkout_enabled: true`.",
+        "",
     ]
-    for offer_id in PUBLIC_IDS:
-        offer = offers_by_id(source)[offer_id]
-        raw_price = int(offer.get("price", offer.get("minimum_price")))
-        price = money(raw_price, suffix="+" if "minimum_price" in offer else "")
-        scope = (
-            f"≤{offer['engineering_day_cap']} engineering days"
-            if "engineering_day_cap" in offer
-            else (
-                f"≤{offer['included_support_hours_per_quarter']} support hours/quarter"
-                if "included_support_hours_per_quarter" in offer
-                else "Custom work separately scoped"
-            )
-        )
-        lines.append(
-            f"| {offer['name']} | {price} | {offer['availability_label']} | "
-            f"{offer['billing']} | {scope} |"
-        )
-    lines.extend([
-        "",
-        "Public checkout is disabled. Evaluations use invoicing milestones; annual agreements are prepaid `send_invoice` contracts.",
-        "",
-    ])
     return "\n".join(lines)
 
 
 def desired_outputs(source: dict[str, object]) -> dict[Path, str]:
-    pricing = PRICING_HTML.read_text(encoding="utf-8")
     return {
-        PRICING_HTML: replace_generated(pricing, render_cards(source)),
         JSON_LD: render_jsonld(source),
         SALES_MATRIX: render_sales_matrix(source),
     }
@@ -207,6 +406,13 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     source = load_source()
     problems = validate(source)
+    if not problems:
+        try:
+            pricing_html = PRICING_HTML.read_text(encoding="utf-8")
+        except OSError as error:
+            problems.append(f"cannot read pricing.html: {error}")
+        else:
+            problems.extend(validate_pricing_html(source, pricing_html))
     if problems:
         for problem in problems:
             print(f"FAIL  {problem}", file=sys.stderr)
@@ -226,7 +432,7 @@ def main(argv: list[str]) -> int:
         for path in drift:
             print(f"FAIL  generated commercial artifact is stale: {path}", file=sys.stderr)
         return 1
-    print("PASS  commercial offers are valid and generated artifacts are current")
+    print("PASS  Community/Guard offers are valid and generated artifacts are current")
     return 0
 
 

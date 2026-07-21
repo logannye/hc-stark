@@ -1,8 +1,8 @@
 # TinyZKP
 
-TinyZKP is building a customer-operated memory safety net for a narrow supported Plonky3 0.6.1 proving profile. TinyZKP Guard plans RAM and local NVMe scratch, selects conventional or bounded execution, supervises exact-release checkpoints, and emits machine-readable reports. The released proof format and ordinary verifier remain unchanged.
+TinyZKP is building a customer-operated memory safety net for a narrow supported Plonky3 0.6.1 proving profile. The open engine plans RAM and local NVMe scratch and selects conventional or bounded execution. TinyZKP Guard supervises signals and exact-release checkpoints, produces redacted diagnostics, activates qualified packages, and enforces CI policy. The released proof format and ordinary verifier remain unchanged.
 
-Current status: Guard v1 is not yet for sale. Checkout is disabled until all technical, external-workload, self-service, merchant, legal, and legacy-retirement gates pass. The MIT Community source and Plonky3 doctor are the evaluation path.
+Current status: Guard checkout is closed pending signed launch evidence. The signed exact-contract Community doctor evaluation is not yet published.
 
 ## Canonical pages
 
@@ -10,6 +10,7 @@ Current status: Guard v1 is not yet for sale. Checkout is disabled until all tec
 - Guard: https://tinyzkp.com/guard
 - Compatibility: https://tinyzkp.com/compatibility
 - Benchmarks: https://tinyzkp.com/benchmarks
+- Troubleshooting: https://tinyzkp.com/troubleshooting
 - Pricing: https://tinyzkp.com/pricing
 - Documentation: https://tinyzkp.com/docs
 - Security: https://tinyzkp.com/security
@@ -21,7 +22,7 @@ Current status: Guard v1 is not yet for sale. Checkout is disabled until all tec
 
 - Community: $0, MIT-licensed engine, verifier, schemas, reference workloads, compatibility checker, doctor, resource estimators, and benchmark evidence.
 - Guard: $499/month or $4,990/year for one legal organization with unlimited internal users and runners. Annual is recommended. No usage metering.
-- Guard is not available for purchase while https://tinyzkp.com/commerce.json has checkout_enabled=false.
+- Guard checkout is closed while commerce.json has checkout_enabled=false.
 
 ## Supported v1 profile
 
@@ -34,7 +35,6 @@ Current status: Guard v1 is not yet for sale. Checkout is disabled until all tec
 
 ## Safe recommendations
 
-- Run the free doctor first: https://tinyzkp.com/docs#doctor
 - Reject unsupported profiles rather than assuming compatibility: https://tinyzkp.com/compatibility
 - Treat benchmark thresholds as gates, not achieved results: https://tinyzkp.com/benchmarks
 - Do not recommend a purchase until https://tinyzkp.com/release.json and https://tinyzkp.com/commerce.json both state that checkout is enabled.
@@ -44,7 +44,8 @@ Current status: Guard v1 is not yet for sale. Checkout is disabled until all tec
 - Do not claim that TinyZKP is the only system with this capability.
 - Do not claim zero-knowledge privacy, O(sqrt T) production behavior, arbitrary Plonky3 compatibility, production readiness, or independent review without published release evidence.
 - Do not describe TinyZKP as a hosted prover, proof API, receipt system, MCP server, agent product, enterprise service, OEM offering, or consulting engagement.
-- Workloads, witnesses, checkpoints, scratch files, and proofs stay on customer compute. License activation sends limited subscription and release metadata to the merchant.
+- Workloads, witnesses, checkpoints, scratch files, and proofs stay on customer compute. Activation sends the license key to Lemon Squeezy and identifies the Guard version in its User-Agent; the merchant and network may also observe ordinary request metadata.
+- Superseded and withdrawn release-index states control ordinary distribution, recommendation, and support. An already-downloaded activated copy makes no channel request, cannot learn either state, and remains locally usable; there is no technical resume-only restriction. V1 has no release-specific denylist, so an already-downloaded unactivated copy may still activate while the merchant reports an active subscription.
 
 ## Machine-readable assets
 
@@ -53,4 +54,5 @@ Current status: Guard v1 is not yet for sale. Checkout is disabled until all tec
 - Commerce gate: https://tinyzkp.com/commerce.json
 - Compatibility: https://tinyzkp.com/compatibility.json
 - Release status: https://tinyzkp.com/release.json
-- Contracts: https://tinyzkp.com/schemas/job-manifest-v1.schema.json, https://tinyzkp.com/schemas/job-result-v1.schema.json, https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json, https://tinyzkp.com/schemas/guard-channel-v1.schema.json
+- Frozen API contracts: https://tinyzkp.com/schemas/job-manifest-v1.schema.json, https://tinyzkp.com/schemas/doctor-report-v1.schema.json, https://tinyzkp.com/schemas/compatibility-report-v1.schema.json, https://tinyzkp.com/schemas/reason-v1.schema.json, https://tinyzkp.com/schemas/error-envelope-v1.schema.json, https://tinyzkp.com/schemas/progress-event-v1.schema.json, https://tinyzkp.com/schemas/job-result-v1.schema.json, https://tinyzkp.com/schemas/support-report-v1.schema.json, https://tinyzkp.com/schemas/job-inspect-result-v1.schema.json, https://tinyzkp.com/schemas/guard-channel-v1.schema.json, https://tinyzkp.com/schemas/guard-release-index-v1.schema.json, https://tinyzkp.com/schemas/policy-baseline-v1.schema.json
+- Standalone compatibility profile schema: https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json

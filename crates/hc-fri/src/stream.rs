@@ -77,7 +77,7 @@ where
     P: hc_replay::traits::BlockProducer<F>,
 {
     let len = source.trace_length();
-    if len % 2 != 0 {
+    if !len.is_multiple_of(2) {
         return Err(HcError::invalid_argument(
             "FRI layer size must be even for folding",
         ));

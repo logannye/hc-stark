@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Plonky3 out of memory — Diagnose before rerunning</title>
+  <meta name="description" content="A practical checklist for diagnosing a supported Plonky3 prover out-of-memory failure and deciding whether bounded, SSD-backed execution fits.">
+  <meta name="robots" content="noindex,nofollow" data-guard-acquisition>
+  <link rel="canonical" href="https://tinyzkp.com/plonky3-out-of-memory"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><script src="/shared.js" defer></script>
+</head>
+<body>
+<header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a></nav></div></header>
+<main><section class="page-hero"><div class="container"><div class="eyebrow">Plonky3 out of memory</div><h1>Diagnose the resource envelope before rerunning.</h1><p class="lede">An OOM is evidence that the current execution and machine do not fit. It is not evidence that every bounded strategy will work—or that a larger machine is the only answer.</p><div class="actions"><a class="button" href="/doctor">Run the free doctor</a><a class="button secondary" href="/compatibility">Check the v1 profile</a></div></div></section>
+<section class="content container">
+  <h2>Capture the failure you actually have</h2><ul><li>Record trace rows, width, constraint degree, dependency/profile identity, peak RSS, wall time, and the durable phase reached.</li><li>Distinguish process OOM, cgroup termination, kernel OOM kill, disk exhaustion, and manual interruption.</li><li>Use synthetic or scrubbed reports; never upload witness or trace data.</li></ul>
+  <h2>Preflight three choices</h2><div class="grid"><article class="card"><h3>Conventional</h3><p>Keep the fast path only when estimated peak use stays within 70% of the declared RAM budget.</p></article><article class="card"><h3>Bounded</h3><p>Use customer NVMe scratch only after the candidate estimate and 10% free-space headroom pass.</p></article><article class="card"><h3>Reject</h3><p>Stop before ingestion when the proof profile, AIR feature, path, RAM, or scratch contract is unsupported.</p></article></div>
+  <h2>Evidence before claims</h2><p>TinyZKP’s resource targets are release gates, not universal achieved results. Use the <a href="/benchmarks">fixed-host evidence matrix</a> and reproduce the same workload before budgeting production capacity.</p>
+</section></main>
+<footer class="site-footer"><div class="container"><div class="footer-grid"><div><a class="brand" href="/"><span>Tiny</span>ZKP</a><p>Customer-operated bounded-memory proving.</p></div><div><h2>Evaluate</h2><a href="/doctor">Doctor</a><a href="/compatibility">Compatibility</a></div><div><h2>Learn</h2><a href="/resumable-plonky3-prover">Resumable Plonky3 prover</a><a href="/ssd-backed-plonky3-proving">SSD-backed proving</a></div><div><h2>Evidence</h2><a href="/benchmarks">Benchmarks</a><a href="/releases">Releases</a></div></div></div></footer>
+</body></html>

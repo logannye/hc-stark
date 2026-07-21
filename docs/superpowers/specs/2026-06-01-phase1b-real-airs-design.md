@@ -1,5 +1,8 @@
 # TinyZKP / hc-stark — Phase 1B: General AIR layer + first real template (`range_proof`)
 
+> **Legacy research — not production evidence.** This superseded design is
+> outside the supported Guard release and establishes no production privacy claim.
+
 - **Status:** Approved (design); implementation plan to follow
 - **Date:** 2026-06-01
 - **Author:** Logan Nye

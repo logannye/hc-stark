@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TinyZKP Doctor — Check Plonky3 compatibility and resources</title>
+  <meta name="description" content="Use the free TinyZKP doctor contract to check a supported Plonky3 job, RAM budget, scratch budget, and expected execution mode before purchase.">
+  <meta name="robots" content="noindex,nofollow" data-guard-acquisition>
+  <link rel="canonical" href="https://tinyzkp.com/doctor"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><script src="/shared.js" defer></script><script src="/roi.js" defer></script>
+</head>
+<body>
+<header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a><a class="button nav-buy" data-checkout="annual" data-closed-label="Not yet for sale" data-live-label="Buy Guard">Not yet for sale</a></nav></div></header>
+<main><section class="page-hero"><div class="container"><div class="eyebrow">Free evaluation path</div><h1>Check fit before you move a proof job.</h1><p class="lede">The Community engine owns compatibility, automatic mode planning, RAM estimation, and scratch-headroom checks. It rejects unsafe or unsupported jobs before expensive ingestion.</p><div class="actions"><a class="button" href="#run">Run the free doctor</a><a class="button secondary" href="/compatibility">Review the exact profile</a></div></div></section>
+<section class="content container">
+  <div class="notice" data-doctor-status><strong>Distribution status:</strong> the exact-contract Community doctor has not yet been published as a signed release. Do not treat an unqualified build or copied command as release evidence. The <a href="/releases#launch-blockers">release gate</a> remains blocked.</div>
+  <h2 id="run">Expected local flow</h2>
+  <pre><code>tinyzkp-engine doctor --job job.json</code></pre>
+  <p>The signed evaluation release will emit one versioned <code>DoctorReportV1</code> result. Keep that report local. Never send its contents, a witness, trace chunk, license key, entitlement, secret, private path, or proprietary AIR source. A founding-validation record may contain only the report digest and standardized compatibility result.</p>
+  <h2 id="fit">Good fit</h2>
+  <div class="grid two"><article class="card"><h3>Continue evaluating when</h3><ul><li>Your production target is Linux x86-64.</li><li>Your workload matches the exact published Plonky3 profile.</li><li>You have a measured OOM, high-memory machine cost, or restart-loss problem.</li><li>Local NVMe scratch under your control is acceptable.</li></ul></article><article class="card"><h3>Stop when</h3><ul><li>You need lookups, buses, multi-table AIRs, recursion, a GPU, or a custom field.</li><li>You need hosted proving, a service bureau, an SLA, custom AIR work, SSO, or private branches.</li><li>You cannot keep witness-derived scratch data on customer-managed storage.</li><li>The doctor reports an unsupported profile or unsafe path.</li></ul></article></div>
+  <h2 id="roi">Local ROI worksheet</h2>
+  <p>TinyZKP does not publish a universal ROI claim. This worksheet runs only in your browser, sends nothing, and stores nothing. Enter your own annual avoidable costs; its calculation is not benchmark or purchase evidence.</p>
+  <form class="worksheet" data-roi-form>
+    <div class="worksheet-grid">
+      <label>Annual high-memory capacity cost avoided (USD)<input type="number" min="0" step="1" value="0" data-roi-capacity></label>
+      <label>Annual operator restart hours<input type="number" min="0" step="0.25" value="0" data-roi-hours></label>
+      <label>Loaded operator cost per hour (USD)<input type="number" min="0" step="1" value="0" data-roi-rate></label>
+      <label>Annual delay or failed-job cost avoided (USD)<input type="number" min="0" step="1" value="0" data-roi-delay></label>
+    </div>
+    <p class="formula"><code>avoidable cost = capacity + (restart hours × hourly cost) + delay cost</code><br><code>net after Guard = avoidable cost − $4,990</code></p>
+    <button class="button secondary" type="submit">Calculate locally</button>
+    <output class="worksheet-output" data-roi-output aria-live="polite">Enter your documented costs to calculate a local comparison.</output>
+  </form>
+  <div class="notice"><strong>Decision rule:</strong> continue only when documented annual avoidable cost materially exceeds $4,990 and integration remains self-service. A hypothetical estimate is not benchmark evidence.</div>
+  <h2>What to do with a result</h2>
+  <ol><li>If compatible, compare the estimate with your measured baseline and the <a href="/benchmarks">published evidence contract</a>.</li><li>If incompatible, use the exact reason link in <a href="/troubleshooting">troubleshooting</a>; do not work around it.</li><li>If the report appears wrong, open a public issue with synthetic inputs and the exact release identity.</li></ol>
+</section></main>
+<footer class="site-footer"><div class="container"><div class="footer-grid"><div><a class="brand" href="/"><span>Tiny</span>ZKP</a><p>Check compatibility and resources before purchase.</p></div><div><h2>Product</h2><a href="/guard">Guard</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a></div><div><h2>Technical</h2><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/troubleshooting">Troubleshooting</a></div><div><h2>Company</h2><a href="/security">Security</a><a href="/support">Support</a><a href="/terms">Legal</a></div></div><div class="footer-note">The doctor is the free evaluation path; Guard has no free trial.</div></div></footer>
+</body></html>

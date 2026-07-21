@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Sync no-PII Stripe Checkout evidence into the GTM pipeline ledger."""
+"""Historical checkout-pipeline synchronizer; executable entry point retired.
+
+The implementation remains in source control as recovery-era audit evidence.
+It must not read payment-provider state or mutate the current Community/Guard
+revenue-readiness pipeline.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +33,11 @@ DEFAULT_CSV = ROOT / "marketing" / "generated" / "gtm_pipeline_ledger.csv"
 DEFAULT_MD = ROOT / "marketing" / "generated" / "gtm_pipeline_ledger.md"
 PILOT_TASK_ID = "revenue.pilot_checkout_launch"
 STRIPE_DASHBOARD_URL = "https://dashboard.stripe.com/payments"
+RETIREMENT_NOTICE = (
+    "retired: the legacy checkout pipeline sync cannot update the current Guard "
+    "revenue-readiness ledger; use the canonical launch-state and Lemon Squeezy "
+    "commerce gates"
+)
 
 
 def _load_renderer():
@@ -233,6 +243,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
+    # Fail before argument parsing, file reads, account checks, network access,
+    # or writes. Historical helpers below remain importable only so the prior
+    # aggregation behavior can be audited against preserved fixtures.
+    _ = argv
+    print(f"FAIL {RETIREMENT_NOTICE}", file=sys.stderr)
+    return 2
+
+    # Historical implementation retained below; unreachable by design.
     args = build_parser().parse_args(argv)
     if args.from_json:
         summary = summary_from_payload(load_json(args.from_json), lookback_hours=args.lookback_hours)

@@ -1,150 +1,135 @@
-# TinyZKP release and compatibility policy
+# TinyZKP engine and Guard release policy
 
-Status: active policy for the `hc-stark` production repo.
+Status: active policy for the `hc-stark` production repository.
 
-This document turns the unified company story into an operating model. The goal
-is to let TinyZKP ship product, protocol, website, billing, and SDK changes
-without mixing unrelated risk or surprising users who depend on proof formats,
-API behavior, or pricing.
+TinyZKP ships a public MIT engine and a separately licensed, customer-operated
+Guard supervisor. Hosted proving, hosted verification, customer accounts,
+usage billing, SDK publication, and MCP commerce are retired release surfaces.
+Their retained source and infrastructure have no authority to enable Guard.
 
-## Release surfaces
+The authoritative operating documents are:
 
-TinyZKP has five release surfaces. Every pull request should identify which
-surface it changes.
+- `docs/strategy/GUARD_PRODUCT_BOUNDARY.md` for product and compatibility scope;
+- `docs/runbooks/release_provenance.md` for build, candidate, promotion, and
+  withdrawal controls; and
+- `docs/validation/FOUNDING_VALIDATION_PROTOCOL.md` for the one-time founding
+  validation program.
+
+## Active release surfaces
+
+Every pull request must identify the surfaces it changes.
 
 | Surface | Examples | Primary risk |
 |---|---|---|
-| Protocol and verifier | `hc-prover`, `hc-verifier`, `hc-sdk` proof bytes, transcript domains, WASM verifier | Previously issued proofs stop verifying, or a weaker proof is accepted |
-| API and MCP | `hc-server`, `hc-mcp`, OpenAPI, tool schemas, auth/rate limits | Integrations fail or quota/billing behavior changes |
-| SDKs and CLI | Python, TypeScript, Rust SDKs, CLI, MCP binaries | Developer workflows break |
-| Website and public docs | `site/`, README, business guide, security/research pages | Public claims drift from the live product |
-| Billing and pricing | `pricing.json`, Stripe functions, webhook, tenant store, usage sync | Customers are charged incorrectly or plans behave differently than advertised |
+| Public contracts and engine | `tinyzkp-contracts`, `hc-stream`, `hc-plonky3`, `hc-cli`, schemas, proof bytes | A supported job changes meaning, a proof stops verifying, or resource/recovery claims become false |
+| Guard package | Private supervisor, activation, release channel, OCI package | Commercial code changes proof semantics, leaks data, or accepts the wrong release |
+| Site, legal, and commerce | `site/`, legal documents, pricing, Lemon Squeezy catalog | A buyer sees an unsupported claim, wrong price, or checkout without a qualified release |
+| Release evidence and operations | `release/`, qualification, signing, promotion, retirement | Evidence is forged, stale, rebuilt after review, or published without independent approval |
 
-## Release trains
+The legacy API, MCP, Stripe usage billing, account database, worker fleet, and
+SDK package trains may be changed only for containment, export, retention, or
+decommissioning. They cannot authorize a product launch.
 
-Use separate release trains unless a change must be coordinated.
+## Coordinated release classes
 
-| Train | When to use | Required gates |
+| Class | Use | Required gates |
 |---|---|---|
-| Website copy/docs | Public positioning, docs, pricing copy, security/research pages | `scripts/ci/reconciliation_invariants.sh`, `python3 -m pytest billing/tests/test_site_pricing_parity.py`, sitemap XML check |
-| API/MCP server | HTTP routes, MCP tools, auth, rate limits, template discovery | Rust tests for touched crates, API/MCP synthetic audit, deploy runbook |
-| Protocol/verifier | Proof format, transcript, prover, verifier, WASM verifier | Soundness suite, SDK verifier tests, security docs, changelog compatibility entry |
-| SDK/CLI | Published package behavior or examples | SDK CI, examples, changelog entry, package version bump if user-visible |
-| Billing/pricing | Stripe, tenant plans, usage metering, pricing copy | Billing pytest suite, pricing parity tests, checkout canary, rollback note |
+| `proof_critical` | Engine, verifier, compatibility, proof, checkpoint, or resource behavior changes | Complete engine and Guard qualification, independent reproduction and review, clean-machine journeys, immutable publication |
+| `guard_package_only` | Guard behavior changes while the exact engine and profile remain unchanged | Guard/package/activation/OCI checks plus two complete clean-machine journeys |
+| `site_legal_pricing` | Site, legal, or catalog changes with unchanged software identity | Static-site contracts, exact legal digests, merchant lifecycle, deploy plan, and rollback rehearsal |
 
-Coordinated releases are required when one surface makes a public claim that
-depends on another surface. Example: the reconciliation release must deploy API
-and MCP lifecycle fields before the website says lifecycle labels exist.
+The first generally available release is `proof_critical`.
 
-## Release provenance
+## Compatibility and interface policy
 
-Published SDK, verifier, and MCP release artifacts must be attributable to a
-tagged GitHub Actions run. The `Publish SDKs` workflow uses npm provenance,
-GitHub artifact attestations, and MCP SHA-256 checksum files; operators should
-follow [`docs/runbooks/release_provenance.md`](../runbooks/release_provenance.md)
-for verification and failure handling.
+- `tinyzkp-contracts` is the Rust source of truth for Guard-facing JSON
+  contracts. Generated public schemas must match it byte-for-byte.
+- The supported production profile is exactly
+  `tinyzkp-p3-goldilocks-v1`. Unsupported profiles fail closed.
+- Proof bytes must remain accepted by the ordinary pinned Plonky3 verifier.
+  Guard must never change proof semantics or verification.
+- Public contract changes require a new versioned schema when they are not
+  backward compatible. Existing signed release schemas remain immutable.
+- A checkpoint may resume only with its exact release identity. Never replace
+  or delete a release that owns an unfinished checkpoint.
+- Guard activation is the only network-capable product command. Doctor, run,
+  resume, policy, diagnostics, and verification operate offline after
+  activation and never transmit proof data.
 
-## Compatibility policy
+## Pricing and merchant policy
 
-### API
+- `site/pricing.json` is the public price source; `site/commerce.json` is
+  generated from reviewed `GuardLaunchEvidenceV2`.
+- Guard costs $499 monthly or $4,990 annually for one legal organization.
+  Annual is the default and founding customers receive no discount.
+- There are no trials, coupons, add-ons, usage meters, enterprise variants,
+  included services, or hosted compute.
+- Lemon Squeezy is the merchant of record and owns tax, receipts, invoices,
+  renewal, dunning, payment changes, cancellation, eligible refunds, portal,
+  and subscription license-key lifecycle.
+- Existing merchant variant IDs are never deleted or repurposed. A new variant
+  requires a reviewed catalog change and applicable release class.
+- Checkout remains fail-closed unless signed evidence derives
+  `launch_state: qualified`, `sales_state: live`,
+  `commerce_state: public_live`, and exact release/catalog identity parity.
 
-- Public routes must remain backward compatible unless the changelog marks a
-  breaking change and the release notes include migration guidance.
-- New response fields should be additive and optional for clients. SDK types
-  should deserialize older servers conservatively.
-- Auth and rate-limit behavior must be documented before deploy if it changes.
-- Deprecated routes should receive at least one release cycle of warning unless
-  they are disabled for security reasons.
+## Build and promotion control
 
-### MCP
+1. Protect `main`, trust, signing, evaluation, candidate, release-index,
+   promotion, preview, and production environments as described in the release
+   provenance runbook.
+2. Require an independent reviewer for trust, signing, candidate authorization,
+   and promotion; prevent self-review.
+3. Build the engine and Guard candidate once. Record source SHAs, checksums,
+   signatures, OCI digests, schemas, SBOM, provenance, attestations, legal
+   digests, and merchant catalog.
+4. Keep commerce `live_hidden` while ordinary founding purchases and
+   clean-machine journeys run. Public TinyZKP.com checkout remains closed.
+5. Promotion verifies and publishes the reviewed draft bytes without rebuilding
+   or resigning them.
+6. A later evidence-only change may derive `public_live`; a local scorecard or
+   workflow artifact cannot enable checkout.
 
-- Tool names, parameter names, and result fields are public API.
-- Additive fields are allowed. Removing a tool or changing required parameters
-  requires a changelog entry and MCP directory/server-card update.
-- The hosted public lane and optional Bearer lane must stay documented together
-  so users understand anonymous limits versus authenticated plan limits.
+Source-controlled trust-policy digests are insufficient by themselves. The
+same exact digests must be independently protected in GitHub environments.
+Secrets, private signing keys, customer data, license keys, or payment data
+must never be committed.
 
-### Proof formats and verifier packages
+## Required validation
 
-- Proof bytes, transcript domains, security floors, and verifier acceptance
-  rules are wire contracts.
-- A verifier may accept older proof versions only when the current security
-  policy explicitly allows that version.
-- Any new production proof version must include:
-  - verifier tests through `verify_proof_bytes`
-  - documented security floor
-  - changelog entry
-  - SDK/WASM compatibility note
-  - rollout/rollback plan
-- Never market a proof mode as private or audited unless the exact template,
-  configuration, and audit status are documented.
-
-### Pricing and billing
-
-- `pricing.json` is the single source of truth for plan limits and price tiers.
-- Public pricing copy must not invent proof-count quotas for paid plans or
-  included trace-step allotments.
-- Self-serve annual checkout remains disabled until annual usage meters,
-  reporting, and reconciliation are wired end to end.
-- `team` is a legacy/admin alias for `pro`, not a storefront plan.
-
-## Changelog policy
-
-Maintain the root `CHANGELOG.md`.
-
-Every user-visible change needs an entry under `Unreleased` before merge:
-
-- API route behavior, response shape, auth, or rate limit changes
-- MCP tool schemas, tool list, or server-card changes
-- proof-format, transcript, security-floor, or verifier changes
-- SDK/CLI behavior changes
-- pricing, billing, or plan-limit changes
-- public website claims around security, lifecycle, research lineage, or Compute
-
-Use these sections: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`,
-`Security`, and `Operations`.
-
-Internal refactors with no user-visible effect may omit a changelog entry, but
-the PR description should say why.
-
-## Deployment gates
-
-Before a production deploy:
+Before merging a release change, run the complete CI suites for all affected
+surfaces, including:
 
 ```bash
 cargo fmt --all --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace --all-targets
+python3 -m pytest scripts/ci scripts/release -q
 git diff --check
-scripts/ci/reconciliation_invariants.sh
-python3 -m pytest billing/tests/test_site_pricing_parity.py
-xmllint --noout site/sitemap.xml
-bash -n scripts/monitoring/api_health_audit.sh
 ```
 
-Then add the train-specific gates from the table above. For the reconciliation
-release, use `docs/runbooks/2026-06-23-reconciliation-deploy.md`.
+The release workflows add Linux x86-64 qualification, independent evidence,
+artifact inventory, signatures, OCI identity, SBOM, provenance, legal and
+merchant lifecycle, clean-machine, static-site, deployment, and rollback
+checks. Local or macOS results are development evidence only.
 
-## Rollback rules
+## Rollback, withdrawal, and sales freeze
 
-- Website-only rollback is allowed when API/MCP contracts remain backward
-  compatible.
-- API/MCP rollback must consider jobs in flight and billing usage emitted during
-  the bad deploy.
-- Protocol/verifier rollback is a security decision, not just an operations
-  decision. If a deployed verifier accepts a bad proof, publish an incident note
-  and rotate the accepted proof floor where needed.
-- Billing rollback must reconcile Stripe events, local tenant state, and usage
-  rows before declaring recovery complete.
+- A site-only rollback must keep checkout fail-closed unless its commerce and
+  release manifests still match the published release.
+- Published artifacts are immutable. Supersede or withdraw them through the
+  signed release index; never replace their bytes.
+- Immediately freeze sales for verifier/correctness, signature, provenance,
+  artifact identity, offline-runtime, checkpoint, legal, merchant-semantic,
+  proof-data, or high/critical security failures.
+- Already activated releases cannot be remotely disabled. Incident response
+  must state that limitation explicitly.
+- Retired `api`, `mcp`, and `webhook` hostnames return static `410 Gone` for at
+  least 90 days after obligations and retention requirements are resolved.
 
-## Legacy research repo policy
+## Changelog policy
 
-`space-efficient-zero-knowledge-proofs` remains public research lineage. Changes
-there should be limited to:
-
-- paper support
-- correctness/security caveats
-- build/test hygiene
-- links forward to `hc-stark` and TinyZKP.com
-
-Do not move the old KZG/BN254 code into the production service unless a concrete
-customer need justifies a trusted-SRS product line with a separate security and
-commercial story.
+Every user-visible contract, proof, Guard, release, pricing, legal, commerce,
+site, or operational change receives an entry under `Unreleased` in
+`CHANGELOG.md`. Internal refactors may omit an entry only when the pull request
+explains why behavior and evidence remain unchanged.

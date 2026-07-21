@@ -10,6 +10,6 @@
     "execution": "customer_controlled",
     "data_plane": "local_only",
     "commerce": "merchant_of_record",
-    "checkout_gate": "release/guard-launch-gates-v1.json"
+    "checkout_gate": "release/guard-launch-state-v2.json"
   }
 }

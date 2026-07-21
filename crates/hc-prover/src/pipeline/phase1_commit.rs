@@ -168,7 +168,7 @@ where
                 .last()
                 .copied()
                 .ok_or_else(|| HcError::message("trace contains no rows"))?;
-            padded_trace.extend(std::iter::repeat(last_row).take(padding_extra));
+            padded_trace.extend(std::iter::repeat_n(last_row, padding_extra));
 
             let acc_values: Vec<F> = padded_trace.iter().map(|row| row[0]).collect();
             let input_values: Vec<F> = padded_trace.iter().map(|row| row[1]).collect();

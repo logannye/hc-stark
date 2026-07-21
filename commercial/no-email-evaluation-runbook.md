@@ -1,5 +1,12 @@
 # No-email evaluation operations
 
+> **Historical/retired recovery evidence — do not execute.** This runbook
+> describes the former hosted evaluation, contract, invoicing, and product-tier
+> workflow. It cannot qualify a customer, authorize a proposal, create a sale,
+> or change current TinyZKP Guard launch state. Use
+> `release/guard-launch-state-v2.json`, its digest-bound evidence source, and
+> the current Community/Guard offer in `site/pricing.json` instead.
+
 TinyZKP does not use an unrelated personal or business mailbox for outreach or
 recovery-period application acknowledgements. The public form returns the
 application ID and benchmark instructions synchronously and stores the record

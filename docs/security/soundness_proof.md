@@ -1,5 +1,8 @@
 # Informal Soundness Argument
 
+> **Legacy research — not production evidence.** This historical argument does
+> not qualify the supported Guard profile or establish a production claim.
+
 > **Status — conjectured, pending external audit.** The soundness of hc-stark
 > rests on the same **proximity-gap conjecture** that every production FRI-STARK
 > relies on (the "ethSTARK conjecture"; see References). Under that conjecture

@@ -1,9 +1,17 @@
 import json
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 BETA = ROOT / "deploy" / "hetzner" / "beta"
+PUBLIC_BETA_CANDIDATE = ROOT / ".github/workflows/public-beta-candidate.yml"
+PUBLIC_BETA_RELEASE = ROOT / ".github/workflows/public-beta-release.yml"
+requires_retired_public_beta_workflows = pytest.mark.skipif(
+    not (PUBLIC_BETA_CANDIDATE.is_file() and PUBLIC_BETA_RELEASE.is_file()),
+    reason="retired hosted-beta publication workflows are intentionally absent",
+)
 
 
 def text(name):
@@ -133,9 +141,10 @@ def test_api_image_contains_reconciliation_and_refund_operators():
     assert "/usr/local/bin/hc-beta-refund" in dockerfile
 
 
+@requires_retired_public_beta_workflows
 def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
-    candidate = (ROOT / ".github/workflows/public-beta-candidate.yml").read_text()
-    authorization = (ROOT / ".github/workflows/public-beta-release.yml").read_text()
+    candidate = PUBLIC_BETA_CANDIDATE.read_text()
+    authorization = PUBLIC_BETA_RELEASE.read_text()
     assert "docker buildx build --push" in candidate
     assert candidate.count('--build-arg HC_RELEASE_SHA="$HC_RELEASE_SHA"') == 4
     assert "build_dark_canary_authorization.py" in candidate
@@ -153,8 +162,9 @@ def test_release_authorization_is_two_phase_and_never_rebuilds_candidate():
     assert "workflow_dispatch" in candidate and "workflow_dispatch" in authorization
 
 
+@requires_retired_public_beta_workflows
 def test_candidate_signs_standalone_services_and_replacement_sdks_with_sboms():
-    candidate = (ROOT / ".github/workflows/public-beta-candidate.yml").read_text()
+    candidate = PUBLIC_BETA_CANDIDATE.read_text()
     required_artifacts = {
         "hc-beta-api-linux-x86_64",
         "hc-beta-worker-linux-x86_64",
@@ -179,8 +189,9 @@ def test_candidate_signs_standalone_services_and_replacement_sdks_with_sboms():
     assert "cosign sign-blob --yes --bundle candidate-artifacts/SHA256SUMS.sigstore.json" in candidate
 
 
+@requires_retired_public_beta_workflows
 def test_candidate_typescript_package_contains_and_executes_both_module_formats():
-    candidate = (ROOT / ".github/workflows/public-beta-candidate.yml").read_text()
+    candidate = PUBLIC_BETA_CANDIDATE.read_text()
     package = json.loads((ROOT / "clients/typescript/package.json").read_text())
     assert package["scripts"]["prepack"] == "npm run build"
     for required in (

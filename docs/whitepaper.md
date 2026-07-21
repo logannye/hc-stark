@@ -1,5 +1,8 @@
 # hc-STARK: Height-Compressed, Memory-Efficient STARK Provers
 
+> **Legacy research — not production evidence.** This historical design is not
+> the supported TinyZKP Guard release contract or a source of production claims.
+
 _Last updated: 2025-12-04_
 
 ---

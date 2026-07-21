@@ -10,8 +10,8 @@ An organization may be considered only when all of the following are true:
 
 - it already uses the published `tinyzkp-p3-goldilocks-v1` profile;
 - it has a real prover OOM, memory-cost, or interruption/restart problem;
-- it runs the free doctor locally and supplies only its reviewed, scrubbed
-  compatibility report;
+- it runs the signed exact-contract Community doctor locally and supplies only
+  the `DoctorReportV1` digest and standardized compatibility result;
 - it confirms in writing that the standard annual price is $4,990;
 - it submits at most one workload through the public adapter and
   `JobManifestV1`; and
@@ -30,20 +30,25 @@ including diagnosis and documentation. Reaching that cap without an unaided
 verified proof is product evidence that the workflow is not self-service; do
 not extend the cap or create a customer-specific branch.
 
-## Evidence recorded
+## Private founding ledger
 
-The release gate may record only:
+The private ledger is validated by
+`release/founding-validation-ledger-v1.schema.json` and may contain exactly:
 
 - an opaque organization identifier;
-- the scrubbed compatibility report digest;
-- the public adapter and schema versions;
-- the documented baseline failure class and approximate business cost;
-- proof and verifier digests;
-- bounded/conventional resource summaries;
-- interruption/resume outcome;
-- unaided time to verified proof;
-- assistance minutes; and
-- written standard-price acceptance and ordinary-checkout purchase status.
+- public source/profile evidence;
+- the `DoctorReportV1` SHA-256 digest;
+- the standardized compatibility result;
+- one standardized pain category;
+- assistance minutes;
+- written $4,990 annual-price acceptance; and
+- ordinary purchase outcome.
+
+Proof qualification, verifier acceptance, resources, recovery, and
+clean-machine journey evidence belong in their separate signed launch-evidence
+types. They never enter the founding ledger. In particular, the ledger must
+not contain a proof, proof digest, verifier digest, checkpoint digest, resource
+report, resume outcome, or unaided-journey time.
 
 Evidence must not contain witness values, trace data, source code, private
 paths, customer names in public files, email addresses, keys, or credentials.

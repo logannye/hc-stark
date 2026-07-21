@@ -31,7 +31,7 @@ use hc_core::field::FieldElement;
 /// Returns `out[j] = (a+b)/2 + beta*(a-b)/(2x)` with
 /// `a = f(x)`, `b = f(-x)`, `x = D[j]`.
 pub fn reference_fold<E: FieldElement>(values: &[E], domain: &[E], beta: E) -> Vec<E> {
-    assert!(values.len() % 2 == 0, "layer size must be even");
+    assert!(values.len().is_multiple_of(2), "layer size must be even");
     assert_eq!(
         values.len(),
         domain.len(),
