@@ -1138,7 +1138,13 @@ def test_identity_gate_is_bound_to_signed_artifact_digests(tmp_path):
         ),
         (
             "official_verifier_fibonacci",
-            "fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier",
+            "prover::tests::fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier",
+            "release",
+            True,
+        ),
+        (
+            "official_verifier_poseidon2",
+            "prover::tests::poseidon2_proof_is_accepted_by_unmodified_plonky3_verifier",
             "release",
             True,
         ),

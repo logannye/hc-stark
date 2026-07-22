@@ -88,7 +88,9 @@ def gate_metadata(name: str, release_sha: str) -> dict[str, object]:
             "hc-plonky3",
             "--release",
             "--locked",
-            "fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier",
+            "prover::tests::fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier",
+            "--",
+            "--exact",
         ],
         "official_verifier_poseidon2": [
             "cargo",
@@ -97,7 +99,9 @@ def gate_metadata(name: str, release_sha: str) -> dict[str, object]:
             "hc-plonky3",
             "--release",
             "--locked",
-            "poseidon2_proof_is_accepted_by_unmodified_plonky3_verifier",
+            "prover::tests::poseidon2_proof_is_accepted_by_unmodified_plonky3_verifier",
+            "--",
+            "--exact",
         ],
         "deterministic_cross_mode_proofs": [
             "bash",
@@ -110,6 +114,8 @@ def gate_metadata(name: str, release_sha: str) -> dict[str, object]:
             "hc-cli",
             "--locked",
             "plonky3_air_job_contracts",
+            "--",
+            "--exact",
         ],
     }
     if name in commands:

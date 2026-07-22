@@ -37,8 +37,20 @@ def test_air_job_contract_gate_is_local_and_exact():
         "hc-cli",
         "--locked",
         "plonky3_air_job_contracts",
+        "--",
+        "--exact",
     ]
     assert spec["test"] == "plonky3_air_job_contracts"
+
+
+def test_cargo_test_gates_bind_the_exact_parser_identity():
+    for gate in (
+        "official_verifier_fibonacci",
+        "official_verifier_poseidon2",
+        "air_job_contracts",
+    ):
+        spec = module.GATES[gate]
+        assert spec["command"][-3:] == [spec["test"], "--", "--exact"]
 
 
 def test_generic_gate_tool_versions_are_exact_and_closed():
