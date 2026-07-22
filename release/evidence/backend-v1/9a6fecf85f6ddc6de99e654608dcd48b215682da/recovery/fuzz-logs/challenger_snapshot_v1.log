@@ -1,0 +1,57 @@
+tinyzkp-fuzz-target-v1 target=challenger_snapshot_v1 corpus_sha256=f116abd57c3e0560fd70ec4abc84e1a1385d3aaa1a936cdda4bfefbcf099a26c toolchain=nightly-2026-04-15
+   Compiling hc-fuzz v0.0.0 (/home/runner/work/hc-stark/hc-stark/raw-reports/immutable-source/fuzz)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.33s
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 1629961690
+INFO: Loaded 1 modules   (1623 inline 8-bit counters): 1623 [0x561757df27d0, 0x561757df2e27), 
+INFO: Loaded 1 PC tables (1623 PCs): 1623 [0x561757df2e28,0x561757df9398), 
+INFO:        0 files found in /home/runner/work/hc-stark/hc-stark/raw-reports/fuzz-logs/execution-corpus/challenger_snapshot_v1
+INFO:        1 files found in /home/runner/work/hc-stark/hc-stark/raw-reports/fuzz-logs/smoke-corpus/challenger_snapshot_v1
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 4096 bytes
+INFO: seed corpus: files: 1 min: 1b max: 1b total: 1b rss: 46Mb
+#2	INITED cov: 25 ft: 26 corp: 1/1b exec/s: 0 rss: 46Mb
+	NEW_FUNC[1/4]: 0x561757d97c50  (/home/runner/work/hc-stark/hc-stark/raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/challenger_snapshot_v1+0x18ec50) (BuildId: 0f0551ee9fbd3a7ae6f16c2e2eb65f5784160c6d)
+	NEW_FUNC[2/4]: 0x561757d97fb0  (/home/runner/work/hc-stark/hc-stark/raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/challenger_snapshot_v1+0x18efb0) (BuildId: 0f0551ee9fbd3a7ae6f16c2e2eb65f5784160c6d)
+#10722	NEW    cov: 65 ft: 67 corp: 2/111b lim: 110 exec/s: 0 rss: 47Mb L: 110/110 MS: 5 ChangeByte-ChangeBit-CopyPart-InsertByte-InsertRepeatedBytes-
+#10723	NEW    cov: 66 ft: 68 corp: 3/221b lim: 110 exec/s: 0 rss: 47Mb L: 110/110 MS: 1 ChangeBit-
+#11254	REDUCE cov: 66 ft: 68 corp: 3/219b lim: 110 exec/s: 0 rss: 47Mb L: 108/110 MS: 1 EraseBytes-
+#11329	REDUCE cov: 66 ft: 68 corp: 3/218b lim: 110 exec/s: 0 rss: 49Mb L: 107/110 MS: 5 ChangeBinInt-CrossOver-ChangeBinInt-ChangeBit-InsertRepeatedBytes-
+#11514	REDUCE cov: 66 ft: 68 corp: 3/217b lim: 110 exec/s: 0 rss: 49Mb L: 106/110 MS: 5 ChangeByte-ChangeBinInt-EraseBytes-ShuffleBytes-InsertRepeatedBytes-
+#16920	NEW    cov: 67 ft: 76 corp: 4/380b lim: 163 exec/s: 0 rss: 50Mb L: 163/163 MS: 1 InsertRepeatedBytes-
+#17086	REDUCE cov: 67 ft: 76 corp: 4/379b lim: 163 exec/s: 0 rss: 50Mb L: 162/162 MS: 1 EraseBytes-
+#18456	REDUCE cov: 67 ft: 76 corp: 4/378b lim: 170 exec/s: 0 rss: 50Mb L: 161/161 MS: 5 ChangeBinInt-CrossOver-ChangeByte-InsertRepeatedBytes-CopyPart-
+#24149	REDUCE cov: 67 ft: 84 corp: 5/604b lim: 226 exec/s: 0 rss: 52Mb L: 226/226 MS: 3 ShuffleBytes-CrossOver-CrossOver-
+#24332	REDUCE cov: 67 ft: 84 corp: 5/603b lim: 226 exec/s: 0 rss: 52Mb L: 225/225 MS: 3 CopyPart-CopyPart-EraseBytes-
+#31105	REDUCE cov: 67 ft: 92 corp: 6/896b lim: 293 exec/s: 0 rss: 54Mb L: 293/293 MS: 3 CrossOver-ShuffleBytes-CrossOver-
+#31741	REDUCE cov: 67 ft: 92 corp: 6/893b lim: 293 exec/s: 0 rss: 54Mb L: 290/290 MS: 1 CrossOver-
+#38330	REDUCE cov: 67 ft: 93 corp: 7/1246b lim: 357 exec/s: 0 rss: 56Mb L: 353/353 MS: 4 ChangeBinInt-InsertRepeatedBytes-ShuffleBytes-InsertRepeatedBytes-
+#43573	REDUCE cov: 67 ft: 93 corp: 7/1245b lim: 405 exec/s: 0 rss: 58Mb L: 289/353 MS: 3 ChangeBinInt-EraseBytes-InsertByte-
+#59068	NEW    cov: 67 ft: 100 corp: 8/1796b lim: 553 exec/s: 0 rss: 63Mb L: 551/551 MS: 5 InsertRepeatedBytes-ShuffleBytes-InsertRepeatedBytes-InsertRepeatedBytes-CMP- DE: "\377\036\270\305\032GJ\006b\314\324\317\010e\3654\2278\326\366d\330<c\250\326\025\"\327\316\233\361"-
+#65862	NEW    cov: 67 ft: 101 corp: 9/2409b lim: 616 exec/s: 0 rss: 66Mb L: 613/613 MS: 4 ChangeASCIIInt-CrossOver-InsertRepeatedBytes-InsertRepeatedBytes-
+#66200	REDUCE cov: 67 ft: 101 corp: 9/2406b lim: 616 exec/s: 0 rss: 66Mb L: 610/610 MS: 3 ChangeBinInt-ShuffleBytes-EraseBytes-
+#66936	REDUCE cov: 67 ft: 101 corp: 9/2400b lim: 616 exec/s: 0 rss: 66Mb L: 545/610 MS: 1 EraseBytes-
+#111756	REDUCE cov: 68 ft: 103 corp: 10/3448b lim: 1060 exec/s: 0 rss: 86Mb L: 1048/1048 MS: 5 CrossOver-CopyPart-CrossOver-CopyPart-CrossOver-
+#112052	REDUCE cov: 68 ft: 103 corp: 10/3442b lim: 1060 exec/s: 0 rss: 86Mb L: 1042/1042 MS: 1 EraseBytes-
+#113529	REDUCE cov: 68 ft: 103 corp: 10/3441b lim: 1070 exec/s: 0 rss: 87Mb L: 609/1042 MS: 2 EraseBytes-InsertByte-
+#114863	REDUCE cov: 68 ft: 103 corp: 10/3439b lim: 1080 exec/s: 0 rss: 88Mb L: 1040/1040 MS: 4 CrossOver-ChangeByte-CopyPart-PersAutoDict- DE: "\377\036\270\305\032GJ\006b\314\324\317\010e\3654\2278\326\366d\330<c\250\326\025\"\327\316\233\361"-
+#116547	REDUCE cov: 68 ft: 103 corp: 10/3432b lim: 1090 exec/s: 0 rss: 89Mb L: 1033/1033 MS: 4 ShuffleBytes-InsertByte-InsertRepeatedBytes-EraseBytes-
+#141629	REDUCE cov: 68 ft: 103 corp: 10/3430b lim: 1330 exec/s: 0 rss: 102Mb L: 1031/1031 MS: 2 EraseBytes-CrossOver-
+#142601	REDUCE cov: 68 ft: 103 corp: 10/3426b lim: 1330 exec/s: 0 rss: 103Mb L: 1027/1027 MS: 2 ChangeBit-EraseBytes-
+#188729	REDUCE cov: 68 ft: 103 corp: 10/3424b lim: 1780 exec/s: 0 rss: 127Mb L: 1025/1025 MS: 3 EraseBytes-ShuffleBytes-CopyPart-
+#1048576	pulse  cov: 68 ft: 103 corp: 10/3424b lim: 4096 exec/s: 524288 rss: 443Mb
+#2097152	pulse  cov: 68 ft: 103 corp: 10/3424b lim: 4096 exec/s: 524288 rss: 445Mb
+#2330467	NEW    cov: 72 ft: 107 corp: 11/3592b lim: 4096 exec/s: 466093 rss: 446Mb L: 168/1025 MS: 3 InsertRepeatedBytes-InsertByte-CMP- DE: "\021\242w\350#\343W?\375D%7\252gk\363\377\004\355D\221}\210\254pr\314Q=z\355)"-
+#4194304	pulse  cov: 72 ft: 107 corp: 11/3592b lim: 4096 exec/s: 466033 rss: 454Mb
+#8388608	pulse  cov: 72 ft: 107 corp: 11/3592b lim: 4096 exec/s: 493447 rss: 455Mb
+#16777216	pulse  cov: 72 ft: 107 corp: 11/3592b lim: 4096 exec/s: 493447 rss: 455Mb
+#29767072	DONE   cov: 72 ft: 107 corp: 11/3592b lim: 4096 exec/s: 487984 rss: 455Mb
+###### Recommended dictionary. ######
+"\377\036\270\305\032GJ\006b\314\324\317\010e\3654\2278\326\366d\330<c\250\326\025\"\327\316\233\361" # Uses: 1418086
+"\021\242w\350#\343W?\375D%7\252gk\363\377\004\355D\221}\210\254pr\314Q=z\355)" # Uses: 1216986
+###### End of recommended dictionary. ######
+Done 29767072 runs in 61 second(s)
+stat::number_of_executed_units: 29767072
+stat::average_exec_per_sec:     487984
+stat::new_units_added:          27
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              455

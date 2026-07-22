@@ -1,0 +1,65 @@
+tinyzkp-fuzz-target-v1 target=scratch_artifact_header_v1 corpus_sha256=377fe728a7be0f6a536659ec265403bdba8c58216c78dbdbe13b8fd5dcf4a408 toolchain=nightly-2026-04-15
+   Compiling hc-fuzz v0.0.0 (/home/runner/work/hc-stark/hc-stark/raw-reports/immutable-source/fuzz)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.27s
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 3137542465
+INFO: Loaded 1 modules   (2390 inline 8-bit counters): 2390 [0x5650e5137580, 0x5650e5137ed6), 
+INFO: Loaded 1 PC tables (2390 PCs): 2390 [0x5650e5137ed8,0x5650e5141438), 
+INFO:        0 files found in /home/runner/work/hc-stark/hc-stark/raw-reports/fuzz-logs/execution-corpus/scratch_artifact_header_v1
+INFO:        2 files found in /home/runner/work/hc-stark/hc-stark/raw-reports/fuzz-logs/smoke-corpus/scratch_artifact_header_v1
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 4096 bytes
+INFO: seed corpus: files: 2 min: 1b max: 10b total: 11b rss: 52Mb
+#3	INITED cov: 183 ft: 184 corp: 2/11b exec/s: 0 rss: 52Mb
+#4	NEW    cov: 183 ft: 185 corp: 3/21b lim: 10 exec/s: 0 rss: 52Mb L: 10/10 MS: 1 CopyPart-
+#12	NEW    cov: 185 ft: 187 corp: 4/23b lim: 10 exec/s: 0 rss: 52Mb L: 2/10 MS: 3 CopyPart-ChangeByte-InsertByte-
+#13	NEW    cov: 186 ft: 188 corp: 5/30b lim: 10 exec/s: 0 rss: 52Mb L: 7/10 MS: 1 InsertRepeatedBytes-
+#32	REDUCE cov: 186 ft: 188 corp: 5/29b lim: 10 exec/s: 0 rss: 52Mb L: 9/10 MS: 4 ShuffleBytes-CopyPart-ChangeByte-EraseBytes-
+#36	REDUCE cov: 186 ft: 188 corp: 5/28b lim: 10 exec/s: 0 rss: 52Mb L: 8/10 MS: 4 CopyPart-CrossOver-ChangeBinInt-CrossOver-
+#67	REDUCE cov: 186 ft: 188 corp: 5/24b lim: 10 exec/s: 0 rss: 52Mb L: 3/10 MS: 1 CrossOver-
+#102	NEW    cov: 186 ft: 190 corp: 6/25b lim: 10 exec/s: 0 rss: 52Mb L: 1/10 MS: 5 CMP-CopyPart-ChangeByte-CrossOver-ShuffleBytes- DE: "\003\000\000\000\000\000\000\000"-
+#133	NEW    cov: 186 ft: 192 corp: 7/27b lim: 10 exec/s: 0 rss: 52Mb L: 2/10 MS: 1 CopyPart-
+#577	REDUCE cov: 186 ft: 192 corp: 7/22b lim: 13 exec/s: 0 rss: 52Mb L: 5/8 MS: 4 CrossOver-InsertByte-ChangeByte-EraseBytes-
+#748	REDUCE cov: 186 ft: 192 corp: 7/21b lim: 13 exec/s: 748 rss: 52Mb L: 4/8 MS: 5 ShuffleBytes-ShuffleBytes-CopyPart-ShuffleBytes-EraseBytes-
+#1301	REDUCE cov: 186 ft: 192 corp: 7/19b lim: 16 exec/s: 1301 rss: 52Mb L: 2/8 MS: 3 ChangeByte-ChangeBit-EraseBytes-
+#1434	REDUCE cov: 186 ft: 193 corp: 8/34b lim: 16 exec/s: 1434 rss: 52Mb L: 15/15 MS: 3 ChangeBinInt-InsertRepeatedBytes-ChangeBinInt-
+#2048	pulse  cov: 186 ft: 193 corp: 8/34b lim: 20 exec/s: 512 rss: 54Mb
+#2070	REDUCE cov: 186 ft: 193 corp: 8/33b lim: 20 exec/s: 517 rss: 54Mb L: 1/15 MS: 1 EraseBytes-
+#3635	NEW    cov: 187 ft: 197 corp: 9/58b lim: 32 exec/s: 454 rss: 59Mb L: 25/25 MS: 5 InsertRepeatedBytes-EraseBytes-ShuffleBytes-PersAutoDict-CMP- DE: "\003\000\000\000\000\000\000\000"-"TZMATV1\000"-
+#3768	REDUCE cov: 188 ft: 200 corp: 10/67b lim: 32 exec/s: 471 rss: 59Mb L: 9/25 MS: 3 ChangeByte-ChangeBinInt-PersAutoDict- DE: "TZMATV1\000"-
+#4096	pulse  cov: 188 ft: 200 corp: 10/67b lim: 32 exec/s: 409 rss: 61Mb
+#4334	NEW    cov: 190 ft: 203 corp: 11/101b lim: 37 exec/s: 433 rss: 61Mb L: 34/34 MS: 1 InsertRepeatedBytes-
+#4591	NEW    cov: 191 ft: 207 corp: 12/123b lim: 37 exec/s: 382 rss: 62Mb L: 22/34 MS: 2 CMP-EraseBytes- DE: "\377\377\377\377\377\377\377\007"-
+#4837	REDUCE cov: 191 ft: 207 corp: 12/122b lim: 37 exec/s: 403 rss: 63Mb L: 21/34 MS: 1 EraseBytes-
+#5416	REDUCE cov: 191 ft: 207 corp: 12/121b lim: 42 exec/s: 451 rss: 65Mb L: 20/34 MS: 4 ChangeBit-CopyPart-InsertByte-EraseBytes-
+#6082	REDUCE cov: 191 ft: 207 corp: 12/118b lim: 47 exec/s: 467 rss: 67Mb L: 17/34 MS: 1 EraseBytes-
+#8192	pulse  cov: 191 ft: 207 corp: 12/118b lim: 67 exec/s: 512 rss: 74Mb
+#8339	REDUCE cov: 199 ft: 215 corp: 13/184b lim: 67 exec/s: 521 rss: 74Mb L: 66/66 MS: 2 EraseBytes-InsertRepeatedBytes-
+#11911	REDUCE cov: 199 ft: 215 corp: 13/182b lim: 97 exec/s: 661 rss: 86Mb L: 32/66 MS: 2 CrossOver-EraseBytes-
+#13048	REDUCE cov: 199 ft: 215 corp: 13/181b lim: 103 exec/s: 686 rss: 89Mb L: 65/65 MS: 2 ChangeByte-EraseBytes-
+#15264	REDUCE cov: 199 ft: 215 corp: 13/180b lim: 121 exec/s: 587 rss: 96Mb L: 1/65 MS: 1 EraseBytes-
+#16384	pulse  cov: 199 ft: 215 corp: 13/180b lim: 127 exec/s: 585 rss: 100Mb
+#16513	REDUCE cov: 200 ft: 223 corp: 14/312b lim: 133 exec/s: 569 rss: 100Mb L: 132/132 MS: 4 ChangeByte-EraseBytes-CrossOver-InsertRepeatedBytes-
+#18310	REDUCE cov: 200 ft: 223 corp: 14/311b lim: 147 exec/s: 590 rss: 106Mb L: 131/131 MS: 2 ChangeBinInt-EraseBytes-
+#21872	REDUCE cov: 200 ft: 223 corp: 14/310b lim: 182 exec/s: 662 rss: 117Mb L: 130/130 MS: 2 EraseBytes-CMP- DE: "\000\000\000\000"-
+#23282	REDUCE cov: 200 ft: 223 corp: 14/309b lim: 189 exec/s: 684 rss: 122Mb L: 129/129 MS: 5 ChangeBit-ChangeBit-InsertByte-CMP-EraseBytes- DE: "\377\377\377\377\377\377\377\017"-
+#25257	REDUCE cov: 200 ft: 231 corp: 15/503b lim: 203 exec/s: 742 rss: 128Mb L: 194/194 MS: 5 InsertRepeatedBytes-CrossOver-ShuffleBytes-InsertRepeatedBytes-PersAutoDict- DE: "\377\377\377\377\377\377\377\017"-
+#28117	REDUCE cov: 200 ft: 231 corp: 15/502b lim: 231 exec/s: 720 rss: 137Mb L: 193/193 MS: 5 ShuffleBytes-CrossOver-CrossOver-EraseBytes-InsertRepeatedBytes-
+#30976	REDUCE cov: 200 ft: 239 corp: 16/760b lim: 259 exec/s: 737 rss: 146Mb L: 258/258 MS: 4 ChangeByte-InsertRepeatedBytes-InsertRepeatedBytes-InsertRepeatedBytes-
+#32768	pulse  cov: 200 ft: 239 corp: 16/760b lim: 275 exec/s: 744 rss: 152Mb
+#37730	NEW    cov: 200 ft: 240 corp: 17/1081b lim: 323 exec/s: 770 rss: 168Mb L: 321/321 MS: 4 ChangeBinInt-InsertByte-InsertRepeatedBytes-InsertRepeatedBytes-
+#50494	REDUCE cov: 200 ft: 240 corp: 17/1080b lim: 443 exec/s: 870 rss: 208Mb L: 257/321 MS: 4 CMP-ShuffleBytes-ChangeBit-EraseBytes- DE: "\005\000\000\000\000\000\000\000"-
+#56389	DONE   cov: 200 ft: 240 corp: 17/1080b lim: 499 exec/s: 924 rss: 227Mb
+###### Recommended dictionary. ######
+"\003\000\000\000\000\000\000\000" # Uses: 1260
+"TZMATV1\000" # Uses: 1046
+"\377\377\377\377\377\377\377\007" # Uses: 1055
+"\000\000\000\000" # Uses: 610
+"\377\377\377\377\377\377\377\017" # Uses: 532
+"\005\000\000\000\000\000\000\000" # Uses: 80
+###### End of recommended dictionary. ######
+Done 56389 runs in 61 second(s)
+stat::number_of_executed_units: 56389
+stat::average_exec_per_sec:     924
+stat::new_units_added:          33
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              227
