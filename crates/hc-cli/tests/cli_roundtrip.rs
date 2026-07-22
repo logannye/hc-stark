@@ -25,6 +25,18 @@ unsafe extern "C" {
 #[cfg(unix)]
 const SIGTERM: i32 = 15;
 
+fn expected_engine_release_identity() -> String {
+    option_env!("HC_RELEASE_SHA")
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| {
+            std::env::var("HC_RELEASE_SHA")
+                .ok()
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or_else(|| "development-unreleased".into())
+}
+
 fn snapshot_tree(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
     fn visit(root: &Path, current: &Path, snapshot: &mut BTreeMap<PathBuf, Option<Vec<u8>>>) {
         let mut entries: Vec<_> = std::fs::read_dir(current)
@@ -280,7 +292,10 @@ fn assert_air_operation_report(
     let report: serde_json::Value = serde_json::from_slice(stdout).unwrap();
     assert_eq!(report.as_object().unwrap().len(), 6);
     assert_eq!(report["schema_version"], 1);
-    assert_eq!(report["engine_release_identity"], "development-unreleased");
+    assert_eq!(
+        report["engine_release_identity"],
+        expected_engine_release_identity()
+    );
     assert_eq!(report["selected_mode"], selected_mode);
     assert!(report["wall_time_millis"]
         .as_u64()
@@ -499,9 +514,10 @@ fn declarative_air_cli_proves_estimates_and_officially_verifies() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"accepted\":true"))
-        .stdout(predicate::str::contains(
-            "\"engine_release_identity\":\"development-unreleased\"",
-        ));
+        .stdout(predicate::str::contains(format!(
+            "\"engine_release_identity\":\"{}\"",
+            expected_engine_release_identity()
+        )));
 
     let conventional_bundle = dir.path().join("air-proof-bundle-conventional.json");
     let conventional = cargo_bin_cmd!("hc-cli")
@@ -1244,7 +1260,7 @@ fn declarative_air_sigterm_uses_exact_checkpoint_dir_and_typed_resume_protocol()
         captured_stderr.push_str(&line);
         let event: tinyzkp_contracts::ProgressEventV1 =
             serde_json::from_str(&line).expect("every progress line must satisfy the public type");
-        assert!(event.validate("development-unreleased"));
+        assert!(event.validate(&expected_engine_release_identity()));
         if event.event == "phase"
             && event.phase.as_deref() == Some("trace")
             && event.checkpoint_durable == Some(true)
@@ -1301,7 +1317,7 @@ fn declarative_air_sigterm_uses_exact_checkpoint_dir_and_typed_resume_protocol()
     assert_air_operation_report(&resumed.stdout, "bounded", true);
     for line in String::from_utf8_lossy(&resumed.stderr).lines() {
         let event: tinyzkp_contracts::ProgressEventV1 = serde_json::from_str(line).unwrap();
-        assert!(event.validate("development-unreleased"));
+        assert!(event.validate(&expected_engine_release_identity()));
     }
     cargo_bin_cmd!("hc-cli")
         .args([
@@ -1356,7 +1372,7 @@ fn root_doctor_emits_one_complete_report_and_only_typed_progress() {
     }
     for line in String::from_utf8_lossy(&output.stderr).lines() {
         let event: tinyzkp_contracts::ProgressEventV1 = serde_json::from_str(line).unwrap();
-        assert!(event.validate("development-unreleased"));
+        assert!(event.validate(&expected_engine_release_identity()));
     }
 }
 
