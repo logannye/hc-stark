@@ -1139,6 +1139,8 @@ def _wrangler_command(
         str(wrangler),
         "pages",
         "deploy",
+        ".",
+        "--cwd",
         str(source),
         "--project-name",
         PROJECT_NAME,
@@ -1149,8 +1151,6 @@ def _wrangler_command(
         "--commit-message",
         f"TinyZKP release {release}",
         "--commit-dirty=false",
-        "--config",
-        str(source / "wrangler.toml"),
     )
 
 
@@ -1374,11 +1374,7 @@ def apply_deploy(
             ):
                 command = _wrangler_command(source, reviewed_sha, node, wrangler)
                 command_identity = tuple(
-                    "<SOURCE>"
-                    if item == str(source)
-                    else "<CONFIG>"
-                    if item == str(source / "wrangler.toml")
-                    else item
+                    "<SOURCE>" if item == str(source) else item
                     for item in command
                 )
                 invocation_started = True
