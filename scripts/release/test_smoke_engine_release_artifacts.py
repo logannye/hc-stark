@@ -62,12 +62,14 @@ class FakeRunner:
         output: bytes,
         network_mode: str = "none",
         mutate_engine: bool = False,
+        report_tmpfs_mounts: bool = False,
     ):
         self.tools = tools
         self.engine = engine
         self.output = output
         self.network_mode = network_mode
         self.mutate_engine = mutate_engine
+        self.report_tmpfs_mounts = report_tmpfs_mounts
         self.calls = []
         self.inspect_count = 0
         self.image_reference = None
@@ -127,7 +129,7 @@ class FakeRunner:
                         "RW": True,
                     },
                 ]
-                if after_run
+                if after_run and self.report_tmpfs_mounts
                 else []
             ),
         }
@@ -268,6 +270,28 @@ def test_runtime_report_binds_cli_oci_and_confined_execution(tmp_path, monkeypat
     assert ["--cap-drop", "ALL"] == create[
         create.index("--cap-drop") : create.index("--cap-drop") + 2
     ]
+
+
+def test_runtime_report_accepts_explicit_tmpfs_mount_inventory(tmp_path, monkeypatch):
+    patch_static_identity(monkeypatch)
+    engine, engine_release, oci, tools = write_inputs(tmp_path)
+    runner = FakeRunner(
+        tools=tools,
+        engine=engine,
+        output=release_bytes(),
+        report_tmpfs_mounts=True,
+    )
+    report = smoke.build_report(
+        root=tmp_path,
+        release_sha=RELEASE_SHA,
+        release_ref=RELEASE_REF,
+        engine=engine,
+        engine_release=engine_release,
+        oci_archive=oci,
+        runner=runner,
+        tools=tools,
+    )
+    assert report["claims"]["oci_smoke"] is True
 
 
 def test_runtime_report_rejects_semantically_equal_but_byte_skewed_output(
