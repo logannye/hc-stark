@@ -77,6 +77,24 @@ def test_release_trust_rejects_unknown_or_missing_sections(monkeypatch, tmp_path
         MODULE.release_trust(tmp_path, "a" * 40)
 
 
+def test_owner_ga_tool_policy_is_version_bound_without_runner_byte_hashes(
+    monkeypatch, tmp_path
+):
+    value = json.loads(
+        (MODULE_PATH.parents[2] / "release" / "release-trust-v1.json").read_text()
+    )
+    monkeypatch.setattr(MODULE, "release_trust", lambda *_arguments: value)
+
+    policy = MODULE.owner_ga_tool_policy(tmp_path, "a" * 40)
+    assert policy["gate_tools"]["policy"] == "owner_only_ga_v1"
+    assert policy["toolchains"]["fuzz"]["cargo_fuzz_version"] == "cargo-fuzz 0.13.2"
+    encoded = json.dumps(
+        {"gate_tools": value["gate_tools"], "toolchains": value["toolchains"]},
+        sort_keys=True,
+    )
+    for retired in ("cargo_sha256", "rustc_sha256", "cargo_fuzz_executables"):
+        assert retired not in encoded
+
 def test_private_reset_rejects_symlinked_parent_without_deletion(tmp_path):
     victim = tmp_path / "victim"
     target = victim / "child"

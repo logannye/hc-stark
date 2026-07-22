@@ -9,9 +9,9 @@
   "resource_policy": {
     "mode": "scratch",
     "max_resident_bytes": 2147483648,
-    "max_scratch_bytes": 536870912000,
+    "max_scratch_bytes": 1000000000,
     "scratch_dir": "/var/lib/tinyzkp-bench/scratch/fibonacci-1m",
-    "max_threads": 8,
+    "max_threads": 4,
     "checkpoint_policy": "retain_on_failure"
   },
   "expected_verifier": "p3_uni_stark_0.6.1"

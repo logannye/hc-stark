@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 import backend_release_ready as final_gate
@@ -80,15 +81,13 @@ def evidence_failures(evidence: dict[str, object], *, root: Path) -> list[str]:
             root=root,
         )
     )
-    problems.extend(
-        final_gate.validate_review_execution_bindings(
-            gates, release_sha, root=root
-        )
-    )
     return problems
 
 
-def failures(config: dict[str, object], *, root: Path = ROOT) -> list[str]:
+def candidate_content_failures(
+    config: dict[str, object], *, root: Path = ROOT
+) -> list[str]:
+    """Validate candidate content before its assembly envelope can exist."""
     problems: list[str] = []
     if set(config) != {
         "schema_version",
@@ -109,9 +108,22 @@ def failures(config: dict[str, object], *, root: Path = ROOT) -> list[str]:
         evidence = final_gate.read_object(
             final_gate.safe_evidence_file(root, evidence_path)
         )
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
         return problems + [f"candidate evidence manifest is unavailable: {error}"]
     return problems + evidence_failures(evidence, root=root)
+
+
+def failures(config: dict[str, object], *, root: Path = ROOT) -> list[str]:
+    problems = candidate_content_failures(config, root=root)
+    if problems:
+        return problems
+    try:
+        import verify_backend_assembly
+
+        verify_backend_assembly.verify(root=root, candidate_config=config)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        problems.append(f"candidate assembly signature is invalid: {error}")
+    return problems
 
 
 def main(argv: list[str] | None = None) -> int:

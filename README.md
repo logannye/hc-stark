@@ -6,17 +6,17 @@ under an explicit RAM ceiling, using deterministic SSD scratch where global
 transforms require it, while retaining the official Plonky3 proof format and
 unmodified verifier.
 
-> **Pre-release:** hosted proving, hosted verification, account creation,
-> public checkout, legacy usage meters, and MCP commerce are disabled and
-> excluded from active release and deployment paths. Their final decommission
-> is not claimed yet. Do not
-> use this repository as a production prover until every gate in
-> [`release/backend-v1-gates.json`](release/backend-v1-gates.json) is passed.
-> Guard checkout is independently fail-closed by the evidence-derived
+> **Release authority:** the MIT Community source is public; a production
+> engine binary is supported only when its automated release evidence passes.
+> TinyZKP does not operate hosted proving, hosted verification, customer
+> accounts, usage metering, or MCP commerce. Guard artifacts and checkout are
+> independently fail-closed by the evidence-derived
 > [`release/guard-launch-state-v2.json`](release/guard-launch-state-v2.json),
 > generated from
 > [`release/guard-launch-evidence-v2.json`](release/guard-launch-evidence-v2.json)
-> and verified against an independently protected trust policy.
+> and verified against protected signing and launch trust. Consult those
+> generated contracts for current availability; do not infer it from README
+> prose.
 
 ## Product boundary
 
@@ -43,8 +43,10 @@ stores, and typed checkpoints preserve the official challenger state for
 byte-identical resume. Plonky3 `0.6.1` still hands its generic DFT trait an
 owned `RowMajorMatrix`; TinyZKP's bounded orchestration therefore uses the
 separate block-matrix entry point. The implementation remains pre-production
-until fixed-host resource evidence, independent reviews, and an external
-design-partner integration satisfy the machine release gates.
+until the automated verifier, determinism, fixed-host resource, recovery,
+fuzz, provenance, SBOM, signature, CLI, and OCI checks pass for the exact
+release and the owner-controlled Guard launch gates publish that artifact.
+Independent reviews and design-partner results remain visible advisories.
 
 Standalone TinyZKP protocols, legacy receipts, hosted services, recursion, zkML, zkVM, IPA,
 Spartan, KZG, and rollup prototypes are research only. Legacy CLI access
@@ -177,15 +179,16 @@ macOS measurements and component-only tests are useful for development but are
 not acceptable release evidence. TinyZKP never infers full-prover memory,
 throughput, cost, or capacity from a component benchmark.
 
-Release targets remain blocked until independently reproduced:
+Release targets remain blocked until the owner-signed automated suite proves:
 
 - 1M rows: at least 4× lower peak RAM, at most 3× baseline wall time, and no
   more than 10% above the configured cap;
 - 16,777,216 rows: at most 2 GiB whole-process peak memory, successful official
   verification, and scratch usage within 10% of preflight;
-- deterministic crash recovery, parser/resource fuzzing, independent review,
-  one external non-reference workload, signed artifacts, SBOM, checksums,
-  and release identity agreement.
+- deterministic crash recovery, parser/resource fuzzing, signed artifacts,
+  SBOM, checksums, provenance, CLI/OCI smoke, and release identity agreement.
+  Independent reproduction, outside review, and external workloads are
+  transparent `not_completed` advisories and do not authorize checkout.
 
 ## Self-hosted behavior
 
@@ -235,9 +238,11 @@ Operators must follow
 [`docs/validation/FOUNDING_VALIDATION_PROTOCOL.md`](docs/validation/FOUNDING_VALIDATION_PROTOCOL.md),
 and
 [`docs/runbooks/guard_commerce_setup.md`](docs/runbooks/guard_commerce_setup.md).
-Counsel intake is consolidated in
+Optional counsel intake is consolidated in
 [`docs/governance/GUARD_COUNSEL_PACKET.md`](docs/governance/GUARD_COUNSEL_PACKET.md);
-that packet is not legal approval.
+that packet is advisory and is not required launch authority. LN Holdings'
+owner approval of exact seller facts and document digests is the machine legal
+gate.
 
 ## Security and disclosure
 

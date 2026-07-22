@@ -140,7 +140,6 @@ def test_fixed_host_semantic_validator_module_loads():
         "fibonacci_1m",
         "poseidon2_1m",
         "fibonacci_16m",
-        "poseidon2_16m",
     }
 
 

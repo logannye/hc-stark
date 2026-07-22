@@ -1,0 +1,401 @@
+name: Assemble owner-qualified backend evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Exact lowercase current main commit qualified by both source runs
+        required: true
+        type: string
+      resource_run_id:
+        description: Successful Owner engine resource qualification run ID
+        required: true
+        type: string
+      resource_run_attempt:
+        description: Exact successful resource run attempt
+        required: true
+        type: number
+      recovery_run_id:
+        description: Successful Owner recovery and fuzz qualification run ID
+        required: true
+        type: string
+      recovery_run_attempt:
+        description: Exact successful recovery run attempt
+        required: true
+        type: number
+
+permissions:
+  actions: read
+  attestations: read
+  contents: write
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: owner-backend-evidence-${{ inputs.expected_main_sha }}
+  cancel-in-progress: false
+
+jobs:
+  assemble-evidence:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.actor == github.repository_owner &&
+      github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      RESOURCE_RUN_ID: ${{ inputs.resource_run_id }}
+      RESOURCE_RUN_ATTEMPT: ${{ inputs.resource_run_attempt }}
+      RECOVERY_RUN_ID: ${{ inputs.recovery_run_id }}
+      RECOVERY_RUN_ATTEMPT: ${{ inputs.recovery_run_attempt }}
+      EXPECTED_OWNER: ${{ github.repository_owner }}
+      DISPATCH_ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      GH_TOKEN: ${{ github.token }}
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.95.0"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12.13"
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+
+      - name: Install pinned evidence validation dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check \
+            pytest==8.4.2 \
+            -r scripts/benchmark/requirements.txt
+
+      - name: Bind this owner dispatch to exact current main
+        run: |
+          test "$EXPECTED_OWNER" = logannye
+          test "$DISPATCH_ACTOR" = "$EXPECTED_OWNER"
+          test "$TRIGGERING_ACTOR" = "$EXPECTED_OWNER"
+          test "$GITHUB_REF" = refs/heads/main
+          case "$EXPECTED_MAIN_SHA" in *[!0-9a-f]*|'') exit 1 ;; esac
+          test "${#EXPECTED_MAIN_SHA}" = 40
+          for value in "$RESOURCE_RUN_ID" "$RECOVERY_RUN_ID"; do
+            case "$value" in *[!0-9]*|'0'|'') exit 1 ;; esac
+          done
+          for value in "$RESOURCE_RUN_ATTEMPT" "$RECOVERY_RUN_ATTEMPT"; do
+            case "$value" in *[!0-9]*|'0'|'') exit 1 ;; esac
+          done
+          test "$GITHUB_SHA" = "$EXPECTED_MAIN_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_MAIN_SHA"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN_SHA"
+          test -z "$(git status --porcelain)"
+
+      - name: Materialize the reviewed Git executable
+        run: |
+          python3 scripts/ci/materialize_anchored_git.py \
+            --output "$RUNNER_TEMP/tinyzkp-anchored-git" \
+            --github-env "$GITHUB_ENV"
+
+      - name: Warm exact locked Rust dependencies for offline evidence commands
+        run: cargo fetch --locked
+
+      - name: Verify exact owner qualification runs and download artifacts by ID
+        run: |
+          verify_run() {
+            kind="$1"
+            run_id="$2"
+            run_attempt="$3"
+            workflow_path="$4"
+            artifact_name="$5"
+            archive="$6"
+            provenance="$7"
+            current="$RUNNER_TEMP/${kind}-current-run.json"
+            selected="$RUNNER_TEMP/${kind}-selected-attempt.json"
+            artifacts="$RUNNER_TEMP/${kind}-artifacts.json"
+
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" >"$current"
+            gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/attempts/$run_attempt" \
+              >"$selected"
+            for record in "$current" "$selected"; do
+              jq -e \
+                --arg repository "$GITHUB_REPOSITORY" \
+                --arg owner "$EXPECTED_OWNER" \
+                --arg path "$workflow_path" \
+                --arg sha "$EXPECTED_MAIN_SHA" \
+                --argjson id "$run_id" \
+                --argjson attempt "$run_attempt" \
+                '.id == $id
+                 and .run_attempt == $attempt
+                 and .repository.full_name == $repository
+                 and .head_repository.full_name == $repository
+                 and .path == $path
+                 and .event == "workflow_dispatch"
+                 and .head_branch == "main"
+                 and .head_sha == $sha
+                 and .status == "completed"
+                 and .conclusion == "success"
+                 and .actor.login == $owner
+                 and .triggering_actor.login == $owner' \
+                "$record"
+            done
+
+            started_at="$(jq -er .run_started_at "$selected")"
+            gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts?per_page=100" \
+              >"$artifacts"
+            artifact_id="$(jq -er \
+              --arg name "$artifact_name" \
+              --arg sha "$EXPECTED_MAIN_SHA" \
+              --arg started "$started_at" \
+              --argjson run "$run_id" \
+              '[.artifacts[]
+                | select(.name == $name
+                  and .expired == false
+                  and .size_in_bytes > 0
+                  and .workflow_run.id == $run
+                  and .workflow_run.head_sha == $sha
+                  and .created_at >= $started)]
+               | if length == 1 then .[0].id else error("one exact artifact required") end' \
+              "$artifacts")"
+            artifact_created_at="$(jq -er \
+              --argjson id "$artifact_id" \
+              '.artifacts[] | select(.id == $id) | .created_at' \
+              "$artifacts")"
+            archive_tmp="${archive}.tmp"
+            gh api \
+              "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" \
+              >"$archive_tmp"
+            test -s "$archive_tmp"
+            mv "$archive_tmp" "$archive"
+            archive_sha256="$(sha256sum "$archive" | cut -d' ' -f1)"
+            jq -n \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg path "$workflow_path" \
+              --arg sha "$EXPECTED_MAIN_SHA" \
+              --arg owner "$EXPECTED_OWNER" \
+              --arg started "$started_at" \
+              --arg artifact_name "$artifact_name" \
+              --arg artifact_created "$artifact_created_at" \
+              --arg archive_sha256 "$archive_sha256" \
+              --argjson run "$run_id" \
+              --argjson attempt "$run_attempt" \
+              --argjson artifact_id "$artifact_id" \
+              '{
+                schema_version: 1,
+                repository: $repository,
+                workflow_path: $path,
+                run_id: $run,
+                run_attempt: $attempt,
+                event: "workflow_dispatch",
+                head_branch: "main",
+                head_sha: $sha,
+                status: "completed",
+                conclusion: "success",
+                actor: $owner,
+                triggering_actor: $owner,
+                run_started_at: $started,
+                artifact: {
+                  id: $artifact_id,
+                  name: $artifact_name,
+                  created_at: $artifact_created,
+                  archive_sha256: $archive_sha256
+                }
+              }' >"$provenance"
+          }
+
+          verify_run \
+            resource \
+            "$RESOURCE_RUN_ID" \
+            "$RESOURCE_RUN_ATTEMPT" \
+            .github/workflows/benches.yml \
+            "plonky3-backend-release-matrix-$EXPECTED_MAIN_SHA" \
+            "$RUNNER_TEMP/resource-evidence.zip" \
+            "$RUNNER_TEMP/resource-provenance.json"
+          verify_run \
+            recovery \
+            "$RECOVERY_RUN_ID" \
+            "$RECOVERY_RUN_ATTEMPT" \
+            .github/workflows/nightly-backend.yml \
+            "plonky3-recovery-fuzz-$EXPECTED_MAIN_SHA" \
+            "$RUNNER_TEMP/recovery-evidence.zip" \
+            "$RUNNER_TEMP/recovery-provenance.json"
+
+      - name: Verify exact source attestations and closed checksum inventories
+        run: |
+          checksum_root="$RUNNER_TEMP/backend-source-checksums"
+          install -d -m 0700 "$checksum_root"
+          python3 scripts/release/extract_backend_qualification_manifests.py \
+            --resource-archive "$RUNNER_TEMP/resource-evidence.zip" \
+            --recovery-archive "$RUNNER_TEMP/recovery-evidence.zip" \
+            --resource-output "$checksum_root/qualification-SHA256SUMS" \
+            --recovery-output "$checksum_root/recovery-SHA256SUMS"
+          gh attestation verify "$checksum_root/qualification-SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow \
+              "github.com/$GITHUB_REPOSITORY/.github/workflows/benches.yml" \
+            --source-digest "$EXPECTED_MAIN_SHA" \
+            --source-ref refs/heads/main \
+            --deny-self-hosted-runners
+          gh attestation verify "$checksum_root/recovery-SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow \
+              "github.com/$GITHUB_REPOSITORY/.github/workflows/nightly-backend.yml" \
+            --source-digest "$EXPECTED_MAIN_SHA" \
+            --source-ref refs/heads/main \
+            --deny-self-hosted-runners
+
+      - name: Execute the six remaining source-bound gates
+        run: |
+          local_root="release/evidence/work/backend-v1-$EXPECTED_MAIN_SHA"
+          install -d -m 0700 "$local_root"
+          for gate in \
+            clean_release_source \
+            plonky3_dependency_profile_pinned \
+            official_verifier_fibonacci \
+            official_verifier_poseidon2 \
+            deterministic_cross_mode_proofs \
+            air_job_contracts
+          do
+            python3 scripts/release/run_evidenced_command.py \
+              --gate "$gate" \
+              --release-sha "$EXPECTED_MAIN_SHA" \
+              --report "$local_root/$gate.test-report.json" \
+              --log "$local_root/$gate.test.log"
+          done
+
+      - name: Assemble and semantically validate exact candidate evidence
+        run: |
+          candidate_root="release/evidence/backend-v1/$EXPECTED_MAIN_SHA"
+          candidate_input="release/evidence/work/backend-v1-candidate-input.json"
+          python3 scripts/release/assemble_backend_candidate.py \
+            --release-sha "$EXPECTED_MAIN_SHA" \
+            --resource-archive "$RUNNER_TEMP/resource-evidence.zip" \
+            --recovery-archive "$RUNNER_TEMP/recovery-evidence.zip" \
+            --resource-provenance "$RUNNER_TEMP/resource-provenance.json" \
+            --recovery-provenance "$RUNNER_TEMP/recovery-provenance.json" \
+            --local-root "release/evidence/work/backend-v1-$EXPECTED_MAIN_SHA" \
+            --output-root "$candidate_root" \
+            --output-input "$candidate_input"
+          python3 scripts/release/build_candidate_evidence.py build \
+            --input "$candidate_input" \
+            --output-evidence release/evidence/backend-v1-evidence.json \
+            --output-config release/backend-v1-gates.json
+
+      - name: Keyless-sign the exact assembled candidate and source-run bindings
+        run: |
+          provenance_root="release/evidence/backend-v1/$EXPECTED_MAIN_SHA/provenance"
+          assembly="$provenance_root/backend-candidate-assembly-v1.json"
+          bundle="$provenance_root/backend-candidate-assembly-v1.sigstore.json"
+          issued_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          python3 scripts/release/build_backend_assembly_provenance.py \
+            --release-sha "$EXPECTED_MAIN_SHA" \
+            --candidate-config release/backend-v1-gates.json \
+            --resource-provenance \
+              "$provenance_root/resource-qualification-run-v1.json" \
+            --recovery-provenance \
+              "$provenance_root/recovery-qualification-run-v1.json" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --actor "$DISPATCH_ACTOR" \
+            --triggering-actor "$TRIGGERING_ACTOR" \
+            --issued-at "$issued_at" \
+            --output "$assembly"
+          cosign sign-blob --yes --bundle "$bundle" "$assembly"
+          cosign verify-blob \
+            --bundle "$bundle" \
+            --certificate-identity \
+              'https://github.com/logannye/hc-stark/.github/workflows/assemble-backend-evidence.yml@refs/heads/main' \
+            --certificate-oidc-issuer \
+              'https://token.actions.githubusercontent.com' \
+            --certificate-github-workflow-sha "$EXPECTED_MAIN_SHA" \
+            --certificate-github-workflow-ref 'refs/heads/main' \
+            --certificate-github-workflow-repository 'logannye/hc-stark' \
+            --certificate-github-workflow-trigger 'workflow_dispatch' \
+            "$assembly"
+          python3 scripts/release/verify_backend_assembly.py \
+            --candidate-config release/backend-v1-gates.json \
+            --expected-release-sha "$EXPECTED_MAIN_SHA"
+
+      - name: Recheck candidate policy and assembly tooling
+        run: |
+          python3 scripts/ci/backend_prerelease_ready.py \
+            --config release/backend-v1-gates.json
+          python3 -m pytest -q \
+            scripts/release/test_assemble_backend_candidate.py \
+            scripts/release/test_build_backend_assembly_provenance.py \
+            scripts/release/test_verify_backend_assembly.py \
+            scripts/release/test_build_candidate_evidence.py \
+            scripts/release/test_run_evidenced_command.py \
+            scripts/ci/test_backend_prerelease_ready.py
+
+      - name: Require current main and an evidence-only change set
+        run: |
+          git fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_MAIN_SHA"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN_SHA"
+          status="$RUNNER_TEMP/evidence-status"
+          git status --porcelain --untracked-files=all >"$status"
+          test -s "$status"
+          while IFS= read -r line; do
+            path="${line#???}"
+            case "$path" in
+              release/backend-v1-gates.json|\
+              release/evidence/backend-v1-evidence.json|\
+              release/evidence/backend-v1/"$EXPECTED_MAIN_SHA"/*) ;;
+              *) echo "unexpected backend evidence change: $path" >&2; exit 1 ;;
+            esac
+          done <"$status"
+
+      - name: Verify, commit, and push the exact staged evidence
+        id: pull_request
+        run: |
+          branch="codex/evidence/backend-${EXPECTED_MAIN_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            release/backend-v1-gates.json \
+            release/evidence/backend-v1-evidence.json \
+            "release/evidence/backend-v1/$EXPECTED_MAIN_SHA"
+          git diff --cached --check
+          git diff --quiet
+          python3 scripts/ci/backend_prerelease_ready.py \
+            --config release/backend-v1-gates.json
+          git diff --quiet
+          git commit -m "Record qualified backend evidence $EXPECTED_MAIN_SHA"
+          evidence_commit="$(git rev-parse HEAD)"
+          git push --set-upstream origin "$branch"
+          compare_url="https://github.com/$GITHUB_REPOSITORY/compare/main...$branch?expand=1"
+          if pr_url="$(gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "Record qualified backend evidence ${EXPECTED_MAIN_SHA:0:12}" \
+            --body "Owner-dispatched evidence-only candidate for source commit \`$EXPECTED_MAIN_SHA\`. Resource run \`$RESOURCE_RUN_ID\` attempt \`$RESOURCE_RUN_ATTEMPT\`; recovery/fuzz run \`$RECOVERY_RUN_ID\` attempt \`$RECOVERY_RUN_ATTEMPT\`. The PR contains no external-review or adoption claim and does not merge itself.")"
+          then
+            created=true
+            destination="$pr_url"
+          else
+            created=false
+            destination="$compare_url"
+          fi
+          {
+            printf 'branch=%s\n' "$branch"
+            printf 'commit=%s\n' "$evidence_commit"
+            printf 'created=%s\n' "$created"
+            printf 'url=%s\n' "$destination"
+          } >>"$GITHUB_OUTPUT"
+          {
+            printf "Evidence branch: \`%s\`\n\n" "$branch"
+            printf "Evidence commit: \`%s\`\n\n" "$evidence_commit"
+            if test "$created" = true; then
+              printf 'Evidence PR: %s\n' "$destination"
+            else
+              printf 'Open the evidence PR: %s\n' "$destination"
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"

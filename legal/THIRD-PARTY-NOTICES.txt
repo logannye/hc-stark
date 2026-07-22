@@ -1,0 +1,10 @@
+UNRESOLVED RELEASE-BLOCKING PLACEHOLDER
+
+The final TinyZKP Guard third-party notices must be generated from the locked
+Rust dependency graph, exact TinyZKP engine revision, bundled engine license,
+and final OCI package inventory. Required license texts and copyright notices
+must be preserved.
+
+The launch validator intentionally rejects this file while any unresolved or
+placeholder marker remains. The final bytes must be copied unchanged into the
+private Guard repository before candidate authorization.

@@ -73,9 +73,10 @@ The bounded path implements near-square four-step transforms, streamed trace and
 quotient generation, scratch-backed MMCS, bounded interpolation/opening
 reduction, and durable FRI. Small Fibonacci and Poseidon2 tests require exact
 proof-byte equality with the conventional Plonky3 prover and acceptance by the
-unmodified verifier. Production remains blocked because fixed-host 1M/16M
-resource evidence, independent reviews, and a design-partner integration have
-not yet passed their machine gates.
+unmodified verifier. Scoped production publication is authorized by
+release-bound automated evidence; independent reviews, design-partner
+integration, and larger-capacity runs are advisory inputs rather than
+publication gates.
 
 Input MMCS leaves are hashed from contiguous source blocks and permuted into
 Plonky3's bit-reversed commitment order with two within-group reversals around
@@ -96,19 +97,21 @@ serialized in canonical row order so thread count cannot change proof bytes.
 
 ## Evidence cadence
 
-The fixed-host workflow is manual and runs during a scheduled quarterly
-qualification day. It covers both 1,048,576-row workloads and the
-16,777,216-row ceiling matrix for a release candidate. Before proving, it
-requires exactly eight logical CPUs, 16-GB-class RAM, non-rotational NVMe with
-at least 500 GB available, and a runner-owned mode-0700 scratch root.
+The owner-dispatched qualification workflow runs on an ephemeral
+`ubuntu-24.04` GitHub-hosted runner. It covers both 1,048,576-row workloads and
+the 16,777,216-row Fibonacci ceiling for the exact current `main` commit.
+Before proving, it requires four effective CPUs, 15--17 GiB effective RAM,
+non-rotational storage with at least 12,000,000,000 scratch bytes available,
+and a runner-owned mode-0700 scratch root. Poseidon2 at 16,777,216 rows is a
+post-GA capacity expansion and cannot satisfy the scoped production matrix.
 An opt-in 134,217,728-row run is exploratory and can never satisfy or bypass a
 release gate. Every run gets a unique owner-only scratch directory and a
 normalized manifest; release validation hashes that manifest and proves that
 only `scratch_dir` differs from the source workload manifest. A random
 `benchmark_session_id` binds the baseline and bounded subprocesses to one
 harness invocation. Typed CPU-count, physical-memory, block-device,
-rotational, and NVMe facts are captured in every report. Release evidence is
-accepted only for the 8-vCPU/16-GB/NVMe host class, and baseline/candidate host
+rotational and storage-class facts are captured in every report. Release evidence is
+accepted only for the four-CPU/16-GiB hosted-runner class, and baseline/candidate host
 facts must match exactly. Root-run fixed-host workflows always return the
 owner-only raw reports to the workflow account before validation/upload.
 `peak_rss_bytes` uses the worker's Linux `VmHWM` after official verification,

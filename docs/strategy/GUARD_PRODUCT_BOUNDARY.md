@@ -42,20 +42,24 @@ The public site and release tooling must not claim zero-knowledge privacy,
 O(sqrt T) production storage, arbitrary Plonky3 compatibility, or uniqueness.
 Performance claims require a signed release evidence bundle.
 
-## Launch gates
+## Owner-attested launch gates
 
-Public checkout remains disabled until all of the following are real:
+Public checkout remains fail-closed until strict, signed evidence establishes:
 
-1. Engine correctness, resource, recovery, independent reproduction, specialist
-   review, implementation review, and external workload gates pass.
-2. Three external workloads from at least two organizations use one standard
-   adapter without customer-specific source changes.
-3. Five unaided installations complete the documented journey, with four
-   reaching an officially verified proof within 60 minutes.
-4. Counsel supplies the legal seller facts and approves the commercial terms.
-5. Merchant-of-record sandbox and live purchase/cancel/refund tests pass.
-6. Two organizations purchase the ordinary annual product without a custom
-   contract.
+1. Automated engine verifier, determinism, resource, recovery, fuzz,
+   provenance, SBOM, signature, CLI, and OCI checks.
+2. Private Guard qualification and publication of the exact no-rebuild signed
+   candidate.
+3. LN Holdings owner approval of exact seller facts, Terms, Privacy, Refund
+   Policy, EULA, and third-party notices bound by digest.
+4. The complete Lemon Squeezy sandbox lifecycle and an owner inspection of the
+   exact live variants, prices, checkout rendering, portal, and license settings.
+5. Resolution of legacy obligations; immediate shutdown of hosted writes,
+   jobs, and credentials; retained records; and static `410/noindex` legacy
+   hosts.
+6. Technical build, deploy, artifact-identity, and rollback rehearsal.
 
-If integration repeatedly takes more than four engineering hours per customer,
-the product is not self-service and must not be launched as passive revenue.
+Independent reproduction, specialist and implementation reviews, a design
+partner integration, three external workloads, two customers, and five unaided
+installs are transparent `advisory_status` metrics. The first release records
+all seven as `not_completed`; they neither authorize nor block checkout.

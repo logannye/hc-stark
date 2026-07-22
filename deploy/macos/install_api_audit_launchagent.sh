@@ -18,14 +18,12 @@ if [ "$REPO_ROOT" != "$expected" ]; then
 fi
 
 mkdir -p "$HOME/Library/LaunchAgents" "$ENV_DIR" "$LOG_DIR" "$RUNTIME_DIR"
-if [ ! -f "$ENV_FILE" ]; then
-    printf '%s\n' 'TINYZKP_AUDIT_MODE=containment' > "$ENV_FILE"
-fi
+python3 "$REPO_ROOT/scripts/monitoring/migrate_audit_env.py" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
 cp "$REPO_ROOT/scripts/monitoring/api_health_audit.sh" "$RUNTIME_DIR/api_health_audit.sh"
-cp "$REPO_ROOT/scripts/monitoring/containment_health_audit.py" "$RUNTIME_DIR/containment_health_audit.py"
+cp "$REPO_ROOT/scripts/monitoring/guard_health_audit.py" "$RUNTIME_DIR/guard_health_audit.py"
 cp "$REPO_ROOT/scripts/monitoring/run_api_health_audit.sh" "$RUNTIME_DIR/run_api_health_audit.sh"
 chmod 700 "$RUNTIME_DIR"/*.sh "$RUNTIME_DIR"/*.py
 cp "$SOURCE_PLIST" "$TARGET_PLIST"

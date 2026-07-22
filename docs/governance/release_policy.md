@@ -12,8 +12,8 @@ The authoritative operating documents are:
 - `docs/strategy/GUARD_PRODUCT_BOUNDARY.md` for product and compatibility scope;
 - `docs/runbooks/release_provenance.md` for build, candidate, promotion, and
   withdrawal controls; and
-- `docs/validation/FOUNDING_VALIDATION_PROTOCOL.md` for the one-time founding
-  validation program.
+- `docs/validation/FOUNDING_VALIDATION_PROTOCOL.md` for transparent advisory
+  adoption metrics that do not authorize or block checkout.
 
 ## Active release surfaces
 
@@ -24,7 +24,7 @@ Every pull request must identify the surfaces it changes.
 | Public contracts and engine | `tinyzkp-contracts`, `hc-stream`, `hc-plonky3`, `hc-cli`, schemas, proof bytes | A supported job changes meaning, a proof stops verifying, or resource/recovery claims become false |
 | Guard package | Private supervisor, activation, release channel, OCI package | Commercial code changes proof semantics, leaks data, or accepts the wrong release |
 | Site, legal, and commerce | `site/`, legal documents, pricing, Lemon Squeezy catalog | A buyer sees an unsupported claim, wrong price, or checkout without a qualified release |
-| Release evidence and operations | `release/`, qualification, signing, promotion, retirement | Evidence is forged, stale, rebuilt after review, or published without independent approval |
+| Release evidence and operations | `release/`, qualification, signing, promotion, retirement | Evidence is forged, stale, rebuilt after review, or published without owner authorization |
 
 The legacy API, MCP, Stripe usage billing, account database, worker fleet, and
 SDK package trains may be changed only for containment, export, retention, or
@@ -34,8 +34,8 @@ decommissioning. They cannot authorize a product launch.
 
 | Class | Use | Required gates |
 |---|---|---|
-| `proof_critical` | Engine, verifier, compatibility, proof, checkpoint, or resource behavior changes | Complete engine and Guard qualification, independent reproduction and review, clean-machine journeys, immutable publication |
-| `guard_package_only` | Guard behavior changes while the exact engine and profile remain unchanged | Guard/package/activation/OCI checks plus two complete clean-machine journeys |
+| `proof_critical` | Engine, verifier, compatibility, proof, checkpoint, or resource behavior changes | Complete automated engine and Guard qualification, signed provenance, and immutable publication |
+| `guard_package_only` | Guard behavior changes while the exact engine and profile remain unchanged | Guard/package/activation/OCI checks and signed provenance |
 | `site_legal_pricing` | Site, legal, or catalog changes with unchanged software identity | Static-site contracts, exact legal digests, merchant lifecycle, deploy plan, and rollback rehearsal |
 
 The first generally available release is `proof_critical`.
@@ -78,20 +78,21 @@ The first generally available release is `proof_critical`.
 1. Protect `main`, trust, signing, evaluation, candidate, release-index,
    promotion, preview, and production environments as described in the release
    provenance runbook.
-2. Require an independent reviewer for trust, signing, candidate authorization,
-   and promotion; prevent self-review.
+2. Restrict launch evidence to the repository owner's main-only OIDC workflow,
+   exact protected trust digests, and strict typed evidence envelopes.
 3. Build the engine and Guard candidate once. Record source SHAs, checksums,
    signatures, OCI digests, schemas, SBOM, provenance, attestations, legal
    digests, and merchant catalog.
-4. Keep commerce `live_hidden` while ordinary founding purchases and
-   clean-machine journeys run. Public TinyZKP.com checkout remains closed.
+4. Keep commerce `live_hidden` while the signed candidate, live merchant
+   configuration, decommission state, and rollback target are verified. Public
+   TinyZKP.com checkout remains closed.
 5. Promotion verifies and publishes the reviewed draft bytes without rebuilding
    or resigning them.
 6. A later evidence-only change may derive `public_live`; a local scorecard or
    workflow artifact cannot enable checkout.
 
 Source-controlled trust-policy digests are insufficient by themselves. The
-same exact digests must be independently protected in GitHub environments.
+same exact digests must be protected in owner-controlled GitHub environments.
 Secrets, private signing keys, customer data, license keys, or payment data
 must never be committed.
 
@@ -108,10 +109,11 @@ python3 -m pytest scripts/ci scripts/release -q
 git diff --check
 ```
 
-The release workflows add Linux x86-64 qualification, independent evidence,
-artifact inventory, signatures, OCI identity, SBOM, provenance, legal and
-merchant lifecycle, clean-machine, static-site, deployment, and rollback
-checks. Local or macOS results are development evidence only.
+The release workflows add Linux x86-64 qualification, verifier, determinism,
+resource, recovery, fuzz, artifact inventory, signature, OCI/CLI identity,
+SBOM, provenance, owner-approved legal-digest, merchant lifecycle, static-site,
+deployment, and rollback checks. External reviews and adoption metrics remain
+visible as `not_completed` advisory status and do not satisfy a technical gate.
 
 ## Rollback, withdrawal, and sales freeze
 
@@ -124,8 +126,9 @@ checks. Local or macOS results are development evidence only.
   proof-data, or high/critical security failures.
 - Already activated releases cannot be remotely disabled. Incident response
   must state that limitation explicitly.
-- Retired `api`, `mcp`, and `webhook` hostnames return static `410 Gone` for at
-  least 90 days after obligations and retention requirements are resolved.
+- Retired `api`, `mcp`, and `webhook` hostnames switch immediately to static
+  `410 Gone` plus `X-Robots-Tag: noindex` after writes, jobs, and credentials are
+  disabled. Keep that edge for 90 days of post-launch monitoring before removal.
 
 ## Changelog policy
 

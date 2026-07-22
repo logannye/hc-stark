@@ -186,10 +186,12 @@ def test_finalization_binds_source_commit_without_requiring_sha_self_reference(
     checksums = tmp_path / "SHA256SUMS"
     signature = tmp_path / "signature.json"
     identity_report = tmp_path / "engine-identity.json"
+    runtime_smoke = tmp_path / "engine-runtime-smoke.json"
     sbom.write_text("{}")
     checksums.write_text("placeholder")
     signature.write_text("{}")
     identity_report.write_text("{}")
+    runtime_smoke.write_text("{}")
     cosign = tmp_path / "cosign"
     cosign.write_text("#!/bin/sh\nexit 0\n")
     cosign.chmod(0o700)
@@ -215,10 +217,12 @@ def test_finalization_binds_source_commit_without_requiring_sha_self_reference(
         root=tmp_path,
         candidate_config_path=config_path,
         release_sha=release_sha,
+        release_ref="backend-v0.1.0",
         sbom=sbom,
         checksums=checksums,
         signature=signature,
         identity_report=identity_report,
+        runtime_smoke=runtime_smoke,
         output_evidence=tmp_path / "final-evidence.json",
         output_config=tmp_path / "final-config.json",
         cosign=str(cosign),
@@ -231,8 +235,31 @@ def test_finalization_binds_source_commit_without_requiring_sha_self_reference(
     assert signed["source_tree_sha256"] == source_tree_sha256
     assert signed["release_tree_sha256"] == source_tree_sha256
     assert signed["evidence_only_delta_verified"] is True
+    assert signed["release_ref"] == "backend-v0.1.0"
+    assert signed["signer_identity"] == module.sigstore_identity("backend-v0.1.0")
+    assert signed["signer_workflow_sha"] == release_sha
+    assert signed["signer_workflow_ref"] == "refs/tags/backend-v0.1.0"
+    assert signed["signer_workflow_repository"] == "logannye/hc-stark"
+    assert signed["signer_workflow_trigger"] == "workflow_dispatch"
+    command = signed["verification_command"]
+    assert command[command.index("--certificate-github-workflow-sha") + 1] == release_sha
+    assert command[command.index("--certificate-github-workflow-ref") + 1] == (
+        "refs/tags/backend-v0.1.0"
+    )
+    assert command[command.index("--certificate-github-workflow-repository") + 1] == (
+        "logannye/hc-stark"
+    )
+    assert command[command.index("--certificate-github-workflow-trigger") + 1] == (
+        "workflow_dispatch"
+    )
     identity_gate = evidence["gates"][module.prerelease.IDENTITY_GATE]
     assert identity_gate["metadata"]["identities"] == {
         "engine_cli": release_sha,
         "engine_oci": release_sha,
+    }
+    assert identity_gate["metadata"]["cli_smoke"] is True
+    assert identity_gate["metadata"]["oci_smoke"] is True
+    assert {item["role"] for item in identity_gate["artifacts"]} == {
+        "identity_report",
+        "runtime_smoke",
     }

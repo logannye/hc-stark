@@ -76,6 +76,14 @@ jobs:
             --output "$RUNNER_TEMP/tinyzkp-anchored-git" \
             --github-env "$GITHUB_ENV"
 
+      - name: Require a signed owner assembly whenever candidate evidence exists
+        run: |
+          if jq -e '.status == "candidate"' release/backend-v1-gates.json >/dev/null
+          then
+            python3 scripts/ci/backend_prerelease_ready.py \
+              --config release/backend-v1-gates.json
+          fi
+
       - name: Release evidence and launch-gate tests
         run: |
           python3 -m pytest \
@@ -87,6 +95,8 @@ jobs:
             scripts/ci/test_profile_expansion_demand_gate.py \
             scripts/ci/test_backend_release_ready.py \
             scripts/ci/test_backend_prerelease_ready.py \
+            scripts/ci/test_verify_guard_candidate.py \
+            scripts/ci/test_owner_launch_evidence_workflow.py \
             scripts/ci/test_launch_gate_audit.py \
             scripts/ci/test_release_distribution_contract.py \
             scripts/ci/test_materialize_anchored_git.py \
@@ -94,6 +104,8 @@ jobs:
             scripts/ci/test_strict_json.py \
             scripts/ci/test_check_pinned_actions.py \
             scripts/release/test_build_candidate_evidence.py \
+            scripts/release/test_build_backend_assembly_provenance.py \
+            scripts/release/test_verify_backend_assembly.py \
             scripts/release/test_build_engine_identity_report.py \
             scripts/release/test_finalize_signed_evidence.py \
             scripts/release/test_build_review_bundle.py \
@@ -102,6 +114,13 @@ jobs:
             scripts/release/test_run_evidenced_command.py \
             scripts/release/test_run_crash_matrix.py \
             scripts/release/test_run_fuzz_smoke.py -q
+          python3 -m pytest \
+            scripts/release/test_build_guard_owner_evidence.py \
+            scripts/ci/test_containment_health_audit.py \
+            scripts/monitoring/test_guard_health_audit.py \
+            scripts/deploy/test_static_site_canary.py \
+            scripts/deploy/test_cloudflare_pages_release.py -q
+          npm --prefix deploy/uptime-probe test
           # These repository-derived digests validate source consistency only;
           # protected production trust roots are evaluated in deploy-site.yml.
           python3 scripts/ci/guard_launch_gate.py \
@@ -136,6 +155,7 @@ jobs:
             scripts/ci/test_site_asset_manifest.py -q
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs
+          node scripts/ci/site_shared_checkout_test.mjs
 
       - name: Guard and static-site production preflight
         run: |

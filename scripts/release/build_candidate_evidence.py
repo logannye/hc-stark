@@ -29,15 +29,17 @@ CRASH_CASES = tuple(f"checkpoint_{phase}" for phase in final_gate.CRASH_PHASES) 
 FUZZ_TARGETS = tuple(sorted(final_gate.FUZZ_TARGETS))
 
 
-def resource_roles(*, baseline: bool) -> list[str]:
+def resource_roles(*, baseline: bool, workloads: tuple[str, ...] = WORKLOADS) -> list[str]:
     suffixes = ["manifest", "candidate_report", "candidate_normalized_manifest"]
     if baseline:
         suffixes.extend(("baseline_report", "baseline_normalized_manifest"))
-    return [f"{workload}_{suffix}" for workload in WORKLOADS for suffix in suffixes]
+    return [f"{workload}_{suffix}" for workload in workloads for suffix in suffixes]
 
 
 ONE_MILLION_WORKLOAD_ROLES = resource_roles(baseline=True)
-TEN_MILLION_WORKLOAD_ROLES = resource_roles(baseline=False)
+TEN_MILLION_WORKLOAD_ROLES = resource_roles(
+    baseline=False, workloads=("fibonacci",)
+)
 ONE_MILLION_ROLES = [RESOURCE_MATRIX_ROLE, *ONE_MILLION_WORKLOAD_ROLES]
 TEN_MILLION_ROLES = [RESOURCE_MATRIX_ROLE, *TEN_MILLION_WORKLOAD_ROLES]
 GATE_ROLES = {
@@ -48,12 +50,6 @@ GATE_ROLES = {
     "deterministic_cross_mode_proofs": ["test_report", "test_log"],
     "one_million_row_resource_gate": ONE_MILLION_ROLES,
     "ten_million_row_resource_gate": TEN_MILLION_ROLES,
-    "independent_resource_reproduction": [
-        "reproduction_record",
-        "reproduction_signature",
-        *[f"one_million_{role}" for role in ONE_MILLION_WORKLOAD_ROLES],
-        *[f"ten_million_{role}" for role in TEN_MILLION_WORKLOAD_ROLES],
-    ],
     "crash_resume_and_corruption_suite": [
         "crash_matrix",
         "fuzz_smoke",
@@ -61,24 +57,6 @@ GATE_ROLES = {
         "fuzz_tool_identity",
         *(f"crash_log_{name}" for name in CRASH_CASES),
         *(f"fuzz_log_{name}" for name in FUZZ_TARGETS),
-    ],
-    "plonky3_specialist_review": [
-        "review_bundle",
-        "review_report",
-        "remediation_ledger",
-        "review_signature",
-    ],
-    "implementation_review_no_high_findings": [
-        "review_bundle",
-        "review_report",
-        "remediation_ledger",
-        "review_signature",
-    ],
-    "external_design_partner_integration": [
-        "adapter_result",
-        "resource_report",
-        "acceptance_record",
-        "partner_signature",
     ],
     "air_job_contracts": ["test_report", "test_log"],
 }
@@ -147,37 +125,6 @@ def gate_metadata(name: str, release_sha: str) -> dict[str, object]:
         return metadata
     if name == "crash_resume_and_corruption_suite":
         return {"release_sha": release_sha, "exit_status": 0}
-    if name == "plonky3_specialist_review":
-        return {
-            "reviewer": "REPLACE_WITH_REVIEWER",
-            "completed_at": "REPLACE_WITH_RFC3339_TIME",
-            "signer_id": "REPLACE_WITH_ALLOWLISTED_SIGNER_ID",
-            "review_scope": "plonky3_specialist",
-        }
-    if name == "implementation_review_no_high_findings":
-        return {
-            "reviewer": "REPLACE_WITH_REVIEWER",
-            "completed_at": "REPLACE_WITH_RFC3339_TIME",
-            "signer_id": "REPLACE_WITH_ALLOWLISTED_SIGNER_ID",
-            "review_scope": "implementation",
-        }
-    if name == "independent_resource_reproduction":
-        return {
-            "release_sha": release_sha,
-            "independent": True,
-            "reproducer": "REPLACE_WITH_REPRODUCER",
-            "organization": "REPLACE_WITH_ORGANIZATION",
-            "completed_at": "REPLACE_WITH_RFC3339_TIME",
-            "signer_id": "REPLACE_WITH_ALLOWLISTED_SIGNER_ID",
-        }
-    if name == "external_design_partner_integration":
-        return {
-            "partner_acceptance_id": "REPLACE_WITH_OPAQUE_ACCEPTANCE_ID",
-            "official_verification": True,
-            "witness_data_committed": False,
-            "bounded_and_conventional": True,
-            "signer_id": "REPLACE_WITH_ALLOWLISTED_SIGNER_ID",
-        }
     return {}
 
 
@@ -241,81 +188,6 @@ def hashed_artifact(root: Path, raw: object) -> dict[str, object]:
     }
 
 
-def verify_review_execution_coverage(
-    gates: dict[str, object], *, root: Path, release_sha: str
-) -> None:
-    def artifacts(gate_name: str) -> dict[str, dict[str, object]]:
-        gate = gates[gate_name]
-        assert isinstance(gate, dict)
-        return {
-            str(item["role"]): item
-            for item in gate["artifacts"]
-            if isinstance(item, dict)
-        }
-
-    review_bundles = []
-    for gate_name in (
-        "plonky3_specialist_review",
-        "implementation_review_no_high_findings",
-    ):
-        descriptor = artifacts(gate_name).get("review_bundle")
-        if descriptor is None:
-            raise ValueError(f"{gate_name}: review bundle is missing")
-        review_bundles.append(descriptor)
-    if review_bundles[0]["sha256"] != review_bundles[1]["sha256"]:
-        raise ValueError("external reviews did not use the same complete review bundle")
-    bundle = safe_existing_file(root, review_bundles[0]["path"])
-    manifest, _ = final_gate.build_review_bundle.verify_bundle(
-        bundle, root=root, release_sha=release_sha
-    )
-    observed = {
-        (item.get("evidence_category"), item.get("evidence_role")): item.get(
-            "source_sha256"
-        )
-        for item in manifest["files"]
-        if isinstance(item, dict) and item.get("origin") == "artifact"
-    }
-    expected: dict[tuple[str, str], str] = {}
-    one = artifacts("one_million_row_resource_gate")
-    ten = artifacts("ten_million_row_resource_gate")
-    if (
-        one[RESOURCE_MATRIX_ROLE]["sha256"]
-        != ten[RESOURCE_MATRIX_ROLE]["sha256"]
-    ):
-        raise ValueError("resource gates do not share one fixed-host matrix manifest")
-    expected[("raw-reports", "fixed_host_matrix_manifest")] = str(
-        one[RESOURCE_MATRIX_ROLE]["sha256"]
-    )
-    for workload in ("fibonacci", "poseidon2"):
-        for mode in ("baseline", "candidate"):
-            role = f"{workload}_{mode}_report"
-            expected[("raw-reports", f"one_million_{role}")] = str(
-                one[role]["sha256"]
-            )
-        role = f"{workload}_candidate_report"
-        expected[("raw-reports", f"ten_million_{role}")] = str(
-            ten[role]["sha256"]
-        )
-    known = artifacts("deterministic_cross_mode_proofs")
-    expected[("known-answers", "known_answer_test_report")] = str(
-        known["test_report"]["sha256"]
-    )
-    expected[("known-answers", "known_answer_test_log")] = str(
-        known["test_log"]["sha256"]
-    )
-    crash = artifacts("crash_resume_and_corruption_suite")
-    for role, descriptor in crash.items():
-        if role.startswith("crash_"):
-            expected[("crash", role)] = str(descriptor["sha256"])
-        elif role.startswith("fuzz_"):
-            expected[("fuzz", role)] = str(descriptor["sha256"])
-    for key, digest in expected.items():
-        if observed.get(key) != digest:
-            raise ValueError(
-                f"review bundle does not contain exact candidate evidence: {key[0]}/{key[1]}"
-            )
-
-
 def construct_evidence(
     source: dict[str, object],
     *,
@@ -367,7 +239,6 @@ def construct_evidence(
         "source_tree_sha256": source_tree_identity.source_tree_sha256(root, release_sha),
         "gates": gates,
     }
-    verify_review_execution_coverage(gates, root=root, release_sha=release_sha)
     problems = prerelease.evidence_failures(evidence, root=root)
     if problems:
         raise ValueError("candidate evidence failed validation: " + "; ".join(problems))
@@ -429,7 +300,7 @@ def build(args: argparse.Namespace) -> None:
     }
     write_json_atomic(output_evidence, evidence)
     write_json_atomic(output_config, config)
-    problems = prerelease.failures(config, root=root)
+    problems = prerelease.candidate_content_failures(config, root=root)
     if problems:
         output_evidence.unlink(missing_ok=True)
         output_config.unlink(missing_ok=True)

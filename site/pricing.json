@@ -3,7 +3,7 @@
   "checkout_enabled": false,
   "commerce_state": "unconfigured",
   "currency": "USD",
-  "effective_date": "2026-07-18",
+  "effective_date": null,
   "hosted_proving": false,
   "launch_gate": "release/guard-launch-state-v2.json",
   "launch_state": "blocked",

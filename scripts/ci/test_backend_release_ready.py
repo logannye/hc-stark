@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 import os
@@ -13,21 +14,8 @@ def trusted_external_and_tool_fixtures(monkeypatch):
     monkeypatch.setattr(gate, "verify_external_signature", lambda *args, **kwargs: [])
     monkeypatch.setattr(
         gate.evidence_runtime,
-        "toolchain_anchor",
-        lambda *args, **kwargs: {
-            "cargo_sha256": "c" * 64,
-            "rustc_sha256": "d" * 64,
-        },
-    )
-    monkeypatch.setattr(
-        gate.evidence_runtime,
-        "gate_tool_anchors",
-        lambda *args, **kwargs: {},
-    )
-    monkeypatch.setattr(
-        gate.evidence_runtime,
-        "cargo_fuzz_anchor",
-        lambda *args, **kwargs: "e" * 64,
+        "owner_ga_tool_policy",
+        lambda *args, **kwargs: {"policy": "owner_only_ga_v1"},
     )
 
     def fixture_bundle(path, *, root, release_sha):
@@ -146,6 +134,14 @@ def test_final_gate_rebinds_review_bundle_to_exact_candidate_artifacts(
     )
 
 
+def test_final_gate_fails_closed_when_signed_candidate_assembly_is_missing(tmp_path):
+    problems = gate.validate_candidate_assembly_signature(
+        {"source_release_sha": "a" * 40}, root=tmp_path
+    )
+    assert len(problems) == 1
+    assert problems[0].startswith("signed candidate assembly is invalid:")
+
+
 def source_release_sha():
     return subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=gate.ROOT, text=True
@@ -156,14 +152,20 @@ def resource_matrix_fixture(tmp_path):
     release_sha = "a" * 40
     source_digest = "b" * 64
     stable_host = {
-        "hardware": "fixed-host; logical_cpus=8",
-        "logical_cpu_count": 8,
-        "total_memory_bytes": 16 * 1024**3,
-        "operating_system": "Linux-fixed",
-        "storage_device": "259:1:nvme0n1p1",
+        "hardware": "github-hosted; logical_cpus=4",
+        "physical_logical_cpu_count": 4,
+        "physical_memory_bytes": 16 * 1024**3,
+        "effective_cpu_count": 4,
+        "effective_cpu_affinity": list(range(4)),
+        "effective_memory_max_bytes": 16 * 1024**3,
+        "effective_swap_max_bytes": 0,
+        "cgroup_v2_path": "/actions_job",
+        "operating_system": "Linux-github-hosted",
+        "storage_device": "8:1:sda1",
+        "effective_storage_device": "8:1:sda1",
         "storage_is_rotational": False,
-        "storage_is_nvme": True,
-        "storage_total_bytes": 1_000_000_000_000,
+        "storage_is_nvme": False,
+        "storage_total_bytes": 14_000_000_000,
     }
     gates = {
         "one_million_row_resource_gate": {"artifacts": []},
@@ -259,6 +261,7 @@ def resource_matrix_fixture(tmp_path):
         "source_tree_sha256": source_digest,
         "profile": "tinyzkp-p3-goldilocks-v1",
         "plonky3_version": "0.6.1",
+        "qualification_profile": gate.RESOURCE_QUALIFICATION_PROFILE,
         "source_root": str(tmp_path),
         "cli_path": str(tmp_path / "hc-cli"),
         "cli_sha256": "d" * 64,
@@ -277,7 +280,7 @@ def resource_matrix_fixture(tmp_path):
         "cgroup_parent": str(tmp_path / "cgroup"),
         "created_at": "2026-07-10T00:00:00+00:00",
         "updated_at": "2026-07-10T01:00:00+00:00",
-        "status": "local_matrix_complete_external_gates_pending",
+        "status": "local_matrix_complete_release_assembly_pending",
         "fixed_host_evidence_eligible": True,
         "stable_host_identity": stable_host,
         "local_matrix_gates_passed": True,
@@ -287,13 +290,7 @@ def resource_matrix_fixture(tmp_path):
             "may_provision_or_mutate_infrastructure": False,
             "may_publish_or_upload_evidence": False,
         },
-        "external_gates": {
-            "independent_reproduction": "required_external",
-            "plonky3_specialist_review": "required_external",
-            "implementation_review": "required_external",
-            "design_partner_acceptance": "required_external",
-            "signed_release_assembly": "required_external",
-        },
+        "external_gates": {"signed_release_assembly": "required_postbuild"},
         "entries": entries,
         "last_error": None,
         "completed_at": "2026-07-10T01:00:00+00:00",
@@ -337,14 +334,14 @@ def test_resource_matrix_binds_exact_first_party_evidence_and_denies_authority(
     assert "fixed-host matrix completion or source identity is invalid" in failures
 
     matrix["release_eligible"] = False
-    matrix["external_gates"]["independent_reproduction"] = "satisfied"
+    matrix["external_gates"]["signed_release_assembly"] = "satisfied"
     persist()
     failures = gate.validate_resource_matrix_binding(
         gates, release_sha, source_digest, root=tmp_path
     )
-    assert "fixed-host matrix may not satisfy external gates" in failures
+    assert "fixed-host matrix pending release steps are invalid" in failures
 
-    matrix["external_gates"]["independent_reproduction"] = "required_external"
+    matrix["external_gates"]["signed_release_assembly"] = "required_postbuild"
     matrix["entries"][0]["artifacts"][0]["sha256"] = "f" * 64
     persist()
     failures = gate.validate_resource_matrix_binding(
@@ -725,14 +722,26 @@ def test_signed_release_metadata_is_bound_to_release(tmp_path):
                     "verify-blob",
                     "--bundle",
                     "signature",
-                    "--certificate-identity-regexp",
-                    gate.SIGSTORE_IDENTITY_REGEXP,
+                    "--certificate-identity",
+                    gate.sigstore_identity("backend-v0.1.0"),
                     "--certificate-oidc-issuer",
                     gate.SIGSTORE_ISSUER,
+                    "--certificate-github-workflow-sha",
+                    "different",
+                    "--certificate-github-workflow-ref",
+                    "refs/tags/backend-v0.1.0",
+                    "--certificate-github-workflow-repository",
+                    gate.SIGSTORE_REPOSITORY,
+                    "--certificate-github-workflow-trigger",
+                    gate.SIGSTORE_TRIGGER,
                     "checksums",
                 ],
-                "signer_identity_regexp": gate.SIGSTORE_IDENTITY_REGEXP,
+                "signer_identity": gate.sigstore_identity("backend-v0.1.0"),
                 "signer_oidc_issuer": gate.SIGSTORE_ISSUER,
+                "signer_workflow_sha": "different",
+                "signer_workflow_ref": "refs/tags/backend-v0.1.0",
+                "signer_workflow_repository": gate.SIGSTORE_REPOSITORY,
+                "signer_workflow_trigger": gate.SIGSTORE_TRIGGER,
                 "checksum_entries": len(gate.SIGNED_RELEASE_CHECKSUM_NAMES),
             },
             "artifacts": artifacts,
@@ -743,6 +752,168 @@ def test_signed_release_metadata_is_bound_to_release(tmp_path):
     assert failures == [
         "signed_release_sbom_and_checksums: signed SBOM/checksum evidence is incomplete"
     ]
+
+
+def test_signed_release_requires_exact_source_workflow_certificate_claims(tmp_path):
+    release_sha = "a" * 40
+    for name in gate.SIGNED_RELEASE_CHECKSUM_NAMES:
+        (tmp_path / name).write_bytes((name + "\n").encode())
+    checksums = tmp_path / "SHA256SUMS"
+    checksums.write_text(
+        "".join(
+            f"{hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()}  {name}\n"
+            for name in sorted(gate.SIGNED_RELEASE_CHECKSUM_NAMES)
+        ),
+        encoding="utf-8",
+    )
+    signature = tmp_path / "SHA256SUMS.sigstore.json"
+    signature.write_text("{}\n", encoding="utf-8")
+    artifacts = [
+        {
+            "role": role,
+            "path": path.name,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+        for role, path in (
+            ("sbom", tmp_path / "tinyzkp-engine.spdx.json"),
+            ("checksums", checksums),
+            ("signature", signature),
+        )
+    ]
+    release_ref = "backend-v0.1.0"
+    workflow_ref = f"refs/tags/{release_ref}"
+    metadata = {
+        "release_sha": release_sha,
+        "release_ref": release_ref,
+        "source_release_sha": "b" * 40,
+        "source_tree_sha256": "c" * 64,
+        "release_tree_sha256": "c" * 64,
+        "evidence_only_delta_verified": True,
+        "evidence_delta_paths": ["release/backend-v1-gates.json"],
+        "signatures_verified": True,
+        "signer_identity": gate.sigstore_identity(release_ref),
+        "signer_oidc_issuer": gate.SIGSTORE_ISSUER,
+        "signer_workflow_sha": release_sha,
+        "signer_workflow_ref": workflow_ref,
+        "signer_workflow_repository": gate.SIGSTORE_REPOSITORY,
+        "signer_workflow_trigger": gate.SIGSTORE_TRIGGER,
+        "verification_command": [
+            "cosign",
+            "verify-blob",
+            "--bundle",
+            signature.name,
+            "--certificate-identity",
+            gate.sigstore_identity(release_ref),
+            "--certificate-oidc-issuer",
+            gate.SIGSTORE_ISSUER,
+            "--certificate-github-workflow-sha",
+            release_sha,
+            "--certificate-github-workflow-ref",
+            workflow_ref,
+            "--certificate-github-workflow-repository",
+            gate.SIGSTORE_REPOSITORY,
+            "--certificate-github-workflow-trigger",
+            gate.SIGSTORE_TRIGGER,
+            checksums.name,
+        ],
+        "checksum_entries": len(gate.SIGNED_RELEASE_CHECKSUM_NAMES),
+    }
+
+    def validate(candidate):
+        return gate.validate_gate(
+            "signed_release_sbom_and_checksums",
+            {"kind": "signed_release", "metadata": candidate, "artifacts": artifacts},
+            root=tmp_path,
+            release_sha=release_sha,
+        )
+
+    assert validate(metadata) == []
+    for field in (
+        "signer_identity",
+        "signer_workflow_sha",
+        "signer_workflow_ref",
+        "signer_workflow_repository",
+        "signer_workflow_trigger",
+    ):
+        tampered = copy.deepcopy(metadata)
+        tampered[field] = "tampered"
+        assert validate(tampered) == [
+            "signed_release_sbom_and_checksums: signed SBOM/checksum evidence is incomplete"
+        ]
+
+    tampered = copy.deepcopy(metadata)
+    sha_index = tampered["verification_command"].index(
+        "--certificate-github-workflow-sha"
+    ) + 1
+    tampered["verification_command"][sha_index] = "d" * 40
+    assert validate(tampered) == [
+        "signed_release_sbom_and_checksums: signed SBOM/checksum evidence is incomplete"
+    ]
+
+
+def test_postbuild_binding_rejects_signature_and_engine_tag_skew(
+    tmp_path, monkeypatch
+):
+    identity = tmp_path / "engine-identity.json"
+    runtime = tmp_path / "engine-runtime-smoke.json"
+    checksums = tmp_path / "SHA256SUMS"
+    write_json(identity, {"release_ref": "backend-v0.1.0"})
+    write_json(runtime, {})
+    checksums.write_text("placeholder\n", encoding="utf-8")
+
+    def descriptor(role, path):
+        return {
+            "role": role,
+            "path": path.name,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+
+    gates = {
+        "engine_cli_oci_identity_match": {
+            "metadata": {},
+            "artifacts": [
+                descriptor("identity_report", identity),
+                descriptor("runtime_smoke", runtime),
+            ],
+        },
+        "signed_release_sbom_and_checksums": {
+            "metadata": {"release_ref": "backend-v0.1.1"},
+            "artifacts": [descriptor("checksums", checksums)],
+        },
+    }
+    monkeypatch.setattr(
+        gate, "validate_identity_checksum_binding", lambda *_args, **_kwargs: []
+    )
+    assert gate.validate_postbuild_bindings(gates, root=tmp_path) == [
+        "post-build engine tag identity is release-skewed"
+    ]
+    gates["signed_release_sbom_and_checksums"]["metadata"]["release_ref"] = (
+        "backend-v0.1.0"
+    )
+    assert gate.validate_postbuild_bindings(gates, root=tmp_path) == []
+
+
+def test_fresh_workflow_checksum_output_is_the_exact_release_inventory(tmp_path):
+    for name in gate.SIGNED_RELEASE_CHECKSUM_NAMES:
+        (tmp_path / name).write_bytes((name + "\n").encode())
+    checksums = tmp_path / "SHA256SUMS"
+    checksums.write_text(
+        "".join(
+            f"{hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()}  {name}\n"
+            for name in sorted(gate.SIGNED_RELEASE_CHECKSUM_NAMES)
+        ),
+        encoding="utf-8",
+    )
+    inventory = gate.checksum_inventory(checksums)
+    assert inventory is not None
+    assert set(inventory) == gate.SIGNED_RELEASE_CHECKSUM_NAMES
+
+    first = sorted(gate.SIGNED_RELEASE_CHECKSUM_NAMES)[0]
+    checksums.write_text(
+        checksums.read_text().replace(f"  {first}\n", f"  ./{first}\n", 1),
+        encoding="utf-8",
+    )
+    assert gate.checksum_inventory(checksums) is None
 
 
 def test_identity_gate_requires_typed_report_and_matching_metadata(tmp_path):
@@ -774,33 +945,136 @@ def test_identity_gate_requires_typed_report_and_matching_metadata(tmp_path):
                     "artifact_sha256": "c" * 64,
                     "manifest_digest": "sha256:" + "d" * 64,
                     "config_digest": "sha256:" + "e" * 64,
-                        "platform": "linux/amd64",
-                        "entrypoint": ["/usr/local/bin/tinyzkp-engine"],
-                        "embedded_engine_sha256": "a" * 64,
-                    },
+                    "platform": "linux/amd64",
+                    "entrypoint": ["/usr/local/bin/tinyzkp-engine"],
+                    "embedded_engine_sha256": "a" * 64,
+                },
             },
             "compatibility": {
                 "artifact": "release-artifacts/plonky3-compatibility-v1.json",
                 "artifact_sha256": "f" * 64,
                 "profile_id": "tinyzkp-p3-goldilocks-v1",
                 "plonky3_version": "0.6.1",
-                "release_status": "reviewed",
+                "release_status": "production_scoped_ga",
             },
         },
     )
-    artifacts = [(report, {"role": "identity_report"})]
+    release_identity = {
+        "service": "cli",
+        "package_version": "0.1.0",
+        "release_sha": release_sha,
+        "release_ref": "backend-v1.0.0",
+        "backend": "plonky3",
+        "plonky3_version": "0.6.1",
+        "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
+        "dependency_lock_sha256": "1" * 64,
+    }
+    canonical_digest = hashlib.sha256(
+        json.dumps(
+            release_identity, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+        ).encode()
+    ).hexdigest()
+    runtime_smoke = tmp_path / "engine-runtime-smoke.json"
+    write_json(
+        runtime_smoke,
+        {
+            "schema_version": 1,
+            "status": "pass",
+            "release_sha": release_sha,
+            "release_ref": "backend-v1.0.0",
+            "checked_at": "2026-01-01T00:00:00Z",
+            "claims": {"cli_smoke": True, "oci_smoke": True},
+            "artifacts": {
+                "engine_cli": {
+                    "path": "release-artifacts/tinyzkp-engine-linux-x86_64",
+                    "sha256": "a" * 64,
+                },
+                "engine_oci": {
+                    "path": "release-artifacts/tinyzkp-engine.oci.tar",
+                    "sha256": "c" * 64,
+                    "manifest_digest": "sha256:" + "d" * 64,
+                    "config_digest": "sha256:" + "e" * 64,
+                    "runtime_image_id": "sha256:" + "e" * 64,
+                },
+                "engine_release": {
+                    "path": "release-artifacts/engine-release.json",
+                    "sha256": "b" * 64,
+                },
+            },
+            "release_identity": release_identity,
+            "executions": {
+                surface: {
+                    "command": ["release"],
+                    "stdout_sha256": "b" * 64,
+                    "canonical_release_sha256": canonical_digest,
+                }
+                for surface in ("engine_cli", "engine_oci")
+            },
+            "runtime_policy": {
+                "image_source_transport": "oci-archive",
+                "image_destination_transport": "docker-daemon",
+                "docker_host": "unix:///var/run/docker.sock",
+                "pull_policy": "never",
+                "network_mode": "none",
+                "user": "10001:10001",
+                "read_only_rootfs": True,
+                "privileged": False,
+                "cap_drop": ["ALL"],
+                "security_opt": ["no-new-privileges"],
+                "host_binds": [],
+                "devices": [],
+                "memory_bytes": 256 * 1024 * 1024,
+                "nano_cpus": 1_000_000_000,
+                "pids_limit": 64,
+                "tmpfs": {
+                    path: {
+                        "bytes": 16 * 1024 * 1024,
+                        "exec": False,
+                        "mode": "0700",
+                        "nodev": True,
+                        "nosuid": True,
+                        "uid": 10001,
+                        "gid": 10001,
+                    }
+                    for path in ("/scratch", "/work")
+                },
+            },
+            "binding": {
+                "cli_matches_engine_release_bytes": True,
+                "oci_matches_engine_release_bytes": True,
+                "cli_matches_oci_semantics": True,
+                "oci_embeds_cli_binary": True,
+                "oci_runtime_policy_inspected": True,
+            },
+        },
+    )
+    artifacts = [
+        (report, {"role": "identity_report"}),
+        (runtime_smoke, {"role": "runtime_smoke"}),
+    ]
+    metadata = {
+        "identities": identities,
+        "cli_smoke": True,
+        "oci_smoke": True,
+    }
     assert (
-        gate.validate_identity_evidence(
-            artifacts, {"identities": identities}, release_sha
-        )
+        gate.validate_identity_evidence(artifacts, metadata, release_sha)
         == []
     )
 
     skewed = identities.copy()
     skewed["engine_cli"] = "old"
+    skewed_metadata = {**metadata, "identities": skewed}
     assert gate.validate_identity_evidence(
-        artifacts, {"identities": skewed}, release_sha
+        artifacts, skewed_metadata, release_sha
     ) == ["release identity metadata does not match the machine report"]
+
+    smoke_value = json.loads(runtime_smoke.read_text())
+    smoke_value["runtime_policy"]["network_mode"] = "bridge"
+    write_json(runtime_smoke, smoke_value)
+    assert gate.validate_identity_evidence(artifacts, metadata, release_sha) == [
+        "engine runtime smoke report is incomplete or release-skewed"
+    ]
 
 
 def test_identity_gate_is_bound_to_signed_artifact_digests(tmp_path):
@@ -809,6 +1083,7 @@ def test_identity_gate_is_bound_to_signed_artifact_digests(tmp_path):
         "engine-release.json": b"release",
         "tinyzkp-engine.oci.tar": b"oci",
         "plonky3-compatibility-v1.json": b"compatibility",
+        "engine-runtime-smoke.json": b"runtime-smoke",
     }
     digests = {}
     for name, payload in artifacts.items():
@@ -842,7 +1117,9 @@ def test_identity_gate_is_bound_to_signed_artifact_digests(tmp_path):
         "".join(f"{digest}  {name}\n" for name, digest in sorted(digests.items())),
         encoding="utf-8",
     )
-    assert gate.validate_identity_checksum_binding(report, checksums) == []
+    assert gate.validate_identity_checksum_binding(
+        report, checksums, tmp_path / "engine-runtime-smoke.json"
+    ) == []
 
     (tmp_path / "tinyzkp-engine.oci.tar").write_bytes(b"mutated")
     assert gate.validate_identity_checksum_binding(report, checksums) == [
@@ -853,6 +1130,12 @@ def test_identity_gate_is_bound_to_signed_artifact_digests(tmp_path):
 @pytest.mark.parametrize(
     ("gate_id", "test_name", "profile", "require_release_profile"),
     [
+        (
+            "plonky3_dependency_profile_pinned",
+            None,
+            "ci",
+            False,
+        ),
         (
             "official_verifier_fibonacci",
             "fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier",
@@ -873,8 +1156,13 @@ def test_evidenced_command_binds_release_command_profile_and_log(
     release_sha = source_release_sha()
     spec = gate.run_evidenced_command.GATES[gate_id]
     log = tmp_path / "test.log"
-    log.write_bytes(exact_test_log(test_name))
+    if test_name is None:
+        log.write_bytes(b"PASS Plonky3 compatibility gate (12 exact crates)\n")
+    else:
+        log.write_bytes(exact_test_log(test_name))
     command = spec["command"]
+    primary = command[0]
+    primary_path = f"/tool/{primary}"
     environment = gate.evidence_runtime.environment_policy()
     report = tmp_path / "test-report.json"
     write_json(
@@ -895,7 +1183,7 @@ def test_evidenced_command_binds_release_command_profile_and_log(
             "gate": gate_id,
             "execution_profile": profile,
             "logical_command": command,
-            "actual_command": ["/tool/cargo", *command[1:]],
+            "actual_command": [primary_path, *command[1:]],
             "descriptor_execution": True,
             "output_parser": spec["parser"],
             "parsed_result": gate.run_evidenced_command.parse_output(
@@ -923,18 +1211,28 @@ def test_evidenced_command_binds_release_command_profile_and_log(
             "network_boundary": None,
             "immutable_file_count": 1,
             "gate_inputs": {},
-            "tools": {
-                "cargo": {
-                    "path": "/tool/cargo",
-                    "sha256": "c" * 64,
-                    "version": runtime_identity(release_sha)["cargo_identity"]["version"],
-                },
-                "rustc": {
-                    "path": "/tool/rustc",
-                    "sha256": "d" * 64,
-                    "version": runtime_identity(release_sha)["rustc_identity"]["version"],
-                },
-            },
+            "tools": (
+                {
+                    "python3": {
+                        "path": primary_path,
+                        "sha256": "b" * 64,
+                        "version": "Python 3.12.13",
+                    }
+                }
+                if primary == "python3"
+                else {
+                    "cargo": {
+                        "path": "/tool/cargo",
+                        "sha256": "c" * 64,
+                        "version": runtime_identity(release_sha)["cargo_identity"]["version"],
+                    },
+                    "rustc": {
+                        "path": "/tool/rustc",
+                        "sha256": "d" * 64,
+                        "version": runtime_identity(release_sha)["rustc_identity"]["version"],
+                    },
+                }
+            ),
         },
     )
     artifacts = [
@@ -1034,7 +1332,7 @@ def test_review_risk_acceptance_cannot_waive_a_high_finding(tmp_path):
     assert "review evidence is incomplete, bundle-skewed, or release-skewed" in failures
 
 
-def test_manual_passed_boolean_and_unresolved_high_finding_fail(tmp_path):
+def test_manual_passed_boolean_fails_for_required_technical_gates(tmp_path):
     report = tmp_path / "review.json"
     digest = write_json(report, {"report": "review"})
     bundle = tmp_path / "review.zip"
@@ -1141,10 +1439,6 @@ def test_manual_passed_boolean_and_unresolved_high_finding_fail(tmp_path):
     assert any(
         "manual passed booleans are forbidden" in problem for problem in problems
     )
-    assert any(
-        "critical/high review finding remains unresolved" in problem
-        for problem in problems
-    )
 
 
 def test_resource_gate_requires_hashed_normalized_manifest_artifacts(tmp_path):
@@ -1177,7 +1471,7 @@ def test_independent_reproduction_requires_typed_record(tmp_path):
     )
     assert "independent reproduction record is incomplete or release-skewed" in failures
     assert "one_million: fibonacci fixed-host evidence is missing" in failures
-    assert "ten_million: poseidon2 fixed-host evidence is missing" in failures
+    assert "ten_million: fibonacci fixed-host evidence is missing" in failures
 
 
 def test_crash_matrix_requires_every_phase_disk_full_and_release_identity(tmp_path):

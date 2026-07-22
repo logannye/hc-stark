@@ -43,12 +43,53 @@ wrangler secret put ALERT_WEBHOOK_TOKEN
 wrangler deploy
 ```
 
-The tracked Worker defaults to `AUDIT_MODE=guard_prelaunch`. The supported
-contracts are:
+For production, use the owner-dispatched
+`.github/workflows/deploy-uptime-probe.yml` from the exact current `main`
+commit. Its protected `tinyzkp-monitoring-production` environment requires:
+
+- secret `CLOUDFLARE_MONITORING_API_TOKEN`, separate from the Pages token and
+  limited to account-level **Workers Scripts: Edit** for deploying this Worker;
+  it does not receive Pages Write, DNS Write, or account-administration scope;
+- variable `CLOUDFLARE_ACCOUNT_ID`, reusing the existing non-secret account ID;
+- variables `TINYZKP_UPTIME_PROBE_URL` and `TINYZKP_UPTIME_PROBE_HOST`. The URL
+  must equal exactly `https://<host>/` with no userinfo, port, query, or fragment;
+  the host must be the assigned `*.workers.dev` hostname or
+  `uptime.tinyzkp.com`;
+- preconfigured Worker secrets `ALERT_WEBHOOK_URL` and
+  `ALERT_WEBHOOK_TOKEN`.
+
+The workflow is main-only, owner-dispatched, commit-bound, tests before deploy,
+and requires the deployed probe to resolve the same canonical mode published by
+the site. Do not reuse the account-scoped Pages Write token: that credential is
+deliberately unable to deploy Workers.
+
+This monitoring environment and its least-privilege token are owner setup
+inputs. Until they are configured and this workflow succeeds, external
+off-device launch monitoring remains an explicit production blocker.
+
+The tracked Worker defaults to the fail-closed `AUDIT_MODE=guard_prelaunch`.
+The active Guard contracts are:
 
 - `guard_prelaunch`: Guard marketing and evaluation are public, checkout and
-  release artifacts remain blocked, and legacy recovery services are still
-  contained.
+  release artifacts remain blocked, and the legacy hosts still return their
+  expected `200` recovery responses.
+- `guard_transition`: every legacy API, MCP, and webhook probe must return
+  `410` with `X-Robots-Tag: noindex`; owner-qualified commerce is configured
+  as `live_hidden`, but checkout remains closed and the only release blocker
+  is publication of the already-built Guard artifact.
+- `guard_live`: the legacy hosts remain `410/noindex`, the published launch
+  and commerce contracts are owner-qualified, Guard `0.1.0` is available,
+  checkout is live, monthly and annual hosted checkout links are distinct,
+  and the generic unsigned store billing portal is configured. The probe
+  validates links and metadata without creating a purchase.
+- `guard_frozen`: the legacy hosts remain `410/noindex`, every checkout URL is
+  removed, and the exact generic billing portal plus already licensed Guard
+  artifacts, signed release index, and anonymous OCI digests remain reachable.
+  Use this only for the owner-signed emergency sales freeze; it is not a
+  rollback to the hosted service.
+
+Rollback-only contracts are:
+
 - `containment`: the earlier backend-recovery site and service contract.
 - `public_beta`: the retired hosted-beta activation contract, retained only for
   rollback compatibility.
@@ -63,9 +104,17 @@ Verify it works by hitting the deployed worker URL in a browser — it runs the 
 Notes:
 - Alerts use the authenticated relay in `deploy/cloudflare/alert-relay`, which sends only to the account-verified `logan@galenhealth.org` destination through Cloudflare Email Service. It does not revive the retired MailChannels path.
 - Adjust the cadence in `wrangler.toml` (`crons`). `*/2 * * * *` = every 2 minutes (UTC).
+- After merging this launch change in the canonical checkout, rerun
+  `deploy/macos/install_api_audit_launchagent.sh`, then verify
+  `launchctl print gui/$(id -u)/com.tinyzkp.api-audit` names the copied
+  `guard_health_audit.py` runtime and reports a successful run. The Mac audit
+  is defense in depth; the Worker remains the off-device production monitor.
 - The Worker probes the same surfaces as Option A, including content markers
   that catch fallback pages, stale schema deploys, and accidental re-enablement.
-  Switch the target contract only as an explicit activation transaction.
+  Switch `guard_prelaunch` → `guard_transition` → `guard_live` only as an
+  explicit activation transaction. `guard_live` → `guard_frozen` is the
+  owner-signed emergency stop that preserves customer fulfillment. Revert to
+  `guard_prelaunch` only if the pre-GA transition deployment is rolled back.
 
 ---
 

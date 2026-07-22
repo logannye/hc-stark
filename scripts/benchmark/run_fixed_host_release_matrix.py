@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Run the complete local TinyZKP backend-v1 fixed-host resource matrix.
 
-This controller is intentionally local-only. It does not provision a host,
-upload evidence, satisfy independent reproduction, or approve a release. A
-successful run means only that all four *local* resource gates passed on one
-eligible fixed host for one immutable source/CLI identity.
+This controller runs on one ephemeral GitHub-hosted Linux VM. It does not
+provision production infrastructure, publish evidence, or approve a release.
+A successful run means only that all three scoped resource gates passed for
+one immutable source/CLI identity and the frozen hosted-runner profile.
 
 The matrix is resumable at workload boundaries. Completed entries are skipped
 only after every recorded artifact digest and the release-gate semantics have
@@ -38,9 +38,34 @@ import source_tree_identity  # noqa: E402
 
 PROFILE = "tinyzkp-p3-goldilocks-v1"
 PLONKY3_VERSION = "0.6.1"
-BASELINE_MEMORY_CAP = 16 * 1024**3
+BASELINE_MEMORY_CAP = 6 * 1024**3
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MATRIX_KIND = "tinyzkp_fixed_host_release_matrix_v1"
+QUALIFICATION_PROFILE = {
+    "runner": "github-hosted-public-ubuntu-24.04",
+    "effective_cpu_count": 4,
+    "minimum_physical_memory_bytes": 15 * 1024**3,
+    "maximum_effective_memory_bytes": 17 * 1024**3,
+    "minimum_available_scratch_bytes": 12_000_000_000,
+    "storage_rotational": False,
+    "workload_estimates": {
+        "fibonacci_1m": {
+            "bounded_peak_resident_bytes": 75_497_472,
+            "bounded_scratch_high_water_bytes": 536_975_026,
+            "conventional_peak_resident_bytes": 587_202_560,
+        },
+        "poseidon2_1m": {
+            "bounded_peak_resident_bytes": 385_875_968,
+            "bounded_scratch_high_water_bytes": 10_569_876_514,
+            "conventional_peak_resident_bytes": 5_100_273_664,
+        },
+        "fibonacci_16m": {
+            "bounded_peak_resident_bytes": 545_259_520,
+            "bounded_scratch_high_water_bytes": 8_590_055_346,
+            "conventional_peak_resident_bytes": 8_891_924_480,
+        },
+    },
+}
 
 
 def _load_module(name: str, path: Path):
@@ -71,6 +96,7 @@ class MatrixEntry:
     gate: str
     report_name: str
     scratch_relative: str
+    scratch_cap_bytes: int
 
     @property
     def manifest_path(self) -> Path:
@@ -88,6 +114,7 @@ MATRIX: tuple[MatrixEntry, ...] = (
         "one-million",
         "fibonacci-1m.json",
         "fibonacci-1m",
+        1_000_000_000,
     ),
     MatrixEntry(
         "poseidon2_1m",
@@ -99,6 +126,7 @@ MATRIX: tuple[MatrixEntry, ...] = (
         "one-million",
         "poseidon2-1m.json",
         "poseidon2-1m",
+        12_000_000_000,
     ),
     MatrixEntry(
         "fibonacci_16m",
@@ -110,17 +138,7 @@ MATRIX: tuple[MatrixEntry, ...] = (
         "ten-million",
         "fibonacci-16m.json",
         "fibonacci-16m",
-    ),
-    MatrixEntry(
-        "poseidon2_16m",
-        "poseidon2_goldilocks",
-        16_777_216,
-        2 * 1024**3,
-        "examples/plonky3/poseidon2-16m.json",
-        "ceiling",
-        "ten-million",
-        "poseidon2-16m.json",
-        "poseidon2-16m",
+        10_000_000_000,
     ),
 )
 
@@ -471,7 +489,7 @@ def validate_matrix_manifest(entry: MatrixEntry, scratch_root: Path) -> dict[str
     expected_policy = {
         "mode": "scratch",
         "max_resident_bytes": entry.resident_cap_bytes,
-        "max_threads": 8,
+        "max_threads": 4,
         "checkpoint_policy": "retain_on_failure",
     }
     for field, wanted in expected_policy.items():
@@ -483,8 +501,10 @@ def validate_matrix_manifest(entry: MatrixEntry, scratch_root: Path) -> dict[str
             f"{entry.entry_id} scratch path must be {expected_scratch(entry, scratch_root)}"
         )
     scratch_cap = policy.get("max_scratch_bytes")
-    if not isinstance(scratch_cap, int) or isinstance(scratch_cap, bool) or scratch_cap < 500_000_000_000:
-        raise ValueError(f"{entry.entry_id} scratch cap must be at least 500 GB")
+    if scratch_cap != entry.scratch_cap_bytes:
+        raise ValueError(
+            f"{entry.entry_id} scratch cap must equal {entry.scratch_cap_bytes}"
+        )
     return manifest
 
 
@@ -663,6 +683,25 @@ def validate_entry_gate(entry: MatrixEntry, output_dir: Path, release_sha: str) 
         str(baseline.get("normalized_manifest_path", ""))
     ).resolve() != paths["baseline_manifest"].resolve():
         raise ValueError(f"{entry.entry_id} baseline normalized manifest path mismatch")
+    expected_estimates = QUALIFICATION_PROFILE["workload_estimates"][entry.entry_id]
+    candidate_estimate = candidate.get("preflight_estimate")
+    if (
+        not isinstance(candidate_estimate, dict)
+        or candidate_estimate.get("peak_resident_bytes")
+        != expected_estimates["bounded_peak_resident_bytes"]
+        or candidate_estimate.get("scratch_high_water_bytes")
+        != expected_estimates["bounded_scratch_high_water_bytes"]
+    ):
+        raise ValueError(f"{entry.entry_id} bounded estimator identity changed")
+    if baseline is not None:
+        baseline_estimate = baseline.get("preflight_estimate")
+        if (
+            not isinstance(baseline_estimate, dict)
+            or baseline_estimate.get("peak_resident_bytes")
+            != expected_estimates["conventional_peak_resident_bytes"]
+            or baseline_estimate.get("scratch_high_water_bytes") != 1
+        ):
+            raise ValueError(f"{entry.entry_id} conventional estimator identity changed")
     failures = GATE.validate_gate(
         entry.gate,
         manifest,
@@ -711,6 +750,7 @@ def new_state(
         "source_tree_sha256": source_tree_sha256,
         "profile": PROFILE,
         "plonky3_version": PLONKY3_VERSION,
+        "qualification_profile": QUALIFICATION_PROFILE,
         "source_root": str(ROOT),
         "cli_path": str(cli),
         "cli_sha256": sha256_file(cli),
@@ -730,13 +770,7 @@ def new_state(
             "may_provision_or_mutate_infrastructure": False,
             "may_publish_or_upload_evidence": False,
         },
-        "external_gates": {
-            "independent_reproduction": "required_external",
-            "plonky3_specialist_review": "required_external",
-            "implementation_review": "required_external",
-            "design_partner_acceptance": "required_external",
-            "signed_release_assembly": "required_external",
-        },
+        "external_gates": {"signed_release_assembly": "required_postbuild"},
         "entries": entries,
         "last_error": None,
         "completed_at": None,
@@ -760,6 +794,7 @@ def validate_loaded_state(
         "source_tree_sha256": source_tree_sha256,
         "profile": PROFILE,
         "plonky3_version": PLONKY3_VERSION,
+        "qualification_profile": QUALIFICATION_PROFILE,
         "source_root": str(ROOT),
         "cli_path": str(cli),
         "cli_sha256": sha256_file(cli),
@@ -775,10 +810,8 @@ def validate_loaded_state(
     if not isinstance(authority, dict) or any(value is not False for value in authority.values()):
         raise ValueError("matrix state overstates its release or infrastructure authority")
     external = state.get("external_gates")
-    if not isinstance(external, dict) or any(
-        value != "required_external" for value in external.values()
-    ):
-        raise ValueError("matrix state may not satisfy external release gates")
+    if external != {"signed_release_assembly": "required_postbuild"}:
+        raise ValueError("matrix state pending release steps are invalid")
     entries = state.get("entries")
     if not isinstance(entries, list) or len(entries) != len(MATRIX):
         raise ValueError("matrix state entries are malformed")
@@ -800,7 +833,7 @@ def entry_state(state: dict[str, object], entry: MatrixEntry) -> dict[str, objec
 
 def persist_state(path: Path, state: dict[str, object], uid: int, gid: int) -> None:
     state["updated_at"] = utc_now()
-    # This controller can never satisfy the independent/external gates.
+    # This controller cannot assemble and sign release artifacts.
     state["release_eligible"] = False
     write_owner_json(path, state, uid, gid)
 
@@ -925,7 +958,7 @@ def build_benchmark_command(
         str(cli),
         "--cgroup-parent",
         str(cgroup_parent),
-        "--require-fixed-host",
+        "--require-qualification-profile",
     ]
     if entry.mode == "throughput":
         command.extend(["--baseline-memory-cap", str(BASELINE_MEMORY_CAP)])
@@ -1056,7 +1089,7 @@ def execute(args: argparse.Namespace) -> int:
                     persist_state(state_path, state, uid, gid)
                     raise
 
-            state["status"] = "local_matrix_complete_external_gates_pending"
+            state["status"] = "local_matrix_complete_release_assembly_pending"
             state["local_matrix_gates_passed"] = True
             state["release_eligible"] = False
             state["completed_at"] = utc_now()
@@ -1068,7 +1101,7 @@ def execute(args: argparse.Namespace) -> int:
                         "local_matrix_gates_passed": True,
                         "release_eligible": False,
                         "state_manifest": str(state_path),
-                        "next_gate": "independent external reproduction",
+                        "next_gate": "signed release assembly",
                     },
                     indent=2,
                     sort_keys=True,

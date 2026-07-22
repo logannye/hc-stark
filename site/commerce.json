@@ -1,5 +1,11 @@
 {
+  "agreement": null,
+  "authorization_policy": "owner_only_ga_v1",
   "canonical_launch_gate": "release/guard-launch-state-v2.json",
+  "checkout_custom_data": {
+    "guard_version": null,
+    "terms_version": null
+  },
   "checkout_enabled": false,
   "commerce_state": "unconfigured",
   "configuration_source": "GuardLaunchEvidenceV2",
@@ -28,14 +34,18 @@
   },
   "product_id": null,
   "provider": "lemon_squeezy",
+  "qualification_basis": "owner_attested",
   "reason_anchors": {
     "launch": "/releases#launch-blockers",
     "portal": "/support#merchant-portal",
     "sales": "/pricing#sales-status"
   },
+  "receipt_download_url": null,
   "sales_state": "closed",
   "schema_version": 2,
+  "store_hostname": null,
   "store_id": null,
+  "support": null,
   "variants": {
     "annual": {
       "checkout_url": null,

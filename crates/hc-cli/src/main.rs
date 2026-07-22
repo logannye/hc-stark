@@ -57,6 +57,12 @@ enum Commands {
         #[arg(long)]
         output: PathBuf,
     },
+    /// Internal read-only resource estimator for the Linux qualification harness.
+    #[command(hide = true)]
+    BenchmarkEstimate {
+        #[arg(long)]
+        manifest: PathBuf,
+    },
     /// Offline legacy reproduction, available only in an explicit research build.
     #[cfg(feature = "legacy-research")]
     LegacyResearch {
@@ -340,6 +346,9 @@ fn run() -> Result<u8> {
             mode,
             output,
         } => commands::plonky3::benchmark_worker(&manifest, &mode, &output).map(|()| 0),
+        Commands::BenchmarkEstimate { manifest } => {
+            commands::plonky3::benchmark_estimate(&manifest).map(|()| 0)
+        }
         #[cfg(feature = "legacy-research")]
         Commands::LegacyResearch { command } => run_legacy(command).map(|()| 0),
     }

@@ -1,0 +1,86 @@
+name: Deploy owner-controlled TinyZKP uptime probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Exact reviewed lowercase 40-hex current main commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tinyzkp-uptime-probe-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.actor == github.repository_owner &&
+      github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-24.04
+    environment: tinyzkp-monitoring-production
+    env:
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      EXPECTED_OWNER: ${{ github.repository_owner }}
+      DISPATCH_ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      UPTIME_PROBE_URL: ${{ vars.TINYZKP_UPTIME_PROBE_URL }}
+      UPTIME_PROBE_HOST: ${{ vars.TINYZKP_UPTIME_PROBE_HOST }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - name: Bind owner dispatch to exact current main
+        run: |
+          case "$EXPECTED_MAIN_SHA" in
+            *[!0-9a-f]*|'') exit 1 ;;
+          esac
+          test "${#EXPECTED_MAIN_SHA}" = 40
+          test "$GITHUB_SHA" = "$EXPECTED_MAIN_SHA"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN_SHA"
+          test "$DISPATCH_ACTOR" = "$EXPECTED_OWNER"
+          test "$TRIGGERING_ACTOR" = "$EXPECTED_OWNER"
+          test -z "$(git status --porcelain)"
+      - name: Validate the exact Worker before deployment
+        run: |
+          node --check deploy/uptime-probe/worker.js
+          npm --prefix deploy/uptime-probe test
+          grep -Fq 'AUDIT_MODE = "canonical"' deploy/uptime-probe/wrangler.toml
+      - name: Deploy with the monitoring-only Cloudflare credential
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_MONITORING_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config deploy/uptime-probe/wrangler.toml
+      - name: Prove the deployed probe follows the canonical release channel
+        run: |
+          node - "$UPTIME_PROBE_URL" "$UPTIME_PROBE_HOST" <<'NODE'
+          const [urlValue, expectedHost] = process.argv.slice(2);
+          if (!/^[a-z0-9.-]+$/.test(expectedHost || "") || expectedHost.startsWith(".") || expectedHost.endsWith(".")) process.exit(1);
+          const url = new URL(urlValue);
+          const approvedHost = url.hostname === expectedHost &&
+            (expectedHost === "uptime.tinyzkp.com" || expectedHost.endsWith(".workers.dev"));
+          if (!approvedHost || url.protocol !== "https:" || url.port || url.username || url.password ||
+              url.pathname !== "/" || url.search || url.hash || urlValue !== `https://${expectedHost}/`) process.exit(1);
+          NODE
+          expected_mode="$(curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            --max-redirs 0 https://tinyzkp.com/release-channels-v1.json |
+            jq -er .current_channel)"
+          result="$RUNNER_TEMP/uptime-probe-result.json"
+          status="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+            --max-redirs 0 --output "$result" --write-out '%{http_code}' \
+            "$UPTIME_PROBE_URL")"
+          test "$status" = 200
+          # shellcheck disable=SC2016
+          jq -e --arg mode "$expected_mode" \
+            '.ok == true and .mode == $mode and (.results | length > 0)' \
+            "$result" >/dev/null
+          printf 'Deployed uptime probe for %s from %s.\n' \
+            "$expected_mode" "$EXPECTED_MAIN_SHA" >> "$GITHUB_STEP_SUMMARY"

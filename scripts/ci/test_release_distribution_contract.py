@@ -71,11 +71,122 @@ def test_signed_release_inventory_is_exactly_engine_and_evidence():
         "backend-v1-gates.json",
         "engine-identity.json",
         "engine-release.json",
+        "engine-runtime-smoke.json",
         "plonky3-compatibility-v1.json",
         "tinyzkp-engine.spdx.json",
         "tinyzkp-engine-linux-x86_64",
         "tinyzkp-engine.oci.tar",
     }
+    workflow = text(".github/workflows/release-backend.yml")
+    assert "-printf '%f\\0'" in workflow
+    assert "LC_ALL=C sort -z | xargs -0 sha256sum" in workflow
+
+
+def test_engine_release_executes_confined_runtime_smoke_before_signing():
+    workflow = text(".github/workflows/release-backend.yml")
+    assert "sudo apt-get install --yes --no-install-recommends skopeo" in workflow
+    assert "scripts/release/smoke_engine_release_artifacts.py" in workflow
+    assert "--runtime-smoke release-artifacts/engine-runtime-smoke.json" in workflow
+    assert workflow.index("smoke_engine_release_artifacts.py") < workflow.index(
+        "Create checksums"
+    )
+
+
+def test_engine_candidate_gate_installs_anchored_cosign_before_prerelease():
+    workflow = text(".github/workflows/release-backend.yml")
+    candidate = workflow.split("  signed-artifacts:", 1)[0]
+    installer = (
+        "sigstore/cosign-installer@"
+        "f713795cb21599bc4e5c4b58cbad1da852d7eeb9"
+    )
+    assert installer in candidate
+    assert "cosign-release: v2.4.3" in candidate
+    assert candidate.index(installer) < candidate.index("backend_prerelease_ready.py")
+
+
+def test_engine_release_is_owner_dispatched_from_exact_current_main_in_protected_jobs():
+    workflow = text(".github/workflows/release-backend.yml")
+    trigger = workflow.split("permissions:", 1)[0]
+    assert "workflow_dispatch:" in trigger
+    assert "push:" not in trigger
+    assert "permissions: {}" in workflow
+    assert workflow.count("github.actor == github.repository_owner") == 3
+    assert workflow.count("github.triggering_actor == github.repository_owner") == 3
+    assert workflow.count('test "$EXPECTED_OWNER" = logannye') == 3
+    assert workflow.count("environment: tinyzkp-engine-signing") == 2
+    assert workflow.count(
+        "+refs/heads/main:refs/remotes/origin/main"
+    ) == 3
+    assert workflow.count('test "$(git rev-parse origin/main)" =') == 3
+    assert "^backend-v(0|[1-9][0-9]*)" in workflow
+
+    candidate, signed = workflow.split("  signed-artifacts:", 1)
+    assert candidate.index("actions/checkout@") < candidate.index(
+        "Bind the immutable tag to exact current protected main"
+    )
+    assert candidate.index("origin/main") < candidate.index(
+        "backend_prerelease_ready.py"
+    )
+    signed, publication = signed.split("  publish-draft:", 1)
+    assert signed.index("origin/main") < signed.index("dtolnay/rust-toolchain@")
+    assert publication.index("origin/main") < publication.index(
+        "Recover the protected staged candidate"
+    )
+
+
+def test_engine_finalizer_receives_every_exact_release_binding():
+    workflow = text(".github/workflows/release-backend.yml")
+    finalization = workflow.split(
+        "- name: Verify signature and construct final release evidence", 1
+    )[1].split("- name: Attest released files", 1)[0]
+    for marker in (
+        "finalize_signed_evidence.py",
+        '--release-sha "$HC_RELEASE_SHA"',
+        '--release-ref "$HC_RELEASE_REF"',
+        "--sbom release-artifacts/tinyzkp-engine.spdx.json",
+        "--checksums release-artifacts/SHA256SUMS",
+        "--signature release-artifacts/SHA256SUMS.sigstore.json",
+        "--identity-report release-artifacts/engine-identity.json",
+        "--runtime-smoke release-artifacts/engine-runtime-smoke.json",
+        "--output-evidence release-artifacts/backend-v1-final-evidence.json",
+        "--output-config release-artifacts/backend-v1-final-gates.json",
+    ):
+        assert marker in finalization
+
+
+def test_engine_signature_and_attestations_bind_exact_source_workflow_identity():
+    release = text(".github/workflows/release-backend.yml")
+    promotion = text(".github/workflows/promote-guard-release.yml")
+    for workflow in (release, promotion):
+        for marker in (
+            "--certificate-github-workflow-sha",
+            "--certificate-github-workflow-ref",
+            "--certificate-github-workflow-repository",
+            "--certificate-github-workflow-trigger workflow_dispatch",
+            "--cert-identity",
+            "--signer-workflow",
+            "--signer-digest",
+            "--source-digest",
+            "--source-ref",
+            "--deny-self-hosted-runners",
+        ):
+            assert marker in workflow
+    assert release.count("--certificate-github-workflow-sha") >= 1
+    assert release.count("gh attestation verify") >= 2
+    assert promotion.count("gh attestation verify") == 1
+    assert '--certificate-github-workflow-sha "$engine_sha"' in promotion
+    assert '--certificate-github-workflow-ref "$engine_ref"' in promotion
+    assert '--source-digest "$engine_sha"' in promotion
+    assert '--source-ref "$engine_ref"' in promotion
+    assert 'jq -er .release_ref engine-release.json' in promotion
+    assert "signed_release_sbom_and_checksums.metadata.release_ref" in promotion
+
+
+def test_pull_request_ci_executes_actual_signed_candidate_gate():
+    workflow = text(".github/workflows/ci.yml")
+    assert '.status == "candidate"' in workflow
+    assert "python3 scripts/ci/backend_prerelease_ready.py" in workflow
+    assert "scripts/release/test_verify_backend_assembly.py" in workflow
 
 
 def test_air_gate_has_no_retired_sdk_dependency_path():
@@ -129,6 +240,17 @@ def test_joint_promotion_is_protected_no_rebuild_exact_candidate_promotion():
     assert workflow.count("--json isDraft --jq .isDraft") == 3
     assert "skopeo inspect --no-creds" in workflow
     assert "package_visibility" in workflow
+    assert (
+        'gh release download "$ENGINE_TAG" --dir '
+        '"$GITHUB_WORKSPACE/release-artifacts"'
+        in workflow
+    )
+    assert "working-directory: ${{ github.workspace }}/release-artifacts" in workflow
+    assert (
+        '"$GITHUB_WORKSPACE/release-artifacts/tinyzkp-engine.oci.tar"'
+        in workflow
+    )
+    assert "$RUNNER_TEMP/engine-candidate" not in workflow
     for forbidden in (
         "cargo build",
         "docker build ",

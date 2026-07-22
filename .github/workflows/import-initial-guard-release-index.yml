@@ -1,0 +1,249 @@
+name: Import published Guard release index
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Exact promotion-ready main commit B
+        required: true
+        type: string
+      promotion_run_id:
+        description: Successful promote-guard-release workflow run ID
+        required: true
+        type: string
+      promotion_run_attempt:
+        description: Exact successful promotion run attempt
+        required: true
+        type: number
+
+permissions:
+  actions: read
+  contents: write
+  id-token: write
+  pull-requests: write
+  packages: read
+
+concurrency:
+  group: tinyzkp-guard-publication
+  cancel-in-progress: false
+
+jobs:
+  import-publication:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.actor == github.repository_owner &&
+      github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-24.04
+    environment: tinyzkp-release-index-promotion
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      PROMOTION_RUN_ID: ${{ inputs.promotion_run_id }}
+      PROMOTION_RUN_ATTEMPT: ${{ inputs.promotion_run_attempt }}
+      EXPECTED_OWNER: ${{ github.repository_owner }}
+      DISPATCH_ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      TRUST_POLICY_SHA256: ${{ vars.GUARD_LAUNCH_TRUST_POLICY_SHA256 }}
+      SIGNING_TRUST_POLICY_SHA256: ${{ vars.GUARD_SIGNING_TRUST_POLICY_SHA256 }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12.13"
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+      - name: Install pinned launch-test runtime
+        run: python3 -m pip install --disable-pip-version-check pytest==8.4.2
+
+      - name: Bind a fresh owner dispatch to exact promotion-ready main
+        run: |
+          [[ "$EXPECTED_MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PROMOTION_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]]
+          [[ "$PROMOTION_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,9}$ ]]
+          test "$DISPATCH_ACTOR" = "$EXPECTED_OWNER"
+          test "$TRIGGERING_ACTOR" = "$EXPECTED_OWNER"
+          test "$GITHUB_SHA" = "$EXPECTED_MAIN_SHA"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN_SHA"
+          test -n "$TRUST_POLICY_SHA256"
+          test -n "$SIGNING_TRUST_POLICY_SHA256"
+          test -z "$(git status --porcelain)"
+          python3 scripts/ci/guard_launch_gate.py \
+            --check \
+            --require-promotion-ready \
+            --trusted-policy-sha256 "$TRUST_POLICY_SHA256" \
+            --trusted-signing-policy-sha256 "$SIGNING_TRUST_POLICY_SHA256"
+
+      - name: Verify the exact successful promotion run identity
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PROMOTION_RUN_ID" \
+            > "$RUNNER_TEMP/promotion-run.json"
+          jq -e \
+            --argjson id "$PROMOTION_RUN_ID" \
+            --argjson attempt "$PROMOTION_RUN_ATTEMPT" \
+            --arg sha "$EXPECTED_MAIN_SHA" \
+            '.id == $id
+             and .run_attempt == $attempt
+             and .event == "workflow_dispatch"
+             and .status == "completed"
+             and .conclusion == "success"
+             and .head_branch == "main"
+             and .head_sha == $sha
+             and .path == ".github/workflows/promote-guard-release.yml"' \
+            "$RUNNER_TEMP/promotion-run.json"
+
+      - name: Download and verify public release bytes anonymously
+        run: |
+          candidate="$RUNNER_TEMP/public-guard-release"
+          install -d "$candidate"
+          evidence_path="$(jq -er \
+            '.gate_status.guard_release_ready.evidence | if length == 1 then .[0].path else error("one Guard evidence required") end' \
+            release/guard-launch-state-v2.json)"
+          artifact_url="$(jq -er .claims.artifact_url "$evidence_path")"
+          channel_url="$(jq -er .claims.channel_url "$evidence_path")"
+          index_url="$(jq -er .claims.release_index_url "$evidence_path")"
+          signature_url="$(jq -er .claims.release_index_signature_url "$evidence_path")"
+          for binding in \
+            "guard-artifact:$artifact_url" \
+            "guard-channel-v1.json:$channel_url" \
+            "guard-release-index-v1.json:$index_url" \
+            "guard-release-index-v1.json.sig:$signature_url"
+          do
+            name="${binding%%:*}"
+            url="${binding#*:}"
+            effective="$(env -u GH_TOKEN -u GITHUB_TOKEN curl \
+              --fail --location --proto '=https' --tlsv1.2 \
+              --max-redirs 5 --write-out '%{url_effective}' \
+              --output "$candidate/$name" "$url")"
+            case "$effective" in
+              https://github.com/logannye/hc-stark/releases/download/*|\
+              https://release-assets.githubusercontent.com/*|\
+              https://objects.githubusercontent.com/*) ;;
+              *) echo "anonymous asset redirected outside approved GitHub hosts: $effective" >&2; exit 1 ;;
+            esac
+          done
+          test "$(sha256sum "$candidate/guard-artifact" | cut -d' ' -f1)" = \
+            "$(jq -er .claims.artifact_sha256 "$evidence_path")"
+          test "$(sha256sum "$candidate/guard-channel-v1.json" | cut -d' ' -f1)" = \
+            "$(jq -er .claims.channel_identity_sha256 "$evidence_path")"
+          test "$(sha256sum "$candidate/guard-release-index-v1.json" | cut -d' ' -f1)" = \
+            "$(jq -er .claims.release_index_sha256 "$evidence_path")"
+          test "$(sha256sum "$candidate/guard-release-index-v1.json.sig" | cut -d' ' -f1)" = \
+            "$(jq -er .claims.release_index_signature_sha256 "$evidence_path")"
+          cosign verify-blob \
+            --key release/guard-signing-public-key.pem \
+            --signature "$candidate/guard-release-index-v1.json.sig" \
+            "$candidate/guard-release-index-v1.json"
+
+      - name: Reverify exact OCI manifests without credentials
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends skopeo
+          guard_digest="$(jq -er .guard_oci_digest site/release.json)"
+          engine_digest="$(jq -er .release_binding.engine_oci_digest site/compatibility.json)"
+          for binding in \
+            "ghcr.io/logannye/tinyzkp-guard@$guard_digest" \
+            "ghcr.io/logannye/tinyzkp-engine@$engine_digest"
+          do
+            observed="sha256:$(skopeo inspect --no-creds --raw \
+              "docker://$binding" | sha256sum | cut -d' ' -f1)"
+            test "$observed" = "${binding##*@}"
+          done
+
+      - name: Stage strict publication and keyless-sign the handoff
+        run: |
+          candidate="$RUNNER_TEMP/public-guard-release"
+          published_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          python3 scripts/release/build_guard_publication.py build \
+            --candidate-dir "$candidate" \
+            --promotion-run-id "$PROMOTION_RUN_ID" \
+            --promotion-run-attempt "$PROMOTION_RUN_ATTEMPT" \
+            --promotion-source-sha "$EXPECTED_MAIN_SHA" \
+            --workflow-source-sha "$EXPECTED_MAIN_SHA" \
+            --published-at "$published_at" \
+            --output site/guard-artifact-publication-v1.json
+          cosign sign-blob --yes \
+            --bundle site/guard-artifact-publication-v1.sigstore.json \
+            site/guard-artifact-publication-v1.json
+          publication_sha="$(sha256sum site/guard-artifact-publication-v1.json | cut -d' ' -f1)"
+          publication_dir="site/artifact-publications/$publication_sha"
+          install -d "$publication_dir"
+          install -m 0644 site/guard-artifact-publication-v1.json \
+            "$publication_dir/guard-artifact-publication-v1.json"
+          install -m 0644 site/guard-artifact-publication-v1.sigstore.json \
+            "$publication_dir/guard-artifact-publication-v1.sigstore.json"
+          cosign verify-blob \
+            --bundle site/guard-artifact-publication-v1.sigstore.json \
+            --certificate-identity-regexp \
+              '^https://github\.com/logannye/hc-stark/\.github/workflows/import-initial-guard-release-index\.yml@refs/heads/main$' \
+            --certificate-oidc-issuer \
+              'https://token.actions.githubusercontent.com' \
+            --certificate-github-workflow-sha "$EXPECTED_MAIN_SHA" \
+            --certificate-github-workflow-ref 'refs/heads/main' \
+            --certificate-github-workflow-repository 'logannye/hc-stark' \
+            --certificate-github-workflow-trigger 'workflow_dispatch' \
+            site/guard-artifact-publication-v1.json
+          index_sha="$(sha256sum "$candidate/guard-release-index-v1.json" | cut -d' ' -f1)"
+          revision="site/release-index-revisions/$index_sha"
+          install -d "$revision"
+          install -m 0644 "$candidate/guard-release-index-v1.json" \
+            site/guard-release-index-v1.json
+          install -m 0644 "$candidate/guard-release-index-v1.json.sig" \
+            site/guard-release-index-v1.json.sig
+          install -m 0644 "$candidate/guard-release-index-v1.json" \
+            "$revision/guard-release-index-v1.json"
+          install -m 0644 "$candidate/guard-release-index-v1.json.sig" \
+            "$revision/guard-release-index-v1.json.sig"
+          python3 scripts/release/build_guard_publication.py request-public-live \
+            --source release/guard-launch-evidence-v2.json
+
+      - name: Regenerate and prove exact public-live contracts
+        run: |
+          python3 scripts/ci/guard_launch_gate.py \
+            --write \
+            --trusted-policy-sha256 "$TRUST_POLICY_SHA256" \
+            --trusted-signing-policy-sha256 "$SIGNING_TRUST_POLICY_SHA256"
+          python3 scripts/ci/guard_launch_gate.py \
+            --check \
+            --require-ready \
+            --trusted-policy-sha256 "$TRUST_POLICY_SHA256" \
+            --trusted-signing-policy-sha256 "$SIGNING_TRUST_POLICY_SHA256"
+          test "$(jq -er .launch_state release/guard-launch-state-v2.json)" = qualified
+          test "$(jq -er .qualification_basis release/guard-launch-state-v2.json)" = owner_attested
+          test "$(jq -er .sales_state site/commerce.json)" = live
+          test "$(jq -er .checkout_enabled site/commerce.json)" = true
+          test "$(jq -er .current_channel site/release-channels-v1.json)" = guard_live
+          python3 -m pytest \
+            scripts/ci/test_guard_launch_gate.py \
+            scripts/release/test_build_guard_publication.py -q
+          node scripts/ci/site_shared_checkout_test.mjs
+
+      - name: Open the exact-byte owner publication pull request
+        run: |
+          unexpected="$(git status --porcelain | awk '{print $2}' | grep -Ev '^(release/|site/)' || true)"
+          test -z "$unexpected"
+          version="$(jq -er .release_identity.guard_version release/guard-launch-state-v2.json)"
+          kind="$(jq -er .publication_kind site/guard-artifact-publication-v1.json)"
+          branch="codex/guard-publication-$PROMOTION_RUN_ID-$PROMOTION_RUN_ATTEMPT"
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release site
+          git diff --cached --check
+          git commit -m "Publish verified TinyZKP Guard $version"
+          git push --set-upstream origin "$branch"
+          compare_url="https://github.com/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
+          if pr_url="$(gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "Publish verified TinyZKP Guard $version" \
+            --body "Imports exact anonymously verified $kind release/index bytes and OCI digests from successful promotion run \`$PROMOTION_RUN_ID\` attempt \`$PROMOTION_RUN_ATTEMPT\`. The keyless-signed handoff is owner-dispatched and bound to \`$EXPECTED_MAIN_SHA\`. CI remains required; this workflow never merges the PR." \
+            2>"$RUNNER_TEMP/pr-create-error")"; then
+            printf 'Publication PR: %s\n' "$pr_url" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::The publication branch was pushed, but repository Actions settings prevented automatic PR creation."
+            printf '[Open the owner-prepared publication PR](%s). No publication evidence needs to be rebuilt.\n' \
+              "$compare_url" >> "$GITHUB_STEP_SUMMARY"
+          fi

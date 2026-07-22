@@ -1,8 +1,9 @@
 # TinyZKP Guard founding validation protocol
 
-This is a one-time product-qualification program, permanently capped at three
-legal organizations. It is not consulting, a pilot product, a custom
-integration offer, or a recurring sales motion.
+This is an optional one-time learning program, permanently capped at three
+legal organizations. It is not launch authority, consulting, a pilot product,
+a custom integration offer, or a recurring sales motion. Every resulting
+metric remains advisory and may truthfully stay `not_completed` at GA.
 
 ## Entry requirements
 
@@ -53,9 +54,9 @@ report, resume outcome, or unaided-journey time.
 Evidence must not contain witness values, trace data, source code, private
 paths, customer names in public files, email addresses, keys, or credentials.
 
-## Market gate
+## Advisory success metrics
 
-Commercial development may continue only after:
+If the program is run, report whether it produced:
 
 - three external workloads from at least two organizations;
 - one public adapter and job contract for all workloads;
@@ -63,7 +64,7 @@ Commercial development may continue only after:
 - at least two organizations willing to buy the standard annual product; and
 - each documented failure cost materially more than the annual price.
 
-At release-candidate stage, at least two organizations must purchase through
-the same ordinary hosted checkout used at general availability. If this gate
-fails, stop commercial development and retain TinyZKP as an open-source
-research project.
+No purchase, workload, or install outcome in this protocol enables checkout or
+changes `GuardLaunchStateV2`. The owner-only release contract records the
+corresponding workload, customer, and install metrics as `not_completed` until
+real evidence exists, without blocking general availability.

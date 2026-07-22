@@ -154,21 +154,21 @@ def test_conventional_preflight_uses_memory_cap_without_mutating_evidence_manife
     assert manifest["resource_policy"]["max_resident_bytes"] == 128
 
 
-def test_fixed_host_validation_is_typed_and_fail_closed():
+def test_qualification_profile_validation_is_typed_and_fail_closed():
     valid = {
-        "physical_logical_cpu_count": 12,
-        "physical_memory_bytes": 64 * 1024**3,
-        "effective_cpu_count": 8,
-        "effective_cpu_affinity": list(range(8)),
+        "physical_logical_cpu_count": 4,
+        "physical_memory_bytes": 16 * 1024**3,
+        "effective_cpu_count": 4,
+        "effective_cpu_affinity": list(range(4)),
         "effective_memory_max_bytes": 16 * 1024**3,
         "effective_swap_max_bytes": 0,
         "cgroup_v2_path": "/tinyzkp-worker",
         "storage_device": "9:1:nvme0n1",
         "effective_storage_device": "9:1:nvme0n1",
         "storage_is_rotational": False,
-        "storage_is_nvme": True,
-        "storage_total_bytes": 1_000_000_000_000,
-        "storage_available_bytes": 500_000_000_000,
+        "storage_is_nvme": False,
+        "storage_total_bytes": 14_000_000_000,
+        "storage_available_bytes": 12_000_000_000,
         "scratch_directory_mode": 0o700,
         "scratch_owned_by_runner": True,
     }
@@ -176,19 +176,19 @@ def test_fixed_host_validation_is_typed_and_fail_closed():
 
     invalid = {
         **valid,
-        "effective_cpu_count": 7,
-        "effective_cpu_affinity": list(range(7)),
+        "effective_cpu_count": 3,
+        "effective_cpu_affinity": list(range(3)),
         "effective_memory_max_bytes": 32 * 1024**3,
         "effective_swap_max_bytes": 1024,
         "storage_is_rotational": True,
-        "storage_is_nvme": False,
-        "storage_available_bytes": 499_999_999_999,
+        "storage_is_nvme": None,
+        "storage_available_bytes": 11_999_999_999,
         "scratch_directory_mode": 0o755,
         "scratch_owned_by_runner": False,
     }
     failures = MODULE.fixed_host_failures(invalid)
     assert len(failures) == 8
-    assert "release scratch storage must have at least 500 GB available" in failures
+    assert "qualification scratch storage must have at least 12 GB available" in failures
     assert "release scratch directory must have mode 0700" in failures
     assert "release scratch directory must be owned by the benchmark runner" in failures
 

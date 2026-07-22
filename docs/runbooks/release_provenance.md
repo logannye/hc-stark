@@ -3,51 +3,66 @@
 Status: active release-control runbook. SDK, MCP, maintenance-server, hosted
 beta, and crates.io publication are not production release surfaces.
 
-## External protection required
+## Owner-controlled protection required
 
 CODEOWNERS records intended review but does not configure GitHub protection.
 Before any passing evidence or promotion:
 
-1. Require pull-request review and CODEOWNERS review on `main`.
-2. Protect `tinyzkp-launch-trust`, `tinyzkp-evaluation-release`,
-   `tinyzkp-guard-candidate`, `tinyzkp-release-promotion`, and
-   `tinyzkp-production` environments.
-3. Put the independently reviewed SHA-256 of
+1. Retain required CI on `main`; repository-owner merges do not require an
+   outside reviewer.
+2. Protect `tinyzkp-launch-trust`, `tinyzkp-engine-signing`,
+   `tinyzkp-evaluation-release`, `tinyzkp-guard-candidate`,
+   `tinyzkp-release-promotion`, and `tinyzkp-production` environments.
+   Allow `tinyzkp-engine-signing` only for canonical `backend-v*` tags; the
+   workflow additionally requires an owner dispatch at a semantic-version tag
+   whose commit is still exact current `origin/main`. It needs no outside
+   reviewer.
+3. Put the owner-reviewed SHA-256 of
    `GuardLaunchTrustV1`/`GuardMarketTrustV1` in the applicable protected
    environment variables `GUARD_LAUNCH_TRUST_POLICY_SHA256` and
    `GUARD_MARKET_TRUST_POLICY_SHA256`. Use separate protected environments
    where appropriate.
-4. Generate the Guard signing key in an owner-controlled key ceremony. Commit
+4. Generate the Guard signing key in an owner-controlled encrypted key ceremony. Commit
    only its public key at `release/guard-signing-public-key.pem`, set
-   `GuardSigningTrustV1` to `configured`, and put the independently reviewed
+   `GuardSigningTrustV1` to `configured`, and put the owner-reviewed
    policy digest in the protected
    `GUARD_SIGNING_TRUST_POLICY_SHA256` environment variable. Never commit the
    private key.
-5. Restrict manual signing, evaluation, candidate, and promotion environments
-   to protected `main`; require a reviewer and prevent self-review where
-   GitHub supports it. Public `tinyzkp-production` is deliberately automatic:
-   it is protected-`main` only and has no manual reviewer. The private Guard
-   production/candidate environments are also protected-`main` only.
+5. Restrict signing, evaluation, candidate, promotion, and production
+   environments to protected `main`. The exact main-only
+   `owner-launch-evidence.yml` OIDC identity is the allowlisted signer for
+   required launch evidence. Public and private production environments need
+   no outside reviewer.
 6. Restrict `tinyzkp-pages-preview` to `refs/pull/*/merge`. GitHub evaluates
    the workflow `GITHUB_REF`, not a `codex/*` head branch. The workflow's
    same-repository pull-request condition remains the boundary that prevents
    forked code from receiving preview credentials.
 7. Record screenshots/API reads of the actual settings whenever they change.
-8. Protect `tinyzkp-release-index-promotion`, require an independent reviewer,
-   and store a least-privilege private-repository token as
+8. Protect `tinyzkp-release-index-promotion` for owner-only main dispatch and
+   store a least-privilege private-repository token as
    `GUARD_PRIVATE_HANDOFF_TOKEN`. It may read workflow artifacts from
    `logannye/tinyzkp-guard`; it must not hold a Guard signing key.
 
 Passing launch or market evidence cannot rely only on a policy digest inside
-the same repository source. The validator requires the exact independently
-protected digest. The checked-in launch, market, and signing policies are
-unconfigured, all evidence is blocked, and no clock or checkout is active.
+the same repository source. The validator requires the exact owner-controlled
+protected digest. The checked-in launch trust allowlists only the exact
+main-only owner workflow; checkout remains blocked until real signed evidence
+and merchant/legal facts exist. Every owner gate, initial publication, and
+emergency-freeze envelope also records the exact dispatch source commit. Cosign
+verification requires that SHA together with `refs/heads/main`, repository
+`logannye/hc-stark`, trigger `workflow_dispatch`, the allowlisted workflow SAN,
+and the GitHub OIDC issuer. A later revision of a workflow with the same SAN
+cannot sign evidence for an earlier dispatch commit.
 
 ## Candidate and promotion flow
 
-1. `release-backend.yml` builds one immutable `backend-v*` draft candidate with
-   the engine binary, OCI archive, compatibility identity, exact final gates,
-   checksums, Sigstore bundle, SBOM, and GitHub attestations.
+1. Dispatch `release-backend.yml` as the repository owner with its ref set to
+   the immutable `backend-v*` tag. It builds one draft candidate with the
+   engine binary, OCI archive, compatibility identity, exact final gates,
+   checksums, Sigstore bundle, SBOM, and GitHub attestations. Automatic tag
+   pushes cannot start a signing run. The signature and attestations bind the
+   exact source/workflow SHA, tag ref, repository, and `workflow_dispatch`
+   trigger; reruns retain that same trigger identity.
 2. Once the engine, legal, merchant-sandbox, and rehearsal source gates pass,
    `guard_launch_gate.py --require-candidate-build-ready` emits a narrowly
    scoped authorization to prepare one signed Guard draft. It does not
@@ -68,7 +83,7 @@ unconfigured, all evidence is blocked, and no clock or checkout is active.
    `commercial_release_authorized: false`.
 4. Signed `GuardLaunchEvidenceV2` then binds the exact Guard/engine source,
    public authorization commit A, artifact,
-   OCI, channel, embedded live Lemon catalog, technical gates, customers,
+   OCI, channel, embedded live Lemon catalog, technical gates,
    legal/merchant lifecycle, retirement, and rehearsal. Promotion-ready
    evidence remains launch-blocked by exactly
    `guard_artifact_published`; checkout stays closed. Merge that evidence as
@@ -82,6 +97,12 @@ unconfigured, all evidence is blocked, and no clock or checkout is active.
    copies the already-built OCI archives to immutable GHCR tags, makes the
    existing GitHub releases public, and records publication evidence. It never
    rebuilds, resigns, or changes candidate bytes.
+   On the first-ever publication, GHCR creates new packages as private. The
+   first run may therefore create `tinyzkp-engine` and `tinyzkp-guard` at the
+   exact expected digests and stop before publishing releases. The owner then
+   changes both package visibilities to public in GitHub Packages and reruns
+   the same promotion. The rerun must observe unchanged digests before it
+   publishes either release; no broad package-administration token is retained.
 6. Final reviewed evidence moves the public site and catalog from
    `live_hidden` to `public_live` only after the artifact publication gate
    passes. Publication flags and evidence change; the candidate payload does
@@ -119,23 +140,28 @@ evaluation artifact and the single moderator-approved Plonky3 announcement.
 There are four qualification windows per year, not four promised releases. A
 window may publish no binary. Change classes are:
 
-- `guard_package_only`: reuse engine, standardized-demand, legal-document,
+- `guard_package_only`: reuse engine, legal-document,
   unchanged Lemon-catalog, and legacy-retirement evidence only when the engine
   SHA and compatibility profile still match; rerun Guard/package/activation/
-  OCI identity plus exactly two complete clean-machine smoke journeys.
+  OCI identity checks. Clean-machine journeys remain advisory.
 - `proof_critical`: fresh complete engine and Guard qualification.
 - `site_legal_pricing`: retain the exact unchanged engine and Guard software
   identity; rerun static-site contracts/accessibility, exact legal-document
   digests, merchant catalog/lifecycle, deploy-plan, and rollback rehearsal.
 
-Candidate-build, promotion-ready, and production-readiness commands require
-the checked-in `evaluated_at` to be no more than 24 hours behind real UTC and
-never in the future. Ordinary blocked prelaunch generation remains
-reproducible. Starting or updating the signed market clock applies the same
-real-time bound.
+Candidate-build and promotion-ready commands require the checked-in
+`evaluated_at` to be no more than 24 hours behind real UTC and never in the
+future. The first publication is dispatched from that fresh promotion-ready
+state. A published qualified artifact remains point-in-time qualified:
+ordinary production deploys may use an older evaluation while live canaries
+recheck merchant, artifact, OCI, route, and retired-host behavior. A new
+candidate or site/legal/pricing change requires class-specific fresh evidence;
+an emergency owner freeze remains available even when the prior evaluation is
+older than 24 hours. Starting or updating the signed market clock retains its
+own real-time bound.
 
-Each window is capped at eight owner hours and $3,000 external spend and
-requires a $6,000 reserve. $499/$4,990 pricing is frozen through GA plus six
+Owner hours, external spend, and reserve targets are business-planning metrics,
+not technical rehearsal or checkout gates. $499/$4,990 pricing is frozen through GA plus six
 months. Any later price change retains the reviewed Lemon monthly and annual
 variant IDs. Lemon preserves the original price for existing subscriptions
 while new subscribers receive the updated price. Never delete or repurpose

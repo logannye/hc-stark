@@ -44,10 +44,10 @@ on the reviewed merchant variant and grandfathers existing subscribers at the
 price attached when their subscriptions were created. Existing variant IDs
 remain intact and are never deleted or repurposed.
 
-## Founding validation
+## Advisory founding validation
 
-The pre-launch validation cohort is permanently capped at three organizations
-and disappears at general availability.
+The optional validation cohort is capped at three organizations. It is a
+transparent learning program, not launch authority.
 
 Each organization:
 
@@ -60,10 +60,10 @@ Each organization:
    architecture consulting.
 5. May consume no more than four hours of TinyZKP assistance.
 
-Launch requires three external workloads from at least two organizations and
-two ordinary annual purchases through the self-service checkout. If the shared
-adapter cannot support the workloads without source changes, the subscription
-does not launch.
+Three external workloads, two ordinary annual customers, and five unaided
+installs are published as advisory metrics. They begin as `not_completed` and
+do not block owner-attested general availability. Any participation must still
+use the shared adapter and must not create a customer-specific product branch.
 
 ## Customer lifecycle
 
@@ -107,8 +107,8 @@ generic agent SEO, or custom CRM.
   channel.
 - Four qualification windows are scheduled each year. A window may publish no
   binary; release only when a warranted change passes its applicable gates.
-- Qualification is capped at eight owner hours and $3,000 external spend per
-  window, with a $6,000 cash reserve.
+- Eight owner hours, $3,000 external spend, and a $6,000 reserve remain optional
+  business-planning thresholds; they are not release-rehearsal or checkout gates.
 - Ordinary business operations must remain below two hours per month.
 - Support target is at most six minutes per customer per month. Seven through
   twelve minutes is warning state; two consecutive months above twelve freezes
@@ -165,11 +165,13 @@ repeated.
 
 `release/guard-launch-state-v2.json` is the generated machine source of truth.
 Its source is `GuardLaunchEvidenceV2`, and passing evidence additionally
-requires an independently protected trust-policy digest. Public
-checkout remains disabled until technical evidence, external workloads,
-unaided installs, legal approval, merchant lifecycle tests, first customers,
-legacy-obligation resolution, and hosted-infrastructure retirement are all
-reviewed and recorded.
+requires an owner-controlled protected trust-policy digest and the exact
+`owner_only_ga_v1` / `owner_attested` policy pair. Public checkout remains
+disabled until automated engine and Guard qualification, owner-approved legal
+digests, merchant sandbox and live-owner checks, legacy-obligation resolution,
+hosted-infrastructure shutdown, technical release rehearsal, and exact Guard
+artifact publication are signed and recorded. Advisory review and adoption
+metrics remain visible but non-blocking.
 
 Candidate preparation is a separate, narrower authorization. It is permitted
 only after the engine, legal, merchant-sandbox, and rehearsal gates pass and

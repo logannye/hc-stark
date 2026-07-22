@@ -16,15 +16,25 @@ stable source-tree digest. Both release jobs use full Git history so this proof
 cannot silently degrade under a shallow checkout.
 
 Release evidence has two explicit stages. A candidate config has `status` set
-to `candidate` and contains exactly the thirteen gates that can exist before
-artifact construction; validate it with `backend_prerelease_ready.py`. The
+to `candidate` and contains exactly the nine automated gates that can exist before
+artifact construction. It is not prerelease-ready until the owner-dispatched
+assembly workflow has bound the exact config, evidence manifest, artifacts,
+closed qualification checksum inventories, and both source workflow runs in
+`backend-candidate-assembly-v1.json` and keyless-signed that envelope. The
+canonical `backend_prerelease_ready.py` path verifies that signature with the
+anchored Cosign binary and constrains the certificate identity, issuer, source
+SHA, main ref, repository, and `workflow_dispatch` trigger; there is no unsigned
+CLI bypass. Pull-request CI and the engine release job both execute this gate.
+The
 release workflow then builds the engine CLI and OCI archive, creates their
-typed identity report, signs the exact artifact inventory, verifies the
-Sigstore bundle, and runs `finalize_signed_evidence.py`. That command adds the
-post-build identity and signed-release gates and emits the final `ready`
-config. The full `backend_release_ready.py` gate is rerun against those files
-before a draft release can be created. No billing or commercial authorization
-artifact is part of the public engine release.
+typed identity report, executes the standalone CLI and the locally imported
+OCI image under a confined no-network runtime, and signs the exact artifact
+inventory including that runtime-smoke report. It verifies the Sigstore bundle
+and runs `finalize_signed_evidence.py`. That command adds the post-build
+identity and signed-release gates and emits the final `ready` config. The full
+`backend_release_ready.py` gate is rerun against those files before a draft
+release can be created. No billing or commercial authorization artifact is
+part of the public engine release.
 
 Signed finalization requires the checksum manifest to contain exactly the
 public engine binary, customer-operated engine OCI archive, compatibility
@@ -111,28 +121,40 @@ python3 scripts/release/build_review_bundle.py \
   --output raw-reports/tinyzkp-engine-review.zip
 ```
 
-External review and design-partner records must be added by an authorized
-operator; the gate rejects handwritten `passed: true` flags.
+External-review, reproduction, and design-partner tooling is retained for
+optional advisory collection. Those records are not members of backend
+candidate or final gate inventory and cannot authorize publication. The Guard
+launch ledger truthfully records them as `not_completed` until real evidence
+exists.
 
-Resource evidence must include both Fibonacci and Poseidon2. Prefix every role
-with `fibonacci_` or `poseidon2_`: `manifest`, `candidate_report`, and
+Scoped production resource evidence includes Fibonacci and Poseidon2 at
+1,048,576 rows and Fibonacci at 16,777,216 rows. Prefix every role with
+`fibonacci_` or `poseidon2_`: `manifest`, `candidate_report`, and
 `candidate_normalized_manifest`; the one-million gate also requires each
-workload's `baseline_report` and `baseline_normalized_manifest`. The gate
-recomputes every digest and permits normalization to change only `scratch_dir`.
-The fixed-host harness additionally records and enforces exactly eight logical
-CPUs, 16-GB-class RAM, non-rotational NVMe, at least 500 GB available before
-the run, and a runner-owned mode-0700 scratch root. Run
-`scripts/benchmark/fixed_host_preflight.py` before any expensive proof; the
-same facts are embedded in and revalidated from every `BenchmarkReportV1`.
+workload's `baseline_report` and `baseline_normalized_manifest`. The
+16,777,216-row gate accepts Fibonacci roles only. The gate recomputes every
+digest and permits normalization to change only `scratch_dir`.
 
-Independent reproduction is a separate release gate, not a metadata flag on
-TinyZKP's own benchmark. It requires a hashed `reproduction_record` plus both
-workloads at both resource gates, nested under `one_million_` and
-`ten_million_` before the workload-prefixed roles. The record binds the
-reproducer, organization, release, profile, workloads, completion time, and
-official-verification result. It also contains an exact `artifact_sha256` map
-for every independently produced resource artifact; co-locating unbound files
-is not sufficient.
+The owner-dispatched qualification workflow runs the three-entry matrix on an
+ephemeral public-repository `ubuntu-24.04` GitHub-hosted runner. The harness
+records and enforces four effective CPUs, 15--17 GiB effective RAM,
+non-rotational storage, at least 12,000,000,000 scratch bytes available before
+the run, and runner-owned mode-0700 scratch roots. It rejects a commit other
+than the exact current `main` SHA. `scripts/benchmark/fixed_host_preflight.py`
+runs before each expensive proof; the same facts and exact estimator outputs
+are embedded in and revalidated from every `BenchmarkReportV1`. Poseidon2 at
+16,777,216 rows requires about 169 GB of scratch before headroom and is
+explicitly a post-GA capacity expansion, not a supported production workload.
+
+Optional independent reproduction is an advisory metric, not a metadata flag
+on TinyZKP's own benchmark or an engine release gate. If the retained broad
+research reproduction is collected, it may include both workloads at both
+resource sizes, nested under `one_million_` and `ten_million_` before the
+workload-prefixed roles. Its Poseidon2 16,777,216-row result remains advisory
+and cannot expand the production scope. The hashed `reproduction_record` binds
+the reproducer, organization, release, profile, workloads, completion time,
+official-verification result, and the exact SHA-256 of every independently
+produced resource artifact; co-locating unbound files is not sufficient.
 
 Each external review requires separately hashed `review_bundle`,
 `review_report`, and `remediation_ledger` roles. The ledger is
@@ -141,7 +163,8 @@ ledger additionally requires a signed `security_assessment` for the exact
 `FriParameters::new_benchmark` values. It records separate consideration of
 conjectured and proven FRI bounds, duplicate-query probability, and challenger
 capacity, plus the reviewer's minimum-bit conclusion, limitations, and explicit
-production-use decision. Missing or negative approval blocks release; an
+production-use decision. Missing or negative approval prevents marking that
+advisory complete; an
 implementation-review ledger must leave this field null.
 `review_bundle_sha256`, `review_manifest_sha256`, and `source_tree_sha256` bind
 the reviewer to the deterministic bundle, its embedded manifest, and the exact
@@ -171,7 +194,7 @@ Cargo's successful zero-test result is not release evidence.
 The disk-full test captures the first failed write and requires Linux error 28
 (`ENOSPC`) before it can emit its successful-resume marker; permission, I/O, or
 quota failures cannot masquerade as disk exhaustion. Fuzz smoke must include
-all nine backend targets, each run from the deterministic,
+all fourteen backend targets, each run from the deterministic,
 version-controlled seed sample emitted by `scripts/release/run_fuzz_smoke.py`; a report
 that omits its profile, exact Rust/cargo-fuzz identities, or corpus/log digests
 does not pass. The validator parses each hashed log and requires LibFuzzer's
@@ -200,47 +223,14 @@ update. Short or disk-full-free diagnostics require explicit `--partial`;
 incomplete runs exit nonzero by default and can never set the release-eligible
 field.
 
-The cargo-fuzz executable itself is also a reviewed input. On the fixed Linux
-evidence host, capture its candidate identity after installing the exact
-version:
-
-```bash
-HC_RELEASE_SHA="$(git rev-parse HEAD)" \
-  python3 scripts/release/fuzz_tool_anchor.py capture \
-    --output raw-reports/cargo-fuzz-anchor-candidate.json
-```
-
-The candidate always says `status: unreviewed` and cannot authorize an
-evidence run. An independent reviewer must reproduce it and deliberately add
-the approved host/digest pair under
-`toolchains.fuzz.cargo_fuzz_executables` in
-`release/release-trust-v1.json` in a separate reviewed commit. The nightly
-workflow then runs `fuzz_tool_anchor.py verify` before proof equality, crash,
-or fuzz evidence. A missing or different committed anchor blocks the workflow
-while preserving the candidate artifact for review; the verifier never copies
-the freshly observed digest into trust.
-
-The non-Rust executables used by the six evidence gates are reviewed inputs as
-well. Run the capture tool under the exact fixed-host Python and PATH that will
-execute the gates:
-
-```bash
-HC_RELEASE_SHA="$(git rev-parse HEAD)" \
-  python3 scripts/release/gate_tool_anchor.py capture \
-    --output release/evidence/work/gate-tool-anchor-candidate.json
-
-HC_RELEASE_SHA="$(git rev-parse HEAD)" \
-  python3 scripts/release/gate_tool_anchor.py verify \
-    --candidate release/evidence/work/gate-tool-anchor-candidate.json
-```
-
-Capture derives the exact tool set from the frozen gate commands: `bash`,
-`python3`, `node`, and `wasm-pack`. The candidate is owner-only and always
-`unreviewed`; verification intentionally fails while the platform is absent
-from `gate_tools.platforms`. After independent reproduction, add only the
-reviewed platform-to-digest mapping in a separate trust commit. Verification
-requires exact equality, including the absence of extra tools, and never
-promotes freshly observed bytes into trust.
+Owner evidence workflows install exact declared tool versions through
+SHA-pinned actions or locked package commands. Every report captures each
+resolved executable's absolute path, full version output, and SHA-256, executes
+the already-opened descriptor, and rehashes that descriptor after execution.
+The final candidate binds those reports and logs to the exact source, lockfiles,
+workflow run, and attested checksum inventory. It deliberately does not compare
+host-built Cargo, rustc, cargo-fuzz, Bash, or Python bytes with a digest captured
+on a different machine; such cross-host byte anchors are not reproducible.
 
 Design-partner evidence requires three
 separately hashed roles: `adapter_result`, `resource_report`, and
@@ -298,12 +288,14 @@ promoted artifacts.
 
 The typed `review-ledger`, `reproduction`, and `partner-acceptance` commands
 remain capture aliases, but accept only `--input` and `--output`; raw CLI flags
-cannot manufacture an external conclusion. Independent reproduction validates
-both workloads at both fixed-host gates before capture. Partner capture
+cannot manufacture an external conclusion. The retained broad independent
+reproduction validates both workloads at both research sizes before capture;
+it does not enlarge the three-entry production qualification scope. Partner capture
 validates the adapter and bounded resource report before hashing them. Review
 capture permits open findings or a negative specialist conclusion so
-remediation can be recorded, while `validate-signed` and the final release gate
-still reject unresolved critical/high findings or missing production approval.
+remediation can be recorded, while `validate-signed` rejects unresolved
+critical/high findings or missing production approval. Backend publication
+does not consume these optional records.
 Review inputs bind the exact deterministic bundle and canonical source commit.
 
 Detached verification reads `external_signers` from the exact candidate

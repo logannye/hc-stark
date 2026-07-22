@@ -1,5 +1,38 @@
 {
   "document_type": "GuardLaunchTrustV1",
   "schema_version": 1,
-  "signers": []
+  "signers": [
+    {
+      "certificate_identity_regexp": "^https://github\\.com/logannye/hc-stark/\\.github/workflows/owner-launch-evidence\\.yml@refs/heads/main$",
+      "id": "tinyzkp-owner-main",
+      "oidc_issuer": "https://token.actions.githubusercontent.com",
+      "purposes": [
+        "guard_launch:engine_release_ready",
+        "guard_launch:guard_release_ready",
+        "guard_launch:hosted_infrastructure_decommissioned",
+        "guard_launch:legacy_obligations_resolved",
+        "guard_launch:legal_terms_approved",
+        "guard_launch:merchant_live_owner_smoke_passed",
+        "guard_launch:merchant_sandbox_lifecycle_passed",
+        "guard_launch:prior_qualified_release",
+        "guard_launch:release_rehearsal_within_budget"
+      ]
+    },
+    {
+      "certificate_identity_regexp": "^https://github\\.com/logannye/hc-stark/\\.github/workflows/configure-guard-launch\\.yml@refs/heads/main$",
+      "id": "tinyzkp-owner-configuration-main",
+      "oidc_issuer": "https://token.actions.githubusercontent.com",
+      "purposes": [
+        "guard_launch:sales_freeze"
+      ]
+    },
+    {
+      "certificate_identity_regexp": "^https://github\\.com/logannye/hc-stark/\\.github/workflows/import-initial-guard-release-index\\.yml@refs/heads/main$",
+      "id": "tinyzkp-artifact-publication-main",
+      "oidc_issuer": "https://token.actions.githubusercontent.com",
+      "purposes": [
+        "guard_launch:artifact_publication"
+      ]
+    }
+  ]
 }

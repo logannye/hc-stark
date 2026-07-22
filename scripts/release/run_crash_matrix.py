@@ -462,6 +462,9 @@ def main(argv: list[str]) -> int:
         evidence_root=evidence_root,
         require_explicit_sha=not args.partial,
     )
+    evidence_runtime.owner_ga_tool_policy(
+        ROOT, str(source_identity["release_sha"])
+    )
     environment = evidence_runtime.sanitized_environment(os.environ)
     cargo_path = evidence_runtime.rustup_tool_path(
         RELEASE_TOOLCHAIN, "cargo", environment=environment, root=ROOT
@@ -475,22 +478,6 @@ def main(argv: list[str]) -> int:
     rustc_identity = evidence_runtime.executable_identity(
         str(rustc_path), ["-Vv"], environment=environment, root=ROOT
     )
-    cargo_host = next(
-        line.removeprefix("host: ")
-        for line in str(cargo_identity["version"]).splitlines()
-        if line.startswith("host: ")
-    )
-    tool_anchor = evidence_runtime.toolchain_anchor(
-        ROOT,
-        str(source_identity["release_sha"]),
-        execution_profile="release",
-        host=cargo_host,
-    )
-    if (
-        cargo_identity["sha256"] != tool_anchor["cargo_sha256"]
-        or rustc_identity["sha256"] != tool_anchor["rustc_sha256"]
-    ):
-        parser.error("release Cargo/rustc executables do not match committed anchors")
     tool_identity_path = log_dir / TOOL_IDENTITY_FILE
     tool_identity_record = evidence_runtime.tool_identity_record(
         source_identity,

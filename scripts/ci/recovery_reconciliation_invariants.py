@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Recovery-era replacement for legacy agent-SaaS reconciliation checks."""
+"""Quarantined historical hosted-recovery diagnostic; not Guard launch CI."""
 
 from __future__ import annotations
 
@@ -40,11 +40,10 @@ def text(path: str) -> str:
 def fixed_host_workflow_failures(workflow: str) -> list[str]:
     failures: list[str] = []
     expected_counts = {
-        "--require-fixed-host": 3,
-        "trap reclaim_reports EXIT": 4,
-        "--expected-release-sha": 2,
+        "runs-on: ubuntu-24.04": 2,
+        "trap reclaim_reports EXIT": 1,
         "scripts/benchmark/run_fixed_host_release_matrix.py": 1,
-        "if: github.event_name == 'workflow_dispatch' && inputs.release_matrix": 1,
+        "expected_main_sha:": 1,
     }
     for marker, expected in expected_counts.items():
         if workflow.count(marker) != expected:
@@ -52,17 +51,21 @@ def fixed_host_workflow_failures(workflow: str) -> list[str]:
                 f"fixed-host workflow must contain {expected} exact occurrence(s): {marker}"
             )
     for marker in (
-        "release_matrix:",
-        "HC_RELEASE_SHA: ${{ github.sha }}",
-        "plonky3-backend-release-matrix-${{ github.sha }}",
+        "github.actor",
+        "github.triggering_actor",
+        "github.repository_owner",
+        "test \"$REF\" = refs/heads/main",
+        "HC_RELEASE_SHA: ${{ inputs.expected_main_sha }}",
+        "plonky3-backend-release-matrix-${{ inputs.expected_main_sha }}",
         "raw-reports/fixed-host-release-matrix/",
     ):
         if marker not in workflow:
             failures.append(f"fixed-host release matrix lost control: {marker}")
-    if workflow.count("!inputs.release_matrix") != 3:
-        failures.append(
-            "fragmented telemetry/exploratory jobs are not suppressed during the release matrix"
-        )
+    for forbidden in ("self-hosted", "tinyzkp-benchmark", "release_matrix:"):
+        if forbidden in workflow:
+            failures.append(
+                f"owner qualification workflow retains unavailable runner control: {forbidden}"
+            )
     return failures
 
 
@@ -449,8 +452,12 @@ def main() -> int:
     finalizer = text("scripts/release/finalize_signed_evidence.py")
     for marker in (
         "REQUIRED_CHECKSUM_ENTRIES",
-        "--certificate-identity-regexp",
+        "--certificate-identity",
         "--certificate-oidc-issuer",
+        "--certificate-github-workflow-sha",
+        "--certificate-github-workflow-ref",
+        "--certificate-github-workflow-repository",
+        "--certificate-github-workflow-trigger",
         "verify_spdx_sbom",
     ):
         require(marker in finalizer, f"signed finalization lost policy control: {marker}")
@@ -459,8 +466,6 @@ def main() -> int:
     release_validator = text("scripts/ci/backend_release_ready.py")
     prerelease_validator = text("scripts/ci/backend_prerelease_ready.py")
     fuzz_runner = text("scripts/release/run_fuzz_smoke.py")
-    fuzz_anchor = text("scripts/release/fuzz_tool_anchor.py")
-    gate_tool_anchor = text("scripts/release/gate_tool_anchor.py")
     require(
         '"crash_resume_and_corruption_suite": [' in evidence_builder
         and '"crash_matrix"' in evidence_builder
@@ -505,25 +510,10 @@ def main() -> int:
         "harden_tree",
     ):
         require(marker in fuzz_runner, f"bounded fuzz smoke lost control: {marker}")
-    for marker in (
-        '"status": "unreviewed"',
-        '"review_required": True',
-        "cargo_fuzz_anchor",
-        "require_trusted_digest",
-        "write_json_atomic",
-    ):
-        require(marker in fuzz_anchor, f"cargo-fuzz anchor workflow lost control: {marker}")
-    for marker in (
-        '"status": "unreviewed"',
-        '"review_required": True',
-        "expected_tool_names",
-        "require_trusted_mapping",
-        "write_json_atomic",
-    ):
-        require(
-            marker in gate_tool_anchor,
-            f"generic gate-tool anchor workflow lost control: {marker}",
-        )
+    require(
+        "cargo_fuzz_anchor" not in fuzz_runner,
+        "fuzz runner still depends on a cross-host executable byte anchor",
+    )
     nightly_workflow = text(".github/workflows/nightly-backend.yml")
     require(
         "cargo install cargo-fuzz --version 0.13.2 --locked" in nightly_workflow,
@@ -534,23 +524,14 @@ def main() -> int:
         "cargo +nightly-2026-04-15 fetch",
         "--manifest-path fuzz/Cargo.toml",
         "run_crash_matrix_disk_full.sh",
-        "fuzz_tool_anchor.py capture",
-        "fuzz_tool_anchor.py verify",
+        "recovery-SHA256SUMS",
+        "actions/attest@",
     ):
         require(marker in nightly_workflow, f"nightly evidence workflow lost control: {marker}")
-    try:
-        capture_position = nightly_workflow.index("fuzz_tool_anchor.py capture")
-        verify_position = nightly_workflow.index("fuzz_tool_anchor.py verify")
-        expensive_position = nightly_workflow.index(
-            "Randomized proof equality through 2^18"
-        )
-    except ValueError:
-        pass
-    else:
-        require(
-            capture_position < verify_position < expensive_position,
-            "nightly does not fail closed on cargo-fuzz trust before expensive evidence",
-        )
+    require(
+        "fuzz_tool_anchor.py" not in nightly_workflow,
+        "nightly still requires a non-reproducible predeclared cargo-fuzz digest",
+    )
 
     preliminary_sbom = text("scripts/release/build_preliminary_sbom.py")
     review_bundle = text("scripts/release/build_review_bundle.py")
@@ -594,10 +575,9 @@ def main() -> int:
             "cancel-in-progress: false" in publish_workflow,
             f"publish workflow can race or cancel an in-flight release in {workflow_path}",
         )
-    sdk_publish_workflow = text(".github/workflows/publish-sdks.yml")
     require(
-        sdk_publish_workflow.count("needs.release-gate.outputs.backend_sha") == 2,
-        "SDK WASM/MCP jobs are not pinned to the evidenced backend commit",
+        not (ROOT / ".github/workflows/publish-sdks.yml").exists(),
+        "retired hosted SDK publication workflow was reactivated",
     )
 
     require(

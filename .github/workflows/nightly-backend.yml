@@ -1,19 +1,56 @@
-name: Manual Plonky3 release qualification
+name: Owner recovery and fuzz qualification
 
 on:
   workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: "Exact lowercase main commit to qualify"
+        required: true
+        type: string
 
 permissions:
+  attestations: write
   contents: read
+  id-token: write
+
+concurrency:
+  group: owner-engine-recovery-${{ inputs.expected_main_sha }}
+  cancel-in-progress: false
 
 jobs:
   proof-equality-crash-and-fuzz:
-    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
-    timeout-minutes: 720
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
     env:
+      HC_RELEASE_SHA: ${{ inputs.expected_main_sha }}
       TINYZKP_NIGHTLY_MAX_LOG: "18"
     steps:
+      - name: Require owner dispatch of the exact current main commit
+        env:
+          ACTOR: ${{ github.actor }}
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
+          RELEASE_SHA: ${{ github.sha }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          test "$OWNER" = logannye
+          test "$ACTOR" = "$OWNER"
+          test "$TRIGGERING_ACTOR" = "$OWNER"
+          test "$REF" = refs/heads/main
+          test "${#EXPECTED_MAIN_SHA}" = 40
+          case "$EXPECTED_MAIN_SHA" in *[!0-9a-f]*) exit 1 ;; esac
+          test "$RELEASE_SHA" = "$EXPECTED_MAIN_SHA"
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - name: Require the dispatch commit to remain current main
+        run: |
+          test "$(git rev-parse HEAD)" = "$HC_RELEASE_SHA"
+          test "$(git rev-parse origin/main)" = "$HC_RELEASE_SHA"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12.13"
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
@@ -24,43 +61,59 @@ jobs:
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - name: Warm exact locked dependencies before offline evidence runs
         run: |
-          cargo fetch --locked
+          cargo +1.95.0 fetch --locked
           cargo +nightly-2026-04-15 fetch \
             --manifest-path fuzz/Cargo.toml \
             --locked
       - name: Install exact cargo-fuzz
         run: cargo install cargo-fuzz --version 0.13.2 --locked
-      - name: Capture and enforce reviewed cargo-fuzz executable
-        env:
-          HC_RELEASE_SHA: ${{ github.sha }}
-        run: |
-          python3 scripts/release/fuzz_tool_anchor.py capture \
-            --output raw-reports/cargo-fuzz-anchor-candidate.json
-          python3 scripts/release/fuzz_tool_anchor.py verify \
-            --candidate raw-reports/cargo-fuzz-anchor-candidate.json
       - name: Randomized proof equality through 2^18
-        run: cargo test -p hc-plonky3 --release --locked nightly_proof_equality_through_configured_power_of_two -- --ignored --nocapture
+        run: cargo +1.95.0 test -p hc-plonky3 --release --locked nightly_proof_equality_through_configured_power_of_two -- --ignored --nocapture
       - name: Scratch preflight calibration across powers of two
-        run: cargo test -p hc-plonky3 --release --locked bounded_prover::tests::scratch_estimates_track_multiple_release_scale_powers -- --exact --ignored --nocapture
+        run: cargo +1.95.0 test -p hc-plonky3 --release --locked bounded_prover::tests::scratch_estimates_track_multiple_release_scale_powers -- --exact --ignored --nocapture
       - name: Complete machine-readable checkpoint crash rotation
         run: |
-          HC_RELEASE_SHA="${{ github.sha }}" \
-            scripts/release/run_crash_matrix_disk_full.sh \
-              raw-reports/crash-matrix.json \
-              raw-reports/crash-logs
-      - name: Parser and recovery fuzz smoke
-        env:
-          HC_RELEASE_SHA: ${{ github.sha }}
+          scripts/release/run_crash_matrix_disk_full.sh \
+            raw-reports/crash-matrix.json \
+            raw-reports/crash-logs
+      - name: All fourteen parser and recovery fuzz targets
         run: |
           python3 scripts/release/run_fuzz_smoke.py \
             --seconds 60 \
             --rss-limit-mb 2048 \
             --output raw-reports/fuzz-smoke.json \
             --log-dir raw-reports/fuzz-logs
+      - name: Bind the exact recovery and fuzz artifact inventory
+        working-directory: raw-reports
+        run: |
+          checksum_tmp="$RUNNER_TEMP/recovery-SHA256SUMS"
+          sha256sum \
+            crash-matrix.json \
+            crash-logs/crash-tool-identity.json \
+            crash-logs/*.log \
+            fuzz-smoke.json \
+            fuzz-logs/fuzz-tool-identity.json \
+            fuzz-logs/*.log \
+            >"$checksum_tmp"
+          test -s "$checksum_tmp"
+          mv "$checksum_tmp" recovery-SHA256SUMS
+      - name: Attest the exact-main recovery and fuzz inventory
+        uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
+        with:
+          subject-path: raw-reports/recovery-SHA256SUMS
       - name: Upload crash/fuzz logs and summaries
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: plonky3-fuzz-smoke-${{ github.sha }}
-          path: raw-reports/
-          if-no-files-found: warn
+          name: plonky3-recovery-fuzz-${{ inputs.expected_main_sha }}
+          path: |
+            raw-reports/recovery-SHA256SUMS
+            raw-reports/crash-matrix.json
+            raw-reports/crash-logs/*.log
+            raw-reports/crash-logs/crash-tool-identity.json
+            raw-reports/fuzz-smoke.json
+            raw-reports/fuzz-logs/*.log
+            raw-reports/fuzz-logs/fuzz-tool-identity.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

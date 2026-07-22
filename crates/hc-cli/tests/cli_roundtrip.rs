@@ -1515,3 +1515,33 @@ fn benchmark_worker_reports_prover_scratch_high_water() {
         .as_u64()
         .is_some_and(|bytes| bytes > 0));
 }
+
+#[test]
+fn benchmark_estimate_is_read_only_and_manifest_bound() {
+    let dir = tempdir().unwrap();
+    let manifest = write_fibonacci_manifest(dir.path());
+    let output = cargo_bin_cmd!("hc-cli")
+        .args([
+            "benchmark-estimate",
+            "--manifest",
+            manifest.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["schema_version"], 1);
+    assert!(report["manifest_digest_hex"]
+        .as_str()
+        .is_some_and(|digest| digest.len() == 64));
+    assert!(report["estimate"]["peak_resident_bytes"]
+        .as_u64()
+        .is_some_and(|bytes| bytes > 0));
+    assert!(report["estimate"]["scratch_high_water_bytes"]
+        .as_u64()
+        .is_some_and(|bytes| bytes > 0));
+}

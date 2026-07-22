@@ -1,7 +1,17 @@
 {
+  "advisory_status": {
+    "external_design_partner_integration": "not_completed",
+    "five_unaided_installs": "not_completed",
+    "implementation_review_no_high_findings": "not_completed",
+    "independent_resource_reproduction": "not_completed",
+    "plonky3_specialist_review": "not_completed",
+    "three_external_workloads": "not_completed",
+    "two_standard_annual_customers": "not_completed"
+  },
+  "agreement": null,
+  "authorization_policy": "owner_only_ga_v1",
   "blocking_gates": [
     "engine_release_ready",
-    "five_unaided_installs",
     "guard_artifact_published",
     "guard_release_ready",
     "hosted_infrastructure_decommissioned",
@@ -9,26 +19,19 @@
     "legal_terms_approved",
     "merchant_live_owner_smoke_passed",
     "merchant_sandbox_lifecycle_passed",
-    "release_rehearsal_within_budget",
-    "three_external_workloads",
-    "two_standard_annual_customers"
+    "release_rehearsal_within_budget"
   ],
   "canonical_gate": "https://github.com/logannye/hc-stark/blob/main/release/guard-launch-state-v2.json",
   "channel_manifest": null,
   "checkout_enabled": false,
   "commerce_state": "unconfigured",
   "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
+  "delivery": null,
   "gate_status": {
     "engine_release_ready": {
       "evidence": [],
       "reason_anchor": "/releases#gate-engine-release-ready",
       "reason_code": "engine-release-evidence-missing",
-      "status": "blocked"
-    },
-    "five_unaided_installs": {
-      "evidence": [],
-      "reason_anchor": "/releases#gate-five-unaided-installs",
-      "reason_code": "clean-machine-evidence-missing",
       "status": "blocked"
     },
     "guard_artifact_published": {
@@ -78,18 +81,6 @@
       "reason_anchor": "/releases#gate-release-rehearsal-within-budget",
       "reason_code": "release-rehearsal-evidence-missing",
       "status": "blocked"
-    },
-    "three_external_workloads": {
-      "evidence": [],
-      "reason_anchor": "/releases#gate-three-external-workloads",
-      "reason_code": "external-workload-evidence-missing",
-      "status": "blocked"
-    },
-    "two_standard_annual_customers": {
-      "evidence": [],
-      "reason_anchor": "/releases#gate-two-standard-annual-customers",
-      "reason_code": "annual-customer-evidence-missing",
-      "status": "blocked"
     }
   },
   "guard_artifact_available": false,
@@ -99,10 +90,10 @@
   "latest_release_index": null,
   "launch_state": "blocked",
   "portal_state": "unconfigured",
+  "qualification_basis": "owner_attested",
   "qualified_engine_artifact_available": false,
   "reason_anchors": {
     "engine_release_ready": "/releases#gate-engine-release-ready",
-    "five_unaided_installs": "/releases#gate-five-unaided-installs",
     "guard_artifact_published": "/releases#gate-guard-artifact-published",
     "guard_release_ready": "/releases#gate-guard-release-ready",
     "hosted_infrastructure_decommissioned": "/releases#gate-hosted-infrastructure-decommissioned",
@@ -115,9 +106,7 @@
     "merchant_sandbox_lifecycle_passed": "/releases#gate-merchant-sandbox-lifecycle-passed",
     "portal": "/support#merchant-portal",
     "release_rehearsal_within_budget": "/releases#gate-release-rehearsal-within-budget",
-    "sales": "/pricing#sales-status",
-    "three_external_workloads": "/releases#gate-three-external-workloads",
-    "two_standard_annual_customers": "/releases#gate-two-standard-annual-customers"
+    "sales": "/pricing#sales-status"
   },
   "release": "tinyzkp-guard-v1",
   "release_identity": {
@@ -129,5 +118,5 @@
   },
   "sales_state": "closed",
   "schema_version": 2,
-  "source_sha256": "3dfa19f361c99a9f09ab9ac230ada6bd6b3f88d4e3e9cc4ec888b187d8bd75bc"
+  "source_sha256": "496ed2c65859ead9760365399498c408ff8be4114298ed2a7c7513e2a8d13dc3"
 }

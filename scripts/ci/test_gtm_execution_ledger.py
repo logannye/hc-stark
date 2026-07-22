@@ -68,6 +68,22 @@ def test_renderer_derives_only_current_guard_gate_tasks():
     assert payload["business_state"]["recorded_revenue_cents"] == 0
     assert len(payload["tasks"]) == len(launch["gate_status"])
     assert {task["gate"] for task in payload["tasks"]} == set(launch["gate_status"])
+    assert set(renderer.GATE_METADATA) == set(launch["gate_status"])
+    assert not {
+        "three_external_workloads",
+        "two_standard_annual_customers",
+        "five_unaided_installs",
+    } & {task["gate"] for task in payload["tasks"]}
+    legal = next(task for task in payload["tasks"] if task["gate"] == "legal_terms_approved")
+    assert legal["owner"] == "owner"
+    assert "LN Holdings owner approval" in legal["next_action"]
+    rehearsal = next(
+        task
+        for task in payload["tasks"]
+        if task["gate"] == "release_rehearsal_within_budget"
+    )
+    assert "technical build" in rehearsal["next_action"]
+    assert "budget" not in rehearsal["next_action"].lower()
     assert all(task["status"] == "blocked" for task in payload["tasks"])
     assert all("primary_cta" not in task and "secondary_cta" not in task for task in payload["tasks"])
     serialized = json.dumps(payload).lower()

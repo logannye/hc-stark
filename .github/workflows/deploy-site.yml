@@ -93,10 +93,14 @@ jobs:
             scripts/ci/test_guard_site_contract.py \
             scripts/ci/test_site_route_check.py \
             scripts/ci/test_site_deploy_check.py \
+            scripts/ci/test_containment_health_audit.py \
+            scripts/monitoring/test_guard_health_audit.py \
             scripts/deploy/test_static_site_canary.py \
             scripts/deploy/test_cloudflare_pages_release.py -q
+          npm --prefix deploy/uptime-probe test
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs
+          node scripts/ci/site_shared_checkout_test.mjs
           python3 scripts/ci/guard_pages_launch_preflight.py \
             --source-guard-trust-sha256 \
               "$(sha256sum release/guard-launch-trust-v1.json | cut -d' ' -f1)" \

@@ -29,10 +29,10 @@ def fixtures(rows=1_048_576):
         "scope": "full_pipeline",
         "benchmark_session_id": "0123456789abcdef0123456789abcdef",
         "hardware": "test-host",
-        "physical_logical_cpu_count": 12,
-        "physical_memory_bytes": 64 * 1024**3,
-        "effective_cpu_count": 8,
-        "effective_cpu_affinity": list(range(8)),
+        "physical_logical_cpu_count": 4,
+        "physical_memory_bytes": 16 * 1024**3,
+        "effective_cpu_count": 4,
+        "effective_cpu_affinity": list(range(4)),
         "effective_memory_max_bytes": 16 * 1024**3,
         "effective_swap_max_bytes": 0,
         "cgroup_v2_path": "/tinyzkp-bench",
@@ -41,9 +41,9 @@ def fixtures(rows=1_048_576):
         "storage_device": "259:1:nvme0n1p1",
         "effective_storage_device": "259:1:nvme0n1p1",
         "storage_is_rotational": False,
-        "storage_is_nvme": True,
-        "storage_total_bytes": 1_000_000_000_000,
-        "storage_available_bytes": 500_000_000_000,
+        "storage_is_nvme": False,
+        "storage_total_bytes": 14_000_000_000,
+        "storage_available_bytes": 12_000_000_000,
         "scratch_directory_mode": 0o700,
         "scratch_owned_by_runner": True,
         "dependency_profile": gate.PROFILE,
@@ -167,15 +167,15 @@ def test_report_release_and_manifest_identity_are_bound():
     assert "candidate release identity does not match evidence" in failures
 
 
-def test_release_reports_require_the_same_fixed_host_session():
+def test_release_reports_require_the_same_qualification_session():
     manifest, baseline, candidate, baseline_normalized, candidate_normalized = fixtures()
     candidate["benchmark_session_id"] = "f" * 32
     candidate["storage_device"] = "259:2:nvme1n1p1"
-    candidate["effective_cpu_count"] = 7
-    candidate["effective_cpu_affinity"] = list(range(7))
+    candidate["effective_cpu_count"] = 3
+    candidate["effective_cpu_affinity"] = list(range(3))
     candidate["effective_memory_max_bytes"] = 32 * 1024**3
-    candidate["storage_is_nvme"] = False
-    candidate["storage_available_bytes"] = 499_999_999_999
+    candidate["storage_is_nvme"] = None
+    candidate["storage_available_bytes"] = 11_999_999_999
     candidate["scratch_directory_mode"] = 0o755
     candidate["scratch_owned_by_runner"] = False
     failures = gate.validate_gate(
@@ -186,11 +186,11 @@ def test_release_reports_require_the_same_fixed_host_session():
         baseline_normalized=baseline_normalized,
         candidate_normalized=candidate_normalized,
     )
-    assert "candidate release cgroup must expose exactly 8 effective CPUs" in failures
-    assert "candidate release cgroup is not in the 16-GiB memory class" in failures
-    assert "candidate release scratch storage is not verified NVMe" in failures
+    assert "candidate qualification runner must expose exactly 4 effective CPUs" in failures
+    assert "candidate qualification runner is not in the 16-GiB memory class" in failures
+    assert "candidate qualification scratch storage type is unknown" in failures
     assert (
-        "candidate release scratch storage must have at least 500 GB available"
+        "candidate qualification scratch storage must have at least 12 GB available"
         in failures
     )
     assert "candidate release scratch directory must have mode 0700" in failures

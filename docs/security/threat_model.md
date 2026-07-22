@@ -55,19 +55,20 @@ Relevant goals are:
   and official verification.
 - CLI events contain phase/progress/provenance/resource metadata only; witness
   values are forbidden.
-- Release publication derives from hashed evidence. Handwritten pass booleans,
-  unresolved critical/high review findings, missing partner acceptance, or
-  release-identity skew block publication.
+- Release publication derives from signed, source-bound evidence. Handwritten
+  pass booleans, missing automated security results, or release-identity skew
+  block publication. Outside review and partner acceptance are advisories.
 
-## Residual risks and open gates
+## Residual risks and advisories
 
-- Plonky3’s frozen benchmark FRI parameters have not yet received the required
-  specialist and implementation reviews for TinyZKP production use.
+- Plonky3’s frozen benchmark FRI parameters have not received specialist or
+  implementation review. That is disclosed as advisory risk, not represented
+  as completed, and does not replace the automated verifier/security suite.
 - Unit and subprocess fault injection cover every durable phase from trace
   generation through verified proof assembly. The machine-readable matrix also
   covers real disk-full recovery, chunk truncation/corruption, stale identity,
   path traversal, symlinks, and cancellation retention. Independent fixed-host
-  reproduction remains a release-evidence gate. The machine-readable crash
+  reproduction remains an uncompleted advisory. The machine-readable crash
   matrix sends a real SIGTERM to the CLI, resumes its retained checkpoint, and
   requires proof-byte equality. Controlled-host power-loss simulation remains
   an outstanding validation item and is not represented by this matrix.

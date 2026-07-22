@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run the active containment/recovery invariants.
+# Run the quarantined historical containment/recovery diagnostic.
+# This wrapper is not invoked by required CI and is not Guard launch authority.
 #
 # The pre-recovery agent-SaaS reconciliation suite was intentionally removed:
 # it required legacy checkout, receipt-sharing, badge, SEO, ChatGPT-app, growth

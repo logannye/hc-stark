@@ -289,6 +289,7 @@ def compatibility_identity(path: Path) -> dict[str, str]:
             "cargo_lock_sha256",
             "upstream",
             "configuration",
+            "production_scope",
             "pinned_crates",
             "artifact_dependencies",
             "validated_workloads",
@@ -320,7 +321,7 @@ def compatibility_identity(path: Path) -> dict[str, str]:
     if (
         manifest.get("schema_version") != 1
         or manifest.get("profile_id") != PROFILE_ID
-        or manifest.get("release_status") != "backend_recovery"
+        or manifest.get("release_status") != "production_scoped_ga"
         or upstream.get("repository") != "https://github.com/Plonky3/Plonky3"
         or upstream.get("tag") != "v0.6.1"
         or upstream.get("reference_configuration")
@@ -341,6 +342,45 @@ def compatibility_identity(path: Path) -> dict[str, str]:
         or configuration.get("official_verifier_required") is not True
     ):
         raise EvidenceError("unsupported Plonky3 compatibility profile")
+    expected_production_scope = {
+        "distribution": ["linux_x86_64_cli", "linux_amd64_oci"],
+        "qualification_runner": {
+            "provider": "github_hosted",
+            "image": "ubuntu-24.04",
+            "effective_cpu_count": 4,
+            "memory_class": "16_gib",
+            "minimum_available_scratch_bytes": 12_000_000_000,
+            "non_rotational_storage_required": True,
+        },
+        "qualified_workloads": [
+            {
+                "workload_id": "fibonacci",
+                "maximum_logical_rows": 16_777_216,
+                "bounded_peak_resident_estimate_bytes": 545_259_520,
+                "bounded_scratch_estimate_bytes": 8_590_055_346,
+                "scratch_required_with_headroom_bytes": 9_544_505_940,
+            },
+            {
+                "workload_id": "poseidon2_goldilocks",
+                "maximum_logical_rows": 1_048_576,
+                "bounded_peak_resident_estimate_bytes": 385_875_968,
+                "bounded_scratch_estimate_bytes": 10_569_876_514,
+                "scratch_required_with_headroom_bytes": 11_744_307_238,
+            },
+        ],
+        "post_ga_capacity_expansion": [
+            {
+                "workload_id": "poseidon2_goldilocks",
+                "logical_rows": 16_777_216,
+                "bounded_peak_resident_estimate_bytes": 763_363_328,
+                "bounded_scratch_estimate_bytes": 169_114_584_484,
+                "scratch_required_with_headroom_bytes": 187_905_093_872,
+                "production_supported": False,
+            }
+        ],
+    }
+    if manifest.get("production_scope") != expected_production_scope:
+        raise EvidenceError("unsupported Plonky3 production scope")
     nonempty_string(manifest.get("rust_toolchain"), "compatibility rust_toolchain")
     sha256_hex(manifest.get("cargo_lock_sha256"), "compatibility cargo_lock_sha256")
     crates = manifest.get("pinned_crates")

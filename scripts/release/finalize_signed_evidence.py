@@ -24,11 +24,21 @@ import source_tree_identity  # noqa: E402
 
 CHECKSUM_LINE = re.compile(r"^([0-9a-f]{64}) [ *](.+)$")
 SIGSTORE_ISSUER = "https://token.actions.githubusercontent.com"
-SIGSTORE_IDENTITY_REGEXP = (
-    r"^https://github\.com/logannye/hc-stark/\.github/workflows/"
-    r"release-backend\.yml@refs/tags/backend-v[^/]+$"
+SIGSTORE_REPOSITORY = "logannye/hc-stark"
+SIGSTORE_WORKFLOW = ".github/workflows/release-backend.yml"
+SIGSTORE_TRIGGER = "workflow_dispatch"
+BACKEND_RELEASE_REF = re.compile(
+    r"^backend-v(?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$"
 )
 REQUIRED_CHECKSUM_ENTRIES = set(final_gate.SIGNED_RELEASE_CHECKSUM_NAMES)
+
+
+def sigstore_identity(release_ref: str) -> str:
+    return (
+        f"https://github.com/{SIGSTORE_REPOSITORY}/{SIGSTORE_WORKFLOW}"
+        f"@refs/tags/{release_ref}"
+    )
 
 
 def sha256(path: Path) -> str:
@@ -153,15 +163,23 @@ def finalize(
     root: Path,
     candidate_config_path: Path,
     release_sha: str,
+    release_ref: str,
     sbom: Path,
     checksums: Path,
     signature: Path,
     identity_report: Path,
+    runtime_smoke: Path,
     output_evidence: Path,
     output_config: Path,
     cosign: str,
 ) -> tuple[dict[str, object], dict[str, object]]:
     root = root.resolve()
+    if not final_gate.lower_hex(release_sha, 40):
+        raise ValueError("release SHA is malformed")
+    if not BACKEND_RELEASE_REF.fullmatch(release_ref):
+        raise ValueError("release ref must be a canonical backend semantic-version tag")
+    workflow_ref = f"refs/tags/{release_ref}"
+    signer_identity = sigstore_identity(release_ref)
     candidate_config = final_gate.read_object(safe_file(root, candidate_config_path))
     problems = prerelease.failures(candidate_config, root=root)
     if problems:
@@ -187,6 +205,7 @@ def finalize(
     checksums = safe_file(root, checksums)
     signature = safe_file(root, signature)
     identity_report = safe_file(root, identity_report)
+    runtime_smoke = safe_file(root, runtime_smoke)
     verify_spdx_sbom(sbom)
     checksum_entries = verify_checksum_manifest(
         checksums, sbom, REQUIRED_CHECKSUM_ENTRIES
@@ -195,15 +214,22 @@ def finalize(
         "identities": {
             "engine_cli": release_sha,
             "engine_oci": release_sha,
-        }
+        },
+        "cli_smoke": True,
+        "oci_smoke": True,
     }
     identity_failures = final_gate.validate_identity_evidence(
-        [(identity_report, {"role": "identity_report"})],
+        [
+            (identity_report, {"role": "identity_report"}),
+            (runtime_smoke, {"role": "runtime_smoke"}),
+        ],
         identity_metadata,
         release_sha,
     )
     identity_failures.extend(
-        final_gate.validate_identity_checksum_binding(identity_report, checksums)
+        final_gate.validate_identity_checksum_binding(
+            identity_report, checksums, runtime_smoke
+        )
     )
     if identity_failures:
         raise ValueError(
@@ -214,10 +240,18 @@ def finalize(
         "verify-blob",
         "--bundle",
         str(signature),
-        "--certificate-identity-regexp",
-        SIGSTORE_IDENTITY_REGEXP,
+        "--certificate-identity",
+        signer_identity,
         "--certificate-oidc-issuer",
         SIGSTORE_ISSUER,
+        "--certificate-github-workflow-sha",
+        release_sha,
+        "--certificate-github-workflow-ref",
+        workflow_ref,
+        "--certificate-github-workflow-repository",
+        SIGSTORE_REPOSITORY,
+        "--certificate-github-workflow-trigger",
+        SIGSTORE_TRIGGER,
         str(checksums),
     ]
     verified = final_gate.evidence_runtime.run_anchored_cosign(
@@ -242,21 +276,31 @@ def finalize(
                 "role": "identity_report",
                 "path": relative_path(root, identity_report),
                 "sha256": sha256(identity_report),
-            }
+            },
+            {
+                "role": "runtime_smoke",
+                "path": relative_path(root, runtime_smoke),
+                "sha256": sha256(runtime_smoke),
+            },
         ],
     }
     gates[prerelease.SIGNED_GATE] = {
         "kind": "signed_release",
         "metadata": {
             "release_sha": release_sha,
+            "release_ref": release_ref,
             "source_release_sha": source_release_sha,
             "source_tree_sha256": source_tree_sha256,
             "release_tree_sha256": release_tree_sha256,
             "evidence_only_delta_verified": True,
             "evidence_delta_paths": evidence_delta_paths,
             "signatures_verified": True,
-            "signer_identity_regexp": SIGSTORE_IDENTITY_REGEXP,
+            "signer_identity": signer_identity,
             "signer_oidc_issuer": SIGSTORE_ISSUER,
+            "signer_workflow_sha": release_sha,
+            "signer_workflow_ref": workflow_ref,
+            "signer_workflow_repository": SIGSTORE_REPOSITORY,
+            "signer_workflow_trigger": SIGSTORE_TRIGGER,
             "verification_command": verification_command,
             "checksum_entries": checksum_entries,
         },
@@ -319,10 +363,12 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate-config", type=Path, required=True)
     parser.add_argument("--release-sha", required=True)
+    parser.add_argument("--release-ref", required=True)
     parser.add_argument("--sbom", type=Path, required=True)
     parser.add_argument("--checksums", type=Path, required=True)
     parser.add_argument("--signature", type=Path, required=True)
     parser.add_argument("--identity-report", type=Path, required=True)
+    parser.add_argument("--runtime-smoke", type=Path, required=True)
     parser.add_argument("--output-evidence", type=Path, required=True)
     parser.add_argument("--output-config", type=Path, required=True)
     parser.add_argument("--cosign", default="cosign")
@@ -332,10 +378,12 @@ def main(argv: list[str]) -> int:
             root=ROOT,
             candidate_config_path=args.candidate_config,
             release_sha=args.release_sha,
+            release_ref=args.release_ref,
             sbom=args.sbom,
             checksums=args.checksums,
             signature=args.signature,
             identity_report=args.identity_report,
+            runtime_smoke=args.runtime_smoke,
             output_evidence=args.output_evidence,
             output_config=args.output_config,
             cosign=args.cosign,

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Permit backend publication only from hashed, machine-validated evidence.
 
-Human-edited `passed: true` flags are deliberately not accepted. External
-reviews and partner acceptance remain human activities, but their reports,
-finding ledgers, signatures, and acceptance records must be represented by
-the evidence contract below before this gate can pass.
+Human-edited ``passed: true`` flags are deliberately not accepted. Optional
+external reviews and adoption evidence are tracked by the Guard advisory
+ledger; they are not engine-publication authority.
 """
 
 from __future__ import annotations
@@ -42,12 +41,28 @@ SIGNED_RELEASE_CHECKSUM_NAMES = {
     "backend-v1-gates.json",
     "engine-identity.json",
     "engine-release.json",
+    "engine-runtime-smoke.json",
     "plonky3-compatibility-v1.json",
     "tinyzkp-engine.spdx.json",
     "tinyzkp-engine-linux-x86_64",
     "tinyzkp-engine.oci.tar",
 }
 CHECKSUM_LINE = re.compile(r"^([0-9a-f]{64}) [ *]([^/\0]+)$")
+SIGSTORE_ISSUER = "https://token.actions.githubusercontent.com"
+SIGSTORE_REPOSITORY = "logannye/hc-stark"
+SIGSTORE_WORKFLOW = ".github/workflows/release-backend.yml"
+SIGSTORE_TRIGGER = "workflow_dispatch"
+BACKEND_RELEASE_REF = re.compile(
+    r"^backend-v(?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$"
+)
+
+
+def sigstore_identity(release_ref: str) -> str:
+    return (
+        f"https://github.com/{SIGSTORE_REPOSITORY}/{SIGSTORE_WORKFLOW}"
+        f"@refs/tags/{release_ref}"
+    )
 
 EXPECTED_KINDS = {
     "clean_release_source": "source_scan",
@@ -57,11 +72,7 @@ EXPECTED_KINDS = {
     "deterministic_cross_mode_proofs": "test_run",
     "one_million_row_resource_gate": "resource_one_million",
     "ten_million_row_resource_gate": "resource_ten_million",
-    "independent_resource_reproduction": "independent_reproduction",
     "crash_resume_and_corruption_suite": "test_run",
-    "plonky3_specialist_review": "review",
-    "implementation_review_no_high_findings": "review",
-    "external_design_partner_integration": "partner",
     "air_job_contracts": "test_run",
     "signed_release_sbom_and_checksums": "signed_release",
     "engine_cli_oci_identity_match": "identity_parity",
@@ -212,11 +223,6 @@ BENCHMARK_REPORT_REQUIRED_FIELDS = {
     "verification_succeeded",
     "exit_status",
 }
-SIGSTORE_ISSUER = "https://token.actions.githubusercontent.com"
-SIGSTORE_IDENTITY_REGEXP = (
-    r"^https://github\.com/logannye/hc-stark/\.github/workflows/"
-    r"release-backend\.yml@refs/tags/backend-v[^/]+$"
-)
 DEVICE_IDENTITY = re.compile(r"^[0-9]{1,10}:[0-9]{1,10}$")
 MOUNT_OPTION = re.compile(r"^[a-z0-9_.=-]{1,64}$")
 TOOL_FIRST_LINE = {
@@ -618,6 +624,7 @@ def validate_runtime_identity(
 ) -> list[str]:
     failures: list[str] = []
     try:
+        evidence_runtime.owner_ga_tool_policy(root, release_sha)
         expected_source_tree = source_tree_identity.source_tree_sha256(
             root, release_sha
         )
@@ -665,25 +672,8 @@ def validate_runtime_identity(
     rustc_host = tool_version_host(
         rustc_identity.get("version") if isinstance(rustc_identity, dict) else None
     )
-    try:
-        anchor = evidence_runtime.toolchain_anchor(
-            root,
-            release_sha,
-            execution_profile="fuzz" if cargo_release.endswith("-nightly") else "release",
-            host=str(cargo_host),
-        )
-    except ValueError as error:
-        failures.append(f"runtime toolchain provenance is unanchored: {error}")
-    else:
-        if (
-            cargo_host is None
-            or rustc_host != cargo_host
-            or not isinstance(cargo_identity, dict)
-            or not isinstance(rustc_identity, dict)
-            or cargo_identity.get("sha256") != anchor["cargo_sha256"]
-            or rustc_identity.get("sha256") != anchor["rustc_sha256"]
-        ):
-            failures.append("runtime tool executable digests do not match committed anchors")
+    if cargo_host is None or rustc_host != cargo_host:
+        failures.append("runtime Cargo and rustc host identities differ")
     return failures
 
 
@@ -1510,12 +1500,6 @@ def validate_fuzz_smoke(
     cargo_host = tool_version_host(
         cargo_identity.get("version") if isinstance(cargo_identity, dict) else None
     )
-    try:
-        expected_cargo_fuzz = evidence_runtime.cargo_fuzz_anchor(
-            root, release_sha, str(cargo_host)
-        )
-    except ValueError:
-        expected_cargo_fuzz = None
     boundary = report.get("execution_boundary")
     if (
         set(report) != FUZZ_REPORT_KEYS
@@ -1534,8 +1518,6 @@ def validate_fuzz_smoke(
             executable_name="cargo-fuzz",
             exact_version="cargo-fuzz 0.13.2",
         )
-        or report.get("cargo_fuzz_identity", {}).get("sha256")
-        != expected_cargo_fuzz
         or report.get("sanitizer") != run_fuzz_smoke.FUZZ_SANITIZER
         or report.get("sanitizer_runtime_environment")
         != {"ASAN_OPTIONS": run_fuzz_smoke.FUZZ_ASAN_OPTIONS}
@@ -1952,31 +1934,49 @@ def validate_test_run_evidence(
         reparsed = run_evidenced_command.parse_output(expected_gate, log)
     except (KeyError, UnicodeError, ValueError):
         reparsed = None
-    anchored_cargo = True
+    owner_ga_tool_policy_valid = True
+    try:
+        evidence_runtime.owner_ga_tool_policy(root, release_sha)
+    except ValueError:
+        owner_ga_tool_policy_valid = False
+    versioned_cargo = True
     if isinstance(tools, dict) and "cargo" in tools:
         cargo_identity = tools.get("cargo")
+        rustc_identity = tools.get("rustc")
         host = tool_version_host(
             cargo_identity.get("version")
             if isinstance(cargo_identity, dict)
             else None
         )
-        try:
-            anchor = evidence_runtime.toolchain_anchor(
-                root,
-                release_sha,
-                execution_profile="release",
-                host=str(host),
+        rustc_host = tool_version_host(
+            rustc_identity.get("version")
+            if isinstance(rustc_identity, dict)
+            else None
+        )
+        versioned_cargo = (
+            _tool_identity_valid(
+                cargo_identity,
+                executable_name="cargo",
+                expected_release="1.95.0",
+                expected_commit=RELEASE_CARGO_COMMIT,
             )
-        except ValueError:
-            anchored_cargo = False
-        else:
-            rustc_identity = tools.get("rustc")
-            anchored_cargo = (
-                isinstance(cargo_identity, dict)
-                and cargo_identity.get("sha256") == anchor["cargo_sha256"]
-                and isinstance(rustc_identity, dict)
-                and rustc_identity.get("sha256") == anchor["rustc_sha256"]
+            and isinstance(cargo_identity, dict)
+            and run_evidenced_command.rust_tool_version_valid(
+                "cargo", cargo_identity.get("version")
             )
+            and _tool_identity_valid(
+                rustc_identity,
+                executable_name="rustc",
+                expected_release="1.95.0",
+                expected_commit=RELEASE_RUSTC_COMMIT,
+            )
+            and isinstance(rustc_identity, dict)
+            and run_evidenced_command.rust_tool_version_valid(
+                "rustc", rustc_identity.get("version")
+            )
+            and host is not None
+            and rustc_host == host
+        )
     expected_tools = {str(primary)} if isinstance(primary, str) else set()
     if primary == "bash":
         expected_tools.update({"cargo", "rustc"})
@@ -1986,19 +1986,16 @@ def validate_test_run_evidence(
     network_boundary = report.get("network_boundary")
     gate_inputs = report.get("gate_inputs")
     expected_gate_inputs: dict[str, object] = {}
-    anchored_generic_tools = True
-    try:
-        generic_anchors = evidence_runtime.gate_tool_anchors(root, release_sha)
-    except ValueError:
-        anchored_generic_tools = False
-        generic_anchors = {}
-    if isinstance(tools, dict):
-        anchored_generic_tools = anchored_generic_tools and all(
-            name in {"cargo", "rustc"}
-            or generic_anchors.get(name) == identity.get("sha256")
-            for name, identity in tools.items()
-            if isinstance(identity, dict)
+    versioned_generic_tools = isinstance(tools, dict) and all(
+        name in {"cargo", "rustc"}
+        or (
+            isinstance(identity, dict)
+            and run_evidenced_command.generic_tool_version_valid(
+                name, identity.get("version")
+            )
         )
+        for name, identity in tools.items()
+    )
     if (
         set(report)
         != {
@@ -2094,8 +2091,9 @@ def validate_test_run_evidence(
         or not isinstance(tools, dict)
         or not tools
         or set(tools) != expected_tools
-        or not anchored_cargo
-        or not anchored_generic_tools
+        or not owner_ga_tool_policy_valid
+        or not versioned_cargo
+        or not versioned_generic_tools
         or not type_sensitive_equal(gate_inputs, expected_gate_inputs)
         or any(
             not isinstance(value, dict)
@@ -2217,6 +2215,8 @@ def validate_identity_evidence(
     release_sha: str,
 ) -> list[str]:
     roles = {descriptor.get("role"): path for path, descriptor in artifacts}
+    if set(roles) != {"identity_report", "runtime_smoke"}:
+        return ["release identity artifacts are incomplete or unexpected"]
     try:
         report = read_object(roles["identity_report"])
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
@@ -2325,13 +2325,195 @@ def validate_identity_evidence(
         or not lower_hex(compatibility.get("artifact_sha256"), 64)
         or compatibility.get("profile_id") != "tinyzkp-p3-goldilocks-v1"
         or compatibility.get("plonky3_version") != "0.6.1"
-        or not bounded_string(compatibility.get("release_status"), maximum=128)
+        or compatibility.get("release_status") != "production_scoped_ga"
     ):
         failures.append("compatibility identity is incomplete or skewed")
 
-    if set(metadata) != {"identities"} or metadata.get("identities") != report_identities:
+    if (
+        set(metadata) != {"identities", "cli_smoke", "oci_smoke"}
+        or metadata.get("identities") != report_identities
+        or metadata.get("cli_smoke") is not True
+        or metadata.get("oci_smoke") is not True
+    ):
         failures.append("release identity metadata does not match the machine report")
+    try:
+        runtime_smoke = read_object(roles["runtime_smoke"])
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        failures.append(f"engine runtime smoke report is unavailable: {error}")
+    else:
+        failures.extend(
+            validate_runtime_smoke_report(runtime_smoke, report, release_sha)
+        )
     return failures
+
+
+def validate_runtime_smoke_report(
+    smoke: dict[str, object],
+    identity_report: dict[str, object],
+    release_sha: str,
+) -> list[str]:
+    failure = "engine runtime smoke report is incomplete or release-skewed"
+    expected_top = {
+        "schema_version",
+        "status",
+        "release_sha",
+        "release_ref",
+        "checked_at",
+        "claims",
+        "artifacts",
+        "release_identity",
+        "executions",
+        "runtime_policy",
+        "binding",
+    }
+    surfaces = identity_report.get("surfaces")
+    if not isinstance(surfaces, dict):
+        return [failure]
+    cli_surface = surfaces.get("engine_cli")
+    oci_surface = surfaces.get("engine_oci")
+    if not isinstance(cli_surface, dict) or not isinstance(oci_surface, dict):
+        return [failure]
+    release_ref = identity_report.get("release_ref")
+    if (
+        set(smoke) != expected_top
+        or not exact_int(smoke.get("schema_version"), 1)
+        or smoke.get("status") != "pass"
+        or smoke.get("release_sha") != release_sha
+        or smoke.get("release_ref") != release_ref
+        or not bounded_string(smoke.get("checked_at"), maximum=128)
+        or smoke.get("claims") != {"cli_smoke": True, "oci_smoke": True}
+    ):
+        return [failure]
+
+    release_identity = smoke.get("release_identity")
+    release_keys = {
+        "service",
+        "package_version",
+        "release_sha",
+        "release_ref",
+        "backend",
+        "plonky3_version",
+        "compatibility_profile",
+        "dependency_lock_sha256",
+    }
+    if (
+        not isinstance(release_identity, dict)
+        or set(release_identity) != release_keys
+        or release_identity.get("service") != "cli"
+        or release_identity.get("package_version") != cli_surface.get("package_version")
+        or release_identity.get("release_sha") != release_sha
+        or release_identity.get("release_ref") != release_ref
+        or release_identity.get("backend") != "plonky3"
+        or release_identity.get("plonky3_version") != "0.6.1"
+        or release_identity.get("compatibility_profile")
+        != "tinyzkp-p3-goldilocks-v1"
+        or not lower_hex(release_identity.get("dependency_lock_sha256"), 64)
+    ):
+        return [failure]
+
+    artifacts = smoke.get("artifacts")
+    if not isinstance(artifacts, dict) or set(artifacts) != {
+        "engine_cli",
+        "engine_oci",
+        "engine_release",
+    }:
+        return [failure]
+    engine_cli = artifacts.get("engine_cli")
+    engine_oci = artifacts.get("engine_oci")
+    engine_release = artifacts.get("engine_release")
+    if (
+        not isinstance(engine_cli, dict)
+        or set(engine_cli) != {"path", "sha256"}
+        or Path(str(engine_cli.get("path"))).name
+        != "tinyzkp-engine-linux-x86_64"
+        or engine_cli.get("sha256") != cli_surface.get("artifact_sha256")
+        or not isinstance(engine_release, dict)
+        or set(engine_release) != {"path", "sha256"}
+        or Path(str(engine_release.get("path"))).name != "engine-release.json"
+        or engine_release.get("sha256")
+        != cli_surface.get("identity_artifact_sha256")
+        or not isinstance(engine_oci, dict)
+        or set(engine_oci)
+        != {
+            "path",
+            "sha256",
+            "manifest_digest",
+            "config_digest",
+            "runtime_image_id",
+        }
+        or Path(str(engine_oci.get("path"))).name != "tinyzkp-engine.oci.tar"
+        or engine_oci.get("sha256") != oci_surface.get("artifact_sha256")
+        or engine_oci.get("manifest_digest") != oci_surface.get("manifest_digest")
+        or engine_oci.get("config_digest") != oci_surface.get("config_digest")
+        or engine_oci.get("runtime_image_id") != oci_surface.get("config_digest")
+    ):
+        return [failure]
+
+    canonical_release = json.dumps(
+        release_identity,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    canonical_digest = hashlib.sha256(canonical_release).hexdigest()
+    executions = smoke.get("executions")
+    if not isinstance(executions, dict) or set(executions) != {
+        "engine_cli",
+        "engine_oci",
+    }:
+        return [failure]
+    for surface in ("engine_cli", "engine_oci"):
+        execution = executions.get(surface)
+        if (
+            not isinstance(execution, dict)
+            or set(execution)
+            != {"command", "stdout_sha256", "canonical_release_sha256"}
+            or execution.get("command") != ["release"]
+            or execution.get("stdout_sha256") != engine_release.get("sha256")
+            or execution.get("canonical_release_sha256") != canonical_digest
+        ):
+            return [failure]
+
+    expected_runtime_policy = {
+        "image_source_transport": "oci-archive",
+        "image_destination_transport": "docker-daemon",
+        "docker_host": "unix:///var/run/docker.sock",
+        "pull_policy": "never",
+        "network_mode": "none",
+        "user": "10001:10001",
+        "read_only_rootfs": True,
+        "privileged": False,
+        "cap_drop": ["ALL"],
+        "security_opt": ["no-new-privileges"],
+        "host_binds": [],
+        "devices": [],
+        "memory_bytes": 256 * 1024 * 1024,
+        "nano_cpus": 1_000_000_000,
+        "pids_limit": 64,
+        "tmpfs": {
+            path: {
+                "bytes": 16 * 1024 * 1024,
+                "exec": False,
+                "mode": "0700",
+                "nodev": True,
+                "nosuid": True,
+                "uid": 10001,
+                "gid": 10001,
+            }
+            for path in ("/scratch", "/work")
+        },
+    }
+    if not type_sensitive_equal(smoke.get("runtime_policy"), expected_runtime_policy):
+        return [failure]
+    if smoke.get("binding") != {
+        "cli_matches_engine_release_bytes": True,
+        "oci_matches_engine_release_bytes": True,
+        "cli_matches_oci_semantics": True,
+        "oci_embeds_cli_binary": True,
+        "oci_runtime_policy_inspected": True,
+    }:
+        return [failure]
+    return []
 
 
 def checksum_inventory(path: Path) -> dict[str, str] | None:
@@ -2368,7 +2550,7 @@ def checksum_inventory(path: Path) -> dict[str, str] | None:
 
 
 def validate_identity_checksum_binding(
-    identity_report: Path, checksums: Path
+    identity_report: Path, checksums: Path, runtime_smoke: Path | None = None
 ) -> list[str]:
     try:
         report = read_object(identity_report)
@@ -2389,6 +2571,11 @@ def validate_identity_checksum_binding(
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         return ["engine identity cannot be bound to the signed checksums"]
     inventory = checksum_inventory(checksums)
+    if runtime_smoke is not None:
+        try:
+            reported[runtime_smoke.name] = bounded_file_sha256(runtime_smoke)
+        except (OSError, ValueError):
+            return ["engine identity cannot be bound to the signed checksums"]
     if inventory is None or any(inventory.get(name) != digest for name, digest in reported.items()):
         return ["engine identity does not match the signed artifact checksums"]
     return []
@@ -2404,14 +2591,20 @@ def validate_postbuild_bindings(
             raise ValueError
         identity_artifacts = identity_gate["artifacts"]
         signed_artifacts = signed_gate["artifacts"]
+        signed_metadata = signed_gate["metadata"]
         if not isinstance(identity_artifacts, list) or not isinstance(
             signed_artifacts, list
-        ):
+        ) or not isinstance(signed_metadata, dict):
             raise ValueError
         identity_descriptor = next(
             item
             for item in identity_artifacts
             if isinstance(item, dict) and item.get("role") == "identity_report"
+        )
+        runtime_descriptor = next(
+            item
+            for item in identity_artifacts
+            if isinstance(item, dict) and item.get("role") == "runtime_smoke"
         )
         checksums_descriptor = next(
             item
@@ -2419,10 +2612,16 @@ def validate_postbuild_bindings(
             if isinstance(item, dict) and item.get("role") == "checksums"
         )
         identity_path, _ = safe_artifact(root, identity_descriptor)
+        runtime_path, _ = safe_artifact(root, runtime_descriptor)
         checksums_path, _ = safe_artifact(root, checksums_descriptor)
+        identity_report = read_object(identity_path)
     except (KeyError, OSError, StopIteration, TypeError, ValueError):
         return ["post-build engine identity binding is incomplete"]
-    return validate_identity_checksum_binding(identity_path, checksums_path)
+    if signed_metadata.get("release_ref") != identity_report.get("release_ref"):
+        return ["post-build engine tag identity is release-skewed"]
+    return validate_identity_checksum_binding(
+        identity_path, checksums_path, runtime_path
+    )
 
 
 def validate_gate(
@@ -2589,28 +2788,63 @@ def validate_gate(
             else None
         )
         command = metadata.get("verification_command")
+        release_ref = metadata.get("release_ref")
+        canonical_release_ref = (
+            isinstance(release_ref, str)
+            and BACKEND_RELEASE_REF.fullmatch(release_ref) is not None
+        )
+        workflow_ref = f"refs/tags/{release_ref}" if canonical_release_ref else ""
+        signer_identity = sigstore_identity(release_ref) if canonical_release_ref else ""
         command_valid = (
             isinstance(command, list)
-            and len(command) == 9
+            and len(command) == 17
             and all(isinstance(item, str) and item for item in command)
             and Path(command[0]).name == "cosign"
             and command[1:3] == ["verify-blob", "--bundle"]
             and Path(command[3]).name
             == role_paths.get("signature", Path("missing")).name
-            and command[4:8]
+            and command[4:16]
             == [
-                "--certificate-identity-regexp",
-                SIGSTORE_IDENTITY_REGEXP,
+                "--certificate-identity",
+                signer_identity,
                 "--certificate-oidc-issuer",
                 SIGSTORE_ISSUER,
+                "--certificate-github-workflow-sha",
+                release_sha,
+                "--certificate-github-workflow-ref",
+                workflow_ref,
+                "--certificate-github-workflow-repository",
+                SIGSTORE_REPOSITORY,
+                "--certificate-github-workflow-trigger",
+                SIGSTORE_TRIGGER,
             ]
-            and Path(command[8]).name
+            and Path(command[16]).name
             == role_paths.get("checksums", Path("missing")).name
         )
         if (
-            metadata.get("signatures_verified") is not True
+            set(metadata)
+            != {
+                "release_sha",
+                "release_ref",
+                "source_release_sha",
+                "source_tree_sha256",
+                "release_tree_sha256",
+                "evidence_only_delta_verified",
+                "evidence_delta_paths",
+                "signatures_verified",
+                "signer_identity",
+                "signer_oidc_issuer",
+                "signer_workflow_sha",
+                "signer_workflow_ref",
+                "signer_workflow_repository",
+                "signer_workflow_trigger",
+                "verification_command",
+                "checksum_entries",
+            }
+            or metadata.get("signatures_verified") is not True
             or metadata.get("release_sha") != release_sha
-            or not isinstance(metadata.get("source_release_sha"), str)
+            or not canonical_release_ref
+            or not lower_hex(metadata.get("source_release_sha"), 40)
             or not lower_hex(metadata.get("source_tree_sha256"), 64)
             or metadata.get("release_tree_sha256") != metadata.get("source_tree_sha256")
             or metadata.get("evidence_only_delta_verified") is not True
@@ -2623,8 +2857,12 @@ def validate_gate(
                 )
                 for path in metadata.get("evidence_delta_paths", [])
             )
-            or metadata.get("signer_identity_regexp") != SIGSTORE_IDENTITY_REGEXP
+            or metadata.get("signer_identity") != signer_identity
             or metadata.get("signer_oidc_issuer") != SIGSTORE_ISSUER
+            or metadata.get("signer_workflow_sha") != release_sha
+            or metadata.get("signer_workflow_ref") != workflow_ref
+            or metadata.get("signer_workflow_repository") != SIGSTORE_REPOSITORY
+            or metadata.get("signer_workflow_trigger") != SIGSTORE_TRIGGER
             or not command_valid
             or not exact_int(metadata.get("checksum_entries"))
             or metadata.get("checksum_entries")
@@ -2687,10 +2925,10 @@ def validate_resource_gate(
     release_sha: str,
 ) -> list[str]:
     failures: list[str] = []
-    for prefix, workload_id in (
-        ("fibonacci", "fibonacci"),
-        ("poseidon2", "poseidon2_goldilocks"),
-    ):
+    workloads = [("fibonacci", "fibonacci")]
+    if kind == "resource_one_million":
+        workloads.append(("poseidon2", "poseidon2_goldilocks"))
+    for prefix, workload_id in workloads:
         selected: list[tuple[Path, dict[str, object]]] = []
         for path, descriptor in artifacts:
             role = descriptor.get("role")
@@ -2718,16 +2956,42 @@ def validate_resource_gate(
 
 
 RESOURCE_MATRIX_ROLE = "matrix_manifest"
-RESOURCE_WORKLOADS = ("fibonacci", "poseidon2")
+RESOURCE_QUALIFICATION_PROFILE = {
+    "runner": "github-hosted-public-ubuntu-24.04",
+    "effective_cpu_count": 4,
+    "minimum_physical_memory_bytes": 15 * 1024**3,
+    "maximum_effective_memory_bytes": 17 * 1024**3,
+    "minimum_available_scratch_bytes": 12_000_000_000,
+    "storage_rotational": False,
+    "workload_estimates": {
+        "fibonacci_1m": {
+            "bounded_peak_resident_bytes": 75_497_472,
+            "bounded_scratch_high_water_bytes": 536_975_026,
+            "conventional_peak_resident_bytes": 587_202_560,
+        },
+        "poseidon2_1m": {
+            "bounded_peak_resident_bytes": 385_875_968,
+            "bounded_scratch_high_water_bytes": 10_569_876_514,
+            "conventional_peak_resident_bytes": 5_100_273_664,
+        },
+        "fibonacci_16m": {
+            "bounded_peak_resident_bytes": 545_259_520,
+            "bounded_scratch_high_water_bytes": 8_590_055_346,
+            "conventional_peak_resident_bytes": 8_891_924_480,
+        },
+    },
+}
 
 
-def resource_matrix_gate_roles(*, baseline: bool) -> set[str]:
+def resource_matrix_gate_roles(
+    *, baseline: bool, workloads: tuple[str, ...]
+) -> set[str]:
     suffixes = {"manifest", "candidate_report", "candidate_normalized_manifest"}
     if baseline:
         suffixes.update({"baseline_report", "baseline_normalized_manifest"})
     return {
         RESOURCE_MATRIX_ROLE,
-        *(f"{workload}_{suffix}" for workload in RESOURCE_WORKLOADS for suffix in suffixes),
+        *(f"{workload}_{suffix}" for workload in workloads for suffix in suffixes),
     }
 
 
@@ -2763,17 +3027,6 @@ RESOURCE_MATRIX_ENTRIES = {
         "stem": "fibonacci-16m",
         "evidence_gate": "ten_million_row_resource_gate",
         "prefix": "fibonacci",
-        "baseline": False,
-    },
-    "poseidon2_16m": {
-        "workload": "poseidon2_goldilocks",
-        "logical_rows": 16_777_216,
-        "mode": "ceiling",
-        "gate": "ten-million",
-        "manifest_path": "examples/plonky3/poseidon2-16m.json",
-        "stem": "poseidon2-16m",
-        "evidence_gate": "ten_million_row_resource_gate",
-        "prefix": "poseidon2",
         "baseline": False,
     },
 }
@@ -2872,13 +3125,17 @@ def validate_resource_matrix_binding(
     one, one_failures = _resource_gate_artifacts(
         gates,
         "one_million_row_resource_gate",
-        expected_roles=resource_matrix_gate_roles(baseline=True),
+        expected_roles=resource_matrix_gate_roles(
+            baseline=True, workloads=("fibonacci", "poseidon2")
+        ),
         root=root,
     )
     ten, ten_failures = _resource_gate_artifacts(
         gates,
         "ten_million_row_resource_gate",
-        expected_roles=resource_matrix_gate_roles(baseline=False),
+        expected_roles=resource_matrix_gate_roles(
+            baseline=False, workloads=("fibonacci",)
+        ),
         root=root,
     )
     failures.extend(one_failures)
@@ -2905,6 +3162,7 @@ def validate_resource_matrix_binding(
         "source_tree_sha256",
         "profile",
         "plonky3_version",
+        "qualification_profile",
         "source_root",
         "cli_path",
         "cli_sha256",
@@ -2934,7 +3192,10 @@ def validate_resource_matrix_binding(
         or matrix.get("source_tree_sha256") != source_tree_sha256
         or matrix.get("profile") != "tinyzkp-p3-goldilocks-v1"
         or matrix.get("plonky3_version") != "0.6.1"
-        or matrix.get("status") != "local_matrix_complete_external_gates_pending"
+        or not type_sensitive_equal(
+            matrix.get("qualification_profile"), RESOURCE_QUALIFICATION_PROFILE
+        )
+        or matrix.get("status") != "local_matrix_complete_release_assembly_pending"
         or matrix.get("fixed_host_evidence_eligible") is not True
         or matrix.get("local_matrix_gates_passed") is not True
         or matrix.get("release_eligible") is not False
@@ -2991,25 +3252,25 @@ def validate_resource_matrix_binding(
         "may_provision_or_mutate_infrastructure": False,
         "may_publish_or_upload_evidence": False,
     }
-    expected_external = {
-        "independent_reproduction": "required_external",
-        "plonky3_specialist_review": "required_external",
-        "implementation_review": "required_external",
-        "design_partner_acceptance": "required_external",
-        "signed_release_assembly": "required_external",
-    }
+    expected_external = {"signed_release_assembly": "required_postbuild"}
     if not type_sensitive_equal(matrix.get("authority"), expected_authority):
         failures.append("fixed-host matrix overstates its release authority")
     if not type_sensitive_equal(matrix.get("external_gates"), expected_external):
-        failures.append("fixed-host matrix may not satisfy external gates")
+        failures.append("fixed-host matrix pending release steps are invalid")
 
     stable_host = matrix.get("stable_host_identity")
     stable_host_fields = {
         "hardware",
-        "logical_cpu_count",
-        "total_memory_bytes",
+        "physical_logical_cpu_count",
+        "physical_memory_bytes",
+        "effective_cpu_count",
+        "effective_cpu_affinity",
+        "effective_memory_max_bytes",
+        "effective_swap_max_bytes",
+        "cgroup_v2_path",
         "operating_system",
         "storage_device",
+        "effective_storage_device",
         "storage_is_rotational",
         "storage_is_nvme",
         "storage_total_bytes",
@@ -3320,10 +3581,10 @@ def validate_review_execution_bindings(
                 expected[("raw-reports", f"one_million_{role}")] = str(
                     one_million[role]["sha256"]
                 )
-            role = f"{workload}_candidate_report"
-            expected[("raw-reports", f"ten_million_{role}")] = str(
-                ten_million[role]["sha256"]
-            )
+        role = "fibonacci_candidate_report"
+        expected[("raw-reports", f"ten_million_{role}")] = str(
+            ten_million[role]["sha256"]
+        )
         known_answers = artifacts("deterministic_cross_mode_proofs")
         expected[("known-answers", "known_answer_test_report")] = str(
             known_answers["test_report"]["sha256"]
@@ -3431,11 +3692,6 @@ def evidence_failures(evidence: dict[str, object], *, root: Path = ROOT) -> list
             root=root,
         )
     )
-    problems.extend(
-        validate_review_execution_bindings(
-            gates, source_release_sha, root=root
-        )
-    )
     signed = gates.get("signed_release_sbom_and_checksums")
     signed_metadata = signed.get("metadata") if isinstance(signed, dict) else None
     if isinstance(signed_metadata, dict) and (
@@ -3450,6 +3706,26 @@ def evidence_failures(evidence: dict[str, object], *, root: Path = ROOT) -> list
     if evidence.get("status") != "ready":
         problems.append("release remains explicitly blocked")
     return problems
+
+
+def validate_candidate_assembly_signature(
+    evidence: dict[str, object], *, root: Path
+) -> list[str]:
+    source_release_sha = evidence.get("source_release_sha")
+    if not isinstance(source_release_sha, str) or not source_release_sha:
+        return ["signed candidate assembly source identity is missing"]
+    try:
+        import verify_backend_assembly
+
+        candidate_config = read_object(root / "release" / "backend-v1-gates.json")
+        verify_backend_assembly.verify(
+            root=root,
+            candidate_config=candidate_config,
+            expected_release_sha=source_release_sha,
+        )
+    except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
+        return [f"signed candidate assembly is invalid: {error}"]
+    return []
 
 
 def failures(config: dict[str, object], *, root: Path = ROOT) -> list[str]:
@@ -3472,6 +3748,7 @@ def failures(config: dict[str, object], *, root: Path = ROOT) -> list[str]:
     except (OSError, ValueError, json.JSONDecodeError) as error:
         return problems + [f"release evidence manifest is unavailable: {error}"]
     problems.extend(evidence_failures(evidence, root=root))
+    problems.extend(validate_candidate_assembly_signature(evidence, root=root))
     if (
         config.get("status") != "ready"
         and "release remains explicitly blocked" not in problems
