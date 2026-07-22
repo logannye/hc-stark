@@ -43,6 +43,9 @@ jobs:
       - name: Formatting
         run: cargo fmt --all -- --check
 
+      - name: Locked standalone fuzz workspace
+        run: cargo +1.95.0 fetch --locked --manifest-path fuzz/Cargo.toml
+
       - name: Public engine unit tests
         run: |
           cargo test --locked -p hc-stream -p hc-plonky3 -p hc-cli -p hc-wasm
