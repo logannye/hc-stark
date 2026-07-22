@@ -1149,6 +1149,12 @@ def test_identity_gate_is_bound_to_signed_artifact_digests(tmp_path):
             True,
         ),
         (
+            "deterministic_cross_mode_proofs",
+            "known_answers_marker",
+            "release",
+            True,
+        ),
+        (
             "air_job_contracts",
             "plonky3_air_job_contracts",
             "ci",
@@ -1162,7 +1168,9 @@ def test_evidenced_command_binds_release_command_profile_and_log(
     release_sha = source_release_sha()
     spec = gate.run_evidenced_command.GATES[gate_id]
     log = tmp_path / "test.log"
-    if test_name is None:
+    if gate_id == "deterministic_cross_mode_proofs":
+        log.write_bytes(b"PASS TinyZKP deterministic cross-mode proof vectors\n")
+    elif test_name is None:
         log.write_bytes(b"PASS Plonky3 compatibility gate (12 exact crates)\n")
     else:
         log.write_bytes(exact_test_log(test_name))
@@ -1212,7 +1220,7 @@ def test_evidenced_command_binds_release_command_profile_and_log(
                 "kind": "landlock-write-deny-v1",
                 "abi_version": 3,
                 "source_write_allowed": False,
-                "writable_paths": ["cargo-target", "gate-work", "tmp"],
+                "writable_paths": gate.run_evidenced_command.writable_path_names(spec),
             },
             "network_boundary": None,
             "immutable_file_count": 1,
@@ -1227,6 +1235,20 @@ def test_evidenced_command_binds_release_command_profile_and_log(
                 }
                 if primary == "python3"
                 else {
+                    **(
+                        {
+                            "bash": {
+                                "path": primary_path,
+                                "sha256": "a" * 64,
+                                "version": (
+                                    "GNU bash, version 5.2.21(1)-release "
+                                    "(x86_64-pc-linux-gnu)"
+                                ),
+                            }
+                        }
+                        if primary == "bash"
+                        else {}
+                    ),
                     "cargo": {
                         "path": "/tool/cargo",
                         "sha256": "c" * 64,
@@ -1262,6 +1284,18 @@ def test_evidenced_command_binds_release_command_profile_and_log(
         )
         == []
     )
+    report_payload = json.loads(report.read_text(encoding="utf-8"))
+    report_payload["write_boundary"]["writable_paths"].append("unexpected")
+    write_json(report, report_payload)
+    assert gate.validate_test_run_evidence(
+        artifacts,
+        metadata,
+        release_sha,
+        require_release_profile=require_release_profile,
+        expected_gate=gate_id,
+    ) == ["evidenced command report is incomplete or release-skewed"]
+    report_payload["write_boundary"]["writable_paths"].pop()
+    write_json(report, report_payload)
     log.write_text("mutated", encoding="utf-8")
     assert gate.validate_test_run_evidence(
         artifacts,
