@@ -122,8 +122,19 @@ jobs:
         working-directory: raw-reports/fixed-host-release-matrix
         run: |
           checksum_tmp="$RUNNER_TEMP/qualification-SHA256SUMS"
-          find . -maxdepth 1 -type f ! -name qualification-SHA256SUMS -print0 |
-            sort -z | xargs -0 sha256sum >"$checksum_tmp"
+          sha256sum \
+            fibonacci-1m.json \
+            fibonacci-1m.bounded.manifest.json \
+            fibonacci-1m.baseline.json \
+            fibonacci-1m.baseline.conventional.manifest.json \
+            poseidon2-1m.json \
+            poseidon2-1m.bounded.manifest.json \
+            poseidon2-1m.baseline.json \
+            poseidon2-1m.baseline.conventional.manifest.json \
+            fibonacci-16m.json \
+            fibonacci-16m.bounded.manifest.json \
+            fixed-host-release-matrix-v1.json \
+            >"$checksum_tmp"
           test -s "$checksum_tmp"
           mv "$checksum_tmp" qualification-SHA256SUMS
       - name: Attest the exact-main qualification inventory
@@ -135,7 +146,19 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: plonky3-backend-release-matrix-${{ inputs.expected_main_sha }}
-          path: raw-reports/fixed-host-release-matrix/
+          path: |
+            raw-reports/fixed-host-release-matrix/fibonacci-1m.json
+            raw-reports/fixed-host-release-matrix/fibonacci-1m.bounded.manifest.json
+            raw-reports/fixed-host-release-matrix/fibonacci-1m.baseline.json
+            raw-reports/fixed-host-release-matrix/fibonacci-1m.baseline.conventional.manifest.json
+            raw-reports/fixed-host-release-matrix/poseidon2-1m.json
+            raw-reports/fixed-host-release-matrix/poseidon2-1m.bounded.manifest.json
+            raw-reports/fixed-host-release-matrix/poseidon2-1m.baseline.json
+            raw-reports/fixed-host-release-matrix/poseidon2-1m.baseline.conventional.manifest.json
+            raw-reports/fixed-host-release-matrix/fibonacci-16m.json
+            raw-reports/fixed-host-release-matrix/fibonacci-16m.bounded.manifest.json
+            raw-reports/fixed-host-release-matrix/fixed-host-release-matrix-v1.json
+            raw-reports/fixed-host-release-matrix/qualification-SHA256SUMS
           if-no-files-found: error
           retention-days: 14
           compression-level: 0

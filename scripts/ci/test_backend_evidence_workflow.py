@@ -3,10 +3,49 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "assemble-backend-evidence.yml"
+RESOURCE_WORKFLOW = ROOT / ".github" / "workflows" / "benches.yml"
+RESOURCE_EVIDENCE_FILES = (
+    "fibonacci-1m.json",
+    "fibonacci-1m.bounded.manifest.json",
+    "fibonacci-1m.baseline.json",
+    "fibonacci-1m.baseline.conventional.manifest.json",
+    "poseidon2-1m.json",
+    "poseidon2-1m.bounded.manifest.json",
+    "poseidon2-1m.baseline.json",
+    "poseidon2-1m.baseline.conventional.manifest.json",
+    "fibonacci-16m.json",
+    "fibonacci-16m.bounded.manifest.json",
+    "fixed-host-release-matrix-v1.json",
+)
 
 
 def workflow():
     return WORKFLOW.read_text(encoding="utf-8")
+
+
+def resource_workflow():
+    return RESOURCE_WORKFLOW.read_text(encoding="utf-8")
+
+
+def test_resource_workflow_uploads_the_exact_closed_assembly_inventory():
+    value = resource_workflow()
+    checksum_start = value.index("      - name: Bind the exact qualification artifact inventory")
+    checksum_end = value.index("      - name: Attest the exact-main qualification inventory")
+    checksum_block = value[checksum_start:checksum_end]
+    upload_start = value.index("      - name: Upload source- and CLI-bound qualification evidence")
+    upload_block = value[upload_start:]
+
+    assert "find ." not in checksum_block
+    assert ".fixed-host-release-matrix.lock" not in value
+    for name in RESOURCE_EVIDENCE_FILES:
+        assert checksum_block.count(name) == 1
+        assert upload_block.count(
+            f"raw-reports/fixed-host-release-matrix/{name}"
+        ) == 1
+    assert checksum_block.count("qualification-SHA256SUMS") == 2
+    assert upload_block.count(
+        "raw-reports/fixed-host-release-matrix/qualification-SHA256SUMS"
+    ) == 1
 
 
 def test_assembly_is_owner_dispatched_from_exact_current_main_only():
