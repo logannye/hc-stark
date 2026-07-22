@@ -375,6 +375,21 @@ def _digest_descriptor(descriptor: int) -> str:
     return digest.hexdigest()
 
 
+def resolve_runtime_executable(root: Path, executable: str | Path) -> Path:
+    """Resolve command names through PATH and explicit relative paths from root."""
+    root = root.resolve()
+    raw = os.fspath(executable)
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        return candidate
+    if len(candidate.parts) == 1:
+        found = shutil.which(raw)
+        if found is None:
+            raise ValueError(f"required runtime executable is unavailable: {raw}")
+        return Path(found).absolute()
+    return (root / candidate).absolute()
+
+
 def run_anchored_cosign(
     root: Path,
     release_sha: str,
@@ -404,7 +419,7 @@ def run_anchored_cosign(
     if not isinstance(anchor, dict) or set(anchor) != {"sha256"}:
         raise ValueError("cosign is not anchored for this runner platform")
     expected = anchor.get("sha256")
-    path = Path(executable).absolute()
+    path = resolve_runtime_executable(root, executable)
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     try:
         details = os.fstat(descriptor)
