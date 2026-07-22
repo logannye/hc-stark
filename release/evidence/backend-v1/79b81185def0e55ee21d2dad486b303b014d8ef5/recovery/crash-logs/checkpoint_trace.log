@@ -1,0 +1,106 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.22
+   Compiling libc v0.2.186
+   Compiling quote v1.0.46
+   Compiling serde_core v1.0.228
+   Compiling autocfg v1.5.0
+   Compiling cfg-if v1.0.4
+   Compiling serde v1.0.228
+   Compiling num-traits v0.2.19
+   Compiling syn v2.0.118
+   Compiling rand_core v0.10.0
+   Compiling num-integer v0.1.46
+   Compiling getrandom v0.4.2
+   Compiling either v1.15.0
+   Compiling paste v1.0.15
+   Compiling strength_reduce v0.2.4
+   Compiling cpufeatures v0.3.0
+   Compiling chacha20 v0.10.0
+   Compiling transpose v0.2.3
+   Compiling pin-project-lite v0.2.16
+   Compiling tracing-core v0.1.36
+   Compiling rand v0.10.2
+   Compiling itertools v0.14.0
+   Compiling num-bigint v0.4.6
+   Compiling p3-maybe-rayon v0.6.1
+   Compiling scopeguard v1.2.0
+   Compiling lock_api v0.4.14
+   Compiling spin v0.12.2
+   Compiling jobserver v0.1.35
+   Compiling shlex v1.3.0
+   Compiling find-msvc-tools v0.1.5
+   Compiling thiserror v2.0.17
+   Compiling cc v1.2.46
+   Compiling crossbeam-utils v0.8.21
+   Compiling pkg-config v0.3.33
+   Compiling serde_derive v1.0.228
+   Compiling tracing-attributes v0.1.31
+   Compiling thiserror-impl v2.0.17
+   Compiling tracing v0.1.44
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling crossbeam-epoch v0.9.20
+   Compiling serde_json v1.0.145
+   Compiling ref-cast v1.0.25
+   Compiling ref-cast-impl v1.0.25
+   Compiling serde_derive_internals v0.29.1
+   Compiling thiserror v1.0.69
+   Compiling itoa v1.0.18
+   Compiling memchr v2.7.6
+   Compiling ryu v1.0.23
+   Compiling rustix v1.1.2
+   Compiling p3-util v0.6.1
+   Compiling p3-field v0.6.1
+   Compiling schemars_derive v1.2.1
+   Compiling p3-matrix v0.6.1
+   Compiling p3-symmetric v0.6.1
+   Compiling p3-dft v0.6.1
+   Compiling p3-multilinear-util v0.6.1
+   Compiling p3-mds v0.6.1
+   Compiling p3-poseidon2 v0.6.1
+   Compiling p3-poseidon1 v0.6.1
+   Compiling p3-monty-31 v0.6.1
+   Compiling blake3 v1.8.2
+   Compiling thiserror-impl v1.0.69
+   Compiling linux-raw-sys v0.11.0
+   Compiling p3-challenger v0.6.1
+   Compiling dyn-clone v1.0.20
+   Compiling bitflags v2.10.0
+   Compiling p3-commit v0.6.1
+   Compiling getrandom v0.3.4
+   Compiling libm v0.2.16
+   Compiling zstd-safe v7.2.4
+   Compiling rayon-core v1.13.0
+   Compiling schemars v1.2.1
+   Compiling crossbeam-deque v0.8.6
+   Compiling p3-air v0.6.1
+   Compiling arrayvec v0.7.6
+   Compiling constant_time_eq v0.3.1
+   Compiling arrayref v0.3.9
+   Compiling tinyzkp-contracts v0.1.0 (/home/runner/work/hc-stark/hc-stark/raw-reports/immutable-source/crates/tinyzkp-contracts)
+   Compiling p3-fri v0.6.1
+   Compiling cobs v0.3.0
+   Compiling fs2 v0.4.3
+   Compiling fastrand v2.3.0
+   Compiling once_cell v1.21.3
+   Compiling tempfile v3.23.0
+   Compiling postcard v1.1.3
+   Compiling p3-uni-stark v0.6.1
+   Compiling hc-stream v0.1.0 (/home/runner/work/hc-stark/hc-stark/raw-reports/immutable-source/crates/hc-stream)
+   Compiling rayon v1.11.0
+   Compiling p3-poseidon2-air v0.6.1
+   Compiling p3-merkle-tree v0.6.1
+   Compiling p3-goldilocks v0.6.1
+   Compiling base64 v0.22.1
+   Compiling zstd v0.13.3
+   Compiling hc-plonky3 v0.1.0 (/home/runner/work/hc-stark/hc-stark/raw-reports/immutable-source/crates/hc-plonky3)
+    Finished `release` profile [optimized] target(s) in 56.09s
+     Running unittests src/lib.rs (/home/runner/work/hc-stark/hc-stark/raw-reports/cargo-target/release/deps/hc_plonky3-a0dd32b1fb0161e7)
+
+running 1 test
+
+running 1 test
+tinyzkp-crash-proof phase=trace resumed=eb95fdda5823cd8f22abcc1fb0f3a959a5545b1f4e24240671f6f9b92fc8df60 reference=eb95fdda5823cd8f22abcc1fb0f3a959a5545b1f4e24240671f6f9b92fc8df60
+test bounded_prover::tests::single_checkpoint_phase_from_environment_resumes_to_identical_proof_bytes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 77 filtered out; finished in 0.51s
+
