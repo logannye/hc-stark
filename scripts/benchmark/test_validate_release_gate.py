@@ -119,6 +119,21 @@ def test_one_million_rejects_inflated_claims():
     assert "one-million gate requires candidate wall time within 3x baseline" in failures
 
 
+def test_candidate_process_rss_must_remain_within_declared_cap():
+    manifest, baseline, candidate, baseline_normalized, candidate_normalized = fixtures()
+    candidate["peak_rss_bytes"] = 2_001
+    candidate["cgroup_peak_bytes"] = 2_100
+    failures = gate.validate_common(
+        manifest,
+        baseline,
+        candidate,
+        baseline_normalized,
+        candidate_normalized,
+    )
+
+    assert "candidate process RSS exceeded the configured resident cap" in failures
+
+
 def test_ten_million_requires_embedded_scratch_estimate_and_two_gib_ceiling():
     manifest, baseline, candidate, baseline_normalized, candidate_normalized = fixtures(
         16_777_216

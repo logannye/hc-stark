@@ -84,6 +84,14 @@ def test_cgroup_peak_is_conservative_when_kernel_accounting_lags_process_rss():
     assert MODULE.conservative_cgroup_peak(800_000_000, 736_030_720) == 800_000_000
 
 
+def test_cgroup_enforcement_reserves_only_accounting_headroom(tmp_path):
+    cgroup = tmp_path / "bounded"
+    MODULE.configure_cgroup(cgroup, 1_073_741_824)
+
+    assert (cgroup / "memory.high").read_text(encoding="utf-8") == "1073741824"
+    assert (cgroup / "memory.max").read_text(encoding="utf-8") == "1181116006"
+
+
 def test_benchmark_runner_uid_honors_sudo_origin(monkeypatch):
     monkeypatch.setattr(MODULE.os, "geteuid", lambda: 0)
     monkeypatch.setenv("SUDO_UID", "1001")
