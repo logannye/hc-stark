@@ -26,6 +26,46 @@ class Response:
         return False
 
 
+def test_canary_retry_allows_bounded_pages_propagation():
+    calls = []
+    sleeps = []
+
+    def check():
+        calls.append(len(calls) + 1)
+        if len(calls) < 3:
+            raise canary.CanaryError("edge has not propagated")
+
+    canary.retry_canary(
+        check,
+        attempts=3,
+        delay_seconds=2,
+        sleeper=sleeps.append,
+    )
+
+    assert calls == [1, 2, 3]
+    assert sleeps == [2, 2]
+
+
+def test_canary_retry_remains_fail_closed_after_the_bound():
+    calls = []
+    sleeps = []
+
+    def check():
+        calls.append(len(calls) + 1)
+        raise canary.CanaryError("persistent mismatch")
+
+    with pytest.raises(canary.CanaryError, match="persistent mismatch"):
+        canary.retry_canary(
+            check,
+            attempts=3,
+            delay_seconds=2,
+            sleeper=sleeps.append,
+        )
+
+    assert calls == [1, 2, 3]
+    assert sleeps == [2, 2]
+
+
 def test_base_url_is_restricted_to_tinyzkp_pages():
     assert canary.safe_base_url("https://candidate.tinyzkp.pages.dev") == (
         "https://candidate.tinyzkp.pages.dev/"
