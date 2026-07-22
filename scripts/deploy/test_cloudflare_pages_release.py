@@ -180,7 +180,9 @@ def deploy_record(tmp_path, api):
     def runner(command, **kwargs):
         assert command[0] == str(pages.PINNED_NODE)
         assert command[1] == str(pages.PINNED_WRANGLER)
-        assert command[2:4] == ("pages", "deploy")
+        assert command[2:5] == ("pages", "deploy", ".")
+        assert Path(command[command.index("--cwd") + 1]).name == "site"
+        assert "--config" not in command
         assert command[command.index("--project-name") + 1] == pages.PROJECT_NAME
         assert command[command.index("--branch") + 1] == pages.PRODUCTION_BRANCH
         assert command[command.index("--commit-hash") + 1] == NEW_SHA
