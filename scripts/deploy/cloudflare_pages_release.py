@@ -597,6 +597,18 @@ def materialized_site_source(
                     output.write(content)
                     output.flush()
                     os.fsync(output.fileno())
+        reviewed_config = (source / "wrangler.toml").read_bytes()
+        scratch_config = home / "wrangler.toml"
+        descriptor = os.open(
+            scratch_config,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0),
+            0o600,
+        )
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(reviewed_config)
+            output.flush()
+            os.fsync(output.fileno())
+        scratch_config.chmod(0o400)
         for path in sorted(source.rglob("*"), reverse=True):
             path.chmod(0o500 if path.is_dir() else 0o400)
         source.chmod(0o500)
@@ -1132,16 +1144,16 @@ def _wrangler_environment(
 
 
 def _wrangler_command(
-    source: Path, release: str, node: Path, wrangler: Path
+    source: Path, scratch: Path, release: str, node: Path, wrangler: Path
 ) -> tuple[str, ...]:
     return (
         str(node),
         str(wrangler),
         "pages",
         "deploy",
-        ".",
-        "--cwd",
         str(source),
+        "--cwd",
+        str(scratch),
         "--project-name",
         PROJECT_NAME,
         "--branch",
@@ -1372,9 +1384,15 @@ def apply_deploy(
                 source,
                 home,
             ):
-                command = _wrangler_command(source, reviewed_sha, node, wrangler)
+                command = _wrangler_command(
+                    source, home, reviewed_sha, node, wrangler
+                )
                 command_identity = tuple(
-                    "<SOURCE>" if item == str(source) else item
+                    "<SOURCE>"
+                    if item == str(source)
+                    else "<SCRATCH>"
+                    if item == str(home)
+                    else item
                     for item in command
                 )
                 invocation_started = True

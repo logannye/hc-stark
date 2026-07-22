@@ -180,8 +180,10 @@ def deploy_record(tmp_path, api):
     def runner(command, **kwargs):
         assert command[0] == str(pages.PINNED_NODE)
         assert command[1] == str(pages.PINNED_WRANGLER)
-        assert command[2:5] == ("pages", "deploy", ".")
-        assert Path(command[command.index("--cwd") + 1]).name == "site"
+        assert command[2:4] == ("pages", "deploy")
+        private_root = Path(kwargs["env"]["HOME"]).parent
+        assert command[4] == str(private_root / "site")
+        assert command[command.index("--cwd") + 1] == kwargs["env"]["HOME"]
         assert "--config" not in command
         assert command[command.index("--project-name") + 1] == pages.PROJECT_NAME
         assert command[command.index("--branch") + 1] == pages.PRODUCTION_BRANCH
@@ -937,6 +939,10 @@ def test_git_source_inspector_binds_clean_reviewed_sha_and_sealed_materializatio
         assert stat.S_IMODE(source.stat().st_mode) == 0o500
         assert stat.S_IMODE((source / "index.html").stat().st_mode) == 0o400
         assert stat.S_IMODE(home.stat().st_mode) == 0o700
+        assert (home / "wrangler.toml").read_bytes() == (
+            source / "wrangler.toml"
+        ).read_bytes()
+        assert stat.S_IMODE((home / "wrangler.toml").stat().st_mode) == 0o400
 
 
 def test_git_source_inspector_rejects_wrong_head_dirty_untracked_and_symlink(tmp_path):
