@@ -174,7 +174,6 @@ jobs:
                 --repo "$GITHUB_REPOSITORY" \
                 --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-backend.yml@refs/tags/${HC_RELEASE_REF}" \
                 --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
-                --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-backend.yml" \
                 --signer-digest "$HC_RELEASE_SHA" \
                 --source-digest "$HC_RELEASE_SHA" \
                 --source-ref "refs/tags/$HC_RELEASE_REF" \
@@ -354,7 +353,6 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-backend.yml@refs/tags/${RELEASE_TAG}" \
               --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
-              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-backend.yml" \
               --signer-digest "$RELEASE_SHA" \
               --source-digest "$RELEASE_SHA" \
               --source-ref "refs/tags/$RELEASE_TAG" \
