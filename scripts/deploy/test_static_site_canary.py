@@ -46,6 +46,15 @@ def test_canary_retry_allows_bounded_pages_propagation():
     assert sleeps == [2, 2]
 
 
+def test_default_canary_window_allows_slow_pages_edge_propagation():
+    assert (
+        canary.CANARY_ATTEMPTS - 1
+    ) * canary.CANARY_RETRY_DELAY_SECONDS >= 60
+    assert (
+        canary.CANARY_ATTEMPTS - 1
+    ) * canary.CANARY_RETRY_DELAY_SECONDS < 180
+
+
 def test_canary_retry_remains_fail_closed_after_the_bound():
     calls = []
     sleeps = []

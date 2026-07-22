@@ -62,7 +62,7 @@ OCI_ACCEPT = (
     "application/vnd.oci.image.manifest.v1+json,"
     "application/vnd.docker.distribution.manifest.v2+json"
 )
-CANARY_ATTEMPTS = 6
+CANARY_ATTEMPTS = 18
 CANARY_RETRY_DELAY_SECONDS = 5
 
 

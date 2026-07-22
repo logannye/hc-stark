@@ -84,6 +84,12 @@ def test_signed_release_inventory_is_exactly_engine_and_evidence():
 
 def test_engine_release_executes_confined_runtime_smoke_before_signing():
     workflow = text(".github/workflows/release-backend.yml")
+    buildx = (
+        "docker/setup-buildx-action@"
+        "bb05f3f5519dd87d3ba754cc423b652a5edd6d2c"
+    )
+    assert buildx in workflow
+    assert workflow.index(buildx) < workflow.index("--output type=oci")
     assert "sudo apt-get install --yes --no-install-recommends skopeo" in workflow
     assert "scripts/release/smoke_engine_release_artifacts.py" in workflow
     assert "--runtime-smoke release-artifacts/engine-runtime-smoke.json" in workflow
