@@ -28,6 +28,54 @@ def test_runner_has_only_fixed_gate_commands_and_timeouts():
         assert spec["parser"].endswith("_v1")
 
 
+def test_only_known_answers_gate_has_exact_external_write_boundary():
+    for gate, spec in module.GATES.items():
+        paths = module.external_writable_paths(spec)
+        if gate == "deterministic_cross_mode_proofs":
+            assert paths == module.KAT_EXTERNAL_WRITABLE_PATHS
+            assert module.writable_path_names(spec) == [
+                "cargo-target",
+                "gate-work",
+                "tmp",
+                "tinyzkp-kat-fibonacci-16",
+                "tinyzkp-kat-poseidon2-8",
+            ]
+        else:
+            assert paths == ()
+            assert module.writable_path_names(spec) == [
+                "cargo-target",
+                "gate-work",
+                "tmp",
+            ]
+
+
+def test_external_write_boundary_is_private_collision_safe_and_removed(tmp_path):
+    paths = (tmp_path / "first", tmp_path / "second")
+    prepared = module._prepare_external_writable_paths(paths, allowed_paths=paths)
+    assert prepared == paths
+    assert all(
+        path.is_dir() and (path.stat().st_mode & 0o777) == 0o700 for path in paths
+    )
+    module._cleanup_external_writable_paths(prepared, allowed_paths=paths)
+    assert all(not path.exists() for path in paths)
+
+    paths[0].mkdir(mode=0o700)
+    sentinel = paths[0] / "owner-data"
+    sentinel.write_text("do not remove", encoding="utf-8")
+    with pytest.raises(ValueError, match="already exists"):
+        module._prepare_external_writable_paths(paths, allowed_paths=paths)
+    assert sentinel.read_text(encoding="utf-8") == "do not remove"
+
+
+def test_external_write_boundary_rejects_unlisted_paths(tmp_path):
+    allowed = (tmp_path / "allowed",)
+    with pytest.raises(ValueError, match="not exactly allowlisted"):
+        module._prepare_external_writable_paths(
+            (tmp_path / "different",), allowed_paths=allowed
+        )
+    assert not (tmp_path / "different").exists()
+
+
 def test_air_job_contract_gate_is_local_and_exact():
     spec = module.GATES["air_job_contracts"]
     assert spec["command"] == [

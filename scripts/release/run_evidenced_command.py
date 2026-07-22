@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import sys
 import time
 
@@ -45,6 +46,11 @@ RUST_TOOL_VERSIONS = {
         "host": "x86_64-unknown-linux-gnu",
     },
 }
+DEFAULT_WRITABLE_PATH_NAMES = ("cargo-target", "gate-work", "tmp")
+KAT_EXTERNAL_WRITABLE_PATHS = (
+    Path("/tmp/tinyzkp-kat-fibonacci-16"),
+    Path("/tmp/tinyzkp-kat-poseidon2-8"),
+)
 GATES: dict[str, dict[str, object]] = {
     "clean_release_source": {
         "command": ["python3", "scripts/ci/backend_source_scan.py"],
@@ -103,6 +109,9 @@ GATES: dict[str, dict[str, object]] = {
         "profile": "release",
         "parser": "known_answers_v1",
         "timeout": 1800,
+        "external_writable_paths": [
+            str(path) for path in KAT_EXTERNAL_WRITABLE_PATHS
+        ],
     },
     "air_job_contracts": {
         "command": [
@@ -121,6 +130,90 @@ GATES: dict[str, dict[str, object]] = {
         "timeout": 1800,
     },
 }
+
+
+def external_writable_paths(spec: dict[str, object]) -> tuple[Path, ...]:
+    raw_paths = spec.get("external_writable_paths", [])
+    if not isinstance(raw_paths, list) or any(
+        not isinstance(value, str) for value in raw_paths
+    ):
+        raise ValueError("external evidence write boundary is malformed")
+    paths = tuple(Path(value) for value in raw_paths)
+    if paths not in {(), KAT_EXTERNAL_WRITABLE_PATHS}:
+        raise ValueError("external evidence write boundary is not allowlisted")
+    return paths
+
+
+def writable_path_names(spec: dict[str, object]) -> list[str]:
+    return [
+        *DEFAULT_WRITABLE_PATH_NAMES,
+        *(path.name for path in external_writable_paths(spec)),
+    ]
+
+
+def _assert_safe_external_tree(path: Path) -> None:
+    expected_uid = os.geteuid()
+    for current, directories, files in os.walk(path, topdown=True, followlinks=False):
+        current_path = Path(current)
+        candidates = [
+            current_path,
+            *(current_path / name for name in directories),
+            *(current_path / name for name in files),
+        ]
+        for candidate in candidates:
+            details = os.lstat(candidate)
+            if stat.S_ISLNK(details.st_mode) or details.st_uid != expected_uid:
+                raise ValueError(f"external evidence tree is unsafe: {candidate}")
+
+
+def _cleanup_external_writable_paths(
+    paths: tuple[Path, ...], *, allowed_paths: tuple[Path, ...]
+) -> None:
+    if any(path not in allowed_paths for path in paths):
+        raise ValueError("external evidence cleanup target is not allowlisted")
+    for path in reversed(paths):
+        details = os.lstat(path)
+        if (
+            stat.S_ISLNK(details.st_mode)
+            or not stat.S_ISDIR(details.st_mode)
+            or details.st_uid != os.geteuid()
+            or stat.S_IMODE(details.st_mode) != 0o700
+        ):
+            raise ValueError(f"external evidence directory is unsafe: {path}")
+        _assert_safe_external_tree(path)
+        shutil.rmtree(path)
+
+
+def _prepare_external_writable_paths(
+    paths: tuple[Path, ...], *, allowed_paths: tuple[Path, ...]
+) -> tuple[Path, ...]:
+    if paths != allowed_paths or len(set(paths)) != len(paths):
+        raise ValueError("external evidence write boundary is not exactly allowlisted")
+    created: list[Path] = []
+    try:
+        for path in paths:
+            if not path.is_absolute():
+                raise ValueError("external evidence write boundary must be absolute")
+            try:
+                os.lstat(path)
+            except FileNotFoundError:
+                pass
+            else:
+                raise ValueError(f"external evidence directory already exists: {path}")
+            os.mkdir(path, 0o700)
+            created.append(path)
+            details = os.lstat(path)
+            if (
+                stat.S_ISLNK(details.st_mode)
+                or not stat.S_ISDIR(details.st_mode)
+                or details.st_uid != os.geteuid()
+                or stat.S_IMODE(details.st_mode) != 0o700
+            ):
+                raise ValueError(f"external evidence directory is unsafe: {path}")
+    except (OSError, ValueError):
+        _cleanup_external_writable_paths(tuple(created), allowed_paths=allowed_paths)
+        raise
+    return tuple(created)
 
 
 def timestamp() -> str:
@@ -297,7 +390,7 @@ def run(
         evidence_runtime.reset_private_directory(
             root, evidence_root, evidence_root / name
         )
-        for name in ("cargo-target", "gate-work", "tmp")
+        for name in DEFAULT_WRITABLE_PATH_NAMES
     )
     environment.update(
         {
@@ -337,10 +430,18 @@ def run(
     if "rustc" in opened_tools:
         environment["RUSTC"] = opened_tools["rustc"][1]
 
-    descriptor = evidence_runtime.open_private_output(root, log_path)
-    started_at = timestamp()
-    started = time.monotonic()
+    prepared_external_paths: tuple[Path, ...] = ()
     try:
+        configured_external_paths = external_writable_paths(spec)
+        if configured_external_paths:
+            prepared_external_paths = _prepare_external_writable_paths(
+                configured_external_paths,
+                allowed_paths=KAT_EXTERNAL_WRITABLE_PATHS,
+            )
+        execution_writable_paths = (*writable_paths, *prepared_external_paths)
+        descriptor = evidence_runtime.open_private_output(root, log_path)
+        started_at = timestamp()
+        started = time.monotonic()
         with os.fdopen(descriptor, "wb") as log:
             exit_status, timed_out = evidence_runtime.run_logged(
                 execution_command,
@@ -349,7 +450,7 @@ def run(
                 log=log,
                 timeout_seconds=timeout_seconds,
                 pass_fds=tuple(value[0] for value in opened_tools.values()),
-                write_boundary_paths=writable_paths,
+                write_boundary_paths=execution_writable_paths,
                 require_network_namespace=False,
                 network_boundary_result=None,
             )
@@ -369,9 +470,20 @@ def run(
             ):
                 raise ValueError(f"gate executable changed during execution: {name}")
     finally:
-        for descriptor_value, _ in opened_tools.values():
-            os.close(descriptor_value)
-        evidence_runtime.remove_read_only_source(root, evidence_root, immutable)
+        try:
+            for descriptor_value, _ in opened_tools.values():
+                os.close(descriptor_value)
+        finally:
+            try:
+                if prepared_external_paths:
+                    _cleanup_external_writable_paths(
+                        prepared_external_paths,
+                        allowed_paths=KAT_EXTERNAL_WRITABLE_PATHS,
+                    )
+            finally:
+                evidence_runtime.remove_read_only_source(
+                    root, evidence_root, immutable
+                )
     report: dict[str, object] = {
         "schema_version": 4,
         **source,
@@ -400,7 +512,7 @@ def run(
             "kind": "landlock-write-deny-v1",
             "abi_version": boundary_abi,
             "source_write_allowed": False,
-            "writable_paths": [path.name for path in writable_paths],
+            "writable_paths": writable_path_names(spec),
         },
         "network_boundary": None,
         "immutable_file_count": len(inventory),

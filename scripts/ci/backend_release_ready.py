@@ -1986,6 +1986,14 @@ def validate_test_run_evidence(
     network_boundary = report.get("network_boundary")
     gate_inputs = report.get("gate_inputs")
     expected_gate_inputs: dict[str, object] = {}
+    try:
+        expected_writable_paths = (
+            run_evidenced_command.writable_path_names(spec)
+            if isinstance(spec, dict)
+            else None
+        )
+    except ValueError:
+        expected_writable_paths = None
     versioned_generic_tools = isinstance(tools, dict) and all(
         name in {"cargo", "rustc"}
         or (
@@ -2079,7 +2087,7 @@ def validate_test_run_evidence(
         or not exact_int(boundary.get("abi_version"))
         or boundary.get("abi_version", 0) < 3
         or boundary.get("source_write_allowed") is not False
-        or boundary.get("writable_paths") != ["cargo-target", "gate-work", "tmp"]
+        or boundary.get("writable_paths") != expected_writable_paths
         or network_boundary is not None
         or not exact_int(report.get("immutable_file_count"))
         or report.get("immutable_file_count", 0) <= 0
