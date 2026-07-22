@@ -38,13 +38,19 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v3
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
+          targets: x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
         with:
           cosign-release: v2.4.3
+      - name: Install static Linux and OCI smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools skopeo
 
       - name: Bind the separate evaluation tag and source
         run: |
@@ -112,13 +118,23 @@ jobs:
 
       - name: Build the open evaluation engine
         if: steps.recovery.outputs.recovered != 'true'
-        run: cargo build --locked --release -p hc-cli --bin hc-cli
+        run: |
+          cargo build --locked --release -p hc-cli --bin hc-cli \
+            --target x86_64-unknown-linux-musl
+          engine=target/x86_64-unknown-linux-musl/release/hc-cli
+          if readelf --program-headers "$engine" | grep -Fq 'Requesting program interpreter'; then
+            exit 1
+          fi
+          if readelf --dynamic "$engine" 2>/dev/null | grep -Fq '(NEEDED)'; then
+            exit 1
+          fi
 
       - name: Export the exact public schema inventory
         if: steps.recovery.outputs.recovered != 'true'
         run: |
           install -d release-artifacts/schemas
-          target/release/hc-cli schema --output-dir release-artifacts/schemas
+          target/x86_64-unknown-linux-musl/release/hc-cli \
+            schema --output-dir release-artifacts/schemas
           python3 - <<'PY'
           from pathlib import Path
           engine_schemas = {
@@ -162,12 +178,12 @@ jobs:
           cp release/evaluation-doctor/sample-job/air-package-v1.json \
             release-artifacts/sample-job/inputs/
           truncate -s 8192 release-artifacts/sample-job/inputs/trace.bin
-          target/release/hc-cli plonky3 pack-trace \
+          target/x86_64-unknown-linux-musl/release/hc-cli plonky3 pack-trace \
             --air release-artifacts/sample-job/inputs/air-package-v1.json \
             --trace release-artifacts/sample-job/inputs/trace.bin \
             --rows 1024 \
             --output-dir release-artifacts/sample-job/inputs/packed
-          air_digest="$(target/release/hc-cli plonky3 validate-air \
+          air_digest="$(target/x86_64-unknown-linux-musl/release/hc-cli plonky3 validate-air \
             --air release-artifacts/sample-job/inputs/air-package-v1.json | jq -er .air_digest_hex)"
           jq -n --arg digest "$air_digest" \
             '{schema_version:1,air_digest_hex:$digest,values:[]}' \
@@ -175,7 +191,9 @@ jobs:
           install -d release-artifacts/sample-job/jobs \
             release-artifacts/sample-job/outputs \
             release-artifacts/sample-job/scratch
-          install -m 0755 target/release/hc-cli release-artifacts/tinyzkp-engine-linux-x86_64
+          install -m 0755 \
+            target/x86_64-unknown-linux-musl/release/hc-cli \
+            release-artifacts/tinyzkp-engine-linux-x86_64
           (
             cd release-artifacts/sample-job
             ../tinyzkp-engine-linux-x86_64 doctor --job job.json > doctor-report-v1.json
@@ -207,8 +225,6 @@ jobs:
       - name: Smoke the exact evaluation OCI without network or root
         if: steps.recovery.outputs.recovered != 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends skopeo
           skopeo copy \
             oci-archive:release-artifacts/tinyzkp-engine-evaluation.oci.tar \
             docker-daemon:tinyzkp-engine-evaluation:exact

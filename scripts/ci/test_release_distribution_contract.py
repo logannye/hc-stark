@@ -46,10 +46,8 @@ def test_engine_release_has_no_hosted_or_sdk_executables():
     assert "tinyzkp-engine-linux-x86_64" in workflow
     assert "tinyzkp-engine.oci.tar" in workflow
     assert "cargo build --locked --release -p hc-cli --bin hc-cli" in workflow
-    assert (
-        "target/release/hc-cli release-artifacts/tinyzkp-engine-linux-x86_64"
-        in workflow
-    )
+    assert "target/x86_64-unknown-linux-musl/release/hc-cli" in workflow
+    assert "release-artifacts/tinyzkp-engine-linux-x86_64" in workflow
     assert (
         "COPY --from=builder /app/target/release/hc-cli "
         "/usr/local/bin/tinyzkp-engine"
@@ -90,7 +88,12 @@ def test_engine_release_executes_confined_runtime_smoke_before_signing():
     )
     assert buildx in workflow
     assert workflow.index(buildx) < workflow.index("--output type=oci")
-    assert "sudo apt-get install --yes --no-install-recommends skopeo" in workflow
+    assert "targets: x86_64-unknown-linux-musl" in workflow
+    assert "--target x86_64-unknown-linux-musl" in workflow
+    assert "target/x86_64-unknown-linux-musl/release/hc-cli" in workflow
+    assert "musl-tools skopeo" in workflow
+    assert "Requesting program interpreter" in workflow
+    assert "'(NEEDED)'" in workflow
     assert "scripts/release/smoke_engine_release_artifacts.py" in workflow
     assert "--runtime-smoke release-artifacts/engine-runtime-smoke.json" in workflow
     assert workflow.index("smoke_engine_release_artifacts.py") < workflow.index(
@@ -375,6 +378,10 @@ def test_evaluation_doctor_release_is_separate_signed_prerelease_only():
     assert "tinyzkp-public-schemas.tar.gz" in workflow
     assert "tinyzkp-synthetic-doctor-job.tar.gz" in workflow
     assert "tinyzkp-engine-evaluation.oci.tar" in workflow
+    assert "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c" in workflow
+    assert "targets: x86_64-unknown-linux-musl" in workflow
+    assert "target/x86_64-unknown-linux-musl/release/hc-cli" in workflow
+    assert "musl-tools skopeo" in workflow
     assert "cosign sign-blob" in workflow
     assert "actions/attest@" in workflow
     assert "--prerelease" in workflow
@@ -390,3 +397,13 @@ def test_evaluation_doctor_release_is_separate_signed_prerelease_only():
         "public_live",
     ):
         assert forbidden not in workflow
+
+
+def test_pull_request_ci_executes_static_engine_in_pinned_release_runtime():
+    workflow = text(".github/workflows/ci.yml")
+    assert "wasm32-unknown-unknown,x86_64-unknown-linux-musl" in workflow
+    assert "--target x86_64-unknown-linux-musl" in workflow
+    assert "target/x86_64-unknown-linux-musl/release/hc-cli" in workflow
+    assert "Dockerfile.release-runtime" in workflow
+    assert "tinyzkp-engine-release:ci release" in workflow
+    assert 'cmp "$RUNNER_TEMP/engine-host-release.json"' in workflow

@@ -21,7 +21,7 @@ jobs:
         with:
           toolchain: "1.95.0"
           components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
+          targets: wasm32-unknown-unknown,x86_64-unknown-linux-musl
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -38,7 +38,10 @@ jobs:
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
 
       - name: Install evidence test dependencies
-        run: python3 -m pip install pytest -r scripts/benchmark/requirements.txt
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+          python3 -m pip install pytest -r scripts/benchmark/requirements.txt
 
       - name: Formatting
         run: cargo fmt --all -- --check
@@ -175,6 +178,40 @@ jobs:
 
       - name: Customer-operated OCI image
         run: docker build --build-arg HC_RELEASE_SHA=${{ github.sha }} --build-arg HC_RELEASE_REF=ci -t tinyzkp-engine:ci .
+
+      - name: Static release CLI in pinned customer-operated OCI runtime
+        run: |
+          cargo build --locked --release -p hc-cli --bin hc-cli \
+            --target x86_64-unknown-linux-musl
+          engine=target/x86_64-unknown-linux-musl/release/hc-cli
+          if readelf --program-headers "$engine" | grep -Fq 'Requesting program interpreter'; then
+            exit 1
+          fi
+          if readelf --dynamic "$engine" 2>/dev/null | grep -Fq '(NEEDED)'; then
+            exit 1
+          fi
+          "$engine" release > "$RUNNER_TEMP/engine-host-release.json"
+          install -d "$RUNNER_TEMP/engine-release-context"
+          install -m 0755 \
+            "$engine" \
+            "$RUNNER_TEMP/engine-release-context/tinyzkp-engine-linux-x86_64"
+          cp Dockerfile.release-runtime "$RUNNER_TEMP/engine-release-context/Dockerfile"
+          docker build \
+            --platform linux/amd64 \
+            --build-arg HC_RELEASE_SHA=${{ github.sha }} \
+            --build-arg HC_RELEASE_REF=ci \
+            --build-arg HC_RELEASE_BUILD_URL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} \
+            -t tinyzkp-engine-release:ci \
+            "$RUNNER_TEMP/engine-release-context"
+          docker run --rm \
+            --network none \
+            --read-only \
+            --user 10001:10001 \
+            --tmpfs /work:rw,nosuid,nodev,noexec,size=16777216,uid=10001,gid=10001,mode=0700 \
+            --tmpfs /scratch:rw,nosuid,nodev,noexec,size=16777216,uid=10001,gid=10001,mode=0700 \
+            tinyzkp-engine-release:ci release \
+            > "$RUNNER_TEMP/engine-oci-release.json"
+          cmp "$RUNNER_TEMP/engine-host-release.json" "$RUNNER_TEMP/engine-oci-release.json"
 
       - name: Dependency policy
         run: |

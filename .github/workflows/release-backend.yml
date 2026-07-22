@@ -101,6 +101,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
+          targets: x86_64-unknown-linux-musl
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12.13"
@@ -108,6 +109,10 @@ jobs:
       - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
         with:
           cosign-release: v2.4.3
+      - name: Install static Linux and OCI smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools skopeo
       - run: python3 -m pip install -r scripts/benchmark/requirements.txt
       - name: Materialize the reviewed Git executable
         run: |
@@ -183,12 +188,23 @@ jobs:
           echo "recovered=$recovered" >> "$GITHUB_OUTPUT"
       - name: Build locked public engine
         if: steps.recovery.outputs.recovered != 'true'
-        run: cargo build --locked --release -p hc-cli --bin hc-cli
+        run: >-
+          cargo build --locked --release -p hc-cli --bin hc-cli
+          --target x86_64-unknown-linux-musl
       - name: Assemble release payload
         if: steps.recovery.outputs.recovered != 'true'
         run: |
           install -d release-artifacts
-          install -m 0755 target/release/hc-cli release-artifacts/tinyzkp-engine-linux-x86_64
+          engine=target/x86_64-unknown-linux-musl/release/hc-cli
+          if readelf --program-headers "$engine" | grep -Fq 'Requesting program interpreter'; then
+            echo "release engine must not require a dynamic program interpreter" >&2
+            exit 1
+          fi
+          if readelf --dynamic "$engine" 2>/dev/null | grep -Fq '(NEEDED)'; then
+            echo "release engine must not require shared libraries" >&2
+            exit 1
+          fi
+          install -m 0755 "$engine" release-artifacts/tinyzkp-engine-linux-x86_64
           cp release/plonky3-compatibility-v1.json release-artifacts/
           cp release/backend-v1-gates.json release-artifacts/
           env -u HC_RELEASE_SHA -u HC_RELEASE_REF -u HC_RELEASE_BUILD_URL \
@@ -221,11 +237,6 @@ jobs:
             --oci-archive release-artifacts/tinyzkp-engine.oci.tar \
             --compatibility-manifest release-artifacts/plonky3-compatibility-v1.json \
             --output release-artifacts/engine-identity.json
-      - name: Install local OCI transport for runtime smoke
-        if: steps.recovery.outputs.recovered != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends skopeo
       - name: Execute and bind standalone and confined OCI runtime smoke
         if: steps.recovery.outputs.recovered != 'true'
         run: |
