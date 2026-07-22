@@ -72,7 +72,20 @@ def test_owner_qualification_workflows_materialize_reviewed_git():
 
     assert resource.count(materializer) == 1
     assert recovery.count(materializer) == 1
-    assert (
-        "sudo --preserve-env=HC_RELEASE_SHA,HC_RELEASE_REF,"
-        "TINYZKP_ANCHORED_GIT"
-    ) in resource
+    assert "sudo --preserve-env=" in resource
+    for preserved in (
+        "GITHUB_ACTIONS",
+        "GITHUB_REPOSITORY",
+        "HC_RELEASE_SHA",
+        "HC_RELEASE_REF",
+        "ImageOS",
+        "ImageVersion",
+        "RUNNER_ARCH",
+        "RUNNER_ENVIRONMENT",
+        "RUNNER_OS",
+        "TINYZKP_ANCHORED_GIT",
+        "TINYZKP_HOSTED_RUNNER_STORAGE_CONTRACT",
+        "TINYZKP_REPOSITORY_VISIBILITY",
+        "TINYZKP_RUNNER_LABEL",
+    ):
+        assert preserved in resource
