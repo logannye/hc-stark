@@ -36,6 +36,7 @@ def test_reviewed_action_count_rejects_tags_wrong_sha_and_wrong_version_comment(
 def test_fixed_host_release_workflow_requires_single_matrix_controller():
     workflow = invariants.text(".github/workflows/benches.yml")
     assert invariants.fixed_host_workflow_failures(workflow) == []
+    assert 'toolchain: "1.95.0"\n          components: rustfmt, clippy' in workflow
 
     weakened = workflow.replace(
         "scripts/benchmark/run_fixed_host_release_matrix.py",
@@ -50,5 +51,15 @@ def test_fixed_host_release_workflow_requires_single_matrix_controller():
 def test_nightly_qualification_tests_use_exact_release_toolchain():
     workflow = invariants.text(".github/workflows/nightly-backend.yml")
     assert "cargo +1.95.0 fetch --locked" in workflow
+    assert "--manifest-path fuzz/Cargo.toml" in workflow
+    assert "--locked" in workflow
     assert workflow.count("run: cargo +1.95.0 test -p hc-plonky3") == 2
     assert "run: cargo test -p hc-plonky3" not in workflow
+
+
+def test_required_ci_rejects_a_stale_standalone_fuzz_lock():
+    workflow = invariants.text(".github/workflows/ci.yml")
+    assert (
+        "cargo +1.95.0 fetch --locked --manifest-path fuzz/Cargo.toml"
+        in workflow
+    )
