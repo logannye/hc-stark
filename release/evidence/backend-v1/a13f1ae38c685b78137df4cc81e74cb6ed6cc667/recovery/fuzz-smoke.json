@@ -1,0 +1,1040 @@
+{
+  "all_targets_passed": true,
+  "cargo_fuzz_identity": {
+    "path": "/home/runner/.cargo/bin/cargo-fuzz",
+    "sha256": "8b64391ee7f127e560a79f521e2d2a4c5e88eb0eac6ed888257540bfd3a026c1",
+    "version": "cargo-fuzz 0.13.2"
+  },
+  "cargo_fuzz_version": "cargo-fuzz 0.13.2",
+  "cargo_identity": {
+    "path": "/home/runner/.rustup/toolchains/nightly-2026-04-15-x86_64-unknown-linux-gnu/bin/cargo",
+    "sha256": "f87b721ddf9f5c02bab5920c962dd8e14e370a2bf26477434301a251c0c26a15",
+    "version": "cargo 1.97.0-nightly (eb94155a9 2026-04-09)\nrelease: 1.97.0-nightly\ncommit-hash: eb94155a9a60943bd7b1cb04abec42f5d0de6ddc\ncommit-date: 2026-04-09\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.2 (sys:0.20.4 vendored)\nlibcurl: 8.19.0-DEV (sys:0.4.87+curl-8.19.0 vendored ssl:OpenSSL/3.5.4)\nssl: OpenSSL 3.5.4 30 Sep 2025\nos: Ubuntu 24.4.0 (noble) [64-bit]"
+  },
+  "dependency_lock_sha256": "0a28ab40dba2786a5106d274623d174b4c845b15ddd594629ebd98aa08612257",
+  "environment_policy": {
+    "fixed_values": {
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never",
+      "LANG": "C",
+      "LC_ALL": "C",
+      "RUST_BACKTRACE": "0",
+      "SOURCE_DATE_EPOCH": "0"
+    },
+    "inherited_names": [
+      "HOME",
+      "PATH",
+      "USER",
+      "LOGNAME",
+      "TMPDIR",
+      "TMP",
+      "TEMP",
+      "RUSTUP_HOME",
+      "CARGO_HOME"
+    ],
+    "rejected_build_affecting_names": [
+      "ASAN_OPTIONS",
+      "CARGO_BUILD_JOBS",
+      "CARGO_BUILD_RUSTC",
+      "CARGO_BUILD_RUSTC_WRAPPER",
+      "CARGO_BUILD_TARGET",
+      "CARGO_ENCODED_RUSTFLAGS",
+      "CARGO_TARGET_DIR",
+      "DYLD_INSERT_LIBRARIES",
+      "LD_PRELOAD",
+      "LIBFUZZER_OPTIONS",
+      "LLVM_PROFILE_FILE",
+      "MSAN_OPTIONS",
+      "RUSTC",
+      "RUSTC_BOOTSTRAP",
+      "RUSTC_WRAPPER",
+      "RUSTC_WORKSPACE_WRAPPER",
+      "RUSTDOCFLAGS",
+      "RUSTFLAGS",
+      "RUSTUP_TOOLCHAIN",
+      "TSAN_OPTIONS",
+      "UBSAN_OPTIONS"
+    ],
+    "schema_version": 1
+  },
+  "environment_policy_sha256": "1a09048465d17f7fe5df85db2dc96263f1583e03f960701de960547bc6c95b37",
+  "execution_boundary": {
+    "abi_version": 7,
+    "build_writable_roots": [
+      "cargo-target",
+      "tmp"
+    ],
+    "descriptor_execution": true,
+    "kind": "landlock-write-deny-v1",
+    "run_writable_roots": [
+      "tmp"
+    ],
+    "source_write_allowed": false,
+    "target_scoped_writes": [
+      "execution-corpus",
+      "artifacts"
+    ]
+  },
+  "fuzz_dependency_lock_sha256": "d2c316a047da3f440e20f6b2312b2a49f4de3c2a217d829210b611d5a35759f8",
+  "partial": false,
+  "profile": "tinyzkp-p3-goldilocks-v1",
+  "release_eligible": true,
+  "release_sha": "a13f1ae38c685b78137df4cc81e74cb6ed6cc667",
+  "rust_toolchain_sha256": "ccc2e1ec095fbcdc5c18912f077cda7f967f6ce3b214c92a76919a88aa8542b4",
+  "rustc_identity": {
+    "path": "/home/runner/.rustup/toolchains/nightly-2026-04-15-x86_64-unknown-linux-gnu/bin/rustc",
+    "sha256": "7578d1bef0e0524283f4f30411285e5c9bb2b0c5d70d1551e02447dfbfd520ec",
+    "version": "rustc 1.97.0-nightly (a5c825cd8 2026-04-14)\nbinary: rustc\ncommit-hash: a5c825cd824ee0ef9463021078a2f464b4cc1a0d\ncommit-date: 2026-04-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0-nightly\nLLVM version: 22.1.2"
+  },
+  "rustc_version": "rustc 1.97.0-nightly (a5c825cd8 2026-04-14)\nbinary: rustc\ncommit-hash: a5c825cd824ee0ef9463021078a2f464b4cc1a0d\ncommit-date: 2026-04-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0-nightly\nLLVM version: 22.1.2",
+  "sanitizer": "address",
+  "sanitizer_runtime_environment": {
+    "ASAN_OPTIONS": "detect_odr_violation=0"
+  },
+  "schema_version": 2,
+  "seconds_per_target": 60,
+  "source_tree_sha256": "6cc4ccee78fb08dfe9ddcffe131d1f37d19a2c7334670b9c51ac369e5b74995c",
+  "startup_timeout_seconds": 900,
+  "targets": [
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "workload_manifest_v1"
+      ],
+      "build_duration_ms": 122400,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 6310741,
+      "duration_ms": 61214,
+      "executed_units": 6310741,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 56325176,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/workload_manifest_v1",
+        "sha256": "7888c3229d9027ee2ce1c2725fd149c11d16727991f1a16d8bb7964e471595c5"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 2034573,
+      "log_file": "workload_manifest_v1.log",
+      "log_sha256": "d5c40343f33442ec29b9c9b48bdaae2f238f1a3359fb7836915770b6f283a658",
+      "peak_rss_mb": 576,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/workload_manifest_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/workload_manifest_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/workload_manifest_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/workload_manifest_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "909279d0917f8198054c762dd50a88860cf56fede8cd67d807c277ff920bb324",
+        "schema_version": 1,
+        "seed_count": 3,
+        "seeds": [
+          {
+            "bytes": 523,
+            "sha256": "24aee0aa0f0fd7a1ed98c4c30584186d70e39fbed7b9520ab609a8611f0397be"
+          },
+          {
+            "bytes": 535,
+            "sha256": "80ecf75d57fb4c42ac09dee43c886ea0abfcc1a409f2039f84541765a016efa6"
+          },
+          {
+            "bytes": 577,
+            "sha256": "e63e73ad61350a723a3ade62e8a369498bafb4b3d4cf880c7dd71cd0ad71c049"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "909279d0917f8198054c762dd50a88860cf56fede8cd67d807c277ff920bb324",
+      "smoke_seed_count": 3,
+      "target": "workload_manifest_v1",
+      "target_marker": {
+        "corpus_sha256": "909279d0917f8198054c762dd50a88860cf56fede8cd67d807c277ff920bb324",
+        "target": "workload_manifest_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "proof_bundle_v1"
+      ],
+      "build_duration_ms": 2175,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 417966,
+      "duration_ms": 61121,
+      "executed_units": 417966,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 58273568,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/proof_bundle_v1",
+        "sha256": "75ccbb4efc153e01a445affcecb91133cc09c75f72025272ae5030b1e5910b7b"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 1125679,
+      "log_file": "proof_bundle_v1.log",
+      "log_sha256": "ab1cf03a48d9f71ce7f1cbcb68c09373becc0381d31b7b48fbbc0f8be32b9122",
+      "peak_rss_mb": 488,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/proof_bundle_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/proof_bundle_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/proof_bundle_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/proof_bundle_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "795e5e65e495ba395db779bba9710b93aa05a96fc04d334c1682c982ca5c3b79",
+        "schema_version": 1,
+        "seed_count": 2,
+        "seeds": [
+          {
+            "bytes": 120759,
+            "sha256": "e52e71756f18d4aecf5c8fab4cc8333e060560cdfcffab083e91d6b9114274bf"
+          },
+          {
+            "bytes": 320141,
+            "sha256": "ef78f5f49084b7a5f1ef5f3d2d7fecd53acef1fe2a10d5df0ee38ea1dcfe0edd"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "795e5e65e495ba395db779bba9710b93aa05a96fc04d334c1682c982ca5c3b79",
+      "smoke_seed_count": 2,
+      "target": "proof_bundle_v1",
+      "target_marker": {
+        "corpus_sha256": "795e5e65e495ba395db779bba9710b93aa05a96fc04d334c1682c982ca5c3b79",
+        "target": "proof_bundle_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "plonky3_proof_bytes_v1"
+      ],
+      "build_duration_ms": 422,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 156170,
+      "duration_ms": 61175,
+      "executed_units": 156170,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 56635584,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/plonky3_proof_bytes_v1",
+        "sha256": "2485c768d5fea523cbc4b41b9efd2a62b5c1f7dd3ca7b52896dae01246ed2c45"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 324737,
+      "log_file": "plonky3_proof_bytes_v1.log",
+      "log_sha256": "879e954a4550478e5d83e79fb7d44290d862511908ab66ab52b229334f838541",
+      "peak_rss_mb": 502,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/plonky3_proof_bytes_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/plonky3_proof_bytes_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/plonky3_proof_bytes_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/plonky3_proof_bytes_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "fc1d33984ab9ff9c0a44480359ed28f2974d2422ac8d787180691d6f7e4a3356",
+        "schema_version": 1,
+        "seed_count": 2,
+        "seeds": [
+          {
+            "bytes": 89737,
+            "sha256": "cf0c494d0a582456e3d9e5e79ca2a759c636adc2f07792db5adbd005991fcacb"
+          },
+          {
+            "bytes": 239306,
+            "sha256": "e74e75042e09c31b38c7e26eb32a5b866a51a0f7599efb35d7f2b0c49197b06c"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "fc1d33984ab9ff9c0a44480359ed28f2974d2422ac8d787180691d6f7e4a3356",
+      "smoke_seed_count": 2,
+      "target": "plonky3_proof_bytes_v1",
+      "target_marker": {
+        "corpus_sha256": "fc1d33984ab9ff9c0a44480359ed28f2974d2422ac8d787180691d6f7e4a3356",
+        "target": "plonky3_proof_bytes_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "benchmark_report_v1"
+      ],
+      "build_duration_ms": 2126,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 5743550,
+      "duration_ms": 61174,
+      "executed_units": 5743550,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 55992480,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/benchmark_report_v1",
+        "sha256": "963956c798aa893f5a48c25c0ae65ea0455042ccd2f0504da2ab9d8b3f1f6a9d"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 2301741,
+      "log_file": "benchmark_report_v1.log",
+      "log_sha256": "40a7554e7e3e6d9d3223acd15e1d0f3d669664e1b59a582a55ba9f49ae64fa62",
+      "peak_rss_mb": 554,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/benchmark_report_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/benchmark_report_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/benchmark_report_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/benchmark_report_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "c3261fe2631510f2bb95318da775892a0da59504690f901e2bb003a4c8ff8e4b",
+        "schema_version": 1,
+        "seed_count": 1,
+        "seeds": [
+          {
+            "bytes": 1751,
+            "sha256": "782777c3151beff68db5c126620ddc49a78c34e50df920dc9a5d351d837d7977"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "c3261fe2631510f2bb95318da775892a0da59504690f901e2bb003a4c8ff8e4b",
+      "smoke_seed_count": 1,
+      "target": "benchmark_report_v1",
+      "target_marker": {
+        "corpus_sha256": "c3261fe2631510f2bb95318da775892a0da59504690f901e2bb003a4c8ff8e4b",
+        "target": "benchmark_report_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "checkpoint_manifest_v2"
+      ],
+      "build_duration_ms": 1874,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 7168209,
+      "duration_ms": 61219,
+      "executed_units": 7168209,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 22255472,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/checkpoint_manifest_v2",
+        "sha256": "1f0f4d82c0a9e148ed121f5da221b55151d83797066489e25a375b401a0aeeb4"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 2001771,
+      "log_file": "checkpoint_manifest_v2.log",
+      "log_sha256": "3826053c5bebd5ff9197749a70b7ea96180a4667b4256ece887adf1c783bb9be",
+      "peak_rss_mb": 633,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/checkpoint_manifest_v2",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/checkpoint_manifest_v2/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/checkpoint_manifest_v2",
+        "raw-reports/fuzz-logs/smoke-corpus/checkpoint_manifest_v2"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "1f5785e0bd832e33591273c27092149fd8b2ed721923431f72c340dbd7726c35",
+        "schema_version": 1,
+        "seed_count": 1,
+        "seeds": [
+          {
+            "bytes": 685,
+            "sha256": "38e22d55bece216bffcfbe1cac42f0d01b92178a8fcc76526bf8075db55496fc"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "1f5785e0bd832e33591273c27092149fd8b2ed721923431f72c340dbd7726c35",
+      "smoke_seed_count": 1,
+      "target": "checkpoint_manifest_v2",
+      "target_marker": {
+        "corpus_sha256": "1f5785e0bd832e33591273c27092149fd8b2ed721923431f72c340dbd7726c35",
+        "target": "checkpoint_manifest_v2",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "challenger_snapshot_v1"
+      ],
+      "build_duration_ms": 422,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 24092088,
+      "duration_ms": 61162,
+      "executed_units": 24092088,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 55049680,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/challenger_snapshot_v1",
+        "sha256": "88e4be06be192d71555636efff8dc9ed8e99dfc82fdc13a680efc70cfb317b79"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 5765,
+      "log_file": "challenger_snapshot_v1.log",
+      "log_sha256": "22ecdf63c95be41912d36199d75141efd4abae70edce393a0651bf26d495ba4a",
+      "peak_rss_mb": 443,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/challenger_snapshot_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/challenger_snapshot_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/challenger_snapshot_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/challenger_snapshot_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "f116abd57c3e0560fd70ec4abc84e1a1385d3aaa1a936cdda4bfefbcf099a26c",
+        "schema_version": 1,
+        "seed_count": 1,
+        "seeds": [
+          {
+            "bytes": 1,
+            "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "f116abd57c3e0560fd70ec4abc84e1a1385d3aaa1a936cdda4bfefbcf099a26c",
+      "smoke_seed_count": 1,
+      "target": "challenger_snapshot_v1",
+      "target_marker": {
+        "corpus_sha256": "f116abd57c3e0560fd70ec4abc84e1a1385d3aaa1a936cdda4bfefbcf099a26c",
+        "target": "challenger_snapshot_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "scratch_artifact_header_v1"
+      ],
+      "build_duration_ms": 370,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 315336,
+      "duration_ms": 61392,
+      "executed_units": 315336,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 21618912,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/scratch_artifact_header_v1",
+        "sha256": "e356dea7acb46213851a906c94c1918a1fa06b98352306090fa7256a94f8533c"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 7594,
+      "log_file": "scratch_artifact_header_v1.log",
+      "log_sha256": "2af82958c17869247a3c39b92b842739e38fa5cde49d37c3a150dc79d9e8e233",
+      "peak_rss_mb": 572,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/scratch_artifact_header_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/scratch_artifact_header_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/scratch_artifact_header_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/scratch_artifact_header_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "377fe728a7be0f6a536659ec265403bdba8c58216c78dbdbe13b8fd5dcf4a408",
+        "schema_version": 1,
+        "seed_count": 2,
+        "seeds": [
+          {
+            "bytes": 1,
+            "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+          },
+          {
+            "bytes": 10,
+            "sha256": "7bf9e34d75d13fdbb53c4d7118fe8725271b035b3947766aeec2b676c38dda0a"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "377fe728a7be0f6a536659ec265403bdba8c58216c78dbdbe13b8fd5dcf4a408",
+      "smoke_seed_count": 2,
+      "target": "scratch_artifact_header_v1",
+      "target_marker": {
+        "corpus_sha256": "377fe728a7be0f6a536659ec265403bdba8c58216c78dbdbe13b8fd5dcf4a408",
+        "target": "scratch_artifact_header_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "checkpoint_identity_v2"
+      ],
+      "build_duration_ms": 1925,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 5758262,
+      "duration_ms": 61229,
+      "executed_units": 5758262,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 22259088,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/checkpoint_identity_v2",
+        "sha256": "e33860058205d0889d5cf35e328d31a5fee8df71b27dc743f979cfa15d4a8fdd"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 1646000,
+      "log_file": "checkpoint_identity_v2.log",
+      "log_sha256": "38ec595125f3adec374f80e07acf0f580e334217d24bd7f09b2c1fe4168f3f1a",
+      "peak_rss_mb": 597,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/checkpoint_identity_v2",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/checkpoint_identity_v2/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/checkpoint_identity_v2",
+        "raw-reports/fuzz-logs/smoke-corpus/checkpoint_identity_v2"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "1f5785e0bd832e33591273c27092149fd8b2ed721923431f72c340dbd7726c35",
+        "schema_version": 1,
+        "seed_count": 1,
+        "seeds": [
+          {
+            "bytes": 685,
+            "sha256": "38e22d55bece216bffcfbe1cac42f0d01b92178a8fcc76526bf8075db55496fc"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "1f5785e0bd832e33591273c27092149fd8b2ed721923431f72c340dbd7726c35",
+      "smoke_seed_count": 1,
+      "target": "checkpoint_identity_v2",
+      "target_marker": {
+        "corpus_sha256": "1f5785e0bd832e33591273c27092149fd8b2ed721923431f72c340dbd7726c35",
+        "target": "checkpoint_identity_v2",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "resume_checkpoint_v2"
+      ],
+      "build_duration_ms": 471,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 381210,
+      "duration_ms": 61064,
+      "executed_units": 381210,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 62882592,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/resume_checkpoint_v2",
+        "sha256": "d7d2ff4f961882febdab4a432d78aa93862c48e9d3512061c76402b34378ade3"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 8497,
+      "log_file": "resume_checkpoint_v2.log",
+      "log_sha256": "35abab06f7bf62800793d036b01631b4ddcf89720075de2f7b384a277c9fb68b",
+      "peak_rss_mb": 205,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/resume_checkpoint_v2",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/resume_checkpoint_v2/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/resume_checkpoint_v2",
+        "raw-reports/fuzz-logs/smoke-corpus/resume_checkpoint_v2"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "1f5785e0bd832e33591273c27092149fd8b2ed721923431f72c340dbd7726c35",
+        "schema_version": 1,
+        "seed_count": 1,
+        "seeds": [
+          {
+            "bytes": 685,
+            "sha256": "38e22d55bece216bffcfbe1cac42f0d01b92178a8fcc76526bf8075db55496fc"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "1f5785e0bd832e33591273c27092149fd8b2ed721923431f72c340dbd7726c35",
+      "smoke_seed_count": 1,
+      "target": "resume_checkpoint_v2",
+      "target_marker": {
+        "corpus_sha256": "1f5785e0bd832e33591273c27092149fd8b2ed721923431f72c340dbd7726c35",
+        "target": "resume_checkpoint_v2",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "air_package_v1"
+      ],
+      "build_duration_ms": 2479,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 7359908,
+      "duration_ms": 61229,
+      "executed_units": 7359908,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 56720768,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/air_package_v1",
+        "sha256": "5d73e288d3baffbda9805135be8037dc0585332d82181151923d8ef4b19bf47d"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 1608536,
+      "log_file": "air_package_v1.log",
+      "log_sha256": "12bbb064d6372786bccc0f8f2fe3f269240fbd35bf7c1f371b948ff16537ce6e",
+      "peak_rss_mb": 586,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/air_package_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/air_package_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/air_package_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/air_package_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "ca49df70b7f21772fee36d176ee98585999b9bd249db9189a996f0c9297b28a8",
+        "schema_version": 1,
+        "seed_count": 2,
+        "seeds": [
+          {
+            "bytes": 2,
+            "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+          },
+          {
+            "bytes": 20,
+            "sha256": "a9d5f6d002d956b8af5787a05e0ca000d45c03977ffa54ee8fbed719fed5fd23"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "ca49df70b7f21772fee36d176ee98585999b9bd249db9189a996f0c9297b28a8",
+      "smoke_seed_count": 2,
+      "target": "air_package_v1",
+      "target_marker": {
+        "corpus_sha256": "ca49df70b7f21772fee36d176ee98585999b9bd249db9189a996f0c9297b28a8",
+        "target": "air_package_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "trace_manifest_v1"
+      ],
+      "build_duration_ms": 3028,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 7449584,
+      "duration_ms": 61226,
+      "executed_units": 7449584,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 56866920,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/trace_manifest_v1",
+        "sha256": "296422787c169a90238a3670ffb920bc74b159c23bbef7ff9e0886a99d87cd4f"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 1625451,
+      "log_file": "trace_manifest_v1.log",
+      "log_sha256": "ee2985c897c9d6d3fb82df264627eb0b7183704d141ce84dde8d6fcfac1f34c5",
+      "peak_rss_mb": 569,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/trace_manifest_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/trace_manifest_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/trace_manifest_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/trace_manifest_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "2948068fe84aea226456310da692f3fb08e4d78c15811f4065d98a4dc60f8b18",
+        "schema_version": 1,
+        "seed_count": 2,
+        "seeds": [
+          {
+            "bytes": 7,
+            "sha256": "d827049039f82a8b65a9b0f52e637cf3bc5d1e0dec7d6198edf901a5e3dcae7d"
+          },
+          {
+            "bytes": 43,
+            "sha256": "1d271575a7108d4276a88d4f686b16ca7b76ae31a5ac1ab8aed3e33dc6dd30ed"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "2948068fe84aea226456310da692f3fb08e4d78c15811f4065d98a4dc60f8b18",
+      "smoke_seed_count": 2,
+      "target": "trace_manifest_v1",
+      "target_marker": {
+        "corpus_sha256": "2948068fe84aea226456310da692f3fb08e4d78c15811f4065d98a4dc60f8b18",
+        "target": "trace_manifest_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "air_proof_bundle_v1"
+      ],
+      "build_duration_ms": 3478,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 4085101,
+      "duration_ms": 61213,
+      "executed_units": 4085101,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 58762632,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/air_proof_bundle_v1",
+        "sha256": "7ded2bcb5bcfcf3c58676a7022d7d6a90fd7454a0279fd21d13d45aaa4613d3f"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 1909841,
+      "log_file": "air_proof_bundle_v1.log",
+      "log_sha256": "a5eb91133a3adcc5f366579b1fcfe61547a7a16d08973733d36c197701d54474",
+      "peak_rss_mb": 539,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/air_proof_bundle_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/air_proof_bundle_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/air_proof_bundle_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/air_proof_bundle_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "3be1c40cc6b818e5e22dc3cb3b3f6520846eacdf20f9acf88e91fde325b857a9",
+        "schema_version": 1,
+        "seed_count": 2,
+        "seeds": [
+          {
+            "bytes": 2,
+            "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+          },
+          {
+            "bytes": 1529,
+            "sha256": "c34bb65671fcd5da532b6dc0f77374ebec0716638aae49a25e5ac327397b5afc"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "3be1c40cc6b818e5e22dc3cb3b3f6520846eacdf20f9acf88e91fde325b857a9",
+      "smoke_seed_count": 2,
+      "target": "air_proof_bundle_v1",
+      "target_marker": {
+        "corpus_sha256": "3be1c40cc6b818e5e22dc3cb3b3f6520846eacdf20f9acf88e91fde325b857a9",
+        "target": "air_proof_bundle_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "zstd_trace_chunk_v1"
+      ],
+      "build_duration_ms": 421,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 282922,
+      "duration_ms": 61090,
+      "executed_units": 282922,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 31541288,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/zstd_trace_chunk_v1",
+        "sha256": "72c408cc3f872ed6d7b0fac0a45950d1e09c6bcbacb732f40564bdac9c0acf71"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 14028,
+      "log_file": "zstd_trace_chunk_v1.log",
+      "log_sha256": "7db48147b9902fc29711bcfc750c2bf7b3e7e4f36ba08cd7e03b0000c726c0c7",
+      "peak_rss_mb": 298,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/zstd_trace_chunk_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/zstd_trace_chunk_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/zstd_trace_chunk_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/zstd_trace_chunk_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "1636fa5f12dd5fda1e8bda3d73f391e1c6c66a577125851633fa205d8455508a",
+        "schema_version": 1,
+        "seed_count": 2,
+        "seeds": [
+          {
+            "bytes": 4,
+            "sha256": "1c986dc083de2f3d01811ccf5feba7bbf933659591bf729c687c1177df4cb47d"
+          },
+          {
+            "bytes": 9,
+            "sha256": "6fb8543883dafcc2ed0934866b8b3f775231f5b0933add08bf502e9e84944cbd"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "1636fa5f12dd5fda1e8bda3d73f391e1c6c66a577125851633fa205d8455508a",
+      "smoke_seed_count": 2,
+      "target": "zstd_trace_chunk_v1",
+      "target_marker": {
+        "corpus_sha256": "1636fa5f12dd5fda1e8bda3d73f391e1c6c66a577125851633fa205d8455508a",
+        "target": "zstd_trace_chunk_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    },
+    {
+      "artifacts": [],
+      "build_command": [
+        "/home/runner/.cargo/bin/cargo-fuzz",
+        "build",
+        "--target",
+        "x86_64-unknown-linux-gnu",
+        "--target-dir",
+        "raw-reports/cargo-target",
+        "public_inputs_v1"
+      ],
+      "build_duration_ms": 771,
+      "build_exit_status": 0,
+      "build_timed_out": false,
+      "build_timeout_seconds": 900,
+      "done_executed_units": 8719913,
+      "duration_ms": 61264,
+      "executed_units": 8719913,
+      "exit_status": 0,
+      "fuzz_binary": {
+        "bytes": 55878296,
+        "descriptor_execution": true,
+        "path": "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/public_inputs_v1",
+        "sha256": "cbd055d598fb211be61fa35d4028c964992024993bdd367b47427597e9f7f50e"
+      },
+      "libfuzzer_done": true,
+      "libfuzzer_elapsed_seconds": 61,
+      "log_bytes": 1252790,
+      "log_file": "public_inputs_v1.log",
+      "log_sha256": "109721fc21ad3e13e623d971ad4e5576d91c74a30935cea6c60bcda52a13dc86",
+      "peak_rss_mb": 564,
+      "run_command": [
+        "raw-reports/cargo-target/x86_64-unknown-linux-gnu/release/public_inputs_v1",
+        "-max_total_time=60",
+        "-rss_limit_mb=2048",
+        "-timeout=60",
+        "-artifact_prefix=raw-reports/fuzz-logs/artifacts/public_inputs_v1/",
+        "-print_final_stats=1",
+        "raw-reports/fuzz-logs/execution-corpus/public_inputs_v1",
+        "raw-reports/fuzz-logs/smoke-corpus/public_inputs_v1"
+      ],
+      "smoke_corpus": {
+        "corpus_sha256": "0b63c0d9f6bb4ca6a123a9c5a75f196015ae30dba53c06e2c3a37c2d3afa68eb",
+        "schema_version": 1,
+        "seed_count": 2,
+        "seeds": [
+          {
+            "bytes": 2,
+            "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+          },
+          {
+            "bytes": 116,
+            "sha256": "d49c541e3ff7b1c8dd6a0533059b84c7de12129fec0f411246531654fd97d3e9"
+          }
+        ],
+        "selection": "evenly-spaced-sha256-sorted-v1"
+      },
+      "smoke_corpus_sha256": "0b63c0d9f6bb4ca6a123a9c5a75f196015ae30dba53c06e2c3a37c2d3afa68eb",
+      "smoke_seed_count": 2,
+      "target": "public_inputs_v1",
+      "target_marker": {
+        "corpus_sha256": "0b63c0d9f6bb4ca6a123a9c5a75f196015ae30dba53c06e2c3a37c2d3afa68eb",
+        "target": "public_inputs_v1",
+        "toolchain": "nightly-2026-04-15"
+      },
+      "timed_out": false,
+      "timeout_seconds": 960
+    }
+  ],
+  "tool_identity_bytes": 1843,
+  "tool_identity_file": "fuzz-tool-identity.json",
+  "tool_identity_sha256": "af2810d1b82dac93041a1e7cc80ae9424ce22a5bb4eaa88e5fbe8577f1f016bb",
+  "toolchain": "nightly-2026-04-15"
+}

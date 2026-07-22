@@ -1,0 +1,486 @@
+{
+  "assembly_workflow": {
+    "actor": "logannye",
+    "repository": "logannye/hc-stark",
+    "run_attempt": 1,
+    "run_id": 29899364718,
+    "triggering_actor": "logannye",
+    "workflow_path": ".github/workflows/assemble-backend-evidence.yml",
+    "workflow_ref": "refs/heads/main"
+  },
+  "candidate": {
+    "artifact_bindings": [
+      {
+        "gate": "air_job_contracts",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/air_job_contracts.test-report.json",
+        "role": "test_report",
+        "sha256": "21b0882fd73576fa4e1a0aac4301f95ad47c9bcb2304227777b92834bf8c329c"
+      },
+      {
+        "gate": "air_job_contracts",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/air_job_contracts.test.log",
+        "role": "test_log",
+        "sha256": "b653c8751f115f5d2121f62305244e2fbefceefbc952df244222af2cbb07f365"
+      },
+      {
+        "gate": "clean_release_source",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/clean_release_source.test-report.json",
+        "role": "test_report",
+        "sha256": "ab9147351b01d0d075637dfd0dfdd834791767769426b413d8289f1e4484dc74"
+      },
+      {
+        "gate": "clean_release_source",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/clean_release_source.test.log",
+        "role": "test_log",
+        "sha256": "58639ac94060b4d8e6df9887ae49de286858a08d3c9cd4d604b95255c5524db0"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-matrix.json",
+        "role": "crash_matrix",
+        "sha256": "1ed10b84ea4c2e4f4cbc66ebc4573304d746f63aade901630e0442098358544f"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-smoke.json",
+        "role": "fuzz_smoke",
+        "sha256": "c2258ebf4765b6468f2c8dd2da86542119b368662be9fd6c8ebbf5540d521d1b"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/crash-tool-identity.json",
+        "role": "crash_tool_identity",
+        "sha256": "21d72150bf2f9b4c911263e085fd063acee94a29ca2ea6869d6f5a5a1c7b2c86"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/fuzz-tool-identity.json",
+        "role": "fuzz_tool_identity",
+        "sha256": "af2810d1b82dac93041a1e7cc80ae9424ce22a5bb4eaa88e5fbe8577f1f016bb"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_trace.log",
+        "role": "crash_log_checkpoint_trace",
+        "sha256": "9687f5499e7b647c3bdc727a1826187e4ea06803c2df57863eb1ec890a43b8cc"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_trace_lde.log",
+        "role": "crash_log_checkpoint_trace_lde",
+        "sha256": "e556fb67ec53f7533cc171c348b7a559196aa978f90b0053679f19e1627f5f4e"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_trace_commitment.log",
+        "role": "crash_log_checkpoint_trace_commitment",
+        "sha256": "aad1f8bea16462db92fd5ba1979503baef3a5e6b00c7f1893cecaf1cf480ce75"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_quotient.log",
+        "role": "crash_log_checkpoint_quotient",
+        "sha256": "1beef1673970a467c017571d618bed8a37e3439bd1d1a02447c4dc2cdc038c84"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_quotient_lde.log",
+        "role": "crash_log_checkpoint_quotient_lde",
+        "sha256": "4b6dfb144b6f780080e6dbf7af15ed1edce834fc59d784a07c2c41133acd5dd8"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_quotient_commitment.log",
+        "role": "crash_log_checkpoint_quotient_commitment",
+        "sha256": "da7021b6f06cbfca28c3ccfc27afc892acd25dd23eed8ed8c1c6727e9d806125"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_openings.log",
+        "role": "crash_log_checkpoint_openings",
+        "sha256": "c906cb66549e16025f5bd27f348106464783e2cf67d5fa3b6b049f917b547aec"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_fri_layer_0.log",
+        "role": "crash_log_checkpoint_fri_layer_0",
+        "sha256": "ed6e18e77ed4e82a00ea471c5a00226b48b9b1fceec892bb7d9d3521724e2b2c"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_fri_layer_1.log",
+        "role": "crash_log_checkpoint_fri_layer_1",
+        "sha256": "8edd327adebd83acce5d6cd499dcd89639bd1d90849f33e5bde46299a9211929"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_fri_layer_2.log",
+        "role": "crash_log_checkpoint_fri_layer_2",
+        "sha256": "607d047d755bece3895da388833b05cc8c255997af3422c06e948a6465a4af58"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_fri_layer_3.log",
+        "role": "crash_log_checkpoint_fri_layer_3",
+        "sha256": "78b31b2e073731b9cd98cbff1f1d122ff1700e5d7c9c400981f2eb6921727ed0"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_fri_layer_4.log",
+        "role": "crash_log_checkpoint_fri_layer_4",
+        "sha256": "9e35acd5255963af74bbf4504646ff0499a80d770c33c41ea1b70a26ed6d38e6"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_fri_layer_5.log",
+        "role": "crash_log_checkpoint_fri_layer_5",
+        "sha256": "e2d93bf56b21f111619115d8a6c97f84156361b2bd1791cea24782c5e3b540f5"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/checkpoint_proof_assembly.log",
+        "role": "crash_log_checkpoint_proof_assembly",
+        "sha256": "b4e6192669fdac78ecdca974fbe8325df1fb2eb36e93556d2ae9bef43bd41307"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/cancellation_retention.log",
+        "role": "crash_log_cancellation_retention",
+        "sha256": "cbba475e063b9cdbaf626f3edea4cb9a59f84f9bb113e8d7c3ca13a167ab8b01"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/corrupt_artifact_and_stale_identity.log",
+        "role": "crash_log_corrupt_artifact_and_stale_identity",
+        "sha256": "516f3eb36e3cb654a6b2c5d074083f1a23c9267a05292e9982366a89a51e9776"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/disk_full_resume.log",
+        "role": "crash_log_disk_full_resume",
+        "sha256": "ab7ac0cd2814846e5411aa88ed8658b58cefec24ad2924d57177e8493aaeec58"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/path_traversal.log",
+        "role": "crash_log_path_traversal",
+        "sha256": "2a0db4594e490919c6ed96884e4399499e306b64385a92ae12c152ef5549a148"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/saved_artifact_reuse.log",
+        "role": "crash_log_saved_artifact_reuse",
+        "sha256": "85bd15896db45281b2a438c07db05b62494d9cc92bd8997dc6322ba818ffe5f4"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/sigterm_checkpoint_resume.log",
+        "role": "crash_log_sigterm_checkpoint_resume",
+        "sha256": "1eb229ce9cfabe9d89d640892f70ee4069809c1fdec7efb1f91f8e2459b79bfc"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/symlink_rejection.log",
+        "role": "crash_log_symlink_rejection",
+        "sha256": "93ccd9c860a84221721abd87ee8c11a063631460d500bf954532eea96e3326c3"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/crash-logs/truncation_and_checksum.log",
+        "role": "crash_log_truncation_and_checksum",
+        "sha256": "bb5530a09558ef7591db336b3964baa8f7cd07fe5f0f074603016fc51dfdb61f"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/air_package_v1.log",
+        "role": "fuzz_log_air_package_v1",
+        "sha256": "12bbb064d6372786bccc0f8f2fe3f269240fbd35bf7c1f371b948ff16537ce6e"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/air_proof_bundle_v1.log",
+        "role": "fuzz_log_air_proof_bundle_v1",
+        "sha256": "a5eb91133a3adcc5f366579b1fcfe61547a7a16d08973733d36c197701d54474"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/benchmark_report_v1.log",
+        "role": "fuzz_log_benchmark_report_v1",
+        "sha256": "40a7554e7e3e6d9d3223acd15e1d0f3d669664e1b59a582a55ba9f49ae64fa62"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/challenger_snapshot_v1.log",
+        "role": "fuzz_log_challenger_snapshot_v1",
+        "sha256": "22ecdf63c95be41912d36199d75141efd4abae70edce393a0651bf26d495ba4a"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/checkpoint_identity_v2.log",
+        "role": "fuzz_log_checkpoint_identity_v2",
+        "sha256": "38ec595125f3adec374f80e07acf0f580e334217d24bd7f09b2c1fe4168f3f1a"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/checkpoint_manifest_v2.log",
+        "role": "fuzz_log_checkpoint_manifest_v2",
+        "sha256": "3826053c5bebd5ff9197749a70b7ea96180a4667b4256ece887adf1c783bb9be"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/plonky3_proof_bytes_v1.log",
+        "role": "fuzz_log_plonky3_proof_bytes_v1",
+        "sha256": "879e954a4550478e5d83e79fb7d44290d862511908ab66ab52b229334f838541"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/proof_bundle_v1.log",
+        "role": "fuzz_log_proof_bundle_v1",
+        "sha256": "ab1cf03a48d9f71ce7f1cbcb68c09373becc0381d31b7b48fbbc0f8be32b9122"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/public_inputs_v1.log",
+        "role": "fuzz_log_public_inputs_v1",
+        "sha256": "109721fc21ad3e13e623d971ad4e5576d91c74a30935cea6c60bcda52a13dc86"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/resume_checkpoint_v2.log",
+        "role": "fuzz_log_resume_checkpoint_v2",
+        "sha256": "35abab06f7bf62800793d036b01631b4ddcf89720075de2f7b384a277c9fb68b"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/scratch_artifact_header_v1.log",
+        "role": "fuzz_log_scratch_artifact_header_v1",
+        "sha256": "2af82958c17869247a3c39b92b842739e38fa5cde49d37c3a150dc79d9e8e233"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/trace_manifest_v1.log",
+        "role": "fuzz_log_trace_manifest_v1",
+        "sha256": "ee2985c897c9d6d3fb82df264627eb0b7183704d141ce84dde8d6fcfac1f34c5"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/workload_manifest_v1.log",
+        "role": "fuzz_log_workload_manifest_v1",
+        "sha256": "d5c40343f33442ec29b9c9b48bdaae2f238f1a3359fb7836915770b6f283a658"
+      },
+      {
+        "gate": "crash_resume_and_corruption_suite",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/recovery/fuzz-logs/zstd_trace_chunk_v1.log",
+        "role": "fuzz_log_zstd_trace_chunk_v1",
+        "sha256": "7db48147b9902fc29711bcfc750c2bf7b3e7e4f36ba08cd7e03b0000c726c0c7"
+      },
+      {
+        "gate": "deterministic_cross_mode_proofs",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/deterministic_cross_mode_proofs.test-report.json",
+        "role": "test_report",
+        "sha256": "edefe9b285ef3b5da582431de502d3481686c0ba13f6e7940aba7c330ba6e74e"
+      },
+      {
+        "gate": "deterministic_cross_mode_proofs",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/deterministic_cross_mode_proofs.test.log",
+        "role": "test_log",
+        "sha256": "6ac969230d3ff624a54bf9a752f13f03b4a6a29cf528fc85245ee9c242641acd"
+      },
+      {
+        "gate": "official_verifier_fibonacci",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/official_verifier_fibonacci.test-report.json",
+        "role": "test_report",
+        "sha256": "112d589f0ab4741d2375b29766af98efa3ad9e46fbe876da2dec02b52671d4d8"
+      },
+      {
+        "gate": "official_verifier_fibonacci",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/official_verifier_fibonacci.test.log",
+        "role": "test_log",
+        "sha256": "f851693bcc6d0e6d36877e404b489c7b89a9d0b1cb5ef44a5d66826d6f5b150f"
+      },
+      {
+        "gate": "official_verifier_poseidon2",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/official_verifier_poseidon2.test-report.json",
+        "role": "test_report",
+        "sha256": "9803fc903fb09e2dd738c841b8c39ec07c2fa92242e5a4d9ad69034140b143f6"
+      },
+      {
+        "gate": "official_verifier_poseidon2",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/official_verifier_poseidon2.test.log",
+        "role": "test_log",
+        "sha256": "270b701c0184ae9eaabecc212a6008a6e0859b429612c90b0cec116e73c71b4e"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/fixed-host-release-matrix-v1.json",
+        "role": "matrix_manifest",
+        "sha256": "b26178921e49818e02af130b4d54e15edd3f5d4039f592042a087aae1002a104"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "examples/plonky3/fibonacci-1m.json",
+        "role": "fibonacci_manifest",
+        "sha256": "9e2c68fa9ab3c1976fcfb3a3f9aabb50ab12e851c63a3260cca5f0560d76ba28"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/fibonacci-1m.json",
+        "role": "fibonacci_candidate_report",
+        "sha256": "08d296dbf0599ae517359a4375d853b5f644043d674249bdaf9d541243f5527a"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/fibonacci-1m.bounded.manifest.json",
+        "role": "fibonacci_candidate_normalized_manifest",
+        "sha256": "add9b313725a363cf9b13d7dbad6d781ec21c704da86a003356e99989ca84703"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/fibonacci-1m.baseline.json",
+        "role": "fibonacci_baseline_report",
+        "sha256": "6c35be8cd9009e31de17ee8c6d6b41148c330bbd9523a282b272aed1001470f7"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/fibonacci-1m.baseline.conventional.manifest.json",
+        "role": "fibonacci_baseline_normalized_manifest",
+        "sha256": "f69918d65197262fffe1089b4fabafc846483c1715cdd158934091cff4946419"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "examples/plonky3/poseidon2-1m.json",
+        "role": "poseidon2_manifest",
+        "sha256": "a061d7158547ddc3353aeb1bb03c96a29d729b99c8a0465a2b6409a573b7738d"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/poseidon2-1m.json",
+        "role": "poseidon2_candidate_report",
+        "sha256": "81c594c3f19044e6460a7849fba24b57309f5d71b48078596c15036535ffcb95"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/poseidon2-1m.bounded.manifest.json",
+        "role": "poseidon2_candidate_normalized_manifest",
+        "sha256": "7e66be297df439e561f593c2b95bc8f1f9479beaa4637f774559ffa56953c365"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/poseidon2-1m.baseline.json",
+        "role": "poseidon2_baseline_report",
+        "sha256": "93a26e649ea9ded205bd56410bd25b809a04712719b4315361e608d1d09d82e5"
+      },
+      {
+        "gate": "one_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/poseidon2-1m.baseline.conventional.manifest.json",
+        "role": "poseidon2_baseline_normalized_manifest",
+        "sha256": "8ac61027f3c60f4510d8a162c36ae39a88bb12a0bd687bbf71b8925bf6b20d80"
+      },
+      {
+        "gate": "plonky3_dependency_profile_pinned",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/plonky3_dependency_profile_pinned.test-report.json",
+        "role": "test_report",
+        "sha256": "93cbeaf6919a4f641b1cfc7877840784bfff9f42be354293a6587aab4b24216d"
+      },
+      {
+        "gate": "plonky3_dependency_profile_pinned",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/local/plonky3_dependency_profile_pinned.test.log",
+        "role": "test_log",
+        "sha256": "0c4782893ee75ddf7b19b17f463351b2c9f4211932b351712f68e2af87845fdf"
+      },
+      {
+        "gate": "ten_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/fixed-host-release-matrix-v1.json",
+        "role": "matrix_manifest",
+        "sha256": "b26178921e49818e02af130b4d54e15edd3f5d4039f592042a087aae1002a104"
+      },
+      {
+        "gate": "ten_million_row_resource_gate",
+        "path": "examples/plonky3/fibonacci-16m.json",
+        "role": "fibonacci_manifest",
+        "sha256": "fe547a4cc6b7c914e488384cbe679ab53f75983cb0aa7e1310705237b4385b3d"
+      },
+      {
+        "gate": "ten_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/fibonacci-16m.json",
+        "role": "fibonacci_candidate_report",
+        "sha256": "4240e4ac00ef647eb775e63643d4f303d4d10455277c97d1386048fe17c903e2"
+      },
+      {
+        "gate": "ten_million_row_resource_gate",
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/resource/fibonacci-16m.bounded.manifest.json",
+        "role": "fibonacci_candidate_normalized_manifest",
+        "sha256": "5b428dff81e3a3b4282153180a428c196020e6c3571c208458b4e3f3132374fc"
+      }
+    ],
+    "config_path": "release/backend-v1-gates.json",
+    "config_sha256": "f07edb220eeda6bf48d37455ec7bf3d75518d62e646b823fb2fc3c69bd646436",
+    "evidence_path": "release/evidence/backend-v1-evidence.json",
+    "evidence_sha256": "1a5e582fca0d9a58bc088da13bdfb539b161dbd5a9cdcdfe74ea58e6d94b1b57",
+    "source_tree_sha256": "6cc4ccee78fb08dfe9ddcffe131d1f37d19a2c7334670b9c51ac369e5b74995c"
+  },
+  "issued_at": "2026-07-22T07:17:22Z",
+  "kind": "tinyzkp_backend_candidate_assembly_v1",
+  "qualification_sources": {
+    "recovery": {
+      "checksum_manifest": {
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/provenance/recovery-SHA256SUMS",
+        "sha256": "8223e2b3c4c0bcc9f24d95c9b64a249d07ce3adddc762e0328c0519bb75485aa"
+      },
+      "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/provenance/recovery-qualification-run-v1.json",
+      "run": {
+        "actor": "logannye",
+        "artifact": {
+          "archive_sha256": "2005dd1b75c0605fbda679171e6ef2f5f8260290abe33b7ca4babe8dd7b3ae27",
+          "created_at": "2026-07-22T07:12:01Z",
+          "id": 8521231422,
+          "name": "plonky3-recovery-fuzz-a13f1ae38c685b78137df4cc81e74cb6ed6cc667"
+        },
+        "conclusion": "success",
+        "event": "workflow_dispatch",
+        "head_branch": "main",
+        "head_sha": "a13f1ae38c685b78137df4cc81e74cb6ed6cc667",
+        "repository": "logannye/hc-stark",
+        "run_attempt": 1,
+        "run_id": 29898038611,
+        "run_started_at": "2026-07-22T06:49:58Z",
+        "schema_version": 1,
+        "status": "completed",
+        "triggering_actor": "logannye",
+        "workflow_path": ".github/workflows/nightly-backend.yml"
+      },
+      "sha256": "126ce74fac6361d3251653e9bb93a3525a3f8d11b77747c7fed547f3352a6997"
+    },
+    "resource": {
+      "checksum_manifest": {
+        "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/provenance/qualification-SHA256SUMS",
+        "sha256": "96e1eb23d889d615ccdc5497b22b7881afdd062ccee6edbc1f12cbc6bcda17f8"
+      },
+      "path": "release/evidence/backend-v1/a13f1ae38c685b78137df4cc81e74cb6ed6cc667/provenance/resource-qualification-run-v1.json",
+      "run": {
+        "actor": "logannye",
+        "artifact": {
+          "archive_sha256": "b77d379c8335d6a59bb058e8d62924fce0921f27055c730c6248fd41c4ca4771",
+          "created_at": "2026-07-22T07:04:19Z",
+          "id": 8521052213,
+          "name": "plonky3-backend-release-matrix-a13f1ae38c685b78137df4cc81e74cb6ed6cc667"
+        },
+        "conclusion": "success",
+        "event": "workflow_dispatch",
+        "head_branch": "main",
+        "head_sha": "a13f1ae38c685b78137df4cc81e74cb6ed6cc667",
+        "repository": "logannye/hc-stark",
+        "run_attempt": 1,
+        "run_id": 29898037504,
+        "run_started_at": "2026-07-22T06:49:56Z",
+        "schema_version": 1,
+        "status": "completed",
+        "triggering_actor": "logannye",
+        "workflow_path": ".github/workflows/benches.yml"
+      },
+      "sha256": "80ef097c7ffe69e92c4f3724e1c04c0088b92df20ffb873997b10c3cb938d61a"
+    }
+  },
+  "release_sha": "a13f1ae38c685b78137df4cc81e74cb6ed6cc667",
+  "schema_version": 1
+}
