@@ -97,6 +97,7 @@ jobs:
           test "$(git rev-parse "$HC_RELEASE_REF^{commit}")" = "$HC_RELEASE_SHA"
           test "$(git rev-parse origin/main)" = "$HC_RELEASE_SHA"
           test -z "$(git status --porcelain)"
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v3
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
