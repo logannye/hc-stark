@@ -1187,10 +1187,36 @@ def _run_checked(
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ReleaseError("pinned deployment command could not complete") from error
+    stdout = completed.stdout or ""
+    stderr = completed.stderr or ""
+    if completed.returncode != 0:
+        diagnostics = f"{stdout}\n{stderr}"
+        lowered = diagnostics.lower()
+        provider_codes = sorted(
+            set(re.findall(r"\[code:\s*([0-9]{1,10})\]", diagnostics))
+        )
+        if "permission denied" in lowered or "eacces" in lowered:
+            failure_class = "filesystem_permission_denied"
+        elif "pages does not support custom paths" in lowered:
+            failure_class = "unsupported_pages_config_path"
+        elif provider_codes:
+            failure_class = "cloudflare_api_error"
+        elif "authentication" in lowered or "not authenticated" in lowered:
+            failure_class = "authentication_error"
+        else:
+            failure_class = "wrangler_nonzero"
+        print(
+            "FAIL sanitized Wrangler diagnostic "
+            f"class={failure_class} exit_code={completed.returncode} "
+            f"provider_codes={','.join(provider_codes) or 'none'} "
+            f"stdout_sha256={sha256_bytes(stdout.encode('utf-8'))} "
+            f"stderr_sha256={sha256_bytes(stderr.encode('utf-8'))}",
+            file=sys.stderr,
+        )
     if (
         completed.returncode != 0
-        or len(completed.stdout.encode("utf-8")) > MAX_COMMAND_OUTPUT_BYTES
-        or len(completed.stderr.encode("utf-8")) > MAX_COMMAND_OUTPUT_BYTES
+        or len(stdout.encode("utf-8")) > MAX_COMMAND_OUTPUT_BYTES
+        or len(stderr.encode("utf-8")) > MAX_COMMAND_OUTPUT_BYTES
     ):
         raise ReleaseError(
             "pinned deployment command failed or emitted oversized output"

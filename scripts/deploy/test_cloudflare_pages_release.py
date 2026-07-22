@@ -386,7 +386,9 @@ def test_apply_fails_closed_when_cloudflare_does_not_publish_exact_new_sha(tmp_p
     assert stat.S_IMODE(failure_path.stat().st_mode) == 0o600
 
 
-def test_wrangler_failure_after_possible_mutation_rolls_back_and_records(tmp_path):
+def test_wrangler_failure_after_possible_mutation_rolls_back_and_records(
+    tmp_path, capsys
+):
     api = FakeApi()
     preview = plan(api)
 
@@ -413,6 +415,33 @@ def test_wrangler_failure_after_possible_mutation_rolls_back_and_records(tmp_pat
     assert failure["failure_stage"] == "wrangler_invocation"
     assert failure["status"] == "deploy_failed_rolled_back"
     assert api.current == PRIOR_ID
+    diagnostic = capsys.readouterr().err
+    assert "class=wrangler_nonzero" in diagnostic
+    assert "exit_code=1" in diagnostic
+    assert "provider_codes=none" in diagnostic
+    assert "failed" not in diagnostic
+
+
+def test_wrangler_failure_diagnostic_reports_provider_code_without_raw_output(capsys):
+    def runner(command, **_kwargs):
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            "request failed [code: 10000] token-sensitive-detail",
+            "",
+        )
+
+    with pytest.raises(pages.ReleaseError, match="pinned deployment command failed"):
+        pages._run_checked(
+            ("node", "wrangler"),
+            environment={},
+            runner=runner,
+            timeout=1,
+        )
+    diagnostic = capsys.readouterr().err
+    assert "class=cloudflare_api_error" in diagnostic
+    assert "provider_codes=10000" in diagnostic
+    assert "token-sensitive-detail" not in diagnostic
 
 
 def test_deploy_failure_records_critical_unverified_state_when_rollback_fails(
