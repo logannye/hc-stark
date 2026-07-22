@@ -153,3 +153,53 @@ def test_source_identity_ignores_path_git_and_rejects_anchor_skew(tmp_path, monk
     )
     with pytest.raises(ValueError, match="committed anchor"):
         identity.require_canonical_commit(tmp_path, source)
+
+
+@pytest.mark.parametrize(
+    ("root_owner_uid", "effective_uid", "inherited"),
+    [
+        (1001, 1001, "1001"),
+        (1001, 0, ""),
+        (1001, 0, "0"),
+        (1001, 0, "01001"),
+        (1001, 0, "+1001"),
+        (1001, 0, "-1001"),
+        (1001, 0, "1001x"),
+        (1001, 0, "1002"),
+        (1001, 0, "10000000000"),
+    ],
+)
+def test_sudo_uid_is_rejected_unless_root_repo_owner_matches_exactly(
+    root_owner_uid, effective_uid, inherited
+):
+    assert (
+        identity._canonical_sudo_uid(
+            root_owner_uid,
+            effective_uid=effective_uid,
+            inherited=inherited,
+        )
+        is None
+    )
+
+
+def test_sudo_uid_is_accepted_for_root_and_exact_repo_owner():
+    assert (
+        identity._canonical_sudo_uid(
+            1001,
+            effective_uid=0,
+            inherited="1001",
+        )
+        == "1001"
+    )
+
+
+def test_git_environment_copies_only_the_validated_sudo_uid(monkeypatch, tmp_path):
+    monkeypatch.setattr(identity, "_trusted_sudo_uid", lambda root: "1001")
+    monkeypatch.setenv("SUDO_GID", "untrusted")
+    monkeypatch.setenv("SUDO_COMMAND", "untrusted")
+
+    environment = identity._git_environment(tmp_path)
+
+    assert environment["SUDO_UID"] == "1001"
+    assert "SUDO_GID" not in environment
+    assert "SUDO_COMMAND" not in environment

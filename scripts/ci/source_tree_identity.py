@@ -61,6 +61,56 @@ def _git_anchor(root: Path) -> tuple[Path, str, str]:
     return executable, expected_sha256, expected_version
 
 
+def _canonical_sudo_uid(
+    root_owner_uid: int, *, effective_uid: int, inherited: str
+) -> str | None:
+    """Allow Git's sudo ownership exception only for the exact repo owner."""
+
+    if (
+        effective_uid != 0
+        or not inherited
+        or len(inherited) > 10
+        or inherited.startswith("0")
+        or any(character not in "0123456789" for character in inherited)
+    ):
+        return None
+    sudo_uid = int(inherited)
+    if sudo_uid != root_owner_uid:
+        return None
+    return str(sudo_uid)
+
+
+def _trusted_sudo_uid(root: Path) -> str | None:
+    if os.geteuid() != 0:
+        return None
+    inherited = os.environ.get("SUDO_UID", "")
+    if not inherited:
+        return None
+    owner_uid = root.resolve(strict=True).stat().st_uid
+    return _canonical_sudo_uid(
+        owner_uid,
+        effective_uid=os.geteuid(),
+        inherited=inherited,
+    )
+
+
+def _git_environment(root: Path) -> dict[str, str]:
+    environment = {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_TERMINAL_PROMPT": "0",
+        "HOME": "/nonexistent",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/usr/bin:/bin",
+    }
+    sudo_uid = _trusted_sudo_uid(root)
+    if sudo_uid is not None:
+        environment["SUDO_UID"] = sudo_uid
+    return environment
+
+
 def git_output(
     root: Path,
     *args: str,
@@ -88,16 +138,7 @@ def git_output(
         os.lseek(descriptor, 0, os.SEEK_SET)
         if digest.hexdigest() != expected_sha256:
             raise ValueError("Git executable differs from the committed anchor")
-        environment = {
-            "GIT_CONFIG_GLOBAL": "/dev/null",
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_OPTIONAL_LOCKS": "0",
-            "GIT_TERMINAL_PROMPT": "0",
-            "HOME": "/nonexistent",
-            "LANG": "C",
-            "LC_ALL": "C",
-            "PATH": "/usr/bin:/bin",
-        }
+        environment = _git_environment(root)
         command = [str(executable), *args]
         pass_fds: tuple[int, ...] = ()
         if sys.platform.startswith("linux"):
