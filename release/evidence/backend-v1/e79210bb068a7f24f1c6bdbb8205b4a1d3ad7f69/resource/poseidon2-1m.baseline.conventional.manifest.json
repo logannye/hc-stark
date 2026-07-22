@@ -1,0 +1,21 @@
+{
+  "backend": "plonky3",
+  "deterministic_seed": 0,
+  "expected_verifier": "p3_uni_stark_0.6.1",
+  "input_generator": {
+    "kind": "poseidon2",
+    "seed": 0
+  },
+  "logical_rows": 1048576,
+  "profile": "tinyzkp-p3-goldilocks-v1",
+  "resource_policy": {
+    "checkpoint_policy": "retain_on_failure",
+    "max_resident_bytes": 1073741824,
+    "max_scratch_bytes": 12000000000,
+    "max_threads": 4,
+    "mode": "scratch",
+    "scratch_dir": "/var/lib/tinyzkp-bench/scratch/poseidon2-1m/tinyzkp-conventional-fixed-host-v1"
+  },
+  "schema_version": 1,
+  "workload_id": "poseidon2_goldilocks"
+}
