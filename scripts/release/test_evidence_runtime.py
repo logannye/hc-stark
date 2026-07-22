@@ -203,6 +203,29 @@ def test_environment_is_minimal_fixed_and_drops_build_overrides():
     )
 
 
+def test_runtime_executable_resolves_command_name_from_path(tmp_path, monkeypatch):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    cosign = tools / "cosign"
+    cosign.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    cosign.chmod(0o700)
+    monkeypatch.setenv("PATH", str(tools))
+
+    assert MODULE.resolve_runtime_executable(tmp_path, "cosign") == cosign.absolute()
+
+
+def test_runtime_executable_roots_explicit_relative_path(tmp_path):
+    assert MODULE.resolve_runtime_executable(tmp_path, "tools/cosign") == (
+        tmp_path / "tools" / "cosign"
+    ).absolute()
+
+
+def test_runtime_executable_rejects_missing_command_name(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    with pytest.raises(ValueError, match="runtime executable is unavailable"):
+        MODULE.resolve_runtime_executable(tmp_path, "cosign")
+
+
 def test_subprocess_timeout_fails_closed_and_kills_process_group(tmp_path):
     with tempfile.TemporaryFile("w+b") as log:
         status, timed_out = MODULE.run_logged(
