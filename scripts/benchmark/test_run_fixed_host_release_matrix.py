@@ -83,6 +83,9 @@ def test_exact_commands_preserve_fixed_host_and_release_gate_contract(tmp_path):
             scratch / entry.scratch_relative
         )
         assert "--require-qualification-profile" in benchmark
+        assert benchmark[benchmark.index("--scratch-run-label") + 1] == (
+            MATRIX.QUALIFICATION_SCRATCH_RUN_LABEL
+        )
         assert benchmark[benchmark.index("--mode") + 1] == entry.mode
         assert benchmark[benchmark.index("--report") + 1] == str(
             paths["candidate_report"]

@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import stat
 import subprocess
@@ -29,6 +30,7 @@ QUALIFICATION_CPU_COUNT = 4
 MIN_QUALIFICATION_SCRATCH_AVAILABLE_BYTES = 12_000_000_000
 MIN_EFFECTIVE_MEMORY_BYTES = 15 * 1024**3
 MAX_EFFECTIVE_MEMORY_BYTES = 17 * 1024**3
+SCRATCH_RUN_LABEL_PATTERN = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?")
 
 
 def valid_resource_estimate(value: object) -> bool:
@@ -503,10 +505,23 @@ def normalized_manifest_path(report: Path, mode: str) -> Path:
     return report.with_name(f"{report.stem}.{mode}.manifest{suffix}")
 
 
-def prepare_run_manifest(manifest: dict, report_path: Path, mode: str) -> tuple[Path, dict, Path]:
+def prepare_run_manifest(
+    manifest: dict,
+    report_path: Path,
+    mode: str,
+    scratch_run_label: str | None = None,
+) -> tuple[Path, dict, Path]:
     configured_root = Path(manifest["resource_policy"]["scratch_dir"])
     configured_root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    scratch = Path(tempfile.mkdtemp(prefix=f"tinyzkp-{mode}-", dir=configured_root))
+    if scratch_run_label is None:
+        scratch = Path(tempfile.mkdtemp(prefix=f"tinyzkp-{mode}-", dir=configured_root))
+    else:
+        if SCRATCH_RUN_LABEL_PATTERN.fullmatch(scratch_run_label) is None:
+            raise RuntimeError(
+                "scratch run label must be 1-64 lowercase alphanumeric/hyphen characters"
+            )
+        scratch = configured_root / f"tinyzkp-{mode}-{scratch_run_label}"
+        scratch.mkdir(mode=0o700)
     scratch.chmod(0o700)
     normalized = json.loads(json.dumps(manifest))
     normalized["resource_policy"]["scratch_dir"] = str(scratch)
@@ -571,9 +586,12 @@ def run_one(
     source_manifest_digest: str,
     benchmark_session_id: str,
     host_metadata: dict[str, object],
+    scratch_run_label: str | None,
 ) -> dict:
     cgroup = cgroup_parent / f"tinyzkp-{mode}-{uuid.uuid4().hex}"
-    run_manifest_path, _, scratch = prepare_run_manifest(manifest, report_path, mode)
+    run_manifest_path, _, scratch = prepare_run_manifest(
+        manifest, report_path, mode, scratch_run_label
+    )
     try:
         preflight_estimate = doctor_estimate(
             cli, run_manifest_path, mode, memory_cap
@@ -722,6 +740,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="fail unless the host matches the 4-vCPU/16-GB/12-GB SSD profile",
     )
+    parser.add_argument(
+        "--scratch-run-label",
+        help=(
+            "Optional stable 1-64 character label for an exclusive scratch directory; "
+            "release qualification uses this to make estimator identity reproducible"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -768,6 +793,7 @@ def main() -> int:
             source_manifest_digest=source_manifest_digest,
             benchmark_session_id=benchmark_session_id,
             host_metadata=host_metadata,
+            scratch_run_label=args.scratch_run_label,
         )
         persist_report(baseline_path, baseline, "conventional")
     candidate = run_one(
@@ -781,6 +807,7 @@ def main() -> int:
         source_manifest_digest=source_manifest_digest,
         benchmark_session_id=benchmark_session_id,
         host_metadata=host_metadata,
+        scratch_run_label=args.scratch_run_label,
     )
     persist_report(args.report, candidate, "bounded")
     print(
