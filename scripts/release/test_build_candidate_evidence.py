@@ -41,6 +41,23 @@ def test_template_contains_exact_unsigned_gate_set():
     }.isdisjoint(value["gates"])
 
 
+def test_cargo_gate_metadata_binds_exact_test_identities():
+    expected = {
+        "official_verifier_fibonacci": (
+            "prover::tests::"
+            "fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier"
+        ),
+        "official_verifier_poseidon2": (
+            "prover::tests::"
+            "poseidon2_proof_is_accepted_by_unmodified_plonky3_verifier"
+        ),
+        "air_job_contracts": "plonky3_air_job_contracts",
+    }
+    for gate, test_name in expected.items():
+        command = module.gate_metadata(gate, "a" * 40)["command"]
+        assert command[-3:] == [test_name, "--", "--exact"]
+
+
 def test_hashed_artifact_rejects_extra_fields_and_symlinks(tmp_path):
     artifact = tmp_path / "artifact.json"
     artifact.write_text("{}", encoding="utf-8")
