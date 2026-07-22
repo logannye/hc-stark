@@ -1,0 +1,287 @@
+{
+  "authority": {
+    "may_approve_backend_release": false,
+    "may_provision_or_mutate_infrastructure": false,
+    "may_publish_or_upload_evidence": false
+  },
+  "cgroup_parent": "/sys/fs/cgroup/tinyzkp-bench",
+  "cli_identity": {
+    "backend": "plonky3",
+    "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
+    "dependency_lock_sha256": "0a28ab40dba2786a5106d274623d174b4c845b15ddd594629ebd98aa08612257",
+    "package_version": "0.1.0",
+    "plonky3_version": "0.6.1",
+    "release_ref": "main",
+    "release_sha": "e79210bb068a7f24f1c6bdbb8205b4a1d3ad7f69",
+    "service": "cli"
+  },
+  "cli_path": "/home/runner/work/_temp/tinyzkp-engine",
+  "cli_sha256": "c2f518861855602435cf8ca6cdaed7017984aa6e540376055287bce124ce5b29",
+  "completed_at": "2026-07-22T07:51:51+00:00",
+  "created_at": "2026-07-22T07:39:27+00:00",
+  "entries": [
+    {
+      "artifacts": [
+        {
+          "mode": 384,
+          "path": "fibonacci-1m.baseline.conventional.manifest.json",
+          "role": "baseline_manifest",
+          "sha256": "f69918d65197262fffe1089b4fabafc846483c1715cdd158934091cff4946419",
+          "size_bytes": 606
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-1m.baseline.json",
+          "role": "baseline_report",
+          "sha256": "faed5681ebd898a1f344a4f1f916dc99e069fee9955b1f8b27302b3bdf06b0b0",
+          "size_bytes": 2488
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-1m.benchmark.log",
+          "role": "benchmark_log",
+          "sha256": "17d839d38cbb1d55f7110fcf57661cdfc9916b3d1f1304a050c58ac920c4c290",
+          "size_bytes": 902
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-1m.bounded.manifest.json",
+          "role": "candidate_manifest",
+          "sha256": "add9b313725a363cf9b13d7dbad6d781ec21c704da86a003356e99989ca84703",
+          "size_bytes": 601
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-1m.json",
+          "role": "candidate_report",
+          "sha256": "5de00a88f576cd2a88648e474d1cc1ba78c49c7692f1b75ed56a54aae60b3778",
+          "size_bytes": 3394
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-1m.gate.log",
+          "role": "gate_log",
+          "sha256": "ef644ca06d62495946d0918545c9f4e9731babcea549dd2ad90f2e703b07d7ff",
+          "size_bytes": 602
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-1m.host-preflight.json",
+          "role": "host_preflight",
+          "sha256": "01b5ecd7e8d84e45f385bab43eb82e0253b8922d7b8d640d6272a4b74b444ec9",
+          "size_bytes": 1226
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-1m.host-preflight.log",
+          "role": "preflight_log",
+          "sha256": "de97ac279129e458c49c3b319b58f12e8efd734788b4b36d109cded10f4c3bdc",
+          "size_bytes": 1614
+        }
+      ],
+      "attempts": 1,
+      "completed_at": "2026-07-22T07:39:59+00:00",
+      "entry_id": "fibonacci_1m",
+      "gate": "one-million",
+      "last_error": null,
+      "logical_rows": 1048576,
+      "manifest_path": "examples/plonky3/fibonacci-1m.json",
+      "manifest_sha256": "9e2c68fa9ab3c1976fcfb3a3f9aabb50ab12e851c63a3260cca5f0560d76ba28",
+      "mode": "throughput",
+      "status": "complete",
+      "workload": "fibonacci"
+    },
+    {
+      "artifacts": [
+        {
+          "mode": 384,
+          "path": "poseidon2-1m.baseline.conventional.manifest.json",
+          "role": "baseline_manifest",
+          "sha256": "8ac61027f3c60f4510d8a162c36ae39a88bb12a0bd687bbf71b8925bf6b20d80",
+          "size_bytes": 593
+        },
+        {
+          "mode": 384,
+          "path": "poseidon2-1m.baseline.json",
+          "role": "baseline_report",
+          "sha256": "365532fd3e1a7a4b38d7b3b46573d8642541f3df982e05e997882648ca1f4a22",
+          "size_bytes": 2492
+        },
+        {
+          "mode": 384,
+          "path": "poseidon2-1m.benchmark.log",
+          "role": "benchmark_log",
+          "sha256": "a943e7fcd56a40fa5d28a7d9fa37078e276627b87aedff94cadd3f764225ae49",
+          "size_bytes": 901
+        },
+        {
+          "mode": 384,
+          "path": "poseidon2-1m.bounded.manifest.json",
+          "role": "candidate_manifest",
+          "sha256": "7e66be297df439e561f593c2b95bc8f1f9479beaa4637f774559ffa56953c365",
+          "size_bytes": 588
+        },
+        {
+          "mode": 384,
+          "path": "poseidon2-1m.json",
+          "role": "candidate_report",
+          "sha256": "6e4c5e21563f616b4b634a54a576710dce2f50782065353c4f31aec428d9933f",
+          "size_bytes": 3425
+        },
+        {
+          "mode": 384,
+          "path": "poseidon2-1m.gate.log",
+          "role": "gate_log",
+          "sha256": "7d9d6737fb3046e60782028d1344296b7bcfe6894b08450931fd010d7f8fa031",
+          "size_bytes": 602
+        },
+        {
+          "mode": 384,
+          "path": "poseidon2-1m.host-preflight.json",
+          "role": "host_preflight",
+          "sha256": "0cfa41dbcdc8e3850c8bf3b6bbb0755084cef66d8e42bc15237dbe6820b96d88",
+          "size_bytes": 1226
+        },
+        {
+          "mode": 384,
+          "path": "poseidon2-1m.host-preflight.log",
+          "role": "preflight_log",
+          "sha256": "9728f9c42c623eee24ea55df1d5e051a1635e31b2aa46637ed7e11665d9a358f",
+          "size_bytes": 1614
+        }
+      ],
+      "attempts": 1,
+      "completed_at": "2026-07-22T07:46:09+00:00",
+      "entry_id": "poseidon2_1m",
+      "gate": "one-million",
+      "last_error": null,
+      "logical_rows": 1048576,
+      "manifest_path": "examples/plonky3/poseidon2-1m.json",
+      "manifest_sha256": "a061d7158547ddc3353aeb1bb03c96a29d729b99c8a0465a2b6409a573b7738d",
+      "mode": "throughput",
+      "status": "complete",
+      "workload": "poseidon2_goldilocks"
+    },
+    {
+      "artifacts": [
+        {
+          "mode": 384,
+          "path": "fibonacci-16m.benchmark.log",
+          "role": "benchmark_log",
+          "sha256": "e543cd58b0abd6ecc29eed352756cb05c0a00481331f8b439183a517e4df8e5c",
+          "size_bytes": 740
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-16m.bounded.manifest.json",
+          "role": "candidate_manifest",
+          "sha256": "5b428dff81e3a3b4282153180a428c196020e6c3571c208458b4e3f3132374fc",
+          "size_bytes": 604
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-16m.json",
+          "role": "candidate_report",
+          "sha256": "8d4a4c0adf8e34bd0246f9f965f9f463a4a0f06fd9c74d3de4f8f6686910fb43",
+          "size_bytes": 3430
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-16m.gate.log",
+          "role": "gate_log",
+          "sha256": "0ee2e7ab28b601b32c38fdfd8cf80f301c0b525f2ae894710e897c4415d4355b",
+          "size_bytes": 488
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-16m.host-preflight.json",
+          "role": "host_preflight",
+          "sha256": "62cfceb9f5d5a9ade2672438cfc7f73a559651decc0671f3f056e2c2fbd372fa",
+          "size_bytes": 1227
+        },
+        {
+          "mode": 384,
+          "path": "fibonacci-16m.host-preflight.log",
+          "role": "preflight_log",
+          "sha256": "4335a54980e373a02727a1fd27f4d8adf4dd12af0c51e688b201181cfc2678a4",
+          "size_bytes": 1617
+        }
+      ],
+      "attempts": 1,
+      "completed_at": "2026-07-22T07:51:51+00:00",
+      "entry_id": "fibonacci_16m",
+      "gate": "ten-million",
+      "last_error": null,
+      "logical_rows": 16777216,
+      "manifest_path": "examples/plonky3/fibonacci-16m.json",
+      "manifest_sha256": "fe547a4cc6b7c914e488384cbe679ab53f75983cb0aa7e1310705237b4385b3d",
+      "mode": "ceiling",
+      "status": "complete",
+      "workload": "fibonacci"
+    }
+  ],
+  "external_gates": {
+    "signed_release_assembly": "required_postbuild"
+  },
+  "fixed_host_evidence_eligible": true,
+  "kind": "tinyzkp_fixed_host_release_matrix_v1",
+  "last_error": null,
+  "local_matrix_gates_passed": true,
+  "output_dir": "/home/runner/work/hc-stark/hc-stark/raw-reports/fixed-host-release-matrix",
+  "plonky3_version": "0.6.1",
+  "profile": "tinyzkp-p3-goldilocks-v1",
+  "qualification_profile": {
+    "effective_cpu_count": 4,
+    "maximum_effective_memory_bytes": 18253611008,
+    "minimum_available_scratch_bytes": 12000000000,
+    "minimum_physical_memory_bytes": 16106127360,
+    "runner": "github-hosted-public-ubuntu-24.04",
+    "storage_rotational": false,
+    "workload_estimates": {
+      "fibonacci_16m": {
+        "bounded_peak_resident_bytes": 545259520,
+        "bounded_scratch_high_water_bytes": 8590055856,
+        "conventional_peak_resident_bytes": 8891924480
+      },
+      "fibonacci_1m": {
+        "bounded_peak_resident_bytes": 75497472,
+        "bounded_scratch_high_water_bytes": 536975520,
+        "conventional_peak_resident_bytes": 587202560
+      },
+      "poseidon2_1m": {
+        "bounded_peak_resident_bytes": 385875968,
+        "bounded_scratch_high_water_bytes": 10569877024,
+        "conventional_peak_resident_bytes": 5100273664
+      }
+    }
+  },
+  "release_eligible": false,
+  "release_sha": "e79210bb068a7f24f1c6bdbb8205b4a1d3ad7f69",
+  "schema_version": 1,
+  "scratch_root": "/var/lib/tinyzkp-bench/scratch",
+  "source_root": "/home/runner/work/hc-stark/hc-stark",
+  "source_tree_sha256": "ef14e5bfd6e42d18a28cfdbae745cc4496e8bcfb48a1ecee24712049f7e337ac",
+  "stable_host_identity": {
+    "cgroup_v2_path": "/system.slice/hosted-compute-agent.service",
+    "effective_cpu_affinity": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "effective_cpu_count": 4,
+    "effective_memory_max_bytes": 16766423040,
+    "effective_storage_device": "8:1:sda1",
+    "effective_swap_max_bytes": 0,
+    "hardware": "AMD EPYC 7763 64-Core Processor; logical_cpus=4",
+    "operating_system": "Linux-6.17.0-1020-azure-x86_64-with-glibc2.39",
+    "physical_logical_cpu_count": 4,
+    "physical_memory_bytes": 16766423040,
+    "storage_device": "8:1:sda1",
+    "storage_is_nvme": false,
+    "storage_is_rotational": false,
+    "storage_total_bytes": 154894188544
+  },
+  "status": "local_matrix_complete_release_assembly_pending",
+  "updated_at": "2026-07-22T07:51:51+00:00"
+}

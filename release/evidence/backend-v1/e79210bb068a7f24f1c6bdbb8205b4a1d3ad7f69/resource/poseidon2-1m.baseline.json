@@ -1,0 +1,68 @@
+{
+  "benchmark_session_id": "7ccaf31a23d848b98599b0315044a276",
+  "cgroup_peak_bytes": 3700817920,
+  "cgroup_v2_path": "/system.slice/hosted-compute-agent.service",
+  "cpu_seconds": 108.66555,
+  "dependency_profile": "tinyzkp-p3-goldilocks-v1",
+  "effective_cpu_affinity": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "effective_cpu_count": 4,
+  "effective_memory_max_bytes": 16766423040,
+  "effective_storage_device": "8:1:sda1",
+  "effective_swap_max_bytes": 0,
+  "exact_command": [
+    "/home/runner/work/_temp/tinyzkp-engine",
+    "benchmark-worker",
+    "--manifest",
+    "/home/runner/work/hc-stark/hc-stark/raw-reports/fixed-host-release-matrix/poseidon2-1m.baseline.conventional.manifest.json",
+    "--mode",
+    "conventional",
+    "--output",
+    "/tmp/tinyzkp-conventional-d2yvi2ha/worker.json"
+  ],
+  "exit_status": 0,
+  "hardware": "AMD EPYC 7763 64-Core Processor; logical_cpus=4",
+  "mode": "baseline",
+  "normalized_manifest_digest_hex": "d88dcf4e58baa528917bc8f906131ecfc0e08de3122d952d4fdfa7717e61527e",
+  "normalized_manifest_path": "/home/runner/work/hc-stark/hc-stark/raw-reports/fixed-host-release-matrix/poseidon2-1m.baseline.conventional.manifest.json",
+  "operating_system": "Linux-6.17.0-1020-azure-x86_64-with-glibc2.39",
+  "peak_rss_bytes": 3698270208,
+  "physical_logical_cpu_count": 4,
+  "physical_memory_bytes": 16766423040,
+  "preflight_estimate": {
+    "peak_resident_bytes": 5100273664,
+    "phases": [
+      {
+        "phase": "conventional_full_pipeline",
+        "read_bytes": 0,
+        "write_bytes": 0
+      }
+    ],
+    "scratch_high_water_bytes": 1,
+    "total_read_bytes": 0,
+    "total_write_bytes": 0
+  },
+  "proof_size_bytes": 1181204,
+  "read_bytes": 0,
+  "release_sha": "e79210bb068a7f24f1c6bdbb8205b4a1d3ad7f69",
+  "schema_version": 2,
+  "scope": "full_pipeline",
+  "scratch_directory_mode": 448,
+  "scratch_high_water_bytes": 0,
+  "scratch_owned_by_runner": true,
+  "storage": "device=8:1:sda1;rotational=0;kernel_rotational=1;nvme=0;classification=github-hosted-public-ubuntu-24.04-ssd-v1@20260714.240.1;total_bytes=154894188544;available_bytes=92768276480",
+  "storage_available_bytes": 92768276480,
+  "storage_device": "8:1:sda1",
+  "storage_is_nvme": false,
+  "storage_is_rotational": false,
+  "storage_total_bytes": 154894188544,
+  "verification_succeeded": true,
+  "verification_time_ms": 33,
+  "wall_time_ms": 108694,
+  "workload_manifest_digest_hex": "6d365b46f88d0a20cdd615da61694af832ec9576a21834c913066221c706521e",
+  "write_bytes": 4096
+}

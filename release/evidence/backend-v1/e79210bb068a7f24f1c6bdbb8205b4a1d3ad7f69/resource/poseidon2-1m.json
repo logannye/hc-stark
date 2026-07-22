@@ -1,0 +1,108 @@
+{
+  "benchmark_session_id": "7ccaf31a23d848b98599b0315044a276",
+  "cgroup_peak_bytes": 1105088512,
+  "cgroup_v2_path": "/system.slice/hosted-compute-agent.service",
+  "cpu_seconds": 269.319488,
+  "dependency_profile": "tinyzkp-p3-goldilocks-v1",
+  "effective_cpu_affinity": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "effective_cpu_count": 4,
+  "effective_memory_max_bytes": 16766423040,
+  "effective_storage_device": "8:1:sda1",
+  "effective_swap_max_bytes": 0,
+  "exact_command": [
+    "/home/runner/work/_temp/tinyzkp-engine",
+    "benchmark-worker",
+    "--manifest",
+    "/home/runner/work/hc-stark/hc-stark/raw-reports/fixed-host-release-matrix/poseidon2-1m.bounded.manifest.json",
+    "--mode",
+    "bounded",
+    "--output",
+    "/tmp/tinyzkp-bounded-v216exqs/worker.json"
+  ],
+  "exit_status": 0,
+  "hardware": "AMD EPYC 7763 64-Core Processor; logical_cpus=4",
+  "mode": "bounded",
+  "normalized_manifest_digest_hex": "b173423bc7576147ee5295724c566d944a217b7321dfa71cee1e631e582cb0ea",
+  "normalized_manifest_path": "/home/runner/work/hc-stark/hc-stark/raw-reports/fixed-host-release-matrix/poseidon2-1m.bounded.manifest.json",
+  "operating_system": "Linux-6.17.0-1020-azure-x86_64-with-glibc2.39",
+  "peak_rss_bytes": 594329600,
+  "physical_logical_cpu_count": 4,
+  "physical_memory_bytes": 16766423040,
+  "preflight_estimate": {
+    "peak_resident_bytes": 385875968,
+    "phases": [
+      {
+        "phase": "trace_generation",
+        "read_bytes": 0,
+        "write_bytes": 1509949440
+      },
+      {
+        "phase": "trace_lde",
+        "read_bytes": 15099494400,
+        "write_bytes": 15099494400
+      },
+      {
+        "phase": "trace_commitment",
+        "read_bytes": 3355443168,
+        "write_bytes": 335544288
+      },
+      {
+        "phase": "quotient",
+        "read_bytes": 3019901760,
+        "write_bytes": 33554432
+      },
+      {
+        "phase": "quotient_lde",
+        "read_bytes": 335544320,
+        "write_bytes": 335544320
+      },
+      {
+        "phase": "quotient_commitment",
+        "read_bytes": 402653152,
+        "write_bytes": 335544288
+      },
+      {
+        "phase": "openings",
+        "read_bytes": 6207569872,
+        "write_bytes": 134217664
+      },
+      {
+        "phase": "fri",
+        "read_bytes": 201325792,
+        "write_bytes": 201325792
+      },
+      {
+        "phase": "proof_assembly",
+        "read_bytes": 0,
+        "write_bytes": 1238384
+      }
+    ],
+    "scratch_high_water_bytes": 10569877024,
+    "total_read_bytes": 28621932464,
+    "total_write_bytes": 17986413008
+  },
+  "proof_size_bytes": 1181204,
+  "read_bytes": 59106942976,
+  "release_sha": "e79210bb068a7f24f1c6bdbb8205b4a1d3ad7f69",
+  "schema_version": 2,
+  "scope": "full_pipeline",
+  "scratch_directory_mode": 448,
+  "scratch_high_water_bytes": 10569653093,
+  "scratch_owned_by_runner": true,
+  "storage": "device=8:1:sda1;rotational=0;kernel_rotational=1;nvme=0;classification=github-hosted-public-ubuntu-24.04-ssd-v1@20260714.240.1;total_bytes=154894188544;available_bytes=92768276480",
+  "storage_available_bytes": 92768276480,
+  "storage_device": "8:1:sda1",
+  "storage_is_nvme": false,
+  "storage_is_rotational": false,
+  "storage_total_bytes": 154894188544,
+  "verification_succeeded": true,
+  "verification_time_ms": 33,
+  "wall_time_ms": 261542,
+  "workload_manifest_digest_hex": "6d365b46f88d0a20cdd615da61694af832ec9576a21834c913066221c706521e",
+  "write_bytes": 27403255808
+}
