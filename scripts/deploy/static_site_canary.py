@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 import re
 import sys
+import time
+from typing import Callable
 import urllib.error
 import urllib.request
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse
@@ -60,10 +62,33 @@ OCI_ACCEPT = (
     "application/vnd.oci.image.manifest.v1+json,"
     "application/vnd.docker.distribution.manifest.v2+json"
 )
+CANARY_ATTEMPTS = 6
+CANARY_RETRY_DELAY_SECONDS = 5
 
 
 class CanaryError(ValueError):
     pass
+
+
+def retry_canary(
+    check: Callable[[], None],
+    *,
+    attempts: int = CANARY_ATTEMPTS,
+    delay_seconds: int = CANARY_RETRY_DELAY_SECONDS,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> None:
+    """Retry a read-only canary while a completed Pages deploy propagates."""
+
+    if attempts < 1 or delay_seconds < 0:
+        raise ValueError("canary retry policy is invalid")
+    for attempt in range(1, attempts + 1):
+        try:
+            check()
+            return
+        except CanaryError:
+            if attempt == attempts:
+                raise
+            sleeper(delay_seconds)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -697,17 +722,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.mode == "retired-hosts":
             if args.base_url is not None:
                 raise CanaryError("--base-url is not used for retired-hosts mode")
-            check_retired_hosts()
+            retry_canary(check_retired_hosts)
         elif args.base_url is None:
             raise CanaryError("--base-url is required for site canary modes")
         else:
             base = safe_base_url(args.base_url)
             if args.mode == "contracts":
-                check_contracts(base)
+                retry_canary(lambda: check_contracts(base))
             elif args.mode == "routes":
-                check_routes(base)
+                retry_canary(lambda: check_routes(base))
             else:
-                check_monitoring_mode(base, args.mode)
+                retry_canary(lambda: check_monitoring_mode(base, args.mode))
     except CanaryError as error:
         print(f"static Pages canary: FAIL: {error}", file=sys.stderr)
         return 1
