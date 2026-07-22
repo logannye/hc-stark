@@ -273,6 +273,19 @@ jobs:
             --apply \
             --expected-plan-sha256 "$plan_sha" \
             --record-output "$RUNNER_TEMP/tinyzkp-pages-release/deployment.json"
+      - name: Report sanitized deploy failure classification
+        if: failure()
+        run: |
+          failure_record="$RUNNER_TEMP/tinyzkp-pages-release/deployment.json.failure.json"
+          test -f "$failure_record"
+          jq -er '
+            [
+              "status=" + .status,
+              "failure_stage=" + .failure_stage,
+              "failure_type=" + .failure_type,
+              "rollback_status=" + .rollback.status
+            ] | .[]
+          ' "$failure_record"
       - name: Run static canary with automatic exact rollback
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
