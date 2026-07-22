@@ -2966,17 +2966,17 @@ RESOURCE_QUALIFICATION_PROFILE = {
     "workload_estimates": {
         "fibonacci_1m": {
             "bounded_peak_resident_bytes": 75_497_472,
-            "bounded_scratch_high_water_bytes": 536_975_026,
+            "bounded_scratch_high_water_bytes": 536_975_520,
             "conventional_peak_resident_bytes": 587_202_560,
         },
         "poseidon2_1m": {
             "bounded_peak_resident_bytes": 385_875_968,
-            "bounded_scratch_high_water_bytes": 10_569_876_514,
+            "bounded_scratch_high_water_bytes": 10_569_877_024,
             "conventional_peak_resident_bytes": 5_100_273_664,
         },
         "fibonacci_16m": {
             "bounded_peak_resident_bytes": 545_259_520,
-            "bounded_scratch_high_water_bytes": 8_590_055_346,
+            "bounded_scratch_high_water_bytes": 8_590_055_856,
             "conventional_peak_resident_bytes": 8_891_924_480,
         },
     },

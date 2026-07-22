@@ -180,6 +180,52 @@ def test_each_run_gets_a_private_normalized_scratch_directory(tmp_path):
         second_scratch.rmdir()
 
 
+def test_stable_scratch_label_produces_exact_exclusive_directory(tmp_path):
+    manifest = {
+        "resource_policy": {
+            "scratch_dir": str(tmp_path / "scratch"),
+        }
+    }
+    path, normalized, scratch = MODULE.prepare_run_manifest(
+        manifest,
+        tmp_path / "candidate.json",
+        "bounded",
+        "fixed-host-v1",
+    )
+    try:
+        assert scratch == tmp_path / "scratch" / "tinyzkp-bounded-fixed-host-v1"
+        assert normalized["resource_policy"]["scratch_dir"] == str(scratch)
+        assert path.is_file()
+        with pytest.raises(FileExistsError):
+            MODULE.prepare_run_manifest(
+                manifest,
+                tmp_path / "duplicate.json",
+                "bounded",
+                "fixed-host-v1",
+            )
+    finally:
+        scratch.rmdir()
+
+
+@pytest.mark.parametrize(
+    "label",
+    ["", "UPPER", "../escape", "ends-", "a" * 65],
+)
+def test_stable_scratch_label_rejects_unsafe_values(tmp_path, label):
+    manifest = {
+        "resource_policy": {
+            "scratch_dir": str(tmp_path / "scratch"),
+        }
+    }
+    with pytest.raises(RuntimeError, match="scratch run label"):
+        MODULE.prepare_run_manifest(
+            manifest,
+            tmp_path / "candidate.json",
+            "bounded",
+            label,
+        )
+
+
 def test_conventional_preflight_uses_memory_cap_without_mutating_evidence_manifest():
     manifest = {
         "resource_policy": {
