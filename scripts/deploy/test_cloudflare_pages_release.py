@@ -519,7 +519,7 @@ def test_canary_consumes_exact_record_and_runs_static_contracts_then_routes(tmp_
     assert result["status"] == "passed"
     assert len(commands) == 2
     assert commands[0][1].endswith("scripts/deploy/static_site_canary.py")
-    assert commands[0][-2:] == ("--mode", "contracts")
+    assert commands[0][-2:] == ("--mode", "guard_prelaunch")
     assert commands[1][1].endswith("scripts/deploy/static_site_canary.py")
     assert commands[1][-2:] == ("--mode", "routes")
     canary = json.loads(output.read_text())

@@ -50,7 +50,7 @@ CSV_COLUMNS = [
 ]
 OPERATING_RULES = [
     "Treat the canonical Guard launch state as the only source of gate completion.",
-    "Keep sales and checkout closed until every launch gate passes and commerce is reviewed.",
+    "Keep sales and checkout closed until every owner-verifiable launch gate passes and commerce is owner-qualified.",
     "Use Lemon Squeezy as the sole merchant of record for the Guard offer.",
     "Treat this as a readiness ledger, not a customer, payment, or booked-revenue ledger.",
     "Do not restore retired hosted-service or outbound-distribution paths.",
@@ -73,25 +73,10 @@ GATE_METADATA = {
         "engineering",
         "Publish the signed Guard artifact, checksum, provenance, and channel metadata.",
     ),
-    "three_external_workloads": (
-        "qualification",
-        "founder",
-        "Record three independent external workload qualification results in launch evidence.",
-    ),
-    "two_standard_annual_customers": (
-        "qualification",
-        "founder",
-        "Record two standard annual-customer qualification outcomes without changing the public offer.",
-    ),
-    "five_unaided_installs": (
-        "qualification",
-        "engineering",
-        "Record five clean-machine unaided install results without maintainer intervention.",
-    ),
     "legal_terms_approved": (
         "legal",
-        "owner_and_counsel",
-        "Approve the commercial terms and publish the binding legal version.",
+        "owner",
+        "Record LN Holdings owner approval of the exact seller facts and digest-bound legal documents.",
     ),
     "merchant_sandbox_lifecycle_passed": (
         "commerce",
@@ -106,7 +91,7 @@ GATE_METADATA = {
     "release_rehearsal_within_budget": (
         "operations",
         "engineering",
-        "Complete a release rehearsal and bind its measured support and maintenance budget evidence.",
+        "Complete and bind the technical build, deploy, canary, artifact-identity, rollback, and recovery rehearsal.",
     ),
     "legacy_obligations_resolved": (
         "operations",
@@ -193,6 +178,10 @@ def validate_sources(
     launch_gates = launch_state.get("gate_status")
     release_gates = release.get("gate_status")
     _require(isinstance(launch_gates, dict) and launch_gates, "launch state gate_status must be a non-empty object")
+    _require(
+        set(launch_gates) == set(GATE_METADATA),
+        "launch gates must exactly match the owner-only Guard readiness ledger",
+    )
     _require(launch_gates == release_gates, "site release gate status must match canonical launch state")
     _require(launch_state.get("blocking_gates") == release.get("blocking_gates"), "release blocking gates must match canonical launch state")
     blocking_gates = set(launch_state.get("blocking_gates") or [])

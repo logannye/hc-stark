@@ -9,6 +9,7 @@ whose digest, release identity, age, kind, and gate-specific claims validate.
 from __future__ import annotations
 
 import argparse
+import copy
 from datetime import datetime, timedelta, timezone
 import hashlib
 from html.parser import HTMLParser
@@ -21,7 +22,7 @@ import stat
 import subprocess
 import sys
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +44,8 @@ OUTPUTS = {
     "discovery": ROOT / "site" / "discovery.json",
     "compatibility": ROOT / "site" / "compatibility.json",
     "offers": ROOT / "site" / "offers.jsonld",
+    "release_channels": ROOT / "release" / "release-channels-v1.json",
+    "site_release_channels": ROOT / "site" / "release-channels-v1.json",
 }
 EVIDENCE_PREFIX = PurePosixPath("release/evidence/guard-launch-v2")
 PROFILE_ID = "tinyzkp-p3-goldilocks-v1"
@@ -54,11 +57,25 @@ REUSABLE_EVIDENCE_MAX_DAYS = 730
 CURRENT_EVALUATION_MAX_AGE = timedelta(hours=24)
 ARTIFACT_PUBLICATION_BLOCKER = "guard_artifact_published"
 PRIOR_QUALIFIED_RELEASE_GATE = "prior_qualified_release"
+AUTHORIZATION_POLICY = "owner_only_ga_v1"
+QUALIFICATION_BASIS = "owner_attested"
 SIGNING_TRUST_PATH = "release/guard-signing-trust-v1.json"
 SIGNING_PUBLIC_KEY_PATH = "release/guard-signing-public-key.pem"
 RELEASE_INDEX_NAME = "guard-release-index-v1.json"
 RELEASE_INDEX_SIGNATURE_NAME = "guard-release-index-v1.json.sig"
 RELEASE_INDEX_HANDOFF_NAME = "guard-release-index-revision-handoff-v1.json"
+ARTIFACT_PUBLICATION_NAME = "guard-artifact-publication-v1.json"
+ARTIFACT_PUBLICATION_BUNDLE_NAME = "guard-artifact-publication-v1.sigstore.json"
+ARTIFACT_PUBLICATION_PURPOSE = "guard_launch:artifact_publication"
+LEGAL_DOCUMENT_PATHS = {
+    "eula_sha256": "legal/EULA.txt",
+    "notices_sha256": "legal/THIRD-PARTY-NOTICES.txt",
+    "terms_sha256": "site/terms.html",
+    "privacy_sha256": "site/privacy.html",
+    "refunds_sha256": "site/refunds.html",
+}
+LEGACY_RETIREMENT_NOTICE_PATH = "docs/runbooks/legacy_retirement_notice.md"
+RECEIPT_DOWNLOAD_URL = "https://tinyzkp.com/releases"
 ACQUISITION_ROUTES = (
     "/doctor",
     "/plonky3-out-of-memory",
@@ -114,14 +131,13 @@ ACQUISITION_ROBOTS_RE = re.compile(
 GATE_POLICIES: dict[str, tuple[str, int]] = {
     "engine_release_ready": ("EngineReleaseEvidenceV1", 120),
     "guard_release_ready": ("GuardReleaseEvidenceV1", 120),
-    "three_external_workloads": ("ExternalWorkloadEvidenceV1", 180),
-    "two_standard_annual_customers": ("AnnualCustomerEvidenceV1", 90),
-    "five_unaided_installs": ("CleanMachineJourneyEvidenceV1", 90),
     "legal_terms_approved": ("LegalApprovalEvidenceV1", 365),
     "merchant_sandbox_lifecycle_passed": ("MerchantSandboxEvidenceV1", 90),
     "merchant_live_owner_smoke_passed": ("MerchantLiveSmokeEvidenceV1", 30),
     "legacy_obligations_resolved": ("LegacyResolutionEvidenceV1", 365),
-    "hosted_infrastructure_decommissioned": ("DecommissionEvidenceV1", 30),
+    # Decommission is a signed point-in-time transition, not a renewable
+    # assertion that forces the owner to recreate retired infrastructure facts.
+    "hosted_infrastructure_decommissioned": ("DecommissionEvidenceV1", 3650),
     "release_rehearsal_within_budget": ("ReleaseRehearsalEvidenceV1", 90),
     PRIOR_QUALIFIED_RELEASE_GATE: ("PriorQualifiedReleaseEvidenceV1", 730),
 }
@@ -130,7 +146,6 @@ CHANGE_CLASS_FRESH_GATES = {
     "guard_package_only": frozenset(
         {
             "guard_release_ready",
-            "five_unaided_installs",
             "release_rehearsal_within_budget",
         }
     ),
@@ -143,13 +158,11 @@ CHANGE_CLASS_FRESH_GATES = {
         }
     ),
 }
+MUTABLE_FACT_FRESH_GATES = frozenset({"merchant_live_owner_smoke_passed"})
 REQUIRED_GATES = frozenset(GATE_POLICIES) - {PRIOR_QUALIFIED_RELEASE_GATE}
 BLOCKED_REASONS = {
     "engine_release_ready": "engine-release-evidence-missing",
     "guard_release_ready": "guard-release-evidence-missing",
-    "three_external_workloads": "external-workload-evidence-missing",
-    "two_standard_annual_customers": "annual-customer-evidence-missing",
-    "five_unaided_installs": "clean-machine-evidence-missing",
     "legal_terms_approved": "legal-approval-missing",
     "merchant_sandbox_lifecycle_passed": "merchant-sandbox-evidence-missing",
     "merchant_live_owner_smoke_passed": "merchant-live-smoke-missing",
@@ -159,6 +172,17 @@ BLOCKED_REASONS = {
     PRIOR_QUALIFIED_RELEASE_GATE: "prior-qualified-release-evidence-missing",
     ARTIFACT_PUBLICATION_BLOCKER: "guard-artifact-publication-missing",
 }
+ADVISORY_ITEMS = frozenset(
+    {
+        "external_design_partner_integration",
+        "five_unaided_installs",
+        "implementation_review_no_high_findings",
+        "independent_resource_reproduction",
+        "plonky3_specialist_review",
+        "three_external_workloads",
+        "two_standard_annual_customers",
+    }
+)
 LAUNCH_BLOCKERS = REQUIRED_GATES | {ARTIFACT_PUBLICATION_BLOCKER}
 GATE_PURPOSES = {
     gate: f"guard_launch:{gate}" for gate in sorted(REQUIRED_GATES)
@@ -166,6 +190,13 @@ GATE_PURPOSES = {
 GATE_PURPOSES[PRIOR_QUALIFIED_RELEASE_GATE] = (
     f"guard_launch:{PRIOR_QUALIFIED_RELEASE_GATE}"
 )
+SALES_FREEZE_PURPOSE = "guard_launch:sales_freeze"
+SALES_FREEZE_SIGNER_ID = "tinyzkp-owner-configuration-main"
+INACTIVE_SALES_FREEZE = {
+    "status": "inactive",
+    "reason_code": "sales-not-frozen",
+    "evidence": [],
+}
 MARKET_TRUST_PURPOSES = {
     "guard_market:doctor_evaluation_release",
     "guard_market:community_announcement",
@@ -275,6 +306,95 @@ def _normalized_site_file(path: Path) -> bytes:
     return raw
 
 
+def _legal_document_sha256(root: Path, field: str) -> str:
+    relative = LEGAL_DOCUMENT_PATHS[field]
+    path, raw = _safe_fixed_file(root, relative, relative)
+    if field in {"eula_sha256", "notices_sha256"}:
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise GateError(f"{relative} is not UTF-8") from error
+        if re.search(r"(?i)\b(?:unresolved|placeholder|todo|tbd)\b", text):
+            raise GateError(f"{relative} still contains release-blocking markers")
+    return sha256_bytes(_normalized_site_file(path))
+
+
+def _eula_url(eula_sha256: str) -> str:
+    if SHA256_RE.fullmatch(eula_sha256) is None:
+        raise GateError("EULA URL requires an exact SHA-256")
+    return f"https://tinyzkp.com/legal/{eula_sha256}/EULA.txt"
+
+
+def _validate_eula_effective_date(root: Path, expected_release_date: str) -> None:
+    relative = LEGAL_DOCUMENT_PATHS["eula_sha256"]
+    _path, raw = _safe_fixed_file(root, relative, relative)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise GateError(f"{relative} is not UTF-8") from error
+    matches = re.findall(r"(?m)^Effective Date: (\d{4}-\d{2}-\d{2})$", text)
+    if len(matches) != 1:
+        raise GateError(
+            "owner-approved EULA must contain exactly one "
+            "Effective Date: YYYY-MM-DD line"
+        )
+    try:
+        parsed = datetime.strptime(matches[0], "%Y-%m-%d")
+    except ValueError as error:
+        raise GateError("owner-approved EULA effective date is invalid") from error
+    if (
+        parsed.strftime("%Y-%m-%d") != matches[0]
+        or matches[0] != expected_release_date
+    ):
+        raise GateError(
+            "owner-approved EULA effective date differs from legal release_date"
+        )
+
+
+def _validate_public_eula_tree(
+    root: Path, *, current_sha256: str | None = None, current_bytes: bytes | None = None
+) -> None:
+    tree = root / "site" / "legal"
+    if not tree.exists() and not tree.is_symlink():
+        if current_sha256 is not None:
+            raise GateError("current digest-addressed public EULA is unavailable")
+        return
+    metadata = tree.lstat()
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise GateError("site/legal must be a real directory")
+    observed: set[str] = set()
+    for revision in tree.iterdir():
+        revision_metadata = revision.lstat()
+        digest = revision.name
+        if (
+            SHA256_RE.fullmatch(digest) is None
+            or stat.S_ISLNK(revision_metadata.st_mode)
+            or not stat.S_ISDIR(revision_metadata.st_mode)
+        ):
+            raise GateError("site/legal contains an invalid EULA revision path")
+        entries = list(revision.iterdir())
+        if len(entries) != 1 or entries[0].name != "EULA.txt":
+            raise GateError("site/legal EULA revision inventory differs")
+        document = entries[0]
+        document_metadata = document.lstat()
+        if (
+            stat.S_ISLNK(document_metadata.st_mode)
+            or not stat.S_ISREG(document_metadata.st_mode)
+            or document_metadata.st_nlink != 1
+        ):
+            raise GateError("site/legal EULA revision is not a single-link file")
+        raw = document.read_bytes()
+        if not raw or sha256_bytes(raw) != digest:
+            raise GateError("site/legal EULA revision digest differs")
+        observed.add(digest)
+    if current_sha256 is not None and (
+        current_sha256 not in observed
+        or current_bytes is None
+        or (tree / current_sha256 / "EULA.txt").read_bytes() != current_bytes
+    ):
+        raise GateError("current digest-addressed public EULA bytes differ")
+
+
 def _site_bundle_sha256(root: Path) -> str:
     site = root / "site"
     generated = {
@@ -284,22 +404,31 @@ def _site_bundle_sha256(root: Path) -> str:
         "compatibility.json",
         "release.json",
         "offers.jsonld",
+        "release-channels-v1.json",
         "sitemap.xml",
         "llms.txt",
         RELEASE_INDEX_NAME,
         RELEASE_INDEX_SIGNATURE_NAME,
         RELEASE_INDEX_HANDOFF_NAME,
+        ARTIFACT_PUBLICATION_NAME,
+        ARTIFACT_PUBLICATION_BUNDLE_NAME,
     }
     records: list[tuple[str, bytes]] = []
     if not site.is_dir():
         raise GateError("site source tree is unavailable for rehearsal binding")
+    _validate_public_eula_tree(root)
     for path in sorted(site.rglob("*")):
         if path.is_symlink():
             raise GateError("site source tree contains a symlink")
         if not path.is_file():
             continue
         relative = path.relative_to(site).as_posix()
-        if relative in generated or relative.startswith("release-index-revisions/"):
+        if (
+            relative in generated
+            or relative.startswith("release-index-revisions/")
+            or relative.startswith("artifact-publications/")
+            or relative.startswith("legal/")
+        ):
             continue
         records.append((relative, _normalized_site_file(path)))
     if not records:
@@ -474,6 +603,243 @@ def _validate_published_index_files(
     }
 
 
+def _validate_artifact_publication(
+    root: Path,
+    *,
+    guard_claims: dict[str, Any] | None,
+    engine_claims: dict[str, Any] | None,
+    identity: dict[str, Any],
+    trust_policy: dict[str, Any],
+    prior_claim: dict[str, Any] | None,
+    release_change_class: str,
+    signature_runner: Callable[..., subprocess.CompletedProcess[str]],
+    cosign_path: Path | None,
+) -> dict[str, Any]:
+    publication_path, publication_raw = _safe_fixed_file(
+        root,
+        f"site/{ARTIFACT_PUBLICATION_NAME}",
+        f"site/{ARTIFACT_PUBLICATION_NAME}",
+    )
+    bundle_path, bundle_raw = _safe_fixed_file(
+        root,
+        f"site/{ARTIFACT_PUBLICATION_BUNDLE_NAME}",
+        f"site/{ARTIFACT_PUBLICATION_BUNDLE_NAME}",
+    )
+    try:
+        publication_value = strict_json.loads(publication_raw)
+        bundle_value = strict_json.loads(bundle_raw)
+    except ValueError as error:
+        raise GateError(f"artifact publication evidence is not strict JSON: {error}") from error
+    if not isinstance(bundle_value, dict):
+        raise GateError("artifact publication Sigstore bundle must be an object")
+    publication = exact_object(
+        publication_value,
+        {
+            "schema_version",
+            "document_type",
+            "authorization_policy",
+            "qualification_basis",
+            "signer_id",
+            "purpose",
+            "publication_kind",
+            "promotion_repository",
+            "promotion_workflow",
+            "promotion_run_id",
+            "promotion_run_attempt",
+            "promotion_source_sha",
+            "workflow_source_sha",
+            "prior_release_index_sha256",
+            "published_at",
+            "release_identity",
+            "guard_release_tag",
+            "artifact_url",
+            "artifact_sha256",
+            "channel_url",
+            "channel_sha256",
+            "release_index_url",
+            "release_index_sha256",
+            "release_index_signature_url",
+            "release_index_signature_sha256",
+            "guard_oci_reference",
+            "guard_oci_digest",
+            "engine_oci_reference",
+            "engine_oci_digest",
+            "anonymous_checks",
+        },
+        "GuardArtifactPublicationV1",
+    )
+    anonymous = exact_object(
+        publication["anonymous_checks"],
+        {
+            "github_release_artifact",
+            "github_release_channel",
+            "github_release_index",
+            "guard_oci_manifest",
+            "engine_oci_manifest",
+        },
+        "GuardArtifactPublicationV1 anonymous_checks",
+    )
+    _all_true(
+        anonymous,
+        tuple(sorted(anonymous)),
+        "GuardArtifactPublicationV1 anonymous_checks",
+    )
+    if (
+        publication["schema_version"] != 1
+        or publication["document_type"] != "GuardArtifactPublicationV1"
+        or publication["authorization_policy"] != AUTHORIZATION_POLICY
+        or publication["qualification_basis"] != QUALIFICATION_BASIS
+        or publication["signer_id"] != "tinyzkp-artifact-publication-main"
+        or publication["purpose"] != ARTIFACT_PUBLICATION_PURPOSE
+        or publication["publication_kind"] not in {"initial_ga", "successor_ga"}
+        or publication["promotion_repository"] != "logannye/hc-stark"
+        or publication["promotion_workflow"]
+        != ".github/workflows/promote-guard-release.yml"
+        or not isinstance(publication["promotion_run_id"], str)
+        or re.fullmatch(r"[1-9][0-9]{0,19}", publication["promotion_run_id"])
+        is None
+        or not isinstance(publication["promotion_run_attempt"], int)
+        or isinstance(publication["promotion_run_attempt"], bool)
+        or publication["promotion_run_attempt"] < 1
+        or not isinstance(publication["promotion_source_sha"], str)
+        or GIT_SHA_RE.fullmatch(publication["promotion_source_sha"]) is None
+        or not isinstance(publication["workflow_source_sha"], str)
+        or GIT_SHA_RE.fullmatch(publication["workflow_source_sha"]) is None
+        or publication["release_identity"] != identity
+        or publication["guard_release_tag"]
+        != f"guard-v{identity['guard_version']}"
+        or re.fullmatch(r"[0-9a-f]{64}", publication["artifact_sha256"] or "")
+        is None
+        or re.fullmatch(r"[0-9a-f]{64}", publication["channel_sha256"] or "")
+        is None
+        or re.fullmatch(
+            r"[0-9a-f]{64}", publication["release_index_sha256"] or ""
+        )
+        is None
+        or re.fullmatch(
+            r"[0-9a-f]{64}", publication["release_index_signature_sha256"] or ""
+        )
+        is None
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", publication["guard_oci_digest"] or "")
+        is None
+        or publication["guard_oci_reference"]
+        != f"ghcr.io/logannye/tinyzkp-guard@{publication['guard_oci_digest']}"
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", publication["engine_oci_digest"] or "")
+        is None
+        or publication["engine_oci_reference"]
+        != f"ghcr.io/logannye/tinyzkp-engine@{publication['engine_oci_digest']}"
+    ):
+        raise GateError("artifact publication evidence identity differs")
+    if (
+        release_change_class in {"guard_package_only", "proof_critical"}
+        and prior_claim is not None
+    ):
+        expected_prior_sha = (
+            prior_claim["prior_release_index_sha256"]
+        )
+        if (
+            publication["publication_kind"] != "successor_ga"
+            or publication["prior_release_index_sha256"] != expected_prior_sha
+        ):
+            raise GateError("artifact publication predecessor binding differs")
+    elif release_change_class != "retained_prior" and prior_claim is None:
+        if (
+            publication["publication_kind"] != "initial_ga"
+            or publication["prior_release_index_sha256"] is not None
+        ):
+            raise GateError(
+                "first artifact publication must be initial_ga with no predecessor"
+            )
+    if publication["publication_kind"] == "successor_ga":
+        prior_sha = publication["prior_release_index_sha256"]
+        if not isinstance(prior_sha, str) or SHA256_RE.fullmatch(prior_sha) is None:
+            raise GateError("successor artifact publication predecessor is invalid")
+        publication_index_relative = (
+            "site/release-index-revisions/"
+            f"{publication['release_index_sha256']}/{RELEASE_INDEX_NAME}"
+        )
+        _current_index_path, current_index_raw = _safe_fixed_file(
+            root, publication_index_relative, publication_index_relative
+        )
+        prior_relative = (
+            f"site/release-index-revisions/{prior_sha}/{RELEASE_INDEX_NAME}"
+        )
+        prior_index_path, prior_index_raw = _safe_fixed_file(
+            root, prior_relative, prior_relative
+        )
+        if (
+            sha256_bytes(current_index_raw) != publication["release_index_sha256"]
+            or sha256_bytes(prior_index_raw) != prior_sha
+        ):
+            raise GateError("successor artifact publication index chain differs")
+        try:
+            current_index = strict_json.loads(current_index_raw)
+            prior_index = strict_json.loads(prior_index_raw)
+            guard_release_index.validate_successor(
+                prior_index,
+                current_index,
+                expected_new_identity=current_index["current_release_identity"],
+            )
+        except (ValueError, KeyError, guard_release_index.IndexError) as error:
+            raise GateError(
+                f"successor artifact publication index chain differs: {error}"
+            ) from error
+    if guard_claims is not None and any(
+        publication[field] != guard_claims[claim_field]
+        for field, claim_field in {
+            "artifact_url": "artifact_url",
+            "artifact_sha256": "artifact_sha256",
+            "channel_url": "channel_url",
+            "channel_sha256": "channel_identity_sha256",
+            "release_index_url": "release_index_url",
+            "release_index_sha256": "release_index_sha256",
+            "release_index_signature_url": "release_index_signature_url",
+            "release_index_signature_sha256": "release_index_signature_sha256",
+            "guard_oci_digest": "oci_digest",
+        }.items()
+    ):
+        raise GateError("artifact publication differs from current Guard readiness")
+    if engine_claims is not None and (
+        publication["engine_oci_digest"] != engine_claims["engine_oci_digest"]
+    ):
+        raise GateError("artifact publication differs from current engine readiness")
+    parse_timestamp(publication["published_at"], "artifact publication published_at")
+    _verify_signature(
+        claim=publication_path,
+        bundle=bundle_path,
+        signer_id=publication["signer_id"],
+        purpose=publication["purpose"],
+        workflow_source_sha=publication["workflow_source_sha"],
+        trust_policy=trust_policy,
+        runner=signature_runner,
+        cosign_path=cosign_path,
+    )
+    publication_sha = sha256_bytes(publication_raw)
+    immutable_root = root / "site" / "artifact-publications" / publication_sha
+    immutable_record = immutable_root / ARTIFACT_PUBLICATION_NAME
+    immutable_bundle = immutable_root / ARTIFACT_PUBLICATION_BUNDLE_NAME
+    if (
+        immutable_record.is_symlink()
+        or not immutable_record.is_file()
+        or immutable_record.read_bytes() != publication_raw
+        or immutable_bundle.is_symlink()
+        or not immutable_bundle.is_file()
+        or immutable_bundle.read_bytes() != bundle_raw
+    ):
+        raise GateError("immutable artifact publication evidence differs")
+    return {
+        "record": publication,
+        "reference": {
+            "path": f"site/{ARTIFACT_PUBLICATION_NAME}",
+            "sha256": publication_sha,
+            "signature_path": f"site/{ARTIFACT_PUBLICATION_BUNDLE_NAME}",
+            "signature_sha256": sha256_bytes(bundle_raw),
+            "signer_id": publication["signer_id"],
+            "purpose": publication["purpose"],
+        },
+    }
+
+
 def exact_object(value: Any, keys: set[str], label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise GateError(f"{label} must be an object")
@@ -576,10 +942,8 @@ def _semantic_engine(claims: dict[str, Any]) -> None:
         "durable_recovery_matrix",
         "enospc_recovery",
         "fuzzing",
-        "independent_reproduction",
-        "specialist_fri_approval",
-        "independent_review_no_high_or_critical",
-        "external_non_reference_acceptance",
+        "cli_smoke",
+        "oci_smoke",
         "signed_artifacts",
         "checksums",
         "sbom",
@@ -680,8 +1044,11 @@ def _semantic_guard(claims: dict[str, Any]) -> None:
     )
     if claims["guard_channel_status"] != "qualified":
         raise GateError("Guard evidence guard_channel_status must be qualified")
-    if not isinstance(claims["artifact_published"], bool):
-        raise GateError("Guard evidence artifact_published must be a boolean")
+    if claims["artifact_published"] is not False:
+        raise GateError(
+            "Guard readiness evidence cannot claim publication; publication "
+            "is derived from the imported signed release index"
+        )
     if claims["embedded_merchant_mode"] != "live":
         raise GateError("Guard embedded merchant catalog must be live mode")
     _validate_catalog_policy(
@@ -916,8 +1283,9 @@ def _semantic_installs(
 def _semantic_legal(claims: dict[str, Any]) -> None:
     approval_fields = {
         "seller_confirmed",
-        "counsel_approved",
+        "owner_approved",
         "eula",
+        "third_party_notices",
         "privacy",
         "terms",
         "refunds",
@@ -965,11 +1333,24 @@ def _semantic_sandbox(claims: dict[str, Any]) -> None:
         "resumption",
         "refund",
         "expiry",
+        "receipt_delivered",
+        "license_key_delivered",
+        "terms_presented_before_payment",
+        "terms_acceptance_required",
+        "receipt_legal_binding_verified",
+        "receipt_download_url",
+        "eula_url",
+        "eula_sha256",
+        "terms_version",
         "mode",
         "store_id",
         "product_id",
         "monthly_variant_id",
         "annual_variant_id",
+        "monthly_checkout_url",
+        "annual_checkout_url",
+        "portal_url",
+        "store_hostname",
         "catalog_policy",
     )
     exact_object(claims, set(fields), "merchant sandbox evidence claims")
@@ -985,62 +1366,252 @@ def _semantic_sandbox(claims: dict[str, Any]) -> None:
                 "product_id",
                 "monthly_variant_id",
                 "annual_variant_id",
+                "monthly_checkout_url",
+                "annual_checkout_url",
+                "portal_url",
+                "store_hostname",
                 "catalog_policy",
+                "receipt_download_url",
+                "eula_url",
+                "eula_sha256",
+                "terms_version",
             }
         ),
         "merchant sandbox evidence claims",
     )
     if claims["mode"] != "test":
         raise GateError("merchant sandbox evidence mode must be test")
+    _validate_merchant_claim_urls(claims, "merchant sandbox evidence")
     _validate_catalog_policy(
         claims["catalog_policy"], "merchant sandbox catalog_policy"
     )
+    _validate_merchant_legal_delivery(claims, "merchant sandbox evidence")
 
 
 def _semantic_live(claims: dict[str, Any]) -> None:
     fields = (
-        "owner_purchase",
-        "activation",
-        "portal",
-        "cancellation",
-        "refund",
-        "cadence",
+        "monthly_variant_active",
+        "annual_variant_active",
+        "monthly_price_rendered",
+        "annual_price_rendered",
+        "checkout_rendered",
+        "portal_configured",
+        "license_keys_enabled",
+        "receipt_delivery_configured",
+        "license_key_delivery_configured",
+        "terms_presented_before_payment",
+        "terms_acceptance_required",
+        "receipt_legal_binding_configured",
+        "support_mailbox_configured",
+        "support_delivery_verified",
+        "support_owner_access_verified",
+        "support_retention_configured",
+        "support_intake_private",
+        "support_contact",
+        "receipt_download_url",
+        "eula_url",
+        "eula_sha256",
+        "terms_version",
         "mode",
         "store_id",
         "product_id",
         "monthly_variant_id",
         "annual_variant_id",
+        "monthly_checkout_url",
+        "annual_checkout_url",
+        "portal_url",
+        "store_hostname",
         "catalog_policy",
-        "receipt_amount_usd",
-        "receipt_currency",
     )
     exact_object(claims, set(fields), "merchant live-smoke evidence claims")
     _all_true(
         claims,
-        ("owner_purchase", "activation", "portal", "cancellation", "refund"),
+        (
+            "monthly_variant_active",
+            "annual_variant_active",
+            "monthly_price_rendered",
+            "annual_price_rendered",
+            "checkout_rendered",
+            "portal_configured",
+            "license_keys_enabled",
+            "receipt_delivery_configured",
+            "license_key_delivery_configured",
+            "terms_presented_before_payment",
+            "terms_acceptance_required",
+            "receipt_legal_binding_configured",
+            "support_mailbox_configured",
+            "support_delivery_verified",
+            "support_owner_access_verified",
+            "support_retention_configured",
+            "support_intake_private",
+        ),
         "merchant live-smoke evidence claims",
     )
-    if claims["cadence"] != "annual" or claims["mode"] != "live":
-        raise GateError("merchant owner live smoke must be an annual live purchase")
-    if (
-        claims["receipt_amount_usd"] != 4990
-        or claims["receipt_currency"] != "USD"
-    ):
-        raise GateError("merchant owner live receipt must be exactly $4,990 USD")
+    if claims["mode"] != "live":
+        raise GateError("merchant owner live smoke must inspect live mode")
+    _validate_merchant_claim_urls(claims, "merchant live-smoke evidence")
     _validate_catalog_policy(
         claims["catalog_policy"], "merchant live-smoke catalog_policy"
+    )
+    _validate_merchant_legal_delivery(claims, "merchant live-smoke evidence")
+    if (
+        not isinstance(claims["support_contact"], str)
+        or re.fullmatch(
+            r"[a-z0-9](?:[a-z0-9.!#$%&'*+/=?^_`{|}~-]{0,62})@tinyzkp\.com",
+            claims["support_contact"],
+        )
+        is None
+    ):
+        raise GateError(
+            "merchant live-smoke support_contact must be one private TinyZKP mailbox"
+        )
+
+
+def _validate_merchant_legal_delivery(claims: dict[str, Any], label: str) -> None:
+    if claims["receipt_download_url"] != RECEIPT_DOWNLOAD_URL:
+        raise GateError(f"{label} receipt download target differs")
+    if (
+        not isinstance(claims["eula_sha256"], str)
+        or SHA256_RE.fullmatch(claims["eula_sha256"]) is None
+        or claims["eula_url"] != _eula_url(claims["eula_sha256"])
+    ):
+        raise GateError(f"{label} exact EULA identity differs")
+    try:
+        parsed = datetime.strptime(claims["terms_version"], "%Y-%m-%d")
+    except (TypeError, ValueError) as error:
+        raise GateError(f"{label} terms_version must be YYYY-MM-DD") from error
+    if parsed.strftime("%Y-%m-%d") != claims["terms_version"]:
+        raise GateError(f"{label} terms_version must be YYYY-MM-DD")
+
+
+def _validate_merchant_claim_urls(claims: dict[str, Any], label: str) -> None:
+    monthly = _validate_checkout_url(
+        claims["monthly_checkout_url"], f"{label} monthly checkout", required=True
+    )
+    annual = _validate_checkout_url(
+        claims["annual_checkout_url"], f"{label} annual checkout", required=True
+    )
+    if monthly == annual:
+        raise GateError(f"{label} monthly and annual checkout URLs must differ")
+    monthly_host = _merchant_store_hostname(monthly, f"{label} monthly checkout")
+    annual_host = _merchant_store_hostname(annual, f"{label} annual checkout")
+    if monthly_host != annual_host or claims["store_hostname"] != monthly_host:
+        raise GateError(f"{label} store hostname differs from checkout URLs")
+    _validate_portal_url(
+        claims["portal_url"],
+        f"{label} portal URL",
+        required=True,
+        expected_store_hostname=monthly_host,
     )
 
 
 def _semantic_legacy(claims: dict[str, Any]) -> None:
     exact_object(
         claims,
-        {"unresolved_obligations", "statutory_records_retained"},
+        {
+            "identified_free_tenant_accounts",
+            "external_free_tenant_accounts",
+            "synthetic_test_tenant_accounts",
+            "accounts_with_api_usage",
+            "external_api_usage_accounts",
+            "synthetic_api_usage_accounts",
+            "external_accounts_with_billed_usage",
+            "owner_only_legacy_tinyzkp_subscriptions_identified",
+            "owner_only_legacy_tinyzkp_subscriptions_resolved",
+            "owner_only_legacy_tinyzkp_price_usd",
+            "owner_only_legacy_catalog_objects_disabled",
+            "unrelated_stripe_catalog_objects_untouched",
+            "synthetic_test_data_disposition_documented",
+            "retirement_notices_required",
+            "retirement_notices_sent",
+            "external_api_usage_exports_resolved",
+            "open_export_requests",
+            "open_refund_or_credit_obligations",
+            "customer_artifacts_pending_disposition",
+            "unresolved_obligations",
+            "statutory_records_retained",
+            "retained_record_disposition_documented",
+            "retirement_notice_template_sha256",
+        },
         "legacy-resolution evidence claims",
     )
-    if _positive_int(claims["unresolved_obligations"], "unresolved_obligations") != 0:
-        raise GateError("legacy obligations remain unresolved")
-    _all_true(claims, ("statutory_records_retained",), "legacy-resolution evidence claims")
+    counts = {
+        field: _positive_int(claims[field], field)
+        for field in (
+            "identified_free_tenant_accounts",
+            "external_free_tenant_accounts",
+            "synthetic_test_tenant_accounts",
+            "accounts_with_api_usage",
+            "external_api_usage_accounts",
+            "synthetic_api_usage_accounts",
+            "external_accounts_with_billed_usage",
+            "owner_only_legacy_tinyzkp_subscriptions_identified",
+            "owner_only_legacy_tinyzkp_subscriptions_resolved",
+            "owner_only_legacy_tinyzkp_price_usd",
+            "retirement_notices_required",
+            "retirement_notices_sent",
+            "external_api_usage_exports_resolved",
+            "open_export_requests",
+            "open_refund_or_credit_obligations",
+            "customer_artifacts_pending_disposition",
+            "unresolved_obligations",
+        )
+    }
+    if not (
+        counts["external_free_tenant_accounts"]
+        + counts["synthetic_test_tenant_accounts"]
+        == counts["identified_free_tenant_accounts"]
+        and counts["external_accounts_with_billed_usage"]
+        <= counts["external_api_usage_accounts"]
+        and counts["external_api_usage_accounts"]
+        + counts["synthetic_api_usage_accounts"]
+        == counts["accounts_with_api_usage"]
+        <= counts["identified_free_tenant_accounts"]
+        and counts["external_api_usage_accounts"]
+        <= counts["external_free_tenant_accounts"]
+        and counts["synthetic_api_usage_accounts"]
+        <= counts["synthetic_test_tenant_accounts"]
+    ):
+        raise GateError("legacy account inventory counts are inconsistent")
+    if (
+        counts["retirement_notices_required"]
+        != counts["external_free_tenant_accounts"]
+        or counts["retirement_notices_sent"]
+        != counts["retirement_notices_required"]
+        or counts["external_api_usage_exports_resolved"]
+        != counts["external_api_usage_accounts"]
+    ):
+        raise GateError("legacy notices and API-data export dispositions are incomplete")
+    if (
+        counts["owner_only_legacy_tinyzkp_subscriptions_identified"] != 2
+        or counts["owner_only_legacy_tinyzkp_subscriptions_resolved"] != 2
+        or counts["owner_only_legacy_tinyzkp_price_usd"] != 19
+    ):
+        raise GateError("the two owner-only TinyZKP $19 subscriptions are unresolved")
+    for field in (
+        "open_export_requests",
+        "open_refund_or_credit_obligations",
+        "customer_artifacts_pending_disposition",
+        "unresolved_obligations",
+    ):
+        if counts[field] != 0:
+            raise GateError(f"legacy {field} must be zero")
+    if (
+        not isinstance(claims["retirement_notice_template_sha256"], str)
+        or SHA256_RE.fullmatch(claims["retirement_notice_template_sha256"]) is None
+    ):
+        raise GateError("legacy retirement notice template digest is invalid")
+    _all_true(
+        claims,
+        (
+            "owner_only_legacy_catalog_objects_disabled",
+            "unrelated_stripe_catalog_objects_untouched",
+            "synthetic_test_data_disposition_documented",
+            "statutory_records_retained",
+            "retained_record_disposition_documented",
+        ),
+        "legacy-resolution evidence claims",
+    )
 
 
 def _semantic_decommission(claims: dict[str, Any]) -> None:
@@ -1064,14 +1635,28 @@ def _semantic_decommission(claims: dict[str, Any]) -> None:
             *fields,
             "retired_hosts",
             "retired_hosts_return_410",
-            "retired_410_period_days",
+            "writes_disabled",
+            "jobs_disabled",
+            "credentials_revoked",
+            "records_retained",
+            "observation_period_days_planned",
         },
         "decommission evidence claims",
     )
     for field in fields:
         if _positive_int(claims[field], field) != 0:
             raise GateError(f"decommission evidence {field} must be zero")
-    _all_true(claims, ("retired_hosts_return_410",), "decommission evidence claims")
+    _all_true(
+        claims,
+        (
+            "retired_hosts_return_410",
+            "writes_disabled",
+            "jobs_disabled",
+            "credentials_revoked",
+            "records_retained",
+        ),
+        "decommission evidence claims",
+    )
     if claims["retired_hosts"] != [
         "api.tinyzkp.com",
         "mcp.tinyzkp.com",
@@ -1081,17 +1666,19 @@ def _semantic_decommission(claims: dict[str, Any]) -> None:
             "decommission evidence must verify the exact three retired hostnames"
         )
     if _positive_int(
-        claims["retired_410_period_days"], "retired_410_period_days"
+        claims["observation_period_days_planned"],
+        "observation_period_days_planned",
     ) < 90:
-        raise GateError("decommission evidence requires a 90-day 410 period")
+        raise GateError("decommission evidence must plan at least 90 days of 410 monitoring")
 
 
 def _semantic_rehearsal(claims: dict[str, Any]) -> None:
     base_fields = {
         "qualification_completed",
-        "owner_minutes",
-        "external_spend_cents",
-        "cash_reserve_cents",
+        "build_validation_passed",
+        "deployment_rehearsed",
+        "rollback_rehearsed",
+        "release_artifact_identity_verified",
         "change_class",
     }
     site_fields = {
@@ -1100,7 +1687,6 @@ def _semantic_rehearsal(claims: dict[str, Any]) -> None:
         "site_bundle_sha256",
         "deployment_plan_sha256",
         "rollback_plan_sha256",
-        "rollback_rehearsed",
     }
     if claims.get("change_class") == "site_legal_pricing":
         exact_object(
@@ -1113,7 +1699,6 @@ def _semantic_rehearsal(claims: dict[str, Any]) -> None:
             (
                 "site_contract_tests_passed",
                 "site_accessibility_tests_passed",
-                "rollback_rehearsed",
             ),
             "site/legal/pricing rehearsal claims",
         )
@@ -1135,14 +1720,16 @@ def _semantic_rehearsal(claims: dict[str, Any]) -> None:
             "release-rehearsal evidence claims",
         )
     _all_true(
-        claims, ("qualification_completed",), "release-rehearsal evidence claims"
+        claims,
+        (
+            "qualification_completed",
+            "build_validation_passed",
+            "deployment_rehearsed",
+            "rollback_rehearsed",
+            "release_artifact_identity_verified",
+        ),
+        "release-rehearsal evidence claims",
     )
-    if _positive_int(claims["owner_minutes"], "owner_minutes") > 480:
-        raise GateError("release qualification exceeds eight owner hours")
-    if _positive_int(claims["external_spend_cents"], "external_spend_cents") > 300000:
-        raise GateError("release qualification exceeds $3,000 external spend")
-    if _positive_int(claims["cash_reserve_cents"], "cash_reserve_cents") < 600000:
-        raise GateError("release evidence requires a $6,000 cash reserve")
     if claims["change_class"] not in {
         "guard_package_only",
         "proof_critical",
@@ -1211,8 +1798,6 @@ def _semantic_prior_qualified_release(claims: dict[str, Any]) -> None:
 SEMANTIC_VALIDATORS: dict[str, Callable[[dict[str, Any]], None]] = {
     "engine_release_ready": _semantic_engine,
     "guard_release_ready": _semantic_guard,
-    "three_external_workloads": _semantic_workloads,
-    "two_standard_annual_customers": _semantic_customers,
     "legal_terms_approved": _semantic_legal,
     "merchant_sandbox_lifecycle_passed": _semantic_sandbox,
     "merchant_live_owner_smoke_passed": _semantic_live,
@@ -1294,12 +1879,114 @@ def _validate_https_url(
         or not host.isascii()
         or username is not None
         or password is not None
+        or "#" in value
         or parsed.fragment
         or port not in {None, 443}
         or not any(host == allowed or host.endswith("." + allowed) for allowed in allowed_hosts)
     ):
         raise GateError(f"{label} must use an approved HTTPS merchant host")
     return value
+
+
+def _merchant_store_hostname(value: str, label: str) -> str:
+    parsed = urlparse(value)
+    host = (parsed.hostname or "").lower()
+    if host == "lemonsqueezy.com" or not host.endswith(".lemonsqueezy.com"):
+        raise GateError(f"{label} must use the reviewed Lemon Squeezy store hostname")
+    store_slug = host.removesuffix(".lemonsqueezy.com")
+    if (
+        store_slug in {"api", "app", "www"}
+        or re.fullmatch(
+            r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", store_slug
+        )
+        is None
+    ):
+        raise GateError(f"{label} Lemon Squeezy store hostname is malformed")
+    return host
+
+
+def _validate_checkout_url(
+    value: Any,
+    label: str,
+    *,
+    required: bool,
+    expected_terms_version: str | None = None,
+    expected_guard_version: str | None = None,
+) -> str | None:
+    url = _validate_https_url(
+        value,
+        label,
+        required=required,
+        allowed_hosts=("lemonsqueezy.com",),
+    )
+    if url is None:
+        return None
+    parsed = urlparse(url)
+    _merchant_store_hostname(url, label)
+    if re.fullmatch(r"/checkout/buy/[A-Za-z0-9_-]{8,128}/?", parsed.path) is None:
+        raise GateError(f"{label} must be a hosted /checkout/buy/... link")
+    try:
+        query = parse_qsl(
+            parsed.query,
+            keep_blank_values=True,
+            strict_parsing=True,
+        )
+    except ValueError as exc:
+        raise GateError(f"{label} custom data query is malformed") from exc
+    expected_keys = {
+        "checkout[custom][guard_version]",
+        "checkout[custom][terms_version]",
+    }
+    if len(query) != len(expected_keys) or {key for key, _value in query} != expected_keys:
+        raise GateError(
+            f"{label} must contain only fixed terms_version and guard_version custom data"
+        )
+    custom = dict(query)
+    if (
+        not custom["checkout[custom][terms_version]"]
+        or not custom["checkout[custom][guard_version]"]
+    ):
+        raise GateError(f"{label} checkout custom data cannot be empty")
+    if expected_terms_version is not None and (
+        custom["checkout[custom][terms_version]"] != expected_terms_version
+    ):
+        raise GateError(f"{label} terms_version differs from the reviewed legal version")
+    if expected_guard_version is not None and (
+        custom["checkout[custom][guard_version]"] != expected_guard_version
+    ):
+        raise GateError(f"{label} guard_version differs from the release identity")
+    return url
+
+
+def _validate_portal_url(
+    value: Any,
+    label: str,
+    *,
+    required: bool,
+    expected_store_hostname: str | None,
+) -> str | None:
+    url = _validate_https_url(
+        value,
+        label,
+        required=required,
+        allowed_hosts=("lemonsqueezy.com",),
+    )
+    if url is None:
+        return None
+    parsed = urlparse(url)
+    host = _merchant_store_hostname(url, label)
+    if (
+        parsed.path != "/billing"
+        or "?" in url
+        or "#" in url
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise GateError(f"{label} must be the generic unsigned /billing portal")
+    if expected_store_hostname is not None and host != expected_store_hostname:
+        raise GateError(f"{label} must use the same reviewed Lemon Squeezy store")
+    return url
 
 
 def _merchant_id(value: Any, label: str, *, required: bool) -> str | None:
@@ -1316,31 +2003,62 @@ def _merchant_id(value: Any, label: str, *, required: bool) -> str | None:
 def _merchant_configuration(
     value: Any, label: str, *, mode: str, required: bool
 ) -> dict[str, Any]:
-    keys = {"store_id", "product_id", "monthly_variant_id", "annual_variant_id"}
-    if mode == "live":
-        keys |= {"monthly_checkout_url", "annual_checkout_url"}
+    keys = {
+        "store_id",
+        "product_id",
+        "monthly_variant_id",
+        "annual_variant_id",
+        "monthly_checkout_url",
+        "annual_checkout_url",
+        "portal_url",
+    }
     config = exact_object(value, keys, label)
     result = {
         field: _merchant_id(config[field], f"{label}.{field}", required=required)
         for field in ("store_id", "product_id", "monthly_variant_id", "annual_variant_id")
     }
-    if mode == "live":
-        result["monthly_checkout_url"] = _validate_https_url(
-            config["monthly_checkout_url"],
-            f"{label}.monthly_checkout_url",
-            required=required,
-            allowed_hosts=("lemonsqueezy.com",),
-        )
-        result["annual_checkout_url"] = _validate_https_url(
-            config["annual_checkout_url"],
-            f"{label}.annual_checkout_url",
-            required=required,
-            allowed_hosts=("lemonsqueezy.com",),
-        )
+    result["monthly_checkout_url"] = _validate_checkout_url(
+        config["monthly_checkout_url"],
+        f"{label}.monthly_checkout_url",
+        required=required,
+    )
+    result["annual_checkout_url"] = _validate_checkout_url(
+        config["annual_checkout_url"],
+        f"{label}.annual_checkout_url",
+        required=required,
+    )
     if not required and any(item is not None for item in result.values()):
         raise GateError(f"{label} must be entirely null while unconfigured")
     if required and result["monthly_variant_id"] == result["annual_variant_id"]:
         raise GateError(f"{label} monthly and annual variant IDs must differ")
+    if required:
+        if result["monthly_checkout_url"] == result["annual_checkout_url"]:
+            raise GateError(f"{label} monthly and annual checkout URLs must differ")
+        monthly_host = _merchant_store_hostname(
+            result["monthly_checkout_url"], f"{label}.monthly_checkout_url"
+        )
+        annual_host = _merchant_store_hostname(
+            result["annual_checkout_url"], f"{label}.annual_checkout_url"
+        )
+        if monthly_host != annual_host:
+            raise GateError(f"{label} checkout URLs must use one reviewed store")
+        result["portal_url"] = _validate_portal_url(
+            config["portal_url"],
+            f"{label}.portal_url",
+            required=True,
+            expected_store_hostname=monthly_host,
+        )
+        result["store_hostname"] = monthly_host
+    else:
+        result["portal_url"] = _validate_portal_url(
+            config["portal_url"],
+            f"{label}.portal_url",
+            required=False,
+            expected_store_hostname=None,
+        )
+        result["store_hostname"] = None
+    if not required and any(item is not None for item in result.values()):
+        raise GateError(f"{label} must be entirely null while unconfigured")
     return result
 
 
@@ -1433,7 +2151,9 @@ def _load_trust_policy(
             or len(purposes) != len(set(purposes))
             or any(
                 purpose
-                not in set(GATE_PURPOSES.values()) | MARKET_TRUST_PURPOSES
+                not in set(GATE_PURPOSES.values())
+                | MARKET_TRUST_PURPOSES
+                | {ARTIFACT_PUBLICATION_PURPOSE, SALES_FREEZE_PURPOSE}
                 for purpose in purposes
             )
             or not isinstance(signer["certificate_identity_regexp"], str)
@@ -1525,9 +2245,15 @@ def _verify_signature(
     signer_id: Any,
     purpose: str,
     trust_policy: dict[str, Any],
+    workflow_source_sha: Any | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     cosign_path: Path | None = None,
 ) -> None:
+    if workflow_source_sha is not None and (
+        not isinstance(workflow_source_sha, str)
+        or GIT_SHA_RE.fullmatch(workflow_source_sha) is None
+    ):
+        raise GateError("evidence workflow source SHA is malformed")
     matches = [
         signer
         for signer in trust_policy["signers"]
@@ -1552,8 +2278,21 @@ def _verify_signature(
         signer["certificate_identity_regexp"],
         "--certificate-oidc-issuer",
         signer["oidc_issuer"],
-        str(claim),
     ]
+    if workflow_source_sha is not None:
+        command.extend(
+            [
+                "--certificate-github-workflow-sha",
+                workflow_source_sha,
+                "--certificate-github-workflow-ref",
+                "refs/heads/main",
+                "--certificate-github-workflow-repository",
+                "logannye/hc-stark",
+                "--certificate-github-workflow-trigger",
+                "workflow_dispatch",
+            ]
+        )
+    command.append(str(claim))
     try:
         completed = runner(
             command,
@@ -1577,6 +2316,135 @@ def _verify_signature(
         raise GateError("detached evidence signature verification failed")
 
 
+def _validate_sales_freeze(
+    source: dict[str, Any],
+    *,
+    root: Path,
+    identity: dict[str, Any],
+    commerce_state: str,
+    trust_policy: dict[str, Any],
+    signature_runner: Callable[..., subprocess.CompletedProcess[str]],
+    cosign_path: Path | None,
+    current_time: datetime | None,
+) -> dict[str, str] | None:
+    record = exact_object(
+        source["sales_freeze"],
+        {"status", "reason_code", "evidence"},
+        "sales_freeze",
+    )
+    if commerce_state != "sales_frozen":
+        if record != INACTIVE_SALES_FREEZE:
+            raise GateError("non-frozen launch source cannot contain sales-freeze evidence")
+        return None
+    if (
+        record["status"] != "passed"
+        or record["reason_code"] is not None
+        or not isinstance(record["evidence"], list)
+        or len(record["evidence"]) != 1
+    ):
+        raise GateError("sales_frozen requires one owner-signed freeze record")
+    reference = exact_object(
+        record["evidence"][0],
+        {
+            "path",
+            "sha256",
+            "signature_path",
+            "signature_sha256",
+            "signer_id",
+            "purpose",
+        },
+        "sales-freeze evidence reference",
+    )
+    if (
+        reference["signer_id"] != SALES_FREEZE_SIGNER_ID
+        or reference["purpose"] != SALES_FREEZE_PURPOSE
+        or not isinstance(reference["sha256"], str)
+        or SHA256_RE.fullmatch(reference["sha256"]) is None
+        or not isinstance(reference["signature_sha256"], str)
+        or SHA256_RE.fullmatch(reference["signature_sha256"]) is None
+        or not isinstance(reference["signature_path"], str)
+        or not reference["signature_path"].endswith(".sigstore.json")
+    ):
+        raise GateError("sales-freeze evidence reference identity differs")
+    path, raw = _safe_evidence_file(root, reference["path"])
+    signature_path, signature_raw = _safe_evidence_file(
+        root, reference["signature_path"]
+    )
+    if (
+        sha256_bytes(raw) != reference["sha256"]
+        or sha256_bytes(signature_raw) != reference["signature_sha256"]
+    ):
+        raise GateError("sales-freeze evidence bytes differ from their reference")
+    try:
+        envelope_value = strict_json.loads(raw)
+        signature_value = strict_json.loads(signature_raw)
+    except ValueError as error:
+        raise GateError("sales-freeze evidence is not strict JSON") from error
+    if not isinstance(signature_value, dict):
+        raise GateError("sales-freeze signature bundle must be an object")
+    envelope = exact_object(
+        envelope_value,
+        {
+            "schema_version",
+            "document_type",
+            "authorization_policy",
+            "qualification_basis",
+            "signer_id",
+            "purpose",
+            "issued_at",
+            "workflow_source_sha",
+            "prior_source_sha256",
+            "release_identity",
+            "prior_commerce_state",
+            "requested_commerce_state",
+            "checkout_enabled",
+            "preserve_customer_portal",
+            "preserve_published_artifacts",
+            "reason",
+        },
+        "GuardSalesFreezeEvidenceV1",
+    )
+    if (
+        envelope["schema_version"] != 1
+        or envelope["document_type"] != "GuardSalesFreezeEvidenceV1"
+        or envelope["authorization_policy"] != AUTHORIZATION_POLICY
+        or envelope["qualification_basis"] != QUALIFICATION_BASIS
+        or envelope["signer_id"] != SALES_FREEZE_SIGNER_ID
+        or envelope["purpose"] != SALES_FREEZE_PURPOSE
+        or envelope["release_identity"] != identity
+        or envelope["prior_commerce_state"] != "public_live"
+        or envelope["requested_commerce_state"] != "sales_frozen"
+        or envelope["checkout_enabled"] is not False
+        or envelope["preserve_customer_portal"] is not True
+        or envelope["preserve_published_artifacts"] is not True
+        or envelope["reason"] != "owner_emergency_sales_freeze"
+        or not isinstance(envelope["workflow_source_sha"], str)
+        or GIT_SHA_RE.fullmatch(envelope["workflow_source_sha"]) is None
+        or not isinstance(envelope["prior_source_sha256"], str)
+        or SHA256_RE.fullmatch(envelope["prior_source_sha256"]) is None
+    ):
+        raise GateError("sales-freeze evidence contract differs")
+    reconstructed = copy.deepcopy(source)
+    reconstructed["requested_commerce_state"] = "public_live"
+    reconstructed["sales_freeze"] = copy.deepcopy(INACTIVE_SALES_FREEZE)
+    if sha256_bytes(canonical_bytes(reconstructed)) != envelope["prior_source_sha256"]:
+        raise GateError("sales-freeze evidence does not bind the prior live source")
+    issued_at = parse_timestamp(envelope["issued_at"], "sales-freeze issued_at")
+    if current_time is not None and issued_at > current_time:
+        raise GateError("sales-freeze evidence is future-dated")
+    _verify_signature(
+        claim=path,
+        bundle=signature_path,
+        signer_id=reference["signer_id"],
+        purpose=SALES_FREEZE_PURPOSE,
+        workflow_source_sha=envelope["workflow_source_sha"],
+        trust_policy=trust_policy,
+        runner=signature_runner,
+        cosign_path=cosign_path,
+    )
+    return reference
+
+
 def _evidence_policy(
     gate: str, release_change_class: str
 ) -> tuple[int, bool]:
@@ -1593,6 +2461,9 @@ def _evidence_policy(
     if gate == PRIOR_QUALIFIED_RELEASE_GATE:
         return default_max_age_days, True
     fresh_gates = CHANGE_CLASS_FRESH_GATES[release_change_class]
+    exact_release = gate in fresh_gates or release_change_class != "guard_package_only"
+    if gate in MUTABLE_FACT_FRESH_GATES:
+        return default_max_age_days, exact_release
     if gate in fresh_gates:
         return default_max_age_days, True
     if release_change_class == "guard_package_only":
@@ -1700,15 +2571,6 @@ def _validate_gate_evidence(
         purpose = reference["purpose"]
         if purpose != GATE_PURPOSES[gate]:
             raise GateError(f"{gate} evidence purpose differs from the locked purpose")
-        _verify_signature(
-            claim=path,
-            bundle=signature_path,
-            signer_id=reference["signer_id"],
-            purpose=purpose,
-            trust_policy=trust_policy,
-            runner=signature_runner,
-            cosign_path=cosign_path,
-        )
         try:
             envelope = strict_json.loads(raw)
         except ValueError as exc:
@@ -1718,11 +2580,14 @@ def _validate_gate_evidence(
             {
                 "schema_version",
                 "document_type",
+                "authorization_policy",
+                "qualification_basis",
                 "evidence_kind",
                 "gate",
                 "result",
                 "issued_at",
                 "expires_at",
+                "workflow_source_sha",
                 "release_identity",
                 "claims",
             },
@@ -1731,11 +2596,25 @@ def _validate_gate_evidence(
         if (
             envelope["schema_version"] != 1
             or envelope["document_type"] != "GuardGateEvidenceV1"
+            or envelope["authorization_policy"] != AUTHORIZATION_POLICY
+            or envelope["qualification_basis"] != QUALIFICATION_BASIS
             or envelope["evidence_kind"] != expected_kind
             or envelope["gate"] != gate
             or envelope["result"] != "passed"
+            or not isinstance(envelope["workflow_source_sha"], str)
+            or GIT_SHA_RE.fullmatch(envelope["workflow_source_sha"]) is None
         ):
             raise GateError(f"{gate} evidence envelope type, kind, gate, or result differs")
+        _verify_signature(
+            claim=path,
+            bundle=signature_path,
+            signer_id=reference["signer_id"],
+            purpose=purpose,
+            workflow_source_sha=envelope["workflow_source_sha"],
+            trust_policy=trust_policy,
+            runner=signature_runner,
+            cosign_path=cosign_path,
+        )
         _validate_evidence_identity(
             envelope["release_identity"],
             identity,
@@ -1768,20 +2647,7 @@ def _validate_gate_evidence(
                 )
         if not isinstance(envelope["claims"], dict):
             raise GateError(f"{gate} evidence claims must be an object")
-        if gate == "five_unaided_installs":
-            expected_machine_counts = (
-                frozenset({2})
-                if release_change_class == "guard_package_only"
-                else frozenset({2, 5})
-                if release_change_class == "site_legal_pricing"
-                else frozenset({5})
-            )
-            _semantic_installs(
-                envelope["claims"],
-                expected_machine_counts=expected_machine_counts,
-            )
-        else:
-            SEMANTIC_VALIDATORS[gate](envelope["claims"])
+        SEMANTIC_VALIDATORS[gate](envelope["claims"])
         if gate == "legal_terms_approved":
             for field in (
                 "release_date",
@@ -1796,24 +2662,27 @@ def _validate_gate_evidence(
                         f"legal evidence {field} differs from the reviewed "
                         "document identity"
                     )
-            if release_change_class == "site_legal_pricing":
-                site_legal = {
-                    "terms_sha256": sha256_bytes(
-                        _normalized_site_file(root / "site" / "terms.html")
-                    ),
-                    "privacy_sha256": sha256_bytes(
-                        _normalized_site_file(root / "site" / "privacy.html")
-                    ),
-                    "refunds_sha256": sha256_bytes(
-                        _normalized_site_file(root / "site" / "refunds.html")
-                    ),
-                }
-                for field, expected in site_legal.items():
-                    if envelope["claims"][field] != expected:
-                        raise GateError(
-                            f"site/legal/pricing {field} differs from the "
-                            "actual reviewed site document"
-                        )
+            for field in LEGAL_DOCUMENT_PATHS:
+                if envelope["claims"][field] != _legal_document_sha256(
+                    root, field
+                ):
+                    raise GateError(
+                        f"legal evidence {field} differs from the actual "
+                        "reviewed repository document"
+                    )
+        if gate == "legacy_obligations_resolved":
+            _notice_path, notice_raw = _safe_fixed_file(
+                root,
+                LEGACY_RETIREMENT_NOTICE_PATH,
+                LEGACY_RETIREMENT_NOTICE_PATH,
+            )
+            if (
+                envelope["claims"]["retirement_notice_template_sha256"]
+                != sha256_bytes(notice_raw)
+            ):
+                raise GateError(
+                    "legacy retirement notice template differs from reviewed bytes"
+                )
         if (
             gate == "release_rehearsal_within_budget"
             and release_change_class == "site_legal_pricing"
@@ -1925,10 +2794,26 @@ def _validate_gate_evidence(
                 "product_id",
                 "monthly_variant_id",
                 "annual_variant_id",
+                "monthly_checkout_url",
+                "annual_checkout_url",
+                "portal_url",
+                "store_hostname",
             ):
                 if envelope["claims"][field] != expected_configuration[field]:
                     raise GateError(
                         f"{gate} evidence {field} differs from merchant configuration"
+                    )
+            expected_delivery = {
+                "receipt_download_url": RECEIPT_DOWNLOAD_URL,
+                "eula_url": _eula_url(legal["eula_sha256"]),
+                "eula_sha256": legal["eula_sha256"],
+                "terms_version": legal["release_date"],
+            }
+            for field, expected in expected_delivery.items():
+                if envelope["claims"][field] != expected:
+                    raise GateError(
+                        f"{gate} evidence {field} differs from the exact "
+                        "owner-approved agreement"
                     )
         if observed_claims is not None and envelope["claims"] != observed_claims:
             raise GateError(f"{gate} evidence references disagree semantically")
@@ -1963,20 +2848,35 @@ def derive(
         {
             "schema_version",
             "document_type",
+            "authorization_policy",
+            "qualification_basis",
             "evaluated_at",
             "release_identity",
             "trust_policy",
             "requested_commerce_state",
+            "sales_freeze",
             "release_change_class",
             "prior_qualified_release",
             "merchant",
             "legal",
             "gates",
+            "advisory_status",
         },
         "GuardLaunchEvidenceV2",
     )
     if source["schema_version"] != 2 or source["document_type"] != "GuardLaunchEvidenceV2":
         raise GateError("launch evidence must be GuardLaunchEvidenceV2 schema_version 2")
+    if source["authorization_policy"] != AUTHORIZATION_POLICY:
+        raise GateError(f"authorization_policy must be {AUTHORIZATION_POLICY}")
+    if source["qualification_basis"] != QUALIFICATION_BASIS:
+        raise GateError(f"qualification_basis must be {QUALIFICATION_BASIS}")
+    advisory_status = exact_object(
+        source["advisory_status"], set(ADVISORY_ITEMS), "advisory_status"
+    )
+    if any(value != "not_completed" for value in advisory_status.values()):
+        raise GateError(
+            "owner-only GA advisory status must remain transparent and not_completed"
+        )
     evaluated = parse_timestamp(source["evaluated_at"], "evaluated_at")
     if current_time is not None:
         if current_time.tzinfo != timezone.utc:
@@ -2005,10 +2905,13 @@ def derive(
         isinstance(value, dict) and value.get("status") == "passed"
         for value in gates.values()
     )
-    identity = _validate_identity(source["release_identity"], qualified=any_passed)
+    identity = _validate_identity(
+        source["release_identity"],
+        qualified=any_passed or commerce_state != "unconfigured",
+    )
     if any_passed and trusted_policy_sha256 is None:
         raise GateError(
-            "passing evidence requires an independently protected trust-policy SHA-256"
+            "passing evidence requires a protected trust-policy SHA-256"
         )
     trust_policy = _load_trust_policy(
         root,
@@ -2016,14 +2919,20 @@ def derive(
         externally_trusted_sha256=trusted_policy_sha256,
     )
     if any_passed and not trust_policy["signers"]:
-        raise GateError("passing evidence requires at least one externally trusted signer")
-    if not any_passed and trust_policy["signers"]:
-        raise GateError(
-            "the prelaunch trust policy must remain empty while every gate is blocked"
-        )
+        raise GateError("passing evidence requires at least one allowlisted signer")
     signing_trust = _load_signing_trust(
         root,
         externally_trusted_sha256=trusted_signing_policy_sha256,
+    )
+    sales_freeze_reference = _validate_sales_freeze(
+        source,
+        root=root,
+        identity=identity,
+        commerce_state=commerce_state,
+        trust_policy=trust_policy,
+        signature_runner=signature_runner,
+        cosign_path=cosign_path,
+        current_time=current_time,
     )
 
     merchant_source = exact_object(
@@ -2063,14 +2972,26 @@ def derive(
         required=live_required,
     )
     portal_live = merchant_source["portal_state"] == "live"
-    portal_url = _validate_https_url(
+    checkout_store_hostname = (
+        _merchant_store_hostname(
+            live_configuration["monthly_checkout_url"],
+            "merchant.live_configuration.monthly_checkout_url",
+        )
+        if live_configuration.get("monthly_checkout_url") is not None
+        else None
+    )
+    portal_url = _validate_portal_url(
         merchant_source["portal_url"],
         "merchant portal URL",
         required=portal_live,
-        allowed_hosts=("lemonsqueezy.com",),
+        expected_store_hostname=checkout_store_hostname,
     )
     if not portal_live and portal_url is not None:
         raise GateError("unconfigured portal cannot contain a portal URL")
+    if live_required and portal_live and portal_url != live_configuration["portal_url"]:
+        raise GateError(
+            "merchant portal URL differs from the exact live configuration"
+        )
     merchant = {
         **merchant_source,
         "test_configuration": test_configuration,
@@ -2082,7 +3003,7 @@ def derive(
         source["legal"],
         {
             "seller_status",
-            "counsel_status",
+            "owner_approval_status",
             "release_date",
             "eula_sha256",
             "notices_sha256",
@@ -2094,11 +3015,13 @@ def derive(
     )
     if legal["seller_status"] not in {"unconfirmed", "confirmed"}:
         raise GateError("legal seller_status must be unconfirmed or confirmed")
-    if legal["counsel_status"] not in {"not_approved", "approved"}:
-        raise GateError("legal counsel_status must be not_approved or approved")
+    if legal["owner_approval_status"] not in {"not_approved", "approved"}:
+        raise GateError(
+            "legal owner_approval_status must be not_approved or approved"
+        )
     legal_approved = (
         legal["seller_status"] == "confirmed"
-        and legal["counsel_status"] == "approved"
+        and legal["owner_approval_status"] == "approved"
     )
     if legal_approved:
         try:
@@ -2118,6 +3041,11 @@ def derive(
                 legal[field]
             ):
                 raise GateError(f"approved legal {field} must be a SHA-256")
+            if legal[field] != _legal_document_sha256(root, field):
+                raise GateError(
+                    f"approved legal {field} differs from the actual repository bytes"
+                )
+        _validate_eula_effective_date(root, legal["release_date"])
     elif any(
         legal[field] is not None
         for field in (
@@ -2132,6 +3060,34 @@ def derive(
         raise GateError(
             "unapproved legal state cannot declare reviewed document identity"
         )
+
+    if live_required:
+        for field in ("product_id", "monthly_variant_id", "annual_variant_id"):
+            if test_configuration[field] == live_configuration[field]:
+                raise GateError(
+                    f"merchant test and live {field} must use distinct objects"
+                )
+        for configuration_name, configuration in (
+            ("test_configuration", test_configuration),
+            ("live_configuration", live_configuration),
+        ):
+            for cadence in ("monthly", "annual"):
+                _validate_checkout_url(
+                    configuration[f"{cadence}_checkout_url"],
+                    f"merchant.{configuration_name}.{cadence}_checkout_url",
+                    required=True,
+                    expected_terms_version=legal["release_date"],
+                    expected_guard_version=identity["guard_version"],
+                )
+        if len(
+            {
+                test_configuration["monthly_checkout_url"],
+                test_configuration["annual_checkout_url"],
+                live_configuration["monthly_checkout_url"],
+                live_configuration["annual_checkout_url"],
+            }
+        ) != 4:
+            raise GateError("merchant test and live checkout URLs must be distinct")
 
     prior_record = exact_object(
         source["prior_qualified_release"],
@@ -2275,12 +3231,112 @@ def derive(
                 "Guard channel change class/predecessor differs from signed "
                 "launch qualification"
             )
-    artifact_published = (
-        guard_claim is not None and guard_claim["artifact_published"] is True
+    stable_index = root / "site" / RELEASE_INDEX_NAME
+    stable_signature = root / "site" / RELEASE_INDEX_SIGNATURE_NAME
+    publication_record = root / "site" / ARTIFACT_PUBLICATION_NAME
+    publication_bundle = root / "site" / ARTIFACT_PUBLICATION_BUNDLE_NAME
+    publication_parts = (
+        stable_index.exists()
+        or stable_index.is_symlink()
+        or stable_signature.exists()
+        or stable_signature.is_symlink()
+        or publication_record.exists()
+        or publication_record.is_symlink()
+        or publication_bundle.exists()
+        or publication_bundle.is_symlink()
+    )
+    publication_material_present = all(
+        path.exists() or path.is_symlink()
+        for path in (
+            stable_index,
+            stable_signature,
+            publication_record,
+            publication_bundle,
+        )
+    )
+    if publication_parts and not publication_material_present:
+        raise GateError("artifact publication material is incomplete")
+    engine_publication_claim = gate_claims.get("engine_release_ready")
+    publication_matches_current = True
+    publication_validation_identity = identity
+    publication_validation_class = release_change_class
+    if publication_material_present:
+        publication_preview = load_json(
+            publication_record, "GuardArtifactPublicationV1"
+        )
+        publication_matches_current = (
+            publication_preview.get("release_identity") == identity
+        )
+        if not publication_matches_current:
+            if (
+                release_change_class not in {"guard_package_only", "proof_critical"}
+                or commerce_state != "live_hidden"
+                or prior_claim is None
+                or publication_preview.get("release_identity")
+                != prior_claim["prior_release_identity"]
+            ):
+                raise GateError(
+                    "retained artifact publication does not match the signed prior release"
+                )
+            publication_validation_identity = prior_claim["prior_release_identity"]
+            publication_validation_class = "retained_prior"
+    if (
+        publication_material_present
+        and publication_matches_current
+        and commerce_state != "sales_frozen"
+        and (guard_claim is None or engine_publication_claim is None)
+    ):
+        raise GateError(
+            "published Guard material lacks passed engine/Guard readiness"
+        )
+    publication_validation = None
+    if publication_material_present:
+        publication_validation = _validate_artifact_publication(
+            root,
+            guard_claims=guard_claim if publication_matches_current else None,
+            engine_claims=(
+                engine_publication_claim if publication_matches_current else None
+            ),
+            identity=publication_validation_identity,
+            trust_policy=trust_policy,
+            prior_claim=prior_claim,
+            release_change_class=publication_validation_class,
+            signature_runner=signature_runner,
+            cosign_path=cosign_path,
+        )
+    published_identity_claims = (
+        guard_claim
+        if guard_claim is not None
+        else (
+            {
+                "release_index_sha256": publication_validation["record"][
+                    "release_index_sha256"
+                ],
+                "release_index_signature_sha256": publication_validation[
+                    "record"
+                ]["release_index_signature_sha256"],
+                "release_index_url": publication_validation["record"][
+                    "release_index_url"
+                ],
+                "release_index_signature_url": publication_validation[
+                    "record"
+                ]["release_index_signature_url"],
+            }
+            if publication_validation is not None
+            else None
+        )
     )
     latest_release_index = (
-        _validate_published_index_files(root, guard_claim)
-        if artifact_published
+        _validate_published_index_files(root, published_identity_claims)
+        if publication_material_present
+        and publication_matches_current
+        and (guard_claim is not None or commerce_state == "sales_frozen")
+        else None
+    )
+    artifact_published = latest_release_index is not None
+    published_record = (
+        publication_validation["record"]
+        if publication_validation is not None
         else None
     )
     gate_status[ARTIFACT_PUBLICATION_BLOCKER] = {
@@ -2292,7 +3348,7 @@ def derive(
         ),
         "reason_anchor": REASON_ANCHORS[ARTIFACT_PUBLICATION_BLOCKER],
         "evidence": (
-            gate_status["guard_release_ready"]["evidence"]
+            [publication_validation["reference"]]
             if artifact_published
             else []
         ),
@@ -2386,11 +3442,13 @@ def derive(
             "product_id": None,
             "monthly_variant_id": None,
             "annual_variant_id": None,
+            "store_hostname": None,
         }
     )
     source_sha = sha256_bytes(canonical_bytes(source))
     engine_claim = gate_claims.get("engine_release_ready")
     legal_claim = gate_claims.get("legal_terms_approved")
+    live_smoke_claim = gate_claims.get("merchant_live_owner_smoke_passed")
     candidate_prerequisites = {
         "engine_release_ready",
         "legal_terms_approved",
@@ -2423,6 +3481,8 @@ def derive(
     candidate_authorization = {
         "schema_version": 1,
         "document_type": "GuardCandidateBuildAuthorizationV1",
+        "authorization_policy": AUTHORIZATION_POLICY,
+        "qualification_basis": QUALIFICATION_BASIS,
         "authorization_state": candidate_state,
         "authorization_scope": "prepare_signed_guard_draft_only",
         "commercial_release_authorized": False,
@@ -2468,6 +3528,7 @@ def derive(
             {
                 "release_date": legal_claim["release_date"],
                 "eula_sha256": legal_claim["eula_sha256"],
+                "eula_url": _eula_url(legal_claim["eula_sha256"]),
                 "notices_sha256": legal_claim["notices_sha256"],
             }
             if legal_claim is not None
@@ -2481,6 +3542,14 @@ def derive(
                 "product_id": live_configuration["product_id"],
                 "monthly_variant_id": live_configuration["monthly_variant_id"],
                 "annual_variant_id": live_configuration["annual_variant_id"],
+                "monthly_checkout_url": live_configuration[
+                    "monthly_checkout_url"
+                ],
+                "annual_checkout_url": live_configuration[
+                    "annual_checkout_url"
+                ],
+                "customer_portal_url": live_configuration["portal_url"],
+                "store_hostname": live_configuration["store_hostname"],
                 "catalog_policy": merchant["catalog_policy"],
             }
             if live_configuration["store_id"] is not None
@@ -2496,6 +3565,7 @@ def derive(
             "launch_evidence_sha256": source_sha,
             "launch_trust_policy_sha256": source["trust_policy"]["sha256"],
             "required_passed_gates": sorted(candidate_prerequisites),
+            "advisory_status": advisory_status,
         },
         "remaining_launch_blockers": blocking,
     }
@@ -2525,6 +3595,8 @@ def derive(
     launch = {
         "schema_version": 2,
         "document_type": "GuardLaunchStateV2",
+        "authorization_policy": AUTHORIZATION_POLICY,
+        "qualification_basis": QUALIFICATION_BASIS,
         "generated_from": "release/guard-launch-evidence-v2.json",
         "source_sha256": source_sha,
         "evaluated_at": source["evaluated_at"],
@@ -2535,18 +3607,75 @@ def derive(
         "checkout_enabled": checkout_enabled,
         "release_identity": identity,
         "legal_status": (
-            "approved" if legal_ready else "blocked_pending_owner_and_counsel"
+            "approved" if legal_ready else "blocked_pending_owner_approval"
         ),
         "merchant_of_record_status": (
             "approved" if merchant_ready else "approval_pending"
         ),
         "gate_status": gate_status,
+        "advisory_status": advisory_status,
         "blocking_gates": blocking,
+        "sales_freeze": (
+            {
+                "status": "active",
+                "reason": "owner_emergency_sales_freeze",
+                "evidence": [sales_freeze_reference],
+            }
+            if sales_freeze_reference is not None
+            else {"status": "inactive", "reason": None, "evidence": []}
+        ),
         "reason_anchors": REASON_ANCHORS,
     }
+    published_artifact_url = (
+        guard_claim["artifact_url"]
+        if guard_claim is not None
+        else published_record["artifact_url"]
+        if published_record is not None
+        else None
+    )
+    published_channel_url = (
+        guard_claim["channel_url"]
+        if guard_claim is not None
+        else published_record["channel_url"]
+        if published_record is not None
+        else None
+    )
+    release_asset_base = (
+        published_artifact_url.rsplit("/", 1)[0]
+        if isinstance(published_artifact_url, str)
+        else None
+    )
+    delivery = (
+        {
+            "receipt_url": RECEIPT_DOWNLOAD_URL,
+            "artifact_url": published_artifact_url,
+            "artifact_sha256": (
+                guard_claim["artifact_sha256"]
+                if guard_claim is not None
+                else published_record["artifact_sha256"]
+            ),
+            "sha256sums_url": f"{release_asset_base}/SHA256SUMS",
+            "sha256sums_signature_url": f"{release_asset_base}/SHA256SUMS.sig",
+            "signing_public_key_url": f"{release_asset_base}/signing-public-key.pem",
+            "signing_public_key_sha256": signing_trust["public_key_sha256"],
+            "channel_url": published_channel_url,
+            "release_index_url": latest_release_index["url"],
+            "release_index_signature_url": latest_release_index["signature_url"],
+            "start_here_path": "START-HERE.txt",
+            "agreement_path": "AGREEMENT.txt",
+            "delivery_path": "DELIVERY.txt",
+            "activation_command": "./bin/tinyzkp activate --license-key-stdin",
+        }
+        if artifact_published
+        and release_asset_base is not None
+        and latest_release_index is not None
+        else None
+    )
     release = {
         "schema_version": 2,
         "release": identity["guard_release"],
+        "authorization_policy": AUTHORIZATION_POLICY,
+        "qualification_basis": QUALIFICATION_BASIS,
         "release_identity": identity,
         "launch_state": launch_state,
         "sales_state": sales_state,
@@ -2554,21 +3683,38 @@ def derive(
         "portal_state": merchant["portal_state"],
         "checkout_enabled": checkout_enabled,
         "guard_artifact_available": artifact_published,
-        "guard_artifact_url": (
-            guard_claim["artifact_url"] if guard_claim is not None else None
-        ),
+        "guard_artifact_url": published_artifact_url,
         "guard_artifact_sha256": (
-            guard_claim["artifact_sha256"] if guard_claim is not None else None
+            guard_claim["artifact_sha256"]
+            if guard_claim is not None
+            else published_record["artifact_sha256"]
+            if published_record is not None
+            else None
         ),
         "guard_oci_digest": (
-            guard_claim["oci_digest"] if guard_claim is not None else None
+            guard_claim["oci_digest"]
+            if guard_claim is not None
+            else published_record["guard_oci_digest"]
+            if published_record is not None
+            else None
+        ),
+        "agreement": (
+            {
+                "release_date": legal["release_date"],
+                "eula_sha256": legal["eula_sha256"],
+                "eula_url": _eula_url(legal["eula_sha256"]),
+            }
+            if legal_approved
+            else None
         ),
         "latest_release_index": latest_release_index,
+        "delivery": delivery,
         "qualified_engine_artifact_available": gate_status["engine_release_ready"]["status"] == "passed",
         "compatibility_profile": PROFILE_ID,
         "canonical_gate": "https://github.com/logannye/hc-stark/blob/main/release/guard-launch-state-v2.json",
         "source_sha256": source_sha,
         "gate_status": gate_status,
+        "advisory_status": advisory_status,
         "blocking_gates": blocking,
         "channel_manifest": (
             {
@@ -2590,6 +3736,14 @@ def derive(
                 "prior_release_index_sha256": guard_claim[
                     "channel_prior_release_index_sha256"
                 ],
+                "release_index_url": guard_claim["release_index_url"],
+                "release_index_sha256": guard_claim["release_index_sha256"],
+                "release_index_signature_url": guard_claim[
+                    "release_index_signature_url"
+                ],
+                "release_index_signature_sha256": guard_claim[
+                    "release_index_signature_sha256"
+                ],
                 "artifact_sha256": guard_claim["artifact_sha256"],
                 "oci_digest": guard_claim["oci_digest"],
             }
@@ -2601,6 +3755,8 @@ def derive(
     commerce = {
         "schema_version": 2,
         "provider": "lemon_squeezy",
+        "authorization_policy": AUTHORIZATION_POLICY,
+        "qualification_basis": QUALIFICATION_BASIS,
         "sales_state": sales_state,
         "commerce_state": commerce_state,
         "mode": commerce_mode,
@@ -2623,7 +3779,36 @@ def derive(
         },
         "store_id": public_merchant_config["store_id"],
         "product_id": public_merchant_config["product_id"],
+        "store_hostname": public_merchant_config["store_hostname"],
         "customer_portal_url": public_portal_url,
+        "support": (
+            {
+                "state": "verified",
+                "intake": "private_email",
+                "contact": live_smoke_claim["support_contact"],
+                "delivery_verified": True,
+                "owner_access_verified": True,
+                "retention_configured": True,
+            }
+            if live_smoke_claim is not None
+            else None
+        ),
+        "receipt_download_url": (
+            RECEIPT_DOWNLOAD_URL if merchant_ready else None
+        ),
+        "agreement": (
+            {
+                "release_date": legal["release_date"],
+                "eula_sha256": legal["eula_sha256"],
+                "eula_url": _eula_url(legal["eula_sha256"]),
+            }
+            if legal_approved
+            else None
+        ),
+        "checkout_custom_data": {
+            "terms_version": legal["release_date"],
+            "guard_version": identity["guard_version"],
+        },
         "reason_anchors": {
             "sales": REASON_ANCHORS["sales"],
             "portal": REASON_ANCHORS["portal"],
@@ -2653,7 +3838,7 @@ def derive(
         "schema_version": 5,
         "name": "TinyZKP Community and Guard",
         "canonical_url": "https://tinyzkp.com/pricing",
-        "effective_date": "2026-07-18",
+        "effective_date": legal["release_date"] if legal_approved else None,
         "currency": "USD",
         "launch_state": launch_state,
         "sales_state": sales_state,
@@ -2734,6 +3919,81 @@ def derive(
             "prorated_refunds": "only_if_required_by_law_or_merchant",
         },
     }
+    monitoring_mode = (
+        "guard_live"
+        if checkout_enabled
+        else "guard_frozen"
+        if sales_state == "frozen" and artifact_published
+        else "guard_transition"
+        if (
+            commerce_state == "live_hidden"
+            and candidate_state == "candidate_prepared"
+            and blocking == [ARTIFACT_PUBLICATION_BLOCKER]
+            and all(
+                gate_status[name]["status"] == "passed"
+                for name in REQUIRED_GATES
+            )
+        )
+        else "guard_prelaunch"
+    )
+    release_channels = {
+        "schema_version": 1,
+        "authorization_policy": AUTHORIZATION_POLICY,
+        "qualification_basis": QUALIFICATION_BASIS,
+        "current_channel": monitoring_mode,
+        "source_sha256": source_sha,
+        "channels": {
+            "community": {
+                "engine_source": "public_mit",
+                "engine_artifacts": "signed_after_engine_gates",
+                "checkout": False,
+                "hosted_proving": False,
+                "hosted_verification": False,
+                "customer_data_plane": "local_only",
+            },
+            "guard_prelaunch": {
+                "inherits": "community",
+                "guard_artifacts": "private_release_candidates",
+                "checkout": False,
+                "legacy_hosts": "recovery_200",
+                "authorization_policy": AUTHORIZATION_POLICY,
+                "qualification_basis": QUALIFICATION_BASIS,
+                "required_gate_document": "release/guard-launch-state-v2.json",
+            },
+            "guard_transition": {
+                "inherits": "community",
+                "guard_artifacts": "signed_draft_prerelease",
+                "checkout": False,
+                "legacy_hosts": "static_410_noindex",
+                "authorization_policy": AUTHORIZATION_POLICY,
+                "qualification_basis": QUALIFICATION_BASIS,
+                "required_gate_document": "release/guard-launch-state-v2.json",
+            },
+            "guard_live": {
+                "inherits": "community",
+                "guard_artifacts": "commercial_object_code",
+                "checkout": True,
+                "legacy_hosts": "static_410_noindex",
+                "merchant": "merchant_of_record",
+                "runtime_phone_home": False,
+                "future_release_activation_requires_active_subscription": True,
+                "authorization_policy": AUTHORIZATION_POLICY,
+                "qualification_basis": QUALIFICATION_BASIS,
+                "required_gate_document": "release/guard-launch-state-v2.json",
+            },
+            "guard_frozen": {
+                "inherits": "community",
+                "guard_artifacts": "commercial_object_code",
+                "checkout": False,
+                "customer_portal": True,
+                "legacy_hosts": "static_410_noindex",
+                "runtime_phone_home": False,
+                "authorization_policy": AUTHORIZATION_POLICY,
+                "qualification_basis": QUALIFICATION_BASIS,
+                "required_gate_document": "release/guard-launch-state-v2.json",
+            },
+        },
+    }
     discovery = {
         "schema_version": 5,
         "name": "TinyZKP",
@@ -2743,7 +4003,7 @@ def derive(
         "sales_state": sales_state,
         "commerce_state": commerce_state,
         "portal_state": merchant["portal_state"],
-        "service_status": "guard_available" if checkout_enabled else "guard_prelaunch",
+        "service_status": monitoring_mode,
         "positioning": {
             "short": "Finish supported Plonky3 proof jobs within a RAM budget.",
             "description": "A customer-operated supervisor and open proof engine for bounded-memory, SSD-backed, resumable execution without changing the released proof format or ordinary verifier.",
@@ -2945,6 +4205,8 @@ def derive(
         "discovery": discovery,
         "compatibility": compatibility,
         "offers": offers,
+        "release_channels": release_channels,
+        "site_release_channels": release_channels,
     }
     _validate_output_identity_parity(derived)
     return derived
@@ -2972,6 +4234,16 @@ def _validate_output_identity_parity(
     }
     if len(states) != 1:
         raise GateError("generated public launch states differ")
+    release_channels = derived["release_channels"]
+    if (
+        derived["site_release_channels"] != release_channels
+        or release_channels.get("authorization_policy") != AUTHORIZATION_POLICY
+        or release_channels.get("qualification_basis") != QUALIFICATION_BASIS
+        or release_channels.get("source_sha256") != launch["source_sha256"]
+        or release_channels.get("current_channel")
+        != derived["discovery"]["service_status"]
+    ):
+        raise GateError("generated monitoring channel contracts differ")
     if release["release_identity"] != launch["release_identity"]:
         raise GateError("generated release identity differs from the launch identity")
     candidate = derived["candidate_authorization"]
@@ -3177,6 +4449,8 @@ def validate(
             {
                 "schema_version",
                 "document_type",
+                "authorization_policy",
+                "qualification_basis",
                 "generated_from",
                 "source_sha256",
                 "evaluated_at",
@@ -3189,17 +4463,43 @@ def validate(
                 "legal_status",
                 "merchant_of_record_status",
                 "gate_status",
+                "advisory_status",
                 "blocking_gates",
+                "sales_freeze",
                 "reason_anchors",
             },
             "GuardLaunchStateV2",
         )
         if value["schema_version"] != 2 or value["document_type"] != "GuardLaunchStateV2":
             raise GateError("derived launch state schema/type is invalid")
+        if value["authorization_policy"] != AUTHORIZATION_POLICY:
+            raise GateError("derived launch authorization_policy is invalid")
+        if value["qualification_basis"] != QUALIFICATION_BASIS:
+            raise GateError("derived launch qualification_basis is invalid")
+        if (
+            exact_object(
+                value["advisory_status"], set(ADVISORY_ITEMS), "advisory_status"
+            )
+            != {name: "not_completed" for name in ADVISORY_ITEMS}
+        ):
+            raise GateError("derived launch advisory_status is invalid")
         if value["launch_state"] not in {"blocked", "qualified"}:
             raise GateError("launch_state must be blocked or qualified")
         if value["sales_state"] not in {"closed", "live", "frozen"}:
             raise GateError("sales_state must be closed, live, or frozen")
+        freeze = exact_object(
+            value["sales_freeze"], {"status", "reason", "evidence"}, "sales_freeze"
+        )
+        if value["sales_state"] == "frozen":
+            if (
+                freeze["status"] != "active"
+                or freeze["reason"] != "owner_emergency_sales_freeze"
+                or not isinstance(freeze["evidence"], list)
+                or len(freeze["evidence"]) != 1
+            ):
+                raise GateError("frozen sales require one active signed freeze record")
+        elif freeze != {"status": "inactive", "reason": None, "evidence": []}:
+            raise GateError("non-frozen sales cannot contain active freeze evidence")
         if value["commerce_state"] not in COMMERCE_STATES:
             raise GateError("commerce_state is not a locked commerce state")
         if value["portal_state"] not in {"unconfigured", "live"}:
@@ -3243,8 +4543,6 @@ def validate(
                 raise GateError("current release-gate time must be UTC")
             if evaluated_at > current:
                 raise GateError("launch evaluated_at is future-dated")
-            if current - evaluated_at > CURRENT_EVALUATION_MAX_AGE:
-                raise GateError("launch evaluated_at is older than 24 hours")
     except GateError as exc:
         errors.append(str(exc))
     return errors
@@ -3416,6 +4714,7 @@ def _launch_copy_values(
 ) -> dict[str, str]:
     launch = derived["launch"]
     release = derived["release"]
+    commerce = derived["commerce"]
     checkout_live = launch["commerce_state"] == "public_live"
     sales_frozen = launch["commerce_state"] == "sales_frozen"
     legal_approved = launch["legal_status"] == "approved"
@@ -3509,11 +4808,49 @@ def _launch_copy_values(
         )
         + "</tbody></table>"
     )
+    delivery = release.get("delivery")
+    if guard_available and isinstance(delivery, dict):
+        version = launch["release_identity"]["guard_version"]
+        artifact_name = delivery["artifact_url"].rsplit("/", 1)[-1]
+        release_delivery = (
+            '<section class="card"><h3>Download and verify TinyZKP Guard '
+            f'{version}</h3><p><a class="button" href="{delivery["artifact_url"]}">'
+            f'Download {artifact_name}</a></p><p>Expected archive SHA-256: '
+            f'<code>{delivery["artifact_sha256"]}</code>.</p><p>Download '
+            f'<a href="{delivery["sha256sums_url"]}">SHA256SUMS</a>, '
+            f'<a href="{delivery["sha256sums_signature_url"]}">its Cosign '
+            f'signature</a>, and the <a href="{delivery["signing_public_key_url"]}">'
+            'signing public key</a> from the same release. Verify the public-key '
+            f'SHA-256 <code>{delivery["signing_public_key_sha256"]}</code>, then '
+            'run <code>cosign verify-blob --key signing-public-key.pem --signature '
+            'SHA256SUMS.sig SHA256SUMS</code>. Select only this archive from the '
+            'signed multi-asset manifest and verify it with '
+            f'<code>grep -F \'  {artifact_name}\' SHA256SUMS &gt; '
+            'GUARD.sha256 &amp;&amp; sha256sum --check --strict GUARD.sha256</code>. '
+            'The result must report <code>OK</code>.</p><p>Extract with '
+            f'<code>tar -xzf {artifact_name}</code>, open '
+            '<code>START-HERE.txt</code>, confirm <code>DELIVERY.txt</code> and '
+            '<code>AGREEMENT.txt</code>, then inspect '
+            '<code>./bin/tinyzkp version --json</code>. Activate without exposing '
+            'the key in shell history: <code>read -r -s TINYZKP_LICENSE_KEY; '
+            'printf %s "$TINYZKP_LICENSE_KEY" | ./bin/tinyzkp activate '
+            '--license-key-stdin; unset TINYZKP_LICENSE_KEY</code>.</p><p>Signed '
+            f'<a href="{delivery["channel_url"]}">channel</a> · '
+            f'<a href="{delivery["release_index_url"]}">release index</a> · '
+            f'<a href="{delivery["release_index_signature_url"]}">index '
+            'signature</a></p></section>'
+        )
+    else:
+        release_delivery = (
+            '<section class="notice"><strong>Guard delivery is not published.</strong> '
+            'This section becomes an exact download, checksum, signature, extract, '
+            'and activation path only after signed artifact publication.</section>'
+        )
 
     if legal_approved:
         legal_status = (
-            "<strong>Reviewed legal identity.</strong> The release gate binds "
-            "the counsel-approved legal documents used for this release. The "
+            "<strong>Owner-approved legal identity.</strong> The release gate binds "
+            "the exact LN Holdings owner-approved legal documents used for this release. The "
             "binding agreement presented at merchant checkout controls."
         )
         legal_binding = (
@@ -3523,7 +4860,7 @@ def _launch_copy_values(
         )
         privacy_status = (
             "<strong>Reviewed privacy identity.</strong> The release gate binds "
-            "this release to the counsel-approved privacy notice and merchant "
+            "this release to the owner-approved privacy notice and merchant "
             "disclosures."
         )
         privacy_final = (
@@ -3538,7 +4875,7 @@ def _launch_copy_values(
         )
         refund_status = (
             "<strong>Reviewed policy identity.</strong> The release gate binds "
-            "this release to counsel-approved terms and the merchant lifecycle "
+            "this release to owner-approved terms and the merchant lifecycle "
             "tested for purchase, cancellation, and refund."
         )
         refund_footer = (
@@ -3546,13 +4883,17 @@ def _launch_copy_values(
         )
         eula_status = (
             "<strong>Reviewed EULA identity.</strong> The release gate binds "
-            "the exact counsel-approved commercial EULA included with this "
+            "the exact owner-approved commercial EULA included with this "
             "release and presented through merchant checkout."
         )
         eula_final = (
             "The reviewed EULA identifies the legal seller, address, governing "
             "law, warranty disclaimer, liability cap, termination mechanics, "
-            "export controls, notices, and acceptance record."
+            "export controls, notices, and acceptance record. Read the exact "
+            f'<a href="{release["agreement"]["eula_url"]}">owner-approved '
+            "EULA bytes</a> (effective "
+            f'{release["agreement"]["release_date"]}; SHA-256 '
+            f'<code>{release["agreement"]["eula_sha256"]}</code>).'
         )
     else:
         legal_status = (
@@ -3563,13 +4904,13 @@ def _launch_copy_values(
         legal_binding = (
             "The seller's exact legal name, business address, jurisdiction, "
             "governing law, warranty disclaimer, liability cap, export language, "
-            "notice method, and counsel approval remain launch-blocking inputs. "
+            "notice method, and LN Holdings owner approval remain launch-blocking inputs. "
             "The final checkout will present the approved terms before purchase."
         )
         privacy_status = (
             "<strong>Legal review pending:</strong> final controller identity, "
             "contact details, retention schedule, merchant disclosures, and "
-            "jurisdiction-specific rights require counsel-approved seller facts "
+            "jurisdiction-specific rights require owner-supplied seller facts "
             "before checkout opens."
         )
         privacy_final = (
@@ -3588,13 +4929,13 @@ def _launch_copy_values(
             "binding."
         )
         refund_footer = (
-            "Merchant and counsel approval remain required before checkout opens."
+            "Merchant configuration and LN Holdings owner approval remain required before checkout opens."
         )
         eula_status = (
             "<strong>Legal review pending.</strong> The release gate remains "
             "blocked until the seller, jurisdiction, warranties, liability, "
             "export language, and complete license are supplied and approved "
-            "by counsel."
+            "by the LN Holdings owner."
         )
         eula_final = (
             "The exact legal seller, address, governing law, warranty disclaimer, "
@@ -3612,7 +4953,7 @@ def _launch_copy_values(
             "The binding terms and reviewed seller details are presented through "
             "the merchant checkout."
             if legal_approved
-            else "Final binding terms and seller details must be counsel-approved "
+            else "Final binding terms and seller details must be approved by the LN Holdings owner "
             "before checkout can open."
         )
     )
@@ -3629,9 +4970,39 @@ def _launch_copy_values(
         )
         + " TinyZKP does not operate a billing account system."
     )
+    support = commerce.get("support")
+    support_intake = (
+        "<strong>Private ordinary support is verified.</strong> Email "
+        f'<a href="mailto:{support["contact"]}">{support["contact"]}</a>. '
+        "Owner access, end-to-end delivery, and retention configuration were "
+        "verified in the signed live-smoke evidence. Never send proof inputs, "
+        "witnesses, traces, checkpoints, proof bundles, credentials, license "
+        "keys, private paths, or customer source code."
+        if isinstance(support, dict) and support.get("state") == "verified"
+        else "<strong>Private ordinary support is not yet published.</strong> "
+        "Checkout remains fail-closed until a managed private mailbox, "
+        "end-to-end delivery, owner access, and retention configuration are "
+        "verified in signed owner evidence. Public issues are only for "
+        "non-confidential open-source engine defects. Never post proof data, "
+        "credentials, or license keys."
+    )
+    guard_status = (
+        "<strong>Guard is live.</strong> The exact signed artifact and reviewed "
+        "merchant checkout in release.json and commerce.json are available. "
+        "Advisory review and adoption metrics remain transparently not completed."
+        if checkout_live
+        else "<strong>Guard sales are frozen.</strong> Published artifacts and "
+        "the billing portal remain available, but new checkout is closed."
+        if sales_frozen
+        else "<strong>Checkout is closed.</strong> Guard opens only when the "
+        "required owner-qualified release, legal, merchant, retirement, "
+        "rehearsal, and signed-publication gates pass. Advisory review and "
+        "adoption metrics remain visible but do not block launch."
+    )
     return {
         "release-status": release_status,
         "release-availability": release_availability,
+        "release-delivery": release_delivery,
         "release-footer": release_footer,
         "pricing-merchant": pricing_merchant,
         "legal-status": legal_status,
@@ -3644,6 +5015,8 @@ def _launch_copy_values(
         "eula-status": eula_status,
         "eula-final": eula_final,
         "support-billing": support_billing,
+        "support-intake": support_intake,
+        "guard-status": guard_status,
     }
 
 
@@ -3862,6 +5235,39 @@ def _check_outputs(
             errors.append(
                 f"{path.relative_to(root)} is not generated from GuardLaunchEvidenceV2"
             )
+    agreement = derived["release"]["agreement"]
+    try:
+        if agreement is None:
+            _validate_public_eula_tree(root)
+        else:
+            _source_path, source = _safe_fixed_file(
+                root,
+                LEGAL_DOCUMENT_PATHS["eula_sha256"],
+                LEGAL_DOCUMENT_PATHS["eula_sha256"],
+            )
+            _validate_public_eula_tree(
+                root,
+                current_sha256=agreement["eula_sha256"],
+                current_bytes=source,
+            )
+    except GateError as error:
+        errors.append(f"digest-addressed public EULA tree differs: {error}")
+    if agreement is not None:
+        relative = f"site/legal/{agreement['eula_sha256']}/EULA.txt"
+        try:
+            _path, published = _safe_fixed_file(root, relative, relative)
+            _source_path, source = _safe_fixed_file(
+                root, LEGAL_DOCUMENT_PATHS["eula_sha256"], LEGAL_DOCUMENT_PATHS["eula_sha256"]
+            )
+            if (
+                published != source
+                or sha256_bytes(published) != agreement["eula_sha256"]
+                or agreement["eula_url"]
+                != f"https://tinyzkp.com/legal/{agreement['eula_sha256']}/EULA.txt"
+            ):
+                errors.append("digest-addressed public EULA bytes differ")
+        except GateError as error:
+            errors.append(f"digest-addressed public EULA is unavailable: {error}")
     errors.extend(_check_acquisition_surfaces(derived, root=root))
     return errors
 
@@ -3869,6 +5275,39 @@ def _check_outputs(
 def _write_outputs(
     derived: dict[str, dict[str, Any]], *, root: Path = ROOT
 ) -> None:
+    agreement = derived["release"]["agreement"]
+    if agreement is not None:
+        _source_path, source = _safe_fixed_file(
+            root,
+            LEGAL_DOCUMENT_PATHS["eula_sha256"],
+            LEGAL_DOCUMENT_PATHS["eula_sha256"],
+        )
+        if sha256_bytes(source) != agreement["eula_sha256"]:
+            raise GateError("owner-approved EULA digest changed before publication")
+        destination = (
+            root / "site" / "legal" / agreement["eula_sha256"] / "EULA.txt"
+        )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists() or destination.is_symlink():
+            metadata = destination.lstat()
+            if (
+                stat.S_ISLNK(metadata.st_mode)
+                or not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+                or destination.read_bytes() != source
+            ):
+                raise GateError("immutable public EULA path already differs")
+        else:
+            temporary = destination.with_name(destination.name + ".tmp")
+            temporary.write_bytes(source)
+            os.replace(temporary, destination)
+        _validate_public_eula_tree(
+            root,
+            current_sha256=agreement["eula_sha256"],
+            current_bytes=source,
+        )
+    else:
+        _validate_public_eula_tree(root)
     for name, canonical_path in OUTPUTS.items():
         path = root / canonical_path.relative_to(ROOT)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -3994,12 +5433,21 @@ def main(argv: list[str] | None = None) -> int:
             if require_action
             else None
         )
+        derivation_time = (
+            action_time
+            if (
+                args.require_candidate_build_ready
+                or args.require_promotion_ready
+                or args.require_current_evaluation
+            )
+            else None
+        )
         derived = derive(
             source,
             root=args.root.resolve(),
             trusted_policy_sha256=args.trusted_policy_sha256,
             trusted_signing_policy_sha256=args.trusted_signing_policy_sha256,
-            current_time=action_time,
+            current_time=derivation_time,
         )
         errors = (
             _check_outputs(derived, root=args.root.resolve())
@@ -4018,7 +5466,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.require_current_evaluation:
             _require_current_evaluation(derived, now=action_time)
         if args.require_ready:
-            _require_current_evaluation(derived, now=action_time)
+            evaluated_at = parse_timestamp(
+                launch["evaluated_at"], "launch evaluated_at"
+            )
+            if action_time is not None and evaluated_at > action_time:
+                raise GateError("launch evaluated_at is future-dated")
             if (
                 launch["launch_state"] != "qualified"
                 or launch["commerce_state"] != "public_live"

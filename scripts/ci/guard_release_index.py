@@ -352,6 +352,53 @@ def validate_transition(
         raise IndexError("withdrawal revision did not change the target state")
 
 
+def validate_successor(
+    prior: dict[str, Any],
+    revised: dict[str, Any],
+    *,
+    expected_new_identity: str,
+) -> None:
+    """Allow exactly one immutable append and current→superseded transition."""
+    prior_releases, prior_by_identity = validate_index(
+        prior, "prior Guard release index"
+    )
+    revised_releases, revised_by_identity = validate_index(
+        revised, "successor Guard release index"
+    )
+    prior_order = [entry["release_identity"] for entry in prior_releases]
+    revised_order = [entry["release_identity"] for entry in revised_releases]
+    if (
+        revised_order[:-1] != prior_order
+        or len(revised_order) != len(prior_order) + 1
+        or revised_order[-1] != expected_new_identity
+        or expected_new_identity in prior_by_identity
+    ):
+        raise IndexError("successor release index must append exactly one release")
+    prior_current = prior["current_release_identity"]
+    for identity in prior_order:
+        before = prior_by_identity[identity]
+        after = revised_by_identity[identity]
+        if identity == prior_current:
+            expected = {
+                **before,
+                "state": "superseded",
+                "successor_release_identity": expected_new_identity,
+                "advisory_url": None,
+            }
+            if after != expected:
+                raise IndexError("successor index changed the prior current release incorrectly")
+        elif after != before:
+            raise IndexError("successor index changed immutable release history")
+    new_entry = revised_by_identity[expected_new_identity]
+    if (
+        revised["current_release_identity"] != expected_new_identity
+        or new_entry["state"] != "current"
+        or new_entry["successor_release_identity"] is not None
+        or new_entry["advisory_url"] is not None
+    ):
+        raise IndexError("successor index current release differs")
+
+
 def verify_signature(
     *,
     index_path: Path,

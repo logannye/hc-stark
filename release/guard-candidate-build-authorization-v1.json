@@ -1,4 +1,5 @@
 {
+  "authorization_policy": "owner_only_ga_v1",
   "authorization_scope": "prepare_signed_guard_draft_only",
   "authorization_state": "blocked",
   "checkout_enabled": false,
@@ -11,7 +12,8 @@
   "merchant_catalog": null,
   "prior_qualified_release": null,
   "public_candidate_authorization_commit": null,
-  "public_gate_source_sha256": "3dfa19f361c99a9f09ab9ac230ada6bd6b3f88d4e3e9cc4ec888b187d8bd75bc",
+  "public_gate_source_sha256": "496ed2c65859ead9760365399498c408ff8be4114298ed2a7c7513e2a8d13dc3",
+  "qualification_basis": "owner_attested",
   "release_change_class": "proof_critical",
   "release_identity": {
     "compatibility_profile": "tinyzkp-p3-goldilocks-v1",
@@ -22,7 +24,6 @@
   },
   "remaining_launch_blockers": [
     "engine_release_ready",
-    "five_unaided_installs",
     "guard_artifact_published",
     "guard_release_ready",
     "hosted_infrastructure_decommissioned",
@@ -30,13 +31,20 @@
     "legal_terms_approved",
     "merchant_live_owner_smoke_passed",
     "merchant_sandbox_lifecycle_passed",
-    "release_rehearsal_within_budget",
-    "three_external_workloads",
-    "two_standard_annual_customers"
+    "release_rehearsal_within_budget"
   ],
   "reviewed_evidence": {
-    "launch_evidence_sha256": "3dfa19f361c99a9f09ab9ac230ada6bd6b3f88d4e3e9cc4ec888b187d8bd75bc",
-    "launch_trust_policy_sha256": "a72004286f167a5c585394b17eb99aa970f2b1a0c55a455605b72ff0736cd3cc",
+    "advisory_status": {
+      "external_design_partner_integration": "not_completed",
+      "five_unaided_installs": "not_completed",
+      "implementation_review_no_high_findings": "not_completed",
+      "independent_resource_reproduction": "not_completed",
+      "plonky3_specialist_review": "not_completed",
+      "three_external_workloads": "not_completed",
+      "two_standard_annual_customers": "not_completed"
+    },
+    "launch_evidence_sha256": "496ed2c65859ead9760365399498c408ff8be4114298ed2a7c7513e2a8d13dc3",
+    "launch_trust_policy_sha256": "a522cb635efea13406e2049fd837c3849f21805b5d93da40843a119dc4c12cde",
     "required_passed_gates": [
       "engine_release_ready",
       "legal_terms_approved",
@@ -47,8 +55,8 @@
   "schema_version": 1,
   "signing_trust": {
     "policy_path": "release/guard-signing-trust-v1.json",
-    "policy_sha256": "3083096ed287330e3276e772cb1f30d8e1622443d78b0118c22754a44f304ec2",
+    "policy_sha256": "d269d5856d93243e07c51b384f2fe572283d31461c5248dfdcd1416196629975",
     "public_key_path": "release/guard-signing-public-key.pem",
-    "public_key_sha256": null
+    "public_key_sha256": "829be107626d931624765cf3342f2ed0a2e6843bbe36d44849f1c3cd40c9b81c"
   }
 }

@@ -635,6 +635,31 @@ pub struct BenchmarkWorkerResult {
     pub verification_succeeded: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BenchmarkEstimateResult {
+    pub schema_version: u32,
+    pub manifest_digest_hex: String,
+    pub estimate: hc_stream::ResourceEstimate,
+}
+
+/// Return the exact built-in workload estimate used by the bounded prover.
+///
+/// This deliberately hidden surface exists only so the Linux qualification
+/// harness can preflight the same manifest and implementation it will execute.
+/// It performs no proving and creates no scratch artifacts.
+pub fn benchmark_estimate(manifest_path: &Path) -> Result<()> {
+    let manifest: WorkloadManifestV1 = read_json_limited(manifest_path, MAX_MANIFEST_JSON_BYTES)?;
+    manifest.validate().map_err(anyhow::Error::msg)?;
+    let estimate = hc_plonky3::estimate_builtin_manifest(&manifest).map_err(anyhow::Error::msg)?;
+    let manifest_digest = manifest.digest().map_err(anyhow::Error::msg)?;
+    write_stdout_result(&BenchmarkEstimateResult {
+        schema_version: 1,
+        manifest_digest_hex: hex_lower(&manifest_digest),
+        estimate,
+    })
+}
+
 pub fn benchmark_worker(manifest_path: &Path, mode: &str, output: &Path) -> Result<()> {
     let manifest: WorkloadManifestV1 = read_json_limited(manifest_path, MAX_MANIFEST_JSON_BYTES)?;
     manifest.validate().map_err(anyhow::Error::msg)?;

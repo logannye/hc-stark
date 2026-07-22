@@ -345,6 +345,10 @@ def build_steps(
             "Cloudflare Pages worker dispatch check",
             (node, "scripts/ci/site_worker_dispatch_test.mjs"),
         ),
+        Step(
+            "static checkout and billing portal browser contract",
+            (node, "scripts/ci/site_shared_checkout_test.mjs"),
+        ),
     ]
 
     if args.production:

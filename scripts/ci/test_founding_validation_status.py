@@ -60,16 +60,13 @@ def test_private_ledger_schema_allows_only_the_locked_eight_fields() -> None:
         assert forbidden not in serialized
 
 
-def test_commercial_gate_cannot_outrun_founding_evidence() -> None:
+def test_founding_metrics_remain_transparent_nonblocking_advisories() -> None:
     status = load("release/founding-validation-status-v1.json")
     launch = load("release/guard-launch-state-v2.json")
-    gate_status = launch["gate_status"]
-
-    if gate_status["three_external_workloads"]["status"] == "passed":
-        assert status["market_gate_passed"] is True
-        assert status["external_workloads"] >= 3
-        assert status["organizations_with_external_workloads"] >= 2
-        assert status["standard_annual_price_acceptances"] >= 2
-
-    if gate_status["two_standard_annual_customers"]["status"] == "passed":
-        assert status["ordinary_paid_annual_subscriptions"] >= 2
+    advisory = launch["advisory_status"]
+    assert advisory["three_external_workloads"] == "not_completed"
+    assert advisory["two_standard_annual_customers"] == "not_completed"
+    assert advisory["five_unaided_installs"] == "not_completed"
+    assert status["market_gate_passed"] is False
+    assert status["external_workloads"] == 0
+    assert status["ordinary_paid_annual_subscriptions"] == 0

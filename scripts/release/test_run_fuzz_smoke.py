@@ -285,6 +285,11 @@ def test_main_rejects_cargo_fuzz_version_skew(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         MODULE.evidence_runtime,
+        "owner_ga_tool_policy",
+        lambda *args, **kwargs: {"policy": "owner_only_ga_v1"},
+    )
+    monkeypatch.setattr(
+        MODULE.evidence_runtime,
         "commit_file_sha256",
         lambda *args, **kwargs: lock_digest,
     )

@@ -19,7 +19,7 @@
     "portal_state": "unconfigured",
     "merchant_provider": "lemon_squeezy",
     "merchant_of_record_status": "approval_pending",
-    "legal_status": "blocked_pending_owner_and_counsel",
+    "legal_status": "blocked_pending_owner_approval",
     "hosted_proving": false,
     "usage_metering": false,
     "revenue_evidence_claimed": false,
@@ -44,8 +44,8 @@
     }
   ],
   "summary": {
-    "total_records": 12,
-    "blocking_records": 12,
+    "total_records": 9,
+    "blocking_records": 9,
     "passed_records": 0,
     "sales_open": false,
     "checkout_enabled": false,
@@ -55,11 +55,10 @@
       "commerce": 2,
       "legal": 1,
       "operations": 3,
-      "qualification": 3,
       "release": 3
     },
     "by_status": {
-      "blocked": 12
+      "blocked": 9
     }
   },
   "records": [
@@ -75,19 +74,6 @@
       "source_artifact": "release/guard-launch-state-v2.json",
       "next_action_at": "",
       "next_action": "Publish digest-bound engine release evidence from the reviewed release commit."
-    },
-    {
-      "task_id": "guard_gate.five_unaided_installs",
-      "category": "qualification",
-      "gate": "five_unaided_installs",
-      "status": "blocked",
-      "owner": "engineering",
-      "reason_code": "clean-machine-evidence-missing",
-      "evidence_count": 0,
-      "public_status_url": "https://tinyzkp.com/releases#gate-five-unaided-installs",
-      "source_artifact": "release/guard-launch-state-v2.json",
-      "next_action_at": "",
-      "next_action": "Record five clean-machine unaided install results without maintainer intervention."
     },
     {
       "task_id": "guard_gate.guard_artifact_published",
@@ -146,13 +132,13 @@
       "category": "legal",
       "gate": "legal_terms_approved",
       "status": "blocked",
-      "owner": "owner_and_counsel",
+      "owner": "owner",
       "reason_code": "legal-approval-missing",
       "evidence_count": 0,
       "public_status_url": "https://tinyzkp.com/releases#gate-legal-terms-approved",
       "source_artifact": "release/guard-launch-state-v2.json",
       "next_action_at": "",
-      "next_action": "Approve the commercial terms and publish the binding legal version."
+      "next_action": "Record LN Holdings owner approval of the exact seller facts and digest-bound legal documents."
     },
     {
       "task_id": "guard_gate.merchant_live_owner_smoke_passed",
@@ -191,33 +177,7 @@
       "public_status_url": "https://tinyzkp.com/releases#gate-release-rehearsal-within-budget",
       "source_artifact": "release/guard-launch-state-v2.json",
       "next_action_at": "",
-      "next_action": "Complete a release rehearsal and bind its measured support and maintenance budget evidence."
-    },
-    {
-      "task_id": "guard_gate.three_external_workloads",
-      "category": "qualification",
-      "gate": "three_external_workloads",
-      "status": "blocked",
-      "owner": "founder",
-      "reason_code": "external-workload-evidence-missing",
-      "evidence_count": 0,
-      "public_status_url": "https://tinyzkp.com/releases#gate-three-external-workloads",
-      "source_artifact": "release/guard-launch-state-v2.json",
-      "next_action_at": "",
-      "next_action": "Record three independent external workload qualification results in launch evidence."
-    },
-    {
-      "task_id": "guard_gate.two_standard_annual_customers",
-      "category": "qualification",
-      "gate": "two_standard_annual_customers",
-      "status": "blocked",
-      "owner": "founder",
-      "reason_code": "annual-customer-evidence-missing",
-      "evidence_count": 0,
-      "public_status_url": "https://tinyzkp.com/releases#gate-two-standard-annual-customers",
-      "source_artifact": "release/guard-launch-state-v2.json",
-      "next_action_at": "",
-      "next_action": "Record two standard annual-customer qualification outcomes without changing the public offer."
+      "next_action": "Complete and bind the technical build, deploy, canary, artifact-identity, rollback, and recovery rehearsal."
     }
   ]
 }

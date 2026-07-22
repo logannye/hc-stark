@@ -1,6 +1,8 @@
 {
   "schema_version": 2,
   "document_type": "GuardLaunchEvidenceV2",
+  "authorization_policy": "owner_only_ga_v1",
+  "qualification_basis": "owner_attested",
   "evaluated_at": "2026-07-18T12:00:00Z",
   "release_identity": {
     "guard_release": "tinyzkp-guard-v1",
@@ -11,7 +13,7 @@
   },
   "trust_policy": {
     "path": "release/guard-launch-trust-v1.json",
-    "sha256": "a72004286f167a5c585394b17eb99aa970f2b1a0c55a455605b72ff0736cd3cc"
+    "sha256": "a522cb635efea13406e2049fd837c3849f21805b5d93da40843a119dc4c12cde"
   },
   "release_change_class": "proof_critical",
   "prior_qualified_release": {
@@ -20,6 +22,11 @@
     "evidence": []
   },
   "requested_commerce_state": "unconfigured",
+  "sales_freeze": {
+    "status": "inactive",
+    "reason_code": "sales-not-frozen",
+    "evidence": []
+  },
   "merchant": {
     "provider": "lemon_squeezy",
     "approval_status": "pending",
@@ -47,7 +54,10 @@
       "store_id": null,
       "product_id": null,
       "monthly_variant_id": null,
-      "annual_variant_id": null
+      "annual_variant_id": null,
+      "monthly_checkout_url": null,
+      "annual_checkout_url": null,
+      "portal_url": null
     },
     "live_configuration": {
       "store_id": null,
@@ -55,11 +65,12 @@
       "monthly_variant_id": null,
       "annual_variant_id": null,
       "monthly_checkout_url": null,
-      "annual_checkout_url": null
+      "annual_checkout_url": null,
+      "portal_url": null
     }
   },
   "legal": {
-    "counsel_status": "not_approved",
+    "owner_approval_status": "not_approved",
     "eula_sha256": null,
     "notices_sha256": null,
     "privacy_sha256": null,
@@ -67,6 +78,15 @@
     "release_date": null,
     "seller_status": "unconfirmed",
     "terms_sha256": null
+  },
+  "advisory_status": {
+    "external_design_partner_integration": "not_completed",
+    "five_unaided_installs": "not_completed",
+    "implementation_review_no_high_findings": "not_completed",
+    "independent_resource_reproduction": "not_completed",
+    "plonky3_specialist_review": "not_completed",
+    "three_external_workloads": "not_completed",
+    "two_standard_annual_customers": "not_completed"
   },
   "gates": {
     "engine_release_ready": {
@@ -77,21 +97,6 @@
     "guard_release_ready": {
       "status": "blocked",
       "reason_code": "guard-release-evidence-missing",
-      "evidence": []
-    },
-    "three_external_workloads": {
-      "status": "blocked",
-      "reason_code": "external-workload-evidence-missing",
-      "evidence": []
-    },
-    "two_standard_annual_customers": {
-      "status": "blocked",
-      "reason_code": "annual-customer-evidence-missing",
-      "evidence": []
-    },
-    "five_unaided_installs": {
-      "status": "blocked",
-      "reason_code": "clean-machine-evidence-missing",
       "evidence": []
     },
     "legal_terms_approved": {

@@ -25,7 +25,8 @@ import uuid
 
 PROFILE = "tinyzkp-p3-goldilocks-v1"
 REQUIRED_CGROUP_CONTROLLERS = {"cpu", "io", "memory", "pids"}
-MIN_FIXED_HOST_SCRATCH_AVAILABLE_BYTES = 500_000_000_000
+QUALIFICATION_CPU_COUNT = 4
+MIN_QUALIFICATION_SCRATCH_AVAILABLE_BYTES = 12_000_000_000
 MIN_EFFECTIVE_MEMORY_BYTES = 15 * 1024**3
 MAX_EFFECTIVE_MEMORY_BYTES = 17 * 1024**3
 
@@ -233,6 +234,17 @@ def total_memory_bytes() -> int:
     return page_size * page_count
 
 
+def total_swap_bytes() -> int:
+    meminfo = Path("/proc/meminfo")
+    if meminfo.is_file():
+        for line in meminfo.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("SwapTotal:"):
+                fields = line.split()
+                if len(fields) >= 2:
+                    return int(fields[1]) * 1024
+    raise RuntimeError("physical swap inventory is unavailable")
+
+
 def cgroup_v2_identity() -> tuple[str, Path]:
     """Return the exact unified cgroup that constrains this process."""
     for line in Path("/proc/self/cgroup").read_text(encoding="utf-8").splitlines():
@@ -254,6 +266,32 @@ def required_cgroup_limit(path: Path, name: str) -> int:
     if value < 0:
         raise RuntimeError(f"effective cgroup {name} is negative")
     return value
+
+
+def effective_memory_limit(path: Path, physical_memory: int) -> int:
+    raw = (path / "memory.max").read_text(encoding="utf-8").strip()
+    if raw == "max":
+        return physical_memory
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise RuntimeError("effective cgroup memory.max is malformed") from error
+    if value <= 0:
+        raise RuntimeError("effective cgroup memory.max is not positive")
+    return min(value, physical_memory)
+
+
+def effective_swap_limit(path: Path, physical_swap: int) -> int:
+    raw = (path / "memory.swap.max").read_text(encoding="utf-8").strip()
+    if raw == "max":
+        return physical_swap
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise RuntimeError("effective cgroup memory.swap.max is malformed") from error
+    if value < 0:
+        raise RuntimeError("effective cgroup memory.swap.max is negative")
+    return min(value, physical_swap)
 
 
 def benchmark_runner_uid() -> int:
@@ -310,14 +348,16 @@ def collect_host_metadata(scratch: Path) -> dict[str, object]:
     storage_device = f"{device_id}:{backing}"
     cgroup_identity, cgroup_path = cgroup_v2_identity()
     effective_affinity = sorted(os.sched_getaffinity(0))
+    physical_memory = total_memory_bytes()
+    physical_swap = total_swap_bytes()
     return {
         "hardware": hardware_description(),
         "physical_logical_cpu_count": os.cpu_count() or 0,
-        "physical_memory_bytes": total_memory_bytes(),
+        "physical_memory_bytes": physical_memory,
         "effective_cpu_count": len(effective_affinity),
         "effective_cpu_affinity": effective_affinity,
-        "effective_memory_max_bytes": required_cgroup_limit(cgroup_path, "memory.max"),
-        "effective_swap_max_bytes": required_cgroup_limit(cgroup_path, "memory.swap.max"),
+        "effective_memory_max_bytes": effective_memory_limit(cgroup_path, physical_memory),
+        "effective_swap_max_bytes": effective_swap_limit(cgroup_path, physical_swap),
         "cgroup_v2_path": cgroup_identity,
         "operating_system": platform.platform(),
         "storage": (
@@ -340,28 +380,32 @@ def fixed_host_failures(metadata: dict[str, object]) -> list[str]:
     failures: list[str] = []
     affinity = metadata.get("effective_cpu_affinity")
     if (
-        metadata.get("effective_cpu_count") != 8
+        metadata.get("effective_cpu_count") != QUALIFICATION_CPU_COUNT
         or not isinstance(affinity, list)
-        or len(affinity) != 8
+        or len(affinity) != QUALIFICATION_CPU_COUNT
         or any(not isinstance(cpu, int) or isinstance(cpu, bool) or cpu < 0 for cpu in affinity)
-        or len(set(affinity)) != 8
+        or len(set(affinity)) != QUALIFICATION_CPU_COUNT
     ):
-        failures.append("release cgroup must expose exactly 8 effective CPUs")
+        failures.append("qualification runner must expose exactly 4 effective CPUs")
     memory = metadata.get("effective_memory_max_bytes")
     if (
         not isinstance(memory, int)
         or isinstance(memory, bool)
         or not MIN_EFFECTIVE_MEMORY_BYTES <= memory <= MAX_EFFECTIVE_MEMORY_BYTES
     ):
-        failures.append("release cgroup memory must be within the 16-GiB class")
+        failures.append("qualification runner memory must be within the 16-GiB class")
     if metadata.get("effective_swap_max_bytes") != 0:
-        failures.append("release cgroup swap must be disabled")
+        failures.append("qualification runner swap must be disabled")
     physical_cpus = metadata.get("physical_logical_cpu_count")
-    if not isinstance(physical_cpus, int) or isinstance(physical_cpus, bool) or physical_cpus < 8:
-        failures.append("physical host CPU inventory is missing or below 8 CPUs")
+    if (
+        not isinstance(physical_cpus, int)
+        or isinstance(physical_cpus, bool)
+        or physical_cpus < QUALIFICATION_CPU_COUNT
+    ):
+        failures.append("qualification CPU inventory is missing or below 4 CPUs")
     physical_memory = metadata.get("physical_memory_bytes")
     if not isinstance(physical_memory, int) or isinstance(physical_memory, bool) or physical_memory < MIN_EFFECTIVE_MEMORY_BYTES:
-        failures.append("physical host memory inventory is missing or below 15 GiB")
+        failures.append("qualification memory inventory is missing or below 15 GiB")
     cgroup_identity = metadata.get("cgroup_v2_path")
     if not isinstance(cgroup_identity, str) or not cgroup_identity.startswith("/"):
         failures.append("release cgroup identity is missing")
@@ -369,20 +413,20 @@ def fixed_host_failures(metadata: dict[str, object]) -> list[str]:
         failures.append("effective scratch storage identity does not match physical storage")
     if metadata.get("storage_is_rotational") is not False:
         failures.append("release scratch storage must be non-rotational")
-    if metadata.get("storage_is_nvme") is not True:
-        failures.append("release scratch storage must be backed by NVMe")
+    if not isinstance(metadata.get("storage_is_nvme"), bool):
+        failures.append("qualification scratch storage type is unknown")
     total = metadata.get("storage_total_bytes")
     available = metadata.get("storage_available_bytes")
     if (
         not isinstance(total, int)
         or isinstance(total, bool)
-        or total < MIN_FIXED_HOST_SCRATCH_AVAILABLE_BYTES
+        or total < MIN_QUALIFICATION_SCRATCH_AVAILABLE_BYTES
         or not isinstance(available, int)
         or isinstance(available, bool)
-        or available < MIN_FIXED_HOST_SCRATCH_AVAILABLE_BYTES
+        or available < MIN_QUALIFICATION_SCRATCH_AVAILABLE_BYTES
         or available > total
     ):
-        failures.append("release scratch storage must have at least 500 GB available")
+        failures.append("qualification scratch storage must have at least 12 GB available")
     if metadata.get("scratch_directory_mode") != 0o700:
         failures.append("release scratch directory must have mode 0700")
     if metadata.get("scratch_owned_by_runner") is not True:
@@ -414,16 +458,16 @@ def prepare_run_manifest(manifest: dict, report_path: Path, mode: str) -> tuple[
 
 def doctor_metadata(cli: Path, manifest_path: Path) -> dict:
     completed = subprocess.run(
-        [str(cli), "plonky3", "doctor", "--manifest", str(manifest_path)],
+        [str(cli), "benchmark-estimate", "--manifest", str(manifest_path)],
         check=False,
         capture_output=True,
         text=True,
     )
     if completed.returncode != 0:
-        raise RuntimeError(f"resource preflight failed: {completed.stderr[-4000:]}")
+        raise RuntimeError(f"resource estimate failed: {completed.stderr[-4000:]}")
     report = json.loads(completed.stdout)
     if not isinstance(report, dict):
-        raise RuntimeError("doctor did not return an object")
+        raise RuntimeError("benchmark estimator did not return an object")
     return report
 
 
@@ -452,7 +496,7 @@ def doctor_estimate(
         preflight_path.unlink(missing_ok=True)
     estimate = metadata.get("estimate")
     if not valid_resource_estimate(estimate):
-        raise RuntimeError("doctor did not return a ResourceEstimate")
+        raise RuntimeError("benchmark estimator did not return a ResourceEstimate")
     return estimate
 
 
@@ -615,9 +659,9 @@ def parse_args() -> argparse.Namespace:
         "--cgroup-parent", type=Path, default=Path("/sys/fs/cgroup/tinyzkp-bench")
     )
     parser.add_argument(
-        "--require-fixed-host",
+        "--require-qualification-profile",
         action="store_true",
-        help="fail unless the host is the release 8-vCPU/16-GB/NVMe class",
+        help="fail unless the host matches the 4-vCPU/16-GB/12-GB SSD profile",
     )
     return parser.parse_args()
 
@@ -635,7 +679,7 @@ def main() -> int:
     host_metadata = collect_host_metadata(
         Path(manifest["resource_policy"]["scratch_dir"])
     )
-    if args.require_fixed_host:
+    if args.require_qualification_profile:
         failures = fixed_host_failures(host_metadata)
         if failures:
             raise RuntimeError("; ".join(failures))
@@ -644,7 +688,7 @@ def main() -> int:
         "manifest_digest_hex"
     )
     if not isinstance(source_manifest_digest, str) or len(source_manifest_digest) != 64:
-        raise RuntimeError("doctor did not return the source manifest digest")
+        raise RuntimeError("benchmark estimator did not return the source manifest digest")
     candidate_memory_cap = int(manifest["resource_policy"]["max_resident_bytes"])
     baseline_memory_cap = args.baseline_memory_cap or candidate_memory_cap
     if baseline_memory_cap < candidate_memory_cap:

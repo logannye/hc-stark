@@ -1640,6 +1640,17 @@ def run_post_deploy_canary(
         raise ReleaseError("deployment record belongs to another Cloudflare account")
     _write_enabled(environment, expected_record_sha256, record_sha)
     _recorded_deployment_matches_api(record, api)
+    try:
+        discovery = json.loads((ROOT / "site" / "discovery.json").read_text())
+        monitoring_mode = discovery.get("service_status")
+    except (OSError, json.JSONDecodeError) as error:
+        raise ReleaseError("cannot read Guard monitoring mode") from error
+    if monitoring_mode not in {
+        "guard_prelaunch",
+        "guard_transition",
+        "guard_live",
+    }:
+        raise ReleaseError("Guard monitoring mode is not deployable")
     commands = (
         (
             "static_contracts",
@@ -1649,7 +1660,7 @@ def run_post_deploy_canary(
                 "--base-url",
                 record["new_deployment"]["url"],
                 "--mode",
-                "contracts",
+                monitoring_mode,
             ),
         ),
         (

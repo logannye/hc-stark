@@ -1,6 +1,8 @@
 # TinyZKP incident response runbook
 
-Status: production operating runbook.
+Status: production Guard operating runbook. Hosted API, MCP, Stripe-backend,
+and on-box proving instructions retained later in this file are historical
+recovery references only; they are not current launch or rollback controls.
 
 Use this when TinyZKP has a customer-visible outage, degraded proving path,
 billing/account incident, security concern, or bad deployment. The goal is to
@@ -39,15 +41,15 @@ Use one primary category in status updates and postmortems:
 4. Check public canaries:
 
 ```bash
-curl -fsS https://api.tinyzkp.com/healthz
-curl -fsS https://api.tinyzkp.com/templates | jq .
-curl -fsS https://tinyzkp.com/status | rg 'System Status'
-curl -fsS https://mcp.tinyzkp.com/.well-known/mcp/server-card.json | jq .
-./scripts/ci/reconciliation_invariants.sh --live
-bash scripts/monitoring/api_health_audit.sh
+python3 scripts/monitoring/guard_health_audit.py --mode canonical
+python3 scripts/deploy/static_site_canary.py \
+  --base-url https://tinyzkp.com --mode contracts
 ```
 
-5. Check service logs on the host:
+5. For a current Guard incident, inspect the Cloudflare Pages/Worker deployment,
+GitHub release/GHCR availability, Lemon Squeezy owner console, and the private
+support mailbox. The old Hetzner commands below apply only when investigating a
+retained historical recovery snapshot; never restart it as a Guard rollback:
 
 ```bash
 ssh root@46.225.78.136

@@ -29,6 +29,47 @@ def main() -> int:
         failures.append("compatibility manifest schema_version must equal 1")
     if profile.get("profile_id") != "tinyzkp-p3-goldilocks-v1":
         failures.append("unexpected compatibility profile ID")
+    if profile.get("release_status") != "production_scoped_ga":
+        failures.append("compatibility manifest must declare scoped production GA")
+    expected_scope = {
+        "distribution": ["linux_x86_64_cli", "linux_amd64_oci"],
+        "qualification_runner": {
+            "provider": "github_hosted",
+            "image": "ubuntu-24.04",
+            "effective_cpu_count": 4,
+            "memory_class": "16_gib",
+            "minimum_available_scratch_bytes": 12_000_000_000,
+            "non_rotational_storage_required": True,
+        },
+        "qualified_workloads": [
+            {
+                "workload_id": "fibonacci",
+                "maximum_logical_rows": 16_777_216,
+                "bounded_peak_resident_estimate_bytes": 545_259_520,
+                "bounded_scratch_estimate_bytes": 8_590_055_346,
+                "scratch_required_with_headroom_bytes": 9_544_505_940,
+            },
+            {
+                "workload_id": "poseidon2_goldilocks",
+                "maximum_logical_rows": 1_048_576,
+                "bounded_peak_resident_estimate_bytes": 385_875_968,
+                "bounded_scratch_estimate_bytes": 10_569_876_514,
+                "scratch_required_with_headroom_bytes": 11_744_307_238,
+            },
+        ],
+        "post_ga_capacity_expansion": [
+            {
+                "workload_id": "poseidon2_goldilocks",
+                "logical_rows": 16_777_216,
+                "bounded_peak_resident_estimate_bytes": 763_363_328,
+                "bounded_scratch_estimate_bytes": 169_114_584_484,
+                "scratch_required_with_headroom_bytes": 187_905_093_872,
+                "production_supported": False,
+            }
+        ],
+    }
+    if profile.get("production_scope") != expected_scope:
+        failures.append("compatibility manifest production scope or estimates changed")
     expected_toolchain = profile.get("rust_toolchain")
     if toolchain.get("toolchain", {}).get("channel") != expected_toolchain:
         failures.append("rust-toolchain.toml differs from the compatibility manifest")

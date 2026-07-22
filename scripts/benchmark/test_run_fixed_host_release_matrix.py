@@ -30,6 +30,7 @@ def test_matrix_is_the_exact_blocking_resource_matrix():
             entry.mode,
             entry.gate,
             entry.report_name,
+            entry.scratch_cap_bytes,
         )
         for entry in MATRIX.MATRIX
     ] == [
@@ -41,6 +42,7 @@ def test_matrix_is_the_exact_blocking_resource_matrix():
             "throughput",
             "one-million",
             "fibonacci-1m.json",
+            1_000_000_000,
         ),
         (
             "poseidon2_1m",
@@ -50,6 +52,7 @@ def test_matrix_is_the_exact_blocking_resource_matrix():
             "throughput",
             "one-million",
             "poseidon2-1m.json",
+            12_000_000_000,
         ),
         (
             "fibonacci_16m",
@@ -59,15 +62,7 @@ def test_matrix_is_the_exact_blocking_resource_matrix():
             "ceiling",
             "ten-million",
             "fibonacci-16m.json",
-        ),
-        (
-            "poseidon2_16m",
-            "poseidon2_goldilocks",
-            16_777_216,
-            2 * 1024**3,
-            "ceiling",
-            "ten-million",
-            "poseidon2-16m.json",
+            10_000_000_000,
         ),
     ]
 
@@ -87,7 +82,7 @@ def test_exact_commands_preserve_fixed_host_and_release_gate_contract(tmp_path):
         assert preflight[preflight.index("--scratch-dir") + 1] == str(
             scratch / entry.scratch_relative
         )
-        assert "--require-fixed-host" in benchmark
+        assert "--require-qualification-profile" in benchmark
         assert benchmark[benchmark.index("--mode") + 1] == entry.mode
         assert benchmark[benchmark.index("--report") + 1] == str(
             paths["candidate_report"]
@@ -97,7 +92,7 @@ def test_exact_commands_preserve_fixed_host_and_release_gate_contract(tmp_path):
         if entry.mode == "throughput":
             assert benchmark[-2:] == [
                 "--baseline-memory-cap",
-                str(16 * 1024**3),
+                str(6 * 1024**3),
             ]
             assert gate[-2:] == ["--baseline", str(paths["baseline_report"])]
         else:
@@ -121,10 +116,11 @@ def test_new_state_never_claims_release_or_external_gate_completion(tmp_path):
     assert state["release_eligible"] is False
     assert state["local_matrix_gates_passed"] is False
     assert all(value is False for value in state["authority"].values())
-    assert all(
-        value == "required_external" for value in state["external_gates"].values()
-    )
-    assert [entry["status"] for entry in state["entries"]] == ["pending"] * 4
+    assert state["external_gates"] == {
+        "signed_release_assembly": "required_postbuild"
+    }
+    assert state["qualification_profile"] == MATRIX.QUALIFICATION_PROFILE
+    assert [entry["status"] for entry in state["entries"]] == ["pending"] * 3
 
 
 def test_precheck_fails_before_collecting_metadata_off_linux(monkeypatch, tmp_path):
@@ -211,11 +207,11 @@ def test_stable_snapshot_rejects_path_replacement_during_read(monkeypatch, tmp_p
 
 def _eligible_host():
     return {
-        "hardware": "fixed-host; logical_cpus=8",
-        "physical_logical_cpu_count": 12,
-        "physical_memory_bytes": 64 * 1024**3,
-        "effective_cpu_count": 8,
-        "effective_cpu_affinity": list(range(8)),
+        "hardware": "github-hosted; logical_cpus=4",
+        "physical_logical_cpu_count": 4,
+        "physical_memory_bytes": 16 * 1024**3,
+        "effective_cpu_count": 4,
+        "effective_cpu_affinity": list(range(4)),
         "effective_memory_max_bytes": 16 * 1024**3,
         "effective_swap_max_bytes": 0,
         "cgroup_v2_path": "/tinyzkp-bench",
@@ -223,8 +219,8 @@ def _eligible_host():
         "storage_device": "259:1:nvme0n1p1",
         "effective_storage_device": "259:1:nvme0n1p1",
         "storage_is_rotational": False,
-        "storage_is_nvme": True,
-        "storage_total_bytes": 1_000_000_000_000,
+        "storage_is_nvme": False,
+        "storage_total_bytes": 14_000_000_000,
     }
 
 
@@ -282,7 +278,7 @@ def test_execute_resumes_only_revalidated_complete_entries(monkeypatch, tmp_path
     state_path = output / "fixed-host-release-matrix-v1.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
     assert stat.S_IMODE(state_path.stat().st_mode) == 0o600
-    assert state["status"] == "local_matrix_complete_external_gates_pending"
+    assert state["status"] == "local_matrix_complete_release_assembly_pending"
     assert state["local_matrix_gates_passed"] is True
     assert state["release_eligible"] is False
 

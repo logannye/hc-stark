@@ -434,67 +434,59 @@ def run_anchored_cosign(
         os.close(descriptor)
 
 
-def toolchain_anchor(
-    root: Path,
-    release_sha: str,
-    *,
-    execution_profile: str,
-    host: str,
-) -> dict[str, str]:
+def owner_ga_tool_policy(root: Path, release_sha: str) -> dict[str, object]:
+    """Return the exact hosted-runner version/source policy.
+
+    Host-built executable bytes are captured in each evidence envelope and
+    rechecked through the open descriptor, but they are deliberately not
+    compared with bytes produced on a different runner.
+    """
+
     trust = release_trust(root, release_sha)
+    gate_tools = trust.get("gate_tools")
     toolchains = trust.get("toolchains")
-    profile = toolchains.get(execution_profile) if isinstance(toolchains, dict) else None
-    platforms = profile.get("platforms") if isinstance(profile, dict) else None
-    anchor = platforms.get(host) if isinstance(platforms, dict) else None
-    if not isinstance(anchor, dict) or set(anchor) != {
-        "cargo_sha256",
-        "rustc_sha256",
-    }:
-        raise ValueError(
-            f"toolchain is not anchored for {execution_profile}/{host}"
-        )
-    if not all(
-        isinstance(value, str)
-        and len(value) == 64
-        and all(character in "0123456789abcdef" for character in value)
-        for value in anchor.values()
-    ):
-        raise ValueError("committed toolchain digest anchor is malformed")
-    return anchor
-
-
-def gate_tool_anchors(root: Path, release_sha: str) -> dict[str, str]:
-    trust = release_trust(root, release_sha)
-    tools = trust.get("gate_tools")
-    platforms = tools.get("platforms") if isinstance(tools, dict) else None
-    anchor = platforms.get(runtime_platform_key()) if isinstance(platforms, dict) else None
-    if not isinstance(anchor, dict) or not anchor:
-        raise ValueError("generic gate tools are not anchored for this runner platform")
-    if any(
-        not isinstance(name, str)
-        or not name
-        or not isinstance(digest, str)
-        or len(digest) != 64
-        or any(character not in "0123456789abcdef" for character in digest)
-        for name, digest in anchor.items()
-    ):
-        raise ValueError("generic gate tool anchor is malformed")
-    return anchor
-
-
-def cargo_fuzz_anchor(root: Path, release_sha: str, host: str) -> str:
-    trust = release_trust(root, release_sha)
-    toolchains = trust.get("toolchains")
-    fuzz = toolchains.get("fuzz") if isinstance(toolchains, dict) else None
-    binaries = fuzz.get("cargo_fuzz_executables") if isinstance(fuzz, dict) else None
-    digest = binaries.get(host) if isinstance(binaries, dict) else None
-    if (
-        not isinstance(digest, str)
-        or len(digest) != 64
-        or any(character not in "0123456789abcdef" for character in digest)
-    ):
-        raise ValueError(f"cargo-fuzz is not anchored for {host}")
-    return digest
+    expected_gate_tools = {
+        "policy": "owner_only_ga_v1",
+        "runner": "github-hosted-public-ubuntu-24.04",
+        "tools": {
+            "bash": {
+                "source": "ubuntu-24.04",
+                "version": "GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)",
+            },
+            "python3": {
+                "installer_action_sha": "a26af69be951a213d495a4c3e4e4022e16d87065",
+                "version": "Python 3.12.13",
+            },
+        },
+    }
+    expected_toolchains = {
+        "installer_action_sha": "4be7066ada62dd38de10e7b70166bc74ed198c30",
+        "policy": "owner_only_ga_v1",
+        "fuzz": {
+            "cargo_commit": "eb94155a9a60943bd7b1cb04abec42f5d0de6ddc",
+            "cargo_fuzz_install_command": [
+                "cargo",
+                "install",
+                "cargo-fuzz",
+                "--version",
+                "0.13.2",
+                "--locked",
+            ],
+            "cargo_fuzz_version": "cargo-fuzz 0.13.2",
+            "channel": "nightly-2026-04-15",
+            "release": "1.97.0-nightly",
+            "rustc_commit": "a5c825cd824ee0ef9463021078a2f464b4cc1a0d",
+        },
+        "release": {
+            "cargo_commit": "f2d3ce0bd7f24a49f8f72d9000448f8838c4e850",
+            "channel": "1.95.0",
+            "release": "1.95.0",
+            "rustc_commit": "59807616e1fa2540724bfbac14d7976d7e4a3860",
+        },
+    }
+    if gate_tools != expected_gate_tools or toolchains != expected_toolchains:
+        raise ValueError("committed owner-only GA tool policy is malformed or changed")
+    return {"gate_tools": gate_tools, "toolchains": toolchains}
 
 
 def _untracked_files(root: Path) -> list[Path]:

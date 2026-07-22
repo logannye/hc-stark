@@ -13,6 +13,8 @@ import sys
 
 MAX_JSON_BYTES = 1024 * 1024
 PROFILE = "tinyzkp-p3-goldilocks-v1"
+QUALIFICATION_CPU_COUNT = 4
+MIN_QUALIFICATION_SCRATCH_AVAILABLE_BYTES = 12_000_000_000
 REPORT_REQUIRED_FIELDS = {
     "schema_version", "scope", "mode", "benchmark_session_id", "hardware",
     "physical_logical_cpu_count", "physical_memory_bytes", "effective_cpu_count",
@@ -90,25 +92,29 @@ def validate_common(
                 failures.append(f"{name} {field} is missing")
         affinity = report.get("effective_cpu_affinity")
         if (
-            report.get("effective_cpu_count") != 8
+            report.get("effective_cpu_count") != QUALIFICATION_CPU_COUNT
             or not isinstance(affinity, list)
-            or len(affinity) != 8
+            or len(affinity) != QUALIFICATION_CPU_COUNT
             or any(not isinstance(cpu, int) or isinstance(cpu, bool) or cpu < 0 for cpu in affinity)
-            or len(set(affinity)) != 8
+            or len(set(affinity)) != QUALIFICATION_CPU_COUNT
         ):
-            failures.append(f"{name} release cgroup must expose exactly 8 effective CPUs")
+            failures.append(f"{name} qualification runner must expose exactly 4 effective CPUs")
         memory = report.get("effective_memory_max_bytes")
         if (
             not isinstance(memory, int)
             or isinstance(memory, bool)
             or not 15 * 1024**3 <= memory <= 17 * 1024**3
         ):
-            failures.append(f"{name} release cgroup is not in the 16-GiB memory class")
+            failures.append(f"{name} qualification runner is not in the 16-GiB memory class")
         if report.get("effective_swap_max_bytes") != 0:
             failures.append(f"{name} release cgroup swap must be disabled")
         physical_cpus = report.get("physical_logical_cpu_count")
-        if not isinstance(physical_cpus, int) or isinstance(physical_cpus, bool) or physical_cpus < 8:
-            failures.append(f"{name} physical CPU inventory is missing or below 8 CPUs")
+        if (
+            not isinstance(physical_cpus, int)
+            or isinstance(physical_cpus, bool)
+            or physical_cpus < QUALIFICATION_CPU_COUNT
+        ):
+            failures.append(f"{name} qualification CPU inventory is missing or below 4 CPUs")
         physical_memory = report.get("physical_memory_bytes")
         if not isinstance(physical_memory, int) or isinstance(physical_memory, bool) or physical_memory < 15 * 1024**3:
             failures.append(f"{name} physical memory inventory is missing or below 15 GiB")
@@ -119,21 +125,21 @@ def validate_common(
             failures.append(f"{name} effective scratch storage identity mismatch")
         if report.get("storage_is_rotational") is not False:
             failures.append(f"{name} release scratch storage is rotational or unknown")
-        if report.get("storage_is_nvme") is not True:
-            failures.append(f"{name} release scratch storage is not verified NVMe")
+        if not isinstance(report.get("storage_is_nvme"), bool):
+            failures.append(f"{name} qualification scratch storage type is unknown")
         storage_total = report.get("storage_total_bytes")
         storage_available = report.get("storage_available_bytes")
         if (
             not isinstance(storage_total, int)
             or isinstance(storage_total, bool)
-            or storage_total < 500_000_000_000
+            or storage_total < MIN_QUALIFICATION_SCRATCH_AVAILABLE_BYTES
             or not isinstance(storage_available, int)
             or isinstance(storage_available, bool)
-            or storage_available < 500_000_000_000
+            or storage_available < MIN_QUALIFICATION_SCRATCH_AVAILABLE_BYTES
             or storage_available > storage_total
         ):
             failures.append(
-                f"{name} release scratch storage must have at least 500 GB available"
+                f"{name} qualification scratch storage must have at least 12 GB available"
             )
         if report.get("scratch_directory_mode") != 0o700:
             failures.append(f"{name} release scratch directory must have mode 0700")

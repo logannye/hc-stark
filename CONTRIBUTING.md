@@ -71,14 +71,19 @@ expectations.
 
 ## Continuous Integration
 
-CI enforces the following pipeline for every push and pull request:
+CI enforces the following active public-engine and Guard pipeline for every
+push and pull request:
 
 1. `cargo fmt --all -- --check`
-2. `./scripts/ci/reconciliation_invariants.sh`
-3. `python3 -m pytest billing/tests/test_site_pricing_parity.py`
-4. `cargo clippy --workspace --all-targets -- -D warnings`
-5. `cargo test --workspace --all-targets`
-6. `cargo doc --workspace --no-deps`
+2. Locked `hc-stream`, `hc-plonky3`, `hc-cli`, and `hc-wasm` tests
+3. Strict locked Clippy for the same public engine and adapter targets
+4. Frozen compatibility, verifier vectors, and bounded-resource harness tests
+5. Release-evidence, owner-launch, monitoring, and static-site contract tests
+6. Guard Pages production preflight, OCI build, and dependency policy
+
+`scripts/ci/recovery_reconciliation_invariants.py` is a quarantined historical
+hosted-recovery diagnostic. It is not invoked by required CI and is not Guard
+launch authority.
 
 Benchmarks live in `.github/workflows/benches.yml` and run nightly to avoid
 slowing down the main CI loop. Keep them deterministic and bounded so they can

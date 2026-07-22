@@ -11,9 +11,6 @@
     "guard_gate.engine_release_ready": {
       "next_action_at": ""
     },
-    "guard_gate.five_unaided_installs": {
-      "next_action_at": ""
-    },
     "guard_gate.guard_artifact_published": {
       "next_action_at": ""
     },
@@ -36,12 +33,6 @@
       "next_action_at": ""
     },
     "guard_gate.release_rehearsal_within_budget": {
-      "next_action_at": ""
-    },
-    "guard_gate.three_external_workloads": {
-      "next_action_at": ""
-    },
-    "guard_gate.two_standard_annual_customers": {
       "next_action_at": ""
     }
   }

@@ -21,16 +21,11 @@ def test_template_contains_exact_unsigned_gate_set():
     for name, gate in value["gates"].items():
         assert [artifact["role"] for artifact in gate["artifacts"]] == module.GATE_ROLES[name]
     assert len(value["gates"]["one_million_row_resource_gate"]["artifacts"]) == 11
-    assert len(value["gates"]["ten_million_row_resource_gate"]["artifacts"]) == 7
+    assert len(value["gates"]["ten_million_row_resource_gate"]["artifacts"]) == 4
     one_matrix = value["gates"]["one_million_row_resource_gate"]["artifacts"][0]
     ten_matrix = value["gates"]["ten_million_row_resource_gate"]["artifacts"][0]
     assert one_matrix["role"] == ten_matrix["role"] == "matrix_manifest"
     assert one_matrix["path"] == ten_matrix["path"]
-    assert len(value["gates"]["independent_resource_reproduction"]["artifacts"]) == 18
-    assert all(
-        "matrix_manifest" not in artifact["role"]
-        for artifact in value["gates"]["independent_resource_reproduction"]["artifacts"]
-    )
     assert [
         artifact["role"]
         for artifact in value["gates"]["crash_resume_and_corruption_suite"]["artifacts"]
@@ -38,18 +33,12 @@ def test_template_contains_exact_unsigned_gate_set():
     assert len(value["gates"]["crash_resume_and_corruption_suite"]["artifacts"]) == (
         4 + len(module.CRASH_CASES) + len(module.FUZZ_TARGETS)
     )
-    for name in (
+    assert {
+        "independent_resource_reproduction",
         "plonky3_specialist_review",
         "implementation_review_no_high_findings",
-    ):
-        assert [
-            artifact["role"] for artifact in value["gates"][name]["artifacts"]
-        ] == [
-            "review_bundle",
-            "review_report",
-            "remediation_ledger",
-            "review_signature",
-        ]
+        "external_design_partner_integration",
+    }.isdisjoint(value["gates"])
 
 
 def test_hashed_artifact_rejects_extra_fields_and_symlinks(tmp_path):

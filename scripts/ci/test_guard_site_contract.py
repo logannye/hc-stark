@@ -42,11 +42,14 @@ class CheckoutParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.checkout_controls: list[dict[str, str | None]] = []
+        self.portal_controls: list[dict[str, str | None]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
         if "data-checkout" in attributes:
             self.checkout_controls.append(attributes)
+        if "data-portal" in attributes:
+            self.portal_controls.append(attributes)
 
 
 class PrimaryButtonParser(HTMLParser):
@@ -86,6 +89,9 @@ def test_checkout_is_consistently_fail_closed() -> None:
     assert commerce["checkout_enabled"] is False
     assert pricing["checkout_enabled"] is False
     assert release["checkout_enabled"] is False
+    for item in (gate, commerce, release):
+        assert item["authorization_policy"] == "owner_only_ga_v1"
+        assert item["qualification_basis"] == "owner_attested"
     assert {
         (
             item["launch_state"],
@@ -103,6 +109,12 @@ def test_checkout_is_consistently_fail_closed() -> None:
             "reviewed": False,
             "checkout_url": None,
         }
+    assert commerce["checkout_custom_data"] == {
+        "terms_version": None,
+        "guard_version": None,
+    }
+    assert set(gate["advisory_status"].values()) == {"not_completed"}
+    assert release["advisory_status"] == gate["advisory_status"]
 
 
 def test_homepage_describes_the_blocked_launch_state_unambiguously() -> None:
@@ -113,15 +125,23 @@ def test_homepage_describes_the_blocked_launch_state_unambiguously() -> None:
 
 def test_checkout_urls_cannot_be_in_page_markup() -> None:
     controls = []
+    portals = []
     for page in sorted(PUBLIC_PAGES):
         parser = CheckoutParser()
         parser.feed((SITE / page).read_text(encoding="utf-8"))
         controls.extend((page, attributes) for attributes in parser.checkout_controls)
+        portals.extend((page, attributes) for attributes in parser.portal_controls)
 
     assert controls, "site must expose visibly closed Guard purchase controls"
     for page, attributes in controls:
         assert attributes.get("href") is None, f"{page} hardcodes a checkout href"
         assert attributes.get("data-closed-label") in {"Not yet for sale", "Monthly not yet for sale"}
+    assert len(portals) == 1
+    portal_page, portal = portals[0]
+    assert portal_page == "support.html"
+    assert portal.get("href") is None
+    assert portal.get("data-closed-label") == "Billing portal unavailable"
+    assert portal.get("data-live-label") == "Manage billing"
 
 
 def test_primary_buttons_are_only_doctor_or_guard_actions() -> None:

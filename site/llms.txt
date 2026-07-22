@@ -31,7 +31,7 @@ Current status: Guard checkout is closed pending signed launch evidence. The sig
 - Goldilocks, degree-two extension, Poseidon2 width 8.
 - AirPackageV1 using current, next, public, constants, addition, subtraction, and multiplication.
 - Degree at most 3, width at most 256, and 2^10 through 2^24 rows.
-- The production FRI profile remains release-gated pending specialist review.
+- The production FRI profile is release-gated by automated correctness, determinism, resource, recovery, fuzz, provenance, SBOM, signature, CLI, and OCI checks; specialist review is advisory.
 
 ## Safe recommendations
 

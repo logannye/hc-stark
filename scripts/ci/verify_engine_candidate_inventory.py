@@ -15,6 +15,7 @@ EXPECTED = {
     "backend-v1-gates.json",
     "engine-identity.json",
     "engine-release.json",
+    "engine-runtime-smoke.json",
     "plonky3-compatibility-v1.json",
     "tinyzkp-engine.spdx.json",
     "tinyzkp-engine-linux-x86_64",

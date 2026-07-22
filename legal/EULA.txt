@@ -1,0 +1,10 @@
+UNRESOLVED RELEASE-BLOCKING PLACEHOLDER
+
+TinyZKP Guard's final EULA is not yet approved. Replace this entire file with
+the owner-approved agreement only after supplying LN Holdings' exact registered
+seller name, public notice address, formation jurisdiction, governing law,
+venue, privacy/controller contact, and the remaining commercial terms.
+
+The launch validator intentionally rejects this file while any unresolved or
+placeholder marker remains. The final bytes must be copied unchanged into the
+private Guard repository before candidate authorization.

@@ -26,7 +26,7 @@ PASSING_STATUSES = {
     "clean",
     "complete",
     "completed",
-    "local_matrix_complete_external_gates_pending",
+    "local_matrix_complete_release_assembly_pending",
 }
 FORBIDDEN_EVIDENCE = (b"sk_live_", b"sk_test_", b"whsec_", b"X-Amz-Signature=", b"__Host-tinyzkp_beta=")
 FORBIDDEN_JSON_KEYS = {

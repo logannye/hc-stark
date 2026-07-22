@@ -1,9 +1,10 @@
 # TinyZKP Guard counsel review packet
 
-Status: intake packet only. It is not approved legal language and confers no
-authority to sell Guard. All unresolved fields below keep checkout closed.
+Status: optional advisory intake packet. It is not launch authority. Checkout
+is governed by LN Holdings owner approval of the exact seller facts and legal
+document digests; counsel review may inform that approval but is not mandatory.
 
-## Seller facts counsel must confirm
+## Seller facts the LN Holdings owner must confirm
 
 | Fact | Required value |
 |---|---|
@@ -76,9 +77,9 @@ payment account, commit author, or email address.
 TinyZKP.com has no custom contact form, proof API, customer account, event
 collector, billing database, or hosted proof-data path.
 
-## Documents requiring approval
+## Documents requiring owner approval
 
-Counsel must supply or approve final production versions of:
+The LN Holdings owner must supply or approve final production versions of:
 
 1. EULA, including seller identity, grant, restrictions, warranty disclaimer,
    liability cap, termination, export/sanctions, notices, and governing law.
@@ -92,7 +93,7 @@ Counsel must supply or approve final production versions of:
 
 ## Approval handoff
 
-1. Replace every `UNCONFIRMED` fact with counsel-confirmed information.
+1. Replace every `UNCONFIRMED` fact with owner-confirmed information.
 2. Apply approved text to the production legal pages and release package.
 3. Render and review the exact customer-facing pages and checkout presentation.
 4. Record the approval date, approver, release date, and SHA-256 digest of every
@@ -103,5 +104,8 @@ Counsel must supply or approve final production versions of:
 6. Run the launch gate and confirm that legal evidence passes without weakening
    any other gate.
 
-Repository text, this packet, or a self-attestation by the release author is
-not counsel approval.
+Repository text or this packet alone is not approval. The accepted machine
+record is a strict owner-signed `LegalApprovalEvidenceV1` bound to the exact
+seller facts, release date, and repository document digests. If counsel is
+consulted, preserve that advice privately as advisory support for the owner's
+decision; never claim counsel approval unless it actually occurred.

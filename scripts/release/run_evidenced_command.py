@@ -24,6 +24,27 @@ import run_crash_matrix  # noqa: E402
 
 
 PROFILE = "tinyzkp-p3-goldilocks-v1"
+GENERIC_TOOL_VERSIONS = {
+    "bash": "GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)",
+    "python3": "Python 3.12.13",
+}
+RUST_TOOL_VERSIONS = {
+    "cargo": {
+        "first_line": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
+        "release": "1.95.0",
+        "commit-hash": "f2d3ce0bd7f24a49f8f72d9000448f8838c4e850",
+        "commit-date": "2026-03-21",
+        "host": "x86_64-unknown-linux-gnu",
+    },
+    "rustc": {
+        "first_line": "rustc 1.95.0 (59807616e 2026-04-14)",
+        "binary": "rustc",
+        "release": "1.95.0",
+        "commit-hash": "59807616e1fa2540724bfbac14d7976d7e4a3860",
+        "commit-date": "2026-04-14",
+        "host": "x86_64-unknown-linux-gnu",
+    },
+}
 GATES: dict[str, dict[str, object]] = {
     "clean_release_source": {
         "command": ["python3", "scripts/ci/backend_source_scan.py"],
@@ -39,7 +60,12 @@ GATES: dict[str, dict[str, object]] = {
     },
     "official_verifier_fibonacci": {
         "command": [
-            "cargo", "test", "-p", "hc-plonky3", "--release", "--locked",
+            "cargo",
+            "test",
+            "-p",
+            "hc-plonky3",
+            "--release",
+            "--locked",
             "fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier",
         ],
         "profile": "release",
@@ -49,7 +75,12 @@ GATES: dict[str, dict[str, object]] = {
     },
     "official_verifier_poseidon2": {
         "command": [
-            "cargo", "test", "-p", "hc-plonky3", "--release", "--locked",
+            "cargo",
+            "test",
+            "-p",
+            "hc-plonky3",
+            "--release",
+            "--locked",
             "poseidon2_proof_is_accepted_by_unmodified_plonky3_verifier",
         ],
         "profile": "release",
@@ -81,8 +112,11 @@ GATES: dict[str, dict[str, object]] = {
 
 
 def timestamp() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
-        "+00:00", "Z"
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
     )
 
 
@@ -100,7 +134,9 @@ def parse_output(gate: str, payload: bytes) -> dict[str, object]:
         )
         passed = len(matches) == 1
         if passed:
-            details.update(file_count=int(matches[0][0]), candidate_set_sha256=matches[0][1])
+            details.update(
+                file_count=int(matches[0][0]), candidate_set_sha256=matches[0][1]
+            )
     elif parser == "compatibility_v1":
         matches = re.findall(
             r"^PASS Plonky3 compatibility gate \(([1-9][0-9]*) exact crates\)$",
@@ -121,7 +157,47 @@ def parse_output(gate: str, payload: bytes) -> dict[str, object]:
     return {**details, "passed": passed}
 
 
-def _resolved_tools(spec: dict[str, object], environment: dict[str, str]) -> dict[str, dict[str, object]]:
+def owner_ga_generic_tool_identity_valid(name: str, identity: object) -> bool:
+    expected = GENERIC_TOOL_VERSIONS.get(name)
+    if expected is None or not isinstance(identity, dict):
+        return False
+    version = identity.get("version")
+    if not isinstance(version, str):
+        return False
+    lines = version.splitlines()
+    return bool(lines) and lines[0] == expected
+
+
+def generic_tool_version_valid(name: str, version: object) -> bool:
+    """Validate a captured generic-tool version using the owner-GA policy."""
+    return owner_ga_generic_tool_identity_valid(name, {"version": version})
+
+
+def rust_tool_version_valid(name: str, version: object) -> bool:
+    expected = RUST_TOOL_VERSIONS.get(name)
+    if expected is None or not isinstance(version, str):
+        return False
+    lines = version.splitlines()
+    if not lines or lines[0] != expected["first_line"]:
+        return False
+    observed: dict[str, str] = {}
+    for line in lines[1:]:
+        if ": " not in line:
+            continue
+        key, value = line.split(": ", 1)
+        if key in observed:
+            return False
+        observed[key] = value
+    return all(
+        observed.get(key) == value
+        for key, value in expected.items()
+        if key != "first_line"
+    )
+
+
+def _resolved_tools(
+    spec: dict[str, object], environment: dict[str, str]
+) -> dict[str, dict[str, object]]:
     logical = list(spec["command"])
     names = {str(logical[0])}
     if logical[0] == "bash":
@@ -150,6 +226,14 @@ def _resolved_tools(spec: dict[str, object], environment: dict[str, str]) -> dic
         identity = evidence_runtime.executable_identity(
             str(path), arguments, environment=environment, root=ROOT
         )
+        if name in GENERIC_TOOL_VERSIONS and not owner_ga_generic_tool_identity_valid(
+            name, identity
+        ):
+            raise ValueError(f"{name} executable version differs from policy")
+        if name in RUST_TOOL_VERSIONS and not rust_tool_version_valid(
+            name, identity.get("version")
+        ):
+            raise ValueError(f"{name} executable version differs from policy")
         tools[name] = identity
     return tools
 
@@ -182,6 +266,7 @@ def run(
         evidence_root=evidence_root,
         require_explicit_sha=True,
     )
+    evidence_runtime.owner_ga_tool_policy(root, str(source["release_sha"]))
     boundary_abi = evidence_runtime.landlock_abi_version()
     immutable, inventory = evidence_runtime.materialize_read_only_source(
         root,
@@ -211,36 +296,9 @@ def run(
         }
     )
     tools = _resolved_tools(spec, environment)
-    generic_anchors = evidence_runtime.gate_tool_anchors(
-        root, str(source["release_sha"])
-    )
-    for name, identity in tools.items():
-        if name in {"cargo", "rustc"}:
-            continue
-        if generic_anchors.get(name) != identity["sha256"]:
-            raise ValueError(f"{name} executable does not match the committed anchor")
-    if "cargo" in tools:
-        cargo_version = str(tools["cargo"]["version"])
-        hosts = [
-            line.removeprefix("host: ")
-            for line in cargo_version.splitlines()
-            if line.startswith("host: ")
-        ]
-        if len(hosts) != 1:
-            raise ValueError("Cargo host identity is ambiguous")
-        anchor = evidence_runtime.toolchain_anchor(
-            root,
-            str(source["release_sha"]),
-            execution_profile="release",
-            host=hosts[0],
-        )
-        if (
-            tools["cargo"]["sha256"] != anchor["cargo_sha256"]
-            or "rustc" not in tools
-            or tools["rustc"]["sha256"] != anchor["rustc_sha256"]
-        ):
-            raise ValueError("Cargo executable does not match the committed anchor")
-    tool_directories = [str(Path(str(value["path"])).parent) for value in tools.values()]
+    tool_directories = [
+        str(Path(str(value["path"])).parent) for value in tools.values()
+    ]
     environment["PATH"] = os.pathsep.join(
         dict.fromkeys([*tool_directories, "/usr/bin", "/bin"])
     )
@@ -272,7 +330,6 @@ def run(
     started = time.monotonic()
     try:
         with os.fdopen(descriptor, "wb") as log:
-            network_boundary: dict[str, object] = {}
             exit_status, timed_out = evidence_runtime.run_logged(
                 execution_command,
                 cwd=immutable,

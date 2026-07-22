@@ -47,7 +47,7 @@ EXPECTED_SUMMARY_KEYS = {
 }
 EXPECTED_OPERATING_RULES = [
     "Treat the canonical Guard launch state as the only source of gate completion.",
-    "Keep sales and checkout closed until every launch gate passes and commerce is reviewed.",
+    "Keep sales and checkout closed until every owner-verifiable launch gate passes and commerce is owner-qualified.",
     "Use Lemon Squeezy as the sole merchant of record for the Guard offer.",
     "Treat this as a readiness ledger, not a customer, payment, or booked-revenue ledger.",
     "Do not restore retired hosted-service or outbound-distribution paths.",

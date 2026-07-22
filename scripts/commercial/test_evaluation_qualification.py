@@ -202,6 +202,27 @@ def test_compatibility_manifest_rejects_rng_profile_skew(tmp_path, field):
         qualification.compatibility_identity(changed)
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda value: value.update(release_status="backend_recovery"),
+        lambda value: value["production_scope"]["qualified_workloads"][1].update(
+            maximum_logical_rows=16_777_216
+        ),
+        lambda value: value["production_scope"]["post_ga_capacity_expansion"][0].update(
+            production_supported=True
+        ),
+    ],
+)
+def test_compatibility_manifest_rejects_release_scope_skew(tmp_path, mutation):
+    compatibility = json.loads(COMPATIBILITY.read_text())
+    mutation(compatibility)
+    changed = tmp_path / "compatibility.json"
+    write_json(changed, compatibility)
+    with pytest.raises(EvidenceError, match="unsupported Plonky3"):
+        qualification.compatibility_identity(changed)
+
+
 def test_strict_loader_rejects_duplicate_input_keys(tmp_path):
     input_path = tmp_path / "duplicate.json"
     input_path.write_text('{"schema_version":"one","schema_version":"two"}')

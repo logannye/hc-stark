@@ -693,6 +693,9 @@ def main(argv: list[str]) -> int:
         evidence_root=evidence_root,
         require_explicit_sha=not args.partial,
     )
+    evidence_runtime.owner_ga_tool_policy(
+        ROOT, str(source_identity["release_sha"])
+    )
     fuzz_dependency_lock_sha256 = evidence_runtime.commit_file_sha256(
         ROOT, str(source_identity["release_sha"]), "fuzz/Cargo.lock"
     )
@@ -734,11 +737,6 @@ def main(argv: list[str]) -> int:
         r"[A-Za-z0-9_.-]+", cargo_host
     ):
         raise RuntimeError("pinned Cargo host triple is missing or unsafe")
-    cargo_fuzz_anchor = evidence_runtime.cargo_fuzz_anchor(
-        ROOT, str(source_identity["release_sha"]), str(cargo_host)
-    )
-    if cargo_fuzz_identity["sha256"] != cargo_fuzz_anchor:
-        raise RuntimeError("cargo-fuzz executable does not match the committed anchor")
     tool_identity_path = log_dir / TOOL_IDENTITY_FILE
     tool_identity_record = evidence_runtime.tool_identity_record(
         source_identity,

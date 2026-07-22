@@ -6,11 +6,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import tarfile
 from typing import Any
-from urllib.parse import quote, urlparse
+from urllib.parse import parse_qsl, quote, urlparse
 
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -50,6 +50,21 @@ GUARD_SCHEMA_NAMES = {
     "policy-baseline-v1.schema.json",
     "compatibility-manifest-v1.schema.json",
 }
+GUARD_EXAMPLE_NAMES = {
+    "job-manifest-v1.example.json",
+    "policy-baseline-v1.example.json",
+}
+GUARD_PACKAGE_STATIC_DOCUMENT_SHA256 = {
+    # These are the exact buyer-facing documents reviewed for the first GA.
+    # A later Guard version must deliberately add its reviewed document hashes;
+    # silently inheriting stale installation or security copy is not allowed.
+    "0.1.0": {
+        "README.md": "0ac849baa192ff8fd83f4b7c8a620822a5362f1ba54e31f043fb917d4ca14fa4",
+        "SECURITY.md": "b24affd0cf898558abd82514eaaae80eecefdbac626c616d41f4e3023e84f0e8",
+        "INSTALL.md": "74ea5e4c3a091f18fdc1b48b3a555dd1dcaca3e31ebb747258af542cf0c339fb",
+        "START-HERE.txt": "333701529de6c3acf3239fa5f99865da2051665c281c038d5f8f508bea7affbb",
+    }
+}
 FIXED_CANDIDATE_FILES = {
     "SHA256SUMS",
     "SHA256SUMS.sig",
@@ -65,6 +80,104 @@ SIGNATURE_FILES = {
     "guard-release-index-v1.json.sig",
 }
 BUILD_AUTHORIZATION_NAME = "guard-candidate-build-authorization-v1.json"
+AUTHORIZATION_POLICY = "owner_only_ga_v1"
+QUALIFICATION_BASIS = "owner_attested"
+ADVISORY_STATUS = {
+    "external_design_partner_integration": "not_completed",
+    "five_unaided_installs": "not_completed",
+    "implementation_review_no_high_findings": "not_completed",
+    "independent_resource_reproduction": "not_completed",
+    "plonky3_specialist_review": "not_completed",
+    "three_external_workloads": "not_completed",
+    "two_standard_annual_customers": "not_completed",
+}
+
+
+def validate_authorization_merchant_catalog(
+    catalog: Any, *, legal: dict[str, Any], identity: dict[str, Any]
+) -> dict[str, Any]:
+    value = exact(
+        catalog,
+        {
+            "merchant",
+            "mode",
+            "store_id",
+            "product_id",
+            "monthly_variant_id",
+            "annual_variant_id",
+            "monthly_checkout_url",
+            "annual_checkout_url",
+            "customer_portal_url",
+            "store_hostname",
+            "catalog_policy",
+        },
+        "candidate authorization merchant catalog",
+    )
+    if (
+        value["merchant"] != "lemon_squeezy"
+        or value["mode"] != "live"
+        or value["catalog_policy"] != MERCHANT_CATALOG_POLICY
+        or not isinstance(value["store_hostname"], str)
+        or re.fullmatch(
+            r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.lemonsqueezy\.com",
+            value["store_hostname"],
+        )
+        is None
+    ):
+        raise CandidateError("candidate authorization catalog policy differs")
+    for field in (
+        "store_id",
+        "product_id",
+        "monthly_variant_id",
+        "annual_variant_id",
+    ):
+        if not isinstance(value[field], str) or re.fullmatch(r"[1-9][0-9]*", value[field]) is None:
+            raise CandidateError(f"candidate authorization {field} differs")
+    expected_query = sorted(
+        [
+            ("checkout[custom][terms_version]", legal["release_date"]),
+            ("checkout[custom][guard_version]", identity["guard_version"]),
+        ]
+    )
+    checkout_urls: list[str] = []
+    for cadence in ("monthly", "annual"):
+        url = value[f"{cadence}_checkout_url"]
+        parsed = urlparse(url) if isinstance(url, str) else None
+        if (
+            parsed is None
+            or parsed.scheme != "https"
+            or parsed.hostname != value["store_hostname"]
+            or parsed.netloc != value["store_hostname"]
+            or parsed.username is not None
+            or parsed.password is not None
+            or "#" in url
+            or parsed.fragment
+            or re.fullmatch(r"/checkout/buy/[A-Za-z0-9_-]+", parsed.path) is None
+            or sorted(parse_qsl(parsed.query, keep_blank_values=True)) != expected_query
+        ):
+            raise CandidateError(
+                f"candidate authorization {cadence} checkout URL differs"
+            )
+        checkout_urls.append(url)
+    if checkout_urls[0] == checkout_urls[1]:
+        raise CandidateError("candidate authorization checkout URLs must differ")
+    portal_url = value["customer_portal_url"]
+    portal = urlparse(portal_url) if isinstance(portal_url, str) else None
+    if (
+        portal is None
+        or "?" in portal_url
+        or "#" in portal_url
+        or portal.scheme != "https"
+        or portal.netloc != value["store_hostname"]
+        or portal.path != "/billing"
+        or portal.params
+        or portal.query
+        or portal.fragment
+        or portal.username is not None
+        or portal.password is not None
+    ):
+        raise CandidateError("candidate authorization customer portal differs")
+    return value
 
 
 class CandidateError(ValueError):
@@ -227,28 +340,189 @@ def verify_oci(
         raise CandidateError("OCI labels differ from reviewed release identity")
 
 
-def verify_legal_bundle(
-    path: Path, eula_sha256: str, notices_sha256: str
+def _archive_regular_bytes(
+    archive: tarfile.TarFile,
+    members: dict[str, tarfile.TarInfo],
+    name: str,
+    *,
+    maximum_bytes: int = 256 * 1024 * 1024,
+) -> bytes:
+    member = members.get(name)
+    if (
+        member is None
+        or not member.isfile()
+        or not 1 <= member.size <= maximum_bytes
+    ):
+        raise CandidateError(f"Guard tarball member differs: {name}")
+    handle = archive.extractfile(member)
+    if handle is None:
+        raise CandidateError(f"Guard tarball member cannot be read: {name}")
+    raw = handle.read(maximum_bytes + 1)
+    if len(raw) != member.size or len(raw) > maximum_bytes:
+        raise CandidateError(f"Guard tarball member size differs: {name}")
+    return raw
+
+
+def verify_release_bundle(
+    path: Path,
+    *,
+    candidate_dir: Path,
+    artifact_name: str,
+    channel: dict[str, Any],
+    authorization: dict[str, Any],
 ) -> None:
+    """Verify the exact buyer-delivery archive, not only its legal files.
+
+    The tarball itself is signed as a candidate artifact. This check additionally
+    prevents that signed blob from carrying stale source-repository guidance,
+    mismatched agreement/delivery metadata, extra files, or a different embedded
+    engine and contract set.
+    """
+    guard_version = channel["guard_version"]
+    root = f"tinyzkp-guard-{guard_version}-linux-x86_64"
+    expected_relative_files = {
+        "AGREEMENT.txt",
+        "DELIVERY.txt",
+        "INSTALL.md",
+        "README.md",
+        "SECURITY.md",
+        "START-HERE.txt",
+        "bin/tinyzkp",
+        "bin/tinyzkp-engine",
+        "compatibility-manifest-v1.json",
+        "legal/EULA.txt",
+        "legal/THIRD-PARTY-NOTICES.txt",
+        "version.json",
+        *(f"schemas/{name}" for name in GUARD_SCHEMA_NAMES),
+        *(f"examples/{name}" for name in GUARD_EXAMPLE_NAMES),
+    }
+    expected_relative_directories = {
+        ".",
+        "bin",
+        "examples",
+        "legal",
+        "schemas",
+    }
     try:
         with tarfile.open(path, mode="r:*") as archive:
-            members = archive.getmembers()
-            if any(member.issym() or member.islnk() for member in members):
-                raise CandidateError("Guard tarball contains a link")
-            for suffix, expected in (
-                ("/legal/EULA.txt", eula_sha256),
-                ("/legal/THIRD-PARTY-NOTICES.txt", notices_sha256),
+            member_list = archive.getmembers()
+            members: dict[str, tarfile.TarInfo] = {}
+            observed_files: set[str] = set()
+            observed_directories: set[str] = set()
+            for member in member_list:
+                raw_name = member.name.rstrip("/")
+                parsed_name = PurePosixPath(raw_name)
+                if (
+                    not raw_name
+                    or parsed_name.is_absolute()
+                    or ".." in parsed_name.parts
+                    or str(parsed_name) != raw_name
+                    or not parsed_name.parts
+                    or parsed_name.parts[0] != root
+                    or raw_name in members
+                    or member.issym()
+                    or member.islnk()
+                ):
+                    raise CandidateError("Guard tarball contains an unsafe path or link")
+                members[raw_name] = member
+                relative = PurePosixPath(*parsed_name.parts[1:])
+                relative_name = str(relative) if relative.parts else "."
+                if member.isfile():
+                    observed_files.add(relative_name)
+                elif member.isdir():
+                    observed_directories.add(relative_name)
+                else:
+                    raise CandidateError("Guard tarball contains a special filesystem entry")
+            if observed_files != expected_relative_files:
+                raise CandidateError("Guard tarball file inventory differs")
+            if observed_directories != expected_relative_directories:
+                raise CandidateError("Guard tarball directory inventory differs")
+
+            def bundled(relative: str, *, maximum_bytes: int = 256 * 1024 * 1024) -> bytes:
+                return _archive_regular_bytes(
+                    archive,
+                    members,
+                    f"{root}/{relative}",
+                    maximum_bytes=maximum_bytes,
+                )
+
+            reviewed_documents = GUARD_PACKAGE_STATIC_DOCUMENT_SHA256.get(guard_version)
+            if reviewed_documents is None:
+                raise CandidateError(
+                    "Guard version has no reviewed buyer-document digest contract"
+                )
+            for name, expected in reviewed_documents.items():
+                if hashlib.sha256(bundled(name, maximum_bytes=256 * 1024)).hexdigest() != expected:
+                    raise CandidateError(f"Guard tarball buyer document differs: {name}")
+
+            legal = authorization["legal_artifacts"]
+            signing = authorization["signing_trust"]
+            expected_agreement = (
+                "schema_version=1\n"
+                f"release_date={legal['release_date']}\n"
+                f"eula_sha256={legal['eula_sha256']}\n"
+                f"eula_url=https://tinyzkp.com/legal/{legal['eula_sha256']}/EULA.txt\n"
+                "bundled_eula=legal/EULA.txt\n"
+            ).encode()
+            expected_delivery = (
+                "schema_version=1\n"
+                f"guard_version={guard_version}\n"
+                f"release_tag=guard-v{guard_version}\n"
+                f"artifact_name={artifact_name}\n"
+                "artifact_url=https://github.com/logannye/hc-stark/releases/download/"
+                f"guard-v{guard_version}/{artifact_name}\n"
+                "receipt_confirmation_url=https://tinyzkp.com/releases\n"
+                f"signing_public_key_sha256={signing['public_key_sha256']}\n"
+            ).encode()
+            if bundled("AGREEMENT.txt", maximum_bytes=64 * 1024) != expected_agreement:
+                raise CandidateError("Guard tarball AGREEMENT.txt differs")
+            if bundled("DELIVERY.txt", maximum_bytes=64 * 1024) != expected_delivery:
+                raise CandidateError("Guard tarball DELIVERY.txt differs")
+
+            eula_raw = bundled("legal/EULA.txt", maximum_bytes=4 * 1024 * 1024)
+            notices_raw = bundled(
+                "legal/THIRD-PARTY-NOTICES.txt", maximum_bytes=4 * 1024 * 1024
+            )
+            for relative, raw, expected in (
+                ("legal/EULA.txt", eula_raw, legal["eula_sha256"]),
+                (
+                    "legal/THIRD-PARTY-NOTICES.txt",
+                    notices_raw,
+                    legal["notices_sha256"],
+                ),
             ):
-                matches = [
-                    member
-                    for member in members
-                    if member.name.endswith(suffix) and member.isfile()
-                ]
-                if len(matches) != 1 or matches[0].size > 4 * 1024 * 1024:
-                    raise CandidateError(f"Guard tarball legal file differs: {suffix}")
-                handle = archive.extractfile(matches[0])
-                if handle is None or hashlib.sha256(handle.read()).hexdigest() != expected:
-                    raise CandidateError(f"Guard tarball legal digest differs: {suffix}")
+                if hashlib.sha256(raw).hexdigest() != expected:
+                    raise CandidateError(f"Guard tarball legal digest differs: {relative}")
+            try:
+                eula_text = eula_raw.decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise CandidateError("Guard tarball EULA is not UTF-8") from error
+            effective_dates = re.findall(
+                r"(?m)^Effective Date: (\d{4}-\d{2}-\d{2})$", eula_text
+            )
+            if effective_dates != [legal["release_date"]]:
+                raise CandidateError(
+                    "Guard tarball EULA effective date differs from authorization"
+                )
+            if (
+                hashlib.sha256(bundled("bin/tinyzkp-engine")).hexdigest()
+                != channel["engine_artifact_sha256"]
+            ):
+                raise CandidateError("Guard tarball engine binary digest differs")
+            for relative, candidate_name in (
+                ("version.json", "version.json"),
+                (
+                    "compatibility-manifest-v1.json",
+                    "compatibility-manifest-v1.json",
+                ),
+                *((f"schemas/{name}", name) for name in GUARD_SCHEMA_NAMES),
+            ):
+                if bundled(relative, maximum_bytes=16 * 1024 * 1024) != candidate_file(
+                    candidate_dir, candidate_name
+                ).read_bytes():
+                    raise CandidateError(
+                        f"Guard tarball embedded candidate file differs: {relative}"
+                    )
     except (OSError, tarfile.TarError) as exc:
         raise CandidateError("Guard tarball is malformed") from exc
 
@@ -295,16 +569,19 @@ def verify_provenance(
         raise CandidateError("Guard provenance predicate is malformed")
     external = build.get("externalParameters")
     expected_external = {
+        "authorization_policy": authorization["authorization_policy"],
         "candidate_authorization_sha256": build_authorization_sha256,
         "compatibility_profile": authorization["compatibility_profile"],
-        "catalog_policy": authorization["merchant_catalog"]["catalog_policy"],
+        "merchant_catalog": authorization["merchant_catalog"],
         "eula_sha256": authorization["legal_artifacts"]["eula_sha256"],
+        "eula_url": authorization["legal_artifacts"]["eula_url"],
         "engine_artifact_sha256": authorization["engine"]["artifact_sha256"],
         "engine_release_tag": authorization["engine"]["candidate_tag"],
         "engine_source_sha": authorization["engine"]["source_sha"],
         "guard_source_sha": authorization["release_identity"]["guard_source_sha"],
         "guard_version": authorization["release_identity"]["guard_version"],
         "notices_sha256": authorization["legal_artifacts"]["notices_sha256"],
+        "qualification_basis": authorization["qualification_basis"],
         "public_candidate_authorization_commit": authorization[
             "public_candidate_authorization_commit"
         ],
@@ -371,6 +648,8 @@ def verify_build_authorization(
     fields = {
         "schema_version",
         "document_type",
+        "authorization_policy",
+        "qualification_basis",
         "authorization_state",
         "authorization_scope",
         "commercial_release_authorized",
@@ -394,6 +673,8 @@ def verify_build_authorization(
     stable_fields = {
         "schema_version",
         "document_type",
+        "authorization_policy",
+        "qualification_basis",
         "authorization_scope",
         "commercial_release_authorized",
         "checkout_enabled",
@@ -422,6 +703,16 @@ def verify_build_authorization(
         reviewed = value.get("reviewed_evidence")
         if (
             not isinstance(reviewed, dict)
+            or set(reviewed)
+            != {
+                "launch_evidence_sha256",
+                "launch_trust_policy_sha256",
+                "required_passed_gates",
+                "advisory_status",
+            }
+            or value["authorization_policy"] != AUTHORIZATION_POLICY
+            or value["qualification_basis"] != QUALIFICATION_BASIS
+            or reviewed.get("advisory_status") != ADVISORY_STATUS
             or value["public_gate_source_sha256"]
             != reviewed.get("launch_evidence_sha256")
             or not SHA256_RE.fullmatch(value["public_gate_source_sha256"])
@@ -447,7 +738,11 @@ def verify_build_authorization(
             raise CandidateError(
                 f"{label} Guard/package release requires a qualified predecessor"
             )
-    for field in ("launch_trust_policy_sha256", "required_passed_gates"):
+    for field in (
+        "launch_trust_policy_sha256",
+        "required_passed_gates",
+        "advisory_status",
+    ):
         if (
             build_authorization["reviewed_evidence"].get(field)
             != promotion_authorization["reviewed_evidence"].get(field)
@@ -773,10 +1068,14 @@ def verify(
 
     if (
         launch["launch_state"] != "blocked"
+        or launch.get("authorization_policy") != AUTHORIZATION_POLICY
+        or launch.get("qualification_basis") != QUALIFICATION_BASIS
         or launch["commerce_state"] != "live_hidden"
         or launch["checkout_enabled"] is not False
         or launch["blocking_gates"] != ["guard_artifact_published"]
         or authorization["authorization_state"] != "candidate_prepared"
+        or authorization.get("authorization_policy") != AUTHORIZATION_POLICY
+        or authorization.get("qualification_basis") != QUALIFICATION_BASIS
         or not SOURCE_RE.fullmatch(
             authorization["public_candidate_authorization_commit"]
         )
@@ -784,6 +1083,8 @@ def verify(
         or authorization["checkout_enabled"] is not False
         or authorization["release_identity"] != identity
         or site["release_identity"] != identity
+        or site.get("authorization_policy") != AUTHORIZATION_POLICY
+        or site.get("qualification_basis") != QUALIFICATION_BASIS
         or site["commerce_state"] != "live_hidden"
         or site["checkout_enabled"] is not False
         or site["guard_artifact_available"] is not False
@@ -888,18 +1189,21 @@ def verify(
         != authorization["legal_artifacts"]["eula_sha256"]
     ):
         raise CandidateError("Guard channel OCI/EULA identity differs")
-    authorization_catalog = authorization["merchant_catalog"]
-    if (
-        not isinstance(authorization_catalog, dict)
-        or authorization_catalog.get("catalog_policy")
-        != MERCHANT_CATALOG_POLICY
+    authorization_catalog = validate_authorization_merchant_catalog(
+        authorization["merchant_catalog"],
+        legal=authorization["legal_artifacts"],
+        identity=authorization["release_identity"],
+    )
+    if authorization["legal_artifacts"].get("eula_url") != (
+        "https://tinyzkp.com/legal/"
+        f"{authorization['legal_artifacts'].get('eula_sha256')}/EULA.txt"
     ):
-        raise CandidateError("candidate authorization catalog policy differs")
+        raise CandidateError("candidate authorization exact EULA URL differs")
     expected_catalog = {
         "merchant": "lemon_squeezy",
         "entitlement_mode": "lemon_squeezy_subscription_license_keys",
         **{
-            field: authorization["merchant_catalog"][field]
+            field: authorization_catalog[field]
             for field in (
                 "store_id",
                 "product_id",
@@ -994,10 +1298,12 @@ def verify(
     if len(oci_names) != 1 or len(tar_names) != 1:
         raise CandidateError("Guard channel must contain one OCI archive and tarball")
     verify_oci(candidate_file(candidate_dir, oci_names[0]), channel, identity)
-    verify_legal_bundle(
+    verify_release_bundle(
         candidate_file(candidate_dir, tar_names[0]),
-        authorization["legal_artifacts"]["eula_sha256"],
-        authorization["legal_artifacts"]["notices_sha256"],
+        candidate_dir=candidate_dir,
+        artifact_name=tar_names[0],
+        channel=channel,
+        authorization=authorization,
     )
 
     provenance_name = "provenance.intoto.json"

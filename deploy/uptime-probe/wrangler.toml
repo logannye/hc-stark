@@ -9,7 +9,10 @@ compatibility_flags = ["global_fetch_strictly_public"]
 crons = ["*/2 * * * *"]
 
 [vars]
-AUDIT_MODE = "guard_prelaunch"
+# Resolve the exact generated channel on every run. A concrete Guard mode is
+# accepted only when it equals that canonical channel, so stale deployments
+# fail closed instead of probing the wrong launch posture.
+AUDIT_MODE = "canonical"
 # An unchanged incident pages once every six hours instead of every two minutes.
 ALERT_REMINDER_SECONDS = "21600"
 

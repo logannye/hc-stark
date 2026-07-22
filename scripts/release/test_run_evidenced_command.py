@@ -41,13 +41,54 @@ def test_air_job_contract_gate_is_local_and_exact():
     assert spec["test"] == "plonky3_air_job_contracts"
 
 
+def test_generic_gate_tool_versions_are_exact_and_closed():
+    assert module.GENERIC_TOOL_VERSIONS == {
+        "bash": "GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)",
+        "python3": "Python 3.12.13",
+    }
+    for name, version in module.GENERIC_TOOL_VERSIONS.items():
+        assert module.owner_ga_generic_tool_identity_valid(name, {"version": version})
+        assert module.generic_tool_version_valid(name, version)
+        assert module.owner_ga_generic_tool_identity_valid(
+            name, {"version": version + "\nextra detail"}
+        )
+        assert not module.owner_ga_generic_tool_identity_valid(
+            name, {"version": version + ".1"}
+        )
+    assert not module.owner_ga_generic_tool_identity_valid("node", {"version": "v20"})
+    assert not module.owner_ga_generic_tool_identity_valid("bash", {})
+    assert not module.generic_tool_version_valid("python3", "Python 3.12.12")
+
+
+def test_linux_rust_tool_versions_bind_release_commit_and_host():
+    for name, expected in module.RUST_TOOL_VERSIONS.items():
+        lines = [expected["first_line"]]
+        lines.extend(
+            f"{key}: {value}" for key, value in expected.items() if key != "first_line"
+        )
+        version = "\n".join(lines)
+        assert module.rust_tool_version_valid(name, version)
+        assert not module.rust_tool_version_valid(
+            name,
+            version.replace("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"),
+        )
+        assert not module.rust_tool_version_valid(name, version + "\nrelease: 1.95.0")
+
+
 def test_output_parsers_reject_generic_success_text_and_duplicate_markers():
-    assert module.parse_output(
-        "clean_release_source", b"all tests passed\n"
-    )["passed"] is False
+    assert (
+        module.parse_output("clean_release_source", b"all tests passed\n")["passed"]
+        is False
+    )
     marker = b"PASS TinyZKP deterministic cross-mode proof vectors\n"
-    assert module.parse_output("deterministic_cross_mode_proofs", marker)["passed"] is True
-    assert module.parse_output("deterministic_cross_mode_proofs", marker * 2)["passed"] is False
+    assert (
+        module.parse_output("deterministic_cross_mode_proofs", marker)["passed"] is True
+    )
+    assert (
+        module.parse_output("deterministic_cross_mode_proofs", marker * 2)["passed"]
+        is False
+    )
+
 
 def test_run_rejects_unreviewed_commands_before_touching_outputs(tmp_path):
     with pytest.raises(ValueError, match="not allowlisted"):

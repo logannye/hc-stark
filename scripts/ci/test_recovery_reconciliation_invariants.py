@@ -45,3 +45,10 @@ def test_fixed_host_release_workflow_requires_single_matrix_controller():
     assert any(
         "run_fixed_host_release_matrix.py" in failure for failure in failures
     )
+
+
+def test_nightly_qualification_tests_use_exact_release_toolchain():
+    workflow = invariants.text(".github/workflows/nightly-backend.yml")
+    assert "cargo +1.95.0 fetch --locked" in workflow
+    assert workflow.count("run: cargo +1.95.0 test -p hc-plonky3") == 2
+    assert "run: cargo test -p hc-plonky3" not in workflow

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "profile_id": "tinyzkp-p3-goldilocks-v1",
-  "release_status": "backend_recovery",
+  "release_status": "production_scoped_ga",
   "rust_toolchain": "1.95.0",
   "cargo_lock_sha256": "0a28ab40dba2786a5106d274623d174b4c845b15ddd594629ebd98aa08612257",
   "upstream": {
@@ -20,6 +20,46 @@
     "proof_system": "p3_uni_stark",
     "proof_serializer": "postcard-1.1.3",
     "official_verifier_required": true
+  },
+  "production_scope": {
+    "distribution": [
+      "linux_x86_64_cli",
+      "linux_amd64_oci"
+    ],
+    "qualification_runner": {
+      "provider": "github_hosted",
+      "image": "ubuntu-24.04",
+      "effective_cpu_count": 4,
+      "memory_class": "16_gib",
+      "minimum_available_scratch_bytes": 12000000000,
+      "non_rotational_storage_required": true
+    },
+    "qualified_workloads": [
+      {
+        "workload_id": "fibonacci",
+        "maximum_logical_rows": 16777216,
+        "bounded_peak_resident_estimate_bytes": 545259520,
+        "bounded_scratch_estimate_bytes": 8590055346,
+        "scratch_required_with_headroom_bytes": 9544505940
+      },
+      {
+        "workload_id": "poseidon2_goldilocks",
+        "maximum_logical_rows": 1048576,
+        "bounded_peak_resident_estimate_bytes": 385875968,
+        "bounded_scratch_estimate_bytes": 10569876514,
+        "scratch_required_with_headroom_bytes": 11744307238
+      }
+    ],
+    "post_ga_capacity_expansion": [
+      {
+        "workload_id": "poseidon2_goldilocks",
+        "logical_rows": 16777216,
+        "bounded_peak_resident_estimate_bytes": 763363328,
+        "bounded_scratch_estimate_bytes": 169114584484,
+        "scratch_required_with_headroom_bytes": 187905093872,
+        "production_supported": false
+      }
+    ]
   },
   "pinned_crates": [
     {"name":"p3-air","version":"0.6.1","checksum":"a3e18b22bf85451382098e54da526733c7f390f83d4141b3b8b93e98e805df55"},
@@ -52,8 +92,9 @@
   "known_limits": [
     "The Plonky3 0.6.1 TwoAdicSubgroupDft trait owns its input RowMajorMatrix.",
     "TinyZKP uses local pinned prover orchestration so block-readable stores do not change upstream proof types or verification.",
-    "All durable phase checkpoints and signal cancellation require fixed-host crash, disk-full, and termination evidence before release.",
-    "FriParameters::new_benchmark is frozen for compatibility testing, not represented as an audited production security claim.",
-    "Full-pipeline 1,048,576-row and 16,777,216-row fixed-host resource gates remain open."
+    "Every published engine candidate requires complete crash, disk-full, signal-termination, fuzz, resource, identity, SBOM, checksum, and signature evidence.",
+    "FriParameters::new_benchmark is the exact frozen production compatibility profile; no security or workload claim extends beyond that byte-identified profile and its signed release evidence.",
+    "Production resource qualification covers Fibonacci through 16,777,216 rows and Poseidon2 Goldilocks through 1,048,576 rows.",
+    "Poseidon2 Goldilocks at 16,777,216 rows has a 169,114,584,484-byte bounded scratch estimate and is a post-GA capacity expansion, not a supported production workload."
   ]
 }

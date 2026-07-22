@@ -121,3 +121,12 @@ def test_candidate_requires_every_unsigned_gate_and_forbids_signed_gate(tmp_path
         "unexpected candidate evidence gate: signed_release_sbom_and_checksums"
         in problems
     )
+
+
+def test_canonical_prerelease_gate_fails_closed_without_signed_assembly(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(gate, "candidate_content_failures", lambda *args, **kwargs: [])
+    problems = gate.failures({}, root=tmp_path)
+    assert len(problems) == 1
+    assert problems[0].startswith("candidate assembly signature is invalid:")

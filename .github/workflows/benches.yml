@@ -1,251 +1,130 @@
-name: Fixed-host Plonky3 reports
+name: Owner engine resource qualification
 
 on:
   workflow_dispatch:
     inputs:
-      release_matrix:
-        description: "Run the complete stable-host-bound 1M/16M release matrix"
-        required: false
-        default: false
-        type: boolean
-      exploratory_128m:
-        description: "Run the non-blocking 2^27-row exploratory workloads"
-        required: false
-        default: false
-        type: boolean
+      expected_main_sha:
+        description: "Exact lowercase main commit to qualify"
+        required: true
+        type: string
 
 permissions:
+  attestations: write
   contents: read
+  id-token: write
+
+concurrency:
+  group: owner-engine-resource-${{ inputs.expected_main_sha }}
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  one-million-rows:
-    if: github.event_name == 'workflow_dispatch' && !inputs.release_matrix && !inputs.exploratory_128m
-    # Release evidence must come from the labeled 8-vCPU/16-GB NVMe host, not a
-    # variable GitHub-hosted runner. The job remains queued until that host is
-    # deliberately provisioned and online.
-    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
-    timeout-minutes: 720
-    strategy:
-      fail-fast: false
-      matrix:
-        workload: [fibonacci, poseidon2]
+  authorize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
+      - name: Require owner dispatch of the exact current main commit
+        env:
+          ACTOR: ${{ github.actor }}
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+          OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
+          RELEASE_SHA: ${{ github.sha }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          test "$OWNER" = logannye
+          test "$ACTOR" = "$OWNER"
+          test "$TRIGGERING_ACTOR" = "$OWNER"
+          test "$REF" = refs/heads/main
+          test "${#EXPECTED_MAIN_SHA}" = 40
+          case "$EXPECTED_MAIN_SHA" in *[!0-9a-f]*) exit 1 ;; esac
+          test "$RELEASE_SHA" = "$EXPECTED_MAIN_SHA"
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
-          toolchain: "1.95.0"
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-      - name: Install benchmark validator dependencies
-        run: python3 -m pip install --user -r scripts/benchmark/requirements.txt
-      - name: Build pinned release CLI
-        run: cargo build --release -p hc-cli --locked
-      - name: Prepare owner-only scratch and cgroup
-        run: |
-          sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-1m
-          sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
-      - name: Validate fixed-host contract before proving
+          fetch-depth: 0
+      - name: Require the dispatch commit to remain current main
         env:
-          HC_RELEASE_SHA: ${{ github.sha }}
+          EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
         run: |
-          mkdir -p raw-reports
-          report=raw-reports/${{ matrix.workload }}-1m.host-preflight.json
-          reclaim_report() { sudo chown "$(id -u):$(id -g)" "$report" 2>/dev/null || true; }
-          trap reclaim_report EXIT
-          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/fixed_host_preflight.py \
-            --scratch-dir /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-1m \
-            --output "$report"
-      - name: Measure baseline and bounded candidate
-        env:
-          HC_RELEASE_SHA: ${{ github.sha }}
-        run: |
-          mkdir -p raw-reports
-          report_owner="$(id -u):$(id -g)"
-          reclaim_reports() { sudo chown -R "$report_owner" raw-reports || true; }
-          trap reclaim_reports EXIT
-          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/run_plonky3_cgroup.py \
-            --manifest examples/plonky3/${{ matrix.workload }}-1m.json \
-            --mode throughput \
-            --require-fixed-host \
-            --baseline-memory-cap 17179869184 \
-            --report raw-reports/${{ matrix.workload }}-1m.json
-      - name: Validate one-million-row acceptance
-        run: |
-          python3 scripts/benchmark/validate_release_gate.py \
-            --gate one-million \
-            --expected-release-sha "${{ github.sha }}" \
-            --manifest examples/plonky3/${{ matrix.workload }}-1m.json \
-            --baseline raw-reports/${{ matrix.workload }}-1m.baseline.json \
-            --candidate raw-reports/${{ matrix.workload }}-1m.json
-      - name: Upload raw reports
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: plonky3-${{ matrix.workload }}-1m-${{ github.sha }}
-          path: raw-reports/*.json
-          if-no-files-found: warn
-
-  sixteen-million-row-ceiling:
-    if: github.event_name == 'workflow_dispatch' && !inputs.release_matrix
-    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
-    timeout-minutes: 1440
-    strategy:
-      fail-fast: false
-      matrix:
-        workload: [fibonacci, poseidon2]
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: "1.95.0"
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-      - name: Install benchmark validator dependencies
-        run: python3 -m pip install --user -r scripts/benchmark/requirements.txt
-      - name: Build pinned release CLI
-        run: cargo build --release -p hc-cli --locked
-      - name: Prepare owner-only scratch and cgroup
-        run: |
-          sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-16m
-          sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
-      - name: Validate fixed-host contract before proving
-        env:
-          HC_RELEASE_SHA: ${{ github.sha }}
-        run: |
-          mkdir -p raw-reports
-          report=raw-reports/${{ matrix.workload }}-16m.host-preflight.json
-          reclaim_report() { sudo chown "$(id -u):$(id -g)" "$report" 2>/dev/null || true; }
-          trap reclaim_report EXIT
-          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/fixed_host_preflight.py \
-            --scratch-dir /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-16m \
-            --output "$report"
-      - name: Measure bounded ceiling mode
-        env:
-          HC_RELEASE_SHA: ${{ github.sha }}
-        run: |
-          mkdir -p raw-reports
-          report_owner="$(id -u):$(id -g)"
-          reclaim_reports() { sudo chown -R "$report_owner" raw-reports || true; }
-          trap reclaim_reports EXIT
-          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/run_plonky3_cgroup.py \
-            --manifest examples/plonky3/${{ matrix.workload }}-16m.json \
-            --mode ceiling \
-            --require-fixed-host \
-            --report raw-reports/${{ matrix.workload }}-16m.json
-      - name: Validate 2^24-row ceiling acceptance
-        run: |
-          python3 scripts/benchmark/validate_release_gate.py \
-            --gate ten-million \
-            --expected-release-sha "${{ github.sha }}" \
-            --manifest examples/plonky3/${{ matrix.workload }}-16m.json \
-            --candidate raw-reports/${{ matrix.workload }}-16m.json
-      - name: Upload raw reports and normalized manifests
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: plonky3-${{ matrix.workload }}-16m-${{ github.sha }}
-          path: raw-reports/*.json
-          if-no-files-found: warn
+          test "$(git rev-parse HEAD)" = "$EXPECTED_MAIN_SHA"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN_SHA"
 
   backend-release-matrix:
-    # This is the only workflow path intended to create first-party resource
-    # evidence for a backend release. It binds all four gates to one source,
-    # CLI, storage device, and fixed host. Independent reproduction remains a
-    # separate externally signed release gate.
-    if: github.event_name == 'workflow_dispatch' && inputs.release_matrix
-    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
-    timeout-minutes: 4320
+    needs: authorize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      HC_RELEASE_SHA: ${{ inputs.expected_main_sha }}
+      HC_RELEASE_REF: main
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.95.0"
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-      - name: Install benchmark validator dependencies
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12.13"
+      - name: Install locked benchmark validator dependencies
         run: |
-          python3 -m venv .benchmark-venv
-          .benchmark-venv/bin/python -m pip install -r scripts/benchmark/requirements.txt
-      - name: Build release-identity-bound CLI
+          python3 -m venv "$RUNNER_TEMP/benchmark-venv"
+          "$RUNNER_TEMP/benchmark-venv/bin/python" -m pip install \
+            -r scripts/benchmark/requirements.txt
+      - name: Build one release-identity-bound CLI
         env:
-          HC_RELEASE_SHA: ${{ github.sha }}
-          HC_RELEASE_REF: ${{ github.ref }}
-        run: cargo build --release -p hc-cli --locked
-      - name: Prepare owner-only local scratch and delegated cgroup parent
+          CARGO_TARGET_DIR: ${{ runner.temp }}/tinyzkp-cargo-target
+        run: cargo build --release -p hc-cli --bin hc-cli --locked
+      - name: Preserve only the qualified CLI and reclaim build storage
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/tinyzkp-cargo-target
         run: |
-          for workload in fibonacci-1m poseidon2-1m fibonacci-16m poseidon2-16m; do
-            sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" "/var/lib/tinyzkp-bench/scratch/$workload"
+          install -m 0755 \
+            "$CARGO_TARGET_DIR/release/hc-cli" \
+            "$RUNNER_TEMP/tinyzkp-engine"
+          cargo clean --target-dir "$CARGO_TARGET_DIR"
+          test -x "$RUNNER_TEMP/tinyzkp-engine"
+      - name: Prepare ephemeral owner-only scratch and cgroup delegation
+        run: |
+          for workload in fibonacci-1m poseidon2-1m fibonacci-16m; do
+            sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" \
+              "/var/lib/tinyzkp-bench/scratch/$workload"
           done
           sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
           install -d -m 0700 raw-reports/fixed-host-release-matrix
-      - name: Run or resume complete local release matrix
-        env:
-          HC_RELEASE_SHA: ${{ github.sha }}
+      - name: Run the complete scoped production matrix
         run: |
           report_owner="$(id -u):$(id -g)"
-          reclaim_reports() { sudo chown -R "$report_owner" raw-reports/fixed-host-release-matrix || true; }
+          reclaim_reports() {
+            sudo chown -R "$report_owner" raw-reports/fixed-host-release-matrix || true
+          }
           trap reclaim_reports EXIT
-          sudo --preserve-env=HC_RELEASE_SHA .benchmark-venv/bin/python scripts/benchmark/run_fixed_host_release_matrix.py \
-            --release-sha "${{ github.sha }}" \
-            --hc-cli target/release/hc-cli \
-            --output-dir raw-reports/fixed-host-release-matrix
-      - name: Upload stable-host-bound local evidence
+          sudo --preserve-env=HC_RELEASE_SHA,HC_RELEASE_REF \
+            "$RUNNER_TEMP/benchmark-venv/bin/python" \
+            scripts/benchmark/run_fixed_host_release_matrix.py \
+              --release-sha "$HC_RELEASE_SHA" \
+              --hc-cli "$RUNNER_TEMP/tinyzkp-engine" \
+              --output-dir raw-reports/fixed-host-release-matrix
+      - name: Bind the exact qualification artifact inventory
+        working-directory: raw-reports/fixed-host-release-matrix
+        run: |
+          checksum_tmp="$RUNNER_TEMP/qualification-SHA256SUMS"
+          find . -maxdepth 1 -type f ! -name qualification-SHA256SUMS -print0 |
+            sort -z | xargs -0 sha256sum >"$checksum_tmp"
+          test -s "$checksum_tmp"
+          mv "$checksum_tmp" qualification-SHA256SUMS
+      - name: Attest the exact-main qualification inventory
+        uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
+        with:
+          subject-path: raw-reports/fixed-host-release-matrix/qualification-SHA256SUMS
+      - name: Upload source- and CLI-bound qualification evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: plonky3-backend-release-matrix-${{ github.sha }}
+          name: plonky3-backend-release-matrix-${{ inputs.expected_main_sha }}
           path: raw-reports/fixed-host-release-matrix/
           if-no-files-found: error
-
-  exploratory-128m-ceiling:
-    if: github.event_name == 'workflow_dispatch' && inputs.exploratory_128m && !inputs.release_matrix
-    runs-on: [self-hosted, linux, x64, tinyzkp-benchmark]
-    timeout-minutes: 2880
-    strategy:
-      fail-fast: false
-      matrix:
-        workload: [fibonacci, poseidon2]
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: "1.95.0"
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-      - name: Build pinned release CLI
-        run: cargo build --release -p hc-cli --locked
-      - name: Prepare owner-only exploratory scratch and cgroup
-        run: |
-          sudo install -d -m 0700 -o "$(id -u)" -g "$(id -g)" /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-128m
-          sudo install -d -m 0755 /sys/fs/cgroup/tinyzkp-bench
-      - name: Validate fixed-host contract before proving
-        env:
-          HC_RELEASE_SHA: ${{ github.sha }}
-        run: |
-          mkdir -p raw-reports
-          report=raw-reports/${{ matrix.workload }}-128m.host-preflight.json
-          reclaim_report() { sudo chown "$(id -u):$(id -g)" "$report" 2>/dev/null || true; }
-          trap reclaim_report EXIT
-          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/fixed_host_preflight.py \
-            --scratch-dir /var/lib/tinyzkp-bench/scratch/${{ matrix.workload }}-128m \
-            --output "$report"
-      - name: Measure non-blocking 2^27-row candidate
-        continue-on-error: true
-        env:
-          HC_RELEASE_SHA: ${{ github.sha }}
-        run: |
-          mkdir -p raw-reports
-          report_owner="$(id -u):$(id -g)"
-          reclaim_reports() { sudo chown -R "$report_owner" raw-reports || true; }
-          trap reclaim_reports EXIT
-          sudo --preserve-env=HC_RELEASE_SHA python3 scripts/benchmark/run_plonky3_cgroup.py \
-            --manifest examples/plonky3/${{ matrix.workload }}-128m.json \
-            --mode ceiling \
-            --require-fixed-host \
-            --report raw-reports/${{ matrix.workload }}-128m.json
-      - name: Upload exploratory raw evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: plonky3-${{ matrix.workload }}-128m-exploratory-${{ github.sha }}
-          path: raw-reports/*.json
-          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 0

@@ -111,6 +111,7 @@ def test_local_preflight_is_only_guard_and_static_pages_business():
         ("python", "scripts/ci/cloudflare_toolchain_check.py"),
         ("node", "--check", "site/_worker.js"),
         ("node", "scripts/ci/site_worker_dispatch_test.mjs"),
+        ("node", "scripts/ci/site_shared_checkout_test.mjs"),
     ]
     joined = "\n".join(" ".join(command).lower() for command in commands(built))
     for retired in (
