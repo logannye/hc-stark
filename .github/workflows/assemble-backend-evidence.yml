@@ -363,7 +363,12 @@ jobs:
             release/backend-v1-gates.json \
             release/evidence/backend-v1-evidence.json \
             "release/evidence/backend-v1/$EXPECTED_MAIN_SHA"
-          git diff --cached --check
+          # The raw qualification logs are immutable evidence: their exact bytes are
+          # checksum-bound and signed, and upstream tools may emit trailing spaces.
+          # Whitespace-lint only the generated JSON manifests we control.
+          git diff --cached --check -- \
+            release/backend-v1-gates.json \
+            release/evidence/backend-v1-evidence.json
           git diff --quiet
           python3 scripts/ci/backend_prerelease_ready.py \
             --config release/backend-v1-gates.json

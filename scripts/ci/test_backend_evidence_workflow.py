@@ -117,10 +117,15 @@ def test_candidate_is_semantically_validated_and_oidc_signed():
 def test_staged_bytes_are_reverified_immediately_before_commit():
     value = workflow()
     staged = value.index("git add \\")
+    whitespace_check = value.index("git diff --cached --check --", staged)
     final_gate = value.index("backend_prerelease_ready.py", staged)
     clean_index = value.index("git diff --quiet", final_gate)
     commit = value.index('git commit -m "Record qualified backend evidence', clean_index)
-    assert staged < final_gate < clean_index < commit
+    assert staged < whitespace_check < final_gate < clean_index < commit
+    whitespace_block = value[whitespace_check:final_gate]
+    assert "release/backend-v1-gates.json" in whitespace_block
+    assert "release/evidence/backend-v1-evidence.json" in whitespace_block
+    assert 'release/evidence/backend-v1/$EXPECTED_MAIN_SHA' not in whitespace_block
 
 
 def test_evidence_pr_uses_only_builtin_token_and_never_merges_itself():
