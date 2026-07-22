@@ -159,6 +159,27 @@ def _thaw_fixture_runtime(install_root: pathlib.Path) -> None:
     _thaw(install_root)
 
 
+def test_freeze_tree_preserves_native_executability_but_removes_write_bits(
+    tmp_path,
+):
+    runtime = tmp_path / "node_modules"
+    native = runtime / "@esbuild" / "linux-x64" / "bin" / "esbuild"
+    source = runtime / "wrangler" / "wrangler-dist" / "cli.js"
+    native.parent.mkdir(parents=True)
+    source.parent.mkdir(parents=True)
+    native.write_bytes(b"native")
+    source.write_bytes(b"source")
+    native.chmod(0o755)
+    source.chmod(0o644)
+
+    materialize._freeze_tree(runtime)
+
+    assert stat.S_IMODE(native.stat().st_mode) == 0o555
+    assert stat.S_IMODE(source.stat().st_mode) == 0o444
+    for current, _directories, _files in os.walk(runtime):
+        assert stat.S_IMODE(pathlib.Path(current).stat().st_mode) == 0o555
+
+
 def _rewrite_lock(lock_path: pathlib.Path, profile_path: pathlib.Path, lock: dict):
     raw = (json.dumps(lock, indent=2) + "\n").encode()
     lock_path.write_bytes(raw)

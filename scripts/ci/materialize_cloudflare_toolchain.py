@@ -343,6 +343,16 @@ def _reject_symlinks(root: pathlib.Path) -> None:
 
 
 def _freeze_tree(root: pathlib.Path) -> None:
+    """Make the installed runtime immutable without disabling native tools.
+
+    npm preserves executable bits from integrity-bound package archives. Wrangler
+    invokes those reviewed native binaries directly (notably esbuild when a Pages
+    ``_worker.js`` is present), so freezing every file to mode 0444 makes an
+    otherwise valid installation unusable. Preserve only the existing execute
+    classification while removing every write bit; the complete path, content,
+    and resulting mode remain bound by the materialization identity.
+    """
+
     directories: list[pathlib.Path] = []
     for current, directory_names, file_names in os.walk(root, followlinks=False):
         current_path = pathlib.Path(current)
@@ -355,7 +365,8 @@ def _freeze_tree(root: pathlib.Path) -> None:
             candidate = current_path / name
             if candidate.is_symlink() or not candidate.is_file():
                 raise MaterializationError("cannot freeze a non-regular file")
-            candidate.chmod(0o444)
+            installed_mode = stat.S_IMODE(candidate.lstat().st_mode)
+            candidate.chmod(0o555 if installed_mode & 0o111 else 0o444)
     for directory in reversed(directories):
         directory.chmod(0o555)
 
