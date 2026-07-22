@@ -480,6 +480,10 @@ def test_version_probe_uses_sanitized_environment_and_exact_stdout(monkeypatch):
     def fake_run(command, **kwargs):
         captured["command"] = command
         captured["environment"] = kwargs["env"]
+        log_path = pathlib.Path(kwargs["env"]["WRANGLER_LOG_PATH"])
+        captured["log_path"] = log_path
+        assert log_path.name == "wrangler.log"
+        assert log_path.parent.is_dir()
         return SimpleNamespace(returncode=0, stdout="v24.18.0\n", stderr="")
 
     monkeypatch.setenv("NODE_OPTIONS", "--require=/attacker.js")
@@ -490,10 +494,26 @@ def test_version_probe_uses_sanitized_environment_and_exact_stdout(monkeypatch):
     assert captured["command"] == ("/reviewed/node", "--version")
     assert "NODE_OPTIONS" not in captured["environment"]
     assert captured["environment"]["HOME"] == "/nonexistent"
+    assert not captured["log_path"].parent.exists()
 
     with pytest.raises(check.ToolchainError, match="differs"):
         check._exact_version(
             ("/reviewed/node", "--version"), label="Node", expected="v24.18.1"
+        )
+
+
+def test_version_probe_rejects_unexpected_scratch_writes(monkeypatch):
+    def fake_run(_command, **kwargs):
+        log_path = pathlib.Path(kwargs["env"]["WRANGLER_LOG_PATH"])
+        (log_path.parent / "unexpected").write_text("not a Wrangler log")
+        return SimpleNamespace(returncode=0, stdout="4.85.0\n", stderr="")
+
+    monkeypatch.setattr(check.subprocess, "run", fake_run)
+    with pytest.raises(check.ToolchainError, match="bounded log"):
+        check._exact_version(
+            ("/reviewed/node", "/reviewed/wrangler.js", "--version"),
+            label="Wrangler",
+            expected="4.85.0",
         )
 
 

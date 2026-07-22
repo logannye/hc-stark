@@ -20,6 +20,7 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 from typing import Any
 
@@ -781,16 +782,35 @@ def _runtime_environment() -> dict[str, str]:
 
 def _exact_version(command: tuple[str, ...], *, label: str, expected: str) -> None:
     try:
-        completed = subprocess.run(
-            command,
-            env=_runtime_environment(),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=30,
-            check=False,
-        )
+        with tempfile.TemporaryDirectory(prefix="tinyzkp-tool-version-") as raw_scratch:
+            scratch = pathlib.Path(raw_scratch)
+            environment = _runtime_environment()
+            # Wrangler 4.85 writes a debug log even for `--version`. Give that
+            # exact process a private, automatically removed destination so a
+            # root materialization probe cannot leave `/nonexistent` owned by
+            # root and make the later unprivileged production probe fail.
+            environment["WRANGLER_LOG_PATH"] = str(scratch / "wrangler.log")
+            completed = subprocess.run(
+                command,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            for entry in scratch.iterdir():
+                metadata = entry.lstat()
+                if (
+                    entry.name != "wrangler.log"
+                    or entry.is_symlink()
+                    or not stat.S_ISREG(metadata.st_mode)
+                    or metadata.st_size > MAX_JSON_BYTES
+                ):
+                    raise ToolchainError(
+                        f"{label} version check wrote outside its bounded log"
+                    )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ToolchainError(f"cannot execute {label} version check") from error
     if (
