@@ -1,0 +1,21 @@
+{
+  "actor": "logannye",
+  "artifact": {
+    "archive_sha256": "b77d379c8335d6a59bb058e8d62924fce0921f27055c730c6248fd41c4ca4771",
+    "created_at": "2026-07-22T07:04:19Z",
+    "id": 8521052213,
+    "name": "plonky3-backend-release-matrix-a13f1ae38c685b78137df4cc81e74cb6ed6cc667"
+  },
+  "conclusion": "success",
+  "event": "workflow_dispatch",
+  "head_branch": "main",
+  "head_sha": "a13f1ae38c685b78137df4cc81e74cb6ed6cc667",
+  "repository": "logannye/hc-stark",
+  "run_attempt": 1,
+  "run_id": 29898037504,
+  "run_started_at": "2026-07-22T06:49:56Z",
+  "schema_version": 1,
+  "status": "completed",
+  "triggering_actor": "logannye",
+  "workflow_path": ".github/workflows/benches.yml"
+}

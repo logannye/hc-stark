@@ -1,0 +1,9 @@
+    Finished `release` profile [optimized] target(s) in 0.14s
+     Running unittests src/lib.rs (/home/runner/work/hc-stark/hc-stark/raw-reports/cargo-target/release/deps/hc_plonky3-a0dd32b1fb0161e7)
+
+running 1 test
+tinyzkp-disk-full-resume enospc=true resumed=7d0d5c2ab64ff17b617b8dc5bc9c574591a83a83a5d6f45b28bcc6c1090356ed reference=7d0d5c2ab64ff17b617b8dc5bc9c574591a83a83a5d6f45b28bcc6c1090356ed
+test bounded_prover::tests::disk_full_failure_retains_a_resumable_checkpoint ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 77 filtered out; finished in 1.18s
+
