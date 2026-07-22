@@ -403,7 +403,11 @@ def validate_container_inspect(
             or state.get("Error") not in (None, "")
         ):
             raise RuntimeSmokeError("runtime container did not exit cleanly")
-        if len(mounts) != 2:
+        # Docker reports tmpfs mounts under HostConfig.Tmpfs on every supported
+        # engine, but some versions omit them from the derived Mounts array.
+        # HostConfig was validated above; when Mounts are present, validate the
+        # redundant representation without requiring it to exist.
+        if len(mounts) not in (0, 2):
             raise RuntimeSmokeError("runtime container mount inventory is skewed")
         mountpoints: set[str] = set()
         for mount in mounts:
@@ -416,7 +420,7 @@ def validate_container_inspect(
             ):
                 raise RuntimeSmokeError("runtime container has an unexpected mount")
             mountpoints.add(str(mount["Destination"]))
-        if mountpoints != {"/scratch", "/work"}:
+        if mounts and mountpoints != {"/scratch", "/work"}:
             raise RuntimeSmokeError("runtime container tmpfs inventory is incomplete")
     elif state.get("Running") is not False or state.get("Status") != "created":
         raise RuntimeSmokeError("runtime container was not inspected before execution")
