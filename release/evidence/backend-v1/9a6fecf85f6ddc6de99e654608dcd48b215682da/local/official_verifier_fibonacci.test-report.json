@@ -1,0 +1,130 @@
+{
+  "actual_command": [
+    "/home/runner/.rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/cargo",
+    "test",
+    "-p",
+    "hc-plonky3",
+    "--release",
+    "--locked",
+    "prover::tests::fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier",
+    "--",
+    "--exact"
+  ],
+  "dependency_lock_sha256": "0a28ab40dba2786a5106d274623d174b4c845b15ddd594629ebd98aa08612257",
+  "descriptor_execution": true,
+  "duration_ms": 53501,
+  "environment_policy": {
+    "fixed_values": {
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never",
+      "LANG": "C",
+      "LC_ALL": "C",
+      "RUST_BACKTRACE": "0",
+      "SOURCE_DATE_EPOCH": "0"
+    },
+    "inherited_names": [
+      "HOME",
+      "PATH",
+      "USER",
+      "LOGNAME",
+      "TMPDIR",
+      "TMP",
+      "TEMP",
+      "RUSTUP_HOME",
+      "CARGO_HOME"
+    ],
+    "rejected_build_affecting_names": [
+      "ASAN_OPTIONS",
+      "CARGO_BUILD_JOBS",
+      "CARGO_BUILD_RUSTC",
+      "CARGO_BUILD_RUSTC_WRAPPER",
+      "CARGO_BUILD_TARGET",
+      "CARGO_ENCODED_RUSTFLAGS",
+      "CARGO_TARGET_DIR",
+      "DYLD_INSERT_LIBRARIES",
+      "LD_PRELOAD",
+      "LIBFUZZER_OPTIONS",
+      "LLVM_PROFILE_FILE",
+      "MSAN_OPTIONS",
+      "RUSTC",
+      "RUSTC_BOOTSTRAP",
+      "RUSTC_WRAPPER",
+      "RUSTC_WORKSPACE_WRAPPER",
+      "RUSTDOCFLAGS",
+      "RUSTFLAGS",
+      "RUSTUP_TOOLCHAIN",
+      "TSAN_OPTIONS",
+      "UBSAN_OPTIONS"
+    ],
+    "schema_version": 1
+  },
+  "environment_policy_sha256": "1a09048465d17f7fe5df85db2dc96263f1583e03f960701de960547bc6c95b37",
+  "execution_profile": "release",
+  "exit_status": 0,
+  "finished_at": "2026-07-22T08:53:46Z",
+  "gate": "official_verifier_fibonacci",
+  "gate_inputs": {},
+  "immutable_file_count": 1176,
+  "immutable_source": true,
+  "log_bytes": 3868,
+  "log_sha256": "2fb2c5060700bb11119a1fcc6b5e9618bc37802826ce0e597205776a6a764825",
+  "logical_command": [
+    "cargo",
+    "test",
+    "-p",
+    "hc-plonky3",
+    "--release",
+    "--locked",
+    "prover::tests::fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier",
+    "--",
+    "--exact"
+  ],
+  "network_boundary": null,
+  "output_parser": "cargo_exact_test_v1",
+  "parsed_result": {
+    "parser": "cargo_exact_test_v1",
+    "passed": true,
+    "test_execution": {
+      "exact_test_occurrences": 1,
+      "failed_tests": 0,
+      "filtered_tests": 68,
+      "ignored_tests": 0,
+      "measured_tests": 0,
+      "passed_tests": 1,
+      "result_status": "ok",
+      "result_summaries_after_exact_test": 1,
+      "result_summary_count": 1,
+      "test_name": "prover::tests::fibonacci_proof_is_accepted_by_unmodified_plonky3_verifier"
+    }
+  },
+  "profile": "tinyzkp-p3-goldilocks-v1",
+  "release_sha": "9a6fecf85f6ddc6de99e654608dcd48b215682da",
+  "rust_toolchain_sha256": "ccc2e1ec095fbcdc5c18912f077cda7f967f6ce3b214c92a76919a88aa8542b4",
+  "schema_version": 4,
+  "source_tree_sha256": "68420cba396ccf11e0af0b7fbbe0908613aa75558f7327e5063a798851efecf2",
+  "started_at": "2026-07-22T08:52:53Z",
+  "timed_out": false,
+  "timeout_seconds": 1800,
+  "tools": {
+    "cargo": {
+      "path": "/home/runner/.rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/cargo",
+      "sha256": "841072d1d92f9e841d9ba5b0814182a0adf064acf4527cd120967b7bc49dcb66",
+      "version": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)\nrelease: 1.95.0\ncommit-hash: f2d3ce0bd7f24a49f8f72d9000448f8838c4e850\ncommit-date: 2026-03-21\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.2 (sys:0.20.4 vendored)\nlibcurl: 8.15.0-DEV (sys:0.4.83+curl-8.15.0 vendored ssl:OpenSSL/3.5.4)\nssl: OpenSSL 3.5.4 30 Sep 2025\nos: Ubuntu 24.4.0 (noble) [64-bit]"
+    },
+    "rustc": {
+      "path": "/home/runner/.rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/rustc",
+      "sha256": "bff349e72704ff70bc08a234a3847338e797065bbedde5e556808bc87b7bf7c6",
+      "version": "rustc 1.95.0 (59807616e 2026-04-14)\nbinary: rustc\ncommit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860\ncommit-date: 2026-04-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.95.0\nLLVM version: 22.1.2"
+    }
+  },
+  "write_boundary": {
+    "abi_version": 7,
+    "kind": "landlock-write-deny-v1",
+    "source_write_allowed": false,
+    "writable_paths": [
+      "cargo-target",
+      "gate-work",
+      "tmp"
+    ]
+  }
+}
