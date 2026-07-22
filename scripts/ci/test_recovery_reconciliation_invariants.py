@@ -63,3 +63,16 @@ def test_required_ci_rejects_a_stale_standalone_fuzz_lock():
         "cargo +1.95.0 fetch --locked --manifest-path fuzz/Cargo.toml"
         in workflow
     )
+
+
+def test_owner_qualification_workflows_materialize_reviewed_git():
+    materializer = "python3 scripts/ci/materialize_anchored_git.py"
+    resource = invariants.text(".github/workflows/benches.yml")
+    recovery = invariants.text(".github/workflows/nightly-backend.yml")
+
+    assert resource.count(materializer) == 1
+    assert recovery.count(materializer) == 1
+    assert (
+        "sudo --preserve-env=HC_RELEASE_SHA,HC_RELEASE_REF,"
+        "TINYZKP_ANCHORED_GIT"
+    ) in resource
