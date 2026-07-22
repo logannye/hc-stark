@@ -302,6 +302,60 @@ def benchmark_runner_uid() -> int:
     return os.geteuid()
 
 
+GITHUB_HOSTED_SSD_CONTRACT = "github-hosted-public-ubuntu-24.04-ssd-v1"
+# Storage class source: https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+GITHUB_HOSTED_SSD_ENVIRONMENT = {
+    "GITHUB_ACTIONS": "true",
+    "GITHUB_REPOSITORY": "logannye/hc-stark",
+    "ImageOS": "ubuntu24",
+    "RUNNER_ARCH": "X64",
+    "RUNNER_ENVIRONMENT": "github-hosted",
+    "RUNNER_OS": "Linux",
+    "TINYZKP_REPOSITORY_VISIBILITY": "public",
+    "TINYZKP_RUNNER_LABEL": "ubuntu-24.04",
+}
+
+
+def effective_storage_classification(
+    kernel_is_rotational: bool, kernel_is_nvme: bool
+) -> tuple[bool, bool, str]:
+    """Classify storage without trusting a virtual block-device hint alone.
+
+    GitHub documents the public ``ubuntu-24.04`` runner as SSD-backed. Its
+    virtual SCSI device can nevertheless expose ``queue/rotational=1``. The
+    exact owner-dispatched workflow may bind that provider contract only when
+    every GitHub-owned runner identity field matches. Unknown or partially
+    supplied contracts fail closed instead of overriding the kernel result.
+    """
+    contract = os.environ.get("TINYZKP_HOSTED_RUNNER_STORAGE_CONTRACT")
+    if contract is None:
+        return kernel_is_rotational, kernel_is_nvme, "kernel-sysfs-v1"
+    if contract != GITHUB_HOSTED_SSD_CONTRACT:
+        raise RuntimeError("hosted-runner storage contract is unsupported")
+    mismatches = [
+        name
+        for name, expected in GITHUB_HOSTED_SSD_ENVIRONMENT.items()
+        if os.environ.get(name) != expected
+    ]
+    if mismatches:
+        raise RuntimeError(
+            "hosted-runner storage contract identity mismatch: "
+            + ", ".join(sorted(mismatches))
+        )
+    image_version = os.environ.get("ImageVersion", "")
+    if (
+        not image_version.isascii()
+        or not 1 <= len(image_version) <= 64
+        or any(not part.isdecimal() for part in image_version.split("."))
+    ):
+        raise RuntimeError("hosted-runner image version is malformed")
+    return (
+        False,
+        kernel_is_nvme,
+        f"{GITHUB_HOSTED_SSD_CONTRACT}@{image_version}",
+    )
+
+
 def _block_characteristics(device_id: str) -> tuple[str, bool, bool]:
     link = Path("/sys/dev/block") / device_id
     if not link.exists():
@@ -344,7 +398,10 @@ def collect_host_metadata(scratch: Path) -> dict[str, object]:
     usage = shutil.disk_usage(scratch)
     scratch_stat = scratch.stat()
     device_id = f"{os.major(scratch_stat.st_dev)}:{os.minor(scratch_stat.st_dev)}"
-    backing, is_rotational, is_nvme = _block_characteristics(device_id)
+    backing, kernel_is_rotational, kernel_is_nvme = _block_characteristics(device_id)
+    is_rotational, is_nvme, storage_classification = effective_storage_classification(
+        kernel_is_rotational, kernel_is_nvme
+    )
     storage_device = f"{device_id}:{backing}"
     cgroup_identity, cgroup_path = cgroup_v2_identity()
     effective_affinity = sorted(os.sched_getaffinity(0))
@@ -362,7 +419,9 @@ def collect_host_metadata(scratch: Path) -> dict[str, object]:
         "operating_system": platform.platform(),
         "storage": (
             f"device={storage_device};rotational={int(is_rotational)};"
-            f"nvme={int(is_nvme)};total_bytes={usage.total};"
+            f"kernel_rotational={int(kernel_is_rotational)};"
+            f"nvme={int(is_nvme)};classification={storage_classification};"
+            f"total_bytes={usage.total};"
             f"available_bytes={usage.free}"
         ),
         "storage_device": storage_device,

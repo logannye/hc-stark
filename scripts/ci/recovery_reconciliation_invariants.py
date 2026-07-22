@@ -56,6 +56,11 @@ def fixed_host_workflow_failures(workflow: str) -> list[str]:
         "github.repository_owner",
         "test \"$REF\" = refs/heads/main",
         "HC_RELEASE_SHA: ${{ inputs.expected_main_sha }}",
+        "TINYZKP_HOSTED_RUNNER_STORAGE_CONTRACT: github-hosted-public-ubuntu-24.04-ssd-v1",
+        "TINYZKP_REPOSITORY_VISIBILITY: ${{ github.event.repository.visibility }}",
+        "TINYZKP_RUNNER_LABEL: ubuntu-24.04",
+        "sudo swapoff -a",
+        'test "$(awk \'/^SwapTotal:/ {print $2}\' /proc/meminfo)" = 0',
         "plonky3-backend-release-matrix-${{ inputs.expected_main_sha }}",
         "raw-reports/fixed-host-release-matrix/",
     ):

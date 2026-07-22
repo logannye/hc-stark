@@ -97,6 +97,50 @@ def test_benchmark_runner_uid_honors_sudo_origin(monkeypatch):
     assert MODULE.benchmark_runner_uid() == 501
 
 
+def test_storage_classification_uses_kernel_by_default(monkeypatch):
+    monkeypatch.delenv("TINYZKP_HOSTED_RUNNER_STORAGE_CONTRACT", raising=False)
+
+    assert MODULE.effective_storage_classification(True, False) == (
+        True,
+        False,
+        "kernel-sysfs-v1",
+    )
+
+
+def test_storage_classification_accepts_only_exact_github_hosted_contract(monkeypatch):
+    monkeypatch.setenv(
+        "TINYZKP_HOSTED_RUNNER_STORAGE_CONTRACT",
+        MODULE.GITHUB_HOSTED_SSD_CONTRACT,
+    )
+    for name, value in MODULE.GITHUB_HOSTED_SSD_ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("ImageVersion", "20260714.240.1")
+
+    assert MODULE.effective_storage_classification(True, False) == (
+        False,
+        False,
+        f"{MODULE.GITHUB_HOSTED_SSD_CONTRACT}@20260714.240.1",
+    )
+
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "self-hosted")
+    with pytest.raises(
+        RuntimeError, match="hosted-runner storage contract identity mismatch"
+    ):
+        MODULE.effective_storage_classification(True, False)
+
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "github-hosted")
+    monkeypatch.setenv("ImageVersion", "unversioned")
+    with pytest.raises(RuntimeError, match="image version is malformed"):
+        MODULE.effective_storage_classification(True, False)
+
+
+def test_storage_classification_rejects_unknown_contract(monkeypatch):
+    monkeypatch.setenv("TINYZKP_HOSTED_RUNNER_STORAGE_CONTRACT", "unreviewed")
+
+    with pytest.raises(RuntimeError, match="storage contract is unsupported"):
+        MODULE.effective_storage_classification(False, True)
+
+
 def test_failed_report_is_persisted_before_gate_failure(tmp_path):
     report_path = tmp_path / "candidate.json"
     report = {
