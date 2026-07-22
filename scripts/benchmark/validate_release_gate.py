@@ -290,8 +290,18 @@ def validate_common(
         cap = policy.get("max_resident_bytes")
         if not isinstance(cap, int) or cap <= 0:
             failures.append("manifest resident cap is invalid")
-        elif candidate["cgroup_peak_bytes"] > math.floor(cap * 1.10):
-            failures.append("candidate exceeded the configured resident cap by more than 10%")
+        else:
+            candidate_peak_rss = candidate.get("peak_rss_bytes")
+            if (
+                isinstance(candidate_peak_rss, int)
+                and not isinstance(candidate_peak_rss, bool)
+                and candidate_peak_rss > cap
+            ):
+                failures.append("candidate process RSS exceeded the configured resident cap")
+            if candidate["cgroup_peak_bytes"] > math.floor(cap * 1.10):
+                failures.append(
+                    "candidate exceeded the configured resident cap by more than 10%"
+                )
     return failures
 
 

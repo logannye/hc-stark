@@ -30,6 +30,7 @@ QUALIFICATION_CPU_COUNT = 4
 MIN_QUALIFICATION_SCRATCH_AVAILABLE_BYTES = 12_000_000_000
 MIN_EFFECTIVE_MEMORY_BYTES = 15 * 1024**3
 MAX_EFFECTIVE_MEMORY_BYTES = 17 * 1024**3
+CGROUP_ACCOUNTING_HEADROOM_PERCENT = 10
 SCRATCH_RUN_LABEL_PATTERN = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?")
 
 
@@ -196,9 +197,23 @@ def ensure_cgroup_v2(parent: Path) -> None:
         raise RuntimeError("cgroup controller activation did not persist")
 
 
+def cgroup_enforcement_cap(memory_cap: int) -> int:
+    """Reserve bounded kernel page-cache accounting without relaxing RSS policy.
+
+    ``max_resident_bytes`` is the process-resident contract used by the prover
+    and release gate. Cgroup v2 additionally charges file-backed page cache,
+    including the bounded prover's scratch I/O. Keep the declared resident cap
+    as ``memory.high`` and reserve the gate's existing ten-percent accounting
+    allowance only for the hard ``memory.max`` boundary.
+    """
+
+    return memory_cap * (100 + CGROUP_ACCOUNTING_HEADROOM_PERCENT) // 100
+
+
 def configure_cgroup(path: Path, memory_cap: int) -> None:
     path.mkdir()
-    write_control(path / "memory.max", str(memory_cap))
+    write_control(path / "memory.high", str(memory_cap))
+    write_control(path / "memory.max", str(cgroup_enforcement_cap(memory_cap)))
     if (path / "memory.swap.max").exists():
         write_control(path / "memory.swap.max", "0")
     if (path / "pids.max").exists():
