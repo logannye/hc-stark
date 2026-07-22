@@ -1,0 +1,21 @@
+{
+  "actor": "logannye",
+  "artifact": {
+    "archive_sha256": "a34ec4b06997cbfab7c2ca422f4bac002a65472e90945f5a012078f517ee118c",
+    "created_at": "2026-07-22T09:39:15Z",
+    "id": 8524967447,
+    "name": "plonky3-recovery-fuzz-5eb407c43f4ca4cb789cb7ad65a98c5b65b77e2a"
+  },
+  "conclusion": "success",
+  "event": "workflow_dispatch",
+  "head_branch": "main",
+  "head_sha": "5eb407c43f4ca4cb789cb7ad65a98c5b65b77e2a",
+  "repository": "logannye/hc-stark",
+  "run_attempt": 1,
+  "run_id": 29907333750,
+  "run_started_at": "2026-07-22T09:16:53Z",
+  "schema_version": 1,
+  "status": "completed",
+  "triggering_actor": "logannye",
+  "workflow_path": ".github/workflows/nightly-backend.yml"
+}
