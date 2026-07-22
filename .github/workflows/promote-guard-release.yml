@@ -134,7 +134,6 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --cert-identity "$engine_signer" \
               --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
-              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-backend.yml" \
               --signer-digest "$engine_sha" \
               --source-digest "$engine_sha" \
               --source-ref "$engine_ref" \

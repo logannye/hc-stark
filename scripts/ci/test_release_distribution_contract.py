@@ -173,13 +173,16 @@ def test_engine_signature_and_attestations_bind_exact_source_workflow_identity()
             "--certificate-github-workflow-repository",
             "--certificate-github-workflow-trigger workflow_dispatch",
             "--cert-identity",
-            "--signer-workflow",
             "--signer-digest",
             "--source-digest",
             "--source-ref",
             "--deny-self-hosted-runners",
         ):
             assert marker in workflow
+        # gh attestation verify treats cert-identity and signer-workflow as
+        # mutually exclusive actor-identity selectors. The exact certificate
+        # identity is the stricter tag-bound selector used by these workflows.
+        assert "--signer-workflow" not in workflow
     assert release.count("--certificate-github-workflow-sha") >= 1
     assert release.count("gh attestation verify") >= 2
     assert promotion.count("gh attestation verify") == 1
