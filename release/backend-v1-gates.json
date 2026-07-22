@@ -1,7 +1,7 @@
 {
-  "schema_version": 2,
-  "release": "tinyzkp-plonky3-backend-v1",
-  "status": "blocked",
   "evidence_manifest": "release/evidence/backend-v1-evidence.json",
-  "policy": "Every gate is derived from hashed artifacts and typed metadata. Candidate evidence binds a source commit and stable source-tree digest; signed finalization binds the evidence-only release commit. Manual passed booleans are rejected."
+  "policy": "All pre-signing gates are derived from hashed, validated artifacts.",
+  "release": "tinyzkp-plonky3-backend-v1",
+  "schema_version": 2,
+  "status": "candidate"
 }

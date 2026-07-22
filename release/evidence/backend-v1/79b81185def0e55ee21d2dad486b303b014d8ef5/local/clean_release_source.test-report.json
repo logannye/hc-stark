@@ -1,0 +1,101 @@
+{
+  "actual_command": [
+    "/opt/hostedtoolcache/Python/3.12.13/x64/bin/python3.12",
+    "scripts/ci/backend_source_scan.py"
+  ],
+  "dependency_lock_sha256": "0a28ab40dba2786a5106d274623d174b4c845b15ddd594629ebd98aa08612257",
+  "descriptor_execution": true,
+  "duration_ms": 690,
+  "environment_policy": {
+    "fixed_values": {
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_TERM_COLOR": "never",
+      "LANG": "C",
+      "LC_ALL": "C",
+      "RUST_BACKTRACE": "0",
+      "SOURCE_DATE_EPOCH": "0"
+    },
+    "inherited_names": [
+      "HOME",
+      "PATH",
+      "USER",
+      "LOGNAME",
+      "TMPDIR",
+      "TMP",
+      "TEMP",
+      "RUSTUP_HOME",
+      "CARGO_HOME"
+    ],
+    "rejected_build_affecting_names": [
+      "ASAN_OPTIONS",
+      "CARGO_BUILD_JOBS",
+      "CARGO_BUILD_RUSTC",
+      "CARGO_BUILD_RUSTC_WRAPPER",
+      "CARGO_BUILD_TARGET",
+      "CARGO_ENCODED_RUSTFLAGS",
+      "CARGO_TARGET_DIR",
+      "DYLD_INSERT_LIBRARIES",
+      "LD_PRELOAD",
+      "LIBFUZZER_OPTIONS",
+      "LLVM_PROFILE_FILE",
+      "MSAN_OPTIONS",
+      "RUSTC",
+      "RUSTC_BOOTSTRAP",
+      "RUSTC_WRAPPER",
+      "RUSTC_WORKSPACE_WRAPPER",
+      "RUSTDOCFLAGS",
+      "RUSTFLAGS",
+      "RUSTUP_TOOLCHAIN",
+      "TSAN_OPTIONS",
+      "UBSAN_OPTIONS"
+    ],
+    "schema_version": 1
+  },
+  "environment_policy_sha256": "1a09048465d17f7fe5df85db2dc96263f1583e03f960701de960547bc6c95b37",
+  "execution_profile": "ci",
+  "exit_status": 0,
+  "finished_at": "2026-07-22T06:27:03Z",
+  "gate": "clean_release_source",
+  "gate_inputs": {},
+  "immutable_file_count": 1176,
+  "immutable_source": true,
+  "log_bytes": 105,
+  "log_sha256": "69b47d602b0c9458ddf577b172dca294e5a48250fb29d94464c3aefffc1caa56",
+  "logical_command": [
+    "python3",
+    "scripts/ci/backend_source_scan.py"
+  ],
+  "network_boundary": null,
+  "output_parser": "source_scan_v1",
+  "parsed_result": {
+    "candidate_set_sha256": "3a621375184754af952ec40b6726ca0d38bcca5d067244f0f0cd74076d399a75",
+    "file_count": 1176,
+    "parser": "source_scan_v1",
+    "passed": true
+  },
+  "profile": "tinyzkp-p3-goldilocks-v1",
+  "release_sha": "79b81185def0e55ee21d2dad486b303b014d8ef5",
+  "rust_toolchain_sha256": "ccc2e1ec095fbcdc5c18912f077cda7f967f6ce3b214c92a76919a88aa8542b4",
+  "schema_version": 4,
+  "source_tree_sha256": "0834f5b1564ac9b0d4c733595e65b393ce50c6bbfa90ffe4258d509ea12c9296",
+  "started_at": "2026-07-22T06:27:03Z",
+  "timed_out": false,
+  "timeout_seconds": 120,
+  "tools": {
+    "python3": {
+      "path": "/opt/hostedtoolcache/Python/3.12.13/x64/bin/python3.12",
+      "sha256": "edcdaf07e49bb241cbccb0f18fdb2c8f2e6e1be36a583fce9fc703894d814238",
+      "version": "Python 3.12.13"
+    }
+  },
+  "write_boundary": {
+    "abi_version": 7,
+    "kind": "landlock-write-deny-v1",
+    "source_write_allowed": false,
+    "writable_paths": [
+      "cargo-target",
+      "gate-work",
+      "tmp"
+    ]
+  }
+}
