@@ -53,6 +53,26 @@ def test_checked_in_scorecard_is_local_closed_and_generated() -> None:
     assert scorecard.OUTPUT.read_bytes() == scorecard.canonical(result)
 
 
+def test_market_clock_rebind_changes_only_the_anchored_digest(
+    tmp_path: Path,
+) -> None:
+    value = source()
+    original = copy.deepcopy(value)
+    clock = scorecard.load(scorecard.ROOT / "release/guard-market-clock-v1.json")
+    clock["evaluated_at"] = "2026-07-24T02:30:00Z"
+    raw = scorecard.canonical(clock)
+    path = tmp_path / "release" / "guard-market-clock-v1.json"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(raw)
+
+    rebound = scorecard.rebind_market_clock(value, root=tmp_path)
+    expected = copy.deepcopy(original)
+    expected["market_clock"]["sha256"] = hashlib.sha256(raw).hexdigest()
+    assert rebound == expected
+    assert value == original
+    assert scorecard.derive(rebound, root=tmp_path)["recommendation"] == "continue"
+
+
 def test_critical_incident_and_operating_limits_freeze_sales(tmp_path: Path) -> None:
     value = source()
     value["critical_incidents"]["official_verifier_rejection"] = True

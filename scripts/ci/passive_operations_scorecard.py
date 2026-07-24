@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -97,6 +98,20 @@ def load(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ScorecardError(f"{path} must contain an object")
     return value
+
+
+def rebind_market_clock(
+    source: dict[str, Any], *, root: Path = ROOT
+) -> dict[str, Any]:
+    rebound = copy.deepcopy(source)
+    reference = exact(
+        rebound.get("market_clock"), {"path", "sha256"}, "market_clock"
+    )
+    if reference["path"] != "release/guard-market-clock-v1.json":
+        raise ScorecardError("market clock path differs")
+    raw_clock = (root / reference["path"]).read_bytes()
+    reference["sha256"] = hashlib.sha256(raw_clock).hexdigest()
+    return rebound
 
 
 def derive(source: dict[str, Any], *, root: Path = ROOT) -> dict[str, Any]:
@@ -323,17 +338,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--write", action="store_true")
+    parser.add_argument("--rebind-market-clock", action="store_true")
     args = parser.parse_args(argv)
     if args.check and args.write:
         parser.error("--check and --write are mutually exclusive")
+    if args.rebind_market_clock and not args.write:
+        parser.error("--rebind-market-clock requires --write")
     try:
-        output = derive(load(args.source), root=args.root.resolve())
+        source = load(args.source)
+        if args.rebind_market_clock:
+            source = rebind_market_clock(source, root=args.root.resolve())
+        output = derive(source, root=args.root.resolve())
         if args.check or not args.write:
             if OUTPUT.read_bytes() != canonical(output):
                 raise ScorecardError("passive operations scorecard is not generated")
         if args.write:
+            if args.rebind_market_clock:
+                source_temporary = args.source.with_suffix(".json.tmp")
+                source_temporary.write_bytes(canonical(source))
             temporary = OUTPUT.with_suffix(".json.tmp")
             temporary.write_bytes(canonical(output))
+            if args.rebind_market_clock:
+                os.replace(source_temporary, args.source)
             os.replace(temporary, OUTPUT)
     except (OSError, ScorecardError) as error:
         print(f"passive operations scorecard: FAIL: {error}", file=sys.stderr)

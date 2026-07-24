@@ -129,10 +129,15 @@ jobs:
             --check \
             --trusted-policy-sha256 "$launch_trust" \
             --trusted-signing-policy-sha256 "$signing_trust"
+          python3 scripts/ci/passive_operations_scorecard.py \
+            --rebind-market-clock \
+            --write
+          python3 scripts/ci/passive_operations_scorecard.py --check
           python3 -m pytest \
             scripts/release/test_build_guard_market_evidence.py \
             scripts/ci/test_guard_market_clock.py \
-            scripts/ci/test_guard_site_contract.py -q
+            scripts/ci/test_guard_site_contract.py \
+            scripts/ci/test_passive_operations_scorecard.py -q
           echo "market_trust=$market_trust" >> "$GITHUB_OUTPUT"
 
       - name: Commit and open the evidence-only pull request

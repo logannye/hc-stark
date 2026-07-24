@@ -69,6 +69,9 @@ def test_market_evidence_is_owner_main_only_signed_and_never_self_merges():
     ):
         assert generated in workflow
     assert "scripts/ci/test_guard_site_contract.py" in workflow
+    assert "scripts/ci/passive_operations_scorecard.py" in workflow
+    assert "--rebind-market-clock" in workflow
+    assert "scripts/ci/test_passive_operations_scorecard.py" in workflow
     assert "gh pr create" in workflow
     assert "No evidence needs to be rebuilt" in workflow
     assert "gh pr merge" not in workflow
