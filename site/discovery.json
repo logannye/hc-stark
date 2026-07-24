@@ -1,6 +1,6 @@
 {
   "availability": {
-    "community_doctor": false,
+    "community_doctor": true,
     "community_source": true,
     "contact_form": false,
     "customer_accounts": false,
@@ -10,8 +10,8 @@
     "hosted_proving": false,
     "hosted_verification": false,
     "qualified_engine_artifact": false,
-    "signed_evaluation_doctor_binary": false,
-    "signed_evaluation_doctor_oci": false
+    "signed_evaluation_doctor_binary": true,
+    "signed_evaluation_doctor_oci": true
   },
   "canonical_url": "https://tinyzkp.com",
   "commerce": "https://tinyzkp.com/commerce.json",
@@ -31,12 +31,23 @@
     "reason_v1": "https://tinyzkp.com/schemas/reason-v1.schema.json",
     "support_report_v1": "https://tinyzkp.com/schemas/support-report-v1.schema.json"
   },
-  "evergreen_acquisition_pages": [],
+  "evergreen_acquisition_pages": [
+    "https://tinyzkp.com/doctor"
+  ],
   "latest_release_index": null,
   "launch_state": "blocked",
   "market_clock": {
-    "signed_doctor_release_identity": null,
-    "source_sha256": "3817ecca5e0607f96b90d0ceb0baa623c30096544620bd4a76c63795436f6e25"
+    "signed_doctor_release_identity": {
+      "engine_artifact_sha256": "0f39f5f46dbded2743e2a44e604a2abc372695062b4e2d6f974075972611a4af",
+      "engine_source_sha": "fa1618da475051fa56bc3ca4aa4f36b7a5481f3b",
+      "oci_digest": "sha256:a0c4927f34f467ef03bad9c4b926f0ef6327343675ef0fcfd9ed6a94affc1d67",
+      "published_at": "2026-07-24T01:32:50Z",
+      "release_tag": "doctor-eval-v0.1.0",
+      "release_url": "https://github.com/logannye/hc-stark/releases/tag/doctor-eval-v0.1.0",
+      "schema_bundle_sha256": "1e257610eadc215f91ce6c6b0c9e0aac16f0111209a0bbb643c89100e9e43229",
+      "synthetic_job_sha256": "3dfe3efb815e7b5e4786cacfcd880ac7c3a1af87963185795b77131ffcea3112"
+    },
+    "source_sha256": "ac8d085d56e8efc24af4fe8b6d61abb8b6d1a23e678fa15d6150d2c987ffd39e"
   },
   "name": "TinyZKP",
   "portal_state": "unconfigured",
@@ -57,7 +68,12 @@
     "short": "Finish supported Plonky3 proof jobs within a RAM budget."
   },
   "pricing": "https://tinyzkp.com/pricing.json",
-  "primary_actions": [],
+  "primary_actions": [
+    {
+      "label": "Run the free doctor",
+      "url": "https://tinyzkp.com/doctor"
+    }
+  ],
   "reason_anchors": {
     "launch": "https://tinyzkp.com/releases#launch-blockers",
     "portal": "https://tinyzkp.com/support#merchant-portal",
