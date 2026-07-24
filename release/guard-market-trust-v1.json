@@ -1,5 +1,16 @@
 {
   "document_type": "GuardLaunchTrustV1",
   "schema_version": 1,
-  "signers": []
+  "signers": [
+    {
+      "certificate_identity_regexp": "^https://github\\.com/logannye/hc-stark/\\.github/workflows/owner-market-evidence\\.yml@refs/heads/main$",
+      "id": "tinyzkp-owner-market-main",
+      "oidc_issuer": "https://token.actions.githubusercontent.com",
+      "purposes": [
+        "guard_market:community_announcement",
+        "guard_market:doctor_evaluation_release",
+        "guard_market:ecosystem_submission"
+      ]
+    }
+  ]
 }
