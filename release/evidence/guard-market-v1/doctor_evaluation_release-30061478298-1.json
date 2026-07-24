@@ -1,0 +1,22 @@
+{
+  "claims": {
+    "attestation_verified": true,
+    "engine_artifact_sha256": "0f39f5f46dbded2743e2a44e604a2abc372695062b4e2d6f974075972611a4af",
+    "engine_source_sha": "fa1618da475051fa56bc3ca4aa4f36b7a5481f3b",
+    "exact_contract_doctor_command": true,
+    "oci_digest": "sha256:a0c4927f34f467ef03bad9c4b926f0ef6327343675ef0fcfd9ed6a94affc1d67",
+    "prerelease": true,
+    "published_at": "2026-07-24T01:32:50Z",
+    "release_tag": "doctor-eval-v0.1.0",
+    "release_url": "https://github.com/logannye/hc-stark/releases/tag/doctor-eval-v0.1.0",
+    "schema_bundle_sha256": "1e257610eadc215f91ce6c6b0c9e0aac16f0111209a0bbb643c89100e9e43229",
+    "signature_verified": true,
+    "synthetic_job_sha256": "3dfe3efb815e7b5e4786cacfcd880ac7c3a1af87963185795b77131ffcea3112"
+  },
+  "document_type": "GuardMarketEvidenceRecordV1",
+  "evidence_kind": "DoctorEvaluationReleaseEvidenceV1",
+  "issued_at": "2026-07-24T02:23:11Z",
+  "result": "passed",
+  "schema_version": 1,
+  "subject": "doctor_evaluation_release"
+}
