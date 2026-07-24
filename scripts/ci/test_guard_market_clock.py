@@ -124,7 +124,11 @@ def derive(source: dict, root: Path) -> dict:
 
 def test_checked_in_market_clock_is_closed_and_not_fabricated() -> None:
     source = blocked_source()
-    result = market.derive(source)
+    # The owner-evidence workflow intentionally runs this suite after attaching
+    # one signed subject to the checked-in source.  Keep the test independent of
+    # whether that source is fully blocked or contains the doctor prerelease:
+    # the clock must remain closed until the announcement is also present.
+    result = derive(source, market.ROOT)
     assert result["status"] == "not_started"
     assert result["started_at"] is None
     assert result["day_90_deadline"] is None
