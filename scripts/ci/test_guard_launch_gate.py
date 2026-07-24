@@ -1368,13 +1368,28 @@ def test_engine_evidence_exposes_only_production_evidence_acquisition_surfaces(
     tmp_path: Path,
 ) -> None:
     blocked = gate.derive(blocked_source())
-    assert blocked["discovery"]["evergreen_acquisition_pages"] == []
-    assert blocked["discovery"]["primary_actions"] == []
+    doctor_ready = blocked["discovery"]["availability"]["community_doctor"]
+    doctor_url = "https://tinyzkp.com/doctor"
+    doctor_actions = (
+        [{"label": "Run the free doctor", "url": doctor_url}]
+        if doctor_ready
+        else []
+    )
+    assert blocked["discovery"]["evergreen_acquisition_pages"] == (
+        [doctor_url] if doctor_ready else []
+    )
+    assert blocked["discovery"]["primary_actions"] == doctor_actions
     assert "noindex,nofollow" in gate._acquisition_meta(False)
-    blocked_routes = {route: False for route in gate.ACQUISITION_ROUTES}
+    blocked_routes = {
+        route: route == "/doctor" and doctor_ready
+        for route in gate.ACQUISITION_ROUTES
+    }
     assert all(
-        f"https://tinyzkp.com{route}".encode()
-        not in gate._sitemap_bytes(blocked_routes)
+        (
+            f"https://tinyzkp.com{route}".encode()
+            in gate._sitemap_bytes(blocked_routes)
+        )
+        is blocked_routes[route]
         for route in gate.ACQUISITION_ROUTES
     )
     llms_source = (gate.ROOT / "site" / "llms.txt").read_text(encoding="utf-8")
@@ -1382,10 +1397,10 @@ def test_engine_evidence_exposes_only_production_evidence_acquisition_surfaces(
         llms_source,
         blocked_routes,
         commerce_state="unconfigured",
-        doctor_ready=False,
+        doctor_ready=doctor_ready,
     )
     assert all(
-        f"https://tinyzkp.com{route}" not in blocked_llms
+        (f"https://tinyzkp.com{route}" in blocked_llms) is blocked_routes[route]
         for route in gate.ACQUISITION_ROUTES
     )
 
@@ -1393,15 +1408,16 @@ def test_engine_evidence_exposes_only_production_evidence_acquisition_surfaces(
     expected = [
         f"https://tinyzkp.com{route}"
         for route in gate.ACQUISITION_ROUTES
-        if route != "/doctor"
+        if route != "/doctor" or doctor_ready
     ]
     assert derived["release"]["qualified_engine_artifact_available"] is True
     assert derived["commerce"]["checkout_enabled"] is False
     assert derived["discovery"]["evergreen_acquisition_pages"] == expected
-    assert derived["discovery"]["primary_actions"] == []
+    assert derived["discovery"]["primary_actions"] == doctor_actions
     assert "index,follow" in gate._acquisition_meta(True)
     engine_routes = {
-        route: route != "/doctor" for route in gate.ACQUISITION_ROUTES
+        route: route != "/doctor" or doctor_ready
+        for route in gate.ACQUISITION_ROUTES
     }
     assert all(
         url.encode() in gate._sitemap_bytes(engine_routes) for url in expected
@@ -1410,9 +1426,11 @@ def test_engine_evidence_exposes_only_production_evidence_acquisition_surfaces(
         blocked_llms,
         engine_routes,
         commerce_state="unconfigured",
-        doctor_ready=False,
+        doctor_ready=doctor_ready,
     )
-    assert gate.LLMS_ACQUISITION_LINES[0] not in qualified_llms
+    assert (
+        gate.LLMS_ACQUISITION_LINES[0] in qualified_llms
+    ) is doctor_ready
     assert all(
         line in qualified_llms for line in gate.LLMS_ACQUISITION_LINES[1:]
     )
