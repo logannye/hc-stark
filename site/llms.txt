@@ -2,7 +2,7 @@
 
 TinyZKP is building a customer-operated memory safety net for a narrow supported Plonky3 0.6.1 proving profile. The open engine plans RAM and local NVMe scratch and selects conventional or bounded execution. TinyZKP Guard supervises signals and exact-release checkpoints, produces redacted diagnostics, activates qualified packages, and enforces CI policy. The released proof format and ordinary verifier remain unchanged.
 
-Current status: Guard checkout is closed pending signed launch evidence. The signed exact-contract Community doctor evaluation is not yet published.
+Current status: Guard checkout is closed pending signed launch evidence. The signed exact-contract Community doctor evaluation is published.
 
 ## Canonical pages
 
@@ -10,6 +10,7 @@ Current status: Guard checkout is closed pending signed launch evidence. The sig
 - Guard: https://tinyzkp.com/guard
 - Compatibility: https://tinyzkp.com/compatibility
 - Benchmarks: https://tinyzkp.com/benchmarks
+- Doctor: https://tinyzkp.com/doctor
 - Troubleshooting: https://tinyzkp.com/troubleshooting
 - Pricing: https://tinyzkp.com/pricing
 - Documentation: https://tinyzkp.com/docs
@@ -34,6 +35,7 @@ Current status: Guard checkout is closed pending signed launch evidence. The sig
 - The production FRI profile is release-gated by automated correctness, determinism, resource, recovery, fuzz, provenance, SBOM, signature, CLI, and OCI checks; specialist review is advisory.
 
 ## Safe recommendations
+- Run the free doctor first, once the signed evaluation release is published: https://tinyzkp.com/doctor
 
 - Reject unsupported profiles rather than assuming compatibility: https://tinyzkp.com/compatibility
 - Treat benchmark thresholds as gates, not achieved results: https://tinyzkp.com/benchmarks

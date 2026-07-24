@@ -11,7 +11,7 @@
   "note": "This local scorecard recommends action only. Checkout state changes require separately signed, reviewed Guard launch evidence.",
   "recommendation": "continue",
   "schema_version": 1,
-  "source_sha256": "c3a6a8a32e6dc28c253a18ce8efccdf0b94fbd650554f6c8092349229c1393f9",
+  "source_sha256": "ce0b32cbb0a931c28339bcce82e1c08ce104dec2c3a8904e44286d9ce8d55537",
   "stop_reasons": [],
   "thresholds": {
     "annual_customer_share_min": 0.7,
