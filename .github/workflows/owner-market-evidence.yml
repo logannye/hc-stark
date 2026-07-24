@@ -119,20 +119,37 @@ jobs:
           python3 scripts/ci/guard_market_clock.py \
             --check \
             --trusted-policy-sha256 "$market_trust"
+          launch_trust="$(sha256sum release/guard-launch-trust-v1.json | cut -d' ' -f1)"
+          signing_trust="$(sha256sum release/guard-signing-trust-v1.json | cut -d' ' -f1)"
+          python3 scripts/ci/guard_launch_gate.py \
+            --write \
+            --trusted-policy-sha256 "$launch_trust" \
+            --trusted-signing-policy-sha256 "$signing_trust"
+          python3 scripts/ci/guard_launch_gate.py \
+            --check \
+            --trusted-policy-sha256 "$launch_trust" \
+            --trusted-signing-policy-sha256 "$signing_trust"
           python3 -m pytest \
             scripts/release/test_build_guard_market_evidence.py \
-            scripts/ci/test_guard_market_clock.py -q
+            scripts/ci/test_guard_market_clock.py \
+            scripts/ci/test_guard_site_contract.py -q
           echo "market_trust=$market_trust" >> "$GITHUB_OUTPUT"
 
       - name: Commit and open the evidence-only pull request
         run: |
-          unexpected="$(git status --porcelain | awk '{print $2}' | grep -Ev '^release/' || true)"
+          unexpected="$(git status --porcelain | awk '{print $2}' | \
+            grep -Ev '^(release/|site/(discovery\.json|doctor\.html|llms\.txt|sitemap\.xml)$)' || true)"
           test -z "$unexpected"
           branch="codex/evidence/market-${SUBJECT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git switch -c "$branch"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add release
+          git add \
+            release \
+            site/discovery.json \
+            site/doctor.html \
+            site/llms.txt \
+            site/sitemap.xml
           git diff --cached --check
           git commit -m "Record Guard market evidence for ${SUBJECT}"
           git push --set-upstream origin "$branch"

@@ -59,6 +59,16 @@ def test_market_evidence_is_owner_main_only_signed_and_never_self_merges():
         in workflow
     )
     assert "GUARD_MARKET_TRUST_POLICY_SHA256" in workflow
+    assert "scripts/ci/guard_launch_gate.py" in workflow
+    assert "--write" in workflow
+    for generated in (
+        "site/discovery.json",
+        "site/doctor.html",
+        "site/llms.txt",
+        "site/sitemap.xml",
+    ):
+        assert generated in workflow
+    assert "scripts/ci/test_guard_site_contract.py" in workflow
     assert "gh pr create" in workflow
     assert "No evidence needs to be rebuilt" in workflow
     assert "gh pr merge" not in workflow
