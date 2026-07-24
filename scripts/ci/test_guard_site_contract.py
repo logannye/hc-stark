@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SITE = ROOT / "site"
 LAUNCH_GATE = ROOT / "release" / "guard-launch-state-v2.json"
+MARKET_CLOCK = ROOT / "release" / "guard-market-clock-v1.json"
 
 PUBLIC_PAGES = {
     "index.html",
@@ -264,16 +265,22 @@ def test_discovery_exposes_exact_thirteen_published_contract_urls() -> None:
     )
 
 
-def test_signed_evaluation_doctor_is_not_claimed_before_market_evidence() -> None:
+def test_signed_evaluation_doctor_matches_market_evidence() -> None:
     discovery = load_json(SITE / "discovery.json")
+    market_clock = load_json(MARKET_CLOCK)
+    doctor_ready = market_clock["doctor_evaluation_release"]["status"] == "passed"
     assert discovery["availability"]["community_source"] is True
-    assert discovery["availability"]["community_doctor"] is False
-    assert discovery["availability"]["signed_evaluation_doctor_binary"] is False
-    assert discovery["availability"]["signed_evaluation_doctor_oci"] is False
-    assert discovery["primary_actions"] == []
+    assert discovery["availability"]["community_doctor"] is doctor_ready
+    assert discovery["availability"]["signed_evaluation_doctor_binary"] is doctor_ready
+    assert discovery["availability"]["signed_evaluation_doctor_oci"] is doctor_ready
+    assert discovery["primary_actions"] == (
+        [{"label": "Run the free doctor", "url": "https://tinyzkp.com/doctor"}]
+        if doctor_ready
+        else []
+    )
 
 
-def test_acquisition_pages_remain_noindex_and_undiscovered_without_engine_evidence() -> None:
+def test_acquisition_page_indexing_matches_signed_doctor_evidence() -> None:
     routes = (
         "/doctor",
         "/plonky3-out-of-memory",
@@ -281,17 +288,26 @@ def test_acquisition_pages_remain_noindex_and_undiscovered_without_engine_eviden
         "/ssd-backed-plonky3-proving",
     )
     discovery = load_json(SITE / "discovery.json")
+    market_clock = load_json(MARKET_CLOCK)
+    doctor_ready = market_clock["doctor_evaluation_release"]["status"] == "passed"
     sitemap = (SITE / "sitemap.xml").read_text(encoding="utf-8")
-    assert discovery["evergreen_acquisition_pages"] == []
+    assert discovery["evergreen_acquisition_pages"] == (
+        ["https://tinyzkp.com/doctor"] if doctor_ready else []
+    )
     for route in routes:
         page = SITE / f"{route.removeprefix('/')}.html"
         text = page.read_text(encoding="utf-8")
+        route_ready = route == "/doctor" and doctor_ready
+        robots = "index,follow" if route_ready else "noindex,nofollow"
         assert (
-            '<meta name="robots" content="noindex,nofollow" '
-            "data-guard-acquisition>"
+            f'<meta name="robots" content="{robots}" data-guard-acquisition>'
         ) in text
-        assert f"https://tinyzkp.com{route}" not in sitemap
-        assert f"https://tinyzkp.com{route}" not in json.dumps(discovery)
+        if route_ready:
+            assert f"https://tinyzkp.com{route}" in sitemap
+            assert f"https://tinyzkp.com{route}" in json.dumps(discovery)
+        else:
+            assert f"https://tinyzkp.com{route}" not in sitemap
+            assert f"https://tinyzkp.com{route}" not in json.dumps(discovery)
 
 
 def test_activation_disclosure_matches_the_guard_transport() -> None:
