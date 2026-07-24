@@ -54,6 +54,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$")
 MAX_EVIDENCE_BYTES = 1024 * 1024
+MAX_THIRD_PARTY_NOTICES_BYTES = 4 * 1024 * 1024
 REUSABLE_EVIDENCE_MAX_DAYS = 730
 CURRENT_EVALUATION_MAX_AGE = timedelta(hours=24)
 ARTIFACT_PUBLICATION_BLOCKER = "guard_artifact_published"
@@ -309,13 +310,30 @@ def _normalized_site_file(path: Path) -> bytes:
 
 def _legal_document_sha256(root: Path, field: str) -> str:
     relative = LEGAL_DOCUMENT_PATHS[field]
-    path, raw = _safe_fixed_file(root, relative, relative)
+    path, raw = _safe_fixed_file(
+        root,
+        relative,
+        relative,
+        maximum_bytes=(
+            MAX_THIRD_PARTY_NOTICES_BYTES
+            if field == "notices_sha256"
+            else MAX_EVIDENCE_BYTES
+        ),
+    )
     if field in {"eula_sha256", "notices_sha256"}:
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError as error:
             raise GateError(f"{relative} is not UTF-8") from error
-        if re.search(r"(?i)\b(?:unresolved|placeholder|todo|tbd)\b", text):
+        marker = (
+            re.search(r"(?i)\b(?:unresolved|placeholder|todo|tbd)\b", text)
+            if field == "eula_sha256"
+            else re.search(
+                r"(?im)^(?:unresolved|placeholder|todo|tbd)\b",
+                text,
+            )
+        )
+        if marker:
             raise GateError(f"{relative} still contains release-blocking markers")
     return sha256_bytes(_normalized_site_file(path))
 
@@ -2063,7 +2081,13 @@ def _merchant_configuration(
     return result
 
 
-def _safe_fixed_file(root: Path, relative: str, expected: str) -> tuple[Path, bytes]:
+def _safe_fixed_file(
+    root: Path,
+    relative: str,
+    expected: str,
+    *,
+    maximum_bytes: int = MAX_EVIDENCE_BYTES,
+) -> tuple[Path, bytes]:
     if relative != expected:
         raise GateError(f"trust policy path must be {expected}")
     pure = PurePosixPath(relative)
@@ -2081,7 +2105,7 @@ def _safe_fixed_file(root: Path, relative: str, expected: str) -> tuple[Path, by
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
         raise GateError("trust policy must be a single-link regular file")
     raw = path.read_bytes()
-    if not raw or len(raw) > MAX_EVIDENCE_BYTES:
+    if not raw or len(raw) > maximum_bytes:
         raise GateError("trust policy size is invalid")
     return path, raw
 

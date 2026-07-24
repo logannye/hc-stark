@@ -2331,6 +2331,55 @@ def test_legal_approval_binds_actual_bytes_and_pricing_effective_date(
     assert blocked["pricing"]["effective_date"] is None
 
 
+def test_notices_preserve_verbatim_external_todo_and_tbd_metadata(
+    tmp_path: Path,
+) -> None:
+    legal = tmp_path / "legal"
+    legal.mkdir()
+    notices = (
+        "TinyZKP Guard final third-party notices.\n"
+        "Copyright and license inventory:\n"
+        "Files:\n"
+        "  TODO\n"
+        "End-of-life: TBD\n"
+    )
+    path = legal / "THIRD-PARTY-NOTICES.txt"
+    path.write_text(notices, encoding="utf-8")
+    assert gate._legal_document_sha256(tmp_path, "notices_sha256") == (
+        hashlib.sha256(notices.encode("utf-8")).hexdigest()
+    )
+
+    path.write_text(
+        "TODO: complete the third-party notices\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(gate.GateError, match="release-blocking markers"):
+        gate._legal_document_sha256(tmp_path, "notices_sha256")
+
+
+def test_notices_allow_frozen_oci_copyright_inventory_up_to_four_mib(
+    tmp_path: Path,
+) -> None:
+    legal = tmp_path / "legal"
+    legal.mkdir()
+    notices = (
+        b"TinyZKP Guard third-party notices and copyright inventory.\n"
+        + b"x" * (gate.MAX_EVIDENCE_BYTES + 1)
+    )
+    path = legal / "THIRD-PARTY-NOTICES.txt"
+    path.write_bytes(notices)
+    assert gate._legal_document_sha256(tmp_path, "notices_sha256") == (
+        hashlib.sha256(notices).hexdigest()
+    )
+
+    path.write_bytes(
+        b"TinyZKP Guard third-party notices.\n"
+        + b"x" * gate.MAX_THIRD_PARTY_NOTICES_BYTES
+    )
+    with pytest.raises(gate.GateError, match="size is invalid"):
+        gate._legal_document_sha256(tmp_path, "notices_sha256")
+
+
 @pytest.mark.parametrize(
     ("text", "message"),
     [
