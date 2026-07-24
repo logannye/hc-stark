@@ -134,6 +134,10 @@ def test_production_adds_exact_cloudflare_runtime_and_empty_secret_inventory(
 ):
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "scoped-token")
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "scoped-account")
+    monkeypatch.setenv("TINYZKP_GUARD_TRUST_POLICY_SHA256", "a" * 64)
+    monkeypatch.setenv("TINYZKP_GUARD_SIGNING_TRUST_POLICY_SHA256", "b" * 64)
+    monkeypatch.setenv("TINYZKP_GUARD_MARKET_TRUST_POLICY_SHA256", "c" * 64)
+    monkeypatch.setenv("TINYZKP_COSIGN", "/reviewed/cosign")
     built = preflight.build_steps(
         args(
             production=True,
@@ -162,6 +166,9 @@ def test_production_adds_exact_cloudflare_runtime_and_empty_secret_inventory(
         "/reviewed/wrangler.js",
     ) in commands(built)
     assert ("/reviewed/node", "--check", "site/_worker.js") in commands(built)
+    assert set(built[0].env) == set(preflight.GUARD_TRUST_ENV)
+    assert set(built[1].env) == set(preflight.MARKET_TRUST_ENV)
+    assert built[1].env["TINYZKP_COSIGN"] == "/reviewed/cosign"
     assert built[-1].name == "Cloudflare Pages live secret inventory check"
     assert set(built[-1].env) == set(preflight.CLOUDFLARE_ENV)
     assert all(
