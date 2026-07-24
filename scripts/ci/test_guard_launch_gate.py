@@ -1462,10 +1462,15 @@ def test_keyless_verification_binds_workflow_commit_ref_repo_and_trigger(
 ) -> None:
     source = qualified_source(tmp_path)
     commands: list[list[str]] = []
+    isolated_homes: list[str] = []
 
     def capture_cosign(*args, **kwargs):
         command = args[0]
         commands.append(command)
+        isolated_home = Path(kwargs["env"]["HOME"])
+        assert isolated_home.is_dir()
+        assert isolated_home != Path("/nonexistent")
+        isolated_homes.append(str(isolated_home))
         return subprocess.CompletedProcess(command, 0, stdout="verified", stderr="")
 
     signing_policy_sha256 = hashlib.sha256(
@@ -1480,6 +1485,9 @@ def test_keyless_verification_binds_workflow_commit_ref_repo_and_trigger(
         trusted_signing_policy_sha256=signing_policy_sha256,
     )
     assert commands
+    assert len(isolated_homes) == len(commands)
+    assert len(set(isolated_homes)) == len(isolated_homes)
+    assert all(not Path(path).exists() for path in isolated_homes)
     for command in commands:
         assert command[command.index("--certificate-github-workflow-sha") + 1] == (
             WORKFLOW_SOURCE_SHA
@@ -2321,6 +2329,55 @@ def test_legal_approval_binds_actual_bytes_and_pricing_effective_date(
 
     blocked = gate.derive(blocked_source())
     assert blocked["pricing"]["effective_date"] is None
+
+
+def test_notices_preserve_verbatim_external_todo_and_tbd_metadata(
+    tmp_path: Path,
+) -> None:
+    legal = tmp_path / "legal"
+    legal.mkdir()
+    notices = (
+        "TinyZKP Guard final third-party notices.\n"
+        "Copyright and license inventory:\n"
+        "Files:\n"
+        "  TODO\n"
+        "End-of-life: TBD\n"
+    )
+    path = legal / "THIRD-PARTY-NOTICES.txt"
+    path.write_text(notices, encoding="utf-8")
+    assert gate._legal_document_sha256(tmp_path, "notices_sha256") == (
+        hashlib.sha256(notices.encode("utf-8")).hexdigest()
+    )
+
+    path.write_text(
+        "TODO: complete the third-party notices\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(gate.GateError, match="release-blocking markers"):
+        gate._legal_document_sha256(tmp_path, "notices_sha256")
+
+
+def test_notices_allow_frozen_oci_copyright_inventory_up_to_four_mib(
+    tmp_path: Path,
+) -> None:
+    legal = tmp_path / "legal"
+    legal.mkdir()
+    notices = (
+        b"TinyZKP Guard third-party notices and copyright inventory.\n"
+        + b"x" * (gate.MAX_EVIDENCE_BYTES + 1)
+    )
+    path = legal / "THIRD-PARTY-NOTICES.txt"
+    path.write_bytes(notices)
+    assert gate._legal_document_sha256(tmp_path, "notices_sha256") == (
+        hashlib.sha256(notices).hexdigest()
+    )
+
+    path.write_bytes(
+        b"TinyZKP Guard third-party notices.\n"
+        + b"x" * gate.MAX_THIRD_PARTY_NOTICES_BYTES
+    )
+    with pytest.raises(gate.GateError, match="size is invalid"):
+        gate._legal_document_sha256(tmp_path, "notices_sha256")
 
 
 @pytest.mark.parametrize(
