@@ -1462,10 +1462,15 @@ def test_keyless_verification_binds_workflow_commit_ref_repo_and_trigger(
 ) -> None:
     source = qualified_source(tmp_path)
     commands: list[list[str]] = []
+    isolated_homes: list[str] = []
 
     def capture_cosign(*args, **kwargs):
         command = args[0]
         commands.append(command)
+        isolated_home = Path(kwargs["env"]["HOME"])
+        assert isolated_home.is_dir()
+        assert isolated_home != Path("/nonexistent")
+        isolated_homes.append(str(isolated_home))
         return subprocess.CompletedProcess(command, 0, stdout="verified", stderr="")
 
     signing_policy_sha256 = hashlib.sha256(
@@ -1480,6 +1485,9 @@ def test_keyless_verification_binds_workflow_commit_ref_repo_and_trigger(
         trusted_signing_policy_sha256=signing_policy_sha256,
     )
     assert commands
+    assert len(isolated_homes) == len(commands)
+    assert len(set(isolated_homes)) == len(isolated_homes)
+    assert all(not Path(path).exists() for path in isolated_homes)
     for command in commands:
         assert command[command.index("--certificate-github-workflow-sha") + 1] == (
             WORKFLOW_SOURCE_SHA

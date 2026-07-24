@@ -21,6 +21,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 from typing import Any, Callable
 from urllib.parse import parse_qsl, urlparse
 
@@ -2294,22 +2295,23 @@ def _verify_signature(
         )
     command.append(str(claim))
     try:
-        completed = runner(
-            command,
-            cwd=ROOT,
-            env={
-                "PATH": "/usr/bin:/bin",
-                "HOME": "/nonexistent",
-                "LANG": "C.UTF-8",
-                "LC_ALL": "C.UTF-8",
-            },
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=60,
-            check=False,
-        )
+        with tempfile.TemporaryDirectory(prefix="tinyzkp-cosign-") as cosign_home:
+            completed = runner(
+                command,
+                cwd=ROOT,
+                env={
+                    "PATH": "/usr/bin:/bin",
+                    "HOME": cosign_home,
+                    "LANG": "C.UTF-8",
+                    "LC_ALL": "C.UTF-8",
+                },
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=60,
+                check=False,
+            )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise GateError("detached evidence signature verification failed") from exc
     if completed.returncode != 0:
