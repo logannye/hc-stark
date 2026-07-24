@@ -135,13 +135,15 @@ revocation.
 
 Before signing `legacy_obligations_resolved`, follow
 [`legacy_retirement_notice.md`](legacy_retirement_notice.md). The current owner
-inventory is 10 free accounts (9 external and 1 synthetic), with historical
-API use by 1 external account and the synthetic account; no external account
-has billed usage. Separately resolve the 2 active owner-only legacy TinyZKP $19
-subscriptions and their TinyZKP catalog objects without modifying unrelated
-Casino Coach records. These facts do not satisfy the gate by themselves: all 9
-external notices, the 1 external export disposition, the synthetic internal
-disposition, both owner-only subscription dispositions, retained-record
-documentation, and every open obligation must be resolved first. Keep tenant
-identities and delivery evidence out of Git; sign only aggregate claims and the
-exact notice-template digest.
+inventory, verified directly from the legacy tenant and usage stores on
+2026-07-24, is 10 synthetic/test free accounts and 0 external accounts.
+Historical API use belongs to 2 of those synthetic accounts; no external
+account has API or billed usage. The 2 owner-only legacy TinyZKP $19
+subscriptions have been canceled and the legacy TinyZKP catalog objects have
+been disabled without modifying unrelated Casino Coach records. These facts do
+not satisfy the gate by themselves: the synthetic internal disposition,
+owner-only subscription dispositions, retained-record documentation, and every
+open obligation must be resolved first. No customer retirement notice or
+external export disposition is required for a zero-external-account inventory.
+Keep tenant identities and delivery evidence out of Git; sign only aggregate
+claims and the exact notice-template digest.

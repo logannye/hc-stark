@@ -5,14 +5,14 @@ TinyZKP service. Never commit tenant names, email addresses, API keys, usage
 payloads, exports, or delivery receipts to this repository. Keep the delivery
 ledger and any exports in the owner-controlled records system.
 
-The owner audit currently identifies 10 free tenant accounts: 9 external
-accounts and 1 synthetic operator account. Two accounts ever used the API: 1
-external account and the synthetic account. No external account has billed
-usage. Separately, Stripe contains 2 active owner-only legacy TinyZKP
-subscriptions at $19 and their legacy TinyZKP catalog objects. The unrelated
-Casino Coach product and subscriptions are outside this launch and must not be
-changed. These counts are inventory facts, not proof that notice, export,
-subscription, deletion, or retention duties are done.
+The owner audit verified directly against the legacy tenant and usage stores on
+2026-07-24 identifies 10 free tenant accounts: all 10 are synthetic/test
+accounts and 0 are external accounts. Two synthetic accounts used the API. No
+external account has API or billed usage. Separately, the 2 owner-only legacy
+TinyZKP subscriptions at $19 have been canceled and the legacy TinyZKP catalog
+objects disabled. The unrelated Casino Coach product and subscription remain
+outside this launch and were not changed. These counts are inventory facts,
+not proof that deletion or retention duties are done.
 The `legacy_obligations_resolved` gate must remain blocked until the signed
 evidence records every checklist item below as complete.
 
@@ -34,25 +34,28 @@ email.
 
 ## Owner completion checklist
 
-- Send the notice to all 9 external accounts through the private owner
-  channel and retain delivery evidence outside Git.
-- For the 1 external account with API usage, record whether an export was
-  delivered or explicitly declined. Resolve failed delivery attempts directly.
-- Do not send a customer notice or export to the synthetic operator account.
-  Record its internal test-data disposition separately.
-- Resolve both active owner-only legacy TinyZKP $19 subscriptions and disable
-  only their legacy TinyZKP catalog objects. Record exact owner-only
-  dispositions outside Git. Do not modify Casino Coach or any other unrelated
-  Stripe product, price, subscription, or customer.
+- Reconcile the authoritative inventory before sending any notice. Send a
+  notice only to an actual external account, and retain delivery evidence
+  outside Git. The verified inventory currently requires 0 notices.
+- For each actual external account with API usage, record whether an export was
+  delivered or explicitly declined. The verified inventory currently requires
+  0 external export dispositions.
+- Do not send a customer notice or export to synthetic/test accounts. Record
+  their internal test-data disposition separately.
+- Preserve the outside-Git record showing both owner-only legacy TinyZKP $19
+  subscriptions were canceled and only their legacy TinyZKP catalog objects
+  were disabled. Do not modify Casino Coach or any other unrelated Stripe
+  product, price, subscription, or customer.
 - Confirm there are no open export requests, refunds, credits, paid-service
   promises, support commitments, or other unresolved obligations.
 - Dispose of customer artifacts that are not subject to a documented retention
   duty. Record the purpose, custodian, access boundary, and deletion date for
   every retained record category.
 - Record aggregate counts only in the signed launch envelope: external and
-  synthetic accounts, API use, external billed use, 9 notices, the 1 external
-  export disposition, synthetic internal disposition, the 2 owner-only $19
-  subscription dispositions, catalog isolation, and open-obligation counts.
+  synthetic accounts, API use, external billed use, required and sent notices,
+  required external export dispositions, synthetic internal disposition, the
+  2 owner-only $19 subscription dispositions, catalog isolation, and
+  open-obligation counts.
 - Hash these exact template bytes and bind that SHA-256 in the signed evidence.
 
 Only after all checklist counts reconcile may the owner attest
