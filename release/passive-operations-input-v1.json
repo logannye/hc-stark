@@ -1,24 +1,24 @@
 {
-  "schema_version": 1,
+  "critical_incidents": {
+    "activated_release_disabled": false,
+    "artifact_signature_failure": false,
+    "checkpoint_recovery_failure": false,
+    "critical_or_high_security_finding": false,
+    "customer_proof_data_received": false,
+    "legal_semantic_failure": false,
+    "merchant_semantic_failure": false,
+    "official_verifier_rejection": false,
+    "offline_runtime_failure": false,
+    "proof_equality_failure": false,
+    "provenance_failure": false,
+    "release_identity_mismatch": false
+  },
   "document_type": "PassiveOperationsInputV1",
   "evaluated_at": "2026-07-18T12:00:00Z",
   "market_clock": {
     "path": "release/guard-market-clock-v1.json",
-    "sha256": "c9e101f230dc12b76e7d15e85b1605ae4513f463c5f9d9308ed32849bc25c23b"
+    "sha256": "4776917e0749575a8873e99d184bc518c7dfc08ece18655a4b8e04ec337c1db7"
   },
   "months": [],
-  "critical_incidents": {
-    "official_verifier_rejection": false,
-    "proof_equality_failure": false,
-    "release_identity_mismatch": false,
-    "critical_or_high_security_finding": false,
-    "customer_proof_data_received": false,
-    "activated_release_disabled": false,
-    "artifact_signature_failure": false,
-    "provenance_failure": false,
-    "offline_runtime_failure": false,
-    "checkpoint_recovery_failure": false,
-    "legal_semantic_failure": false,
-    "merchant_semantic_failure": false
-  }
+  "schema_version": 1
 }

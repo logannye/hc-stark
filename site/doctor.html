@@ -4,14 +4,14 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>TinyZKP Doctor — Check Plonky3 compatibility and resources</title>
   <meta name="description" content="Use the free TinyZKP doctor contract to check a supported Plonky3 job, RAM budget, scratch budget, and expected execution mode before purchase.">
-  <meta name="robots" content="noindex,nofollow" data-guard-acquisition>
+  <meta name="robots" content="index,follow" data-guard-acquisition>
   <link rel="canonical" href="https://tinyzkp.com/doctor"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><script src="/shared.js" defer></script><script src="/roi.js" defer></script>
 </head>
 <body>
 <header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a><a class="button nav-buy" data-checkout="annual" data-closed-label="Not yet for sale" data-live-label="Buy Guard">Not yet for sale</a></nav></div></header>
 <main><section class="page-hero"><div class="container"><div class="eyebrow">Free evaluation path</div><h1>Check fit before you move a proof job.</h1><p class="lede">The Community engine owns compatibility, automatic mode planning, RAM estimation, and scratch-headroom checks. It rejects unsafe or unsupported jobs before expensive ingestion.</p><div class="actions"><a class="button" href="#run">Run the free doctor</a><a class="button secondary" href="/compatibility">Review the exact profile</a></div></div></section>
 <section class="content container">
-  <div class="notice" data-doctor-status><strong>Distribution status:</strong> the exact-contract Community doctor has not yet been published as a signed release. Do not treat an unqualified build or copied command as release evidence. The <a href="/releases#launch-blockers">release gate</a> remains blocked.</div>
+  <div class="notice" data-doctor-status><strong>Signed evaluation release available.</strong> Download and verify the exact Community doctor identity published in discovery.json before use.</div>
   <h2 id="run">Expected local flow</h2>
   <pre><code>tinyzkp-engine doctor --job job.json</code></pre>
   <p>The signed evaluation release will emit one versioned <code>DoctorReportV1</code> result. Keep that report local. Never send its contents, a witness, trace chunk, license key, entitlement, secret, private path, or proprietary AIR source. A founding-validation record may contain only the report digest and standardized compatibility result.</p>

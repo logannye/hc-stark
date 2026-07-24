@@ -15,21 +15,30 @@
   },
   "day_90_deadline": null,
   "doctor_evaluation_release": {
-    "identity": null,
-    "reason_code": "signed-doctor-evaluation-release-missing",
-    "status": "blocked"
+    "identity": {
+      "engine_artifact_sha256": "0f39f5f46dbded2743e2a44e604a2abc372695062b4e2d6f974075972611a4af",
+      "engine_source_sha": "fa1618da475051fa56bc3ca4aa4f36b7a5481f3b",
+      "oci_digest": "sha256:a0c4927f34f467ef03bad9c4b926f0ef6327343675ef0fcfd9ed6a94affc1d67",
+      "published_at": "2026-07-24T01:32:50Z",
+      "release_tag": "doctor-eval-v0.1.0",
+      "release_url": "https://github.com/logannye/hc-stark/releases/tag/doctor-eval-v0.1.0",
+      "schema_bundle_sha256": "1e257610eadc215f91ce6c6b0c9e0aac16f0111209a0bbb643c89100e9e43229",
+      "synthetic_job_sha256": "3dfe3efb815e7b5e4786cacfcd880ac7c3a1af87963185795b77131ffcea3112"
+    },
+    "reason_code": null,
+    "status": "passed"
   },
   "document_type": "GuardMarketClockV1",
   "ecosystem_submission": {
     "reason_code": "post-qualification-ecosystem-submission-not-made",
     "status": "blocked"
   },
-  "evaluated_at": "2026-07-18T12:00:00Z",
+  "evaluated_at": "2026-07-24T02:33:00Z",
   "generated_from": "release/guard-market-evidence-v1.json",
   "initial_decision_date": "2026-10-16",
   "schema_version": 1,
   "six_month_stop_deadline": null,
-  "source_sha256": "3817ecca5e0607f96b90d0ceb0baa623c30096544620bd4a76c63795436f6e25",
+  "source_sha256": "a7c0a2addc6acd76cf4b5af4479afc094b11b724da786dbc0be126fe3759f99e",
   "started_at": null,
   "status": "not_started"
 }
