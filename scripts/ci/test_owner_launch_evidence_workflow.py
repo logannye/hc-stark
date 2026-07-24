@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/owner-launch-evidence.yml"
+MARKET_WORKFLOW = ROOT / ".github/workflows/owner-market-evidence.yml"
 CONFIGURE_WORKFLOW = ROOT / ".github/workflows/configure-guard-launch.yml"
 PUBLICATION_WORKFLOW = (
     ROOT / ".github/workflows/import-initial-guard-release-index.yml"
@@ -38,8 +39,38 @@ def test_owner_evidence_pr_uses_fresh_codex_branch_and_never_self_merges():
     assert "gh pr merge" not in workflow
 
 
+def test_market_evidence_is_owner_main_only_signed_and_never_self_merges():
+    workflow = MARKET_WORKFLOW.read_text(encoding="utf-8")
+    assert "github.ref == 'refs/heads/main'" in workflow
+    assert "github.actor == github.repository_owner" in workflow
+    assert "github.triggering_actor == github.repository_owner" in workflow
+    assert 'test "$GITHUB_SHA" = "$EXPECTED_MAIN_SHA"' in workflow
+    assert 'test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN_SHA"' in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "\n  push:" not in workflow
+    assert "\n  schedule:" not in workflow
+    assert "id-token: write" in workflow
+    assert "--certificate-github-workflow-sha" in workflow
+    assert "--certificate-github-workflow-ref 'refs/heads/main'" in workflow
+    assert "--certificate-github-workflow-repository 'logannye/hc-stark'" in workflow
+    assert "--certificate-github-workflow-trigger 'workflow_dispatch'" in workflow
+    assert (
+        'branch="codex/evidence/market-${SUBJECT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
+        in workflow
+    )
+    assert "GUARD_MARKET_TRUST_POLICY_SHA256" in workflow
+    assert "gh pr create" in workflow
+    assert "No evidence needs to be rebuilt" in workflow
+    assert "gh pr merge" not in workflow
+
+
 def test_owner_workflows_install_pinned_pytest_before_running_tests():
-    for path in (WORKFLOW, CONFIGURE_WORKFLOW, PUBLICATION_WORKFLOW):
+    for path in (
+        WORKFLOW,
+        MARKET_WORKFLOW,
+        CONFIGURE_WORKFLOW,
+        PUBLICATION_WORKFLOW,
+    ):
         workflow = path.read_text(encoding="utf-8")
         assert "pytest==8.4.2" in workflow
         assert workflow.index("pytest==8.4.2") < workflow.index("python3 -m pytest")
