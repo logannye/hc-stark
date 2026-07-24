@@ -301,11 +301,11 @@ CLAIMS = {
     },
     "legacy_obligations_resolved": {
         "identified_free_tenant_accounts": 10,
-        "external_free_tenant_accounts": 9,
-        "synthetic_test_tenant_accounts": 1,
+        "external_free_tenant_accounts": 0,
+        "synthetic_test_tenant_accounts": 10,
         "accounts_with_api_usage": 2,
-        "external_api_usage_accounts": 1,
-        "synthetic_api_usage_accounts": 1,
+        "external_api_usage_accounts": 0,
+        "synthetic_api_usage_accounts": 2,
         "external_accounts_with_billed_usage": 0,
         "owner_only_legacy_tinyzkp_subscriptions_identified": 2,
         "owner_only_legacy_tinyzkp_subscriptions_resolved": 2,
@@ -313,9 +313,9 @@ CLAIMS = {
         "owner_only_legacy_catalog_objects_disabled": True,
         "unrelated_stripe_catalog_objects_untouched": True,
         "synthetic_test_data_disposition_documented": True,
-        "retirement_notices_required": 9,
-        "retirement_notices_sent": 9,
-        "external_api_usage_exports_resolved": 1,
+        "retirement_notices_required": 0,
+        "retirement_notices_sent": 0,
+        "external_api_usage_exports_resolved": 0,
         "open_export_requests": 0,
         "open_refund_or_credit_obligations": 0,
         "customer_artifacts_pending_disposition": 0,
@@ -1635,8 +1635,8 @@ def test_release_rehearsal_requires_technical_build_deploy_and_rollback_checks(
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
-        ("retirement_notices_sent", 8, "notices and API-data export"),
-        ("external_api_usage_exports_resolved", 0, "notices and API-data export"),
+        ("retirement_notices_sent", 1, "notices and API-data export"),
+        ("external_api_usage_exports_resolved", 1, "notices and API-data export"),
         ("open_export_requests", 1, "open_export_requests must be zero"),
         (
             "customer_artifacts_pending_disposition",
@@ -1645,7 +1645,7 @@ def test_release_rehearsal_requires_technical_build_deploy_and_rollback_checks(
         ),
     ],
 )
-def test_legacy_resolution_requires_nine_notices_and_one_customer_export_disposition(
+def test_legacy_resolution_requires_notice_and_export_counts_to_match_inventory(
     tmp_path: Path, field: str, value: int, message: str
 ) -> None:
     source = qualified_source(tmp_path)
