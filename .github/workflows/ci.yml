@@ -122,6 +122,7 @@ jobs:
             scripts/release/test_run_fuzz_smoke.py -q
           python3 -m pytest \
             scripts/release/test_build_guard_owner_evidence.py \
+            scripts/release/test_build_guard_market_evidence.py \
             scripts/ci/test_containment_health_audit.py \
             scripts/monitoring/test_guard_health_audit.py \
             scripts/deploy/test_static_site_canary.py \

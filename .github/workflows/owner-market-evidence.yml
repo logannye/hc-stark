@@ -1,0 +1,158 @@
+name: Create owner-attested Guard market evidence PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: Exact reviewed lowercase 40-hex origin/main commit
+        required: true
+        type: string
+      subject:
+        description: One blocked Guard market evidence subject
+        required: true
+        type: choice
+        options:
+          - doctor_evaluation_release
+          - community_announcement
+          - ecosystem_submission
+      claims_json:
+        description: Strict subject-specific claims JSON; never include PII or secrets
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: tinyzkp-owner-market-evidence-${{ inputs.subject }}
+  cancel-in-progress: false
+
+jobs:
+  create-evidence-pr:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.actor == github.repository_owner &&
+      github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-24.04
+    env:
+      EXPECTED_MAIN_SHA: ${{ inputs.expected_main_sha }}
+      SUBJECT: ${{ inputs.subject }}
+      CLAIMS_JSON: ${{ inputs.claims_json }}
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_OWNER: ${{ github.repository_owner }}
+      DISPATCH_ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12.13"
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: v2.4.3
+      - name: Install pinned market-test runtime
+        run: python3 -m pip install --disable-pip-version-check pytest==8.4.2
+
+      - name: Bind owner dispatch to exact current main
+        run: |
+          case "$EXPECTED_MAIN_SHA" in
+            *[!0-9a-f]*|'') exit 1 ;;
+          esac
+          test "${#EXPECTED_MAIN_SHA}" = 40
+          test "$GITHUB_SHA" = "$EXPECTED_MAIN_SHA"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN_SHA"
+          test "$DISPATCH_ACTOR" = "$EXPECTED_OWNER"
+          test "$TRIGGERING_ACTOR" = "$EXPECTED_OWNER"
+          test -z "$(git status --porcelain)"
+          cosign_executable="$(command -v cosign)"
+          test -x "$cosign_executable"
+          echo "TINYZKP_COSIGN=$cosign_executable" >> "$GITHUB_ENV"
+
+      - name: Build the strict market evidence envelope
+        id: evidence
+        run: |
+          claims="$RUNNER_TEMP/owner-market-claims.json"
+          printf '%s\n' "$CLAIMS_JSON" > "$claims"
+          issued_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          evidence="release/evidence/guard-market-v1/${SUBJECT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          bundle="${evidence%.json}.sigstore.json"
+          python3 scripts/release/build_guard_market_evidence.py build \
+            --subject "$SUBJECT" \
+            --claims "$claims" \
+            --issued-at "$issued_at" \
+            --output "$evidence"
+          echo "evidence=$evidence" >> "$GITHUB_OUTPUT"
+          echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Keyless-sign the exact market evidence envelope
+        run: |
+          cosign sign-blob --yes \
+            --bundle "${{ steps.evidence.outputs.bundle }}" \
+            "${{ steps.evidence.outputs.evidence }}"
+          cosign verify-blob \
+            --bundle "${{ steps.evidence.outputs.bundle }}" \
+            --certificate-identity-regexp \
+              '^https://github\.com/logannye/hc-stark/\.github/workflows/owner-market-evidence\.yml@refs/heads/main$' \
+            --certificate-oidc-issuer \
+              'https://token.actions.githubusercontent.com' \
+            --certificate-github-workflow-sha "$EXPECTED_MAIN_SHA" \
+            --certificate-github-workflow-ref 'refs/heads/main' \
+            --certificate-github-workflow-repository 'logannye/hc-stark' \
+            --certificate-github-workflow-trigger 'workflow_dispatch' \
+            "${{ steps.evidence.outputs.evidence }}"
+
+      - name: Attach one subject and regenerate the market clock
+        id: attach
+        run: |
+          python3 scripts/release/build_guard_market_evidence.py attach \
+            --subject "$SUBJECT" \
+            --evidence "${{ steps.evidence.outputs.evidence }}" \
+            --signature "${{ steps.evidence.outputs.bundle }}"
+          market_trust="$(sha256sum release/guard-market-trust-v1.json | cut -d' ' -f1)"
+          python3 scripts/ci/guard_market_clock.py \
+            --write \
+            --trusted-policy-sha256 "$market_trust"
+          python3 scripts/ci/guard_market_clock.py \
+            --check \
+            --trusted-policy-sha256 "$market_trust"
+          python3 -m pytest \
+            scripts/release/test_build_guard_market_evidence.py \
+            scripts/ci/test_guard_market_clock.py -q
+          echo "market_trust=$market_trust" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and open the evidence-only pull request
+        run: |
+          unexpected="$(git status --porcelain | awk '{print $2}' | grep -Ev '^release/' || true)"
+          test -z "$unexpected"
+          branch="codex/evidence/market-${SUBJECT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release
+          git diff --cached --check
+          git commit -m "Record Guard market evidence for ${SUBJECT}"
+          git push --set-upstream origin "$branch"
+          compare_url="https://github.com/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
+          body="$(printf '%s\n\n%s\n\n%s\n' \
+            "Owner-dispatched, keyless-signed evidence for \`${SUBJECT}\`, bound to \`${EXPECTED_MAIN_SHA}\`." \
+            "Before merging this PR, set the protected \`GUARD_MARKET_TRUST_POLICY_SHA256\` variable to \`${{ steps.attach.outputs.market_trust }}\` in every production environment that validates the market clock. This ordering anchors the exact trust policy without deploying a mismatched main revision." \
+            "This PR does not bypass CI, merge itself, open checkout, or claim any other launch/adoption milestone.")"
+          if pr_url="$(gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "Record Guard market evidence for ${SUBJECT}" \
+            --body "$body" \
+            2>"$RUNNER_TEMP/pr-create-error")"; then
+            printf 'Evidence PR: %s\n' "$pr_url" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::The evidence branch was pushed, but repository Actions settings prevented automatic PR creation. The owner must open the prepared compare URL."
+            {
+              printf '### Evidence branch prepared; owner action required\n\n'
+              printf 'GitHub rejected automatic PR creation after the exact branch was pushed. '
+              printf '[Open the owner-prepared PR](%s). No evidence needs to be rebuilt.\n' "$compare_url"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

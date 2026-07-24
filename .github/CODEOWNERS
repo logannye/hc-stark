@@ -51,5 +51,6 @@
 /release/passive-operations-* @logannye
 /scripts/ci/guard_launch_gate.py @logannye
 /scripts/ci/guard_market_clock.py @logannye
+/scripts/release/build_guard_market_evidence.py @logannye
 /scripts/ci/passive_operations_scorecard.py @logannye
 /scripts/ci/verify_*_candidate.py @logannye

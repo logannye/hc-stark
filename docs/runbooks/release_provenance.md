@@ -31,8 +31,13 @@ Before any passing evidence or promotion:
 5. Restrict signing, evaluation, candidate, promotion, and production
    environments to protected `main`. The exact main-only
    `owner-launch-evidence.yml` OIDC identity is the allowlisted signer for
-   required launch evidence. Public and private production environments need
-   no outside reviewer.
+   required launch evidence. The separate exact-main
+   `owner-market-evidence.yml` identity is the only signer for the doctor,
+   one-shot community-announcement, and optional ecosystem-submission market
+   records. Its first evidence PR installs that signer and reports the exact
+   `GUARD_MARKET_TRUST_POLICY_SHA256`; update the protected variable to that
+   digest before merging the PR. Public and private production environments
+   need no outside reviewer.
 6. Restrict `tinyzkp-pages-preview` to `refs/pull/*/merge`. GitHub evaluates
    the workflow `GITHUB_REF`, not a `codex/*` head branch. The workflow's
    same-repository pull-request condition remains the boundary that prevents
@@ -53,6 +58,12 @@ verification requires that SHA together with `refs/heads/main`, repository
 `logannye/hc-stark`, trigger `workflow_dispatch`, the allowlisted workflow SAN,
 and the GitHub OIDC issuer. A later revision of a workflow with the same SAN
 cannot sign evidence for an earlier dispatch commit.
+
+`owner-market-evidence.yml` accepts one strict subject-specific claims object,
+signs one immutable evidence envelope, updates only the market evidence source
+and derived clock, and opens a `codex/evidence/market-*` pull request. It cannot
+replace passed evidence, record a community announcement before signed doctor
+evidence, merge its own PR, open checkout, or claim another launch gate.
 
 ## Candidate and promotion flow
 
