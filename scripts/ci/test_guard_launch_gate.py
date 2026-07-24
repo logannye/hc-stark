@@ -1405,18 +1405,24 @@ def test_engine_evidence_exposes_only_production_evidence_acquisition_surfaces(
     )
 
     derived = derive_qualified(engine_only_source(tmp_path), tmp_path)
+    engine_doctor_ready = derived["discovery"]["availability"]["community_doctor"]
+    engine_doctor_actions = (
+        [{"label": "Run the free doctor", "url": doctor_url}]
+        if engine_doctor_ready
+        else []
+    )
     expected = [
         f"https://tinyzkp.com{route}"
         for route in gate.ACQUISITION_ROUTES
-        if route != "/doctor" or doctor_ready
+        if route != "/doctor" or engine_doctor_ready
     ]
     assert derived["release"]["qualified_engine_artifact_available"] is True
     assert derived["commerce"]["checkout_enabled"] is False
     assert derived["discovery"]["evergreen_acquisition_pages"] == expected
-    assert derived["discovery"]["primary_actions"] == doctor_actions
+    assert derived["discovery"]["primary_actions"] == engine_doctor_actions
     assert "index,follow" in gate._acquisition_meta(True)
     engine_routes = {
-        route: route != "/doctor" or doctor_ready
+        route: route != "/doctor" or engine_doctor_ready
         for route in gate.ACQUISITION_ROUTES
     }
     assert all(
@@ -1426,11 +1432,11 @@ def test_engine_evidence_exposes_only_production_evidence_acquisition_surfaces(
         blocked_llms,
         engine_routes,
         commerce_state="unconfigured",
-        doctor_ready=doctor_ready,
+        doctor_ready=engine_doctor_ready,
     )
     assert (
         gate.LLMS_ACQUISITION_LINES[0] in qualified_llms
-    ) is doctor_ready
+    ) is engine_doctor_ready
     assert all(
         line in qualified_llms for line in gate.LLMS_ACQUISITION_LINES[1:]
     )
