@@ -1,32 +1,43 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use hc_plonky3::estimate_params::{estimate_from_params, field_widths, EstimateParams};
 use hc_stream::{CheckpointPolicy, ResourceMode, ResourcePolicyV1};
 use tinyzkp_contracts::{
-    EstimateRequestV1, EstimateResponseV1, ResourceEstimateV1, ResourceEstimatesV1,
+    EstimateRequestV1, EstimateResponseV1, ReasonCodeV1, ResourceEstimateV1, ResourceEstimatesV1,
+    MIN_RAM_BUDGET_BYTES,
 };
+
+use crate::protocol::ProtocolFailure;
 
 /// Cost a declared configuration. Never proves, never reads a witness, and
 /// never rejects a config merely because TinyZKP cannot prove it.
 ///
+/// Errors map onto the same `ProtocolFailure`/`ReasonCodeV1` vocabulary every
+/// other command uses (see `doctor.rs`/`plonky3.rs`), so the CLI's structured
+/// JSON error envelope names the actual problem instead of collapsing every
+/// failure into `internal_error`. `ReasonV1` forbids free-form diagnostic
+/// text on that public boundary, so no config value (e.g. an unsupported
+/// field name) is ever embedded in the returned error; a human-readable
+/// detail is written to stderr as plain text alongside it instead.
+///
 /// This is the function a future hosted estimator API calls directly, so its
 /// signature is load-bearing: a config path in, a fully-formed response (or
-/// an error naming exactly what was wrong) out.
+/// a `ProtocolFailure` naming exactly which reason code applies) out.
 pub fn run(config_path: &Path) -> Result<EstimateResponseV1> {
     let raw = std::fs::read_to_string(config_path)
-        .with_context(|| format!("reading {}", config_path.display()))?;
-    let request: EstimateRequestV1 =
-        serde_json::from_str(&raw).context("parsing estimate request")?;
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
+    let request: EstimateRequestV1 = serde_json::from_str(&raw)
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
 
     let (field_bytes, ext_field_bytes) = field_widths(&request.field, request.extension_degree)
         .ok_or_else(|| {
-            anyhow!(
+            eprintln!(
                 "unsupported field '{}' with extension degree {}: \
                  element width is unknown, so no honest estimate is possible",
-                request.field,
-                request.extension_degree
-            )
+                request.field, request.extension_degree
+            );
+            ProtocolFailure::new(ReasonCodeV1::UnsupportedProfile)
         })?;
 
     let params = EstimateParams {
@@ -41,12 +52,20 @@ pub fn run(config_path: &Path) -> Result<EstimateResponseV1> {
         digest_bytes: 32,
     };
 
+    // A caller-declared RAM budget below the floor `ResourcePolicyV1` itself
+    // requires (`MIN_RAM_BUDGET_BYTES`, 16 MiB) must not hard-fail the whole
+    // estimate: `request.blocking_reasons()` below already reports
+    // `RamBudgetInsufficient` for exactly this case, carrying the declared
+    // (sub-floor) budget as `limit_bytes` and the floor as `required_bytes`.
+    // Substituting the floor as the bounded ceiling here lets that reason
+    // communicate the gap without this function refusing to estimate.
+    let bounded_ceiling = request.ram_budget_bytes.max(MIN_RAM_BUDGET_BYTES);
     let bounded_policy = ResourcePolicyV1 {
-        max_resident_bytes: request.ram_budget_bytes,
+        max_resident_bytes: bounded_ceiling,
         ..policy_defaults()
     };
     let bounded = estimate_from_params(&params, &bounded_policy)
-        .map_err(|e| anyhow!("bounded estimate failed: {e:?}"))?;
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::InternalError))?;
 
     // Conventional holds every vector resident, so it is the same shape with
     // an effectively unbounded ceiling.
@@ -55,7 +74,7 @@ pub fn run(config_path: &Path) -> Result<EstimateResponseV1> {
         ..policy_defaults()
     };
     let conventional = estimate_from_params(&params, &conventional_policy)
-        .map_err(|e| anyhow!("conventional estimate failed: {e:?}"))?;
+        .map_err(|_| ProtocolFailure::new(ReasonCodeV1::InternalError))?;
 
     let blocking_reasons = request.blocking_reasons();
     Ok(EstimateResponseV1 {
