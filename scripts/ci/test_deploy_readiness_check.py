@@ -11,6 +11,24 @@ import pytest
 import deploy_readiness_check as readiness
 
 
+# billing/backup_env_exec.py was deleted 2026-07-17 when hosted proving was
+# retired (commit b611915). deploy_readiness_check now treats it as optional
+# and fails each retired-host-only call site explicitly (see
+# `backup_env_exec is None` checks in that module) rather than crashing at
+# import time. The tests below exercise backup_env_exec's actual validation
+# logic (rclone probing, backup-value validation, backup source semantics,
+# loader token / staging root checks) and cannot pass without that module;
+# skip them explicitly instead of letting them fail on retired functionality.
+requires_backup_env_exec = pytest.mark.skipif(
+    readiness.backup_env_exec is None,
+    reason=(
+        "backup_env_exec was removed with billing/ when hosted proving was "
+        "retired (2026-07-17, commit b611915); this test exercises its real "
+        "validation logic and cannot run without it"
+    ),
+)
+
+
 LIVE_KEY = "sk_live_" + "a" * 32
 WEBHOOK_SECRET = "whsec_" + "b" * 32
 ACCOUNT_ID = "acct_" + "c" * 16
@@ -451,6 +469,7 @@ def test_production_mode_rejects_placeholder_secrets():
     assert "off-host backups require HC_BACKUP_REMOTE" in failures
 
 
+@requires_backup_env_exec
 def test_production_mode_rejects_https_backup_without_matching_fixed_host_drill(
     tmp_path, monkeypatch
 ):
@@ -476,6 +495,7 @@ def test_production_mode_rejects_https_backup_without_matching_fixed_host_drill(
     ) in failures
 
 
+@requires_backup_env_exec
 def test_production_host_rclone_probe_is_read_only_and_successful(
     tmp_path, monkeypatch
 ):
@@ -544,6 +564,7 @@ def test_production_host_rejects_missing_rclone_for_configured_remote(
     assert "HC_BACKUP_REMOTE requires rclone on the production host" in failures
 
 
+@requires_backup_env_exec
 def test_production_host_rejects_unusable_rclone_remote(tmp_path, monkeypatch):
     env = _valid_production_env(tmp_path)
     rclone_config = tmp_path / "rclone.conf"
@@ -603,6 +624,7 @@ def test_production_host_rejects_local_path_as_backup_remote(tmp_path, monkeypat
         ),
     ],
 )
+@requires_backup_env_exec
 def test_production_readiness_reuses_backup_value_validation(
     tmp_path, updates, message
 ):
@@ -618,6 +640,7 @@ def test_production_readiness_reuses_backup_value_validation(
     )
 
 
+@requires_backup_env_exec
 def test_production_readiness_rejects_credentialed_backup_url(tmp_path):
     env = _valid_production_env(tmp_path)
     env.pop("HC_BACKUP_REMOTE")
@@ -653,6 +676,7 @@ def test_production_mode_rejects_insecure_or_partial_backup_ingest():
     assert "must use https" in failures
 
 
+@requires_backup_env_exec
 def test_production_mode_accepts_realistic_values(tmp_path):
     failures, _warnings = _production_failures(_valid_production_env(tmp_path))
     assert failures == ""
@@ -725,6 +749,7 @@ def test_production_mode_rejects_partial_annual_release_authorization():
     assert "requires all four path/digest settings" in failures
 
 
+@requires_backup_env_exec
 def test_production_host_checks_annual_release_artifacts_and_cosign(
     tmp_path, monkeypatch
 ):
@@ -772,6 +797,7 @@ def test_production_host_checks_annual_release_artifacts_and_cosign(
     assert "cosign is required" in "\n".join(failures)
 
 
+@requires_backup_env_exec
 def test_production_checks_release_artifacts_without_host_python_flag(
     tmp_path,
 ):
