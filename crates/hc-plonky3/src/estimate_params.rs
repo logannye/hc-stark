@@ -128,14 +128,20 @@ pub fn estimate_from_params(
         .saturating_mul(field_bytes)
         .saturating_add(phase_metadata_bytes);
     // Quotient transforms additionally coexist with the trace tree,
-    // raw/interleaved chunks, and already completed chunk LDEs. Every chunk
-    // buffer here (`quotient.rs::stream_quotient_values` /
-    // `build_quotient_chunk_ldes`) stores extension-field coefficients, so
-    // the per-chunk term is priced at `ext_field_bytes`: four live copies of
-    // the full quotient-value footprint (raw + interleaved + chunk store +
-    // chunk LDE), plus a fixed three-chunk-equivalent floor for the
-    // unchunked staging buffers that exist regardless of `quotient_chunks`
-    // (i.e. `4 * ext_field_bytes * (quotient_chunks + 3)`).
+    // raw/interleaved chunks, and already completed chunk LDEs. The
+    // per-chunk term (`4 * ext_field_bytes`) is established: every chunk
+    // buffer in `quotient.rs::stream_quotient_values` /
+    // `build_quotient_chunk_ldes` stores extension-field coefficients, so
+    // four live copies of the quotient-value footprint (raw + interleaved +
+    // chunk store + chunk LDE) trace to those named buffers. The fixed `+3`
+    // chunk-equivalent floor does NOT: it is only inferred from the
+    // algebraic relation `192 = 3 * 64`, and for Goldilocks `192` is equally
+    // consistent with `6 * digest_bytes` or `24 * field_bytes` — no test
+    // here holds `ext_field_bytes` and `digest_bytes` apart, so the unit
+    // choice below is unverified for non-Goldilocks fields. Known
+    // limitation of `quotient_transform_peak` outside Goldilocks; if a
+    // BabyBear/KoalaBear/Mersenne31 estimate is ever contradicted by
+    // measurement, start here.
     let quotient_transform_peak = rows
         .saturating_mul(
             ext_field_bytes
