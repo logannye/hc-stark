@@ -1030,7 +1030,6 @@ dependencies = [
  "hc-stream",
  "hc-verifier",
  "hc-vm",
- "hc-wasm",
  "hex",
  "predicates",
  "serde",
@@ -1144,6 +1143,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
+ "tinyzkp-contracts",
  "zstd",
 ]
 

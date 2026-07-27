@@ -5,14 +5,12 @@
 
 #![forbid(unsafe_code)]
 
-pub mod estimate;
 pub mod types;
 
 use hc_plonky3::contracts::{ProofBundleV1, MAX_BUNDLE_JSON_BYTES};
+use hc_plonky3::estimate_params::estimate_request;
 use types::WasmVerifyResult;
 use wasm_bindgen::prelude::*;
-
-pub use estimate::{estimate_request, EstimateFailure};
 
 /// Core JSON verification logic, callable from WASM and native tests.
 pub fn verify_bundle_json(json: &str) -> WasmVerifyResult {
@@ -101,8 +99,9 @@ mod tests {
     }"#;
 
     /// The JSON export must return exactly what the typed core returns.
-    /// `estimate_request` lives in THIS crate (see the placement note below);
-    /// `hc-cli` calls it too, so the CLI and the API cannot diverge.
+    /// `estimate_request` lives in `hc-plonky3` (below both `hc-cli` and
+    /// `hc-wasm` in the dependency graph); `hc-cli` calls it too, so the
+    /// CLI and the API cannot diverge.
     #[test]
     fn wasm_export_matches_the_shared_core() {
         let request: tinyzkp_contracts::EstimateRequestV1 =

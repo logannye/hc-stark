@@ -114,7 +114,7 @@ jobs:
           cargo test --locked -p hc-cli doctor
           cargo test --locked -p hc-cli release_identity_is_machine_readable_and_profile_pinned
           test "$(sha256sum Cargo.lock | cut -d' ' -f1)" = \
-            "3e033b26817fe454a61fe91ea9af5b8934db7b995f7ee7bfa5548b118d0accb5"
+            "e124d2c46bf7e313edc2c4b06ea90633d9a929a430d5d1657d032a581f760990"
 
       - name: Build the open evaluation engine
         if: steps.recovery.outputs.recovered != 'true'

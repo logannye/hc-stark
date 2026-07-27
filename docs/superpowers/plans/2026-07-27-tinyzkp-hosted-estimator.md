@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Rust toolchain pinned `1.95.0`; Plonky3 exact-pinned `0.6.1`. **Do not add, remove, or bump any EXTERNAL dependency, and never change a version.** Task 1 deliberately adds one internal path edge (`tinyzkp-contracts` to `hc-wasm`), which moves the lock and is handled by its Step 7a re-freeze — the root `Cargo.lock` SHA-256 is frozen at `974b350620f98ee29a8d90bca0302000cd229bbd381169e2f772944387dc012b` in `release/plonky3-compatibility-v1.json`, `crates/hc-plonky3/src/prover.rs` (`DEPENDENCY_LOCK_SHA256`), `crates/hc-cli/tests/cli_roundtrip.rs`, and several scripts. A bump reds `scripts/ci/plonky3_compatibility_gate.py`.
+- Rust toolchain pinned `1.95.0`; Plonky3 exact-pinned `0.6.1`. **Do not add, remove, or bump any EXTERNAL dependency, and never change a version.** Task 1 deliberately adds one internal path edge (`tinyzkp-contracts` to `hc-wasm`), which moves the lock and is handled by its Step 7a re-freeze — the root `Cargo.lock` SHA-256 is frozen at `e124d2c46bf7e313edc2c4b06ea90633d9a929a430d5d1657d032a581f760990` in `release/plonky3-compatibility-v1.json`, `crates/hc-plonky3/src/prover.rs` (`DEPENDENCY_LOCK_SHA256`), `crates/hc-cli/tests/cli_roundtrip.rs`, and several scripts. A bump reds `scripts/ci/plonky3_compatibility_gate.py`.
 - Any dependency-graph change also stales `fuzz/Cargo.lock` and `clients/rust/Cargo.lock` — standalone workspaces NOT covered by a root gate. Verify both with `cargo +1.95.0 fetch --locked --manifest-path <each>`.
 - **The cost model is never reimplemented in JavaScript.** Every number in a response must originate from the Rust WASM module. Phase 1a shipped a `conventional` estimate that diverged 7.8x from computing one concept two ways; this constraint exists to prevent recreating that at the API boundary.
 - `scripts/ci/claim_containment_scan.py` scans `docs/**/*.md` for `\bzero[- ]knowledge\b`. Tripping it blocks the Pages deploy.
@@ -201,10 +201,10 @@ Expected: the ONLY change is `tinyzkp-contracts` appearing in `hc-wasm`'s `depen
 
 - [ ] **Step 7a: Re-freeze the lock hash**
 
-The new hash must replace `974b350620f98ee29a8d90bca0302000cd229bbd381169e2f772944387dc012b` everywhere it is pinned. Find every site — the last re-freeze touched eight files:
+The new hash must replace `e124d2c46bf7e313edc2c4b06ea90633d9a929a430d5d1657d032a581f760990` everywhere it is pinned. Find every site — the last re-freeze touched eight files:
 
 ```bash
-grep -rln "974b350620f98ee29a8d90bca0302000cd229bbd381169e2f772944387dc012b" \
+grep -rln "e124d2c46bf7e313edc2c4b06ea90633d9a929a430d5d1657d032a581f760990" \
   --exclude-dir=target --exclude-dir=.git .
 ```
 
