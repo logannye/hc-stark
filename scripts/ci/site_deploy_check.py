@@ -70,7 +70,16 @@ REQUIRED_BINDINGS: set[str] = set()
 
 ONE_OF_BINDINGS: list[tuple[str, ...]] = []
 
-OPTIONAL_BINDINGS: set[str] = set()
+# `DB` is the D1 binding shared by the anonymous rate limiter
+# (`rate_limit_windows`) and the shape-only demand log (`demand_log`); see
+# site/wrangler.toml's `[[d1_databases]]` block and migrations/*.sql. It is
+# classified as optional (not required), unlike REQUIRED_BINDINGS, because
+# its real identity lives in wrangler.toml's committed `database_id` -- it
+# is a structural resource binding, not a secret injected out-of-band via
+# `wrangler pages secret` (which `cloudflare_pages_secret_check.py` validates
+# using REQUIRED_BINDINGS). Both `site/_worker.js` code paths that use it
+# fail open/silent if it is ever absent or misconfigured.
+OPTIONAL_BINDINGS: set[str] = {"DB"}
 
 
 def display(path: pathlib.Path) -> str:

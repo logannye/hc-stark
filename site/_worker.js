@@ -7,7 +7,14 @@
 // level; a CI gate, `scripts/ci/estimate_wasm_cli_parity_gate.mjs`, fails
 // the build if the committed wasm and the native CLI ever compute
 // different numbers for the same input, so that never goes unnoticed). It
-// calls no upstream service and stores no visitor or proof data.
+// calls no upstream service.
+//
+// It DOES store one thing: a per-IP rate-limit counter for `/v1/estimate`,
+// in a D1 database bound as `env.DB` (see site/wrangler.toml and
+// migrations/0000_rate_limit_windows.sql), keyed on a salted hash of
+// `CF-Connecting-IP` — never the raw address. No number in the estimate
+// response itself is touched by any of this; it still comes solely from
+// `estimate_json`.
 
 import estimateWasmModule from "./vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm";
 import {
@@ -27,6 +34,83 @@ initEstimateWasm({ module: estimateWasmModule });
 // request bodies far above this — it just keeps this endpoint from ever
 // looking like a workload-upload surface.
 const MAX_ESTIMATE_REQUEST_BYTES = 8192;
+
+// --- Anonymous rate limiting (Task 3) ---------------------------------
+//
+// A fixed one-hour window keyed on a salted hash of `CF-Connecting-IP` —
+// never the raw address. 30/hour is a conservative default for a free,
+// no-signup resource estimator; Task 5's keyed tier raises this ceiling
+// per caller.
+//
+// This is deliberately NOT a named export: Cloudflare Pages' Advanced Mode
+// runtime treats every top-level export of `_worker.js` as a candidate
+// handler/Durable Object binding and refuses to start if one isn't a
+// function or `ExportedHandler` (confirmed against a real `wrangler pages
+// dev` run — a second named export here hard-crashes the Worker at
+// startup). scripts/ci/test_worker_estimate.mjs instead reads this exact
+// constant back out of the committed source text, so the test and the
+// worker can never silently drift apart.
+const ANON_RATE_LIMIT_PER_HOUR = 30;
+const RATE_LIMIT_WINDOW_SECONDS = 3600;
+
+// This salt is an application-level constant compiled into this committed,
+// publicly-readable source file — it is NOT a managed Cloudflare secret.
+// It stops a casual precomputed-table correlation of the stored hash back
+// to common IP strings; it is not a defense against an attacker who
+// already has this source. There is no existing secret-provisioning
+// surface for this static site (see scripts/ci/cloudflare_pages_secret_check.py,
+// which asserts the static site has *no* application secrets), and
+// inventing one unverified here would be worse than being explicit about
+// the limitation. See the Task 3/4 report for the full rationale.
+const IP_HASH_SALT = "tinyzkp-v1-estimate-ip-hash-salt";
+
+async function saltedIpHash(ip) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(IP_HASH_SALT),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(ip));
+  return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// Fixed-window counter backed by D1 (`rate_limit_windows`,
+// migrations/0000_rate_limit_windows.sql). Fails OPEN: the 30/hour ceiling
+// is a courtesy limit protecting the free tier from runaway callers, not a
+// security boundary, so a transient rate-limit-store error must never take
+// down the estimator itself.
+async function checkAnonymousRateLimit(env, ipHash) {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const windowStart = Math.floor(nowSeconds / RATE_LIMIT_WINDOW_SECONDS) * RATE_LIMIT_WINDOW_SECONDS;
+  try {
+    const row = await env.DB.prepare(
+      `INSERT INTO rate_limit_windows (ip_hash, window_start, request_count)
+       VALUES (?, ?, 1)
+       ON CONFLICT (ip_hash, window_start) DO UPDATE SET request_count = request_count + 1
+       RETURNING request_count`,
+    ).bind(ipHash, windowStart).first();
+    const count = Number(row && row.request_count);
+    if (Number.isFinite(count) && count > ANON_RATE_LIMIT_PER_HOUR) {
+      const retryAfterSeconds = Math.max(1, windowStart + RATE_LIMIT_WINDOW_SECONDS - nowSeconds);
+      return { limited: true, retryAfterSeconds };
+    }
+    return { limited: false };
+  } catch {
+    return { limited: false };
+  }
+}
+
+function rateLimitedResponse(retryAfterSeconds) {
+  return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), {
+    status: 429,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Retry-After": String(retryAfterSeconds),
+    },
+  });
+}
 
 const CANONICAL_HOST = "tinyzkp.com";
 const RETIRED_HOSTS = new Set([
@@ -216,12 +300,21 @@ async function staticResponse(request, env, url, preview) {
 // unparseable input, rather than a bespoke JS-side error shape: replacing it
 // with an empty string still fails `estimate_json`'s own JSON parse, so the
 // engine itself produces the (non-`internal_error`) reason code.
-async function estimateResponse(request) {
+//
+// An anonymous rate-limit check (Task 3) runs first and can turn the whole
+// request into a 429 before `estimate_json` ever runs.
+async function estimateResponse(request, env) {
   if (request.method !== "POST") {
     return new Response("method not allowed", {
       status: 405,
       headers: { Allow: "POST", "Content-Type": "text/plain; charset=utf-8" },
     });
+  }
+
+  const ipHash = await saltedIpHash(request.headers.get("CF-Connecting-IP") || "");
+  const rateLimit = await checkAnonymousRateLimit(env, ipHash);
+  if (rateLimit.limited) {
+    return rateLimitedResponse(rateLimit.retryAfterSeconds);
   }
 
   const declaredLength = Number(request.headers.get("content-length") ?? "");
@@ -252,7 +345,7 @@ export default {
     if (redirect) return secured(redirect, preview);
 
     if (url.pathname === "/v1/estimate") {
-      return secured(await estimateResponse(request), preview);
+      return secured(await estimateResponse(request, env), preview);
     }
 
     const normalized = normalizedPath(url.pathname);

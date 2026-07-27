@@ -51,7 +51,7 @@ def test_static_check_classifies_current_site_bindings():
     refs = check.validate_functions(failures)
     assert failures == []
     assert check.REQUIRED_BINDINGS <= refs
-    assert refs == {"ASSETS"}
+    assert refs == {"ASSETS", "DB"}
     assert "guard-social.png" in check.REQUIRED_FILES
     assert "favicon.svg" in check.REQUIRED_FILES
 
