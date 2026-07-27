@@ -1,8 +1,30 @@
 // Static-only Cloudflare Pages router for TinyZKP.com.
 //
-// This worker provides canonical routing, security headers, and explicit 410
-// responses for the retired hosted-service surfaces. It imports no function,
-// calls no upstream service, and stores no visitor or proof data.
+// This worker provides canonical routing, security headers, explicit 410
+// responses for the retired hosted-service surfaces, and `POST /v1/estimate`
+// (a shape-only resource estimate backed by the compiled Rust cost model via
+// a WASM import — the same core `hc-cli estimate` calls, so the two can
+// never diverge). It calls no upstream service and stores no visitor or
+// proof data.
+
+import estimateWasmModule from "./vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm";
+import {
+  initSync as initEstimateWasm,
+  estimate_json as estimateJson,
+} from "./vendor/tinyzkp-estimate/tinyzkp-estimate.js";
+
+// Instantiated once per Worker isolate. `initSync` is both idempotent (safe
+// to call more than once) and fully synchronous — Wrangler resolves a static
+// `.wasm` import to an already-compiled `WebAssembly.Module`, so no
+// cold-start `await` (and no network fetch of the module) is needed.
+initEstimateWasm({ module: estimateWasmModule });
+
+// A few KB is generous for this shape-only manifest (schema_version, field,
+// row/width counts, feature flags): a real request serializes to well under
+// 1 KB. This is not a security boundary — Cloudflare's own edge network caps
+// request bodies far above this — it just keeps this endpoint from ever
+// looking like a workload-upload surface.
+const MAX_ESTIMATE_REQUEST_BYTES = 8192;
 
 const CANONICAL_HOST = "tinyzkp.com";
 const RETIRED_HOSTS = new Set([
@@ -184,6 +206,36 @@ async function staticResponse(request, env, url, preview) {
   return secured(await env.ASSETS.fetch(new Request(htmlUrl, request)), preview);
 }
 
+// `POST /v1/estimate` — the shape-only resource estimator. Every number in
+// the response comes from `estimate_json`; this function never parses,
+// recomputes, rounds, clamps, or otherwise "fixes up" any figure it returns,
+// and it never reimplements the engine's error envelope. An oversized body
+// is routed through the exact same "malformed manifest" path as any other
+// unparseable input, rather than a bespoke JS-side error shape: replacing it
+// with an empty string still fails `estimate_json`'s own JSON parse, so the
+// engine itself produces the (non-`internal_error`) reason code.
+async function estimateResponse(request) {
+  if (request.method !== "POST") {
+    return new Response("method not allowed", {
+      status: 405,
+      headers: { Allow: "POST", "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  const declaredLength = Number(request.headers.get("content-length") ?? "");
+  let body;
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_ESTIMATE_REQUEST_BYTES) {
+    body = "";
+  } else {
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    body = bytes.byteLength > MAX_ESTIMATE_REQUEST_BYTES ? "" : new TextDecoder().decode(bytes);
+  }
+
+  return new Response(estimateJson(body), {
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -196,6 +248,10 @@ export default {
     const preview = url.hostname.endsWith(".pages.dev");
     const redirect = canonicalRedirect(url);
     if (redirect) return secured(redirect, preview);
+
+    if (url.pathname === "/v1/estimate") {
+      return secured(await estimateResponse(request), preview);
+    }
 
     const normalized = normalizedPath(url.pathname);
     const permanent = PERMANENT_REDIRECTS.get(normalized);
