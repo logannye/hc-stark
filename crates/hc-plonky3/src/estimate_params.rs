@@ -3,7 +3,14 @@ use crate::bounded_prover::{
     fri_mmcs_store_count, merkle_payload_bytes, merkle_store_count, BoundedProverError,
 };
 use crate::dft::ResourceBoundedDft;
-use hc_stream::{PhaseEstimate, ResourceEstimate, ResourcePolicyV1, SCRATCH_STORE_HEADER_BYTES};
+use hc_stream::{PhaseEstimate, SCRATCH_STORE_HEADER_BYTES};
+
+/// Re-exported so a caller building an `EstimateParams`/`ResourcePolicyV1`
+/// pair from `hc_plonky3::estimate_params` alone (e.g. `hc-wasm`'s shared
+/// `estimate_request` core) never needs its own direct `hc-stream`
+/// dependency just to name these types. `hc-plonky3` already depends on
+/// `hc-stream`; this widens visibility only, it adds no new crate edge.
+pub use hc_stream::{CheckpointPolicy, ResourceEstimate, ResourceMode, ResourcePolicyV1};
 
 /// Every scalar the analytic cost model needs. Deliberately contains no AIR
 /// and no field type, so it can describe a configuration TinyZKP cannot prove.

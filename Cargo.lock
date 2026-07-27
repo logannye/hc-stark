@@ -1030,6 +1030,7 @@ dependencies = [
  "hc-stream",
  "hc-verifier",
  "hc-vm",
+ "hc-wasm",
  "hex",
  "predicates",
  "serde",
@@ -1315,6 +1316,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
+ "tinyzkp-contracts",
  "wasm-bindgen",
  "wasm-bindgen-test",
 ]
