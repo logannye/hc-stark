@@ -99,6 +99,7 @@ jobs:
             scripts/ci/test_guard_site_contract.py \
             scripts/ci/test_site_route_check.py \
             scripts/ci/test_site_deploy_check.py \
+            scripts/ci/test_demand_report.py \
             scripts/ci/test_containment_health_audit.py \
             scripts/monitoring/test_guard_health_audit.py \
             scripts/deploy/test_static_site_canary.py \

@@ -159,7 +159,8 @@ jobs:
             scripts/ci/test_site_route_check.py \
             scripts/ci/test_guard_site_contract.py \
             scripts/commercial/test_render_offers.py \
-            scripts/ci/test_site_asset_manifest.py -q
+            scripts/ci/test_site_asset_manifest.py \
+            scripts/ci/test_demand_report.py -q
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs
           node scripts/ci/site_shared_checkout_test.mjs

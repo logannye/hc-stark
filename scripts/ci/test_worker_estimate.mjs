@@ -83,13 +83,16 @@ function assetsMock() {
 // to a real local D1 database — was instead verified directly against real
 // `wrangler pages dev`/`wrangler d1 migrations apply --local` (Wrangler
 // 4.85.0, matching toolchains/cloudflare/package.json's pinned version).
-// This stub only needs to reproduce the exact query shape `site/_worker.js`
-// issues for `rate_limit_windows` (see
-// migrations/0000_rate_limit_windows.sql) faithfully enough to exercise the
-// worker's own logic -- not to validate SQL.
-function createD1Stub({ failRateLimit = false } = {}) {
+// This stub only needs to reproduce the exact two query shapes
+// `site/_worker.js` issues (see migrations/0000_rate_limit_windows.sql and
+// migrations/0001_demand_log.sql) faithfully enough to exercise the
+// worker's own logic — rate-limit counting, bucketing, and the "a write
+// failure never reaches the response" contract — not to validate SQL.
+function createD1Stub({ failRateLimit = false, failDemandLog = false } = {}) {
   const rateLimitCounts = new Map();
+  const demandLogRows = [];
   return {
+    demandLogRows,
     prepare(sql) {
       const normalized = sql.replace(/\s+/g, " ").trim();
       let boundArgs = [];
@@ -109,8 +112,32 @@ function createD1Stub({ failRateLimit = false } = {}) {
           rateLimitCounts.set(key, next);
           return { request_count: next };
         },
+        async run() {
+          if (!normalized.includes("demand_log")) {
+            throw new Error(`D1 stub: unsupported .run() query: ${normalized}`);
+          }
+          if (failDemandLog) throw new Error("D1 stub: injected demand-log failure");
+          demandLogRows.push(boundArgs);
+          return { success: true, meta: {} };
+        },
       };
       return statement;
+    },
+  };
+}
+
+// Mirrors the one real method `site/_worker.js` calls on the Workers
+// `ExecutionContext`: `waitUntil`. `drain()` lets a test observe every
+// background write before asserting on it, without ever awaiting it on the
+// response's own critical path (which is exactly the behavior under test).
+function createExecutionContext() {
+  const waited = [];
+  return {
+    waitUntil(promise) {
+      waited.push(promise);
+    },
+    async drain() {
+      await Promise.allSettled(waited);
     },
   };
 }
@@ -267,14 +294,15 @@ test("POST /v1/estimate rate-limits one anonymous IP after N requests/hour; a di
     assert.equal(typeof anonRateLimitPerHour, "number");
     assert.ok(anonRateLimitPerHour > 0);
     const env = { ASSETS: assetsMock(), DB: createD1Stub() };
+    const ctx = createExecutionContext();
 
     for (let i = 1; i <= anonRateLimitPerHour; i += 1) {
-      const response = await worker.fetch(estimateRequest("203.0.113.7"), env);
+      const response = await worker.fetch(estimateRequest("203.0.113.7"), env, ctx);
       assert.equal(response.status, 200, `request ${i} of ${anonRateLimitPerHour} must be within the window`);
     }
 
     // The N+1th request from the same IP within the window is rejected.
-    const limited = await worker.fetch(estimateRequest("203.0.113.7"), env);
+    const limited = await worker.fetch(estimateRequest("203.0.113.7"), env, ctx);
     assert.equal(limited.status, 429);
     const retryAfter = Number(limited.headers.get("Retry-After"));
     assert.ok(Number.isFinite(retryAfter) && retryAfter > 0);
@@ -282,8 +310,10 @@ test("POST /v1/estimate rate-limits one anonymous IP after N requests/hour; a di
     assert.equal(limitedBody.ok, false);
 
     // A different IP has its own independent window.
-    const otherIp = await worker.fetch(estimateRequest("203.0.113.99"), env);
+    const otherIp = await worker.fetch(estimateRequest("203.0.113.99"), env, ctx);
     assert.equal(otherIp.status, 200);
+
+    await ctx.drain();
   } finally {
     await cleanup();
   }
@@ -293,10 +323,132 @@ test("a D1 rate-limit-store failure fails open instead of blocking the estimator
   const { worker, anonRateLimitPerHour, cleanup } = await importWorker();
   try {
     const env = { ASSETS: assetsMock(), DB: createD1Stub({ failRateLimit: true }) };
+    const ctx = createExecutionContext();
     for (let i = 0; i < anonRateLimitPerHour + 5; i += 1) {
-      const response = await worker.fetch(estimateRequest("203.0.113.5"), env);
+      const response = await worker.fetch(estimateRequest("203.0.113.5"), env, ctx);
       assert.equal(response.status, 200, "a broken rate-limit store must never itself return 429");
     }
+    await ctx.drain();
+  } finally {
+    await cleanup();
+  }
+});
+
+// --- Task 4: shape-only demand log -----------------------------------
+
+test("a successful estimate writes exactly one bucketed, shape-only demand-log row via ctx.waitUntil", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub();
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      estimateRequest("198.51.100.20"),
+      { ASSETS: assetsMock(), DB: db },
+      ctx,
+    );
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.provable_today, false);
+
+    // The write must not have been on the response's own critical path: it
+    // is only observable after draining `ctx.waitUntil`.
+    await ctx.drain();
+    assert.equal(db.demandLogRows.length, 1);
+    const [
+      observedAtHour,
+      requestDigest,
+      field,
+      extensionDegree,
+      traceWidthBucket,
+      logicalRowsBucket,
+      usesLookups,
+      usesBuses,
+      usesPermutations,
+      usesMultiTable,
+      usesPreprocessedColumns,
+      usesPeriodicColumns,
+      usesRecursion,
+      usesGpu,
+      provableToday,
+      blockingReasonCodesJson,
+      keyId,
+      anonIpHash,
+    ] = db.demandLogRows[0];
+
+    assert.ok(Number.isInteger(observedAtHour) && observedAtHour % 3600 === 0, "timestamp must be hour-coarse");
+    assert.equal(requestDigest, body.request_digest);
+    assert.equal(field, "babybear"); // SP1_SHAPED_REQUEST.field, verbatim (not sensitive, not bucketed)
+    assert.equal(extensionDegree, 4);
+    // trace_width: 180 falls in the 161-192 band, never the exact 180.
+    assert.equal(traceWidthBucket, "161-192");
+    // logical_rows: 4194304 == 2^22 falls in the 2^22-2^24 band, never the
+    // exact row count.
+    assert.equal(logicalRowsBucket, "2^22-2^24");
+    assert.deepEqual(
+      [usesLookups, usesBuses, usesPermutations, usesMultiTable, usesPreprocessedColumns, usesPeriodicColumns, usesRecursion, usesGpu],
+      [1, 0, 0, 1, 0, 0, 0, 0],
+    );
+    assert.equal(provableToday, 0);
+    assert.deepEqual(JSON.parse(blockingReasonCodesJson), body.blocking_reasons.map((reason) => reason.code));
+    // Exactly one of key_id / anon_ip_hash is set -- no keyed tier exists
+    // yet (Task 5), so every row today carries the anonymous hash.
+    assert.equal(keyId, null);
+    assert.equal(typeof anonIpHash, "string");
+    assert.ok(anonIpHash.length > 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("a demand-log write failure never turns a good estimate into an error", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub({ failDemandLog: true });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      estimateRequest("198.51.100.30"),
+      { ASSETS: assetsMock(), DB: db },
+      ctx,
+    );
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.estimates.bounded.peak_resident_bytes > 0);
+
+    // The rejected logging promise must be observable without throwing out
+    // of the test (i.e. it was caught before being handed to `waitUntil`),
+    // and it must never have produced a row.
+    await ctx.drain();
+    assert.equal(db.demandLogRows.length, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("logging is skipped, not errored, when env.DB is entirely absent", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const response = await worker.fetch(estimateRequest("198.51.100.40"), { ASSETS: assetsMock() });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.estimates.bounded.peak_resident_bytes > 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("a rate-limited request writes no demand-log row", async () => {
+  const { worker, anonRateLimitPerHour, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub();
+    const ctx = createExecutionContext();
+    const env = { ASSETS: assetsMock(), DB: db };
+    for (let i = 0; i < anonRateLimitPerHour; i += 1) {
+      await worker.fetch(estimateRequest("198.51.100.50"), env, ctx);
+    }
+    const limited = await worker.fetch(estimateRequest("198.51.100.50"), env, ctx);
+    assert.equal(limited.status, 429);
+    await ctx.drain();
+    assert.equal(db.demandLogRows.length, anonRateLimitPerHour);
   } finally {
     await cleanup();
   }

@@ -9,12 +9,17 @@
 // different numbers for the same input, so that never goes unnoticed). It
 // calls no upstream service.
 //
-// It DOES store one thing: a per-IP rate-limit counter for `/v1/estimate`,
-// in a D1 database bound as `env.DB` (see site/wrangler.toml and
-// migrations/0000_rate_limit_windows.sql), keyed on a salted hash of
-// `CF-Connecting-IP` — never the raw address. No number in the estimate
-// response itself is touched by any of this; it still comes solely from
-// `estimate_json`.
+// It DOES store data, in one D1 database bound as `env.DB` (see
+// site/wrangler.toml and migrations/*.sql): a per-IP rate-limit counter
+// keyed on a salted hash of `CF-Connecting-IP` (never the raw address), and
+// a shape-only demand-log row per successful estimate (never a raw request
+// body, raw IP, email, path, AIR, or witness — see
+// migrations/0001_demand_log.sql for the exact bucketing). Every number in
+// an `/v1/estimate` response still comes solely from `estimate_json`; the
+// demand log separately re-reads the request's already-validated shape
+// fields (field, extension_degree, trace width/row-count buckets, feature
+// flags) purely to log them, and that read never feeds back into the
+// estimate or the response.
 
 import estimateWasmModule from "./vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm";
 import {
@@ -110,6 +115,126 @@ function rateLimitedResponse(retryAfterSeconds) {
       "Retry-After": String(retryAfterSeconds),
     },
   });
+}
+
+// --- Shape-only demand log (Task 4) ------------------------------------
+//
+// Every column here describes the SHAPE of a request the engine already
+// accepted and estimated: never a raw request body, raw IP, email, path,
+// AIR, or witness. See migrations/0001_demand_log.sql for the exact bucket
+// boundaries and the full rationale.
+const TRACE_WIDTH_BUCKET_SIZE = 32; // 8 fixed bands across the valid [1, 256] range
+
+function bucketTraceWidth(width) {
+  if (!Number.isInteger(width) || width < 1) return null;
+  const start = Math.floor((width - 1) / TRACE_WIDTH_BUCKET_SIZE) * TRACE_WIDTH_BUCKET_SIZE + 1;
+  return `${start}-${start + TRACE_WIDTH_BUCKET_SIZE - 1}`;
+}
+
+// `logical_rows` is only ever a power of two on [2^10, 2^24]. Storing the
+// exact exponent would be equivalent to storing the exact row count, so
+// this groups the exponent into 4 wide bands; each still collapses at
+// least 3 distinct exact row counts into one label.
+const LOGICAL_ROWS_BUCKETS = [
+  { minExponent: 10, maxExponent: 13, label: "2^10-2^13" },
+  { minExponent: 14, maxExponent: 17, label: "2^14-2^17" },
+  { minExponent: 18, maxExponent: 21, label: "2^18-2^21" },
+  { minExponent: 22, maxExponent: 24, label: "2^22-2^24" },
+];
+
+function bucketLogicalRows(rows) {
+  if (!Number.isInteger(rows) || rows < 1) return null;
+  const exponent = Math.round(Math.log2(rows));
+  if (2 ** exponent !== rows) return null;
+  const bucket = LOGICAL_ROWS_BUCKETS.find(
+    (candidate) => exponent >= candidate.minExponent && exponent <= candidate.maxExponent,
+  );
+  return bucket ? bucket.label : null;
+}
+
+function boolToFlag(value) {
+  return typeof value === "boolean" ? (value ? 1 : 0) : null;
+}
+
+// Appends one shape-only row for a successfully *estimated* request via
+// `ctx.waitUntil`, so this never delays the response, and never turns a
+// good estimate into an error: every failure mode here — a missing `env.DB`
+// binding, a malformed body that cannot be re-parsed, a D1 write that
+// rejects — is caught and silently dropped. `requestBody` is re-read here
+// purely to bucket its already-validated declared shape fields for logging;
+// that read never feeds back into the estimate itself, which remains
+// entirely `estimateJson`'s untouched output.
+function logDemand(env, ctx, requestBody, responseBody, ipHash) {
+  try {
+    let parsedRequest;
+    let parsedResponse;
+    try {
+      parsedRequest = JSON.parse(requestBody);
+      parsedResponse = JSON.parse(responseBody);
+    } catch {
+      return;
+    }
+    // Only `EstimateResponseV1` (the success shape) carries anything to
+    // log; the error envelope (malformed manifest, oversized body, etc.)
+    // has no `estimates`/`provable_today` and is never logged here.
+    if (
+      typeof parsedResponse.schema_version !== "number" ||
+      typeof parsedResponse.provable_today !== "boolean" ||
+      !parsedResponse.estimates
+    ) {
+      return;
+    }
+
+    const features =
+      parsedRequest.features && typeof parsedRequest.features === "object" ? parsedRequest.features : {};
+    const blockingReasonCodes = Array.isArray(parsedResponse.blocking_reasons)
+      ? parsedResponse.blocking_reasons
+          .map((reason) => reason && reason.code)
+          .filter((code) => typeof code === "string")
+      : [];
+    const observedAtHour = Math.floor(Date.now() / 1000 / 3600) * 3600;
+
+    // `key_id` stays null until Task 5 ships free keys; every row logged
+    // today carries the anonymous IP hash instead.
+    const promise = env.DB.prepare(
+      `INSERT INTO demand_log (
+         observed_at_hour, request_digest, field, extension_degree,
+         trace_width_bucket, logical_rows_bucket,
+         uses_lookups, uses_buses, uses_permutations, uses_multi_table,
+         uses_preprocessed_columns, uses_periodic_columns, uses_recursion, uses_gpu,
+         provable_today, blocking_reason_codes, key_id, anon_ip_hash
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        observedAtHour,
+        typeof parsedResponse.request_digest === "string" ? parsedResponse.request_digest : null,
+        typeof parsedRequest.field === "string" ? parsedRequest.field : null,
+        typeof parsedRequest.extension_degree === "number" ? parsedRequest.extension_degree : null,
+        bucketTraceWidth(parsedRequest.trace_width),
+        bucketLogicalRows(parsedRequest.logical_rows),
+        boolToFlag(features.uses_lookups),
+        boolToFlag(features.uses_buses),
+        boolToFlag(features.uses_permutations),
+        boolToFlag(features.uses_multi_table),
+        boolToFlag(features.uses_preprocessed_columns),
+        boolToFlag(features.uses_periodic_columns),
+        boolToFlag(features.uses_recursion),
+        boolToFlag(features.uses_gpu),
+        parsedResponse.provable_today ? 1 : 0,
+        JSON.stringify(blockingReasonCodes),
+        null,
+        ipHash,
+      )
+      .run();
+
+    const safe = Promise.resolve(promise).catch(() => {});
+    if (ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil(safe);
+    }
+  } catch {
+    // A missing/misconfigured `env.DB` binding must never affect the
+    // response that `estimateResponse` already computed independently.
+  }
 }
 
 const CANONICAL_HOST = "tinyzkp.com";
@@ -301,9 +426,12 @@ async function staticResponse(request, env, url, preview) {
 // with an empty string still fails `estimate_json`'s own JSON parse, so the
 // engine itself produces the (non-`internal_error`) reason code.
 //
-// An anonymous rate-limit check (Task 3) runs first and can turn the whole
-// request into a 429 before `estimate_json` ever runs.
-async function estimateResponse(request, env) {
+// Two things happen around that untouched computation: an anonymous
+// rate-limit check (Task 3) that can turn the whole request into a 429
+// before `estimate_json` ever runs, and a fire-and-forget shape-only
+// demand-log write (Task 4) after it, via `ctx.waitUntil`, that can never
+// delay or fail the response.
+async function estimateResponse(request, env, ctx) {
   if (request.method !== "POST") {
     return new Response("method not allowed", {
       status: 405,
@@ -326,13 +454,16 @@ async function estimateResponse(request, env) {
     body = bytes.byteLength > MAX_ESTIMATE_REQUEST_BYTES ? "" : new TextDecoder().decode(bytes);
   }
 
-  return new Response(estimateJson(body), {
+  const responseBody = estimateJson(body);
+  logDemand(env, ctx, body, responseBody, ipHash);
+
+  return new Response(responseBody, {
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     // Retired service hostnames must never canonicalize to the website. Once
     // their custom domains are migrated to Pages, every path and method stays
@@ -345,7 +476,7 @@ export default {
     if (redirect) return secured(redirect, preview);
 
     if (url.pathname === "/v1/estimate") {
-      return secured(await estimateResponse(request, env), preview);
+      return secured(await estimateResponse(request, env, ctx), preview);
     }
 
     const normalized = normalizedPath(url.pathname);
