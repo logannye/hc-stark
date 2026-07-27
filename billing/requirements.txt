@@ -1,7 +1,0 @@
-# Direct billing-runtime requirements. Keep every root exact; the reviewed
-# transitive closure and target-wheel hashes live in requirements.lock.
-Flask==3.1.2
-gunicorn==22.0.0
-psycopg[binary]==3.2.10
-pytest==8.4.2
-stripe==15.3.0
