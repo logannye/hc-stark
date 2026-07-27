@@ -28,10 +28,14 @@ pub struct EstimateParams {
 /// Body copied verbatim from `bounded_prover::estimate_air_pipeline`,
 /// substituting the four AIR-derived values for `params` fields and the
 /// three byte-width literals (8, 16, 32) for `params.field_bytes`,
-/// `params.ext_field_bytes`, and `params.digest_bytes` respectively. Do not
-/// "improve" any expression here without re-verifying every byte-equality
-/// parity test below and the release-evidence-pinning tests in
-/// `bounded_prover.rs`.
+/// `params.ext_field_bytes`, and `params.digest_bytes` respectively. The two
+/// remaining compound literals (formerly the bare `56` in
+/// `trace_transform_peak` and the bare `64`/`192` in
+/// `quotient_transform_peak`) are likewise decomposed into a small
+/// live-copy count times one of those same byte widths — see the comments
+/// at each site. Do not "improve" any expression here without
+/// re-verifying every byte-equality parity test below and the
+/// release-evidence-pinning tests in `bounded_prover.rs`.
 pub fn estimate_from_params(
     params: &EstimateParams,
     policy: &ResourcePolicyV1,
@@ -114,18 +118,33 @@ pub fn estimate_from_params(
         .saturating_add(proof_bytes)
         .saturating_add(phase_metadata_bytes);
     // Caller input plus padded coefficients and the two active four-step DFT
-    // matrices. Quotient transforms additionally coexist with the trace tree,
-    // raw/interleaved chunks, and already completed chunk LDEs.
+    // matrices. Seven live copies of the trace's base-field footprint (1 +
+    // 1 + 2 doubled across the idft/dft halves of the coset LDE): every copy
+    // here is a base-field element, so the per-element width is
+    // `field_bytes`, not `ext_field_bytes`.
     let trace_transform_peak = rows
         .saturating_mul(width as u64)
-        .saturating_mul(56)
+        .saturating_mul(7)
+        .saturating_mul(field_bytes)
         .saturating_add(phase_metadata_bytes);
+    // Quotient transforms additionally coexist with the trace tree,
+    // raw/interleaved chunks, and already completed chunk LDEs. Every chunk
+    // buffer here (`quotient.rs::stream_quotient_values` /
+    // `build_quotient_chunk_ldes`) stores extension-field coefficients, so
+    // the per-chunk term is priced at `ext_field_bytes`: four live copies of
+    // the full quotient-value footprint (raw + interleaved + chunk store +
+    // chunk LDE), plus a fixed three-chunk-equivalent floor for the
+    // unchunked staging buffers that exist regardless of `quotient_chunks`
+    // (i.e. `4 * ext_field_bytes * (quotient_chunks + 3)`).
     let quotient_transform_peak = rows
         .saturating_mul(
             ext_field_bytes
                 .saturating_mul(width as u64)
-                .saturating_add(64u64.saturating_mul(quotient_chunks))
-                .saturating_add(192),
+                .saturating_add(
+                    4u64.saturating_mul(ext_field_bytes)
+                        .saturating_mul(quotient_chunks),
+                )
+                .saturating_add(12u64.saturating_mul(ext_field_bytes)),
         )
         .saturating_add(phase_metadata_bytes);
     let scratch_high_water_bytes = fri_peak
@@ -134,8 +153,8 @@ pub fn estimate_from_params(
         .max(proof_checkpoint_peak);
 
     let dft = ResourceBoundedDft::new(policy.clone())?;
-    let trace_dft = dft.estimate_scratch(lde_rows as usize, width, false)?;
-    let quotient_dft = dft.estimate_scratch(lde_rows as usize, 2, false)?;
+    let trace_dft = dft.estimate_scratch(lde_rows as usize, width, false, field_bytes)?;
+    let quotient_dft = dft.estimate_scratch(lde_rows as usize, 2, false, field_bytes)?;
     let peak_resident_bytes = trace_dft
         .peak_resident_bytes
         .max(quotient_dft.peak_resident_bytes)
@@ -210,6 +229,33 @@ pub fn estimate_from_params(
     })
 }
 
+/// Base-field byte width and canonical binomial-extension degree for fields
+/// Plonky3 ships. Goldilocks (64-bit) reaches ~128-bit security at degree 2;
+/// BabyBear/KoalaBear/Mersenne31 (31-bit) need degree 4. A caller-supplied
+/// `extension_degree` that does not match the field's canonical degree is
+/// rejected rather than priced: this function only reports widths for
+/// extensions this codebase would actually reach for, not every degree that
+/// happens to be algebraically valid.
+fn canonical_extension_degree(field: &str) -> Option<(u64, u8)> {
+    match field {
+        "goldilocks" => Some((8, 2)),
+        "babybear" | "koalabear" | "mersenne31" => Some((4, 4)),
+        _ => None,
+    }
+}
+
+/// Base and extension element widths in bytes for fields Plonky3 ships.
+/// Returns None for anything unrecognised, including a recognised field
+/// paired with an extension degree this codebase does not use: an estimate
+/// built on a guessed element width would be worse than no estimate.
+pub fn field_widths(field: &str, extension_degree: u8) -> Option<(u64, u64)> {
+    let (base, degree) = canonical_extension_degree(field)?;
+    if extension_degree != degree {
+        return None;
+    }
+    Some((base, base * degree as u64))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,5 +304,71 @@ mod tests {
                 estimate_from_params(&params_for_workload_for_test(&fib), &policy).unwrap();
             assert_eq!(via_air, via_params, "diverged at 2^{log_rows} rows");
         }
+    }
+
+    #[test]
+    fn known_field_widths_are_resolved() {
+        assert_eq!(field_widths("goldilocks", 2), Some((8, 16)));
+        assert_eq!(field_widths("babybear", 4), Some((4, 16)));
+        assert_eq!(field_widths("koalabear", 4), Some((4, 16)));
+        assert_eq!(field_widths("mersenne31", 4), Some((4, 16)));
+    }
+
+    #[test]
+    fn unknown_field_is_rejected_rather_than_guessed() {
+        assert_eq!(field_widths("bn254", 1), None);
+        assert_eq!(field_widths("goldilocks", 7), None);
+    }
+
+    /// A 4-byte base field must produce a strictly smaller trace footprint AND
+    /// a strictly smaller resident-memory footprint than an 8-byte one at
+    /// identical shape. This is the property that makes cross-field estimates
+    /// meaningful rather than decorative: a prior version of this core left
+    /// several byte-width literals hardcoded to Goldilocks, so `field_bytes`
+    /// was a no-op on both `scratch_high_water_bytes` and
+    /// `peak_resident_bytes`.
+    #[test]
+    fn narrower_field_yields_smaller_estimate() {
+        let policy = crate::test_support::release_policy_2gib();
+        let base = EstimateParams {
+            workload_id: "synthetic".to_string(),
+            rows: 1 << 20,
+            width: 64,
+            quotient_chunks: 2,
+            public_values: 4,
+            has_next_row_columns: true,
+            field_bytes: 8,
+            ext_field_bytes: 16,
+            digest_bytes: 32,
+        };
+        let narrow = EstimateParams {
+            field_bytes: 4,
+            ..base.clone()
+        };
+
+        let wide_est = estimate_from_params(&base, &policy).unwrap();
+        let narrow_est = estimate_from_params(&narrow, &policy).unwrap();
+
+        assert!(
+            narrow_est.scratch_high_water_bytes < wide_est.scratch_high_water_bytes,
+            "4-byte field {} should need less scratch than 8-byte {}",
+            narrow_est.scratch_high_water_bytes,
+            wide_est.scratch_high_water_bytes
+        );
+        assert!(
+            narrow_est.peak_resident_bytes < wide_est.peak_resident_bytes,
+            "4-byte field {} should need less resident memory than 8-byte {}",
+            narrow_est.peak_resident_bytes,
+            wide_est.peak_resident_bytes
+        );
+    }
+
+    /// Goldilocks is the field TinyZKP actually proves; its numbers must
+    /// match exactly what `field_widths("goldilocks", 2)` reproduces, so a
+    /// caller building `EstimateParams` from the declared config string gets
+    /// today's published evidence back byte-for-byte.
+    #[test]
+    fn goldilocks_field_widths_reproduce_the_pinned_byte_widths() {
+        assert_eq!(field_widths("goldilocks", 2), Some((8, 16)));
     }
 }

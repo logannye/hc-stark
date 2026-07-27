@@ -374,30 +374,41 @@ impl ResourceBoundedDft {
         })
     }
 
+    /// `field_bytes` is the per-element byte width to cost the transform at.
+    /// Real execution through this type only ever moves `GoldilocksWord`
+    /// values, so every caller that actually runs the DFT (as opposed to
+    /// estimating a hypothetical configuration) must pass
+    /// `GoldilocksWord::WIDTH as u64`. `estimate_params::estimate_from_params`
+    /// is the one caller that passes a caller-declared width to price fields
+    /// TinyZKP does not execute.
     pub fn estimate_scratch(
         &self,
         height: usize,
         width: usize,
         owned_input: bool,
+        field_bytes: u64,
     ) -> Result<ResourceEstimate> {
         let elements = height.checked_mul(width).ok_or(DftError::SizeOverflow)? as u64;
-        let artifact_bytes = elements.checked_mul(8).ok_or(DftError::SizeOverflow)?;
+        let artifact_bytes = elements
+            .checked_mul(field_bytes)
+            .ok_or(DftError::SizeOverflow)?;
         let owned_input_bytes = if owned_input { artifact_bytes } else { 0 };
         let (first_factor, second_factor) = four_step_factors(height);
         let first_sub_fft_buffers =
-            self.sub_fft_buffer_bytes(first_factor, second_factor, width)?;
+            self.sub_fft_buffer_bytes(first_factor, second_factor, width, field_bytes)?;
         let second_sub_fft_buffers =
-            self.sub_fft_buffer_bytes(second_factor, first_factor, width)?;
+            self.sub_fft_buffer_bytes(second_factor, first_factor, width, field_bytes)?;
         let sub_fft_buffers = first_sub_fft_buffers.max(second_sub_fft_buffers);
         let (outer_tile, inner_tile) = self.transpose_tile_shape(
             width,
             first_factor.max(second_factor),
             first_factor.min(second_factor),
+            field_bytes,
         )?;
         let transpose_buffers = (outer_tile as u64)
             .saturating_mul(inner_tile as u64)
             .saturating_mul(width as u64)
-            .saturating_mul(8)
+            .saturating_mul(field_bytes)
             .saturating_mul(2);
         let working_buffers = sub_fft_buffers.max(transpose_buffers);
         // Initial transpose, first sub-FFT/twiddle, middle transpose, second
@@ -430,7 +441,9 @@ impl ResourceBoundedDft {
             .select_mode(&self.estimate_memory(height, width)?)?;
         let estimate = match selected {
             ExecutionMode::Memory => self.estimate_memory(height, width)?,
-            ExecutionMode::Scratch => self.estimate_scratch(height, width, true)?,
+            ExecutionMode::Scratch => {
+                self.estimate_scratch(height, width, true, GoldilocksWord::WIDTH as u64)?
+            }
         };
         self.policy.preflight_for_mode(selected, estimate)?;
         if selected == ExecutionMode::Memory {
@@ -481,7 +494,9 @@ impl ResourceBoundedDft {
             .select_mode(&self.estimate_memory(height, width)?)?;
         let estimate = match selected {
             ExecutionMode::Memory => self.estimate_memory(height, width)?,
-            ExecutionMode::Scratch => self.estimate_scratch(height, width, false)?,
+            ExecutionMode::Scratch => {
+                self.estimate_scratch(height, width, false, GoldilocksWord::WIDTH as u64)?
+            }
         };
         self.policy.preflight_for_mode(selected, estimate)?;
         if selected == ExecutionMode::Memory {
@@ -532,7 +547,9 @@ impl ResourceBoundedDft {
             .select_mode(&self.estimate_memory(height, width)?)?;
         let estimate = match selected {
             ExecutionMode::Memory => self.estimate_memory(height, width)?,
-            ExecutionMode::Scratch => self.estimate_scratch(height, width, false)?,
+            ExecutionMode::Scratch => {
+                self.estimate_scratch(height, width, false, GoldilocksWord::WIDTH as u64)?
+            }
         };
         self.policy.preflight_for_mode(selected, estimate)?;
         if selected == ExecutionMode::Memory {
@@ -811,10 +828,11 @@ impl ResourceBoundedDft {
         group_count: usize,
         group_len: usize,
         width: usize,
+        field_bytes: u64,
     ) -> Result<u64> {
         let bytes_per_worker = (group_len as u64)
             .saturating_mul(width as u64)
-            .saturating_mul(GoldilocksWord::WIDTH as u64)
+            .saturating_mul(field_bytes)
             .saturating_mul(3);
         let memory_workers = (self.policy.max_resident_bytes / 2)
             .checked_div(bytes_per_worker)
@@ -870,7 +888,8 @@ impl ResourceBoundedDft {
             height as u64,
             width,
         )?;
-        let (outer_tile, inner_tile) = self.transpose_tile_shape(width, outer, inner)?;
+        let (outer_tile, inner_tile) =
+            self.transpose_tile_shape(width, outer, inner, GoldilocksWord::WIDTH as u64)?;
         let max_elements = outer_tile
             .checked_mul(inner_tile)
             .and_then(|value| value.checked_mul(width))
@@ -929,11 +948,12 @@ impl ResourceBoundedDft {
         width: usize,
         outer: usize,
         inner: usize,
+        field_bytes: u64,
     ) -> Result<(usize, usize)> {
-        let bytes_per_factor_element = width
-            .checked_mul(GoldilocksWord::WIDTH)
+        let bytes_per_factor_element = (width as u64)
+            .checked_mul(field_bytes)
             .and_then(|value| value.checked_mul(2))
-            .ok_or(DftError::SizeOverflow)? as u64;
+            .ok_or(DftError::SizeOverflow)?;
         let element_budget = (self.policy.max_resident_bytes / 2)
             .checked_div(bytes_per_factor_element)
             .unwrap_or(0);
@@ -1088,7 +1108,9 @@ mod tests {
         let mut parallel_policy = policy(parallel_dir.path());
         parallel_policy.max_threads = 4;
         let parallel_dft = ResourceBoundedDft::new(parallel_policy).unwrap();
-        let estimate = parallel_dft.estimate_scratch(height, width, true).unwrap();
+        let estimate = parallel_dft
+            .estimate_scratch(height, width, true, GoldilocksWord::WIDTH as u64)
+            .unwrap();
         assert!(estimate.peak_resident_bytes <= 32 * 1024 * 1024);
         let parallel = parallel_dft.try_dft_batch(input).unwrap();
         assert_eq!(
@@ -1231,7 +1253,9 @@ mod tests {
         constrained.max_resident_bytes = 16 * 1024 * 1024;
         constrained.max_scratch_bytes = u64::MAX;
         let dft = ResourceBoundedDft::new(constrained.clone()).unwrap();
-        let estimate = dft.estimate_scratch(1 << 30, 180, false).unwrap();
+        let estimate = dft
+            .estimate_scratch(1 << 30, 180, false, GoldilocksWord::WIDTH as u64)
+            .unwrap();
         assert!(matches!(
             constrained.preflight_for_mode(ExecutionMode::Scratch, estimate),
             Err(StreamError::ResourceLimit {
