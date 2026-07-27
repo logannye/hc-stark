@@ -63,6 +63,12 @@ enum Commands {
         #[arg(long)]
         manifest: PathBuf,
     },
+    /// Estimate resources for a declared Plonky3 configuration.
+    /// Works on configurations TinyZKP cannot prove.
+    Estimate {
+        #[arg(long)]
+        config: PathBuf,
+    },
     /// Offline legacy reproduction, available only in an explicit research build.
     #[cfg(feature = "legacy-research")]
     LegacyResearch {
@@ -348,6 +354,11 @@ fn run() -> Result<u8> {
         } => commands::plonky3::benchmark_worker(&manifest, &mode, &output).map(|()| 0),
         Commands::BenchmarkEstimate { manifest } => {
             commands::plonky3::benchmark_estimate(&manifest).map(|()| 0)
+        }
+        Commands::Estimate { config } => {
+            let response = commands::estimate_config::run(&config)?;
+            println!("{}", serde_json::to_string_pretty(&response)?);
+            Ok(0)
         }
         #[cfg(feature = "legacy-research")]
         Commands::LegacyResearch { command } => run_legacy(command).map(|()| 0),
