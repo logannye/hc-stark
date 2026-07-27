@@ -53,6 +53,10 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.95.0"
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
@@ -101,6 +105,8 @@ jobs:
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs
           node scripts/ci/site_shared_checkout_test.mjs
+          node --test scripts/ci/test_worker_estimate.mjs
+          node scripts/ci/estimate_wasm_cli_parity_gate.mjs
           python3 scripts/ci/guard_pages_launch_preflight.py \
             --source-guard-trust-sha256 \
               "$(sha256sum release/guard-launch-trust-v1.json | cut -d' ' -f1)" \

@@ -1,4 +1,4 @@
-/* @ts-self-types="./tinyzkp-verify.d.ts" */
+/* @ts-self-types="./tinyzkp-estimate.d.ts" */
 
 /**
  * Estimate from a JSON `EstimateRequestV1`. Returns a JSON

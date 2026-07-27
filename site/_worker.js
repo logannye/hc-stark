@@ -3,9 +3,11 @@
 // This worker provides canonical routing, security headers, explicit 410
 // responses for the retired hosted-service surfaces, and `POST /v1/estimate`
 // (a shape-only resource estimate backed by the compiled Rust cost model via
-// a WASM import — the same core `hc-cli estimate` calls, so the two can
-// never diverge). It calls no upstream service and stores no visitor or
-// proof data.
+// a WASM import — the same core `hc-cli estimate` calls at the source
+// level; a CI gate, `scripts/ci/estimate_wasm_cli_parity_gate.mjs`, fails
+// the build if the committed wasm and the native CLI ever compute
+// different numbers for the same input, so that never goes unnoticed). It
+// calls no upstream service and stores no visitor or proof data.
 
 import estimateWasmModule from "./vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm";
 import {

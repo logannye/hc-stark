@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "field": "babybear",
+  "extension_degree": 4,
+  "logical_rows": 4194304,
+  "trace_width": 180,
+  "max_constraint_degree": 3,
+  "public_values": 8,
+  "has_next_row_columns": true,
+  "features": {
+    "uses_lookups": true,
+    "uses_buses": false,
+    "uses_permutations": false,
+    "uses_multi_table": true,
+    "uses_preprocessed_columns": false,
+    "uses_periodic_columns": false,
+    "uses_recursion": false,
+    "uses_gpu": false
+  },
+  "ram_budget_bytes": 2147483648
+}

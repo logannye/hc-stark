@@ -163,6 +163,8 @@ jobs:
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs
           node scripts/ci/site_shared_checkout_test.mjs
+          node --test scripts/ci/test_worker_estimate.mjs
+          node scripts/ci/estimate_wasm_cli_parity_gate.mjs
 
       - name: Guard and static-site production preflight
         run: |
