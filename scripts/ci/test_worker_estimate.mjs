@@ -49,6 +49,10 @@ register(`data:text/javascript,${encodeURIComponent(WASM_LOADER_SOURCE)}`, impor
 // worker being able to silently drift apart, and without reintroducing the
 // export that breaks the real runtime.
 const ANON_RATE_LIMIT_SOURCE_RE = /const ANON_RATE_LIMIT_PER_HOUR = (\d+);/;
+// `KEYED_RATE_LIMIT_PER_HOUR` is likewise deliberately NOT a named export,
+// for the same reason `ANON_RATE_LIMIT_PER_HOUR` isn't (see above) -- read
+// back out of the committed source instead.
+const KEYED_RATE_LIMIT_SOURCE_RE = /const KEYED_RATE_LIMIT_PER_HOUR = (\d+);/;
 
 async function importWorker() {
   const temp = await mkdtemp(path.join(tmpdir(), "tinyzkp-estimate-worker-"));
@@ -56,6 +60,9 @@ async function importWorker() {
   const anonRateLimitMatch = workerSource.match(ANON_RATE_LIMIT_SOURCE_RE);
   assert.ok(anonRateLimitMatch, "site/_worker.js must declare `const ANON_RATE_LIMIT_PER_HOUR = <number>;`");
   const anonRateLimitPerHour = Number(anonRateLimitMatch[1]);
+  const keyedRateLimitMatch = workerSource.match(KEYED_RATE_LIMIT_SOURCE_RE);
+  assert.ok(keyedRateLimitMatch, "site/_worker.js must declare `const KEYED_RATE_LIMIT_PER_HOUR = <number>;`");
+  const keyedRateLimitPerHour = Number(keyedRateLimitMatch[1]);
 
   await cp(path.join(root, "site", "_worker.js"), path.join(temp, "_worker.js"));
   await cp(
@@ -68,6 +75,7 @@ async function importWorker() {
   return {
     worker: module.default,
     anonRateLimitPerHour,
+    keyedRateLimitPerHour,
     cleanup: () => rm(temp, { recursive: true, force: true }),
   };
 }
@@ -83,16 +91,28 @@ function assetsMock() {
 // to a real local D1 database — was instead verified directly against real
 // `wrangler pages dev`/`wrangler d1 migrations apply --local` (Wrangler
 // 4.85.0, matching toolchains/cloudflare/package.json's pinned version).
-// This stub only needs to reproduce the exact two query shapes
-// `site/_worker.js` issues (see migrations/0000_rate_limit_windows.sql and
-// migrations/0001_demand_log.sql) faithfully enough to exercise the
-// worker's own logic — rate-limit counting, bucketing, and the "a write
-// failure never reaches the response" contract — not to validate SQL.
-function createD1Stub({ failRateLimit = false, failDemandLog = false } = {}) {
+// This stub only needs to reproduce the exact query shapes `site/_worker.js`
+// issues (see migrations/0000_rate_limit_windows.sql,
+// migrations/0001_demand_log.sql, and migrations/0002_keys.sql) faithfully
+// enough to exercise the worker's own logic — rate-limit counting,
+// bucketing, key minting/lookup, and the "a write failure never reaches the
+// response" contract — not to validate SQL. `keysByHash` stands in for the
+// real `estimator_keys` table: a test can inspect it directly to confirm
+// only a `key_hash`/`key_id` pair ever lands there, never the raw key or an
+// email (see the Task 5 tests below).
+function createD1Stub({
+  failRateLimit = false,
+  failDemandLog = false,
+  failKeyedRateLimit = false,
+  failKeyMint = false,
+} = {}) {
   const rateLimitCounts = new Map();
+  const keyedRateLimitCounts = new Map();
   const demandLogRows = [];
+  const keysByHash = new Map();
   return {
     demandLogRows,
+    keysByHash,
     prepare(sql) {
       const normalized = sql.replace(/\s+/g, " ").trim();
       let boundArgs = [];
@@ -102,23 +122,44 @@ function createD1Stub({ failRateLimit = false, failDemandLog = false } = {}) {
           return statement;
         },
         async first() {
-          if (!normalized.includes("rate_limit_windows")) {
-            throw new Error(`D1 stub: unsupported .first() query: ${normalized}`);
+          // Checked before the plain `rate_limit_windows` branch below:
+          // "keyed_rate_limit_windows" contains "rate_limit_windows" as a
+          // substring, so the more specific table name must win first.
+          if (normalized.includes("keyed_rate_limit_windows")) {
+            if (failKeyedRateLimit) throw new Error("D1 stub: injected keyed rate-limit failure");
+            const [keyId, windowStart] = boundArgs;
+            const key = `${keyId}:${windowStart}`;
+            const next = (keyedRateLimitCounts.get(key) || 0) + 1;
+            keyedRateLimitCounts.set(key, next);
+            return { request_count: next };
           }
-          if (failRateLimit) throw new Error("D1 stub: injected rate-limit failure");
-          const [ipHash, windowStart] = boundArgs;
-          const key = `${ipHash}:${windowStart}`;
-          const next = (rateLimitCounts.get(key) || 0) + 1;
-          rateLimitCounts.set(key, next);
-          return { request_count: next };
+          if (normalized.includes("estimator_keys")) {
+            const [keyHash] = boundArgs;
+            return keysByHash.get(keyHash) || null;
+          }
+          if (normalized.includes("rate_limit_windows")) {
+            if (failRateLimit) throw new Error("D1 stub: injected rate-limit failure");
+            const [ipHash, windowStart] = boundArgs;
+            const key = `${ipHash}:${windowStart}`;
+            const next = (rateLimitCounts.get(key) || 0) + 1;
+            rateLimitCounts.set(key, next);
+            return { request_count: next };
+          }
+          throw new Error(`D1 stub: unsupported .first() query: ${normalized}`);
         },
         async run() {
-          if (!normalized.includes("demand_log")) {
-            throw new Error(`D1 stub: unsupported .run() query: ${normalized}`);
+          if (normalized.includes("estimator_keys")) {
+            if (failKeyMint) throw new Error("D1 stub: injected key-mint failure");
+            const [keyId, keyHash, mintedAtHour, revoked] = boundArgs;
+            keysByHash.set(keyHash, { key_id: keyId, minted_at_hour: mintedAtHour, revoked });
+            return { success: true, meta: {} };
           }
-          if (failDemandLog) throw new Error("D1 stub: injected demand-log failure");
-          demandLogRows.push(boundArgs);
-          return { success: true, meta: {} };
+          if (normalized.includes("demand_log")) {
+            if (failDemandLog) throw new Error("D1 stub: injected demand-log failure");
+            demandLogRows.push(boundArgs);
+            return { success: true, meta: {} };
+          }
+          throw new Error(`D1 stub: unsupported .run() query: ${normalized}`);
         },
       };
       return statement;
@@ -449,6 +490,209 @@ test("a rate-limited request writes no demand-log row", async () => {
     assert.equal(limited.status, 429);
     await ctx.drain();
     assert.equal(db.demandLogRows.length, anonRateLimitPerHour);
+  } finally {
+    await cleanup();
+  }
+});
+
+// --- Task 5: free keys and the keyed rate tier ------------------------
+
+function keysRequest(email) {
+  return new Request("https://tinyzkp.com/v1/keys", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+}
+
+function estimateRequestWithKey(ip, key) {
+  return new Request("https://tinyzkp.com/v1/estimate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip, Authorization: `Bearer ${key}` },
+    body: SP1_SHAPED_REQUEST,
+  });
+}
+
+test("POST /v1/keys mints an opaque key that is not derivable from the email, storing only a hash", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub();
+    const email = "distinct-org@example.com";
+    const response = await worker.fetch(keysRequest(email), { ASSETS: assetsMock(), DB: db });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("Content-Type"), /application\/json/);
+    const body = await response.json();
+    assert.equal(body.ok, true);
+    assert.equal(typeof body.key, "string");
+    assert.ok(body.key.startsWith("tzk_live_"));
+    assert.ok(body.key.length > 40, "the key must carry real entropy, not a short token");
+    // Not derivable from the email: neither the local part nor the domain
+    // appears anywhere in the returned key.
+    assert.ok(!body.key.toLowerCase().includes("distinct-org"));
+    assert.ok(!body.key.toLowerCase().includes("example"));
+    assert.equal(typeof body.rate_limit_per_hour, "number");
+    assert.ok(body.rate_limit_per_hour > 0);
+
+    // Only one row landed in the table standing in for `estimator_keys`,
+    // keyed by a hash that is not the key itself and does not embed the
+    // email either.
+    assert.equal(db.keysByHash.size, 1);
+    const [storedHash, storedRow] = [...db.keysByHash.entries()][0];
+    assert.notEqual(storedHash, body.key);
+    assert.ok(!storedHash.toLowerCase().includes("distinct-org"));
+    assert.equal(typeof storedRow.key_id, "string");
+    assert.ok(storedRow.key_id.length > 0);
+    assert.notEqual(storedRow.key_id, body.key);
+    assert.notEqual(storedRow.key_id, storedHash);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("POST /v1/keys rejects a malformed email with a structured error, never internal_error", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub();
+    const response = await worker.fetch(keysRequest("not-an-email"), { ASSETS: assetsMock(), DB: db });
+    assert.equal(response.status, 400);
+    const body = await response.json();
+    assert.equal(body.ok, false);
+    assert.equal(body.error, "invalid_email");
+    assert.notEqual(body.error, "internal_error");
+    assert.equal(db.keysByHash.size, 0, "a rejected mint request must store nothing");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("GET /v1/keys returns 405", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const response = await worker.fetch(
+      new Request("https://tinyzkp.com/v1/keys", { method: "GET" }),
+      { ASSETS: assetsMock() },
+    );
+    assert.equal(response.status, 405);
+    assert.equal(response.headers.get("Allow"), "POST");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("/v1/estimate with an unknown or malformed key returns a structured 401 error, never internal_error", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const env = { ASSETS: assetsMock(), DB: createD1Stub() };
+
+    const unknown = await worker.fetch(
+      estimateRequestWithKey("203.0.113.150", "tzk_live_00000000000000000000000000000000000000000000"),
+      env,
+    );
+    assert.equal(unknown.status, 401);
+    const unknownBody = await unknown.json();
+    assert.equal(unknownBody.ok, false);
+    assert.equal(unknownBody.error, "invalid_key");
+    assert.notEqual(unknownBody.error, "internal_error");
+
+    const malformed = await worker.fetch(estimateRequestWithKey("203.0.113.150", "not-a-real-key"), env);
+    assert.equal(malformed.status, 401);
+    const malformedBody = await malformed.json();
+    assert.equal(malformedBody.error, "invalid_key");
+    assert.notEqual(malformedBody.error, "internal_error");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("a request bearing a minted key gets the keyed rate limit, on a bucket independent of the anonymous ceiling", async () => {
+  const { worker, anonRateLimitPerHour, keyedRateLimitPerHour, cleanup } = await importWorker();
+  try {
+    assert.ok(
+      keyedRateLimitPerHour > anonRateLimitPerHour,
+      "the keyed ceiling must exceed the anonymous default for minting a key to be worth it",
+    );
+    const db = createD1Stub();
+    const ctx = createExecutionContext();
+    const env = { ASSETS: assetsMock(), DB: db };
+
+    const mintResponse = await worker.fetch(keysRequest("keyed-caller@example.com"), env);
+    const { key } = await mintResponse.json();
+
+    // Exhaust the anonymous ceiling for one IP first.
+    const sharedIp = "203.0.113.201";
+    for (let i = 0; i < anonRateLimitPerHour; i += 1) {
+      await worker.fetch(estimateRequest(sharedIp), env, ctx);
+    }
+    const anonLimited = await worker.fetch(estimateRequest(sharedIp), env, ctx);
+    assert.equal(anonLimited.status, 429, "the anonymous bucket for this IP must already be exhausted");
+
+    // The SAME IP, now presenting the key, keeps succeeding past the
+    // anonymous ceiling because a keyed request rides its own per-key
+    // bucket instead.
+    for (let i = 1; i <= keyedRateLimitPerHour; i += 1) {
+      const response = await worker.fetch(estimateRequestWithKey(sharedIp, key), env, ctx);
+      assert.equal(response.status, 200, `keyed request ${i} of ${keyedRateLimitPerHour} must succeed`);
+    }
+    const keyedLimited = await worker.fetch(estimateRequestWithKey(sharedIp, key), env, ctx);
+    assert.equal(keyedLimited.status, 429);
+
+    await ctx.drain();
+  } finally {
+    await cleanup();
+  }
+});
+
+test("a keyed estimate logs the caller's key_id and never the email, leaving anon_ip_hash null", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub();
+    const ctx = createExecutionContext();
+    const env = { ASSETS: assetsMock(), DB: db };
+    const email = "quiet-org@example.com";
+
+    const mintResponse = await worker.fetch(keysRequest(email), env);
+    const { key } = await mintResponse.json();
+    // The table standing in for `estimator_keys` -- the only place a real
+    // key or email could ever land -- stored no email in any column.
+    for (const stored of db.keysByHash.values()) {
+      assert.deepEqual(Object.keys(stored).sort(), ["key_id", "minted_at_hour", "revoked"]);
+    }
+
+    const response = await worker.fetch(estimateRequestWithKey("203.0.113.210", key), env, ctx);
+    assert.equal(response.status, 200);
+    await ctx.drain();
+
+    assert.equal(db.demandLogRows.length, 1);
+    const row = db.demandLogRows[0];
+    const keyId = row[16];
+    const anonIpHash = row[17];
+    assert.equal(typeof keyId, "string");
+    assert.ok(keyId.length > 0);
+    // Exactly one of key_id / anon_ip_hash is set for a keyed caller.
+    assert.equal(anonIpHash, null);
+
+    // The logged row, serialized whole, never contains the email, any
+    // substring of it, or the raw key material itself.
+    const serializedRow = JSON.stringify(row);
+    assert.ok(!serializedRow.toLowerCase().includes("quiet-org"));
+    assert.ok(!serializedRow.toLowerCase().includes("example.com"));
+    assert.ok(!serializedRow.includes(key));
+  } finally {
+    await cleanup();
+  }
+});
+
+test("a D1 outage while minting fails as a structured error, never internal_error, and stores nothing", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub({ failKeyMint: true });
+    const response = await worker.fetch(keysRequest("outage-org@example.com"), { ASSETS: assetsMock(), DB: db });
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.ok, false);
+    assert.equal(body.error, "keys_unavailable");
+    assert.notEqual(body.error, "internal_error");
+    assert.equal(db.keysByHash.size, 0);
   } finally {
     await cleanup();
   }

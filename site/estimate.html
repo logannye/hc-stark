@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TinyZKP Estimate — Free hosted resource estimator</title>
+  <meta name="description" content="Estimate conventional and bounded RAM, scratch, and I/O for a Plonky3-shaped configuration from your browser or the CLI, free, with no account required.">
+  <meta name="robots" content="noindex,follow">
+  <link rel="canonical" href="https://tinyzkp.com/estimate"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><script src="/shared.js" defer></script><script src="/estimate.js" defer></script>
+</head>
+<body>
+<header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a><a class="button nav-buy" data-checkout="annual" data-closed-label="Not yet for sale" data-live-label="Buy Guard">Not yet for sale</a></nav></div></header>
+<main><section class="page-hero"><div class="container"><div class="eyebrow">Free hosted tool</div><h1>Estimate resource cost from your browser.</h1><p class="lede">This calls the exact same compiled cost model as <code>tinyzkp-engine estimate</code> — the same core function, wrapped once for the browser and once for the CLI. No JavaScript on this page computes, rounds, or adjusts a single number in the result.</p><div class="actions"><a class="button secondary" href="#run">Try it now</a><a class="button secondary" href="/docs">Read the CLI docs</a></div></div></section>
+<section class="content container">
+  <div class="notice"><strong>Honest scope:</strong> only two field shapes are calculated: <code>goldilocks</code> at extension degree 2 (the only profile TinyZKP can prove today) and <code>babybear</code>, <code>koalabear</code>, or <code>mersenne31</code>, each at extension degree 4 (recognized for resource-shape math, not provable yet). A configuration outside these shapes, or one that uses an AIR feature not yet supported, still returns a real byte-for-byte estimate — it is just marked <code>provable_today: false</code> with the specific blocking reason(s) linked below. See <a href="/troubleshooting#unsupported_profile">unsupported_profile</a>, <a href="/troubleshooting#unsupported_air_feature">unsupported_air_feature</a>, <a href="/troubleshooting#ram_budget_insufficient">ram_budget_insufficient</a>, and <a href="/troubleshooting#manifest_contract_invalid">manifest_contract_invalid</a>.</div>
+  <h2 id="run">Run the estimator</h2>
+  <p>Fill in a configuration and submit. The exact same JSON is shown below as an equivalent local <code>tinyzkp-engine estimate</code> command, so you can cross-check this page against a local run.</p>
+  <div class="grid two">
+    <form class="worksheet" data-estimate-form>
+      <fieldset>
+        <legend>Field shape</legend>
+        <div class="worksheet-grid">
+          <label>Field
+            <select data-field-select>
+              <option value="goldilocks" selected>goldilocks (provable today)</option>
+              <option value="babybear">babybear (estimate only)</option>
+              <option value="koalabear">koalabear (estimate only)</option>
+              <option value="mersenne31">mersenne31 (estimate only)</option>
+            </select>
+          </label>
+          <label>Extension degree (derived from field)
+            <input type="text" data-extension-degree value="2" disabled>
+          </label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Workload shape</legend>
+        <div class="worksheet-grid">
+          <label>Logical rows
+            <select data-logical-rows>
+              <option value="1024">2^10 = 1,024</option>
+              <option value="2048">2^11 = 2,048</option>
+              <option value="4096">2^12 = 4,096</option>
+              <option value="8192">2^13 = 8,192</option>
+              <option value="16384">2^14 = 16,384</option>
+              <option value="32768">2^15 = 32,768</option>
+              <option value="65536">2^16 = 65,536</option>
+              <option value="131072">2^17 = 131,072</option>
+              <option value="262144">2^18 = 262,144</option>
+              <option value="524288">2^19 = 524,288</option>
+              <option value="1048576" selected>2^20 = 1,048,576</option>
+              <option value="2097152">2^21 = 2,097,152</option>
+              <option value="4194304">2^22 = 4,194,304</option>
+              <option value="8388608">2^23 = 8,388,608</option>
+              <option value="16777216">2^24 = 16,777,216</option>
+            </select>
+          </label>
+          <label>Trace width (1–256)
+            <input type="number" min="1" max="256" step="1" value="3" data-trace-width>
+          </label>
+          <label>Max constraint degree
+            <select data-max-constraint-degree>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+            </select>
+          </label>
+          <label>Public values
+            <input type="number" min="0" step="1" value="3" data-public-values>
+          </label>
+        </div>
+        <div class="checkbox-row"><label><input type="checkbox" checked data-has-next-row-columns> Uses next-row columns</label></div>
+      </fieldset>
+      <fieldset>
+        <legend>AIR features</legend>
+        <div class="checkbox-grid">
+          <label class="checkbox-row"><input type="checkbox" data-uses-lookups> Lookups</label>
+          <label class="checkbox-row"><input type="checkbox" data-uses-buses> Buses</label>
+          <label class="checkbox-row"><input type="checkbox" data-uses-permutations> Permutations</label>
+          <label class="checkbox-row"><input type="checkbox" data-uses-multi-table> Multi-table</label>
+          <label class="checkbox-row"><input type="checkbox" data-uses-preprocessed-columns> Preprocessed columns</label>
+          <label class="checkbox-row"><input type="checkbox" data-uses-periodic-columns> Periodic columns</label>
+          <label class="checkbox-row"><input type="checkbox" data-uses-recursion> Recursion</label>
+          <label class="checkbox-row"><input type="checkbox" data-uses-gpu> GPU</label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Resources and key</legend>
+        <div class="worksheet-grid">
+          <label>RAM budget (bytes, min 16,777,216)
+            <input type="number" min="16777216" step="1" value="2147483648" data-ram-budget-bytes>
+          </label>
+          <label>Free key (optional — raises your limit)
+            <input type="text" placeholder="tzk_live_…" data-estimate-key>
+          </label>
+        </div>
+      </fieldset>
+      <button class="button secondary" type="submit">Estimate</button>
+      <output class="worksheet-output" data-estimate-output hidden aria-live="polite"></output>
+    </form>
+    <div class="card">
+      <span class="tag">Equivalent local command</span>
+      <p>This exact JSON, run locally instead of hosted:</p>
+      <pre><code data-config-json>{}</code></pre>
+      <pre><code>cat &gt; job.json &lt;&lt;'JSON'
+&lt;paste the JSON above&gt;
+JSON
+tinyzkp-engine estimate --config job.json</code></pre>
+      <p class="subtle">A CI gate, <code>scripts/ci/estimate_wasm_cli_parity_gate.mjs</code>, fails the build if the hosted WASM and the native CLI ever compute different numbers for the same input.</p>
+    </div>
+  </div>
+  <h2 id="keys">Get a free key</h2>
+  <p>Anonymous requests are rate-limited per IP address. A free key raises that ceiling. There is no account, password, dashboard, or confirmation email — one request returns one key.</p>
+  <form class="worksheet" data-key-form>
+    <div class="worksheet-grid">
+      <label>Email
+        <input type="email" required placeholder="Work email address" data-key-email>
+      </label>
+    </div>
+    <button class="button secondary" type="submit">Get a free key</button>
+    <output class="worksheet-output" data-key-result hidden aria-live="polite"></output>
+  </form>
+  <h2>What we store</h2>
+  <p>We store a hash of your key, never the key itself, and we never store your submitted email in any form — there is no account-recovery, revocation, or notification flow that would need it, so keeping it would be pure unused liability. Every successful estimate writes one shape-only row (field, extension degree, trace-width and row-count bucket, feature flags, whether it is provable, and the blocking reason codes) tagged with either your key's opaque identifier or a salted hash of your IP address, never both and never the raw address. No request body, workload, witness, or AIR is ever stored. This log exists to measure real demand, not to profile callers; see <a href="/security">security</a> for the surrounding posture.</p>
+  <h2>Good fit</h2>
+  <div class="grid two">
+    <article class="card"><h3>Use this for</h3><ul><li>Sizing conventional vs. bounded RAM, scratch, and I/O before committing to a machine.</li><li>Checking whether a configuration is provable today, or seeing exactly why it is not.</li><li>Cross-checking the hosted number against a local <code>tinyzkp-engine estimate</code> run.</li></ul></article>
+    <article class="card"><h3>Do not use this for</h3><ul><li>Submitting a real workload, witness, trace, or AIR — this endpoint accepts only the small declared shape above, never a payload.</li><li>Proving — this is an estimate only; run the free <a href="/doctor">doctor</a> and then prove locally.</li><li>Anything requiring an SLA — this is a free, best-effort, rate-limited tool with no uptime guarantee.</li></ul></article>
+  </div>
+</section></main>
+<footer class="site-footer"><div class="container"><div class="footer-grid"><div><a class="brand" href="/"><span>Tiny</span>ZKP</a><p>Free hosted resource estimator, backed by the same cost model as the CLI.</p></div><div><h2>Product</h2><a href="/guard">Guard</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a></div><div><h2>Technical</h2><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/doctor">Doctor</a></div><div><h2>Company</h2><a href="/security">Security</a><a href="/support">Support</a><a href="/terms">Legal</a></div></div><div class="footer-note">This page sends only the declared shape you enter above — never a workload, witness, trace, or AIR.</div></div></footer>
+</body></html>

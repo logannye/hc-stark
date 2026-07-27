@@ -176,6 +176,16 @@ tr:last-child td { border-bottom: 0; }
 .footer-grid a:hover { color: var(--ink); }
 .footer-note { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--quiet); font-size: .72rem; }
 
+.worksheet select { width: 100%; padding: .72rem .8rem; border: 1px solid var(--line-strong); border-radius: .45rem; background: var(--night); color: var(--ink); font: inherit; }
+.worksheet select:disabled { color: var(--quiet); }
+.worksheet fieldset { margin: 0; border: 1px solid var(--line); border-radius: .6rem; padding: .9rem 1rem; }
+.worksheet legend { padding: 0 .4rem; color: var(--quiet); font-family: var(--mono); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; }
+.checkbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem 1rem; }
+.checkbox-row { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: .85rem; }
+.checkbox-row input { width: auto; }
+.key-output { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: .6rem 0; }
+.key-output code { flex: 1 1 260px; padding: .6rem .7rem; overflow-wrap: anywhere; border: 1px solid var(--line-strong); border-radius: .45rem; background: var(--night); }
+
 @media (max-width: 900px) {
   .nav-toggle { display: block; }
   .site-nav { display: none; position: absolute; inset: 4.1rem 0 auto; padding: .8rem 1rem 1rem; flex-direction: column; align-items: stretch; background: #07131d; border-bottom: 1px solid var(--line); }

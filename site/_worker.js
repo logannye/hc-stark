@@ -1,25 +1,44 @@
 // Static-only Cloudflare Pages router for TinyZKP.com.
 //
 // This worker provides canonical routing, security headers, explicit 410
-// responses for the retired hosted-service surfaces, and `POST /v1/estimate`
+// responses for the retired hosted-service surfaces, `POST /v1/estimate`
 // (a shape-only resource estimate backed by the compiled Rust cost model via
 // a WASM import — the same core `hc-cli estimate` calls at the source
 // level; a CI gate, `scripts/ci/estimate_wasm_cli_parity_gate.mjs`, fails
 // the build if the committed wasm and the native CLI ever compute
-// different numbers for the same input, so that never goes unnoticed). It
-// calls no upstream service.
+// different numbers for the same input, so that never goes unnoticed), and
+// `POST /v1/keys` (mints a free, opaque bearer key that raises the
+// `/v1/estimate` rate-limit ceiling — Task 5, see below). It calls no
+// upstream service.
 //
 // It DOES store data, in one D1 database bound as `env.DB` (see
-// site/wrangler.toml and migrations/*.sql): a per-IP rate-limit counter
-// keyed on a salted hash of `CF-Connecting-IP` (never the raw address), and
-// a shape-only demand-log row per successful estimate (never a raw request
-// body, raw IP, email, path, AIR, or witness — see
-// migrations/0001_demand_log.sql for the exact bucketing). Every number in
-// an `/v1/estimate` response still comes solely from `estimate_json`; the
-// demand log separately re-reads the request's already-validated shape
-// fields (field, extension_degree, trace width/row-count buckets, feature
-// flags) purely to log them, and that read never feeds back into the
-// estimate or the response.
+// site/wrangler.toml and migrations/*.sql):
+//
+//   - a per-IP rate-limit counter keyed on a salted hash of
+//     `CF-Connecting-IP` (never the raw address);
+//   - a per-key rate-limit counter keyed on a caller's own opaque `key_id`
+//     (migrations/0002_keys.sql) once they mint a free key;
+//   - exactly a SHA-256 hash of each minted key (`estimator_keys.key_hash`)
+//     -- the raw key is handed back to its caller once, at mint time, and
+//     is never itself written to D1;
+//   - a shape-only demand-log row per successful estimate (never a raw
+//     request body, raw IP, email, path, AIR, or witness — see
+//     migrations/0001_demand_log.sql for the exact bucketing), tagged with
+//     exactly one of that caller's `key_id` or the anonymous salted IP
+//     hash.
+//
+// `POST /v1/keys` takes only an email, used solely to check it is shaped
+// like a real address before minting; that email is never stored anywhere,
+// in any form, by this worker or by any migration in this repo. There is
+// no account, password, confirmation flow, or lost-key recovery path that
+// would need it, so persisting it would be pure unused liability — see the
+// Task 5 report for the full reasoning.
+//
+// Every number in an `/v1/estimate` response still comes solely from
+// `estimate_json`; the demand log separately re-reads the request's
+// already-validated shape fields (field, extension_degree, trace
+// width/row-count buckets, feature flags) purely to log them, and that
+// read never feeds back into the estimate or the response.
 
 import estimateWasmModule from "./vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm";
 import {
@@ -117,6 +136,174 @@ function rateLimitedResponse(retryAfterSeconds) {
   });
 }
 
+// --- Free keys and the keyed rate tier (Task 5) -------------------------
+//
+// A minted key raises the per-caller ceiling above the anonymous default:
+// a courtesy for callers willing to identify themselves as a distinct
+// organization, which is also what makes `scripts/ci/demand_report.py`'s
+// kill-criterion count meaningful (see migrations/0001_demand_log.sql's
+// `key_id` column) — not a security boundary and not a paid product. There
+// is still no account, password, dashboard, or confirmation email:
+// `POST /v1/keys` mints and returns a key synchronously from one email,
+// and that is the entire flow.
+const KEYED_RATE_LIMIT_PER_HOUR = 300;
+const KEY_PREFIX = "tzk_live_";
+const KEY_TOKEN_BYTES = 32; // 256 bits of randomness in the bearer key itself
+const KEY_ID_BYTES = 16; // a second, independently-random 128-bit identifier
+const MAX_KEYS_REQUEST_BYTES = 2048; // an email address plus JSON overhead is well under 1 KB
+const EMAIL_SHAPE_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function randomUrlSafeToken(byteLength) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// The same structured-error shape `rateLimitedResponse` already uses
+// (`{ ok: false, error: <code> }`) so an invalid/unknown key, a malformed
+// `/v1/keys` request, or a D1 outage while minting are all reported the
+// same clear way — never as `internal_error`.
+function structuredErrorResponse(status, code) {
+  return new Response(JSON.stringify({ ok: false, error: code }), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
+// Mints one free key. A SHA-256 hash of the returned bearer key is stored
+// (`estimator_keys.key_hash`), never the key itself, alongside a second,
+// independently-random `key_id` used everywhere a caller must be
+// identified in logs (`demand_log.key_id`, `keyed_rate_limit_windows.key_id`)
+// — so nobody who only reads those tables can work backward to the raw key
+// or to `key_hash`. The submitted email is checked only for shape (it must
+// look like an email, as a light guard against empty/junk submissions) and
+// is never stored, here or anywhere else in this repo; see
+// migrations/0002_keys.sql and the Task 5 report for why that is a
+// deliberate choice, not an oversight. Minting itself rides the same
+// anonymous per-IP rate limiter `/v1/estimate` uses (Task 3): unlike the
+// demand log, an inflated count of free keys would directly corrupt the
+// kill-criterion this whole feature exists to measure, so mass-minting
+// from one IP is bounded the same way mass-estimating is.
+async function keysResponse(request, env) {
+  if (request.method !== "POST") {
+    return new Response("method not allowed", {
+      status: 405,
+      headers: { Allow: "POST", "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  const ipHash = await saltedIpHash(request.headers.get("CF-Connecting-IP") || "");
+  const rateLimit = await checkAnonymousRateLimit(env, ipHash);
+  if (rateLimit.limited) {
+    return rateLimitedResponse(rateLimit.retryAfterSeconds);
+  }
+
+  const declaredLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_KEYS_REQUEST_BYTES) {
+    return structuredErrorResponse(400, "invalid_request");
+  }
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.byteLength > MAX_KEYS_REQUEST_BYTES) {
+    return structuredErrorResponse(400, "invalid_request");
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return structuredErrorResponse(400, "invalid_request");
+  }
+  const email = typeof parsed?.email === "string" ? parsed.email.trim() : "";
+  if (!email || email.length > 320 || !EMAIL_SHAPE_RE.test(email)) {
+    return structuredErrorResponse(400, "invalid_email");
+  }
+
+  if (!env.DB) {
+    return structuredErrorResponse(503, "keys_unavailable");
+  }
+
+  const rawKey = KEY_PREFIX + randomUrlSafeToken(KEY_TOKEN_BYTES);
+  const keyHash = await sha256Hex(rawKey);
+  const keyId = randomUrlSafeToken(KEY_ID_BYTES);
+  const mintedAtHour = Math.floor(Date.now() / 1000 / 3600) * 3600;
+
+  try {
+    await env.DB.prepare(
+      `INSERT INTO estimator_keys (key_id, key_hash, minted_at_hour, revoked) VALUES (?, ?, ?, 0)`,
+    ).bind(keyId, keyHash, mintedAtHour).run();
+  } catch {
+    return structuredErrorResponse(503, "keys_unavailable");
+  }
+
+  return new Response(
+    JSON.stringify({ ok: true, key: rawKey, rate_limit_per_hour: KEYED_RATE_LIMIT_PER_HOUR }),
+    { status: 200, headers: { "Content-Type": "application/json; charset=utf-8" } },
+  );
+}
+
+// Resolves the caller's `Authorization: Bearer <key>` header, if any, into
+// one of three states:
+//   - `{ status: "none" }` — no key presented, OR D1 is unreachable (which
+//     fails OPEN to the anonymous tier exactly like Task 3's rate limiter,
+//     rather than failing the whole request over an infrastructure hiccup);
+//   - `{ status: "invalid" }` — a key WAS presented but is malformed,
+//     unknown, or revoked; a caller who asked to be treated as a keyed
+//     caller must be told plainly that didn't work, never silently
+//     downgraded to the anonymous tier without saying so;
+//   - `{ status: "keyed", keyId }` — a valid, active key.
+async function resolveKeyedCaller(env, authorizationHeader) {
+  if (!authorizationHeader) return { status: "none" };
+  const match = /^Bearer\s+(\S+)$/.exec(authorizationHeader.trim());
+  if (!match) return { status: "invalid" };
+  const token = match[1];
+  if (!token.startsWith(KEY_PREFIX) || token.length < KEY_PREFIX.length + 16) {
+    return { status: "invalid" };
+  }
+  if (!env.DB) return { status: "none" };
+  try {
+    const keyHash = await sha256Hex(token);
+    const row = await env.DB.prepare(
+      `SELECT key_id, revoked FROM estimator_keys WHERE key_hash = ?`,
+    ).bind(keyHash).first();
+    if (!row || row.revoked) return { status: "invalid" };
+    return { status: "keyed", keyId: row.key_id };
+  } catch {
+    return { status: "none" };
+  }
+}
+
+// Fixed-window counter structurally identical to `checkAnonymousRateLimit`
+// but backed by `keyed_rate_limit_windows` and keyed on `key_id` instead of
+// a salted IP hash (migrations/0002_keys.sql). Also fails OPEN: this
+// ceiling is a courtesy, not a security boundary.
+async function checkKeyedRateLimit(env, keyId) {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const windowStart = Math.floor(nowSeconds / RATE_LIMIT_WINDOW_SECONDS) * RATE_LIMIT_WINDOW_SECONDS;
+  try {
+    const row = await env.DB.prepare(
+      `INSERT INTO keyed_rate_limit_windows (key_id, window_start, request_count)
+       VALUES (?, ?, 1)
+       ON CONFLICT (key_id, window_start) DO UPDATE SET request_count = request_count + 1
+       RETURNING request_count`,
+    ).bind(keyId, windowStart).first();
+    const count = Number(row && row.request_count);
+    if (Number.isFinite(count) && count > KEYED_RATE_LIMIT_PER_HOUR) {
+      const retryAfterSeconds = Math.max(1, windowStart + RATE_LIMIT_WINDOW_SECONDS - nowSeconds);
+      return { limited: true, retryAfterSeconds };
+    }
+    return { limited: false };
+  } catch {
+    return { limited: false };
+  }
+}
+
 // --- Shape-only demand log (Task 4) ------------------------------------
 //
 // Every column here describes the SHAPE of a request the engine already
@@ -163,8 +350,10 @@ function boolToFlag(value) {
 // rejects — is caught and silently dropped. `requestBody` is re-read here
 // purely to bucket its already-validated declared shape fields for logging;
 // that read never feeds back into the estimate itself, which remains
-// entirely `estimateJson`'s untouched output.
-function logDemand(env, ctx, requestBody, responseBody, ipHash) {
+// entirely `estimateJson`'s untouched output. `caller` carries exactly one
+// of `keyId` (a Task 5 keyed caller) or `ipHash` (an anonymous caller) —
+// never both, matching migrations/0001_demand_log.sql's invariant.
+function logDemand(env, ctx, requestBody, responseBody, caller) {
   try {
     let parsedRequest;
     let parsedResponse;
@@ -194,8 +383,6 @@ function logDemand(env, ctx, requestBody, responseBody, ipHash) {
       : [];
     const observedAtHour = Math.floor(Date.now() / 1000 / 3600) * 3600;
 
-    // `key_id` stays null until Task 5 ships free keys; every row logged
-    // today carries the anonymous IP hash instead.
     const promise = env.DB.prepare(
       `INSERT INTO demand_log (
          observed_at_hour, request_digest, field, extension_degree,
@@ -222,8 +409,8 @@ function logDemand(env, ctx, requestBody, responseBody, ipHash) {
         boolToFlag(features.uses_gpu),
         parsedResponse.provable_today ? 1 : 0,
         JSON.stringify(blockingReasonCodes),
-        null,
-        ipHash,
+        caller && caller.keyId ? caller.keyId : null,
+        caller && caller.ipHash ? caller.ipHash : null,
       )
       .run();
 
@@ -261,6 +448,7 @@ const PUBLIC_ROUTES = new Set([
   "/compatibility",
   "/benchmarks",
   "/doctor",
+  "/estimate",
   "/pricing",
   "/docs",
   "/troubleshooting",
@@ -426,11 +614,14 @@ async function staticResponse(request, env, url, preview) {
 // with an empty string still fails `estimate_json`'s own JSON parse, so the
 // engine itself produces the (non-`internal_error`) reason code.
 //
-// Two things happen around that untouched computation: an anonymous
-// rate-limit check (Task 3) that can turn the whole request into a 429
-// before `estimate_json` ever runs, and a fire-and-forget shape-only
-// demand-log write (Task 4) after it, via `ctx.waitUntil`, that can never
-// delay or fail the response.
+// Three things happen around that untouched computation: resolving an
+// optional `Authorization: Bearer <key>` caller (Task 5) into either the
+// keyed or anonymous rate tier, the corresponding rate-limit check (Task 3
+// for anonymous, Task 5 for keyed) that can turn the whole request into a
+// 429 (or a 401 for a key that is present but invalid) before
+// `estimate_json` ever runs, and a fire-and-forget shape-only demand-log
+// write (Task 4) after it, via `ctx.waitUntil`, that can never delay or
+// fail the response.
 async function estimateResponse(request, env, ctx) {
   if (request.method !== "POST") {
     return new Response("method not allowed", {
@@ -439,8 +630,21 @@ async function estimateResponse(request, env, ctx) {
     });
   }
 
-  const ipHash = await saltedIpHash(request.headers.get("CF-Connecting-IP") || "");
-  const rateLimit = await checkAnonymousRateLimit(env, ipHash);
+  const keyResolution = await resolveKeyedCaller(env, request.headers.get("Authorization") || "");
+  if (keyResolution.status === "invalid") {
+    return structuredErrorResponse(401, "invalid_key");
+  }
+
+  let keyId = null;
+  let ipHash = null;
+  let rateLimit;
+  if (keyResolution.status === "keyed") {
+    keyId = keyResolution.keyId;
+    rateLimit = await checkKeyedRateLimit(env, keyId);
+  } else {
+    ipHash = await saltedIpHash(request.headers.get("CF-Connecting-IP") || "");
+    rateLimit = await checkAnonymousRateLimit(env, ipHash);
+  }
   if (rateLimit.limited) {
     return rateLimitedResponse(rateLimit.retryAfterSeconds);
   }
@@ -455,7 +659,7 @@ async function estimateResponse(request, env, ctx) {
   }
 
   const responseBody = estimateJson(body);
-  logDemand(env, ctx, body, responseBody, ipHash);
+  logDemand(env, ctx, body, responseBody, { keyId, ipHash });
 
   return new Response(responseBody, {
     headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -477,6 +681,9 @@ export default {
 
     if (url.pathname === "/v1/estimate") {
       return secured(await estimateResponse(request, env, ctx), preview);
+    }
+    if (url.pathname === "/v1/keys") {
+      return secured(await keysResponse(request, env), preview);
     }
 
     const normalized = normalizedPath(url.pathname);
