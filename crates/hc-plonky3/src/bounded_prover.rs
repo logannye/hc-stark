@@ -22,8 +22,8 @@ use crate::workloads::{
 use hc_stream::{
     cleanup_job_directory, ArtifactDigest, BlockMatrix, CheckpointArtifactV2, CheckpointIdentityV2,
     CheckpointManifestV2, CheckpointPolicy, ExecutionMode, MatrixStore, MemoryMatrix,
-    PhaseEstimate, PipelineArtifactKindV1, PipelinePhaseV1, PreflightReport, ResourceEstimate,
-    ResourceMode, ResourcePolicyV1, ScratchMatrixStore, StreamError, SCRATCH_STORE_HEADER_BYTES,
+    PipelineArtifactKindV1, PipelinePhaseV1, PreflightReport, ResourceEstimate, ResourceMode,
+    ResourcePolicyV1, ScratchMatrixStore, StreamError,
 };
 use p3_air::symbolic::{AirLayout, SymbolicAirBuilder};
 use p3_air::{Air, BaseAir};
@@ -435,160 +435,54 @@ where
     A: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
 {
     let width = BaseAir::<Val>::width(air);
-    let quotient_chunks = quotient_chunks(air, width, public_values)?;
-    let rows = rows as u64;
-    // The frozen profile always uses at least a two-times FRI blowup. AIRs
-    // whose quotient degree needs more chunks raise the blowup to match.
-    let blowup = quotient_chunks.max(2);
-    let lde_rows = rows.saturating_mul(blowup);
-    let trace_bytes = rows.saturating_mul(width as u64).saturating_mul(8);
-    let trace_lde_bytes = lde_rows.saturating_mul(width as u64).saturating_mul(8);
-    let quotient_bytes = rows.saturating_mul(quotient_chunks).saturating_mul(16);
-    let quotient_lde_bytes = lde_rows.saturating_mul(quotient_chunks).saturating_mul(16);
-    let one_input_leaf = lde_rows.saturating_mul(32);
-    let one_input_tree = merkle_payload_bytes(lde_rows);
-    let input_mmcs_bytes = one_input_tree.saturating_mul(2);
-    // Every retained extension-field FRI vector has lengths blowup*N,
-    // blowup*N/2, ..., blowup. Their geometric sum is
-    // 2*blowup*N - blowup elements at 16 bytes each.
-    let fri_vector_bytes = lde_rows
-        .saturating_mul(2)
-        .saturating_sub(blowup)
-        .saturating_mul(16);
-    let opening_layer_bytes = fri_vector_bytes / 2;
-    let fri_mmcs_bytes = fri_mmcs_payload_bytes(lde_rows / 2);
-    let durable_core = trace_lde_bytes
-        .saturating_add(quotient_lde_bytes)
-        .saturating_add(input_mmcs_bytes);
-    let proof_bytes = estimated_profile_proof_bytes(rows, width as u64, quotient_chunks);
-    let log_rows = rows.trailing_zeros() as u64;
-    let max_store_count = 1u64
-        .saturating_add(quotient_chunks)
-        .saturating_add(merkle_store_count(lde_rows).saturating_mul(2))
-        .saturating_add(log_rows.saturating_add(1))
-        .saturating_add(fri_mmcs_store_count(log_rows))
-        .saturating_add(1);
-    let store_headers = max_store_count.saturating_mul(SCRATCH_STORE_HEADER_BYTES);
-    let checkpoint_atomic_bytes = estimated_atomic_checkpoint_bytes(
-        policy,
-        workload_id,
-        rows,
-        width,
-        public_values,
-        quotient_chunks,
-        !air.main_next_row_columns().is_empty(),
-        proof_bytes,
-    )?;
-    // Atomic checkpoint replacement temporarily keeps the previous manifest
-    // beside the fully-synced replacement. Store headers and both manifests
-    // are therefore included in every candidate phase peak rather than hidden
-    // in a row-linear calibration factor.
-    let phase_metadata_bytes = store_headers.saturating_add(checkpoint_atomic_bytes);
-    let fri_peak = durable_core
-        .saturating_add(fri_vector_bytes)
-        .saturating_add(fri_mmcs_bytes)
-        .saturating_add(phase_metadata_bytes);
-    // Once FRI query openings have been assembled, the FRI MMCS trees are
-    // released. The retained LDEs, input MMCS trees, all FRI vectors, and the
-    // serialized proof artifact remain live through the proof checkpoint.
-    let proof_checkpoint_peak = durable_core
-        .saturating_add(fri_vector_bytes)
-        .saturating_add(proof_bytes)
-        .saturating_add(phase_metadata_bytes);
-    // Caller input plus padded coefficients and the two active four-step DFT
-    // matrices. Quotient transforms additionally coexist with the trace tree,
-    // raw/interleaved chunks, and already completed chunk LDEs.
-    let trace_transform_peak = rows
-        .saturating_mul(width as u64)
-        .saturating_mul(56)
-        .saturating_add(phase_metadata_bytes);
-    let quotient_transform_peak = rows
-        .saturating_mul(
-            16u64
-                .saturating_mul(width as u64)
-                .saturating_add(64u64.saturating_mul(quotient_chunks))
-                .saturating_add(192),
-        )
-        .saturating_add(phase_metadata_bytes);
-    let scratch_high_water_bytes = fri_peak
-        .max(trace_transform_peak)
-        .max(quotient_transform_peak)
-        .max(proof_checkpoint_peak);
+    let params = crate::estimate_params::EstimateParams {
+        workload_id: workload_id.to_string(),
+        rows: rows as u64,
+        width: width as u64,
+        quotient_chunks: quotient_chunks(air, width, public_values)?,
+        public_values: public_values as u64,
+        has_next_row_columns: !air.main_next_row_columns().is_empty(),
+        field_bytes: 8,
+        ext_field_bytes: 16,
+        digest_bytes: 32,
+    };
+    crate::estimate_params::estimate_from_params(&params, policy)
+}
 
-    let dft = ResourceBoundedDft::new(policy.clone())?;
-    let trace_dft = dft.estimate_scratch(lde_rows as usize, width, false)?;
-    let quotient_dft = dft.estimate_scratch(lde_rows as usize, 2, false)?;
-    let peak_resident_bytes = trace_dft
-        .peak_resident_bytes
-        .max(quotient_dft.peak_resident_bytes)
-        // Opening reduction holds one bounded source block plus extension-field
-        // denominators/reductions and two permutation tiles.
-        .max(64 * 1024 * 1024);
-    let phases = vec![
-        PhaseEstimate {
-            phase: "trace_generation".into(),
-            read_bytes: 0,
-            write_bytes: trace_bytes,
-        },
-        PhaseEstimate {
-            phase: "trace_lde".into(),
-            read_bytes: trace_dft.total_read_bytes,
-            write_bytes: trace_dft.total_write_bytes,
-        },
-        PhaseEstimate {
-            phase: "trace_commitment".into(),
-            read_bytes: trace_lde_bytes
-                .saturating_add(one_input_leaf.saturating_mul(3))
-                .saturating_add(one_input_tree),
-            write_bytes: one_input_tree.saturating_add(one_input_leaf.saturating_mul(3)),
-        },
-        PhaseEstimate {
-            phase: "quotient".into(),
-            read_bytes: trace_lde_bytes.saturating_add((width as u64).saturating_mul(16)),
-            write_bytes: quotient_bytes,
-        },
-        PhaseEstimate {
-            phase: "quotient_lde".into(),
-            read_bytes: quotient_dft
-                .total_read_bytes
-                .saturating_mul(quotient_chunks),
-            write_bytes: quotient_dft
-                .total_write_bytes
-                .saturating_mul(quotient_chunks),
-        },
-        PhaseEstimate {
-            phase: "quotient_commitment".into(),
-            read_bytes: quotient_lde_bytes
-                .saturating_add(one_input_leaf.saturating_mul(3))
-                .saturating_add(one_input_tree),
-            write_bytes: one_input_tree.saturating_add(one_input_leaf.saturating_mul(3)),
-        },
-        PhaseEstimate {
-            phase: "openings".into(),
-            read_bytes: trace_lde_bytes
-                .saturating_mul(2)
-                .saturating_add(quotient_lde_bytes)
-                .saturating_add(opening_layer_bytes.saturating_mul(3)),
-            write_bytes: opening_layer_bytes.saturating_mul(4),
-        },
-        PhaseEstimate {
-            phase: "fri".into(),
-            read_bytes: fri_vector_bytes.saturating_add(fri_mmcs_bytes),
-            write_bytes: fri_vector_bytes.saturating_add(fri_mmcs_bytes),
-        },
-        PhaseEstimate {
-            phase: "proof_assembly".into(),
-            read_bytes: 0,
-            write_bytes: proof_bytes,
-        },
-    ];
-    Ok(ResourceEstimate {
-        peak_resident_bytes,
-        scratch_high_water_bytes,
-        total_read_bytes: phases.iter().map(|phase| phase.read_bytes).sum(),
-        total_write_bytes: phases.iter().map(|phase| phase.write_bytes).sum(),
-        phases,
-    })
+#[cfg(test)]
+pub(crate) fn estimate_air_pipeline_for_test<W>(
+    workload: &W,
+    policy: &ResourcePolicyV1,
+) -> Result<ResourceEstimate>
+where
+    W: ResourceBoundedWorkload,
+    W::Air: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
+{
+    estimate_resource_bounded_workload(workload, policy)
+}
+
+#[cfg(test)]
+pub(crate) fn params_for_workload_for_test<W>(
+    workload: &W,
+) -> crate::estimate_params::EstimateParams
+where
+    W: ResourceBoundedWorkload,
+    W::Air: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
+{
+    let air = workload.air();
+    let width = BaseAir::<Val>::width(&air);
+    let public_values = air.num_public_values();
+    crate::estimate_params::EstimateParams {
+        workload_id: workload.identity().id.to_string(),
+        rows: workload.rows(),
+        width: width as u64,
+        quotient_chunks: quotient_chunks(&air, width, public_values).unwrap(),
+        public_values: public_values as u64,
+        has_next_row_columns: !air.main_next_row_columns().is_empty(),
+        field_bytes: 8,
+        ext_field_bytes: 16,
+        digest_bytes: 32,
+    }
 }
 
 fn quotient_log_blowup<A>(air: &A, width: usize, public_values: usize) -> usize
@@ -605,7 +499,11 @@ where
     get_log_num_quotient_chunks::<Val, _>(air, layout, 0).max(1)
 }
 
-fn estimated_profile_proof_bytes(rows: u64, trace_width: u64, quotient_chunks: u64) -> u64 {
+pub(crate) fn estimated_profile_proof_bytes(
+    rows: u64,
+    trace_width: u64,
+    quotient_chunks: u64,
+) -> u64 {
     let log_rows = rows.trailing_zeros() as u64;
     PROFILE_PROOF_LOG_SQUARED_BYTES
         .saturating_mul(log_rows.saturating_mul(log_rows))
@@ -618,18 +516,18 @@ fn estimated_profile_proof_bytes(rows: u64, trace_width: u64, quotient_chunks: u
         )
 }
 
-fn merkle_payload_bytes(leaves: u64) -> u64 {
+pub(crate) fn merkle_payload_bytes(leaves: u64) -> u64 {
     leaves
         .saturating_mul(2)
         .saturating_sub(1)
         .saturating_mul(32)
 }
 
-fn merkle_store_count(leaves: u64) -> u64 {
+pub(crate) fn merkle_store_count(leaves: u64) -> u64 {
     u64::from(leaves.trailing_zeros()).saturating_add(1)
 }
 
-fn fri_mmcs_payload_bytes(rows: u64) -> u64 {
+pub(crate) fn fri_mmcs_payload_bytes(rows: u64) -> u64 {
     let mut leaves = rows;
     let mut total = 0u64;
     while leaves >= 2 {
@@ -639,7 +537,7 @@ fn fri_mmcs_payload_bytes(rows: u64) -> u64 {
     total
 }
 
-fn fri_mmcs_store_count(log_rows: u64) -> u64 {
+pub(crate) fn fri_mmcs_store_count(log_rows: u64) -> u64 {
     // Trees have N, N/2, ..., 2 leaves. A tree with 2^k leaves owns k + 1
     // scratch stores, so the total is sum(k + 1), k=1..log2(N).
     log_rows
@@ -649,7 +547,7 @@ fn fri_mmcs_store_count(log_rows: u64) -> u64 {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn estimated_atomic_checkpoint_bytes(
+pub(crate) fn estimated_atomic_checkpoint_bytes(
     policy: &ResourcePolicyV1,
     workload_id: &str,
     rows: u64,

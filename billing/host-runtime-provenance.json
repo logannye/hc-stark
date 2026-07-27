@@ -1,6 +1,0 @@
-{
-  "profile_id": "tinyzkp-billing-debian12-x86_64-cpython311-v1",
-  "reason": "Capture on the fixed Debian 12 production host, obtain independent review, and commit the reviewed file inventory before production runtime installation.",
-  "schema_version": 1,
-  "status": "unconfigured"
-}

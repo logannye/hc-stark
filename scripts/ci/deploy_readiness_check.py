@@ -23,7 +23,16 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "billing"))
 
-import backup_env_exec  # noqa: E402
+try:
+    import backup_env_exec  # noqa: E402
+except ModuleNotFoundError:
+    # billing/ was removed 2026-07-17 when hosted proving was retired
+    # (commit b611915). The handful of off-host-backup validation code
+    # paths below only ever applied to the retired Hetzner production
+    # host; each now fails explicitly at its point of use (see the
+    # `backup_env_exec is None` checks throughout this module) instead of
+    # crashing here at import time.
+    backup_env_exec = None
 
 
 MAX_ENV_BYTES = 64 * 1024
@@ -256,6 +265,12 @@ def _validate_rclone_remote(remote: str) -> str | None:
     executable = shutil.which("rclone")
     if executable is None:
         return "HC_BACKUP_REMOTE requires rclone on the production host"
+    if backup_env_exec is None:
+        return (
+            "HC_BACKUP_REMOTE cannot be validated: backup_env_exec is "
+            "unavailable in this checkout (billing/ was removed when hosted "
+            "proving was retired)"
+        )
     try:
         read_private_file(
             backup_env_exec.FIXED_RCLONE_CONFIG,
@@ -428,6 +443,12 @@ def _validate_required_backup_source(path: pathlib.Path, label: str) -> list[str
 def _validate_backup_source_semantics(
     path: pathlib.Path, label: str, profile: str
 ) -> list[str]:
+    if backup_env_exec is None:
+        return [
+            f"required backup source failed semantic validation: {label} "
+            "(backup_env_exec is unavailable in this checkout; billing/ was "
+            "removed when hosted proving was retired)"
+        ]
     try:
         owner = path.lstat().st_uid
         if profile == "api-keys":
@@ -650,31 +671,44 @@ def check_env(
             failures.append(
                 "evaluation and contract billing ledgers must use distinct paths"
             )
-        backup_data = pathlib.Path(
-            _value(env, "HC_BACKUP_DATA_DIR") or backup_env_exec.FIXED_DATA_ROOT
-        )
-        expected_evaluation = backup_data / "evaluation_applications.sqlite"
-        if pathlib.Path(_value(env, "HC_EVALUATION_STORE_PATH")) != expected_evaluation:
+        backup_data_dir = _value(env, "HC_BACKUP_DATA_DIR")
+        backup_data: pathlib.Path | None
+        if backup_data_dir:
+            backup_data = pathlib.Path(backup_data_dir)
+        elif backup_env_exec is not None:
+            backup_data = pathlib.Path(backup_env_exec.FIXED_DATA_ROOT)
+        else:
             failures.append(
-                "HC_EVALUATION_STORE_PATH must match the required backup data store"
+                "HC_BACKUP_DATA_DIR must be set explicitly: its retired-host "
+                "default comes from backup_env_exec, which is unavailable in "
+                "this checkout (billing/ was removed when hosted proving was "
+                "retired)"
             )
-        required_backup_sources = {
-            "tenant store": (backup_data / "tenant_store.sqlite", "tenant"),
-            "usage store": (backup_data / "usage.sqlite", "usage"),
-            "evaluation store": (expected_evaluation, "evaluation"),
-            "API key store": (backup_data / "api_keys.txt", "api-keys"),
-            "contract billing ledger": (
-                pathlib.Path(_value(env, "TINYZKP_CONTRACT_BILLING_LEDGER_PATH")),
-                "contract",
-            ),
-        }
-        for label, (path, profile) in required_backup_sources.items():
-            metadata_failures = _validate_required_backup_source(path, label)
-            failures.extend(metadata_failures)
-            if not metadata_failures:
-                failures.extend(
-                    _validate_backup_source_semantics(path, label, profile)
+            backup_data = None
+
+        if backup_data is not None:
+            expected_evaluation = backup_data / "evaluation_applications.sqlite"
+            if pathlib.Path(_value(env, "HC_EVALUATION_STORE_PATH")) != expected_evaluation:
+                failures.append(
+                    "HC_EVALUATION_STORE_PATH must match the required backup data store"
                 )
+            required_backup_sources = {
+                "tenant store": (backup_data / "tenant_store.sqlite", "tenant"),
+                "usage store": (backup_data / "usage.sqlite", "usage"),
+                "evaluation store": (expected_evaluation, "evaluation"),
+                "API key store": (backup_data / "api_keys.txt", "api-keys"),
+                "contract billing ledger": (
+                    pathlib.Path(_value(env, "TINYZKP_CONTRACT_BILLING_LEDGER_PATH")),
+                    "contract",
+                ),
+            }
+            for label, (path, profile) in required_backup_sources.items():
+                metadata_failures = _validate_required_backup_source(path, label)
+                failures.extend(metadata_failures)
+                if not metadata_failures:
+                    failures.extend(
+                        _validate_backup_source_semantics(path, label, profile)
+                    )
 
         annual_release_keys = RELEASE_AUTHORIZATION_KEYS
         configured_release_keys = {
@@ -704,15 +738,22 @@ def check_env(
         backup_remote = _value(env, "HC_BACKUP_REMOTE")
         backup_http_url = _value(env, "HC_BACKUP_HTTP_URL")
         backup_http_token_file = _value(env, "HC_BACKUP_HTTP_TOKEN_FILE")
-        backup_settings = {
-            key: env[key]
-            for key in backup_env_exec.BACKUP_KEYS
-            if key in env and env[key].strip()
-        }
-        try:
-            backup_env_exec.validate_backup_values(backup_settings, production=True)
-        except backup_env_exec.BackupEnvError as error:
-            failures.append(f"backup configuration is unsafe: {error}")
+        if backup_env_exec is None:
+            failures.append(
+                "backup configuration cannot be validated: backup_env_exec is "
+                "unavailable in this checkout (billing/ was removed when "
+                "hosted proving was retired)"
+            )
+        else:
+            backup_settings = {
+                key: env[key]
+                for key in backup_env_exec.BACKUP_KEYS
+                if key in env and env[key].strip()
+            }
+            try:
+                backup_env_exec.validate_backup_values(backup_settings, production=True)
+            except backup_env_exec.BackupEnvError as error:
+                failures.append(f"backup configuration is unsafe: {error}")
         if not backup_remote and not (backup_http_url and backup_http_token_file):
             failures.append(
                 "off-host backups require HC_BACKUP_REMOTE or both "
@@ -740,27 +781,34 @@ def check_env(
             if remote_failure:
                 failures.append(remote_failure)
         if check_host_python and os.geteuid() == 0:
-            try:
-                backup_env_exec.read_loader_token(
-                    backup_env_exec.FIXED_LOADER_TOKEN
+            if backup_env_exec is None:
+                failures.append(
+                    "backup host checks cannot run: backup_env_exec is "
+                    "unavailable in this checkout (billing/ was removed when "
+                    "hosted proving was retired)"
                 )
-            except backup_env_exec.BackupEnvError as error:
-                failures.append(f"backup loader token is unsafe: {error}")
-            try:
-                staging = backup_env_exec.FIXED_STAGING_ROOT.lstat()
-                service_gid = pwd.getpwnam("tinyzkp-billing").pw_gid
-                if (
-                    backup_env_exec.FIXED_STAGING_ROOT.is_symlink()
-                    or not stat.S_ISDIR(staging.st_mode)
-                    or staging.st_uid != 0
-                    or staging.st_gid != service_gid
-                    or stat.S_IMODE(staging.st_mode) != 0o710
-                ):
-                    failures.append(
-                        "backup staging root must be root:tinyzkp-billing mode 0710"
+            else:
+                try:
+                    backup_env_exec.read_loader_token(
+                        backup_env_exec.FIXED_LOADER_TOKEN
                     )
-            except (KeyError, OSError):
-                failures.append("backup staging root is unavailable or unsafe")
+                except backup_env_exec.BackupEnvError as error:
+                    failures.append(f"backup loader token is unsafe: {error}")
+                try:
+                    staging = backup_env_exec.FIXED_STAGING_ROOT.lstat()
+                    service_gid = pwd.getpwnam("tinyzkp-billing").pw_gid
+                    if (
+                        backup_env_exec.FIXED_STAGING_ROOT.is_symlink()
+                        or not stat.S_ISDIR(staging.st_mode)
+                        or staging.st_uid != 0
+                        or staging.st_gid != service_gid
+                        or stat.S_IMODE(staging.st_mode) != 0o710
+                    ):
+                        failures.append(
+                            "backup staging root must be root:tinyzkp-billing mode 0710"
+                        )
+                except (KeyError, OSError):
+                    failures.append("backup staging root is unavailable or unsafe")
         if backup_http_token_file and check_host_python:
             token_path = pathlib.Path(backup_http_token_file)
             try:
