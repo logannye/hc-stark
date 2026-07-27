@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Rust toolchain pinned `1.95.0`; Plonky3 exact-pinned `0.6.1`. **Do not add, remove, or bump any dependency** — the root `Cargo.lock` SHA-256 is frozen at `974b350620f98ee29a8d90bca0302000cd229bbd381169e2f772944387dc012b` in `release/plonky3-compatibility-v1.json`, `crates/hc-plonky3/src/prover.rs` (`DEPENDENCY_LOCK_SHA256`), `crates/hc-cli/tests/cli_roundtrip.rs`, and several scripts. A bump reds `scripts/ci/plonky3_compatibility_gate.py`.
+- Rust toolchain pinned `1.95.0`; Plonky3 exact-pinned `0.6.1`. **Do not add, remove, or bump any EXTERNAL dependency, and never change a version.** Task 1 deliberately adds one internal path edge (`tinyzkp-contracts` to `hc-wasm`), which moves the lock and is handled by its Step 7a re-freeze — the root `Cargo.lock` SHA-256 is frozen at `974b350620f98ee29a8d90bca0302000cd229bbd381169e2f772944387dc012b` in `release/plonky3-compatibility-v1.json`, `crates/hc-plonky3/src/prover.rs` (`DEPENDENCY_LOCK_SHA256`), `crates/hc-cli/tests/cli_roundtrip.rs`, and several scripts. A bump reds `scripts/ci/plonky3_compatibility_gate.py`.
 - Any dependency-graph change also stales `fuzz/Cargo.lock` and `clients/rust/Cargo.lock` — standalone workspaces NOT covered by a root gate. Verify both with `cargo +1.95.0 fetch --locked --manifest-path <each>`.
 - **The cost model is never reimplemented in JavaScript.** Every number in a response must originate from the Rust WASM module. Phase 1a shipped a `conventional` estimate that diverged 7.8x from computing one concept two ways; this constraint exists to prevent recreating that at the API boundary.
 - `scripts/ci/claim_containment_scan.py` scans `docs/**/*.md` for `\bzero[- ]knowledge\b`. Tripping it blocks the Pages deploy.
@@ -111,7 +111,16 @@ mod tests {
 }
 ```
 
-**Note:** `hc-wasm` may not currently depend on `hc-cli`. Depending on a binary-oriented crate from the WASM crate is likely wrong. Prefer moving `estimate_request` into a crate both can reach — check whether `hc-plonky3` or `tinyzkp-contracts` is the natural home (`tinyzkp-contracts` cannot host it: it must not depend on `hc-plonky3`). If neither fits, keep it in `hc-cli` behind a `default-features = false` dependency, but **do not add a new workspace crate** — that changes `Cargo.lock`. Record your choice in the report.
+**Where the shared core lives — resolved by the controller, do not re-litigate:**
+
+Verified dependency facts:
+- `hc-wasm` depends on `hc-plonky3` but **not** on `tinyzkp-contracts` or `hc-cli`.
+- `hc-plonky3` depends on `hc-stream` but **not** on `tinyzkp-contracts`.
+- `hc-cli` is the **only** crate depending on both `tinyzkp-contracts` and `hc-plonky3`, and it also pulls `clap`, `anyhow`, and `tempfile` — which must not enter a `wasm32` build.
+
+So `estimate_request` needs a home reachable from `hc-wasm` that can see `EstimateRequestV1`. **Add `tinyzkp-contracts` as a dependency of `hc-wasm`** and put the glue in `hc-wasm` itself, calling into `hc_plonky3::estimate_params::*`. Then make `hc-cli`'s `estimate_config::run()` call that same function so the CLI and the API cannot diverge. Do NOT add a new workspace crate, and do NOT make `hc-wasm` depend on `hc-cli`.
+
+⚠️ **This edge changes `Cargo.lock` and therefore requires a re-freeze.** `Cargo.lock` records each package's `dependencies` list, so adding `tinyzkp-contracts` to `hc-wasm`'s entry moves the file hash away from the frozen `974b3506…`. This is expected and permitted — see Step 7a. It is not a reason to duplicate the cost model in JavaScript or in `hc-wasm`.
 
 - [ ] **Step 3: Run to verify failure**
 
@@ -178,13 +187,37 @@ cargo check --locked -p hc-wasm --target wasm32-unknown-unknown 2>&1 | tail -5
 
 Expected: all three tests PASS, and the wasm32 check succeeds.
 
-- [ ] **Step 7: Confirm the lock did not move**
+- [ ] **Step 7: Confirm the lock moved for exactly one expected reason**
 
 ```bash
+git diff Cargo.lock | grep -E '^[+-]' | grep -v '^[+-][+-]'
 shasum -a 256 Cargo.lock
 ```
 
-Expected: `974b350620f98ee29a8d90bca0302000cd229bbd381169e2f772944387dc012b`. If it changed, you added a dependency — revert that and find another way.
+Expected: the ONLY change is `tinyzkp-contracts` appearing in `hc-wasm`'s `dependencies` list. **Zero `-version =` lines** — no existing package may be bumped. If any version changed, revert and investigate.
+
+- [ ] **Step 7a: Re-freeze the lock hash**
+
+The new hash must replace `974b350620f98ee29a8d90bca0302000cd229bbd381169e2f772944387dc012b` everywhere it is pinned. Find every site — the last re-freeze touched eight files:
+
+```bash
+grep -rln "974b350620f98ee29a8d90bca0302000cd229bbd381169e2f772944387dc012b" \
+  --exclude-dir=target --exclude-dir=.git .
+```
+
+Update all of them **except anything under `release/evidence/`** — those are signed historical attestations of past release SHAs and must never be edited. If the gate demands a change inside `release/evidence/`, STOP and report BLOCKED.
+
+Then verify, and also regenerate the two standalone workspace locks, which are not covered by any root gate:
+
+```bash
+python3 scripts/ci/plonky3_compatibility_gate.py
+cargo +1.95.0 fetch --locked --manifest-path fuzz/Cargo.toml
+cargo +1.95.0 fetch --locked --manifest-path clients/rust/Cargo.toml
+```
+
+If either standalone fetch fails, regenerate that lock minimally (`cargo +1.95.0 fetch --manifest-path <it>`, no `--locked`) and confirm its diff adds only dependency edges with zero version changes.
+
+Record in your report: the old hash, the new hash, every file you changed, and confirmation that `git diff --name-only -- release/evidence/` is empty.
 
 - [ ] **Step 8: Commit**
 
