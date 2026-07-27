@@ -25,6 +25,16 @@ pub const MIN_ROWS: u64 = 1 << 10;
 pub const MAX_ROWS: u64 = 1 << 24;
 pub const MAX_TRACE_WIDTH: u32 = 256;
 pub const MAX_CONSTRAINT_DEGREE: u8 = 3;
+/// Mirrors the RAM floor enforced inline by
+/// `JobManifestV1::compatibility_reasons()` (`ram_budget_bytes < 16 * 1024 *
+/// 1024`). Kept as its own constant, used only by
+/// `EstimateRequestV1::blocking_reasons()`, rather than edited into that
+/// function's body: `compatibility_reasons()` governs proving admission and
+/// is intentionally left untouched by estimation work. Both currently equal
+/// `16 * 1024 * 1024` byte-for-byte; if that literal in
+/// `compatibility_reasons()` is ever revised, this constant must be revised
+/// to match, or the two admission surfaces will disagree.
+pub const MIN_RAM_BUDGET_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 pub const MAX_AIR_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_TRACE_MANIFEST_BYTES: u64 = 8 * 1024 * 1024;
@@ -575,8 +585,31 @@ pub struct EstimateResponseV1 {
 impl EstimateRequestV1 {
     /// Reasons this config could not be PROVED today. Estimation itself is
     /// never blocked by these; they are reported, not enforced.
+    ///
+    /// Mirrors every check in `JobManifestV1::compatibility_reasons()` that
+    /// applies to a field `EstimateRequestV1` also carries:
+    /// - profile shape (`field`, `extension_degree`, `logical_rows`,
+    ///   `trace_width`, `max_constraint_degree`) -> `UnsupportedProfile`
+    /// - AIR features -> `UnsupportedAirFeature`
+    /// - `ram_budget_bytes` below `MIN_RAM_BUDGET_BYTES` ->
+    ///   `RamBudgetInsufficient`
+    /// - `schema_version != 1` -> `ManifestContractInvalid`
+    ///
+    /// It CANNOT mirror `compatibility_reasons()`'s `permutation`/`verifier`
+    /// equality checks, its `scratch_budget_bytes` floor, or its
+    /// `max_threads` range check, because `EstimateRequestV1` deliberately
+    /// carries none of those fields — an estimate request describes AIR
+    /// shape only, not a full job manifest. This is a genuine, permanent
+    /// gap between "no blocking reasons reported here" and "would pass full
+    /// manifest admission," not an oversight to be closed later.
     pub fn blocking_reasons(&self) -> Vec<ReasonV1> {
         let mut reasons = Vec::new();
+        if self.schema_version != 1 {
+            push_unique(
+                &mut reasons,
+                ReasonV1::new(ReasonCodeV1::ManifestContractInvalid),
+            );
+        }
         if self.field != FIELD
             || self.extension_degree != EXTENSION_DEGREE
             || !(MIN_ROWS..=MAX_ROWS).contains(&self.logical_rows)
@@ -598,21 +631,39 @@ impl EstimateRequestV1 {
                 ReasonV1::new(ReasonCodeV1::UnsupportedAirFeature),
             );
         }
+        if self.ram_budget_bytes < MIN_RAM_BUDGET_BYTES {
+            push_unique(
+                &mut reasons,
+                ReasonV1::new(ReasonCodeV1::RamBudgetInsufficient).resource(
+                    MIN_RAM_BUDGET_BYTES,
+                    None,
+                    Some(self.ram_budget_bytes),
+                ),
+            );
+        }
         reasons
     }
 
     /// Quotient chunk count implied by the declared constraint degree.
     pub fn quotient_chunks(&self) -> u64 {
-        let quotient_degree = u64::from(self.max_constraint_degree).saturating_sub(1).max(1);
+        let quotient_degree = u64::from(self.max_constraint_degree)
+            .saturating_sub(1)
+            .max(1);
         quotient_degree.next_power_of_two()
     }
 
     /// Stable shape key. Row count is deliberately excluded so that the same
     /// AIR probed at different sizes aggregates as one demand signal.
+    ///
+    /// `field`'s byte length is written as a fixed-width `u32` prefix before
+    /// its bytes so the variable-length string cannot be concatenated
+    /// ambiguously with whatever fixed-width field follows it.
     pub fn digest(&self) -> String {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
-        hasher.update(self.field.as_bytes());
+        let field_bytes = self.field.as_bytes();
+        hasher.update((field_bytes.len() as u32).to_le_bytes());
+        hasher.update(field_bytes);
         hasher.update(self.extension_degree.to_le_bytes());
         hasher.update(self.trace_width.to_le_bytes());
         hasher.update(self.max_constraint_degree.to_le_bytes());
@@ -3335,21 +3386,30 @@ mod tests {
         let request = babybear_multi_table_request();
         let reasons = request.blocking_reasons();
 
-        assert!(!reasons.is_empty(), "babybear multi-table must be blocked for proving");
         assert!(
-            reasons.iter().any(|r| r.code == ReasonCodeV1::UnsupportedProfile),
+            !reasons.is_empty(),
+            "babybear multi-table must be blocked for proving"
+        );
+        assert!(
+            reasons
+                .iter()
+                .any(|r| r.code == ReasonCodeV1::UnsupportedProfile),
             "non-goldilocks field must raise UnsupportedProfile"
         );
         assert!(
-            reasons.iter().any(|r| r.code == ReasonCodeV1::UnsupportedAirFeature),
+            reasons
+                .iter()
+                .any(|r| r.code == ReasonCodeV1::UnsupportedAirFeature),
             "lookups and multi-table must raise UnsupportedAirFeature"
         );
-        assert!(reasons.iter().all(|r| r.validate()), "every reason must validate");
+        assert!(
+            reasons.iter().all(|r| r.validate()),
+            "every reason must validate"
+        );
     }
 
-    #[test]
-    fn in_profile_request_has_no_blockers() {
-        let request = EstimateRequestV1 {
+    fn in_profile_request() -> EstimateRequestV1 {
+        EstimateRequestV1 {
             schema_version: 1,
             field: FIELD.to_string(),
             extension_degree: EXTENSION_DEGREE,
@@ -3369,8 +3429,59 @@ mod tests {
                 uses_gpu: false,
             },
             ram_budget_bytes: 2 * 1024 * 1024 * 1024,
-        };
-        assert!(request.blocking_reasons().is_empty());
+        }
+    }
+
+    /// Also exercises the RAM-budget and schema-version checks added
+    /// alongside profile/feature checks: this request has a valid budget
+    /// (well above `MIN_RAM_BUDGET_BYTES`) and `schema_version: 1`, so if
+    /// either new check over-blocks (fires when it should not), this test
+    /// catches it.
+    #[test]
+    fn in_profile_request_has_no_blockers() {
+        assert!(in_profile_request().blocking_reasons().is_empty());
+    }
+
+    #[test]
+    fn ram_budget_below_minimum_blocks_proving() {
+        let mut request = in_profile_request();
+        request.ram_budget_bytes = MIN_RAM_BUDGET_BYTES - 1;
+
+        let reasons = request.blocking_reasons();
+        assert!(
+            reasons
+                .iter()
+                .any(|r| r.code == ReasonCodeV1::RamBudgetInsufficient),
+            "sub-minimum RAM budget must raise RamBudgetInsufficient"
+        );
+        assert!(
+            reasons.iter().all(|r| r.validate()),
+            "every reason must validate"
+        );
+
+        // provable_today is defined downstream as `blocking_reasons().is_empty()`;
+        // pin that invariant here since EstimateRequestV1 itself has no such field.
+        let provable_today = reasons.is_empty();
+        assert!(!provable_today);
+    }
+
+    #[test]
+    fn wrong_schema_version_blocks_proving() {
+        let mut request = in_profile_request();
+        request.schema_version = 2;
+
+        let reasons = request.blocking_reasons();
+        assert!(
+            reasons
+                .iter()
+                .any(|r| r.code == ReasonCodeV1::ManifestContractInvalid),
+            "schema_version != 1 must raise ManifestContractInvalid"
+        );
+        assert!(
+            reasons.iter().all(|r| r.validate()),
+            "every reason must validate"
+        );
+        assert!(!reasons.is_empty(), "provable_today must be false");
     }
 
     /// The digest is the demand-aggregation key: identical shapes must collide,
@@ -3394,6 +3505,21 @@ mod tests {
         let mut b = babybear_multi_table_request();
         b.logical_rows = 1 << 23;
         assert_eq!(a.digest(), b.digest());
+    }
+
+    /// `field` is the only variable-length component hashed before a run of
+    /// fixed-width fields; without a length prefix, a string that is a
+    /// prefix of another string is exactly the shape of input that
+    /// concatenation-ambiguity bugs exploit (e.g. "ab"+"c..." vs
+    /// "abc"+"..."). Pin that prefix-related field values still diverge
+    /// under the length-prefixed encoding.
+    #[test]
+    fn digest_distinguishes_field_prefix_values() {
+        let mut a = babybear_multi_table_request();
+        a.field = "ba".to_string();
+        let mut b = babybear_multi_table_request();
+        b.field = "bab".to_string();
+        assert_ne!(a.digest(), b.digest());
     }
 
     #[test]
