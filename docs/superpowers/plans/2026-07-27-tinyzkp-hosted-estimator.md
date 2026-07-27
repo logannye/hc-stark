@@ -37,13 +37,14 @@
 ### Task 1: Expose the estimator as a WASM export
 
 **Files:**
-- Modify: `crates/hc-cli/src/commands/estimate_config.rs`
+- Modify: `crates/hc-cli/src/commands/estimate_config.rs` (delegate to the shared core)
+- Modify: `crates/hc-wasm/Cargo.toml` (add the `tinyzkp-contracts` path edge)
 - Modify: `crates/hc-wasm/src/lib.rs`
 - Test: `crates/hc-wasm/src/lib.rs` (`#[cfg(test)] mod tests`)
 
 **Interfaces:**
 - Consumes: `tinyzkp_contracts::{EstimateRequestV1, EstimateResponseV1}`; `hc_plonky3::estimate_params::{estimate_from_params, estimate_conventional_from_params, field_widths, EstimateParams}`.
-- Produces: `pub fn estimate_request(request: EstimateRequestV1) -> Result<EstimateResponseV1, ProtocolFailure>` in a crate reachable from both `hc-cli` and `hc-wasm`; and `#[wasm_bindgen] pub fn estimate_json(input: &str) -> String` in `hc-wasm`. Task 2 calls `estimate_json`.
+- Produces: `pub fn estimate_request(request: EstimateRequestV1) -> Result<EstimateResponseV1, EstimateFailure>` **in `hc-wasm`** (see the placement note in Step 2), re-used by `hc-cli`; and `#[wasm_bindgen] pub fn estimate_json(input: &str) -> String` in `hc-wasm`. Task 2 calls `estimate_json`.
 
 - [ ] **Step 1: Find where the shared logic currently lives**
 
@@ -76,12 +77,14 @@ mod tests {
       "ram_budget_bytes": 2147483648
     }"#;
 
-    /// The WASM path must return exactly what the CLI core returns.
+    /// The JSON export must return exactly what the typed core returns.
+    /// `estimate_request` lives in THIS crate (see the placement note below);
+    /// `hc-cli` calls it too, so the CLI and the API cannot diverge.
     #[test]
     fn wasm_export_matches_the_shared_core() {
         let request: tinyzkp_contracts::EstimateRequestV1 =
             serde_json::from_str(SP1_SHAPED).unwrap();
-        let direct = hc_cli::commands::estimate_config::estimate_request(request).unwrap();
+        let direct = estimate_request(request).unwrap();
         let via_wasm: tinyzkp_contracts::EstimateResponseV1 =
             serde_json::from_str(&estimate_json(SP1_SHAPED)).unwrap();
         assert_eq!(direct, via_wasm);
