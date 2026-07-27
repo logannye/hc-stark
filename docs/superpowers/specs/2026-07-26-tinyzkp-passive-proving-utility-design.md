@@ -209,7 +209,7 @@ silent burn. Retire the Guard SKU publicly. Delete the legacy hosted crates. Pub
 `backend-v0.1.0`, which is currently an unpublished draft and is free. Collapse the
 nine launch gates to the three that gate a hosted service. Ship three distribution
 acts: awesome-plonky3 submission, a forward-pointing banner on the 50-star
-`space-efficient-zero-knowledge-proofs` repo, and a Rosalind cross-link.
+legacy research repo (arXiv 2509.05326), and a Rosalind cross-link.
 
 **Phase 1 — free estimator and demand harvesting (~6 weeks).** The unlock is that
 estimation is an analytic cost model over field, columns, rows, blowup, and query

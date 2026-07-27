@@ -26,7 +26,7 @@ These are required for Phase 0 to be *complete* but cannot be done by an agent. 
 - [ ] Check the Hetzner console: confirm whether CPX42 `46.225.78.136` is deleted or merely firewalled. If alive, delete it. Ports 22/80/443 are currently filtered, which is consistent with deletion but does not prove it.
 - [ ] Publish the `backend-v0.1.0` GitHub release (currently a **draft**). It is the free MIT engine and is the entire top of funnel.
 - [ ] Submit to `Plonky3/awesome-plonky3`.
-- [ ] Add a forward-pointing banner to `logannye/space-efficient-zero-knowledge-proofs` (50 stars) directing readers to `hc-stark`.
+- [ ] Add a forward-pointing banner to the legacy research repo (`logannye`, 50 stars, arXiv 2509.05326) directing readers to `hc-stark`.
 
 ## File Structure
 

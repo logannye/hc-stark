@@ -33,6 +33,31 @@ const BABYBEAR_MULTI_TABLE: &str = r#"{
   "ram_budget_bytes": 2147483648
 }"#;
 
+/// An entirely ordinary first-time-user config: 1,000,000 rows (not a power
+/// of two, but nothing a real caller would expect to be treated as an
+/// internal fault) on the field TinyZKP actually proves.
+const GOLDILOCKS_ORDINARY_NON_POW2_ROWS: &str = r#"{
+  "schema_version": 1,
+  "field": "goldilocks",
+  "extension_degree": 2,
+  "logical_rows": 1000000,
+  "trace_width": 8,
+  "max_constraint_degree": 3,
+  "public_values": 3,
+  "has_next_row_columns": false,
+  "features": {
+    "uses_lookups": false,
+    "uses_buses": false,
+    "uses_permutations": false,
+    "uses_multi_table": false,
+    "uses_preprocessed_columns": false,
+    "uses_periodic_columns": false,
+    "uses_recursion": false,
+    "uses_gpu": false
+  },
+  "ram_budget_bytes": 2147483648
+}"#;
+
 /// The product in one test: a config we cannot prove still returns real
 /// numbers, flagged as unprovable.
 #[test]
@@ -146,4 +171,75 @@ fn ram_budget_below_minimum_still_estimates_end_to_end() {
             .unwrap()
             > 0
     );
+}
+
+/// `estimate_from_params`'s only documented failure mode
+/// (`BoundedProverError::UnsupportedProfile`, for rows that are zero or not
+/// a power of two) must reach the caller as `ReasonCodeV1::UnsupportedProfile`.
+/// 1,000,000 is an entirely ordinary number a first-time user might type —
+/// it happens not to be a power of two, but that is not an internal fault.
+/// This regression guards the defect this fix replaces: every
+/// `estimate_from_params` error used to be collapsed onto `InternalError`,
+/// so this exact config produced exit 70 / `internal_error` /
+/// "generate_support_report" for a config that was simply unsupported.
+#[test]
+fn ordinary_non_power_of_two_rows_is_unsupported_profile_not_internal_error() {
+    let cfg = write_config(GOLDILOCKS_ORDINARY_NON_POW2_ROWS);
+    let err = hc_cli::commands::estimate_config::run(cfg.path()).unwrap_err();
+    let failure = err
+        .downcast_ref::<ProtocolFailure>()
+        .expect("non-power-of-two rows must fail as a ProtocolFailure, not a bare anyhow error");
+    assert_ne!(failure.reason.code, ReasonCodeV1::InternalError);
+    assert_eq!(failure.reason.code, ReasonCodeV1::UnsupportedProfile);
+}
+
+/// Same defect, driven through the real `tinyzkp-engine` binary end to end,
+/// mirroring `unknown_field_cli_end_to_end_is_not_internal_error` above: the
+/// wire-level JSON error envelope, not just `run()`'s Rust-level contract,
+/// must name `unsupported_profile`.
+#[test]
+fn ordinary_non_power_of_two_rows_cli_end_to_end_is_not_internal_error() {
+    let cfg = write_config(GOLDILOCKS_ORDINARY_NON_POW2_ROWS);
+    let output = cargo_bin_cmd!("hc-cli")
+        .args(["estimate", "--config"])
+        .arg(cfg.path())
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let envelope: EngineErrorEnvelopeV1 = serde_json::from_slice(&output.stdout).unwrap();
+    assert_ne!(envelope.error.reason.code, ReasonCodeV1::InternalError);
+    assert_eq!(envelope.error.reason.code, ReasonCodeV1::UnsupportedProfile);
+}
+
+/// `logical_rows`/`trace_width` far beyond anything this estimator was
+/// built to price must be refused outright (`UnsupportedProfile`) rather
+/// than priced and silently saturated. 2^48 and 2^50 rows are the exact
+/// values that, before the overflow fix, produced
+/// `total_read_bytes = 10_700_552_714_632_300_784` and
+/// `1_297_036_692_682_705_071` respectively — the second, larger row count
+/// producing a *smaller* answer. The ceiling in `estimate_config::run` means
+/// neither of these ever reaches the estimator at all now.
+#[test]
+fn rows_far_beyond_the_ceiling_are_refused_not_estimated() {
+    for rows in [1u64 << 48, 1u64 << 50] {
+        let cfg = write_config(&BABYBEAR_MULTI_TABLE.replace("4194304", &rows.to_string()));
+        let err = hc_cli::commands::estimate_config::run(cfg.path()).unwrap_err();
+        let failure = err.downcast_ref::<ProtocolFailure>().unwrap_or_else(|| {
+            panic!("rows={rows} beyond the ceiling must fail as a ProtocolFailure")
+        });
+        assert_eq!(failure.reason.code, ReasonCodeV1::UnsupportedProfile);
+    }
+}
+
+/// Same ceiling, for `trace_width`.
+#[test]
+fn trace_width_far_beyond_the_ceiling_is_refused_not_estimated() {
+    let cfg = write_config(
+        &BABYBEAR_MULTI_TABLE.replace("\"trace_width\": 180", "\"trace_width\": 4294967295"),
+    );
+    let err = hc_cli::commands::estimate_config::run(cfg.path()).unwrap_err();
+    let failure = err
+        .downcast_ref::<ProtocolFailure>()
+        .expect("trace_width beyond the ceiling must fail as a ProtocolFailure");
+    assert_eq!(failure.reason.code, ReasonCodeV1::UnsupportedProfile);
 }
