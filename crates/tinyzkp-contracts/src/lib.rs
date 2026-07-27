@@ -543,6 +543,97 @@ pub struct ResourceEstimatesV1 {
     pub bounded: ResourceEstimateV1,
 }
 
+/// A configuration to be costed. Unlike JobManifestV1 this describes shape
+/// only: no paths, no witness, no AIR package. It may describe a
+/// configuration TinyZKP cannot prove.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EstimateRequestV1 {
+    pub schema_version: u32,
+    pub field: String,
+    pub extension_degree: u8,
+    pub logical_rows: u64,
+    pub trace_width: u32,
+    pub max_constraint_degree: u8,
+    pub public_values: u32,
+    pub has_next_row_columns: bool,
+    pub features: AirFeaturesV1,
+    pub ram_budget_bytes: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EstimateResponseV1 {
+    pub schema_version: u32,
+    /// Shape-only key for aggregating demand across callers. Excludes rows.
+    pub request_digest: String,
+    pub provable_today: bool,
+    pub blocking_reasons: Vec<ReasonV1>,
+    pub estimates: ResourceEstimatesV1,
+}
+
+impl EstimateRequestV1 {
+    /// Reasons this config could not be PROVED today. Estimation itself is
+    /// never blocked by these; they are reported, not enforced.
+    pub fn blocking_reasons(&self) -> Vec<ReasonV1> {
+        let mut reasons = Vec::new();
+        if self.field != FIELD
+            || self.extension_degree != EXTENSION_DEGREE
+            || !(MIN_ROWS..=MAX_ROWS).contains(&self.logical_rows)
+            || !self.logical_rows.is_power_of_two()
+            || !(1..=MAX_TRACE_WIDTH).contains(&self.trace_width)
+            || !(1..=MAX_CONSTRAINT_DEGREE).contains(&self.max_constraint_degree)
+        {
+            push_unique(
+                &mut reasons,
+                ReasonV1::new(ReasonCodeV1::UnsupportedProfile).profiles(
+                    Some(ProfileIdentifierV1::TinyzkpP3GoldilocksV1),
+                    Some(ProfileIdentifierV1::Other),
+                ),
+            );
+        }
+        if self.features.has_unsupported_enabled() {
+            push_unique(
+                &mut reasons,
+                ReasonV1::new(ReasonCodeV1::UnsupportedAirFeature),
+            );
+        }
+        reasons
+    }
+
+    /// Quotient chunk count implied by the declared constraint degree.
+    pub fn quotient_chunks(&self) -> u64 {
+        let quotient_degree = u64::from(self.max_constraint_degree).saturating_sub(1).max(1);
+        quotient_degree.next_power_of_two()
+    }
+
+    /// Stable shape key. Row count is deliberately excluded so that the same
+    /// AIR probed at different sizes aggregates as one demand signal.
+    pub fn digest(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(self.field.as_bytes());
+        hasher.update(self.extension_degree.to_le_bytes());
+        hasher.update(self.trace_width.to_le_bytes());
+        hasher.update(self.max_constraint_degree.to_le_bytes());
+        hasher.update(self.public_values.to_le_bytes());
+        hasher.update([u8::from(self.has_next_row_columns)]);
+        for flag in [
+            self.features.uses_lookups,
+            self.features.uses_buses,
+            self.features.uses_permutations,
+            self.features.uses_multi_table,
+            self.features.uses_preprocessed_columns,
+            self.features.uses_periodic_columns,
+            self.features.uses_recursion,
+            self.features.uses_gpu,
+        ] {
+            hasher.update([u8::from(flag)]);
+        }
+        format!("{:x}", hasher.finalize())
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ResourcePreflightV1 {
@@ -3211,5 +3302,106 @@ mod tests {
         );
         cycle.releases[0].successor_release_identity = Some("release-middle".into());
         assert!(!cycle.validate());
+    }
+
+    fn babybear_multi_table_request() -> EstimateRequestV1 {
+        EstimateRequestV1 {
+            schema_version: 1,
+            field: "babybear".to_string(),
+            extension_degree: 4,
+            logical_rows: 1 << 22,
+            trace_width: 180,
+            max_constraint_degree: 3,
+            public_values: 8,
+            has_next_row_columns: true,
+            features: AirFeaturesV1 {
+                uses_lookups: true,
+                uses_buses: false,
+                uses_permutations: false,
+                uses_multi_table: true,
+                uses_preprocessed_columns: false,
+                uses_periodic_columns: false,
+                uses_recursion: false,
+                uses_gpu: false,
+            },
+            ram_budget_bytes: 2 * 1024 * 1024 * 1024,
+        }
+    }
+
+    /// The product thesis: an SP1-shaped config we cannot prove must still be
+    /// estimable, and must say precisely why proving is blocked.
+    #[test]
+    fn out_of_profile_request_is_estimable_and_reports_blockers() {
+        let request = babybear_multi_table_request();
+        let reasons = request.blocking_reasons();
+
+        assert!(!reasons.is_empty(), "babybear multi-table must be blocked for proving");
+        assert!(
+            reasons.iter().any(|r| r.code == ReasonCodeV1::UnsupportedProfile),
+            "non-goldilocks field must raise UnsupportedProfile"
+        );
+        assert!(
+            reasons.iter().any(|r| r.code == ReasonCodeV1::UnsupportedAirFeature),
+            "lookups and multi-table must raise UnsupportedAirFeature"
+        );
+        assert!(reasons.iter().all(|r| r.validate()), "every reason must validate");
+    }
+
+    #[test]
+    fn in_profile_request_has_no_blockers() {
+        let request = EstimateRequestV1 {
+            schema_version: 1,
+            field: FIELD.to_string(),
+            extension_degree: EXTENSION_DEGREE,
+            logical_rows: 1 << 20,
+            trace_width: 3,
+            max_constraint_degree: 3,
+            public_values: 3,
+            has_next_row_columns: true,
+            features: AirFeaturesV1 {
+                uses_lookups: false,
+                uses_buses: false,
+                uses_permutations: false,
+                uses_multi_table: false,
+                uses_preprocessed_columns: false,
+                uses_periodic_columns: false,
+                uses_recursion: false,
+                uses_gpu: false,
+            },
+            ram_budget_bytes: 2 * 1024 * 1024 * 1024,
+        };
+        assert!(request.blocking_reasons().is_empty());
+    }
+
+    /// The digest is the demand-aggregation key: identical shapes must collide,
+    /// different shapes must not.
+    #[test]
+    fn digest_is_stable_and_shape_sensitive() {
+        let a = babybear_multi_table_request();
+        let b = babybear_multi_table_request();
+        assert_eq!(a.digest(), b.digest());
+
+        let mut c = babybear_multi_table_request();
+        c.trace_width = 181;
+        assert_ne!(a.digest(), c.digest());
+    }
+
+    /// Rows never change the AIR shape, so they must not change the digest -
+    /// otherwise every row count looks like separate demand.
+    #[test]
+    fn digest_ignores_row_count() {
+        let a = babybear_multi_table_request();
+        let mut b = babybear_multi_table_request();
+        b.logical_rows = 1 << 23;
+        assert_eq!(a.digest(), b.digest());
+    }
+
+    #[test]
+    fn quotient_chunks_are_derived_from_declared_degree() {
+        let mut r = babybear_multi_table_request();
+        r.max_constraint_degree = 3;
+        assert_eq!(r.quotient_chunks(), 2);
+        r.max_constraint_degree = 2;
+        assert_eq!(r.quotient_chunks(), 1);
     }
 }
