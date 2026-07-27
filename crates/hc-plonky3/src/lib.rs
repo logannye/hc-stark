@@ -13,6 +13,7 @@ mod checkpoint;
 pub mod contracts;
 mod declarative;
 mod dft;
+pub mod estimate_params;
 mod fri;
 mod mmcs;
 mod opening;
@@ -73,3 +74,24 @@ pub use workloads::{
     FibonacciAir, FibonacciWorkload, GeneratedTraceV1, Poseidon2GoldilocksAir, Poseidon2Workload,
     ResourceBoundedWorkload, WorkloadError, WorkloadIdentityV1,
 };
+
+/// Test-only fixtures shared across this crate's unit tests.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use hc_stream::{CheckpointPolicy, ResourceMode, ResourcePolicyV1};
+    use std::path::PathBuf;
+
+    /// The 2 GiB ceiling used by examples/plonky3/fibonacci-1m.json, so tests
+    /// exercise the published release policy. `ResourcePolicyV1` has no
+    /// `Default`, so every field is copied explicitly from that manifest.
+    pub fn release_policy_2gib() -> ResourcePolicyV1 {
+        ResourcePolicyV1 {
+            mode: ResourceMode::Scratch,
+            max_resident_bytes: 2 * 1024 * 1024 * 1024,
+            max_scratch_bytes: 1_000_000_000,
+            scratch_dir: PathBuf::from("/var/lib/tinyzkp-bench/scratch/fibonacci-1m"),
+            max_threads: 4,
+            checkpoint_policy: CheckpointPolicy::RetainOnFailure,
+        }
+    }
+}
