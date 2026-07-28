@@ -2119,7 +2119,7 @@ def test_partner_evidence_requires_typed_adapter_report_and_acceptance(tmp_path)
             "mode": "compare",
             "profile": "tinyzkp-p3-goldilocks-v1",
             "plonky3_version": "0.6.1",
-            "dependency_lock_sha256": "e124d2c46bf7e313edc2c4b06ea90633d9a929a430d5d1657d032a581f760990",
+            "dependency_lock_sha256": "7cb346489f8c01cd9473da9dcffd3ab5940c76a963061b0c3a84b8f567591cea",
             "release_sha": "abc",
             "official_verification": True,
             "bounded_equals_conventional": True,
