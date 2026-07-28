@@ -877,7 +877,21 @@ Compare the `bounded.peak_resident_bytes` figure against Step 2's measured value
 
 - [ ] **Step 4: Resolve the documented uncertainty**
 
-If the measured value matches the prediction within reasonable tolerance, update the comment at `estimate_params.rs:145-158` to state the term is now measured and confirmed for BabyBear (cite this fixture), removing the "unverified for non-Goldilocks" hedge. If it does not match, use the discrepancy to correct the `+3`/`192` term's field-byte-width attribution — the comment itself names this as the expected remedy ("if a BabyBear/KoalaBear/Mersenne31 estimate is ever contradicted by measurement, start here"). Either outcome is a valid result of this step; do not force a match.
+**FIRST READ THIS — a BabyBear measurement is only PARTLY discriminating, computed before the fact (fix round 2):**
+
+`canonical_extension_degree` (`estimate_params.rs:366-372`) gives Goldilocks `(8, 2)` and BabyBear/KoalaBear/Mersenne31 `(4, 4)`. So `ext_field_bytes = base * degree` is **16 for every field this codebase supports**, and `digest_bytes` is **32 for every one of them** (Goldilocks 4 elements x 8 bytes; BabyBear 8 elements x 4 bytes). The three candidate readings of the `192` term therefore evaluate as:
+
+| field | `12 * ext_field_bytes` | `6 * digest_bytes` | `24 * field_bytes` |
+|---|---|---|---|
+| goldilocks | 192 | 192 | 192 |
+| babybear / koalabear / mersenne31 | 192 | 192 | **96** |
+
+Consequences, which the existing comment does NOT say and which this step must not overstate:
+
+1. A BabyBear measurement **CAN falsify the `24 * field_bytes` reading** — that reading predicts half the term (96 vs 192), a difference large enough to see.
+2. It **CANNOT separate `12 * ext_field_bytes` from `6 * digest_bytes`**. Those two coincide in *every* field on this codebase's roadmap, so no measurement reachable from here distinguishes them. A field with `digest_bytes != 2 * ext_field_bytes` would be required, and none is planned.
+
+So the honest outcomes of this step are "the `24 * field_bytes` reading is falsified (or confirmed)", NOT "the term is now resolved". If the measurement matches, update the comment at `estimate_params.rs:145-158` to say the term is measured and confirmed for BabyBear (cite this fixture) and that the `24 * field_bytes` reading is excluded — but **keep a hedge recording that `12 * ext_field_bytes` and `6 * digest_bytes` remain confounded**, because they do. Removing the hedge entirely would be a false claim of resolution. If it does not match, use the discrepancy to correct the `+3`/`192` term's field-byte-width attribution — the comment itself names this as the expected remedy ("if a BabyBear/KoalaBear/Mersenne31 estimate is ever contradicted by measurement, start here"). Either outcome is a valid result of this step; do not force a match.
 
 - [ ] **Step 5: Publish the honest benchmark, with the scalar-fallback caveat**
 
