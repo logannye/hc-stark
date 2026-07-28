@@ -787,6 +787,22 @@ pub enum ProfileIdentifierV1 {
 }
 ```
 
+**⚠️ SCOPED WORK DISCOVERED BEFORE TASK 8 — the admission gates are a canonicality hazard, not just an enum check.**
+
+"Loosening" the field-admission check is NOT sufficient on its own. `GOLDILOCKS_MODULUS_U64` is referenced at 31 sites across 10 files, and the load-bearing ones are **public-input canonicality validators**, not definitions:
+
+| file | sites | role |
+|---|---|---|
+| `declarative.rs` | 146, 225, 320, 377 | declarative-AIR public values |
+| `contracts.rs` | 145, 352, 424, 425 | admission gate |
+| `prover.rs` | 532 (`validate_workload`) | workload seeds |
+| `workloads.rs` | 191-192 | Fibonacci seeds (Task 8 handles this one) |
+| `hc-cli/src/commands/plonky3.rs` | 299 | CLI input |
+
+Every one of these compares a user-supplied `u64` against **Goldilocks'** modulus (~2^64). Left as-is on a BabyBear job they admit any value below 2^64, and the field constructor then silently reduces it mod 2^31-2^27+1. That is precisely the failure `prover.rs:23-25` already warns about in prose — *"distinct manifests collapse to the same public field element"* — and is the same defect class as the `BabyBearWord::decode` bug this plan's fix round 2 caught: a constructor that accepts anything and reduces, with no canonicality gate in front of it.
+
+So this step must make each of those validators compare against **the profile's** modulus (`P::modulus_u64()`), not merely accept a new `field` string. A test must assert that a BabyBear job with a public input in `[BABYBEAR_MODULUS, GOLDILOCKS_MODULUS)` is REJECTED — that range passes every check today.
+
 - [ ] **Step 2: Loosen the field-admission check**
 
 Replace the single-field comparison in `blocking_reasons()` (`:613-614`, currently `self.field != FIELD || self.extension_degree != EXTENSION_DEGREE`) with a check against both supported profiles:
