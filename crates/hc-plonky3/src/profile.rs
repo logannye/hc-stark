@@ -206,6 +206,26 @@ impl DurableFieldProfile<16, 8> for BabyBearProfile {
 /// (`p3-baby-bear-0.6.1/src/baby_bear.rs:18`) states it.
 pub const BABYBEAR_MODULUS_U64: u64 = 0x7800_0001;
 
+// EXTENSION_DEGREE (what contracts, manifests, and the estimator report) and
+// Challenge::DIMENSION (what actually sizes the durable on-SSD layout, via
+// fri.rs/quotient.rs's extension_degree()) are two independent sources of the
+// same number. Nothing else pins them together: a future profile declaring
+// EXTENSION_DEGREE = 2 while using BinomialExtensionField<F, 4> would build a
+// degree-4 scratch layout while every contract and estimate reported 2, and
+// no test would fail. KoalaBear is an expected fast-follow, so pin it now.
+const _: () = {
+    assert!(
+        GoldilocksProfile::EXTENSION_DEGREE as usize
+            == <<GoldilocksProfile as DurableFieldProfile<8, 4>>::Challenge
+                as p3_field::BasedVectorSpace<Goldilocks>>::DIMENSION
+    );
+    assert!(
+        BabyBearProfile::EXTENSION_DEGREE as usize
+            == <<BabyBearProfile as DurableFieldProfile<16, 8>>::Challenge
+                as p3_field::BasedVectorSpace<BabyBear>>::DIMENSION
+    );
+};
+
 // The scratch-word counterpart of the Goldilocks assertion above: BabyBear is
 // a 31-bit field, so 4 bytes per element — deliberately NOT 16 (the
 // permutation width) and NOT 8 (the digest size). All three numbers appear in

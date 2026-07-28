@@ -189,10 +189,23 @@ where
             };
             air.eval(&mut folder);
             let quotient = folder.accumulator * selectors.inv_vanishing;
-            for (slot, coefficient) in destination
-                .iter_mut()
-                .zip(quotient.as_basis_coefficients_slice())
-            {
+            let coefficients = quotient.as_basis_coefficients_slice();
+            // The pre-generic code wrote `destination[0]`/`destination[1]`
+            // explicitly, which PANICKED on any shape mismatch. A bare `zip`
+            // silently writes min(len) instead and leaves the tail holding
+            // whatever the reused `encoded` buffer had, so a degree
+            // disagreement would become silent data corruption in the
+            // quotient store rather than a crash. `destination` comes from
+            // `chunks_exact_mut(extension_degree())` and `coefficients` has
+            // `Challenge::DIMENSION` entries; the const assertions in
+            // profile.rs pin those together, and this keeps the original
+            // fail-loud behaviour if they ever come apart anyway.
+            debug_assert_eq!(
+                destination.len(),
+                coefficients.len(),
+                "quotient chunk width does not match the extension degree"
+            );
+            for (slot, coefficient) in destination.iter_mut().zip(coefficients) {
                 *slot = (*coefficient).into();
             }
         };

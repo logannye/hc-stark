@@ -67,6 +67,40 @@ should compute `p3_uni_stark::security::ConjecturedSecurity` for both
 profiles and assert BabyBear meets a stated floor before Task 10 publishes
 any benchmark.
 
+## 🔴 BLOCKING PREREQUISITE FOR TASK 9 — a live estimator bug, diagnosed and measured but NOT landed
+
+`estimate_params.rs:177` prices the quotient DFT with a hardcoded `2`:
+
+```rust
+let quotient_dft = dft.estimate_scratch(lde_rows as usize, 2, false, field_bytes)?;
+```
+
+That `2` is the quotient store's **column count** — the extension degree, the exact quantity swept out of `fri.rs`/`quotient.rs` as `extension_degree()`. It was missed. Goldilocks is degree 2 so this is correct there; **BabyBear/KoalaBear/Mersenne31 are degree 4**, so the shipped model prices half the columns the prover actually writes.
+
+**The fix is one line and needs no new plumbing** — `field_widths` returns `(base, base * degree)`, so the degree is already derivable from the two widths in `params`:
+
+```rust
+let extension_degree = if field_bytes == 0 { 2 } else { (ext_field_bytes / field_bytes).max(1) as usize };
+let quotient_dft = dft.estimate_scratch(lde_rows as usize, extension_degree, false, field_bytes)?;
+```
+
+**MEASURED IMPACT** (applied, measured against `test-vectors/estimate/babybear-multi-table.json`, then reverted):
+
+| metric | shipped today | corrected | delta |
+|---|---|---|---|
+| `total_read_bytes` | 59,458,455,408 | 60,129,544,048 | +671,088,640 (+1.13%) |
+| `total_write_bytes` | 38,052,155,280 | 38,723,243,920 | +671,088,640 (+1.76%) |
+| `scratch_high_water_bytes` | 21,139,660,882 | unchanged | — |
+| `peak_resident_bytes` | 763,363,328 | unchanged | — |
+
+The Goldilocks fixture is **byte-identical** either way (16/8 = 2), confirmed by the parity gate. So this is a BabyBear-only correction, and it moves the estimate UP — today's numbers understate I/O.
+
+**WHY IT IS NOT IN THIS BRANCH.** `scripts/ci/estimate_wasm_cli_parity_gate.mjs` compares the native `hc-cli` against the **committed** `site/vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm` over two fixtures, one of which is `babybear-multi-table.json`. Any cost-model change therefore requires rebuilding and recommitting that vendored wasm in the same commit. The gate is wired into `ci.yml:168` **and `deploy-site.yml:112`, the production Pages deploy** — so landing the source fix alone would fail CI *and block the site deploy*. The gate is behaving exactly as designed; it caught this.
+
+**THE REBUILD IS BLOCKED ON THIS MACHINE**, by a pre-existing toolchain issue unrelated to Phase 3A: `cargo build -p hc-wasm --target wasm32-unknown-unknown` fails in `zstd-sys`'s build script, which compiles `zstd/lib/decompress/huf_decompress_amd64.S` for wasm32 and Apple clang rejects it. `zstd` is a hard (non-optional) dependency of `hc-plonky3` via `declarative.rs`. **Verified identical at `main` (f17930c)**, so it is not caused by this work. One machine-local contributor was found and is separately fixable: `~/.cargo/config.toml` sets a global `rustflags = ["-C","target-cpu=native"]`, which leaks `apple-m4` into wasm32 builds; overriding `RUSTFLAGS` clears that error but not the zstd one.
+
+**TO CLOSE THIS, IN ORDER:** (1) make `hc-wasm` buildable for wasm32 — most likely by gating `zstd` behind a non-wasm `cfg` or feature, since the estimator does not need decompression — or run the rebuild on Linux/CI; (2) apply the one-line fix; (3) rebuild + recommit the vendored wasm; (4) confirm the parity gate passes on BOTH fixtures. **Do this before Task 9 exposes BabyBear through the admission gate**, or the endpoint starts quoting a knowingly wrong number for a field it now advertises as supported.
+
 ---
 
 ### Task 1: Add the `p3-baby-bear` dependency and re-freeze the lock
