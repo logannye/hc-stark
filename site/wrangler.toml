@@ -9,17 +9,18 @@ pages_build_output_dir = "."
 # `site/migrations/` directory, matching this repo's existing convention of
 # keeping migrations out of the deployed static-asset tree.
 #
-# `database_id` below is a PLACEHOLDER. Before this binds to anything in
-# production, the account owner must run `wrangler d1 create
-# tinyzkp-estimator` against the real Cloudflare account, replace this value
-# with the real UUID it returns, and run `wrangler d1 migrations apply DB
-# --remote` from this directory. Until that happens, `env.DB` in production
-# is either absent or non-functional; both the rate limiter and the demand
-# logger are written to fail open/silent in that case (see site/_worker.js),
-# so `POST /v1/estimate` itself keeps working -- it simply logs nothing and
-# rate-limits nothing until the real database exists.
+# `database_id` is the real `tinyzkp-estimator` D1 database, created by the
+# account owner on 2026-07-28. Migrations in `../migrations` are applied with
+# `wrangler d1 migrations apply DB --remote` from this directory.
+#
+# NOTE for anyone editing this block: a `database_id` that does not resolve in
+# the Cloudflare account makes Wrangler REJECT THE DEPLOY outright -- it is not
+# merely a runtime binding failure. A placeholder UUID here failed the
+# production deploy on 2026-07-27 (auto-rolled back, no outage). The worker
+# separately fails open when `env.DB` is missing at runtime (see
+# site/_worker.js), but that safety net does not cover deploy-time rejection.
 [[d1_databases]]
 binding = "DB"
 database_name = "tinyzkp-estimator"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "ea4ad71c-6175-4a69-b106-02cc4af378ae"
 migrations_dir = "../migrations"
