@@ -25,10 +25,16 @@ mod quotient;
 mod scratch;
 mod workloads;
 
-pub use bounded_pcs::{
-    make_bounded_verifier_config, make_durable_mmcs, BoundedConfig, DurableChallengeMmcs,
-    DurableInputMmcs, DurablePcsProof, ResourceBoundedVerifierPcs,
+// `dft`, `mmcs`, `fri`, `quotient`, and `bounded_pcs` are now generic over
+// `DurableFieldProfile<PERM_WIDTH, DIGEST_ELEMS>`. The names re-exported here
+// stay bound to each module's `goldilocks` pin, so this crate's public API is
+// unchanged and every production entry point still names `GoldilocksProfile` —
+// now explicitly, in exactly one place per module.
+pub use bounded_pcs::goldilocks::{
+    BoundedConfig, DurableChallengeMmcs, DurableInputMmcs, DurablePcsProof,
+    ResourceBoundedVerifierPcs,
 };
+pub use bounded_pcs::{make_bounded_verifier_config, make_durable_mmcs};
 #[cfg(feature = "fault-injection")]
 pub use bounded_prover::EnvironmentAbortFailureInjector;
 pub use bounded_prover::{
@@ -55,14 +61,18 @@ pub use declarative::{
     estimate_declarative_execution_paths, estimate_declarative_statement,
     plan_declarative_statement, verify_declarative_proof, DeclarativeAir, UploadedTraceWorkload,
 };
-pub use dft::{GoldilocksWord, ResourceBoundedDft, ResourceBoundedMatrix, ScratchPlonky3Matrix};
+pub use dft::goldilocks::{ResourceBoundedDft, ResourceBoundedMatrix, ScratchPlonky3Matrix};
+pub use dft::GoldilocksWord;
+pub use fri::goldilocks::{
+    ChallengeArityMatrix, DurableFriCommitment, FriLayerCheckpoint, ScratchChallengeVector,
+};
 pub use fri::{
     fold_binary_layer, prove_durable_fri, prove_durable_fri_observed,
     prove_durable_fri_observed_batched, resume_durable_fri_observed,
-    resume_durable_fri_observed_batched, ChallengeArityMatrix, DurableFriCommitment,
-    DurableFriError, FriLayerCheckpoint, ProfileChallenge, ScratchChallengeVector,
+    resume_durable_fri_observed_batched, DurableFriError, ProfileChallenge,
 };
-pub use mmcs::{DurableGoldilocksMmcs, DurableMerkleData, DurableMmcsError};
+pub use mmcs::goldilocks::{DurableGoldilocksMmcs, DurableMerkleData};
+pub use mmcs::DurableMmcsError;
 pub use opening::{
     build_reduced_opening_layer, interpolate_standard_lde, DurableOpeningError, MatrixOpening,
 };

@@ -1,7 +1,10 @@
-use crate::dft::{GoldilocksWord, ResourceBoundedMatrix};
-use crate::fri::{
-    bit_reverse_challenge_vector, DurableFriError, ProfileChallenge, ScratchChallengeVector,
-};
+// `dft` and `fri` are generic over `DurableFieldProfile`; this module is still
+// field-concrete and imports their `goldilocks` pins, which denote exactly the
+// types it used before.
+use crate::dft::goldilocks::ResourceBoundedMatrix;
+use crate::dft::GoldilocksWord;
+use crate::fri::goldilocks::ScratchChallengeVector;
+use crate::fri::{bit_reverse_challenge_vector, DurableFriError, ProfileChallenge};
 use hc_stream::{BlockMatrix, CanonicalElement, ResourcePolicyV1};
 use p3_field::{
     batch_multiplicative_inverse, dot_product, Field, PrimeCharacteristicRing, TwoAdicField,

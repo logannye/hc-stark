@@ -1,20 +1,24 @@
-use crate::bounded_pcs::{
-    make_bounded_verifier_config, make_durable_mmcs, BoundedConfig, DurableInputMmcs,
-};
+// `dft`/`mmcs`/`fri`/`quotient`/`bounded_pcs` are generic over
+// `DurableFieldProfile<PERM_WIDTH, DIGEST_ELEMS>`; this module is still
+// field-concrete, so it imports each module's `goldilocks` pin. Every name
+// below denotes exactly the type it denoted before that change.
+use crate::bounded_pcs::goldilocks::{BoundedConfig, DurableInputMmcs};
+use crate::bounded_pcs::{make_bounded_verifier_config, make_durable_mmcs};
 use crate::checkpoint::ChallengerSnapshotV1;
-use crate::dft::{GoldilocksWord, ResourceBoundedDft, ResourceBoundedMatrix};
+use crate::dft::goldilocks::{ResourceBoundedDft, ResourceBoundedMatrix};
+use crate::dft::GoldilocksWord;
+use crate::fri::goldilocks::{DurableFriCommitment, FriLayerCheckpoint, ScratchChallengeVector};
 use crate::fri::{
-    prove_durable_fri_observed_batched, resume_durable_fri_observed_batched, DurableFriCommitment,
-    DurableFriError, FriLayerCheckpoint, ScratchChallengeVector,
+    prove_durable_fri_observed_batched, resume_durable_fri_observed_batched, DurableFriError,
 };
-use crate::mmcs::DurableMerkleData;
+use crate::mmcs::goldilocks::DurableMerkleData;
 use crate::opening::{
     build_reduced_opening_layer, interpolate_standard_lde, DurableOpeningError, MatrixOpening,
 };
+use crate::profile::GoldilocksProfile;
 use crate::prover::{Challenge, GoldilocksConfig, Val, COMPATIBILITY_PROFILE, PLONKY3_VERSION};
-use crate::quotient::{
-    build_quotient_chunk_ldes, stream_quotient_values, EvaluationConfig, StreamedQuotientError,
-};
+use crate::quotient::goldilocks::EvaluationConfig;
+use crate::quotient::{build_quotient_chunk_ldes, stream_quotient_values, StreamedQuotientError};
 use crate::scratch::create_unique_job_dir;
 use crate::workloads::{
     FibonacciWorkload, Poseidon2Workload, ResourceBoundedWorkload, WorkloadError,
@@ -1266,7 +1270,10 @@ where
             return Err(BoundedProverError::InvalidCheckpoint);
         }
     } else if !resumed_from_quotient_ldes {
-        quotient_values = Some(stream_quotient_values(
+        // `P` is not inferable from the arguments (`P::Word` is an associated
+        // type, so `ScratchMatrixStore<GoldilocksWord>` does not pin it), so
+        // this module's Goldilocks profile is named explicitly.
+        quotient_values = Some(stream_quotient_values::<8, 4, GoldilocksProfile, _, _>(
             air,
             &public_values,
             trace_domain,

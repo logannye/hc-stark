@@ -1,20 +1,19 @@
-use crate::dft::GoldilocksWord;
-use crate::mmcs::{DurableGoldilocksMmcs, DurableMerkleData};
+use crate::mmcs::{DurableMerkleData, DurableProfileMmcs};
+use crate::profile::{DurableFieldProfile, GoldilocksProfile};
 use crate::scratch::create_unique_job_dir;
-use crate::ProfileChallenger;
 use hc_stream::{
     ArtifactDigest, BlockMatrix, CanonicalElement, ExecutionMode, MatrixStore, PhaseEstimate,
     ResourceEstimate, ResourcePolicyV1, ScratchMatrixStore, StreamError,
 };
-use p3_challenger::{CanObserve, CanSampleBits, FieldChallenger, GrindingChallenger};
+use p3_challenger::{
+    CanObserve, CanSampleBits, DuplexChallenger, FieldChallenger, GrindingChallenger,
+};
 use p3_commit::ExtensionMmcs;
 use p3_dft::{Radix2DFTSmallBatch, TwoAdicSubgroupDft};
-use p3_field::extension::BinomialExtensionField;
 use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, TwoAdicField};
 use p3_fri::{
     compute_log_arity_for_round, CommitPhaseProofStep, FriParameters, FriProof, QueryProof,
 };
-use p3_goldilocks::Goldilocks;
 use p3_matrix::Matrix;
 use p3_merkle_tree::MerkleCap;
 use rayon::prelude::*;
@@ -23,11 +22,57 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
-pub type ProfileChallenge = BinomialExtensionField<Goldilocks, 2>;
-pub type DurableFriMmcs<H, C> =
-    ExtensionMmcs<Goldilocks, ProfileChallenge, DurableGoldilocksMmcs<H, C>>;
-pub type DurableFriCommitment = MerkleCap<Goldilocks, [Goldilocks; 4]>;
+/// The Goldilocks FRI challenge field. Kept under its pre-generic name and
+/// spelled through the profile so it cannot drift from `GoldilocksProfile`.
+pub type ProfileChallenge = <GoldilocksProfile as DurableFieldProfile<8, 4>>::Challenge;
+/// The duplex challenger at a profile's dimensions. `RATE` is the digest size
+/// `D` (4 for Goldilocks, 8 for BabyBear), matching `checkpoint::RATE` and
+/// Plonky3's own reference configs; `WIDTH` is the permutation width `W`.
+pub(crate) type ProfileChallengerFor<const W: usize, const D: usize, P> = DuplexChallenger<
+    <P as DurableFieldProfile<W, D>>::Val,
+    <P as DurableFieldProfile<W, D>>::Permutation,
+    W,
+    D,
+>;
+pub type DurableFriMmcs<const W: usize, const D: usize, P> = ExtensionMmcs<
+    <P as DurableFieldProfile<W, D>>::Val,
+    <P as DurableFieldProfile<W, D>>::Challenge,
+    DurableProfileMmcs<W, D, P>,
+>;
+pub type DurableFriCommitment<const W: usize, const D: usize, P> =
+    MerkleCap<<P as DurableFieldProfile<W, D>>::Val, [<P as DurableFieldProfile<W, D>>::Val; D]>;
+/// The FRI proof this module produces. Factored into an alias because the
+/// four-parameter `FriProof<..>` written inline trips
+/// `clippy::type_complexity` now that each parameter is a projection.
+/// `P::Val` is the grinding witness type, matching `DuplexChallenger`'s
+/// `GrindingChallenger::Witness = F`.
+pub type DurableFriProof<const W: usize, const D: usize, P, InputProof> = FriProof<
+    <P as DurableFieldProfile<W, D>>::Challenge,
+    DurableFriMmcs<W, D, P>,
+    <P as DurableFieldProfile<W, D>>::Val,
+    InputProof,
+>;
 static LAYER_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Number of base-field coordinates per extension element — the number of
+/// durable scratch columns each FRI value occupies. 2 for Goldilocks, 4 for
+/// BabyBear. Every `2` that used to be written inline in this module was this
+/// quantity.
+fn extension_degree<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>() -> usize
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    <P::Challenge as BasedVectorSpace<P::Val>>::DIMENSION
+}
+
+/// Bytes on disk per stored extension element: 16 for Goldilocks (2 x 8),
+/// 16 for BabyBear (4 x 4).
+fn challenge_bytes<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>() -> usize
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    extension_degree::<W, D, P>() * <P::Word as CanonicalElement>::WIDTH
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum DurableFriError {
@@ -56,13 +101,20 @@ fn worker_pool(policy: &ResourcePolicyV1) -> Result<Option<rayon::ThreadPool>> {
         .map_err(|_| DurableFriError::InvalidShape)
 }
 
-struct ChallengeArtifact {
-    store: ScratchMatrixStore<GoldilocksWord>,
+struct ChallengeArtifact<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    store: ScratchMatrixStore<P::Word>,
     job_dir: PathBuf,
     remove_on_drop: AtomicBool,
 }
 
-impl Drop for ChallengeArtifact {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Drop
+    for ChallengeArtifact<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn drop(&mut self) {
         if !self.remove_on_drop.load(Ordering::Relaxed) {
             return;
@@ -72,29 +124,50 @@ impl Drop for ChallengeArtifact {
     }
 }
 
-/// Durable bit-reversed FRI evaluation vector. Each extension element is two
-/// canonical Goldilocks words in its scratch row.
-#[derive(Clone)]
-pub struct ScratchChallengeVector {
-    inner: Arc<ChallengeArtifact>,
+/// Durable bit-reversed FRI evaluation vector. Each extension element occupies
+/// `extension_degree::<W, D, P>()` canonical base-field words in its scratch
+/// row (2 for Goldilocks, 4 for BabyBear).
+pub struct ScratchChallengeVector<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    inner: Arc<ChallengeArtifact<W, D, P>>,
     len: usize,
 }
 
-impl ScratchChallengeVector {
-    pub fn from_values(policy: &ResourcePolicyV1, values: &[ProfileChallenge]) -> Result<Self> {
+// Hand-written so the bound stays `P: DurableFieldProfile`; cloning is an
+// `Arc` bump that never touches `P`.
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Clone
+    for ScratchChallengeVector<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            len: self.len,
+        }
+    }
+}
+
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> ScratchChallengeVector<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    pub fn from_values(policy: &ResourcePolicyV1, values: &[P::Challenge]) -> Result<Self> {
         if values.is_empty() || !values.len().is_power_of_two() {
             return Err(DurableFriError::InvalidShape);
         }
-        preflight_layer(policy, values.len())?;
+        preflight_layer::<W, D, P>(policy, values.len())?;
         let job_dir = create_job_dir(&policy.scratch_dir)?;
         let result = (|| {
-            let mut store = ScratchMatrixStore::<GoldilocksWord>::create(
+            let mut store = ScratchMatrixStore::<P::Word>::create(
                 &job_dir,
                 "fri-layer.bin",
                 values.len() as u64,
-                2,
+                extension_degree::<W, D, P>(),
             )?;
-            let words = flatten_challenges(values);
+            let words = flatten_challenges::<W, D, P>(values);
             store.write_rows(0, values.len(), &words)?;
             store.finalize()?;
             Ok(Self {
@@ -118,9 +191,9 @@ impl ScratchChallengeVector {
         generate: G,
     ) -> Result<Self>
     where
-        G: FnMut(usize, usize) -> Result<Vec<ProfileChallenge>>,
+        G: FnMut(usize, usize) -> Result<Vec<P::Challenge>>,
     {
-        let block_rows = policy.tile_rows(16, 1)?.min(len);
+        let block_rows = policy.tile_rows(challenge_bytes::<W, D, P>(), 1)?.min(len);
         Self::from_block_generator_with_rows(policy, len, block_rows, generate)
     }
 
@@ -131,7 +204,7 @@ impl ScratchChallengeVector {
         mut generate: G,
     ) -> Result<Self>
     where
-        G: FnMut(usize, usize) -> Result<Vec<ProfileChallenge>>,
+        G: FnMut(usize, usize) -> Result<Vec<P::Challenge>>,
     {
         if len == 0 || !len.is_power_of_two() {
             return Err(DurableFriError::InvalidShape);
@@ -140,14 +213,14 @@ impl ScratchChallengeVector {
             return Err(DurableFriError::InvalidShape);
         }
         let block_rows = block_rows.min(len);
-        preflight_layer(policy, len)?;
+        preflight_layer::<W, D, P>(policy, len)?;
         let job_dir = create_job_dir(&policy.scratch_dir)?;
         let result = (|| {
-            let mut store = ScratchMatrixStore::<GoldilocksWord>::create(
+            let mut store = ScratchMatrixStore::<P::Word>::create(
                 &job_dir,
                 "fri-layer.bin",
                 len as u64,
-                2,
+                extension_degree::<W, D, P>(),
             )?;
             for row_start in (0..len).step_by(block_rows) {
                 let row_count = (len - row_start).min(block_rows);
@@ -155,7 +228,11 @@ impl ScratchChallengeVector {
                 if values.len() != row_count {
                     return Err(DurableFriError::InvalidShape);
                 }
-                store.write_rows(row_start as u64, row_count, &flatten_challenges(&values))?;
+                store.write_rows(
+                    row_start as u64,
+                    row_count,
+                    &flatten_challenges::<W, D, P>(&values),
+                )?;
             }
             store.finalize()?;
             Ok(Self::from_store(store, job_dir.clone(), len))
@@ -166,7 +243,7 @@ impl ScratchChallengeVector {
         result
     }
 
-    fn from_store(store: ScratchMatrixStore<GoldilocksWord>, job_dir: PathBuf, len: usize) -> Self {
+    fn from_store(store: ScratchMatrixStore<P::Word>, job_dir: PathBuf, len: usize) -> Self {
         Self {
             inner: Arc::new(ChallengeArtifact {
                 store,
@@ -191,14 +268,14 @@ impl ScratchChallengeVector {
     }
 
     pub fn reopen(path: &Path, expected: ArtifactDigest) -> Result<Self> {
-        if expected.columns != 2 {
+        if expected.columns != extension_degree::<W, D, P>() {
             return Err(DurableFriError::InvalidShape);
         }
         let len = usize::try_from(expected.rows).map_err(|_| DurableFriError::InvalidShape)?;
         if len == 0 || !len.is_power_of_two() {
             return Err(DurableFriError::InvalidShape);
         }
-        let store = ScratchMatrixStore::<GoldilocksWord>::reopen(path, expected)?;
+        let store = ScratchMatrixStore::<P::Word>::reopen(path, expected)?;
         let job_dir = path.parent().ok_or(StreamError::UnsafePath)?.to_path_buf();
         Ok(Self {
             inner: Arc::new(ChallengeArtifact {
@@ -218,24 +295,26 @@ impl ScratchChallengeVector {
         self.len == 0
     }
 
-    pub fn try_read(&self, start: usize, count: usize) -> Result<Vec<ProfileChallenge>> {
+    pub fn try_read(&self, start: usize, count: usize) -> Result<Vec<P::Challenge>> {
         if start.checked_add(count).is_none_or(|end| end > self.len) {
             return Err(DurableFriError::InvalidShape);
         }
-        let mut words = vec![GoldilocksWord::default(); count * 2];
+        let degree = extension_degree::<W, D, P>();
+        let mut words = vec![P::Word::default(); count * degree];
         self.inner
             .store
             .read_rows(start as u64, count, &mut words)?;
         words
-            .chunks_exact(2)
-            .map(|pair| {
-                ProfileChallenge::from_basis_coefficients_slice(&[pair[0].0, pair[1].0])
+            .chunks_exact(degree)
+            .map(|coordinates| {
+                let values: Vec<P::Val> = coordinates.iter().map(|word| (*word).into()).collect();
+                P::Challenge::from_basis_coefficients_slice(&values)
                     .ok_or(DurableFriError::InvalidShape)
             })
             .collect()
     }
 
-    pub fn arity_matrix(&self, arity: usize) -> Result<ChallengeArityMatrix> {
+    pub fn arity_matrix(&self, arity: usize) -> Result<ChallengeArityMatrix<W, D, P>> {
         if arity == 0 || !arity.is_power_of_two() || !self.len.is_multiple_of(arity) {
             return Err(DurableFriError::InvalidShape);
         }
@@ -245,7 +324,7 @@ impl ScratchChallengeVector {
         })
     }
 
-    fn arity_base_matrix(&self, arity: usize) -> Result<ChallengeArityBaseMatrix> {
+    fn arity_base_matrix(&self, arity: usize) -> Result<ChallengeArityBaseMatrix<W, D, P>> {
         if arity == 0 || !arity.is_power_of_two() || !self.len.is_multiple_of(arity) {
             return Err(DurableFriError::InvalidShape);
         }
@@ -256,7 +335,11 @@ impl ScratchChallengeVector {
     }
 }
 
-impl Matrix<ProfileChallenge> for ScratchChallengeVector {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Matrix<P::Challenge>
+    for ScratchChallengeVector<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn width(&self) -> usize {
         1
     }
@@ -269,8 +352,8 @@ impl Matrix<ProfileChallenge> for ScratchChallengeVector {
         &self,
         row: usize,
     ) -> impl IntoIterator<
-        Item = ProfileChallenge,
-        IntoIter = impl Iterator<Item = ProfileChallenge> + Send + Sync,
+        Item = P::Challenge,
+        IntoIter = impl Iterator<Item = P::Challenge> + Send + Sync,
     > {
         self.try_read(row, 1)
             .expect("validated FRI row remains readable")
@@ -278,13 +361,32 @@ impl Matrix<ProfileChallenge> for ScratchChallengeVector {
     }
 }
 
-#[derive(Clone)]
-pub struct ChallengeArityMatrix {
-    vector: ScratchChallengeVector,
+pub struct ChallengeArityMatrix<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    vector: ScratchChallengeVector<W, D, P>,
     arity: usize,
 }
 
-impl Matrix<ProfileChallenge> for ChallengeArityMatrix {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Clone
+    for ChallengeArityMatrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            vector: self.vector.clone(),
+            arity: self.arity,
+        }
+    }
+}
+
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Matrix<P::Challenge>
+    for ChallengeArityMatrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn width(&self) -> usize {
         self.arity
     }
@@ -297,8 +399,8 @@ impl Matrix<ProfileChallenge> for ChallengeArityMatrix {
         &self,
         row: usize,
     ) -> impl IntoIterator<
-        Item = ProfileChallenge,
-        IntoIter = impl Iterator<Item = ProfileChallenge> + Send + Sync,
+        Item = P::Challenge,
+        IntoIter = impl Iterator<Item = P::Challenge> + Send + Sync,
     > {
         self.vector
             .try_read(row * self.arity, self.arity)
@@ -307,15 +409,34 @@ impl Matrix<ProfileChallenge> for ChallengeArityMatrix {
     }
 }
 
-#[derive(Clone)]
-struct ChallengeArityBaseMatrix {
-    vector: ScratchChallengeVector,
+struct ChallengeArityBaseMatrix<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    vector: ScratchChallengeVector<W, D, P>,
     arity: usize,
 }
 
-impl Matrix<Goldilocks> for ChallengeArityBaseMatrix {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Clone
+    for ChallengeArityBaseMatrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            vector: self.vector.clone(),
+            arity: self.arity,
+        }
+    }
+}
+
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Matrix<P::Val>
+    for ChallengeArityBaseMatrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn width(&self) -> usize {
-        self.arity * 2
+        self.arity * extension_degree::<W, D, P>()
     }
 
     fn height(&self) -> usize {
@@ -325,7 +446,7 @@ impl Matrix<Goldilocks> for ChallengeArityBaseMatrix {
     unsafe fn row_unchecked(
         &self,
         row: usize,
-    ) -> impl IntoIterator<Item = Goldilocks, IntoIter = impl Iterator<Item = Goldilocks> + Send + Sync>
+    ) -> impl IntoIterator<Item = P::Val, IntoIter = impl Iterator<Item = P::Val> + Send + Sync>
     {
         self.vector
             .try_read(row * self.arity, self.arity)
@@ -335,7 +456,11 @@ impl Matrix<Goldilocks> for ChallengeArityBaseMatrix {
     }
 }
 
-impl BlockMatrix<GoldilocksWord> for ChallengeArityBaseMatrix {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> BlockMatrix<P::Word>
+    for ChallengeArityBaseMatrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn rows(&self) -> u64 {
         self.height() as u64
     }
@@ -348,7 +473,7 @@ impl BlockMatrix<GoldilocksWord> for ChallengeArityBaseMatrix {
         &self,
         row_start: u64,
         row_count: usize,
-        output: &mut [GoldilocksWord],
+        output: &mut [P::Word],
     ) -> hc_stream::Result<()> {
         let row_start = usize::try_from(row_start).map_err(|_| StreamError::OutOfBounds)?;
         if row_start
@@ -365,40 +490,45 @@ impl BlockMatrix<GoldilocksWord> for ChallengeArityBaseMatrix {
                 DurableFriError::Stream(stream) => stream,
                 _ => StreamError::Corrupt("FRI base block read failed"),
             })?;
-        let words = flatten_challenges(&values);
+        let words = flatten_challenges::<W, D, P>(&values);
         output.copy_from_slice(&words);
         Ok(())
     }
 }
 
 /// Exact binary Plonky3 FRI fold over a bit-reversed durable vector.
-pub fn fold_binary_layer(
-    source: &ScratchChallengeVector,
-    beta: ProfileChallenge,
+pub fn fold_binary_layer<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>(
+    source: &ScratchChallengeVector<W, D, P>,
+    beta: P::Challenge,
     policy: &ResourcePolicyV1,
-) -> Result<ScratchChallengeVector> {
+) -> Result<ScratchChallengeVector<W, D, P>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     if source.len < 2 || !source.len.is_power_of_two() {
         return Err(DurableFriError::InvalidShape);
     }
     let output_len = source.len / 2;
-    preflight_layer(policy, output_len)?;
+    preflight_layer::<W, D, P>(policy, output_len)?;
     let job_dir = create_job_dir(&policy.scratch_dir)?;
     let result = (|| {
-        let mut output = ScratchMatrixStore::<GoldilocksWord>::create(
+        let mut output = ScratchMatrixStore::<P::Word>::create(
             &job_dir,
             "fri-layer.bin",
             output_len as u64,
-            2,
+            extension_degree::<W, D, P>(),
         )?;
-        let block_rows = policy.tile_rows(16, 1)?.min(output_len);
+        let block_rows = policy
+            .tile_rows(challenge_bytes::<W, D, P>(), 1)?
+            .min(output_len);
         let pool = worker_pool(policy)?;
         let log_output_len = output_len.trailing_zeros() as usize;
-        let generator_inverse = Goldilocks::two_adic_generator(log_output_len + 1).inverse();
+        let generator_inverse = P::Val::two_adic_generator(log_output_len + 1).inverse();
         for row_start in (0..output_len).step_by(block_rows) {
             let row_count = (output_len - row_start).min(block_rows);
             let inputs = source.try_read(row_start * 2, row_count * 2)?;
-            let mut folded = vec![ProfileChallenge::ZERO; row_count];
-            let fold_row = |(row, destination): (usize, &mut ProfileChallenge)| {
+            let mut folded = vec![P::Challenge::ZERO; row_count];
+            let fold_row = |(row, destination): (usize, &mut P::Challenge)| {
                 let index = row_start + row;
                 let exponent = reverse_low_bits(index, log_output_len);
                 let halve_inverse_power = generator_inverse.exp_u64(exponent as u64).halve();
@@ -411,7 +541,7 @@ pub fn fold_binary_layer(
             } else {
                 folded.iter_mut().enumerate().for_each(fold_row);
             }
-            let words = flatten_challenges(&folded);
+            let words = flatten_challenges::<W, D, P>(&folded);
             output.write_rows(row_start as u64, row_count, &words)?;
         }
         output.finalize()?;
@@ -430,35 +560,30 @@ pub fn fold_binary_layer(
 /// Prover-side FRI loop with durable layers and the official Plonky3 proof
 /// structure. The frozen production profile uses binary folding; test profiles
 /// may vary query and grinding counts but must retain `max_log_arity = 1`.
-pub struct FriLayerCheckpoint<'a> {
+pub struct FriLayerCheckpoint<'a, const W: usize, const D: usize, P: DurableFieldProfile<W, D>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     pub layer: u32,
-    pub committed_layer: &'a ScratchChallengeVector,
-    pub next_layer: &'a ScratchChallengeVector,
-    pub commitment: &'a DurableFriCommitment,
-    pub commit_pow_witness: Goldilocks,
+    pub committed_layer: &'a ScratchChallengeVector<W, D, P>,
+    pub next_layer: &'a ScratchChallengeVector<W, D, P>,
+    pub commitment: &'a DurableFriCommitment<W, D, P>,
+    pub commit_pow_witness: P::Val,
     pub log_arity: u8,
 }
 
-pub fn prove_durable_fri<H, C, InputProof, OpenInput>(
-    params: &FriParameters<DurableFriMmcs<H, C>>,
-    base_mmcs: &DurableGoldilocksMmcs<H, C>,
-    inputs: Vec<ScratchChallengeVector>,
-    challenger: &mut ProfileChallenger,
+pub fn prove_durable_fri<const W: usize, const D: usize, P, InputProof, OpenInput>(
+    params: &FriParameters<DurableFriMmcs<W, D, P>>,
+    base_mmcs: &DurableProfileMmcs<W, D, P>,
+    inputs: Vec<ScratchChallengeVector<W, D, P>>,
+    challenger: &mut ProfileChallengerFor<W, D, P>,
     log_global_max_height: usize,
     open_input: OpenInput,
     policy: &ResourcePolicyV1,
-) -> Result<FriProof<ProfileChallenge, DurableFriMmcs<H, C>, Goldilocks, InputProof>>
+) -> Result<DurableFriProof<W, D, P, InputProof>>
 where
-    H: p3_symmetric::CryptographicHasher<Goldilocks, [Goldilocks; 4]>
-        + p3_symmetric::CryptographicHasher<
-            <Goldilocks as Field>::Packing,
-            [<Goldilocks as Field>::Packing; 4],
-        > + Clone
-        + Sync,
-    C: p3_symmetric::PseudoCompressionFunction<[Goldilocks; 4], 2>
-        + p3_symmetric::PseudoCompressionFunction<[<Goldilocks as Field>::Packing; 4], 2>
-        + Clone
-        + Sync,
+    P: DurableFieldProfile<W, D>,
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
     InputProof: Clone,
     OpenInput: FnMut(usize) -> InputProof,
 {
@@ -475,30 +600,32 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove_durable_fri_observed<H, C, InputProof, OpenInput, Observe>(
-    params: &FriParameters<DurableFriMmcs<H, C>>,
-    base_mmcs: &DurableGoldilocksMmcs<H, C>,
-    inputs: Vec<ScratchChallengeVector>,
-    challenger: &mut ProfileChallenger,
+pub fn prove_durable_fri_observed<
+    const W: usize,
+    const D: usize,
+    P,
+    InputProof,
+    OpenInput,
+    Observe,
+>(
+    params: &FriParameters<DurableFriMmcs<W, D, P>>,
+    base_mmcs: &DurableProfileMmcs<W, D, P>,
+    inputs: Vec<ScratchChallengeVector<W, D, P>>,
+    challenger: &mut ProfileChallengerFor<W, D, P>,
     log_global_max_height: usize,
     mut open_input: OpenInput,
     policy: &ResourcePolicyV1,
     observe: Observe,
-) -> Result<FriProof<ProfileChallenge, DurableFriMmcs<H, C>, Goldilocks, InputProof>>
+) -> Result<DurableFriProof<W, D, P, InputProof>>
 where
-    H: p3_symmetric::CryptographicHasher<Goldilocks, [Goldilocks; 4]>
-        + p3_symmetric::CryptographicHasher<
-            <Goldilocks as Field>::Packing,
-            [<Goldilocks as Field>::Packing; 4],
-        > + Clone
-        + Sync,
-    C: p3_symmetric::PseudoCompressionFunction<[Goldilocks; 4], 2>
-        + p3_symmetric::PseudoCompressionFunction<[<Goldilocks as Field>::Packing; 4], 2>
-        + Clone
-        + Sync,
+    P: DurableFieldProfile<W, D>,
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
     InputProof: Clone,
     OpenInput: FnMut(usize) -> InputProof,
-    Observe: FnMut(FriLayerCheckpoint<'_>, &ProfileChallenger) -> std::result::Result<(), String>,
+    Observe: FnMut(
+        FriLayerCheckpoint<'_, W, D, P>,
+        &ProfileChallengerFor<W, D, P>,
+    ) -> std::result::Result<(), String>,
 {
     prove_durable_fri_observed_batched(
         params,
@@ -513,30 +640,32 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove_durable_fri_observed_batched<H, C, InputProof, OpenInputs, Observe>(
-    params: &FriParameters<DurableFriMmcs<H, C>>,
-    base_mmcs: &DurableGoldilocksMmcs<H, C>,
-    inputs: Vec<ScratchChallengeVector>,
-    challenger: &mut ProfileChallenger,
+pub fn prove_durable_fri_observed_batched<
+    const W: usize,
+    const D: usize,
+    P,
+    InputProof,
+    OpenInputs,
+    Observe,
+>(
+    params: &FriParameters<DurableFriMmcs<W, D, P>>,
+    base_mmcs: &DurableProfileMmcs<W, D, P>,
+    inputs: Vec<ScratchChallengeVector<W, D, P>>,
+    challenger: &mut ProfileChallengerFor<W, D, P>,
     log_global_max_height: usize,
     mut open_inputs: OpenInputs,
     policy: &ResourcePolicyV1,
     mut observe: Observe,
-) -> Result<FriProof<ProfileChallenge, DurableFriMmcs<H, C>, Goldilocks, InputProof>>
+) -> Result<DurableFriProof<W, D, P, InputProof>>
 where
-    H: p3_symmetric::CryptographicHasher<Goldilocks, [Goldilocks; 4]>
-        + p3_symmetric::CryptographicHasher<
-            <Goldilocks as Field>::Packing,
-            [<Goldilocks as Field>::Packing; 4],
-        > + Clone
-        + Sync,
-    C: p3_symmetric::PseudoCompressionFunction<[Goldilocks; 4], 2>
-        + p3_symmetric::PseudoCompressionFunction<[<Goldilocks as Field>::Packing; 4], 2>
-        + Clone
-        + Sync,
+    P: DurableFieldProfile<W, D>,
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
     InputProof: Clone,
     OpenInputs: FnMut(&[usize]) -> std::result::Result<Vec<InputProof>, String>,
-    Observe: FnMut(FriLayerCheckpoint<'_>, &ProfileChallenger) -> std::result::Result<(), String>,
+    Observe: FnMut(
+        FriLayerCheckpoint<'_, W, D, P>,
+        &ProfileChallengerFor<W, D, P>,
+    ) -> std::result::Result<(), String>,
 {
     if inputs.is_empty()
         || params.num_queries == 0
@@ -572,33 +701,35 @@ where
 /// sampled. Prior MMCS prover data is reconstructed without observing or
 /// sampling the transcript again.
 #[allow(clippy::too_many_arguments)]
-pub fn resume_durable_fri_observed<H, C, InputProof, OpenInput, Observe>(
-    params: &FriParameters<DurableFriMmcs<H, C>>,
-    base_mmcs: &DurableGoldilocksMmcs<H, C>,
-    layers: Vec<ScratchChallengeVector>,
-    commitments: Vec<DurableFriCommitment>,
-    commit_pow_witnesses: Vec<Goldilocks>,
+pub fn resume_durable_fri_observed<
+    const W: usize,
+    const D: usize,
+    P,
+    InputProof,
+    OpenInput,
+    Observe,
+>(
+    params: &FriParameters<DurableFriMmcs<W, D, P>>,
+    base_mmcs: &DurableProfileMmcs<W, D, P>,
+    layers: Vec<ScratchChallengeVector<W, D, P>>,
+    commitments: Vec<DurableFriCommitment<W, D, P>>,
+    commit_pow_witnesses: Vec<P::Val>,
     log_arities: Vec<usize>,
-    challenger: &mut ProfileChallenger,
+    challenger: &mut ProfileChallengerFor<W, D, P>,
     log_global_max_height: usize,
     mut open_input: OpenInput,
     policy: &ResourcePolicyV1,
     observe: Observe,
-) -> Result<FriProof<ProfileChallenge, DurableFriMmcs<H, C>, Goldilocks, InputProof>>
+) -> Result<DurableFriProof<W, D, P, InputProof>>
 where
-    H: p3_symmetric::CryptographicHasher<Goldilocks, [Goldilocks; 4]>
-        + p3_symmetric::CryptographicHasher<
-            <Goldilocks as Field>::Packing,
-            [<Goldilocks as Field>::Packing; 4],
-        > + Clone
-        + Sync,
-    C: p3_symmetric::PseudoCompressionFunction<[Goldilocks; 4], 2>
-        + p3_symmetric::PseudoCompressionFunction<[<Goldilocks as Field>::Packing; 4], 2>
-        + Clone
-        + Sync,
+    P: DurableFieldProfile<W, D>,
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
     InputProof: Clone,
     OpenInput: FnMut(usize) -> InputProof,
-    Observe: FnMut(FriLayerCheckpoint<'_>, &ProfileChallenger) -> std::result::Result<(), String>,
+    Observe: FnMut(
+        FriLayerCheckpoint<'_, W, D, P>,
+        &ProfileChallengerFor<W, D, P>,
+    ) -> std::result::Result<(), String>,
 {
     resume_durable_fri_observed_batched(
         params,
@@ -616,33 +747,35 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn resume_durable_fri_observed_batched<H, C, InputProof, OpenInputs, Observe>(
-    params: &FriParameters<DurableFriMmcs<H, C>>,
-    base_mmcs: &DurableGoldilocksMmcs<H, C>,
-    layers: Vec<ScratchChallengeVector>,
-    commitments: Vec<DurableFriCommitment>,
-    commit_pow_witnesses: Vec<Goldilocks>,
+pub fn resume_durable_fri_observed_batched<
+    const W: usize,
+    const D: usize,
+    P,
+    InputProof,
+    OpenInputs,
+    Observe,
+>(
+    params: &FriParameters<DurableFriMmcs<W, D, P>>,
+    base_mmcs: &DurableProfileMmcs<W, D, P>,
+    layers: Vec<ScratchChallengeVector<W, D, P>>,
+    commitments: Vec<DurableFriCommitment<W, D, P>>,
+    commit_pow_witnesses: Vec<P::Val>,
     log_arities: Vec<usize>,
-    challenger: &mut ProfileChallenger,
+    challenger: &mut ProfileChallengerFor<W, D, P>,
     log_global_max_height: usize,
     mut open_inputs: OpenInputs,
     policy: &ResourcePolicyV1,
     mut observe: Observe,
-) -> Result<FriProof<ProfileChallenge, DurableFriMmcs<H, C>, Goldilocks, InputProof>>
+) -> Result<DurableFriProof<W, D, P, InputProof>>
 where
-    H: p3_symmetric::CryptographicHasher<Goldilocks, [Goldilocks; 4]>
-        + p3_symmetric::CryptographicHasher<
-            <Goldilocks as Field>::Packing,
-            [<Goldilocks as Field>::Packing; 4],
-        > + Clone
-        + Sync,
-    C: p3_symmetric::PseudoCompressionFunction<[Goldilocks; 4], 2>
-        + p3_symmetric::PseudoCompressionFunction<[<Goldilocks as Field>::Packing; 4], 2>
-        + Clone
-        + Sync,
+    P: DurableFieldProfile<W, D>,
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
     InputProof: Clone,
     OpenInputs: FnMut(&[usize]) -> std::result::Result<Vec<InputProof>, String>,
-    Observe: FnMut(FriLayerCheckpoint<'_>, &ProfileChallenger) -> std::result::Result<(), String>,
+    Observe: FnMut(
+        FriLayerCheckpoint<'_, W, D, P>,
+        &ProfileChallengerFor<W, D, P>,
+    ) -> std::result::Result<(), String>,
 {
     if layers.len() != commitments.len() + 1
         || commitments.len() != commit_pow_witnesses.len()
@@ -687,35 +820,37 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn continue_durable_fri_batched<H, C, InputProof, OpenInputs, Observe>(
-    params: &FriParameters<DurableFriMmcs<H, C>>,
-    base_mmcs: &DurableGoldilocksMmcs<H, C>,
-    mut input_iter: std::iter::Peekable<std::vec::IntoIter<ScratchChallengeVector>>,
-    mut folded: ScratchChallengeVector,
-    mut commits: Vec<DurableFriCommitment>,
-    mut data: Vec<DurableMerkleData<ChallengeArityBaseMatrix>>,
+fn continue_durable_fri_batched<
+    const W: usize,
+    const D: usize,
+    P,
+    InputProof,
+    OpenInputs,
+    Observe,
+>(
+    params: &FriParameters<DurableFriMmcs<W, D, P>>,
+    base_mmcs: &DurableProfileMmcs<W, D, P>,
+    mut input_iter: std::iter::Peekable<std::vec::IntoIter<ScratchChallengeVector<W, D, P>>>,
+    mut folded: ScratchChallengeVector<W, D, P>,
+    mut commits: Vec<DurableFriCommitment<W, D, P>>,
+    mut data: Vec<DurableMerkleData<W, D, P, ChallengeArityBaseMatrix<W, D, P>>>,
     mut log_arities: Vec<usize>,
-    mut commit_pow_witnesses: Vec<Goldilocks>,
-    challenger: &mut ProfileChallenger,
+    mut commit_pow_witnesses: Vec<P::Val>,
+    challenger: &mut ProfileChallengerFor<W, D, P>,
     log_global_max_height: usize,
     open_inputs: &mut OpenInputs,
     policy: &ResourcePolicyV1,
     observe: &mut Observe,
-) -> Result<FriProof<ProfileChallenge, DurableFriMmcs<H, C>, Goldilocks, InputProof>>
+) -> Result<DurableFriProof<W, D, P, InputProof>>
 where
-    H: p3_symmetric::CryptographicHasher<Goldilocks, [Goldilocks; 4]>
-        + p3_symmetric::CryptographicHasher<
-            <Goldilocks as Field>::Packing,
-            [<Goldilocks as Field>::Packing; 4],
-        > + Clone
-        + Sync,
-    C: p3_symmetric::PseudoCompressionFunction<[Goldilocks; 4], 2>
-        + p3_symmetric::PseudoCompressionFunction<[<Goldilocks as Field>::Packing; 4], 2>
-        + Clone
-        + Sync,
+    P: DurableFieldProfile<W, D>,
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
     InputProof: Clone,
     OpenInputs: FnMut(&[usize]) -> std::result::Result<Vec<InputProof>, String>,
-    Observe: FnMut(FriLayerCheckpoint<'_>, &ProfileChallenger) -> std::result::Result<(), String>,
+    Observe: FnMut(
+        FriLayerCheckpoint<'_, W, D, P>,
+        &ProfileChallengerFor<W, D, P>,
+    ) -> std::result::Result<(), String>,
 {
     let log_final_height = params.log_blowup + params.log_final_poly_len;
 
@@ -739,7 +874,7 @@ where
         challenger.observe(commit.clone());
         commits.push(commit);
         commit_pow_witnesses.push(challenger.grind(params.commit_proof_of_work_bits));
-        let beta: ProfileChallenge = challenger.sample_algebra_element();
+        let beta: P::Challenge = challenger.sample_algebra_element();
         let mut next = fold_binary_layer(&folded, beta, policy)?;
         if input_iter
             .peek()
@@ -769,14 +904,13 @@ where
     let final_len = params.final_poly_len();
     let mut final_evaluations = folded.try_read(0, final_len)?;
     reverse_slice_index_bits(&mut final_evaluations);
-    let final_dft = Radix2DFTSmallBatch::<Goldilocks>::default();
-    let final_poly =
-        <Radix2DFTSmallBatch<Goldilocks> as TwoAdicSubgroupDft<Goldilocks>>::idft_algebra::<
-            ProfileChallenge,
-        >(&final_dft, final_evaluations);
+    let final_dft = Radix2DFTSmallBatch::<P::Val>::default();
+    let final_poly = <Radix2DFTSmallBatch<P::Val> as TwoAdicSubgroupDft<P::Val>>::idft_algebra::<
+        P::Challenge,
+    >(&final_dft, final_evaluations);
     challenger.observe_algebra_slice(&final_poly);
     for &log_arity in &log_arities {
-        challenger.observe(Goldilocks::from_usize(log_arity));
+        challenger.observe(P::Val::from_usize(log_arity));
     }
     let query_pow_witness = challenger.grind(params.query_proof_of_work_bits);
     let query_indices: Vec<_> = (0..params.num_queries)
@@ -812,29 +946,36 @@ where
     })
 }
 
-fn add_scaled_layer(
-    current: &ScratchChallengeVector,
-    addition: &ScratchChallengeVector,
-    scale: ProfileChallenge,
+fn add_scaled_layer<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>(
+    current: &ScratchChallengeVector<W, D, P>,
+    addition: &ScratchChallengeVector<W, D, P>,
+    scale: P::Challenge,
     policy: &ResourcePolicyV1,
-) -> Result<ScratchChallengeVector> {
+) -> Result<ScratchChallengeVector<W, D, P>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     if current.len() != addition.len() {
         return Err(DurableFriError::InvalidShape);
     }
     let len = current.len();
-    preflight_layer(policy, len)?;
+    preflight_layer::<W, D, P>(policy, len)?;
     let job_dir = create_job_dir(&policy.scratch_dir)?;
     let result = (|| {
-        let mut output =
-            ScratchMatrixStore::<GoldilocksWord>::create(&job_dir, "fri-layer.bin", len as u64, 2)?;
-        let block_rows = policy.tile_rows(16, 1)?.min(len);
+        let mut output = ScratchMatrixStore::<P::Word>::create(
+            &job_dir,
+            "fri-layer.bin",
+            len as u64,
+            extension_degree::<W, D, P>(),
+        )?;
+        let block_rows = policy.tile_rows(challenge_bytes::<W, D, P>(), 1)?.min(len);
         let pool = worker_pool(policy)?;
         for row_start in (0..len).step_by(block_rows) {
             let row_count = (len - row_start).min(block_rows);
             let current_values = current.try_read(row_start, row_count)?;
             let addition_values = addition.try_read(row_start, row_count)?;
-            let mut combined = vec![ProfileChallenge::ZERO; row_count];
-            let combine = |(index, destination): (usize, &mut ProfileChallenge)| {
+            let mut combined = vec![P::Challenge::ZERO; row_count];
+            let combine = |(index, destination): (usize, &mut P::Challenge)| {
                 *destination = current_values[index] + scale * addition_values[index];
             };
             if let Some(pool) = &pool {
@@ -842,7 +983,11 @@ fn add_scaled_layer(
             } else {
                 combined.iter_mut().enumerate().for_each(combine);
             }
-            output.write_rows(row_start as u64, row_count, &flatten_challenges(&combined))?;
+            output.write_rows(
+                row_start as u64,
+                row_count,
+                &flatten_challenges::<W, D, P>(&combined),
+            )?;
         }
         output.finalize()?;
         Ok(ScratchChallengeVector::from_store(
@@ -857,15 +1002,22 @@ fn add_scaled_layer(
     result
 }
 
-pub(crate) fn bit_reverse_challenge_vector(
-    source: ScratchChallengeVector,
+pub(crate) fn bit_reverse_challenge_vector<
+    const W: usize,
+    const D: usize,
+    P: DurableFieldProfile<W, D>,
+>(
+    source: ScratchChallengeVector<W, D, P>,
     policy: &ResourcePolicyV1,
-) -> Result<ScratchChallengeVector> {
+) -> Result<ScratchChallengeVector<W, D, P>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     let len = source.len();
     if len == 0 || !len.is_power_of_two() {
         return Err(DurableFriError::InvalidShape);
     }
-    let bytes = (len as u64).saturating_mul(16);
+    let bytes = (len as u64).saturating_mul(challenge_bytes::<W, D, P>() as u64);
     policy.preflight_for_mode(
         ExecutionMode::Scratch,
         ResourceEstimate {
@@ -886,31 +1038,36 @@ pub(crate) fn bit_reverse_challenge_vector(
     let rows = 1usize << row_bits;
     let columns = 1usize << column_bits;
 
-    let columns_reversed = reverse_challenge_groups(&source, columns, column_bits, policy)?;
+    let columns_reversed =
+        reverse_challenge_groups::<W, D, P>(&source, columns, column_bits, policy)?;
     drop(source);
-    let transposed = transpose_challenge_grid(&columns_reversed, rows, columns, policy)?;
+    let transposed = transpose_challenge_grid::<W, D, P>(&columns_reversed, rows, columns, policy)?;
     drop(columns_reversed);
-    let output = reverse_challenge_groups(&transposed, rows, row_bits, policy)?;
+    let output = reverse_challenge_groups::<W, D, P>(&transposed, rows, row_bits, policy)?;
     drop(transposed);
     Ok(output)
 }
 
-fn reverse_challenge_groups(
-    source: &ScratchChallengeVector,
+fn reverse_challenge_groups<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>(
+    source: &ScratchChallengeVector<W, D, P>,
     group_rows: usize,
     bits: usize,
     policy: &ResourcePolicyV1,
-) -> Result<ScratchChallengeVector> {
+) -> Result<ScratchChallengeVector<W, D, P>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     let len = source.len();
     if group_rows == 0 || !len.is_multiple_of(group_rows) {
         return Err(DurableFriError::InvalidShape);
     }
+    let degree = extension_degree::<W, D, P>();
     let job_dir = create_job_dir(&policy.scratch_dir)?;
     let result = (|| {
         let mut store =
-            ScratchMatrixStore::<GoldilocksWord>::create(&job_dir, "fri-layer.bin", len as u64, 2)?;
-        let mut input = vec![GoldilocksWord::default(); group_rows * 2];
-        let mut output = vec![GoldilocksWord::default(); group_rows * 2];
+            ScratchMatrixStore::<P::Word>::create(&job_dir, "fri-layer.bin", len as u64, degree)?;
+        let mut input = vec![P::Word::default(); group_rows * degree];
+        let mut output = vec![P::Word::default(); group_rows * degree];
         for group_start in (0..len).step_by(group_rows) {
             source
                 .inner
@@ -918,8 +1075,8 @@ fn reverse_challenge_groups(
                 .read_rows(group_start as u64, group_rows, &mut input)?;
             for row in 0..group_rows {
                 let destination = reverse_low_bits(row, bits);
-                output[destination * 2..destination * 2 + 2]
-                    .copy_from_slice(&input[row * 2..row * 2 + 2]);
+                output[destination * degree..destination * degree + degree]
+                    .copy_from_slice(&input[row * degree..row * degree + degree]);
             }
             store.write_rows(group_start as u64, group_rows, &output)?;
         }
@@ -936,12 +1093,15 @@ fn reverse_challenge_groups(
     result
 }
 
-fn transpose_challenge_grid(
-    source: &ScratchChallengeVector,
+fn transpose_challenge_grid<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>(
+    source: &ScratchChallengeVector<W, D, P>,
     rows: usize,
     columns: usize,
     policy: &ResourcePolicyV1,
-) -> Result<ScratchChallengeVector> {
+) -> Result<ScratchChallengeVector<W, D, P>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     const BUFFER_BYTES: usize = 8 * 1024 * 1024;
     let len = rows
         .checked_mul(columns)
@@ -949,9 +1109,11 @@ fn transpose_challenge_grid(
     if source.len() != len {
         return Err(DurableFriError::InvalidShape);
     }
-    let fixed_items = BUFFER_BYTES / (2 * 2 * GoldilocksWord::WIDTH);
+    let degree = extension_degree::<W, D, P>();
+    let word_width = <P::Word as CanonicalElement>::WIDTH;
+    let fixed_items = BUFFER_BYTES / (2 * degree * word_width);
     let max_items = policy
-        .tile_rows(GoldilocksWord::WIDTH, 4)?
+        .tile_rows(word_width, 2 * degree)?
         .min(fixed_items)
         .max(1);
     let max_side = rows.min(columns);
@@ -968,35 +1130,35 @@ fn transpose_challenge_grid(
     let job_dir = create_job_dir(&policy.scratch_dir)?;
     let result = (|| {
         let mut store =
-            ScratchMatrixStore::<GoldilocksWord>::create(&job_dir, "fri-layer.bin", len as u64, 2)?;
-        let mut input = vec![GoldilocksWord::default(); tile_side * tile_side * 2];
-        let mut output = vec![GoldilocksWord::default(); tile_side * tile_side * 2];
+            ScratchMatrixStore::<P::Word>::create(&job_dir, "fri-layer.bin", len as u64, degree)?;
+        let mut input = vec![P::Word::default(); tile_side * tile_side * degree];
+        let mut output = vec![P::Word::default(); tile_side * tile_side * degree];
         for row_start in (0..rows).step_by(tile_side) {
             let row_count = (rows - row_start).min(tile_side);
             for column_start in (0..columns).step_by(tile_side) {
                 let column_count = (columns - column_start).min(tile_side);
                 for row in 0..row_count {
-                    let destination = row * column_count * 2;
+                    let destination = row * column_count * degree;
                     source.inner.store.read_rows(
                         ((row_start + row) * columns + column_start) as u64,
                         column_count,
-                        &mut input[destination..destination + column_count * 2],
+                        &mut input[destination..destination + column_count * degree],
                     )?;
                 }
                 for row in 0..row_count {
                     for column in 0..column_count {
-                        let source_offset = (row * column_count + column) * 2;
-                        let destination_offset = (column * row_count + row) * 2;
-                        output[destination_offset..destination_offset + 2]
-                            .copy_from_slice(&input[source_offset..source_offset + 2]);
+                        let source_offset = (row * column_count + column) * degree;
+                        let destination_offset = (column * row_count + row) * degree;
+                        output[destination_offset..destination_offset + degree]
+                            .copy_from_slice(&input[source_offset..source_offset + degree]);
                     }
                 }
                 for column in 0..column_count {
-                    let source_offset = column * row_count * 2;
+                    let source_offset = column * row_count * degree;
                     store.write_rows(
                         ((column_start + column) * rows + row_start) as u64,
                         row_count,
-                        &output[source_offset..source_offset + row_count * 2],
+                        &output[source_offset..source_offset + row_count * degree],
                     )?;
                 }
             }
@@ -1015,22 +1177,14 @@ fn transpose_challenge_grid(
 }
 
 #[allow(clippy::type_complexity)]
-fn answer_queries_batched<H, C>(
-    base_mmcs: &DurableGoldilocksMmcs<H, C>,
-    data: &[DurableMerkleData<ChallengeArityBaseMatrix>],
+fn answer_queries_batched<const W: usize, const D: usize, P>(
+    base_mmcs: &DurableProfileMmcs<W, D, P>,
+    data: &[DurableMerkleData<W, D, P, ChallengeArityBaseMatrix<W, D, P>>],
     start_indices: &[usize],
-) -> Result<Vec<Vec<CommitPhaseProofStep<ProfileChallenge, DurableFriMmcs<H, C>>>>>
+) -> Result<Vec<Vec<CommitPhaseProofStep<P::Challenge, DurableFriMmcs<W, D, P>>>>>
 where
-    H: p3_symmetric::CryptographicHasher<Goldilocks, [Goldilocks; 4]>
-        + p3_symmetric::CryptographicHasher<
-            <Goldilocks as Field>::Packing,
-            [<Goldilocks as Field>::Packing; 4],
-        > + Clone
-        + Sync,
-    C: p3_symmetric::PseudoCompressionFunction<[Goldilocks; 4], 2>
-        + p3_symmetric::PseudoCompressionFunction<[<Goldilocks as Field>::Packing; 4], 2>
-        + Clone
-        + Sync,
+    P: DurableFieldProfile<W, D>,
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
 {
     let mut answers = vec![Vec::with_capacity(data.len()); start_indices.len()];
     let mut current_indices = start_indices.to_vec();
@@ -1049,9 +1203,12 @@ where
             let (base_rows, opening_proof) = openings[position].clone().unpack();
             let mut rows: Vec<_> = base_rows
                 .into_iter()
-                .map(ProfileChallenge::reconstitute_from_base)
+                .map(P::Challenge::reconstitute_from_base)
                 .collect();
             let row = rows.pop().ok_or(DurableFriError::InvalidShape)?;
+            // The committed arity is 2 (binary folding), independent of the
+            // extension degree: each group holds exactly the value and its
+            // sibling.
             if !rows.is_empty() || row.len() != 2 {
                 return Err(DurableFriError::InvalidShape);
             }
@@ -1082,7 +1239,12 @@ fn reverse_slice_index_bits<T>(values: &mut [T]) {
     }
 }
 
-fn flatten_challenges(values: &[ProfileChallenge]) -> Vec<GoldilocksWord> {
+fn flatten_challenges<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>(
+    values: &[P::Challenge],
+) -> Vec<P::Word>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     values
         .iter()
         .flat_map(|value| {
@@ -1090,13 +1252,19 @@ fn flatten_challenges(values: &[ProfileChallenge]) -> Vec<GoldilocksWord> {
                 .as_basis_coefficients_slice()
                 .iter()
                 .copied()
-                .map(GoldilocksWord)
+                .map(Into::into)
         })
         .collect()
 }
 
-fn preflight_layer(policy: &ResourcePolicyV1, len: usize) -> Result<()> {
-    let bytes = (len as u64).saturating_mul(16);
+fn preflight_layer<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>(
+    policy: &ResourcePolicyV1,
+    len: usize,
+) -> Result<()>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    let bytes = (len as u64).saturating_mul(challenge_bytes::<W, D, P>() as u64);
     policy.preflight_for_mode(
         ExecutionMode::Scratch,
         ResourceEstimate {
@@ -1126,14 +1294,29 @@ fn create_job_dir(root: &Path) -> Result<PathBuf> {
     create_unique_job_dir(root, "fri-layer", &LAYER_COUNTER).map_err(Into::into)
 }
 
+/// Goldilocks pins, so `bounded_prover`/`opening` keep naming exactly the
+/// types they named before this module became generic.
+pub mod goldilocks {
+    use crate::profile::GoldilocksProfile;
+
+    pub type ScratchChallengeVector = super::ScratchChallengeVector<8, 4, GoldilocksProfile>;
+    pub type ChallengeArityMatrix = super::ChallengeArityMatrix<8, 4, GoldilocksProfile>;
+    pub type DurableFriCommitment = super::DurableFriCommitment<8, 4, GoldilocksProfile>;
+    pub type FriLayerCheckpoint<'a> = super::FriLayerCheckpoint<'a, 8, 4, GoldilocksProfile>;
+}
+
 #[cfg(test)]
 mod tests {
+    use super::goldilocks::ScratchChallengeVector;
     use super::*;
     use crate::checkpoint::profile_permutation;
-    use crate::mmcs::DurableGoldilocksMmcs;
+    use crate::mmcs::goldilocks::DurableGoldilocksMmcs;
+    use crate::ProfileChallenger;
     use hc_stream::{CheckpointPolicy, ResourceMode};
     use p3_commit::{BatchOpening, ExtensionMmcs, Mmcs};
+    use p3_field::Field;
     use p3_fri::{FriFoldingStrategy, TwoAdicFriFolding, TwoAdicFriFoldingForMmcs};
+    use p3_goldilocks::Goldilocks;
     use p3_matrix::dense::RowMajorMatrix;
     use p3_merkle_tree::MerkleTreeMmcs;
     use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
@@ -1265,9 +1448,8 @@ mod tests {
                 batch_calls.set(batch_calls.get() + 1);
                 assert!(indices.windows(2).all(|pair| pair[0] < pair[1]));
                 Ok(vec![
-                    Vec::<
-                        BatchOpening<Goldilocks, DurableGoldilocksMmcs<Hash, Compression>>,
-                    >::new();
+                    Vec::<BatchOpening<Goldilocks, DurableGoldilocksMmcs>>::new(
+                    );
                     indices.len()
                 ])
             },

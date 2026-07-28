@@ -1,3 +1,4 @@
+use crate::profile::DurableFieldProfile;
 use crate::scratch::create_unique_job_dir;
 use hc_stream::{
     ArtifactDigest, BlockMatrix, CanonicalElement, ExecutionMode, MatrixStore, PhaseEstimate,
@@ -12,9 +13,25 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use rayon::prelude::*;
 use std::fs;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+
+/// The durable scratch element width, in BYTES PER ELEMENT, for a profile.
+///
+/// Deliberately spelled out rather than written `8` inline: this is
+/// `hc_stream::CanonicalElement::WIDTH` (8 for Goldilocks, 4 for BabyBear) and
+/// is a completely different quantity from the Poseidon2 permutation width
+/// `PERM_WIDTH` (8 for Goldilocks, 16 for BabyBear), which only ever appears
+/// here as the first const generic parameter. Conflating them would corrupt
+/// the on-SSD layout.
+const fn word_bytes<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>() -> usize
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    <P::Word as CanonicalElement>::WIDTH
+}
 
 const GOLDILOCKS_MODULUS: u64 = 0xffff_ffff_0000_0001;
 /// BabyBear's prime, 2^31 - 2^27 + 1. Matches `BabyBearParameters::PRIME`
@@ -120,14 +137,20 @@ impl CanonicalElement for BabyBearWord {
     }
 }
 
-struct ManagedStore {
-    store: Mutex<Option<ScratchMatrixStore<GoldilocksWord>>>,
+struct ManagedStore<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    store: Mutex<Option<ScratchMatrixStore<P::Word>>>,
     path: PathBuf,
     job_dir: PathBuf,
     remove_on_drop: AtomicBool,
 }
 
-impl Drop for ManagedStore {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Drop for ManagedStore<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn drop(&mut self) {
         if !self.remove_on_drop.load(Ordering::Relaxed) {
             return;
@@ -142,16 +165,38 @@ impl Drop for ManagedStore {
 }
 
 /// A Plonky3 matrix backed by a checksummed, owner-only scratch artifact.
-#[derive(Clone)]
-pub struct ScratchPlonky3Matrix {
-    inner: Arc<ManagedStore>,
+pub struct ScratchPlonky3Matrix<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    inner: Arc<ManagedStore<W, D, P>>,
     width: usize,
     height: usize,
 }
 
-impl ScratchPlonky3Matrix {
+// Hand-written so the bound stays `P: DurableFieldProfile` instead of the
+// `P: Clone` that `#[derive(Clone)]` would add; an `Arc` clone never touches
+// `P` anyway.
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Clone
+    for ScratchPlonky3Matrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> ScratchPlonky3Matrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn new(
-        store: ScratchMatrixStore<GoldilocksWord>,
+        store: ScratchMatrixStore<P::Word>,
         width: usize,
         height: usize,
         job_dir: PathBuf,
@@ -188,16 +233,16 @@ impl ScratchPlonky3Matrix {
 
     pub fn reopen(path: &Path, expected: ArtifactDigest) -> Result<Self> {
         let job_dir = path.parent().ok_or(StreamError::UnsafePath)?.to_path_buf();
-        let store = ScratchMatrixStore::<GoldilocksWord>::reopen(path, expected)?;
+        let store = ScratchMatrixStore::<P::Word>::reopen(path, expected)?;
         let height = usize::try_from(expected.rows).map_err(|_| DftError::SizeOverflow)?;
         Ok(Self::new(store, expected.columns, height, job_dir, false))
     }
 
-    pub fn try_row(&self, row: usize) -> Result<Vec<Goldilocks>> {
+    pub fn try_row(&self, row: usize) -> Result<Vec<P::Val>> {
         self.try_rows(row, 1)
     }
 
-    pub fn try_rows(&self, row_start: usize, row_count: usize) -> Result<Vec<Goldilocks>> {
+    pub fn try_rows(&self, row_start: usize, row_count: usize) -> Result<Vec<P::Val>> {
         if row_start
             .checked_add(row_count)
             .is_none_or(|end| end > self.height)
@@ -212,13 +257,17 @@ impl ScratchPlonky3Matrix {
         let store = guard
             .as_ref()
             .ok_or(StreamError::Corrupt("scratch matrix was released"))?;
-        let mut words = vec![GoldilocksWord::default(); self.width * row_count];
+        let mut words = vec![P::Word::default(); self.width * row_count];
         store.read_rows(row_start as u64, row_count, &mut words)?;
         Ok(words.into_iter().map(Into::into).collect())
     }
 }
 
-impl Matrix<Goldilocks> for ScratchPlonky3Matrix {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Matrix<P::Val>
+    for ScratchPlonky3Matrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn width(&self) -> usize {
         self.width
     }
@@ -230,7 +279,7 @@ impl Matrix<Goldilocks> for ScratchPlonky3Matrix {
     unsafe fn row_unchecked(
         &self,
         row: usize,
-    ) -> impl IntoIterator<Item = Goldilocks, IntoIter = impl Iterator<Item = Goldilocks> + Send + Sync>
+    ) -> impl IntoIterator<Item = P::Val, IntoIter = impl Iterator<Item = P::Val> + Send + Sync>
     {
         self.try_row(row)
             .expect("validated scratch row must remain readable")
@@ -238,7 +287,11 @@ impl Matrix<Goldilocks> for ScratchPlonky3Matrix {
     }
 }
 
-impl BitReversibleMatrix<Goldilocks> for ScratchPlonky3Matrix {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> BitReversibleMatrix<P::Val>
+    for ScratchPlonky3Matrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     type BitRev = BitReversedMatrixView<Self>;
 
     fn bit_reverse_rows(self) -> Self::BitRev {
@@ -247,18 +300,38 @@ impl BitReversibleMatrix<Goldilocks> for ScratchPlonky3Matrix {
 }
 
 /// Result matrix selected by `ResourcePolicyV1`.
-#[derive(Clone)]
-pub enum ResourceBoundedMatrix {
-    Memory(RowMajorMatrix<Goldilocks>),
-    Scratch(ScratchPlonky3Matrix),
+pub enum ResourceBoundedMatrix<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    Memory(RowMajorMatrix<P::Val>),
+    Scratch(ScratchPlonky3Matrix<W, D, P>),
 }
 
-impl ResourceBoundedMatrix {
-    pub fn try_row(&self, row: usize) -> Result<Vec<Goldilocks>> {
+// Hand-written for the same reason as `ScratchPlonky3Matrix`'s: `#[derive]`
+// would demand `P: Clone` even though no `P` value is ever stored.
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Clone
+    for ResourceBoundedMatrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    fn clone(&self) -> Self {
+        match self {
+            Self::Memory(matrix) => Self::Memory(matrix.clone()),
+            Self::Scratch(matrix) => Self::Scratch(matrix.clone()),
+        }
+    }
+}
+
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> ResourceBoundedMatrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    pub fn try_row(&self, row: usize) -> Result<Vec<P::Val>> {
         self.try_rows(row, 1)
     }
 
-    pub fn try_rows(&self, row_start: usize, row_count: usize) -> Result<Vec<Goldilocks>> {
+    pub fn try_rows(&self, row_start: usize, row_count: usize) -> Result<Vec<P::Val>> {
         match self {
             Self::Memory(matrix) => {
                 let end = row_start
@@ -306,7 +379,11 @@ impl ResourceBoundedMatrix {
     }
 }
 
-impl Matrix<Goldilocks> for ResourceBoundedMatrix {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Matrix<P::Val>
+    for ResourceBoundedMatrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn width(&self) -> usize {
         match self {
             Self::Memory(matrix) => matrix.width(),
@@ -324,7 +401,7 @@ impl Matrix<Goldilocks> for ResourceBoundedMatrix {
     unsafe fn row_unchecked(
         &self,
         row: usize,
-    ) -> impl IntoIterator<Item = Goldilocks, IntoIter = impl Iterator<Item = Goldilocks> + Send + Sync>
+    ) -> impl IntoIterator<Item = P::Val, IntoIter = impl Iterator<Item = P::Val> + Send + Sync>
     {
         self.try_row(row)
             .expect("validated resource-bounded row must remain readable")
@@ -332,7 +409,11 @@ impl Matrix<Goldilocks> for ResourceBoundedMatrix {
     }
 }
 
-impl BlockMatrix<GoldilocksWord> for ResourceBoundedMatrix {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> BlockMatrix<P::Word>
+    for ResourceBoundedMatrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn rows(&self) -> u64 {
         self.height() as u64
     }
@@ -345,7 +426,7 @@ impl BlockMatrix<GoldilocksWord> for ResourceBoundedMatrix {
         &self,
         row_start: u64,
         row_count: usize,
-        output: &mut [GoldilocksWord],
+        output: &mut [P::Word],
     ) -> hc_stream::Result<()> {
         let row_start = usize::try_from(row_start).map_err(|_| StreamError::OutOfBounds)?;
         let values = self
@@ -358,13 +439,17 @@ impl BlockMatrix<GoldilocksWord> for ResourceBoundedMatrix {
             return Err(StreamError::OutOfBounds);
         }
         for (slot, value) in output.iter_mut().zip(values) {
-            *slot = GoldilocksWord(value);
+            *slot = value.into();
         }
         Ok(())
     }
 }
 
-impl BitReversibleMatrix<Goldilocks> for ResourceBoundedMatrix {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> BitReversibleMatrix<P::Val>
+    for ResourceBoundedMatrix<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     type BitRev = BitReversedMatrixView<Self>;
 
     fn bit_reverse_rows(self) -> Self::BitRev {
@@ -377,12 +462,48 @@ impl BitReversibleMatrix<Goldilocks> for ResourceBoundedMatrix {
 /// Plonky3 0.6.1's public DFT trait still owns a `RowMajorMatrix`; that input
 /// is included in preflight and dropped after ingestion. `try_dft_block_matrix`
 /// is the fully block-readable entry point proposed for upstream integration.
-#[derive(Clone, Debug)]
-pub struct ResourceBoundedDft {
+pub struct ResourceBoundedDft<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     policy: ResourcePolicyV1,
+    profile: PhantomData<P>,
 }
 
-impl Default for ResourceBoundedDft {
+// Hand-written so neither impl demands `P: Clone`/`P: Debug`; the struct holds
+// no `P` value, only a marker.
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Clone
+    for ResourceBoundedDft<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            policy: self.policy.clone(),
+            profile: PhantomData,
+        }
+    }
+}
+
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> std::fmt::Debug
+    for ResourceBoundedDft<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ResourceBoundedDft")
+            .field("policy", &self.policy)
+            .field("field", &P::FIELD_NAME)
+            .finish()
+    }
+}
+
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Default
+    for ResourceBoundedDft<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn default() -> Self {
         Self {
             policy: ResourcePolicyV1 {
@@ -393,14 +514,21 @@ impl Default for ResourceBoundedDft {
                 max_threads: 1,
                 checkpoint_policy: hc_stream::CheckpointPolicy::DeleteOnSuccess,
             },
+            profile: PhantomData,
         }
     }
 }
 
-impl ResourceBoundedDft {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> ResourceBoundedDft<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     pub fn new(policy: ResourcePolicyV1) -> Result<Self> {
         policy.validate()?;
-        Ok(Self { policy })
+        Ok(Self {
+            policy,
+            profile: PhantomData,
+        })
     }
 
     pub fn resource_policy(&self) -> &ResourcePolicyV1 {
@@ -408,10 +536,18 @@ impl ResourceBoundedDft {
     }
 
     pub fn estimate_memory(&self, height: usize, width: usize) -> Result<ResourceEstimate> {
+        // `word_bytes` is 8 for Goldilocks, so this is bit-identical to the
+        // literal `8` it replaces; it is a per-element field width, unlike the
+        // fixed 8 MiB slack term below.
+        let field_bytes = word_bytes::<W, D, P>() as u64;
         let elements = height.checked_mul(width).ok_or(DftError::SizeOverflow)? as u64;
-        let artifact_bytes = elements.checked_mul(8).ok_or(DftError::SizeOverflow)?;
-        let twiddle_bytes = (height as u64).saturating_div(2).saturating_mul(8);
-        let row_buffers = (width as u64).saturating_mul(8).saturating_mul(4);
+        let artifact_bytes = elements
+            .checked_mul(field_bytes)
+            .ok_or(DftError::SizeOverflow)?;
+        let twiddle_bytes = (height as u64)
+            .saturating_div(2)
+            .saturating_mul(field_bytes);
+        let row_buffers = (width as u64).saturating_mul(field_bytes).saturating_mul(4);
         Ok(ResourceEstimate {
             peak_resident_bytes: artifact_bytes
                 .saturating_add(twiddle_bytes)
@@ -429,12 +565,11 @@ impl ResourceBoundedDft {
     }
 
     /// `field_bytes` is the per-element byte width to cost the transform at.
-    /// Real execution through this type only ever moves `GoldilocksWord`
-    /// values, so every caller that actually runs the DFT (as opposed to
-    /// estimating a hypothetical configuration) must pass
-    /// `GoldilocksWord::WIDTH as u64`. `estimate_params::estimate_from_params`
-    /// is the one caller that passes a caller-declared width to price fields
-    /// TinyZKP does not execute.
+    /// Real execution through this type only ever moves `P::Word` values, so
+    /// every caller that actually runs the DFT (as opposed to estimating a
+    /// hypothetical configuration) must pass `P::Word::WIDTH as u64`.
+    /// `estimate_params::estimate_from_params` is the one caller that passes a
+    /// caller-declared width to price fields TinyZKP does not execute.
     pub fn estimate_scratch(
         &self,
         height: usize,
@@ -485,8 +620,8 @@ impl ResourceBoundedDft {
 
     pub fn try_dft_batch(
         &self,
-        matrix: RowMajorMatrix<Goldilocks>,
-    ) -> Result<ResourceBoundedMatrix> {
+        matrix: RowMajorMatrix<P::Val>,
+    ) -> Result<ResourceBoundedMatrix<W, D, P>> {
         let height = matrix.height();
         let width = matrix.width();
         self.validate_shape(height, width)?;
@@ -496,13 +631,13 @@ impl ResourceBoundedDft {
         let estimate = match selected {
             ExecutionMode::Memory => self.estimate_memory(height, width)?,
             ExecutionMode::Scratch => {
-                self.estimate_scratch(height, width, true, GoldilocksWord::WIDTH as u64)?
+                self.estimate_scratch(height, width, true, word_bytes::<W, D, P>() as u64)?
             }
         };
         self.policy.preflight_for_mode(selected, estimate)?;
         if selected == ExecutionMode::Memory {
             return Ok(ResourceBoundedMatrix::Memory(
-                Radix2Dit::<Goldilocks>::default().dft_batch(matrix),
+                Radix2Dit::<P::Val>::default().dft_batch(matrix),
             ));
         }
         let job_dir = create_job_dir(&self.policy.scratch_dir)?;
@@ -520,7 +655,7 @@ impl ResourceBoundedDft {
                         .checked_add(row_count.checked_mul(width).ok_or(DftError::SizeOverflow)?)
                         .ok_or(DftError::SizeOverflow)?;
                     for (slot, value) in output.iter_mut().zip(&matrix.values[start..end]) {
-                        *slot = GoldilocksWord(*value);
+                        *slot = (*value).into();
                     }
                     Ok(())
                 },
@@ -536,10 +671,10 @@ impl ResourceBoundedDft {
         result
     }
 
-    pub fn try_dft_block_matrix<M: BlockMatrix<GoldilocksWord>>(
+    pub fn try_dft_block_matrix<M: BlockMatrix<P::Word>>(
         &self,
         matrix: &M,
-    ) -> Result<ResourceBoundedMatrix> {
+    ) -> Result<ResourceBoundedMatrix<W, D, P>> {
         let height = usize::try_from(matrix.rows()).map_err(|_| DftError::SizeOverflow)?;
         let width = matrix.columns();
         self.validate_shape(height, width)?;
@@ -549,17 +684,17 @@ impl ResourceBoundedDft {
         let estimate = match selected {
             ExecutionMode::Memory => self.estimate_memory(height, width)?,
             ExecutionMode::Scratch => {
-                self.estimate_scratch(height, width, false, GoldilocksWord::WIDTH as u64)?
+                self.estimate_scratch(height, width, false, word_bytes::<W, D, P>() as u64)?
             }
         };
         self.policy.preflight_for_mode(selected, estimate)?;
         if selected == ExecutionMode::Memory {
             let elements = height.checked_mul(width).ok_or(DftError::SizeOverflow)?;
-            let mut words = vec![GoldilocksWord::default(); elements];
+            let mut words = vec![P::Word::default(); elements];
             matrix.read_rows(0, height, &mut words)?;
             let values = words.into_iter().map(Into::into).collect();
             return Ok(ResourceBoundedMatrix::Memory(
-                Radix2Dit::<Goldilocks>::default().dft_batch(RowMajorMatrix::new(values, width)),
+                Radix2Dit::<P::Val>::default().dft_batch(RowMajorMatrix::new(values, width)),
             ));
         }
         let job_dir = create_job_dir(&self.policy.scratch_dir)?;
@@ -589,10 +724,10 @@ impl ResourceBoundedDft {
 
     /// Inverse transform over a caller-buffered matrix. This is the first half
     /// of an external-memory LDE and avoids reconstructing the trace in a Vec.
-    pub fn try_idft_block_matrix<M: BlockMatrix<GoldilocksWord>>(
+    pub fn try_idft_block_matrix<M: BlockMatrix<P::Word>>(
         &self,
         matrix: &M,
-    ) -> Result<ResourceBoundedMatrix> {
+    ) -> Result<ResourceBoundedMatrix<W, D, P>> {
         let height = usize::try_from(matrix.rows()).map_err(|_| DftError::SizeOverflow)?;
         let width = matrix.columns();
         self.validate_shape(height, width)?;
@@ -602,17 +737,17 @@ impl ResourceBoundedDft {
         let estimate = match selected {
             ExecutionMode::Memory => self.estimate_memory(height, width)?,
             ExecutionMode::Scratch => {
-                self.estimate_scratch(height, width, false, GoldilocksWord::WIDTH as u64)?
+                self.estimate_scratch(height, width, false, word_bytes::<W, D, P>() as u64)?
             }
         };
         self.policy.preflight_for_mode(selected, estimate)?;
         if selected == ExecutionMode::Memory {
             let elements = height.checked_mul(width).ok_or(DftError::SizeOverflow)?;
-            let mut words = vec![GoldilocksWord::default(); elements];
+            let mut words = vec![P::Word::default(); elements];
             matrix.read_rows(0, height, &mut words)?;
             let values = words.into_iter().map(Into::into).collect();
             return Ok(ResourceBoundedMatrix::Memory(
-                Radix2Dit::<Goldilocks>::default().idft_batch(RowMajorMatrix::new(values, width)),
+                Radix2Dit::<P::Val>::default().idft_batch(RowMajorMatrix::new(values, width)),
             ));
         }
         let job_dir = create_job_dir(&self.policy.scratch_dir)?;
@@ -643,12 +778,12 @@ impl ResourceBoundedDft {
     /// Compute a coset LDE from a block-readable evaluation matrix. The
     /// coefficient and padded-evaluation stores are released before returning;
     /// the result remains compatible with Plonky3's ordinary DFT output order.
-    pub fn try_coset_lde_block_matrix<M: BlockMatrix<GoldilocksWord>>(
+    pub fn try_coset_lde_block_matrix<M: BlockMatrix<P::Word>>(
         &self,
         matrix: &M,
         log_blowup: usize,
-        shift: Goldilocks,
-    ) -> Result<ResourceBoundedMatrix> {
+        shift: P::Val,
+    ) -> Result<ResourceBoundedMatrix<W, D, P>> {
         let height = usize::try_from(matrix.rows()).map_err(|_| DftError::SizeOverflow)?;
         let width = matrix.columns();
         self.validate_shape(height, width)?;
@@ -661,29 +796,29 @@ impl ResourceBoundedDft {
         let coefficients = self.try_idft_block_matrix(matrix)?;
         let staging_dir = create_job_dir(&self.policy.scratch_dir)?;
         let result = (|| {
-            let mut padded = ScratchMatrixStore::<GoldilocksWord>::create(
+            let mut padded = ScratchMatrixStore::<P::Word>::create(
                 &staging_dir,
                 "coset-coefficients.bin",
                 lde_height as u64,
                 width,
             )?;
-            let tile_rows = self.policy.tile_rows(8, width)?.min(height);
-            let mut power = Goldilocks::ONE;
+            let tile_rows = self
+                .policy
+                .tile_rows(word_bytes::<W, D, P>(), width)?
+                .min(height);
+            let mut power = P::Val::ONE;
             for row_start in (0..height).step_by(tile_rows) {
                 let row_count = (height - row_start).min(tile_rows);
-                let mut values: Vec<_> = coefficients
-                    .try_rows(row_start, row_count)?
-                    .into_iter()
-                    .map(GoldilocksWord)
-                    .collect();
+                let mut values: Vec<P::Val> = coefficients.try_rows(row_start, row_count)?;
                 for row in 0..row_count {
                     let start = row * width;
                     for value in &mut values[start..start + width] {
-                        value.0 *= power;
+                        *value *= power;
                     }
                     power *= shift;
                 }
-                padded.write_rows(row_start as u64, row_count, &values)?;
+                let words: Vec<P::Word> = values.into_iter().map(Into::into).collect();
+                padded.write_rows(row_start as u64, row_count, &words)?;
             }
             padded.finalize()?;
             drop(coefficients);
@@ -713,14 +848,14 @@ impl ResourceBoundedDft {
 
     fn finish_four_step(
         &self,
-        current: ScratchMatrixStore<GoldilocksWord>,
+        current: ScratchMatrixStore<P::Word>,
         height: usize,
         width: usize,
         job_dir: &Path,
         inverse: bool,
-    ) -> Result<ScratchPlonky3Matrix> {
+    ) -> Result<ScratchPlonky3Matrix<W, D, P>> {
         let (first_factor, second_factor) = four_step_factors(height);
-        let mut root = Goldilocks::two_adic_generator(height.trailing_zeros() as usize);
+        let mut root = P::Val::two_adic_generator(height.trailing_zeros() as usize);
         if inverse {
             root = root.inverse();
         }
@@ -781,21 +916,17 @@ impl ResourceBoundedDft {
     #[allow(clippy::too_many_arguments)]
     fn sub_fft_stage(
         &self,
-        source: ScratchMatrixStore<GoldilocksWord>,
+        source: ScratchMatrixStore<P::Word>,
         job_dir: &Path,
         output_name: &str,
         group_count: usize,
         group_len: usize,
         width: usize,
-        twiddle_root: Option<Goldilocks>,
+        twiddle_root: Option<P::Val>,
         inverse: bool,
-    ) -> Result<ScratchMatrixStore<GoldilocksWord>> {
-        let mut output = ScratchMatrixStore::<GoldilocksWord>::create(
-            job_dir,
-            output_name,
-            source.rows(),
-            width,
-        )?;
+    ) -> Result<ScratchMatrixStore<P::Word>> {
+        let mut output =
+            ScratchMatrixStore::<P::Word>::create(job_dir, output_name, source.rows(), width)?;
         let group_elements = group_len.checked_mul(width).ok_or(DftError::SizeOverflow)?;
         let workers = self.sub_fft_workers(group_count, group_len, width)?;
         let pool = (workers > 1)
@@ -806,7 +937,7 @@ impl ResourceBoundedDft {
                     .map_err(|_| DftError::InvalidMatrix("failed to create bounded DFT workers"))
             })
             .transpose()?;
-        let mut batches = vec![vec![GoldilocksWord::default(); group_elements]; workers];
+        let mut batches = vec![vec![P::Word::default(); group_elements]; workers];
         for batch_start in (0..group_count).step_by(workers) {
             let batch_count = (group_count - batch_start).min(workers);
             for (offset, words) in batches[..batch_count].iter_mut().enumerate() {
@@ -814,8 +945,8 @@ impl ResourceBoundedDft {
                 let row_start = group.checked_mul(group_len).ok_or(DftError::SizeOverflow)?;
                 source.read_rows(row_start as u64, group_len, words)?;
             }
-            let transform = |(offset, words): (usize, &mut Vec<GoldilocksWord>)| {
-                transform_sub_fft_group(
+            let transform = |(offset, words): (usize, &mut Vec<P::Word>)| {
+                transform_sub_fft_group::<W, D, P>(
                     words,
                     batch_start + offset,
                     group_len,
@@ -852,7 +983,7 @@ impl ResourceBoundedDft {
     fn sub_fft_workers(&self, group_count: usize, group_len: usize, width: usize) -> Result<usize> {
         let bytes_per_worker = group_len
             .checked_mul(width)
-            .and_then(|elements| elements.checked_mul(GoldilocksWord::WIDTH))
+            .and_then(|elements| elements.checked_mul(word_bytes::<W, D, P>()))
             .and_then(|bytes| bytes.checked_mul(3))
             .ok_or(DftError::SizeOverflow)?;
         let memory_workers = usize::try_from(
@@ -899,13 +1030,13 @@ impl ResourceBoundedDft {
 
     fn transpose_store(
         &self,
-        source: ScratchMatrixStore<GoldilocksWord>,
+        source: ScratchMatrixStore<P::Word>,
         job_dir: &Path,
         output_name: &str,
         outer: usize,
         inner: usize,
         width: usize,
-    ) -> Result<ScratchMatrixStore<GoldilocksWord>> {
+    ) -> Result<ScratchMatrixStore<P::Word>> {
         let mut output = self.transpose_from_reader(
             job_dir,
             output_name,
@@ -931,25 +1062,21 @@ impl ResourceBoundedDft {
         inner: usize,
         width: usize,
         mut read_rows: R,
-    ) -> Result<ScratchMatrixStore<GoldilocksWord>>
+    ) -> Result<ScratchMatrixStore<P::Word>>
     where
-        R: FnMut(usize, usize, &mut [GoldilocksWord]) -> Result<()>,
+        R: FnMut(usize, usize, &mut [P::Word]) -> Result<()>,
     {
         let height = outer.checked_mul(inner).ok_or(DftError::SizeOverflow)?;
-        let mut output = ScratchMatrixStore::<GoldilocksWord>::create(
-            job_dir,
-            output_name,
-            height as u64,
-            width,
-        )?;
+        let mut output =
+            ScratchMatrixStore::<P::Word>::create(job_dir, output_name, height as u64, width)?;
         let (outer_tile, inner_tile) =
-            self.transpose_tile_shape(width, outer, inner, GoldilocksWord::WIDTH as u64)?;
+            self.transpose_tile_shape(width, outer, inner, word_bytes::<W, D, P>() as u64)?;
         let max_elements = outer_tile
             .checked_mul(inner_tile)
             .and_then(|value| value.checked_mul(width))
             .ok_or(DftError::SizeOverflow)?;
-        let mut input = vec![GoldilocksWord::default(); max_elements];
-        let mut transposed = vec![GoldilocksWord::default(); max_elements];
+        let mut input = vec![P::Word::default(); max_elements];
+        let mut transposed = vec![P::Word::default(); max_elements];
 
         for outer_start in (0..outer).step_by(outer_tile) {
             let outer_count = (outer - outer_start).min(outer_tile);
@@ -1030,40 +1157,58 @@ impl ResourceBoundedDft {
     }
 }
 
-fn transform_sub_fft_group(
-    words: &mut [GoldilocksWord],
+fn transform_sub_fft_group<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>(
+    words: &mut [P::Word],
     group: usize,
     group_len: usize,
     width: usize,
-    twiddle_root: Option<Goldilocks>,
+    twiddle_root: Option<P::Val>,
     inverse: bool,
-) {
-    let values = words.iter().map(|word| word.0).collect();
+) where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    let values: Vec<P::Val> = words.iter().map(|word| (*word).into()).collect();
     let transformed = if inverse {
-        Radix2Dit::<Goldilocks>::default().idft_batch(RowMajorMatrix::new(values, width))
+        Radix2Dit::<P::Val>::default().idft_batch(RowMajorMatrix::new(values, width))
     } else {
-        Radix2Dit::<Goldilocks>::default().dft_batch(RowMajorMatrix::new(values, width))
+        Radix2Dit::<P::Val>::default().dft_batch(RowMajorMatrix::new(values, width))
     };
     let twiddle_step = twiddle_root
         .map(|root| root.exp_u64(group as u64))
-        .unwrap_or(Goldilocks::ONE);
-    let mut twiddle = Goldilocks::ONE;
+        .unwrap_or(P::Val::ONE);
+    let mut twiddle = P::Val::ONE;
     for row in 0..group_len {
         let start = row * width;
         for column in 0..width {
-            words[start + column] = GoldilocksWord(transformed.values[start + column] * twiddle);
+            words[start + column] = (transformed.values[start + column] * twiddle).into();
         }
         twiddle *= twiddle_step;
     }
 }
 
-impl TwoAdicSubgroupDft<Goldilocks> for ResourceBoundedDft {
-    type Evaluations = ResourceBoundedMatrix;
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> TwoAdicSubgroupDft<P::Val>
+    for ResourceBoundedDft<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    type Evaluations = ResourceBoundedMatrix<W, D, P>;
 
-    fn dft_batch(&self, matrix: RowMajorMatrix<Goldilocks>) -> Self::Evaluations {
+    fn dft_batch(&self, matrix: RowMajorMatrix<P::Val>) -> Self::Evaluations {
         self.try_dft_batch(matrix)
             .expect("Plonky3 DFT exceeded or violated the configured resource policy")
     }
+}
+
+/// The Goldilocks pins for the callers that are still field-concrete
+/// (`prover`, `bounded_prover`, `opening`, `estimate_params`). Each name here
+/// is exactly the type those modules used before this module became generic,
+/// so importing from here leaves their bodies untouched.
+pub mod goldilocks {
+    use crate::profile::GoldilocksProfile;
+
+    pub type ScratchPlonky3Matrix = super::ScratchPlonky3Matrix<8, 4, GoldilocksProfile>;
+    pub type ResourceBoundedMatrix = super::ResourceBoundedMatrix<8, 4, GoldilocksProfile>;
+    pub type ResourceBoundedDft = super::ResourceBoundedDft<8, 4, GoldilocksProfile>;
 }
 
 fn four_step_factors(height: usize) -> (usize, usize) {
@@ -1099,7 +1244,9 @@ fn create_job_dir(root: &Path) -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use super::goldilocks::{ResourceBoundedDft, ResourceBoundedMatrix};
     use super::*;
+    use crate::profile::BabyBearProfile;
     use hc_stream::{CheckpointPolicy, MatrixStore};
     use p3_dft::Radix2Dit;
 
@@ -1317,6 +1464,33 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// The generalization has to be real, not merely syntactic: instantiate the
+    /// whole durable DFT at BabyBear's `<16, 8>` dimensions and run a transform
+    /// against the unmodified Plonky3 reference over the same field. Nothing
+    /// here touches the Goldilocks entry points, so it cannot perturb the
+    /// frozen transcript.
+    #[test]
+    fn scratch_dft_generalizes_to_babybear_dimensions() {
+        use p3_baby_bear::BabyBear;
+
+        let dir = tempfile::tempdir().unwrap();
+        let dft =
+            super::ResourceBoundedDft::<16, 8, BabyBearProfile>::new(policy(dir.path())).unwrap();
+        // 4 bytes per scratch element (`CanonicalElement::WIDTH`), NOT 16 (the
+        // permutation width) and NOT 8 (the digest size).
+        assert_eq!(word_bytes::<16, 8, BabyBearProfile>(), 4);
+        for height in [2usize, 8, 64] {
+            let width = 3usize;
+            let values: Vec<_> = (0..height * width)
+                .map(|value| BabyBear::new((value as u32) * 13 + 5))
+                .collect();
+            let input = RowMajorMatrix::new(values, width);
+            let expected = Radix2Dit::<BabyBear>::default().dft_batch(input.clone());
+            let actual = dft.try_dft_batch(input).unwrap();
+            assert_eq!(actual.try_rows(0, height).unwrap(), expected.values);
+        }
     }
 
     #[test]

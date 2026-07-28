@@ -2,7 +2,7 @@ use crate::bounded_prover::{
     estimated_atomic_checkpoint_bytes, estimated_profile_proof_bytes, fri_mmcs_payload_bytes,
     fri_mmcs_store_count, merkle_payload_bytes, merkle_store_count, BoundedProverError,
 };
-use crate::dft::ResourceBoundedDft;
+use crate::dft::goldilocks::ResourceBoundedDft;
 use hc_stream::{
     CheckpointPolicy, PhaseEstimate, ResourceEstimate, ResourceMode, ResourcePolicyV1,
     SCRATCH_STORE_HEADER_BYTES,
