@@ -1,170 +1,35 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Result;
-use hc_plonky3::estimate_params::{
-    estimate_conventional_from_params, estimate_from_params, field_widths, EstimateParams,
-};
-use hc_plonky3::BoundedProverError;
-use hc_stream::{CheckpointPolicy, ResourceMode, ResourcePolicyV1};
-use tinyzkp_contracts::{
-    EstimateRequestV1, EstimateResponseV1, ReasonCodeV1, ResourceEstimateV1, ResourceEstimatesV1,
-    MIN_RAM_BUDGET_BYTES,
-};
+use tinyzkp_contracts::{EstimateRequestV1, EstimateResponseV1, ReasonCodeV1};
 
 use crate::protocol::ProtocolFailure;
 
-/// Upper bound on `logical_rows` this estimator will price, deliberately far
-/// above `tinyzkp_contracts::MAX_ROWS` (2^24 — the *provable* range enforced
-/// by `EstimateRequestV1::blocking_reasons()`). This is a distinct, wider
-/// ceiling: estimation is meant to price configs TinyZKP cannot prove, so it
-/// must not reuse the provable-range limit. It exists purely to keep every
-/// product term this module and `estimate_params.rs` compute — rows times
-/// width times a byte width, rows times FRI blowup times a byte width, and
-/// so on — within `u64` headroom so `saturating_*` never needs to clamp.
-/// Rows beyond this are refused outright with `UnsupportedProfile` rather
-/// than priced and silently saturated: a refusal is honest, a saturated
-/// number that looks precise is not. `2^32` rows at the widest plausible
-/// trace width and blowup still leaves many bits of `u64` headroom before
-/// any single product term could reach `u64::MAX`.
-const MAX_ESTIMATE_ROWS: u64 = 1 << 32;
-
-/// Upper bound on `trace_width` this estimator will price, deliberately far
-/// above `tinyzkp_contracts::MAX_TRACE_WIDTH` (256 — the provable range).
-/// Same overflow-headroom rationale as `MAX_ESTIMATE_ROWS`.
-const MAX_ESTIMATE_TRACE_WIDTH: u32 = 65536;
-
-/// Cost a declared configuration. Never proves, never reads a witness, and
-/// never rejects a config merely because TinyZKP cannot prove it — with one
-/// exception: `logical_rows`/`trace_width` far outside anything this
-/// estimator was built to price are refused (`UnsupportedProfile`) rather
-/// than priced, because pricing them would risk a silently wrong number
-/// (see `MAX_ESTIMATE_ROWS`/`MAX_ESTIMATE_TRACE_WIDTH`).
+/// Cost a declared configuration read from a manifest file on disk.
+///
+/// This is purely the CLI-only file-reading wrapper: it reads and parses
+/// `config_path`, then delegates the entire request-to-response mapping to
+/// `hc_plonky3::estimate_params::estimate_request`. That function is the
+/// single implementation of the cost model — the hosted WASM API
+/// (`hc-wasm`'s `estimate_json`) calls the exact same function, so the CLI
+/// and the API cannot diverge on a number the way Phase 1a's `conventional`
+/// estimate did (computed two ways, 7.8x apart). `hc-plonky3` sits below
+/// both `hc-cli` and `hc-wasm` in the dependency graph, so each reaches it
+/// without depending on the other. Nothing here recomputes any part of that
+/// mapping.
 ///
 /// Errors map onto the same `ProtocolFailure`/`ReasonCodeV1` vocabulary every
 /// other command uses (see `doctor.rs`/`plonky3.rs`), so the CLI's structured
 /// JSON error envelope names the actual problem instead of collapsing every
 /// failure into `internal_error`. `ReasonV1` forbids free-form diagnostic
 /// text on that public boundary, so no config value (e.g. an unsupported
-/// field name) is ever embedded in the returned error; a human-readable
-/// detail is written to stderr as plain text alongside it instead.
-/// `estimate_from_params`'s only documented failure mode,
-/// `BoundedProverError::UnsupportedProfile` (rows that are zero or not a
-/// power of two), maps to `ReasonCodeV1::UnsupportedProfile` for the same
-/// reason: an ordinary, if malformed, input must not present as an internal
-/// fault. Every other `BoundedProverError` variant maps to `InternalError`,
-/// which is reserved for genuine internal faults.
-///
-/// This is the function a future hosted estimator API calls directly, so its
-/// signature is load-bearing: a config path in, a fully-formed response (or
-/// a `ProtocolFailure` naming exactly which reason code applies) out.
+/// field name) is ever embedded in the returned error.
 pub fn run(config_path: &Path) -> Result<EstimateResponseV1> {
     let raw = std::fs::read_to_string(config_path)
         .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
     let request: EstimateRequestV1 = serde_json::from_str(&raw)
         .map_err(|_| ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid))?;
 
-    if request.logical_rows > MAX_ESTIMATE_ROWS || request.trace_width > MAX_ESTIMATE_TRACE_WIDTH {
-        eprintln!(
-            "logical_rows {} / trace_width {} exceeds this estimator's sane ceiling \
-             (logical_rows <= {MAX_ESTIMATE_ROWS}, trace_width <= {MAX_ESTIMATE_TRACE_WIDTH}): \
-             refusing rather than risk a silently saturated number",
-            request.logical_rows, request.trace_width
-        );
-        return Err(ProtocolFailure::new(ReasonCodeV1::UnsupportedProfile).into());
-    }
-
-    let (field_bytes, ext_field_bytes) = field_widths(&request.field, request.extension_degree)
-        .ok_or_else(|| {
-            eprintln!(
-                "unsupported field '{}' with extension degree {}: \
-                 element width is unknown, so no honest estimate is possible",
-                request.field, request.extension_degree
-            );
-            ProtocolFailure::new(ReasonCodeV1::UnsupportedProfile)
-        })?;
-
-    let params = EstimateParams {
-        workload_id: request.digest(),
-        rows: request.logical_rows,
-        width: u64::from(request.trace_width),
-        quotient_chunks: request.quotient_chunks(),
-        public_values: u64::from(request.public_values),
-        has_next_row_columns: request.has_next_row_columns,
-        field_bytes,
-        ext_field_bytes,
-        digest_bytes: 32,
-    };
-
-    // A caller-declared RAM budget below the floor `ResourcePolicyV1` itself
-    // requires (`MIN_RAM_BUDGET_BYTES`, 16 MiB) must not hard-fail the whole
-    // estimate: `request.blocking_reasons()` below already reports
-    // `RamBudgetInsufficient` for exactly this case, carrying the declared
-    // (sub-floor) budget as `limit_bytes` and the floor as `required_bytes`.
-    // Substituting the floor as the bounded ceiling here lets that reason
-    // communicate the gap without this function refusing to estimate.
-    let bounded_ceiling = request.ram_budget_bytes.max(MIN_RAM_BUDGET_BYTES);
-    let bounded_policy = ResourcePolicyV1 {
-        max_resident_bytes: bounded_ceiling,
-        ..policy_defaults()
-    };
-    let bounded = estimate_from_params(&params, &bounded_policy).map_err(map_estimate_error)?;
-
-    // The conventional model is the naive, fully-in-memory Plonky3 pipeline
-    // (see `estimate_conventional_from_params`), not the bounded/streaming
-    // model run with an unbounded ceiling: those are different shapes, and
-    // conflating them previously made `estimates.conventional` byte-identical
-    // to `estimates.bounded`'s streaming scratch/read/write figures, which a
-    // real in-memory prover does not have.
-    let conventional = estimate_conventional_from_params(&params);
-
-    let blocking_reasons = request.blocking_reasons();
-    Ok(EstimateResponseV1 {
-        schema_version: 1,
-        request_digest: request.digest(),
-        provable_today: blocking_reasons.is_empty(),
-        blocking_reasons,
-        estimates: ResourceEstimatesV1 {
-            bounded: to_contract(bounded),
-            conventional: to_contract(conventional),
-        },
-    })
-}
-
-/// `BoundedProverError::UnsupportedProfile` is `estimate_from_params`'s
-/// documented response to an ordinary, if malformed, input (rows that are
-/// zero or not a power of two) — it must reach the caller as
-/// `ReasonCodeV1::UnsupportedProfile`, not `InternalError`. Every other
-/// variant (DFT/stream/checkpoint faults, etc.) is a genuine internal fault
-/// and keeps mapping to `InternalError`.
-fn map_estimate_error(error: BoundedProverError) -> ProtocolFailure {
-    match error {
-        BoundedProverError::UnsupportedProfile => {
-            ProtocolFailure::new(ReasonCodeV1::UnsupportedProfile)
-        }
-        _ => ProtocolFailure::new(ReasonCodeV1::InternalError),
-    }
-}
-
-/// Mirrors `examples/plonky3/fibonacci-1m.json`'s `resource_policy`, apart
-/// from `max_resident_bytes`, which each call site overrides. `scratch_dir`
-/// is never touched on disk here: `estimate_from_params` only costs a
-/// hypothetical run, it never executes one.
-fn policy_defaults() -> ResourcePolicyV1 {
-    ResourcePolicyV1 {
-        mode: ResourceMode::Scratch,
-        max_resident_bytes: 0,
-        max_scratch_bytes: 1_000_000_000,
-        scratch_dir: PathBuf::from("/var/lib/tinyzkp-bench/scratch/fibonacci-1m"),
-        max_threads: 4,
-        checkpoint_policy: CheckpointPolicy::RetainOnFailure,
-    }
-}
-
-fn to_contract(e: hc_stream::ResourceEstimate) -> ResourceEstimateV1 {
-    ResourceEstimateV1 {
-        peak_resident_bytes: e.peak_resident_bytes,
-        scratch_high_water_bytes: e.scratch_high_water_bytes,
-        total_read_bytes: e.total_read_bytes,
-        total_write_bytes: e.total_write_bytes,
-    }
+    hc_plonky3::estimate_params::estimate_request(request)
+        .map_err(|failure| anyhow::Error::new(ProtocolFailure::new(failure.reason_code())))
 }

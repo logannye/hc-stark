@@ -30,6 +30,15 @@ JS_ROUTE_RE = re.compile(
     r"(?:fetch|apiPost)\(\s*['\"]([^'\"]+)['\"]"
     r"|window\.location\.href\s*=\s*['\"]([^'\"]+)['\"]"
 )
+# `/v1/estimate` and `/v1/keys` are handled directly inside `_worker.js`'s own
+# `fetch()` dispatcher (`if (url.pathname === "/v1/xxx")`), not through the
+# `functions/api/*.js` mechanism `IMPORT_RE`/`ROUTE_RE` understand above --
+# there is no static file or `/api/*` module for a caller to resolve to, by
+# design. This regex reads the worker's real dispatch conditions back out of
+# its committed source so a `fetch("/v1/...")` call from site JS (see
+# site/estimate.js) resolves against the route the worker actually serves,
+# instead of being flagged as a broken link.
+WORKER_NATIVE_ROUTE_RE = re.compile(r'url\.pathname === "(/v1/[^"]+)"')
 
 PUBLIC_HTML = {
     "index.html",
@@ -37,6 +46,7 @@ PUBLIC_HTML = {
     "compatibility.html",
     "benchmarks.html",
     "doctor.html",
+    "estimate.html",
     "troubleshooting.html",
     "plonky3-out-of-memory.html",
     "resumable-plonky3-prover.html",
@@ -334,7 +344,15 @@ def worker_api_routes() -> tuple[dict[str, Path], list[str]]:
     return routes, failures
 
 
-def resolve_static_path(path: str, api_routes: dict[str, Path]) -> Path | None:
+def resolve_static_path(
+    path: str, api_routes: dict[str, Path], worker_native_routes: frozenset[str] = frozenset()
+) -> Path | None:
+    if path in worker_native_routes:
+        # Handled directly inside site/_worker.js's fetch() dispatcher, not a
+        # static asset -- point at the worker file itself so a caller of this
+        # function still gets a real, existing Path back.
+        return WORKER
+
     if path.startswith("/api/"):
         return api_routes.get(path.rstrip("/"))
 
@@ -482,6 +500,7 @@ def main() -> int:
     failures.extend(sitemap_failures)
 
     worker_text = WORKER.read_text(encoding="utf-8") if WORKER.is_file() else ""
+    worker_native_routes = frozenset(WORKER_NATIVE_ROUTE_RE.findall(worker_text))
     html_paths = sorted(SITE.rglob("*.html"))
     for path in html_paths:
         rel = path.relative_to(SITE).as_posix()
@@ -549,7 +568,7 @@ def main() -> int:
         path, fragment = normalized
         if link.attr == "json-ld":
             fragment = ""
-        resolved = resolve_static_path(path, api_routes)
+        resolved = resolve_static_path(path, api_routes, worker_native_routes)
         if resolved is None:
             failures.append(
                 f"{display_path(link.source)}:{link.line}: broken {link.attr} {link.raw!r}"
@@ -562,7 +581,7 @@ def main() -> int:
             )
 
     for record in sitemap_records:
-        resolved = resolve_static_path(record.path, api_routes)
+        resolved = resolve_static_path(record.path, api_routes, worker_native_routes)
         if resolved is None or resolved.suffix != ".html":
             failures.append(f"site/sitemap.xml: unresolved URL path {record.path!r}")
 

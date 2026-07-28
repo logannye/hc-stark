@@ -1,3 +1,25 @@
 name = "tinyzkp"
 compatibility_date = "2025-12-01"
 pages_build_output_dir = "."
+
+# Shared by the anonymous rate limiter (Task 3, `rate_limit_windows`) and the
+# shape-only demand log (Task 4, `demand_log`) -- see migrations/*.sql for
+# both tables' schemas. `migrations_dir` points at the repo-root
+# `migrations/` directory (one level up from this file) rather than a
+# `site/migrations/` directory, matching this repo's existing convention of
+# keeping migrations out of the deployed static-asset tree.
+#
+# `database_id` below is a PLACEHOLDER. Before this binds to anything in
+# production, the account owner must run `wrangler d1 create
+# tinyzkp-estimator` against the real Cloudflare account, replace this value
+# with the real UUID it returns, and run `wrangler d1 migrations apply DB
+# --remote` from this directory. Until that happens, `env.DB` in production
+# is either absent or non-functional; both the rate limiter and the demand
+# logger are written to fail open/silent in that case (see site/_worker.js),
+# so `POST /v1/estimate` itself keeps working -- it simply logs nothing and
+# rate-limits nothing until the real database exists.
+[[d1_databases]]
+binding = "DB"
+database_name = "tinyzkp-estimator"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "../migrations"

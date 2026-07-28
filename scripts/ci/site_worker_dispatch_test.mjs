@@ -1,11 +1,35 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { register } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const root = process.cwd();
+
+// `_worker.js` statically imports a `.wasm` module — the correct, Wrangler-
+// native form (confirmed against a real `wrangler pages dev` run: a bare
+// `.wasm` ES import resolves to a `WebAssembly.Module`, matching Cloudflare's
+// documented Workers behavior for ES-module-format Workers). Plain Node has
+// no built-in support for that extension, so this registers a minimal loader
+// hook — scoped to this test process only, never shipped — that reproduces
+// the same "give me a Module" contract from the raw file bytes.
+const WASM_LOADER_SOURCE = `
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+export async function load(url, context, nextLoad) {
+  if (url.endsWith(".wasm")) {
+    const bytes = await readFile(fileURLToPath(url));
+    const source = "const bytes = Uint8Array.from(atob(" +
+      JSON.stringify(bytes.toString("base64")) +
+      "), (c) => c.charCodeAt(0));\\nexport default new WebAssembly.Module(bytes);\\n";
+    return { format: "module", source, shortCircuit: true };
+  }
+  return nextLoad(url, context);
+}
+`;
+register(`data:text/javascript,${encodeURIComponent(WASM_LOADER_SOURCE)}`, import.meta.url);
 
 function assetsMock(handler = async () => new Response("missing", { status: 404 })) {
   const calls = [];
@@ -21,6 +45,11 @@ function assetsMock(handler = async () => new Response("missing", { status: 404 
 async function importWorker() {
   const temp = await mkdtemp(path.join(tmpdir(), "tinyzkp-static-worker-"));
   await cp(path.join(root, "site", "_worker.js"), path.join(temp, "_worker.js"));
+  await cp(
+    path.join(root, "site", "vendor", "tinyzkp-estimate"),
+    path.join(temp, "vendor", "tinyzkp-estimate"),
+    { recursive: true },
+  );
   await writeFile(path.join(temp, "package.json"), '{"type":"module"}\n');
   const module = await import(pathToFileURL(path.join(temp, "_worker.js")).href);
   return { worker: module.default, cleanup: () => rm(temp, { recursive: true, force: true }) };

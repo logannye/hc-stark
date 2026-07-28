@@ -19,6 +19,7 @@ PUBLIC_PAGES = {
     "compatibility.html",
     "benchmarks.html",
     "doctor.html",
+    "estimate.html",
     "troubleshooting.html",
     "plonky3-out-of-memory.html",
     "resumable-plonky3-prover.html",
