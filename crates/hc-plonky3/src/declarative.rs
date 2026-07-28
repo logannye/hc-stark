@@ -129,6 +129,37 @@ pub struct UploadedTraceWorkload {
     input_digest: [u8; 32],
 }
 
+/// zstd is scoped to non-wasm targets in Cargo.toml: its build script
+/// compiles an x86-64 assembly file even when targeting wasm32, which made
+/// `hc-wasm` -- and therefore the vendored WASM estimator -- unbuildable for
+/// that target. The uploaded-trace path below reads chunk FILES, so it is
+/// already unreachable on wasm32; this shim keeps the call sites identical
+/// on both targets rather than cfg-gating public methods, so the crate's API
+/// does not change shape by target.
+#[cfg(not(target_arch = "wasm32"))]
+mod compression {
+    use super::WorkloadError;
+    use std::io::Read;
+
+    pub(super) fn decoder<R: Read>(reader: R) -> Result<impl Read, WorkloadError> {
+        zstd::stream::read::Decoder::new(reader).map_err(|_| WorkloadError::InvalidShape)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+mod compression {
+    use super::WorkloadError;
+    use std::io::Read;
+
+    /// Unreachable on wasm32: reaching it requires an opened chunk file, and
+    /// this target has no filesystem. Fails closed rather than silently
+    /// returning empty data, so a future caller that does reach it gets an
+    /// error instead of a zero-row trace.
+    pub(super) fn decoder<R: Read>(_reader: R) -> Result<std::io::Empty, WorkloadError> {
+        Err(WorkloadError::InvalidShape)
+    }
+}
+
 impl UploadedTraceWorkload {
     pub fn new(
         air: AirPackageV1,
@@ -207,8 +238,7 @@ impl UploadedTraceWorkload {
         for chunk in &self.manifest.chunks {
             let path = self.chunk_path(chunk.index);
             let file = open_validated_chunk(&path, chunk.compressed_bytes, &chunk.blake3_hex)?;
-            let mut decoder =
-                zstd::stream::read::Decoder::new(file).map_err(|_| WorkloadError::InvalidShape)?;
+            let mut decoder = compression::decoder(file)?;
             let mut remaining = chunk.uncompressed_bytes;
             while remaining > 0 {
                 let read_len = usize::try_from(remaining.min(buffer.len() as u64))
@@ -299,8 +329,7 @@ impl ResourceBoundedWorkload for UploadedTraceWorkload {
         for chunk in &self.manifest.chunks {
             let path = self.chunk_path(chunk.index);
             let file = open_validated_chunk(&path, chunk.compressed_bytes, &chunk.blake3_hex)?;
-            let mut decoder =
-                zstd::stream::read::Decoder::new(file).map_err(|_| WorkloadError::InvalidShape)?;
+            let mut decoder = compression::decoder(file)?;
             let chunk_rows = usize::try_from(chunk.uncompressed_bytes / row_bytes as u64)
                 .map_err(|_| WorkloadError::InvalidShape)?;
             let mut remaining_rows = chunk_rows;

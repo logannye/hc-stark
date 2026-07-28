@@ -174,7 +174,17 @@ pub fn estimate_from_params(
 
     let dft = ResourceBoundedDft::new(policy.clone())?;
     let trace_dft = dft.estimate_scratch(lde_rows as usize, width, false, field_bytes)?;
-    let quotient_dft = dft.estimate_scratch(lde_rows as usize, 2, false, field_bytes)?;
+    // The quotient store holds one column per EXTENSION-field coefficient,
+    // not a literal 2. That is the same quantity `fri.rs`/`quotient.rs` call
+    // `extension_degree()`; this site was missed when those were swept, so
+    // the shipped model priced half the columns the prover actually writes
+    // for every 31-bit field. Derived from the two widths already in
+    // `params` (`field_widths` returns `(base, base * degree)`), so it needs
+    // no new plumbing: 16/8 = 2 for Goldilocks, byte-identical to the
+    // previous literal, and 16/4 = 4 for BabyBear/KoalaBear/Mersenne31.
+    let extension_degree = ext_field_bytes.checked_div(field_bytes).unwrap_or(2).max(1) as usize;
+    let quotient_dft =
+        dft.estimate_scratch(lde_rows as usize, extension_degree, false, field_bytes)?;
     let peak_resident_bytes = trace_dft
         .peak_resident_bytes
         .max(quotient_dft.peak_resident_bytes)

@@ -67,39 +67,46 @@ should compute `p3_uni_stark::security::ConjecturedSecurity` for both
 profiles and assert BabyBear meets a stated floor before Task 10 publishes
 any benchmark.
 
-## 🔴 BLOCKING PREREQUISITE FOR TASK 9 — a live estimator bug, diagnosed and measured but NOT landed
+## ✅ RESOLVED (was a blocking prerequisite for Task 9): live estimator degree bug + wasm32 build
 
-`estimate_params.rs:177` prices the quotient DFT with a hardcoded `2`:
-
-```rust
-let quotient_dft = dft.estimate_scratch(lde_rows as usize, 2, false, field_bytes)?;
-```
-
-That `2` is the quotient store's **column count** — the extension degree, the exact quantity swept out of `fri.rs`/`quotient.rs` as `extension_degree()`. It was missed. Goldilocks is degree 2 so this is correct there; **BabyBear/KoalaBear/Mersenne31 are degree 4**, so the shipped model prices half the columns the prover actually writes.
-
-**The fix is one line and needs no new plumbing** — `field_widths` returns `(base, base * degree)`, so the degree is already derivable from the two widths in `params`:
+`estimate_params.rs` priced the quotient DFT with a hardcoded `2` — the extension degree, missed when `fri.rs`/`quotient.rs` were swept. Correct for Goldilocks (degree 2); **half the true column count for BabyBear/KoalaBear/Mersenne31** (degree 4). It is now derived from the widths already in `params`, since `field_widths` returns `(base, base * degree)`:
 
 ```rust
-let extension_degree = if field_bytes == 0 { 2 } else { (ext_field_bytes / field_bytes).max(1) as usize };
-let quotient_dft = dft.estimate_scratch(lde_rows as usize, extension_degree, false, field_bytes)?;
+let extension_degree = ext_field_bytes.checked_div(field_bytes).unwrap_or(2).max(1) as usize;
 ```
 
-**MEASURED IMPACT** (applied, measured against `test-vectors/estimate/babybear-multi-table.json`, then reverted):
+**Measured correction** on `test-vectors/estimate/babybear-multi-table.json`:
 
-| metric | shipped today | corrected | delta |
+| metric | before (shipped) | after | delta |
 |---|---|---|---|
 | `total_read_bytes` | 59,458,455,408 | 60,129,544,048 | +671,088,640 (+1.13%) |
 | `total_write_bytes` | 38,052,155,280 | 38,723,243,920 | +671,088,640 (+1.76%) |
-| `scratch_high_water_bytes` | 21,139,660,882 | unchanged | — |
-| `peak_resident_bytes` | 763,363,328 | unchanged | — |
+| `scratch_high_water_bytes` / `peak_resident_bytes` | — | unchanged | — |
 
-The Goldilocks fixture is **byte-identical** either way (16/8 = 2), confirmed by the parity gate. So this is a BabyBear-only correction, and it moves the estimate UP — today's numbers understate I/O.
+Goldilocks is byte-identical (16/8 = 2), confirmed by the parity gate. The correction moves BabyBear estimates UP; the previously shipped numbers understated I/O.
 
-**WHY IT IS NOT IN THIS BRANCH.** `scripts/ci/estimate_wasm_cli_parity_gate.mjs` compares the native `hc-cli` against the **committed** `site/vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm` over two fixtures, one of which is `babybear-multi-table.json`. Any cost-model change therefore requires rebuilding and recommitting that vendored wasm in the same commit. The gate is wired into `ci.yml:168` **and `deploy-site.yml:112`, the production Pages deploy** — so landing the source fix alone would fail CI *and block the site deploy*. The gate is behaving exactly as designed; it caught this.
+### The wasm32 blocker, and how it was cleared
 
-**THE REBUILD IS BLOCKED ON THIS MACHINE**, by a pre-existing toolchain issue unrelated to Phase 3A: `cargo build -p hc-wasm --target wasm32-unknown-unknown` fails in `zstd-sys`'s build script, which compiles `zstd/lib/decompress/huf_decompress_amd64.S` for wasm32 and Apple clang rejects it. `zstd` is a hard (non-optional) dependency of `hc-plonky3` via `declarative.rs`. **Verified identical at `main` (f17930c)**, so it is not caused by this work. One machine-local contributor was found and is separately fixable: `~/.cargo/config.toml` sets a global `rustflags = ["-C","target-cpu=native"]`, which leaks `apple-m4` into wasm32 builds; overriding `RUSTFLAGS` clears that error but not the zstd one.
+Landing any cost-model change requires rebuilding the committed `site/vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm`, because `estimate_wasm_cli_parity_gate.mjs` compares `hc-cli` against those exact bytes — and that gate runs in **`deploy-site.yml`**, the production Pages deploy, so a source-only change would have blocked the site deploy.
 
-**TO CLOSE THIS, IN ORDER:** (1) make `hc-wasm` buildable for wasm32 — most likely by gating `zstd` behind a non-wasm `cfg` or feature, since the estimator does not need decompression — or run the rebuild on Linux/CI; (2) apply the one-line fix; (3) rebuild + recommit the vendored wasm; (4) confirm the parity gate passes on BOTH fixtures. **Do this before Task 9 exposes BabyBear through the admission gate**, or the endpoint starts quoting a knowingly wrong number for a field it now advertises as supported.
+`hc-wasm` could not build for `wasm32-unknown-unknown`: `zstd-sys`'s build script compiles `zstd/lib/decompress/huf_decompress_amd64.S` — x86-64 assembly — even for wasm32, and clang rejects it. Verified identical at `main`, so it predated this plan.
+
+**Fix:** `zstd` is now scoped to `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` in `crates/hc-plonky3/Cargo.toml`, with a small `compression` shim in `declarative.rs` keeping both call sites identical across targets (the uploaded-trace path reads chunk FILES, so it is already unreachable on a target with no filesystem; the wasm arm fails closed rather than returning empty data). **`Cargo.lock` is byte-unchanged** — the lock is target-agnostic, so the hash pinned in 8 places still matches. Side benefit: the vendored wasm shrank 428,793 → 394,572 bytes (−8%), since zstd was dead weight there.
+
+### ⚠️ THE RE-VENDORING PROCEDURE (reverse-engineered; write it down or it will be lost)
+
+The vendored files are named `tinyzkp-estimate.*` but the wasm's compiled-in import module name is `tinyzkp-verify`. Build with `--out-name tinyzkp-verify`, then rename only the `.wasm` FILENAME reference — never the import key at `tinyzkp-estimate.js:88` (`"./tinyzkp-verify_bg.js"`), which must keep matching the binary's import section:
+
+```bash
+RUSTFLAGS=" " wasm-pack build --target web --out-name tinyzkp-verify --out-dir <tmp> crates/hc-wasm
+sed 's/tinyzkp-verify_bg\.wasm/tinyzkp-estimate_bg.wasm/g; s|@ts-self-types="./tinyzkp-verify.d.ts"|@ts-self-types="./tinyzkp-estimate.d.ts"|' \
+  <tmp>/tinyzkp-verify.js > site/vendor/tinyzkp-estimate/tinyzkp-estimate.js
+cp <tmp>/tinyzkp-verify_bg.wasm site/vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm
+```
+
+Applying that transform to a fresh build reproduces the committed `.js` **byte-identically**, which is the check that the toolchain and ABI still match — do it every time before replacing the `.wasm`. `RUSTFLAGS=" "` is required on this Mac because `~/.cargo/config.toml` sets a global `target-cpu=native`, which leaks `apple-m4` into wasm32 builds.
+
+Gates confirming the result: `estimate_wasm_cli_parity_gate.mjs` (BOTH fixtures), `test_worker_estimate.mjs`, `site_worker_dispatch_test.mjs`.
 
 ---
 
