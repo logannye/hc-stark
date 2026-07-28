@@ -17,6 +17,7 @@ pub mod estimate_params;
 mod fri;
 mod mmcs;
 mod opening;
+pub mod profile;
 mod prover;
 mod quotient;
 mod scratch;
@@ -68,6 +69,7 @@ pub use prover::{
     WorkloadKind, COMPATIBILITY_PROFILE, DEPENDENCY_LOCK_SHA256, GOLDILOCKS_MODULUS_U64,
     PLONKY3_VERSION,
 };
+pub use profile::{DurableFieldProfile, GoldilocksProfile};
 pub use quotient::{build_quotient_chunk_ldes, stream_quotient_values, StreamedQuotientError};
 pub use workloads::{
     fibonacci_public_values, fibonacci_trace, poseidon2_goldilocks_air, poseidon2_trace,

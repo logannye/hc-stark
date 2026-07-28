@@ -1,6 +1,5 @@
-use p3_goldilocks::{Goldilocks, Poseidon2Goldilocks};
-use rand::rngs::Xoshiro256PlusPlus;
-use rand::SeedableRng;
+use crate::profile::{DurableFieldProfile, GoldilocksProfile};
+use p3_goldilocks::Goldilocks;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +9,7 @@ const RATE: usize = 4;
 const GOLDILOCKS_MODULUS: u64 = 0xffff_ffff_0000_0001;
 const CHECKSUM_BYTES: usize = 32;
 
-pub type ProfilePermutation = Poseidon2Goldilocks<WIDTH>;
+pub type ProfilePermutation = <GoldilocksProfile as DurableFieldProfile>::Permutation;
 pub type ProfileChallenger =
     p3_challenger::DuplexChallenger<Goldilocks, ProfilePermutation, WIDTH, RATE>;
 
@@ -169,11 +168,13 @@ impl ChallengerSnapshotV1 {
 }
 
 pub(crate) fn profile_permutation() -> ProfilePermutation {
-    // Plonky3's 0.6.1 Goldilocks example uses SmallRng on a 64-bit host,
-    // where SmallRng is Xoshiro256PlusPlus. Name that algorithm explicitly so
-    // 32-bit WASM reconstructs exactly the same frozen transcript parameters.
-    let mut rng = Xoshiro256PlusPlus::seed_from_u64(1);
-    ProfilePermutation::new_from_rng_128(&mut rng)
+    // Delegates to `GoldilocksProfile::profile_permutation()` (`profile.rs`),
+    // which is an exact copy of what this function used to compute inline
+    // (same seed, same RNG algorithm, same constructor). Every existing
+    // caller here (`fri.rs`, `mmcs.rs`, `prover.rs`'s tests, this module's
+    // own `restore()`/tests) keeps calling this free function unchanged;
+    // only its body is repointed at the new trait impl.
+    GoldilocksProfile::profile_permutation()
 }
 
 fn take<'a>(bytes: &'a [u8], cursor: &mut usize, len: usize) -> Result<&'a [u8]> {

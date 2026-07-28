@@ -1,5 +1,5 @@
-use crate::checkpoint::profile_permutation;
 use crate::contracts::MAX_PROOF_BYTES;
+use crate::profile::{DurableFieldProfile, GoldilocksProfile};
 use crate::workloads::{
     fibonacci_public_values, fibonacci_trace, poseidon2_goldilocks_air, poseidon2_trace,
     FibonacciAir,
@@ -10,13 +10,11 @@ use hc_stream::{
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::{Radix2DitParallel, TwoAdicSubgroupDft};
-use p3_field::extension::BinomialExtensionField;
 use p3_field::{Field, PrimeCharacteristicRing, PrimeField64};
 use p3_fri::{FriParameters, TwoAdicFriPcs};
-use p3_goldilocks::{Goldilocks, Poseidon2Goldilocks};
+use p3_goldilocks::Goldilocks;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_merkle_tree::MerkleTreeMmcs;
-use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::{prove, verify, Proof, StarkConfig};
 use serde::{Deserialize, Serialize};
 
@@ -43,11 +41,46 @@ pub fn release_identity() -> String {
         .unwrap_or_else(|| "development-unreleased".into())
 }
 
+// `Val` is kept as a direct concrete-type alias rather than the literal
+// projection `<GoldilocksProfile as DurableFieldProfile>::Val`. This is a
+// discovered rustc limitation, not a design choice: `prove_to_bytes` (below)
+// has a bound of the shape `Air: for<'a> p3_air::Air<ProverConstraintFolder<
+// 'a, GoldilocksConfig<Dft>>>`, and once `Val` is an unnormalized projection,
+// rustc fails to normalize it while checking that higher-ranked (`for<'a>`)
+// bound several layers deep (`GoldilocksConfig<Dft>` -> `Pcs<Dft>` ->
+// `TwoAdicFriPcs<Val, ..>`), producing 15 `E0277` errors confined entirely to
+// `prove_to_bytes`. Bisected empirically: reverting only `Val` to a concrete
+// alias (as here) while leaving `Challenge`/`Permutation`/`Hash`/
+// `Compression` as literal profile projections compiles cleanly with zero
+// errors; the reverse (projected `Val`, concrete everything else) still
+// fails identically. See task-2-report.md for the full bisection.
+//
+// This is not a silent second copy: the `const _` assertion just below
+// proves at compile time that this `Val` is exactly
+// `GoldilocksProfile::Val`, so the two can never drift apart unnoticed.
 pub(crate) type Val = Goldilocks;
-pub(crate) type Challenge = BinomialExtensionField<Val, 2>;
-pub(crate) type Permutation = Poseidon2Goldilocks<8>;
-pub(crate) type Hash = PaddingFreeSponge<Permutation, 8, 4, 4>;
-pub(crate) type Compression = TruncatedPermutation<Permutation, 2, 4, 8>;
+pub(crate) type Challenge =
+    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile>::Challenge;
+pub(crate) type Permutation =
+    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile>::Permutation;
+pub(crate) type Hash = <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile>::Hash;
+pub(crate) type Compression =
+    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile>::Compression;
+
+#[allow(dead_code)]
+const _: () = {
+    fn assert_val_matches_profile<P: DurableFieldProfile<Val = Val>>() {}
+    fn check() {
+        assert_val_matches_profile::<GoldilocksProfile>();
+    }
+};
+
+// ValPacking, ValMmcs, ChallengeMmcs, Challenger, Pcs<Dft> keep their
+// existing definitions unchanged — they're built FROM Val/Challenge/
+// Permutation/Hash/Compression, not part of the profile trait itself.
+// (`Permutation` is also re-derived from the profile here, since
+// Hash/Compression/Challenger's definitions below still name it directly;
+// the plan's original sketch omitted it, but dropping it does not compile.)
 pub(crate) type ValPacking = <Val as Field>::Packing;
 pub(crate) type ValMmcs = MerkleTreeMmcs<ValPacking, ValPacking, Hash, Compression, 2, 4>;
 pub(crate) type ChallengeMmcs = ExtensionMmcs<Val, Challenge, ValMmcs>;
@@ -536,7 +569,7 @@ pub(crate) fn make_config_with_log_blowup<Dft: TwoAdicSubgroupDft<Val>>(
 }
 
 pub(crate) fn profile_components() -> (Permutation, Hash, Compression) {
-    let permutation = profile_permutation();
+    let permutation = GoldilocksProfile::profile_permutation();
     let hash = Hash::new(permutation.clone());
     let compression = Compression::new(permutation.clone());
     (permutation, hash, compression)
