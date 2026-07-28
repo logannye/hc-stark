@@ -60,16 +60,17 @@ pub fn release_identity() -> String {
 // `GoldilocksProfile::Val`, so the two can never drift apart unnoticed.
 pub(crate) type Val = Goldilocks;
 pub(crate) type Challenge =
-    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile>::Challenge;
+    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile<8, 4>>::Challenge;
 pub(crate) type Permutation =
-    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile>::Permutation;
-pub(crate) type Hash = <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile>::Hash;
+    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile<8, 4>>::Permutation;
+pub(crate) type Hash =
+    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile<8, 4>>::Hash;
 pub(crate) type Compression =
-    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile>::Compression;
+    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile<8, 4>>::Compression;
 
 #[allow(dead_code)]
 const _: () = {
-    fn assert_val_matches_profile<P: DurableFieldProfile<Val = Val>>() {}
+    fn assert_val_matches_profile<P: DurableFieldProfile<8, 4, Val = Val>>() {}
     fn check() {
         assert_val_matches_profile::<GoldilocksProfile>();
     }

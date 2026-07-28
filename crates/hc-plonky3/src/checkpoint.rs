@@ -9,7 +9,7 @@ const RATE: usize = 4;
 const GOLDILOCKS_MODULUS: u64 = 0xffff_ffff_0000_0001;
 const CHECKSUM_BYTES: usize = 32;
 
-pub type ProfilePermutation = <GoldilocksProfile as DurableFieldProfile>::Permutation;
+pub type ProfilePermutation = <GoldilocksProfile as DurableFieldProfile<WIDTH, RATE>>::Permutation;
 pub type ProfileChallenger =
     p3_challenger::DuplexChallenger<Goldilocks, ProfilePermutation, WIDTH, RATE>;
 
