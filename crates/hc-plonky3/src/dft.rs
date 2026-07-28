@@ -3,8 +3,9 @@ use hc_stream::{
     ArtifactDigest, BlockMatrix, CanonicalElement, ExecutionMode, MatrixStore, PhaseEstimate,
     ResourceEstimate, ResourceMode, ResourcePolicyV1, ScratchMatrixStore, StreamError,
 };
+use p3_baby_bear::BabyBear;
 use p3_dft::{Radix2Dit, TwoAdicSubgroupDft};
-use p3_field::{Field, PrimeCharacteristicRing, PrimeField64, TwoAdicField};
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32, PrimeField64, TwoAdicField};
 use p3_goldilocks::Goldilocks;
 use p3_matrix::bitrev::{BitReversalPerm, BitReversedMatrixView, BitReversibleMatrix};
 use p3_matrix::dense::RowMajorMatrix;
@@ -16,6 +17,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 const GOLDILOCKS_MODULUS: u64 = 0xffff_ffff_0000_0001;
+/// BabyBear's prime, 2^31 - 2^27 + 1. Matches `BabyBearParameters::PRIME`
+/// (`p3-baby-bear-0.6.1/src/baby_bear.rs:18`).
+const BABYBEAR_MODULUS: u32 = 0x7800_0001;
 static JOB_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, thiserror::Error)]
@@ -63,6 +67,56 @@ impl CanonicalElement for GoldilocksWord {
             return Err(StreamError::Corrupt("non-canonical Goldilocks element"));
         }
         Ok(Self(Goldilocks::new(value)))
+    }
+}
+
+/// BabyBear's durable scratch word. Sits alongside `GoldilocksWord` rather
+/// than replacing it — Task 4 makes the DFT generic over the profile; until
+/// then nothing outside `profile.rs` and this module's tests refers to it.
+#[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
+pub struct BabyBearWord(pub BabyBear);
+
+impl From<BabyBear> for BabyBearWord {
+    fn from(value: BabyBear) -> Self {
+        Self(value)
+    }
+}
+
+impl From<BabyBearWord> for BabyBear {
+    fn from(value: BabyBearWord) -> Self {
+        value.0
+    }
+}
+
+impl CanonicalElement for BabyBearWord {
+    /// BabyBear is a 31-bit field, so 4 bytes per scratch element — NOT the
+    /// permutation width (16). `estimate_params.rs`'s
+    /// `canonical_extension_degree` already prices babybear at 4 bytes; if
+    /// these two ever disagree, the estimator and the real on-SSD footprint
+    /// disagree, and `/v1/estimate` is already answering BabyBear queries in
+    /// production.
+    const WIDTH: usize = 4;
+
+    fn encode(self, output: &mut [u8]) {
+        output.copy_from_slice(&self.0.as_canonical_u32().to_le_bytes());
+    }
+
+    fn decode(bytes: &[u8]) -> hc_stream::Result<Self> {
+        let bytes: [u8; 4] = bytes
+            .try_into()
+            .map_err(|_| StreamError::Corrupt("invalid BabyBear width"))?;
+        let value = u32::from_le_bytes(bytes);
+        // Mirrors GoldilocksWord's canonicity check above, and is NOT
+        // optional. `BabyBear::new` accepts any `u32` and silently reduces it
+        // mod p ("Any `u32` value is accepted", p3-monty-31-0.6.1
+        // src/monty_31.rs:47), so without this guard `x` and `x + p` would
+        // decode to the same element: decode stops being injective and the
+        // scratch layer loses its corruption detector. `encode` emits
+        // `as_canonical_u32`, so any value >= p is by definition corrupt.
+        if value >= BABYBEAR_MODULUS {
+            return Err(StreamError::Corrupt("non-canonical BabyBear element"));
+        }
+        Ok(Self(BabyBear::new(value)))
     }
 }
 

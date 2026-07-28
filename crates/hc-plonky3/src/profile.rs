@@ -37,8 +37,9 @@
 //! `MerkleTreeMmcs`, and `DuplexChallenger` — const generics, never
 //! associated consts, for anything that sizes an array).
 
-use crate::dft::GoldilocksWord;
+use crate::dft::{BabyBearWord, GoldilocksWord};
 use hc_stream::CanonicalElement;
+use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 use p3_field::extension::BinomialExtensionField;
 use p3_field::{ExtensionField, Field, PrimeField64, TwoAdicField};
 use p3_goldilocks::{Goldilocks, Poseidon2Goldilocks};
@@ -156,92 +157,164 @@ const _: () = {
     );
 };
 
+/// The second profile. Not yet reachable from any prover entry point —
+/// `dft`/`mmcs`/`fri`/`quotient`/`bounded_pcs`/`bounded_prover` are still
+/// Goldilocks-concrete until Tasks 4-8 genericize them, and the admission
+/// gate does not accept `"babybear"` until Task 9.
+///
+/// Dimensions are `<16, 8>`, matching Plonky3's own reference BabyBear
+/// config (`p3-uni-stark-0.6.1/tests/mul_fib_pair.rs:171-190`). They are NOT
+/// interchangeable with Goldilocks' `<8, 4>`: BabyBear's Poseidon2 only
+/// exists at widths 16/24/32 (`InternalLayerParameters` is implemented for
+/// exactly those in `p3-baby-bear-0.6.1/src/poseidon2.rs:474-476`), and a
+/// 4-element BabyBear digest would be ~62-bit collision resistance against
+/// Goldilocks' ~128.
+#[derive(Clone, Debug, Default)]
+pub struct BabyBearProfile;
+
+impl DurableFieldProfile<16, 8> for BabyBearProfile {
+    type Val = BabyBear;
+    type Challenge = BinomialExtensionField<BabyBear, 4>;
+    type Permutation = Poseidon2BabyBear<16>;
+    type Hash = PaddingFreeSponge<Self::Permutation, 16, 8, 8>;
+    type Compression = TruncatedPermutation<Self::Permutation, 2, 8, 16>;
+    type Word = BabyBearWord;
+
+    const FIELD_NAME: &'static str = "babybear";
+    /// Must stay 4. `canonical_extension_degree("babybear")` in
+    /// `estimate_params.rs:369` already returns `(4, 4)`, and `/v1/estimate`
+    /// is answering BabyBear queries in production against it — degree 2 here
+    /// would make the shipped estimator silently disagree with what the
+    /// prover actually builds.
+    const EXTENSION_DEGREE: u8 = 4;
+
+    fn profile_permutation() -> Self::Permutation {
+        // Same seed and RNG as GoldilocksProfile. This is a NEW transcript,
+        // not a frozen one — no BabyBear proof has ever been published, so
+        // there is nothing to stay byte-compatible with. Matching Goldilocks'
+        // construction keeps the two profiles auditable side by side.
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(1);
+        Self::Permutation::new_from_rng_128(&mut rng)
+    }
+
+    fn modulus_u64() -> u64 {
+        BABYBEAR_MODULUS_U64
+    }
+}
+
+/// BabyBear's prime, 2^31 - 2^27 + 1, as `BabyBearParameters::PRIME`
+/// (`p3-baby-bear-0.6.1/src/baby_bear.rs:18`) states it.
+pub const BABYBEAR_MODULUS_U64: u64 = 0x7800_0001;
+
+// The scratch-word counterpart of the Goldilocks assertion above: BabyBear is
+// a 31-bit field, so 4 bytes per element — deliberately NOT 16 (the
+// permutation width) and NOT 8 (the digest size). All three numbers appear in
+// this impl and only one of them sizes the on-SSD layout.
+const _: () = {
+    assert!(
+        <<BabyBearProfile as DurableFieldProfile<16, 8>>::Word as CanonicalElement>::WIDTH == 4
+    );
+    assert!(BABYBEAR_MODULUS_U64 == (1u64 << 31) - (1u64 << 27) + 1);
+};
+
 #[cfg(test)]
-mod fix_round_1_sanity_checks {
-    //! Fix-round-1 regression guard, NOT `BabyBearProfile` (that's Task 3's
-    //! job). This exists solely to prove `DurableFieldProfile`'s bounds, as
-    //! reshaped in this fix round, actually admit BabyBear's *real*
-    //! dimensions (width 16, 8-element digest — confirmed against
-    //! `p3-baby-bear` 0.6.1 and against upstream Plonky3's own
-    //! `uni-stark/tests/mul_fib_pair.rs` reference config) rather than only
-    //! ever having been checked against Goldilocks. If a future change to
-    //! this trait's shape makes it Goldilocks-only again, this test module
-    //! fails to compile and says so immediately, instead of that regression
-    //! surfacing only when Task 3 starts.
-    use super::DurableFieldProfile;
-    use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
-    use p3_field::extension::BinomialExtensionField;
+mod tests {
+    //! Supersedes the fix-round-1 `BabyBearShapeStub`. That stub existed only
+    //! to prove `DurableFieldProfile<16, 8>` was satisfiable with BabyBear's
+    //! real dimensions before `BabyBearProfile` existed. It does now, and it
+    //! is real (non-test) code, so the stub would be a second, drifting copy
+    //! of the same shape — the real profile carries the proof instead.
+    use super::{BabyBearProfile, DurableFieldProfile, GoldilocksProfile, BABYBEAR_MODULUS_U64};
+    use crate::dft::BabyBearWord;
+    use hc_stream::CanonicalElement;
+    use p3_baby_bear::BabyBear;
     use p3_field::PrimeField32;
-    use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-    use rand::rngs::Xoshiro256PlusPlus;
-    use rand::SeedableRng;
 
-    /// Minimal throwaway `CanonicalElement` wrapper around `BabyBear`, just
-    /// so `type Word` has something to point at. Not the real
-    /// `BabyBearWord` (Task 4's job) — BabyBear is a 31-bit field, encoded
-    /// here as 4 little-endian bytes of its canonical `u32` representative.
-    #[derive(Copy, Clone, Debug, Default)]
-    struct ThrowawayBabyBearWord(BabyBear);
-
-    impl From<BabyBear> for ThrowawayBabyBearWord {
-        fn from(value: BabyBear) -> Self {
-            Self(value)
-        }
-    }
-    impl From<ThrowawayBabyBearWord> for BabyBear {
-        fn from(value: ThrowawayBabyBearWord) -> Self {
-            value.0
-        }
-    }
-    impl hc_stream::CanonicalElement for ThrowawayBabyBearWord {
-        const WIDTH: usize = 4;
-        fn encode(self, out: &mut [u8]) {
-            out.copy_from_slice(&self.0.as_canonical_u32().to_le_bytes());
-        }
-        fn decode(bytes: &[u8]) -> hc_stream::Result<Self> {
-            let bytes: [u8; 4] = bytes
-                .try_into()
-                .map_err(|_| hc_stream::StreamError::Corrupt("invalid babybear word width"))?;
-            Ok(Self(BabyBear::new(u32::from_le_bytes(bytes))))
-        }
+    /// The satisfiability proof the stub used to carry. Merely naming these
+    /// associated types forces rustc to check `BabyBearProfile` against every
+    /// bound on the trait — including the packed-SIMD `Permutation`/`Hash`/
+    /// `Compression` bounds and the serde bound on `[Val; DIGEST_ELEMS]`.
+    #[test]
+    fn babybear_profile_satisfies_the_trait_at_its_real_dimensions() {
+        let permutation = BabyBearProfile::profile_permutation();
+        let _hash = <BabyBearProfile as DurableFieldProfile<16, 8>>::Hash::new(permutation.clone());
+        let _compression =
+            <BabyBearProfile as DurableFieldProfile<16, 8>>::Compression::new(permutation);
+        assert_eq!(BabyBearProfile::FIELD_NAME, "babybear");
+        assert_eq!(BabyBearProfile::EXTENSION_DEGREE, 4);
+        assert_eq!(BabyBearProfile::modulus_u64(), BABYBEAR_MODULUS_U64);
     }
 
-    #[derive(Clone, Debug, Default)]
-    struct BabyBearShapeStub;
+    /// The two profiles must not be confusable: different field names,
+    /// different extension degrees, different scratch widths, different
+    /// moduli. A copy-paste error in a future profile shows up here.
+    #[test]
+    fn profiles_are_distinct_in_every_field_specific_constant() {
+        assert_ne!(BabyBearProfile::FIELD_NAME, GoldilocksProfile::FIELD_NAME);
+        assert_ne!(
+            BabyBearProfile::EXTENSION_DEGREE,
+            GoldilocksProfile::EXTENSION_DEGREE
+        );
+        assert_ne!(
+            BabyBearProfile::modulus_u64(),
+            GoldilocksProfile::modulus_u64()
+        );
+        assert_eq!(<BabyBearWord as CanonicalElement>::WIDTH, 4);
+        assert_eq!(
+            <<GoldilocksProfile as DurableFieldProfile<8, 4>>::Word as CanonicalElement>::WIDTH,
+            8
+        );
+    }
 
-    impl DurableFieldProfile<16, 8> for BabyBearShapeStub {
-        type Val = BabyBear;
-        type Challenge = BinomialExtensionField<BabyBear, 4>;
-        type Permutation = Poseidon2BabyBear<16>;
-        type Hash = PaddingFreeSponge<Self::Permutation, 16, 8, 8>;
-        type Compression = TruncatedPermutation<Self::Permutation, 2, 8, 16>;
-        type Word = ThrowawayBabyBearWord;
-
-        const FIELD_NAME: &'static str = "babybear-shape-stub";
-        const EXTENSION_DEGREE: u8 = 4;
-
-        fn profile_permutation() -> Self::Permutation {
-            let mut rng = Xoshiro256PlusPlus::seed_from_u64(1);
-            Self::Permutation::new_from_rng_128(&mut rng)
-        }
-
-        fn modulus_u64() -> u64 {
-            (1u64 << 31) - (1u64 << 27) + 1
-        }
+    fn roundtrip(value: u32) -> BabyBearWord {
+        let word = BabyBearWord(BabyBear::new(value));
+        let mut buffer = [0u8; <BabyBearWord as CanonicalElement>::WIDTH];
+        word.encode(&mut buffer);
+        BabyBearWord::decode(&buffer).expect("canonical value must decode")
     }
 
     #[test]
-    fn babybear_shape_admits_real_dimensions() {
-        // If this compiles and runs, DurableFieldProfile<16, 8> is
-        // satisfiable with BabyBear's real Poseidon2/digest dimensions —
-        // the exact thing fix-round-1 needed to prove that Task 2's
-        // original submission had only ever verified against Goldilocks.
-        let permutation = BabyBearShapeStub::profile_permutation();
-        let _hash =
-            <BabyBearShapeStub as DurableFieldProfile<16, 8>>::Hash::new(permutation.clone());
-        let _compression =
-            <BabyBearShapeStub as DurableFieldProfile<16, 8>>::Compression::new(permutation);
-        assert_eq!(BabyBearShapeStub::FIELD_NAME, "babybear-shape-stub");
-        assert_eq!(BabyBearShapeStub::EXTENSION_DEGREE, 4);
+    fn babybear_word_roundtrips_across_the_canonical_range() {
+        // Boundaries plus a deterministic sweep. p-1 is the largest legal
+        // value; p itself must NOT be reachable through encode.
+        for value in [0u32, 1, 2, 1_000_003, (BABYBEAR_MODULUS_U64 as u32) - 1] {
+            let decoded = roundtrip(value);
+            assert_eq!(
+                decoded.0.as_canonical_u32(),
+                value,
+                "round trip changed {value}"
+            );
+        }
+        let mut value: u64 = 7;
+        for _ in 0..2_000 {
+            value = (value * 1_103_515_245 + 12_345) % BABYBEAR_MODULUS_U64;
+            let decoded = roundtrip(value as u32);
+            assert_eq!(decoded.0.as_canonical_u32(), value as u32);
+        }
+    }
+
+    /// The check the plan's first draft omitted. `BabyBear::new` accepts any
+    /// `u32` and reduces mod p, so without an explicit guard `x` and `x + p`
+    /// would decode to the same element and the durable scratch layer would
+    /// lose its corruption detector. Goldilocks has always rejected these.
+    #[test]
+    fn babybear_word_rejects_non_canonical_bytes() {
+        let modulus = BABYBEAR_MODULUS_U64 as u32;
+        for value in [modulus, modulus + 1, u32::MAX] {
+            let bytes = value.to_le_bytes();
+            assert!(
+                BabyBearWord::decode(&bytes).is_err(),
+                "decode accepted non-canonical {value}, losing injectivity"
+            );
+        }
+        // And the value just below the modulus is still accepted, so the
+        // guard is not off by one.
+        assert!(BabyBearWord::decode(&(modulus - 1).to_le_bytes()).is_ok());
+    }
+
+    #[test]
+    fn babybear_word_rejects_wrong_width_slices() {
+        assert!(BabyBearWord::decode(&[0u8; 3]).is_err());
+        assert!(BabyBearWord::decode(&[0u8; 8]).is_err());
     }
 }
