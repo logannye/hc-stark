@@ -5,11 +5,22 @@ use serde::{Deserialize, Serialize};
 
 const MAGIC: &[u8; 8] = b"TZCHAL1\0";
 const WIDTH: usize = 8;
+/// The challenger's sponge RATE.
 const RATE: usize = 4;
+/// The Merkle digest size in field elements — a DIFFERENT quantity from
+/// `RATE` that happens to equal it for both profiles we support (Goldilocks
+/// 4, BabyBear 8). `DurableFieldProfile`'s second parameter is the digest
+/// size, so passing `RATE` there compiled only by that coincidence. Named
+/// separately and pinned below so a future field where the sponge rate and
+/// the digest size diverge fails loudly instead of silently mis-shaping the
+/// Merkle tree.
+const DIGEST_ELEMS: usize = 4;
+const _: () = assert!(RATE == DIGEST_ELEMS);
 const GOLDILOCKS_MODULUS: u64 = 0xffff_ffff_0000_0001;
 const CHECKSUM_BYTES: usize = 32;
 
-pub type ProfilePermutation = <GoldilocksProfile as DurableFieldProfile<WIDTH, RATE>>::Permutation;
+pub type ProfilePermutation =
+    <GoldilocksProfile as DurableFieldProfile<WIDTH, DIGEST_ELEMS>>::Permutation;
 pub type ProfileChallenger =
     p3_challenger::DuplexChallenger<Goldilocks, ProfilePermutation, WIDTH, RATE>;
 

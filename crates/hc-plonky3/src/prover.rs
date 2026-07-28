@@ -42,22 +42,26 @@ pub fn release_identity() -> String {
 }
 
 // `Val` is kept as a direct concrete-type alias rather than the literal
-// projection `<GoldilocksProfile as DurableFieldProfile>::Val`. This is a
-// discovered rustc limitation, not a design choice: `prove_to_bytes` (below)
-// has a bound of the shape `Air: for<'a> p3_air::Air<ProverConstraintFolder<
-// 'a, GoldilocksConfig<Dft>>>`, and once `Val` is an unnormalized projection,
-// rustc fails to normalize it while checking that higher-ranked (`for<'a>`)
-// bound several layers deep (`GoldilocksConfig<Dft>` -> `Pcs<Dft>` ->
-// `TwoAdicFriPcs<Val, ..>`), producing 15 `E0277` errors confined entirely to
-// `prove_to_bytes`. Bisected empirically: reverting only `Val` to a concrete
-// alias (as here) while leaving `Challenge`/`Permutation`/`Hash`/
-// `Compression` as literal profile projections compiles cleanly with zero
-// errors; the reverse (projected `Val`, concrete everything else) still
-// fails identically. See task-2-report.md for the full bisection.
+// projection `<GoldilocksProfile as DurableFieldProfile<8, 4>>::Val`.
 //
-// This is not a silent second copy: the `const _` assertion just below
-// proves at compile time that this `Val` is exactly
-// `GoldilocksProfile::Val`, so the two can never drift apart unnoticed.
+// The original Task 2 note recorded this as "rustc cannot normalize the
+// projection inside `prove_to_bytes`'s higher-ranked (`for<'a>`) bound".
+// That diagnosis was WRONG and has been retired: `generic_prover_guard.rs`
+// builds a fully generic `prove_to_bytes` carrying exactly that
+// higher-ranked bound, and it compiles and produces real proof bytes. The
+// original 15 E0277s were missing trait bounds (now stated once on
+// `DurableFieldProfile`), not a normalization failure.
+//
+// What DOES still fail — verified, not assumed — is making this alias a
+// projection while `prove_to_bytes`'s callers stay concrete: rustc then
+// reports `Dft: TwoAdicSubgroupDft<Goldilocks>` unsatisfied, because it
+// will not unify the projection with `Goldilocks` in `Dft`/`Air`'s bounds.
+// That is a property of the HALF-generic intermediate state only.
+// Task 8 must therefore convert `prove_to_bytes` and its generic parameters
+// to `P::Val` in a single step; flipping this alias first does not converge.
+//
+// The `const _` assertion just below proves at compile time that this `Val`
+// is exactly `GoldilocksProfile::Val`, so the two cannot drift apart.
 pub(crate) type Val = Goldilocks;
 pub(crate) type Challenge =
     <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile<8, 4>>::Challenge;

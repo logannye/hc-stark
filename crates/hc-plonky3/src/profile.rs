@@ -2,11 +2,9 @@
 //! prover needs, so `dft`, `mmcs`, `fri`, `quotient`, `bounded_pcs`, and
 //! `bounded_prover` can be written once and instantiated per field.
 //! `GoldilocksProfile` (this file) is the extracted, behavior-preserving
-//! form of what `prover.rs` previously hardcoded. See task-2-report.md for
-//! the exact trait bounds this compiled against, if they differ from the
-//! sketch in the plan that introduced this file.
+//! form of what `prover.rs` previously hardcoded.
 //!
-//! `WIDTH` (the Poseidon2 permutation width) and `DIGEST_ELEMS` (the sponge
+//! `PERM_WIDTH` (the Poseidon2 permutation width) and `DIGEST_ELEMS` (the sponge
 //! rate/output size, which also matches the Merkle compression chunk size
 //! and the challenger's rate — see `checkpoint.rs`'s `WIDTH`/`RATE`
 //! constants and this module's `babybear_shape_admits_real_dimensions`
@@ -22,40 +20,78 @@
 //! soundness regression (a 4-element BabyBear digest is ~124 bits, roughly
 //! half the collision resistance of Goldilocks' 4-element 256-bit digest).
 //!
-//! Associated `const`s were tried first and rejected: `Self::WIDTH` used as
+//! NOTE the deliberate name: `hc_stream::CanonicalElement::WIDTH` means
+//! BYTES PER SCRATCH ELEMENT (8 for Goldilocks, 4 for BabyBear), which is a
+//! completely different quantity that happens to equal 8 for Goldilocks too.
+//! Conflating the two would corrupt the durable scratch layout, so the
+//! permutation width is spelled `PERM_WIDTH` here and never plain `WIDTH`.
+//!
+//! Associated `const`s were tried first and rejected: `Self::PERM_WIDTH` used as
 //! an array length inside this trait's own associated-type bounds
-//! (`[Self::Val; Self::WIDTH]`) hits `E0770` ("generic parameters may not
+//! (`[Self::Val; Self::PERM_WIDTH]`) hits `E0770` ("generic parameters may not
 //! be used in const operations") on stable Rust, because the trait
-//! definition can't assume a concrete value for `Self::WIDTH` while
+//! definition can't assume a concrete value for `Self::PERM_WIDTH` while
 //! defining the shape every implementor must satisfy. Const generic
 //! parameters on the trait don't have this problem (this is exactly how
 //! Plonky3 itself parameterizes `PaddingFreeSponge`, `TruncatedPermutation`,
 //! `MerkleTreeMmcs`, and `DuplexChallenger` — const generics, never
 //! associated consts, for anything that sizes an array).
 
+use crate::dft::GoldilocksWord;
 use hc_stream::CanonicalElement;
-use p3_field::{ExtensionField, Field, TwoAdicField};
+use p3_field::extension::BinomialExtensionField;
+use p3_field::{ExtensionField, Field, PrimeField64, TwoAdicField};
+use p3_goldilocks::{Goldilocks, Poseidon2Goldilocks};
 use p3_symmetric::{CryptographicHasher, CryptographicPermutation, PseudoCompressionFunction};
+use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
+use rand::rngs::Xoshiro256PlusPlus;
+use rand::SeedableRng;
 
 /// Every field-specific type and constant the durable prover needs.
 /// Implement once per supported field profile.
 ///
-/// `WIDTH` is the Poseidon2 permutation's width; `DIGEST_ELEMS` is the
+/// `PERM_WIDTH` is the Poseidon2 permutation's width; `DIGEST_ELEMS` is the
 /// sponge/compression digest size (see the module doc comment above for
 /// why these are const generic parameters rather than associated consts).
-pub trait DurableFieldProfile<const WIDTH: usize, const DIGEST_ELEMS: usize>:
+pub trait DurableFieldProfile<const PERM_WIDTH: usize, const DIGEST_ELEMS: usize>:
     Clone + Send + Sync + 'static
+where
+    // `p3_uni_stark::prove` serializes the Merkle roots, which are
+    // `[Val; DIGEST_ELEMS]`. serde's array impls are macro-generated for
+    // lengths 0..=32, so a *generic* `DIGEST_ELEMS` can't select one; the
+    // bound has to be stated explicitly here. Empirically required — see
+    // the `generic_prover_guard` module.
+    [Self::Val; DIGEST_ELEMS]: serde::Serialize + for<'de> serde::Deserialize<'de>,
 {
     /// The base field. Must support two-adic FFT (Plonky3's DFT requires it).
-    type Val: Field + TwoAdicField;
+    /// `PrimeField64` is required by `DuplexChallenger`'s `GrindingChallenger`
+    /// impl, which `TwoAdicFriPcs` requires in turn. BabyBear satisfies it via
+    /// `impl<FP: FieldParameters> PrimeField64 for MontyField31<FP>`
+    /// (`p3-monty-31-0.6.1/src/monty_31.rs:634`), despite being a 31-bit field.
+    type Val: Field + TwoAdicField + PrimeField64;
     /// The extension field used for FRI challenges.
     type Challenge: ExtensionField<Self::Val>;
     /// The Poseidon2 (or equivalent) permutation over `Val`.
-    type Permutation: CryptographicPermutation<[Self::Val; WIDTH]> + Clone;
+    ///
+    /// The `Packing` variants of these three bounds are what let Plonky3 run
+    /// its Merkle commitments over packed SIMD lanes. They are NOT optional
+    /// decoration: without them `MerkleTreeMmcs` does not implement `Mmcs`,
+    /// and nothing downstream of it compiles.
+    type Permutation: CryptographicPermutation<[Self::Val; PERM_WIDTH]>
+        + CryptographicPermutation<[<Self::Val as Field>::Packing; PERM_WIDTH]>
+        + Clone;
     /// Sponge hash built from `Permutation`.
-    type Hash: CryptographicHasher<Self::Val, [Self::Val; DIGEST_ELEMS]> + Clone;
+    type Hash: CryptographicHasher<Self::Val, [Self::Val; DIGEST_ELEMS]>
+        + CryptographicHasher<
+            <Self::Val as Field>::Packing,
+            [<Self::Val as Field>::Packing; DIGEST_ELEMS],
+        > + Clone
+        + Sync;
     /// Merkle compression built from `Permutation`.
-    type Compression: PseudoCompressionFunction<[Self::Val; DIGEST_ELEMS], 2> + Clone;
+    type Compression: PseudoCompressionFunction<[Self::Val; DIGEST_ELEMS], 2>
+        + PseudoCompressionFunction<[<Self::Val as Field>::Packing; DIGEST_ELEMS], 2>
+        + Clone
+        + Sync;
     /// The durable on-SSD scratch word for this field. Bridges `Val` to
     /// `hc_stream::CanonicalElement` — see `dft::GoldilocksWord` for the
     /// existing Goldilocks form Task 4 will generalize.
@@ -77,13 +113,6 @@ pub trait DurableFieldProfile<const WIDTH: usize, const DIGEST_ELEMS: usize>:
     /// `GOLDILOCKS_MODULUS_U64` in `prover.rs`.
     fn modulus_u64() -> u64;
 }
-
-use crate::dft::GoldilocksWord;
-use p3_field::extension::BinomialExtensionField;
-use p3_goldilocks::{Goldilocks, Poseidon2Goldilocks};
-use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use rand::rngs::Xoshiro256PlusPlus;
-use rand::SeedableRng;
 
 #[derive(Clone, Debug, Default)]
 pub struct GoldilocksProfile;
@@ -115,6 +144,17 @@ impl DurableFieldProfile<8, 4> for GoldilocksProfile {
         crate::prover::GOLDILOCKS_MODULUS_U64
     }
 }
+
+// Pins the OTHER `WIDTH`: bytes per durable scratch element. Goldilocks is a
+// 64-bit field => 8 bytes, which must agree with `canonical_extension_degree`
+// in `estimate_params.rs` or the estimator and the real on-SSD footprint
+// disagree. Deliberately spelled out rather than inferred, because this
+// number and `PERM_WIDTH` are both 8 for Goldilocks and only for Goldilocks.
+const _: () = {
+    assert!(
+        <<GoldilocksProfile as DurableFieldProfile<8, 4>>::Word as CanonicalElement>::WIDTH == 8
+    );
+};
 
 #[cfg(test)]
 mod fix_round_1_sanity_checks {
@@ -197,7 +237,8 @@ mod fix_round_1_sanity_checks {
         // the exact thing fix-round-1 needed to prove that Task 2's
         // original submission had only ever verified against Goldilocks.
         let permutation = BabyBearShapeStub::profile_permutation();
-        let _hash = <BabyBearShapeStub as DurableFieldProfile<16, 8>>::Hash::new(permutation.clone());
+        let _hash =
+            <BabyBearShapeStub as DurableFieldProfile<16, 8>>::Hash::new(permutation.clone());
         let _compression =
             <BabyBearShapeStub as DurableFieldProfile<16, 8>>::Compression::new(permutation);
         assert_eq!(BabyBearShapeStub::FIELD_NAME, "babybear-shape-stub");

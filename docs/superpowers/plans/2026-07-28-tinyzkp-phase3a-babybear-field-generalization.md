@@ -18,6 +18,55 @@
 - No task in this plan touches `site/`, pricing, or commerce copy. Site/estimator copy changes (the scalar-fallback caveat, BabyBear benchmark publication) are Task 10 only, and only additive.
 - This plan does **not** implement KoalaBear or Mersenne31, multi-table scheduling (Phase 3B), or LogUp (Phase 3C). Once `DurableFieldProfile` exists, adding KoalaBear is expected to be a small follow-on (a second profile impl, no further trait changes) — track it as a fast-follow, not a task here.
 
+## Fix round 2 (post-review, before Task 3) — READ BEFORE TASKS 4-8
+
+A code review of Tasks 1-2 produced four findings that change how the
+remaining tasks must be executed. All were verified by compiling, not by
+reasoning.
+
+1. **`DurableFieldProfile` needed 8 more bounds, and now carries them.**
+   Task 2's note said rustc "cannot normalize the projection inside a
+   higher-ranked bound". That was WRONG. `crates/hc-plonky3/src/generic_prover_guard.rs`
+   builds a fully generic `prove_to_bytes` with exactly that `for<'a>` bound
+   and it compiles and produces real proof bytes. The original 15 E0277s
+   were missing bounds: `Val: PrimeField64`, the three **`Packing` (SIMD)**
+   variants of Permutation/Hash/Compression, `Sync` on Hash and Compression,
+   and `[Val; DIGEST_ELEMS]: Serialize + Deserialize`. Seven are now stated
+   once on the trait; only the serde one must be restated at generic use
+   sites (trait `where`-clauses over non-`Self` types are not elaborated to
+   callers).
+
+2. **Task 8 must go fully generic in ONE step.** Making `prover.rs`'s `Val`
+   alias a projection while its callers stay concrete still fails, with a
+   DIFFERENT error (`Dft: TwoAdicSubgroupDft<Goldilocks>` unsatisfied).
+   That is an artifact of the half-generic intermediate state. Flipping
+   `Val` first and chasing fallout does not converge — convert
+   `prove_to_bytes` and its generic parameters together.
+
+3. **The byte-identity safety net was self-referential.** Every existing
+   byte-equality test compared the bounded prover against the reference
+   prover *in the same build*; both call the same `profile_permutation()`,
+   so a changed seed would move both sides together and stay green.
+   `bounded_prover.rs::goldilocks_fibonacci_proof_matches_frozen_known_answer`
+   now pins the fibonacci(0,1,16) proof to a blake3 constant. That constant
+   was verified equal at `main` (f17930c) and on this branch, which is the
+   only external evidence Tasks 1-2 were byte-preserving. **If it ever
+   fails, stop and ask — do not update the constant.**
+
+4. **`PERM_WIDTH` vs `CanonicalElement::WIDTH`.** The trait's permutation
+   width is now spelled `PERM_WIDTH`, because `hc_stream::CanonicalElement::WIDTH`
+   means BYTES PER SCRATCH ELEMENT — a different quantity that coincidentally
+   also equals 8 for Goldilocks (and is 4, not 16, for BabyBear). Never
+   write bare `WIDTH` for either. `checkpoint.rs` likewise now separates
+   `RATE` from `DIGEST_ELEMS` with a static assertion.
+
+Still open, deliberately deferred: FRI security parameters are field-blind
+(`prover.rs` calls `FriParameters::new_benchmark` with no field awareness).
+BabyBear's challenge field is 124 bits vs Goldilocks' 128. Task 8 or 10
+should compute `p3_uni_stark::security::ConjecturedSecurity` for both
+profiles and assert BabyBear meets a stated floor before Task 10 publishes
+any benchmark.
+
 ---
 
 ### Task 1: Add the `p3-baby-bear` dependency and re-freeze the lock
@@ -185,7 +234,7 @@ pub trait DurableFieldProfile: Clone + Send + Sync + 'static {
     /// Upper bound (exclusive) on values this profile's workloads may seed
     /// with, so generated fixtures (Fibonacci's `initial_a`/`initial_b`,
     /// etc.) never exceed the field's modulus. Generalizes
-    /// `GOLDILOCKS_MODULUS_U64` in `workloads.rs`.
+    /// `GOLDILOCKS_MODULUS_U64` in `prover.rs`.
     fn modulus_u64() -> u64;
 }
 ```
@@ -229,7 +278,7 @@ impl DurableFieldProfile for GoldilocksProfile {
     }
 
     fn modulus_u64() -> u64 {
-        crate::workloads::GOLDILOCKS_MODULUS_U64
+        crate::prover::GOLDILOCKS_MODULUS_U64
     }
 }
 ```
@@ -316,17 +365,29 @@ impl CanonicalElement for BabyBearWord {
     }
 
     fn decode(bytes: &[u8]) -> hc_stream::Result<Self> {
-        use p3_field::PrimeCharacteristicRing;
         let bytes: [u8; 4] = bytes
             .try_into()
             .map_err(|_| hc_stream::StreamError::Corrupt("invalid BabyBear width"))?;
         let value = u32::from_le_bytes(bytes);
-        Ok(Self(p3_baby_bear::BabyBear::from_u32(value)))
+        // REQUIRED, and absent from this plan's first draft.
+        // `GoldilocksWord::decode` (dft.rs:62) rejects `value >= modulus`:
+        // that check is the durable scratch layer's corruption detector and
+        // it makes decode injective. `BabyBear::new` accepts ANY u32 and
+        // silently reduces mod p ("Any `u32` value is accepted",
+        // p3-monty-31-0.6.1/src/monty_31.rs:47), so omitting this makes `x`
+        // and `x + 0x78000001` decode to the same element and loses
+        // corruption detection on the BabyBear scratch path.
+        if value >= 0x7800_0001 {
+            return Err(hc_stream::StreamError::Corrupt(
+                "non-canonical BabyBear element",
+            ));
+        }
+        Ok(Self(p3_baby_bear::BabyBear::new(value)))
     }
 }
 ```
 
-Confirm the exact method names (`as_canonical_u32`, `from_u32` or whichever `p3_baby_bear::BabyBear` actually exposes for canonical round-trip) against the crate as vendored by Task 1 — `cargo doc -p p3-baby-bear --open` or reading `~/.cargo/registry/src/*/p3-baby-bear-0.6.1/src/` directly, since this plan was written without that crate checked out locally. If the method names differ, use the real ones; the round-trip property (`decode(encode(x)) == x` for every canonical value) is what Step 3's test enforces, not the exact method names above.
+The constructor is `BabyBear::new(u32)` — VERIFIED against the vendored crate; this plan's original guess of `from_u32` is WRONG. `as_canonical_u32` comes from `p3_field::PrimeField32`. Confirm any further method names against the crate as vendored by Task 1 — `cargo doc -p p3-baby-bear --open` or reading `~/.cargo/registry/src/*/p3-baby-bear-0.6.1/src/` directly, since this plan was written without that crate checked out locally. If the method names differ, use the real ones; the round-trip property (`decode(encode(x)) == x` for every canonical value) is what Step 3's test enforces, not the exact method names above.
 
 - [ ] **Step 2: Implement `BabyBearProfile`**
 
@@ -339,25 +400,28 @@ use p3_baby_bear::BabyBear;
 #[derive(Clone, Debug, Default)]
 pub struct BabyBearProfile;
 
-impl DurableFieldProfile for BabyBearProfile {
+// CORRECTED (fix rounds 1 + 2). BabyBear's Poseidon2 exists ONLY at widths
+// 16/24/32, and Plonky3's reference BabyBear config uses an 8-element
+// digest. Goldilocks' <8, 4, 4> / <2, 4, 8> here would be BOTH a compile
+// error AND a silent soundness regression (a 4-element BabyBear digest is
+// ~62-bit collision resistance vs Goldilocks' ~128). These exact numbers
+// are already proven satisfiable by profile.rs's BabyBearShapeStub.
+impl DurableFieldProfile<16, 8> for BabyBearProfile {
     type Val = BabyBear;
     type Challenge = p3_field::extension::BinomialExtensionField<BabyBear, 4>;
-    type Permutation = /* p3_baby_bear's standard Poseidon2 permutation type —
-                           check p3-baby-bear's public API for its Poseidon2
-                           constructor, analogous to GoldilocksProfile's */;
-    type Hash = PaddingFreeSponge<Self::Permutation, 8, 4, 4>;
-    type Compression = TruncatedPermutation<Self::Permutation, 2, 4, 8>;
+    type Permutation = p3_baby_bear::Poseidon2BabyBear<16>;
+    type Hash = PaddingFreeSponge<Self::Permutation, 16, 8, 8>;
+    type Compression = TruncatedPermutation<Self::Permutation, 2, 8, 16>;
     type Word = BabyBearWord;
 
     const FIELD_NAME: &'static str = "babybear";
     const EXTENSION_DEGREE: u8 = 4;
 
     fn profile_permutation() -> Self::Permutation {
-        // Use p3_baby_bear's own recommended/default Poseidon2 construction
-        // (a seeded RNG construction analogous to GoldilocksProfile's, or a
-        // fixed round-constants constant if p3-baby-bear ships one — check
-        // p3-poseidon2's generic constructor and p3-baby-bear's re-export).
-        todo!("construct BabyBear's Poseidon2 permutation")
+        // Same construction GoldilocksProfile uses, already compiled in
+        // profile.rs's BabyBearShapeStub.
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(1);
+        Self::Permutation::new_from_rng_128(&mut rng)
     }
 
     fn modulus_u64() -> u64 {
@@ -599,7 +663,7 @@ pub struct ResourceBoundedVerifierPcs<P: DurableFieldProfile> {
 }
 ```
 
-`ProfileChallenger` (referenced throughout `bounded_pcs.rs` and `fri.rs`, currently `DuplexChallenger<Val, Permutation, 8, 4>` per `prover.rs:54`) becomes generic: `ProfileChallenger<P> = DuplexChallenger<P::Val, P::Permutation, 8, 4>`. `BoundedConfig` (`bounded_pcs.rs:131`) becomes `BoundedConfig<P> = StarkConfig<ResourceBoundedVerifierPcs<P>, P::Challenge, ProfileChallenger<P>>`.
+`ProfileChallenger` (referenced throughout `bounded_pcs.rs` and `fri.rs`, currently `DuplexChallenger<Val, Permutation, 8, 4>` per `prover.rs:54`) becomes generic: `ProfileChallenger<const PERM_WIDTH: usize, const DIGEST_ELEMS: usize, P> = DuplexChallenger<P::Val, P::Permutation, PERM_WIDTH, DIGEST_ELEMS>`. **Do NOT leave the literal `8, 4`** — BabyBear needs `16, 8` (`p3-uni-stark-0.6.1/tests/mul_fib_pair.rs:190`), so hardcoding `8, 4` here stalls Task 8. `crates/hc-plonky3/src/generic_prover_guard.rs` already holds a COMPILING generic form of this entire alias chain (ValPacking -> ValMmcs -> ChallengeMmcs -> Challenger -> Pcs -> Config); copy its shapes rather than re-deriving them. `BoundedConfig` (`bounded_pcs.rs:131`) becomes `BoundedConfig<P> = StarkConfig<ResourceBoundedVerifierPcs<P>, P::Challenge, ProfileChallenger<P>>`.
 
 - [ ] **Step 3: Compile and regression-test**
 
@@ -624,7 +688,7 @@ This is the task that first produces an actual BabyBear proof.
 **Files:**
 - Modify: `crates/hc-plonky3/src/bounded_prover.rs` (every public entry point — `prove_resource_bounded`, `verify_resource_bounded_proof`, checkpoint/resume functions)
 - Modify: `crates/hc-plonky3/src/prover.rs` (finish removing any remaining Goldilocks-concrete code not already covered by Task 2)
-- Modify: `crates/hc-plonky3/src/workloads.rs` (`FibonacciWorkload`'s seed-value bound: replace `GOLDILOCKS_MODULUS_U64` literal check at `workloads.rs:494,637` with `P::modulus_u64()`; `FibonacciAir` itself needs no change — it is already `impl<F> BaseAir<F> for FibonacciAir` / `impl<AB: AirBuilder> Air<AB> for FibonacciAir`, field-agnostic since before this plan)
+- Modify: `crates/hc-plonky3/src/workloads.rs` (`FibonacciWorkload`'s seed-value bound: replace the `GOLDILOCKS_MODULUS_U64` literal check at **`workloads.rs:191-192`** with `P::modulus_u64()`; `FibonacciAir` itself needs no change — it is already `impl<F> BaseAir<F> for FibonacciAir` / `impl<AB: AirBuilder> Air<AB> for FibonacciAir`, field-agnostic since before this plan)
 - Test: `crates/hc-plonky3/tests/babybear_fibonacci_roundtrip.rs` (new)
 
 **Interfaces:**
@@ -639,7 +703,7 @@ Apply the established substitution to every function currently concrete over `Go
 
 - [ ] **Step 2: Fix `FibonacciWorkload`'s modulus check**
 
-In `crates/hc-plonky3/src/workloads.rs`, replace the two sites currently comparing against the literal `GOLDILOCKS_MODULUS_U64` (`workloads.rs:494,637`) with a comparison against `P::modulus_u64()`, threading `P: DurableFieldProfile` through `FibonacciWorkload` the same way `bounded_prover.rs` now does. `GOLDILOCKS_MODULUS_U64` itself stays defined (Task 3's `GoldilocksProfile::modulus_u64()` already returns it) — only the two call sites change to go through the profile instead of the bare constant.
+In `crates/hc-plonky3/src/workloads.rs`, replace the site currently comparing against the literal `GOLDILOCKS_MODULUS_U64` with a comparison against `P::modulus_u64()`. **CORRECTED SCOPE — the original line numbers were wrong:** `workloads.rs` is only 419 lines, so `:494,637` do not exist; the real check is the single two-line condition at **`workloads.rs:191-192`**. Repo-wide the constant is referenced at **31 sites across 10 files** (`workloads.rs`, `declarative.rs`, `beta_fixtures.rs`, `contracts.rs`, `bounded_prover.rs`, `prover.rs`, `lib.rs`, `profile.rs`, `hc-cli/src/commands/plonky3.rs`, `hc-cli/tests/cli_roundtrip.rs`). Enumerate them first with `grep -rn GOLDILOCKS_MODULUS_U64 crates/ --include='*.rs'` and explicitly declare which stay Goldilocks-only — do NOT assume all 31 must generalize. threading `P: DurableFieldProfile` through `FibonacciWorkload` the same way `bounded_prover.rs` now does. `GOLDILOCKS_MODULUS_U64` itself stays defined (Task 3's `GoldilocksProfile::modulus_u64()` already returns it) — only the two call sites change to go through the profile instead of the bare constant.
 
 - [ ] **Step 3: Write the failing test first**
 

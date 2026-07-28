@@ -3364,6 +3364,43 @@ mod tests {
         assert_eq!(actual, expected.proof_bytes);
     }
 
+    /// Known-answer test pinning the Goldilocks transcript to a CONSTANT.
+    ///
+    /// Every other byte-equality test in this file compares the bounded
+    /// prover against the reference prover *in the same build*. Both sides
+    /// call the same `profile_permutation()`, so a change to its seed, RNG,
+    /// or round constants would move both sides together and leave every
+    /// assertion green while silently emitting a different proof system.
+    ///
+    /// Phase 3A rewrites `dft`/`mmcs`/`fri`/`quotient`/`bounded_pcs`/
+    /// `bounded_prover` to be generic over `DurableFieldProfile`, and the
+    /// plan's stated safety net is "Goldilocks stays byte-identical". That
+    /// net is only real if something outside the build holds the answer.
+    /// This is that something.
+    ///
+    /// If this fails, the Goldilocks proof bytes changed. Do NOT update the
+    /// constant to make it pass — per the plan's Global Constraints, a
+    /// changed byte-equality expectation is a plan conflict: stop and ask.
+    #[test]
+    fn goldilocks_fibonacci_proof_matches_frozen_known_answer() {
+        const FROZEN_FIBONACCI_16_PROOF_BLAKE3: &str =
+            "ed94fb697d9c6ec95e08724bf960a1e3bb84b7b41954eed888688d2a8a174a02";
+
+        let proof = crate::ResourceBoundedUniStarkProver::prove_reference(
+            crate::WorkloadKind::Fibonacci {
+                initial_a: 0,
+                initial_b: 1,
+            },
+            16,
+        )
+        .unwrap();
+        let digest = blake3::hash(&proof.proof_bytes).to_hex().to_string();
+        assert_eq!(
+            digest, FROZEN_FIBONACCI_16_PROOF_BLAKE3,
+            "Goldilocks fibonacci(0,1,16) proof bytes changed; see this test's doc comment"
+        );
+    }
+
     #[test]
     fn parallel_policy_emits_the_same_official_proof_bytes() {
         let dir = tempfile::tempdir().unwrap();

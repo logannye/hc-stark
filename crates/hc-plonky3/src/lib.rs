@@ -15,6 +15,8 @@ mod declarative;
 mod dft;
 pub mod estimate_params;
 mod fri;
+#[cfg(test)]
+mod generic_prover_guard;
 mod mmcs;
 mod opening;
 pub mod profile;
@@ -64,12 +66,12 @@ pub use mmcs::{DurableGoldilocksMmcs, DurableMerkleData, DurableMmcsError};
 pub use opening::{
     build_reduced_opening_layer, interpolate_standard_lde, DurableOpeningError, MatrixOpening,
 };
+pub use profile::{DurableFieldProfile, GoldilocksProfile};
 pub use prover::{
     release_identity, BackendError, InternalProofBundle, ResourceBoundedUniStarkProver,
     WorkloadKind, COMPATIBILITY_PROFILE, DEPENDENCY_LOCK_SHA256, GOLDILOCKS_MODULUS_U64,
     PLONKY3_VERSION,
 };
-pub use profile::{DurableFieldProfile, GoldilocksProfile};
 pub use quotient::{build_quotient_chunk_ldes, stream_quotient_values, StreamedQuotientError};
 pub use workloads::{
     fibonacci_public_values, fibonacci_trace, poseidon2_goldilocks_air, poseidon2_trace,
