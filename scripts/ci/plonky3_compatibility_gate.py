@@ -126,6 +126,17 @@ def main() -> int:
     source = (ROOT / "crates" / "hc-plonky3" / "src" / "prover.rs").read_text(
         encoding="utf-8"
     )
+    # The seeded-permutation literal used to live in checkpoint.rs. The
+    # DurableFieldProfile extraction moved the construction into profile.rs
+    # (GoldilocksProfile::profile_permutation), which silently broke this gate
+    # -- it kept passing locally because `cargo test` never runs it, and only
+    # the post-merge CI job exercises it. Both files are read so the token is
+    # found wherever the permutation is actually built, and so a future move
+    # cannot break the gate without also removing the token from every
+    # backend source that could legitimately hold it.
+    profile_source = (ROOT / "crates" / "hc-plonky3" / "src" / "profile.rs").read_text(
+        encoding="utf-8"
+    )
     checkpoint_source = (ROOT / "crates" / "hc-plonky3" / "src" / "checkpoint.rs").read_text(
         encoding="utf-8"
     )
@@ -140,7 +151,7 @@ def main() -> int:
             failures.append(f"backend source is missing frozen profile token {required!r}")
     if profile.get("configuration", {}).get("permutation_rng") != "rand-0.10.2::Xoshiro256PlusPlus":
         failures.append("compatibility profile does not pin the cross-target permutation RNG")
-    if "Xoshiro256PlusPlus::seed_from_u64(1)" not in checkpoint_source:
+    if "Xoshiro256PlusPlus::seed_from_u64(1)" not in (checkpoint_source + profile_source):
         failures.append("backend does not reconstruct cross-target-stable permutation parameters")
 
     if failures:

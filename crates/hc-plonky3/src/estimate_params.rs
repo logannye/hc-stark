@@ -2,7 +2,7 @@ use crate::bounded_prover::{
     estimated_atomic_checkpoint_bytes, estimated_profile_proof_bytes, fri_mmcs_payload_bytes,
     fri_mmcs_store_count, merkle_payload_bytes, merkle_store_count, BoundedProverError,
 };
-use crate::dft::ResourceBoundedDft;
+use crate::dft::goldilocks::ResourceBoundedDft;
 use hc_stream::{
     CheckpointPolicy, PhaseEstimate, ResourceEstimate, ResourceMode, ResourcePolicyV1,
     SCRATCH_STORE_HEADER_BYTES,
@@ -89,7 +89,22 @@ pub fn estimate_from_params(
     let durable_core = trace_lde_bytes
         .saturating_add(quotient_lde_bytes)
         .saturating_add(input_mmcs_bytes);
-    let proof_bytes = estimated_profile_proof_bytes(rows, width as u64, quotient_chunks);
+    // The quotient store holds one column per EXTENSION-field coefficient, and
+    // each Merkle root holds `digest_bytes / field_bytes` field elements. Both
+    // were literals (`2` and `4`) in the prover's sizing helpers, correct only
+    // for Goldilocks. `field_widths` returns `(base, base * degree)`, so both
+    // are derivable from the widths `params` already carries: 16/8 = 2 and
+    // 32/8 = 4 for Goldilocks (byte-identical to the previous literals), and
+    // 16/4 = 4 and 32/4 = 8 for BabyBear/KoalaBear/Mersenne31.
+    let extension_degree = ext_field_bytes.checked_div(field_bytes).unwrap_or(2).max(1);
+    let digest_words = digest_bytes.checked_div(field_bytes).unwrap_or(4).max(1);
+    let proof_bytes = estimated_profile_proof_bytes(
+        rows,
+        width as u64,
+        quotient_chunks,
+        digest_words,
+        extension_degree,
+    );
     let log_rows = rows.trailing_zeros() as u64;
     let max_store_count = 1u64
         .saturating_add(quotient_chunks)
@@ -107,6 +122,18 @@ pub fn estimate_from_params(
         quotient_chunks,
         params.has_next_row_columns,
         proof_bytes,
+        digest_words as usize,
+        extension_degree as usize,
+        // `EstimateParams` deliberately carries no Poseidon2 permutation
+        // width, so this prices the GOLDILOCKS challenger snapshot for every
+        // field. For BabyBear the real snapshot would be 128 bytes larger
+        // (16-element state, rate 8, versus 8 and 4), i.e. 256 bytes across
+        // the two manifests an atomic replacement holds — a fixed, sub-kilobyte
+        // understatement against a scratch high-water measured in megabytes.
+        // Correcting it needs a permutation-width field on `EstimateParams`,
+        // which is a shipped, wasm-vendored public shape; that belongs with
+        // the admission-gate work, not here.
+        crate::bounded_prover::GOLDILOCKS_CHALLENGER_SNAPSHOT_BYTES,
     )?;
     // Atomic checkpoint replacement temporarily keeps the previous manifest
     // beside the fully-synced replacement. Store headers and both manifests
@@ -152,10 +179,42 @@ pub fn estimate_from_params(
     // algebraic relation `192 = 3 * 64`, and for Goldilocks `192` is equally
     // consistent with `6 * digest_bytes` or `24 * field_bytes` — no test
     // here holds `ext_field_bytes` and `digest_bytes` apart, so the unit
-    // choice below is unverified for non-Goldilocks fields. Known
-    // limitation of `quotient_transform_peak` outside Goldilocks; if a
-    // BabyBear/KoalaBear/Mersenne31 estimate is ever contradicted by
-    // measurement, start here.
+    // choice below is unverified for non-Goldilocks fields.
+    //
+    // MEASURED 2026-07-29 against a real BabyBear proof; see
+    // `scratch_calibration.rs`. Three findings, none of which resolve the
+    // unit choice:
+    //
+    // 1. NOT CONTRADICTED. At the only shape where the readings differ
+    //    (quotient_chunks == 2, trace_width 24-26, rows >= 2^14) the measured
+    //    scratch high-water was 11,670,144 bytes, BELOW both the shipped
+    //    model's 11,967,932 and the `24 * field_bytes` counterfactual's
+    //    11,836,188. Both readings stay conservative, so the invitation just
+    //    above -- "if an estimate is ever contradicted by measurement, start
+    //    here" -- has NOT been triggered.
+    // 2. STILL UNSEPARABLE, and permanently so on this roadmap.
+    //    `canonical_extension_degree` gives every 31-bit field (4, 4), so
+    //    `ext_field_bytes` is 16 and `digest_bytes` 32 for EVERY supported
+    //    field: `12 * ext_field_bytes` and `6 * digest_bytes` both evaluate
+    //    to 192 always. Only `24 * field_bytes` (192 vs 96) is even in
+    //    principle falsifiable here, and it was not falsified. Separating the
+    //    other two needs a field with `digest_bytes != 2 * ext_field_bytes`;
+    //    none is planned.
+    // 3. LOW STAKES. A sweep over chunks {1,2,4,8} x rows 2^10..2^24 x
+    //    widths 1..256 found `quotient_transform_peak` is the binding term
+    //    for BabyBear only in that 3-width band, and the disputed reading
+    //    moves the final estimate by at most 1.12%. Everywhere else
+    //    `fri_peak` or `trace_transform_peak` dominates and all three
+    //    readings agree byte-for-byte. This is also why Goldilocks never
+    //    calibrated it: the term is nearly unreachable there too.
+    //
+    // The model is CONSERVATIVE, never optimistic, at both fields on every
+    // shape measured (Goldilocks +0.10%/+0.47%, BabyBear +1.24%/+2.55%).
+    // Open question worth a look before anyone tightens this: BabyBear's
+    // measured value sits only 0.26% above `trace_transform_peak`, so the
+    // `7 * field_bytes` coefficient there may be marginally optimistic at
+    // 4-byte fields and rescued only by the `max()`. No phase attribution
+    // exists to confirm that.
     let quotient_transform_peak = rows
         .saturating_mul(
             ext_field_bytes
@@ -174,7 +233,14 @@ pub fn estimate_from_params(
 
     let dft = ResourceBoundedDft::new(policy.clone())?;
     let trace_dft = dft.estimate_scratch(lde_rows as usize, width, false, field_bytes)?;
-    let quotient_dft = dft.estimate_scratch(lde_rows as usize, 2, false, field_bytes)?;
+    // The quotient store holds one column per EXTENSION-field coefficient,
+    // not a literal 2 — the same `extension_degree` derived above.
+    let quotient_dft = dft.estimate_scratch(
+        lde_rows as usize,
+        extension_degree as usize,
+        false,
+        field_bytes,
+    )?;
     let peak_resident_bytes = trace_dft
         .peak_resident_bytes
         .max(quotient_dft.peak_resident_bytes)
@@ -594,6 +660,52 @@ mod tests {
             let via_params =
                 estimate_from_params(&params_for_workload_for_test(&fib), &policy).unwrap();
             assert_eq!(via_air, via_params, "diverged at 2^{log_rows} rows");
+        }
+    }
+
+    /// The BabyBear half of the invariant above, which did not exist and whose
+    /// absence hid a live 2x divergence: `conventional_pipeline_estimate` used
+    /// to hardcode `24 * trace_width` and `32 * quotient_chunks` — `3 *
+    /// field_bytes` and `2 * ext_field_bytes` evaluated at GOLDILOCKS ONLY.
+    /// The parameter-only core opposite always computed them from the widths,
+    /// so for any 31-bit field the in-process planner and the shipped
+    /// `/v1/estimate` model disagreed by 2x on the conventional trace term.
+    /// A Goldilocks-only parity test cannot see that: 3*8 IS 24.
+    #[test]
+    fn conventional_cores_agree_for_babybear_widths_not_just_goldilocks() {
+        // BabyBear: 4-byte base, degree-4 extension => 16-byte extension.
+        const BABYBEAR_FIELD_BYTES: u64 = 4;
+        const BABYBEAR_EXT_FIELD_BYTES: u64 = 16;
+        for (width, quotient_chunks, rows) in [
+            (2u64, 1u64, 1usize << 20),
+            (180, 2, 1 << 16),
+            (7, 3, 1 << 10),
+        ] {
+            let params = EstimateParams {
+                field_bytes: BABYBEAR_FIELD_BYTES,
+                ext_field_bytes: BABYBEAR_EXT_FIELD_BYTES,
+                width,
+                quotient_chunks,
+                rows: rows as u64,
+                ..params_for_workload_for_test(&FibonacciWorkload {
+                    initial_a: 0,
+                    initial_b: 1,
+                    logical_rows: rows as u64,
+                })
+            };
+            let via_params = estimate_conventional_from_params(&params);
+            let via_pipeline = crate::prover::conventional_pipeline_estimate(
+                rows,
+                width,
+                quotient_chunks,
+                BABYBEAR_FIELD_BYTES,
+                BABYBEAR_EXT_FIELD_BYTES,
+            );
+            assert_eq!(
+                via_params.peak_resident_bytes, via_pipeline.peak_resident_bytes,
+                "conventional cores diverged at BabyBear widths \
+                 (width={width}, chunks={quotient_chunks}, rows={rows})"
+            );
         }
     }
 

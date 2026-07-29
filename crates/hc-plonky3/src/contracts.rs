@@ -1,3 +1,4 @@
+use crate::profile::{declared_field_profile, DurableFieldProfile, GoldilocksProfile};
 use crate::{
     verify_declarative_proof, InternalProofBundle, ResourceBoundedUniStarkProver, WorkloadKind,
     COMPATIBILITY_PROFILE, GOLDILOCKS_MODULUS_U64, PLONKY3_VERSION,
@@ -138,11 +139,21 @@ impl AirPackageV1 {
             return Err(ContractError::InvalidAir);
         }
 
+        // Constants are field elements, so their bound is the DECLARED field's
+        // modulus, not Goldilocks'. An unrecognised field name falls back to
+        // Goldilocks — the widest modulus this crate knows — purely to keep the
+        // pre-existing ordering ("malformed structure is reported before profile
+        // skew", pinned by `declarative_air_distinguishes_profile_skew_from_
+        // malformed_structure`); the profile gate at the end of this function
+        // rejects such a package unconditionally, so the fallback can never
+        // admit anything.
+        let field_modulus = declared_field_profile(&self.field)
+            .map_or(GOLDILOCKS_MODULUS_U64, |field| field.modulus_u64);
         let mut degrees = Vec::with_capacity(self.expressions.len());
         for (position, expression) in self.expressions.iter().enumerate() {
             let position = u32::try_from(position).map_err(|_| ContractError::InvalidAir)?;
             let degree = match expression {
-                AirExpressionV1::Constant { value } if *value < GOLDILOCKS_MODULUS_U64 => 0,
+                AirExpressionV1::Constant { value } if *value < field_modulus => 0,
                 AirExpressionV1::Current { column } | AirExpressionV1::Next { column }
                     if *column < self.trace_width =>
                 {
@@ -187,9 +198,23 @@ impl AirPackageV1 {
         if canonical_json_bytes_v1(self)?.len() > MAX_AIR_JSON_BYTES {
             return Err(ContractError::SizeLimit);
         }
+        // `profile` names the frozen DEPENDENCY profile (Plonky3 0.6.1 +
+        // `p3_uni_stark` + postcard); `field` names the field within it. That
+        // split is the convention `bounded_prover.rs::checkpoint_identity`
+        // already established, which hashes
+        // `{COMPATIBILITY_PROFILE}:{PLONKY3_VERSION}:{P::FIELD_NAME}:{PW}:{DE}`
+        // precisely because the profile constant is shared across fields.
+        //
+        // Admitting a field here does NOT assert the engine can prove it.
+        // `declarative.rs`'s workloads are `ResourceBoundedWorkload<8, 4,
+        // GoldilocksProfile>` at the type level and refuse anything else, and
+        // `AirProofBundleV1` refuses to stamp provenance on a non-Goldilocks
+        // AIR. What admission buys is that the canonicality bounds above and in
+        // `PublicInputsV1`/`TraceManifestV1` are evaluated against the field the
+        // package actually declares, instead of silently reducing mod p later.
         if self.backend != "plonky3"
             || self.profile != COMPATIBILITY_PROFILE
-            || self.field != "goldilocks"
+            || declared_field_profile(&self.field).is_none()
             || self.expected_verifier != "p3_uni_stark_0.6.1"
         {
             return Err(ContractError::ProfileMismatch);
@@ -235,6 +260,25 @@ fn expression_uses_next(expressions: &[AirExpressionV1], root: usize) -> bool {
     false
 }
 
+/// Refuse to build or accept a proof bundle whose AIR declares a field this
+/// release cannot honestly stamp provenance for.
+///
+/// `ReleaseProvenanceV1::dependency_profile` is written unconditionally as
+/// `COMPATIBILITY_PROFILE`, and `release/plonky3-compatibility-v1.json` — the
+/// signed record that string refers to — documents exactly one qualified
+/// instantiation (`configuration.field: p3_goldilocks::Goldilocks`). Stamping
+/// it onto a BabyBear AIR would label non-Goldilocks work as Goldilocks-profile
+/// work, so the bundle is refused instead of relabelled. Nothing here is
+/// reachable today (the declarative prover and verifier are Goldilocks-typed
+/// and refuse first), which is precisely why the guard is stated explicitly
+/// rather than left to depend on that ordering.
+fn provenance_representable_field(air: &AirPackageV1) -> Result<()> {
+    if air.field != <GoldilocksProfile as DurableFieldProfile<8, 4>>::FIELD_NAME {
+        return Err(ContractError::ProfileMismatch);
+    }
+    Ok(())
+}
+
 fn prior_degrees(degrees: &[u32], position: u32, left: u32, right: u32) -> Result<(u32, u32)> {
     if left >= position || right >= position {
         return Err(ContractError::InvalidAir);
@@ -268,6 +312,14 @@ pub struct TraceManifestV1 {
 impl TraceManifestV1 {
     pub fn validate_for_air(&self, air: &AirPackageV1) -> Result<()> {
         air.validate()?;
+        // `air.validate()` already refused every field this crate has no
+        // canonicality rule for, so the lookup cannot fail; `ok_or` rather than
+        // an `expect` keeps that a refusal instead of a panic if the two ever
+        // drift. Both the accepted encoding string and the bytes-per-element
+        // arithmetic below follow the AIR's declared field: a BabyBear trace is
+        // 4 bytes per element, so reusing Goldilocks' 8 would compute the wrong
+        // chunk count and the wrong total size for it.
+        let field = declared_field_profile(&air.field).ok_or(ContractError::ProfileMismatch)?;
         if self.schema_version != 1
             || self.air_digest_hex != hex_lower(&air.digest()?)
             || !is_lower_hex_digest(&self.trace_digest_hex)
@@ -275,11 +327,13 @@ impl TraceManifestV1 {
             || self.logical_rows < MIN_CUSTOM_TRACE_ROWS
             || self.logical_rows > MAX_CUSTOM_TRACE_ROWS
             || !self.logical_rows.is_power_of_two()
-            || self.field_encoding != "goldilocks_u64_le"
+            || self.field_encoding != field.trace_encoding
             || self.compression != "zstd"
             || self.chunk_uncompressed_bytes == 0
             || self.chunk_uncompressed_bytes > MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES
-            || !self.chunk_uncompressed_bytes.is_multiple_of(8)
+            || !self
+                .chunk_uncompressed_bytes
+                .is_multiple_of(field.element_bytes)
             || self.chunks.is_empty()
             || canonical_json_bytes_v1(self)?.len() > MAX_TRACE_MANIFEST_JSON_BYTES
         {
@@ -288,7 +342,7 @@ impl TraceManifestV1 {
         let expected_uncompressed = self
             .logical_rows
             .checked_mul(u64::from(self.trace_width))
-            .and_then(|value| value.checked_mul(8))
+            .and_then(|value| value.checked_mul(field.element_bytes))
             .ok_or(ContractError::InvalidTrace)?;
         let mut compressed_total = 0u64;
         let mut uncompressed_total = 0u64;
@@ -343,13 +397,16 @@ pub struct PublicInputsV1 {
 impl PublicInputsV1 {
     pub fn validate_for_air(&self, air: &AirPackageV1) -> Result<()> {
         air.validate()?;
+        // The bound is the DECLARED field's modulus. Comparing against
+        // Goldilocks' here would admit every value below 2^64 for a BabyBear
+        // AIR, and the field constructor would then reduce it mod 2^31-2^27+1 —
+        // making distinct public-input sets collapse onto the same field
+        // element and the same proof.
+        let field = declared_field_profile(&air.field).ok_or(ContractError::ProfileMismatch)?;
         if self.schema_version != 1
             || self.air_digest_hex != hex_lower(&air.digest()?)
             || self.values.len() != air.public_inputs.len()
-            || self
-                .values
-                .iter()
-                .any(|value| *value >= GOLDILOCKS_MODULUS_U64)
+            || self.values.iter().any(|value| *value >= field.modulus_u64)
         {
             return Err(ContractError::InvalidAir);
         }
@@ -413,6 +470,13 @@ impl WorkloadManifestV1 {
         {
             return Err(ContractError::ProfileMismatch);
         }
+        // DELIBERATELY Goldilocks-only, not an oversight. `WorkloadManifestV1`
+        // carries no `field` at all, and the only executor it feeds —
+        // `ResourceBoundedUniStarkProver` — is pinned to
+        // `<8, 4, GoldilocksProfile>`. Threading a profile through here would
+        // require adding a `field` property to a schema that is byte-compared
+        // against the published, signed `site/schemas/workload-manifest-v1
+        // .schema.json`, so it is out of scope until that schema is versioned.
         match (&self.workload_id, &self.input_generator) {
             (
                 WorkloadId::Fibonacci,
@@ -504,6 +568,7 @@ impl AirProofBundleV1 {
         proof_bytes: Vec<u8>,
         release_sha: impl Into<String>,
     ) -> Result<Self> {
+        provenance_representable_field(&air)?;
         trace_manifest.validate_for_air(&air)?;
         public_inputs.validate_for_air(&air)?;
         if proof_bytes.len() > MAX_PROOF_BYTES {
@@ -536,6 +601,7 @@ impl AirProofBundleV1 {
     }
 
     pub fn verify(&self) -> Result<()> {
+        provenance_representable_field(&self.air)?;
         if canonical_json_bytes_v1(self)?.len() > MAX_AIR_BUNDLE_JSON_BYTES
             || self.schema_version != 1
             || self.provenance.prover_version != PLONKY3_VERSION
@@ -980,6 +1046,7 @@ fn validate_bundle_sizes(encoded_proof_bytes: usize, public_values: usize) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::profile::BABYBEAR_MODULUS_U64;
     use hc_stream::{CheckpointPolicy, ResourceMode};
 
     fn manifest(root: &std::path::Path) -> WorkloadManifestV1 {
@@ -1214,6 +1281,177 @@ mod tests {
         trace.chunks[0].index = 0;
         trace.chunks[0].uncompressed_bytes = MAX_TRACE_UNCOMPRESSED_BYTES + 1;
         assert!(trace.validate_for_air(&air).is_err());
+    }
+
+    /// The same customer AIR, declared over BabyBear instead of Goldilocks.
+    fn babybear_air() -> AirPackageV1 {
+        AirPackageV1 {
+            field: crate::profile::BabyBearProfile::FIELD_NAME.into(),
+            ..customer_air()
+        }
+    }
+
+    /// Values in `[BABYBEAR_MODULUS, GOLDILOCKS_MODULUS)` are the whole hazard:
+    /// every validator in this file used to admit them for any field, and the
+    /// field constructor would then reduce them mod 2^31-2^27+1, so `x` and
+    /// `x + p` became the same public input and the same proof.
+    #[test]
+    fn babybear_public_inputs_above_its_modulus_are_rejected() {
+        let mut air = babybear_air();
+        air.public_inputs = vec![PublicInputSlotV1 {
+            name: "expected".into(),
+        }];
+        air.expressions.push(AirExpressionV1::Public { index: 0 });
+        air.validate().expect("a BabyBear AIR must be declarable");
+
+        let inputs = |value: u64| PublicInputsV1 {
+            schema_version: 1,
+            air_digest_hex: hex_lower(&air.digest().unwrap()),
+            values: vec![value],
+        };
+
+        for value in [
+            BABYBEAR_MODULUS_U64,
+            BABYBEAR_MODULUS_U64 + 1,
+            GOLDILOCKS_MODULUS_U64 - 1,
+        ] {
+            assert!(
+                matches!(
+                    inputs(value).validate_for_air(&air),
+                    Err(ContractError::InvalidAir)
+                ),
+                "BabyBear admitted the non-canonical public input {value}"
+            );
+        }
+
+        // ...and the largest canonical BabyBear value still passes, so the
+        // bound is not off by one.
+        inputs(BABYBEAR_MODULUS_U64 - 1)
+            .validate_for_air(&air)
+            .expect("the largest canonical BabyBear public input must validate");
+
+        // The identical value is legitimate for the Goldilocks AIR, which is
+        // what makes this a field-relative bound rather than a tightening.
+        let goldilocks = AirPackageV1 {
+            public_inputs: air.public_inputs.clone(),
+            expressions: air.expressions.clone(),
+            ..customer_air()
+        };
+        PublicInputsV1 {
+            schema_version: 1,
+            air_digest_hex: hex_lower(&goldilocks.digest().unwrap()),
+            values: vec![BABYBEAR_MODULUS_U64],
+        }
+        .validate_for_air(&goldilocks)
+        .expect("Goldilocks must still accept a value above BabyBear's modulus");
+    }
+
+    #[test]
+    fn babybear_air_constants_are_bounded_by_babybears_modulus() {
+        let mut air = babybear_air();
+        air.expressions.push(AirExpressionV1::Constant {
+            value: BABYBEAR_MODULUS_U64,
+        });
+        assert!(matches!(air.validate(), Err(ContractError::InvalidAir)));
+
+        air.expressions.pop();
+        air.expressions.push(AirExpressionV1::Constant {
+            value: BABYBEAR_MODULUS_U64 - 1,
+        });
+        air.validate()
+            .expect("the largest canonical BabyBear constant must validate");
+    }
+
+    /// A BabyBear trace is four bytes per element, so a manifest that declares
+    /// Goldilocks' eight-byte encoding — or sizes its chunks by it — describes
+    /// a different trace than the AIR does.
+    #[test]
+    fn babybear_trace_manifests_must_use_babybears_encoding_and_width() {
+        let air = babybear_air();
+        let rows = MIN_CUSTOM_TRACE_ROWS;
+        let babybear_bytes = rows * 4;
+        let mut trace = TraceManifestV1 {
+            schema_version: 1,
+            air_digest_hex: hex_lower(&air.digest().unwrap()),
+            trace_digest_hex: "11".repeat(32),
+            logical_rows: rows,
+            trace_width: 1,
+            field_encoding: "babybear_u32_le".into(),
+            compression: "zstd".into(),
+            chunk_uncompressed_bytes: babybear_bytes,
+            chunks: vec![TraceChunkV1 {
+                index: 0,
+                compressed_bytes: 256,
+                uncompressed_bytes: babybear_bytes,
+                blake3_hex: "22".repeat(32),
+            }],
+        };
+        trace.validate_for_air(&air).unwrap();
+
+        trace.field_encoding = "goldilocks_u64_le".into();
+        assert!(matches!(
+            trace.validate_for_air(&air),
+            Err(ContractError::InvalidTrace)
+        ));
+
+        // Goldilocks' eight-byte sizing is now a size mismatch, not a pass.
+        trace.field_encoding = "babybear_u32_le".into();
+        trace.chunk_uncompressed_bytes = rows * 8;
+        trace.chunks[0].uncompressed_bytes = rows * 8;
+        assert!(matches!(
+            trace.validate_for_air(&air),
+            Err(ContractError::InvalidTrace)
+        ));
+    }
+
+    /// `AirProofBundleV1` stamps `dependency_profile: COMPATIBILITY_PROFILE`
+    /// unconditionally, and the signed record behind that string documents one
+    /// qualified field. Refusing beats relabelling.
+    #[test]
+    fn air_proof_bundles_refuse_a_non_goldilocks_air_rather_than_relabelling_it() {
+        let air = babybear_air();
+        let rows = MIN_CUSTOM_TRACE_ROWS;
+        let trace = TraceManifestV1 {
+            schema_version: 1,
+            air_digest_hex: hex_lower(&air.digest().unwrap()),
+            trace_digest_hex: "11".repeat(32),
+            logical_rows: rows,
+            trace_width: 1,
+            field_encoding: "babybear_u32_le".into(),
+            compression: "zstd".into(),
+            chunk_uncompressed_bytes: rows * 4,
+            chunks: vec![TraceChunkV1 {
+                index: 0,
+                compressed_bytes: 256,
+                uncompressed_bytes: rows * 4,
+                blake3_hex: "22".repeat(32),
+            }],
+        };
+        let public_inputs = PublicInputsV1 {
+            schema_version: 1,
+            air_digest_hex: hex_lower(&air.digest().unwrap()),
+            values: vec![],
+        };
+        assert!(matches!(
+            AirProofBundleV1::from_proof(air, trace, public_inputs, vec![1, 2, 3], "release"),
+            Err(ContractError::ProfileMismatch)
+        ));
+    }
+
+    /// The whole point of the table is that a name it does not know resolves to
+    /// nothing, rather than inheriting Goldilocks' bounds by default.
+    #[test]
+    fn air_packages_still_reject_fields_with_no_canonicality_rule() {
+        for name in ["", "other", "koalabear", "GOLDILOCKS"] {
+            let air = AirPackageV1 {
+                field: name.into(),
+                ..customer_air()
+            };
+            assert!(
+                matches!(air.validate(), Err(ContractError::ProfileMismatch)),
+                "{name} was admitted as a field"
+            );
+        }
     }
 
     #[test]

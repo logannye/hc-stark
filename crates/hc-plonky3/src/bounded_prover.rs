@@ -1,17 +1,32 @@
+// Generic over `DurableFieldProfile<PERM_WIDTH, DIGEST_ELEMS>`, like
+// `dft`/`mmcs`/`fri`/`quotient`/`bounded_pcs` before it.
+//
+// NAMING: the const parameters are spelled `PW` (Poseidon2 permutation width)
+// and `DE` (Merkle digest size in field elements), the profile is `P`, and the
+// **workload is `Wk`** — deliberately NOT `W`, which this module's public
+// entry points have always used for the workload and which is also the
+// conventional name for the permutation width. Reusing one letter for both
+// would make every signature here ambiguous to read.
+//
+// The public entry points below stay pinned to `<8, 4, GoldilocksProfile>` and
+// keep their exact pre-generic signatures; the `*_with_profile` variants are
+// the generic ones. Nothing outside this crate had to change.
 use crate::bounded_pcs::{
     make_bounded_verifier_config, make_durable_mmcs, BoundedConfig, DurableInputMmcs,
+    ProfileStarkConfig,
 };
 use crate::checkpoint::ChallengerSnapshotV1;
-use crate::dft::{GoldilocksWord, ResourceBoundedDft, ResourceBoundedMatrix};
+use crate::dft::{ResourceBoundedDft, ResourceBoundedMatrix};
 use crate::fri::{
     prove_durable_fri_observed_batched, resume_durable_fri_observed_batched, DurableFriCommitment,
-    DurableFriError, FriLayerCheckpoint, ScratchChallengeVector,
+    DurableFriError, FriLayerCheckpoint, ProfileChallengerFor, ScratchChallengeVector,
 };
 use crate::mmcs::DurableMerkleData;
 use crate::opening::{
     build_reduced_opening_layer, interpolate_standard_lde, DurableOpeningError, MatrixOpening,
 };
-use crate::prover::{Challenge, GoldilocksConfig, Val, COMPATIBILITY_PROFILE, PLONKY3_VERSION};
+use crate::profile::{DurableFieldProfile, GoldilocksProfile};
+use crate::prover::{GoldilocksConfig, Val, COMPATIBILITY_PROFILE, PLONKY3_VERSION};
 use crate::quotient::{
     build_quotient_chunk_ldes, stream_quotient_values, EvaluationConfig, StreamedQuotientError,
 };
@@ -20,19 +35,18 @@ use crate::workloads::{
     FibonacciWorkload, Poseidon2Workload, ResourceBoundedWorkload, WorkloadError,
 };
 use hc_stream::{
-    cleanup_job_directory, ArtifactDigest, BlockMatrix, CheckpointArtifactV2, CheckpointIdentityV2,
-    CheckpointManifestV2, CheckpointPolicy, ExecutionMode, MatrixStore, MemoryMatrix,
-    PipelineArtifactKindV1, PipelinePhaseV1, PreflightReport, ResourceEstimate, ResourceMode,
-    ResourcePolicyV1, ScratchMatrixStore, StreamError,
+    cleanup_job_directory, ArtifactDigest, BlockMatrix, CanonicalElement, CheckpointArtifactV2,
+    CheckpointIdentityV2, CheckpointManifestV2, CheckpointPolicy, ExecutionMode, MatrixStore,
+    MemoryMatrix, PipelineArtifactKindV1, PipelinePhaseV1, PreflightReport, ResourceEstimate,
+    ResourceMode, ResourcePolicyV1, ScratchMatrixStore, StreamError,
 };
 use p3_air::symbolic::{AirLayout, SymbolicAirBuilder};
 use p3_air::{Air, BaseAir};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{ExtensionMmcs, PolynomialSpace};
 use p3_dft::Radix2DitParallel;
-use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing};
+use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField64};
 use p3_fri::FriParameters;
-use p3_goldilocks::Goldilocks;
 use p3_matrix::bitrev::BitReversedMatrixView;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
@@ -58,16 +72,23 @@ const FRI_CANCELLED_SENTINEL: &str = "tinyzkp-prover-cancelled";
 // challenges, length prefixes, and the final polynomial.
 const PROFILE_FRI_QUERY_COUNT: u64 = 100;
 const MAX_POSTCARD_U64_BYTES: u64 = 10;
-const PROFILE_DIGEST_WORDS: u64 = 4;
-const PROFILE_PROOF_LOG_SQUARED_BYTES: u64 =
-    PROFILE_FRI_QUERY_COUNT * PROFILE_DIGEST_WORDS * MAX_POSTCARD_U64_BYTES / 2;
-const PROFILE_PROOF_LOG_BYTES: u64 =
-    PROFILE_FRI_QUERY_COUNT * PROFILE_DIGEST_WORDS * MAX_POSTCARD_U64_BYTES * 3;
 const PROFILE_PROOF_FIXED_BYTES: u64 = 16 * 1024;
 const PROFILE_PROOF_TRACE_COLUMN_BYTES: u64 = PROFILE_FRI_QUERY_COUNT * MAX_POSTCARD_U64_BYTES;
-const PROFILE_PROOF_EXTRA_QUOTIENT_CHUNK_BYTES: u64 =
-    PROFILE_FRI_QUERY_COUNT * 2 * MAX_POSTCARD_U64_BYTES;
-const MAX_CHALLENGER_SNAPSHOT_BYTES: usize = 8 + 8 * 8 + 2 + 8 * 8 + 32;
+
+/// Upper bound on one encoded `ChallengerSnapshotV1`: magic, the whole sponge
+/// state, two length bytes, both `RATE`-bounded buffers, and the checksum.
+/// `perm_width` is the sponge state size and `rate` its input/output buffer
+/// bound — 8/4 for Goldilocks, 16/8 for BabyBear. Both were folded into the
+/// literal `8 + 8 * 8 + 2 + 8 * 8 + 32`, where the two `8`s meant different
+/// things (state length, and 2 * rate).
+const fn max_challenger_snapshot_bytes(perm_width: usize, rate: usize) -> usize {
+    8 + perm_width * 8 + 2 + 2 * rate * 8 + 32
+}
+
+/// The Goldilocks value of [`max_challenger_snapshot_bytes`], which is what the
+/// field-agnostic estimator in `estimate_params.rs` prices. See the note on
+/// [`estimated_atomic_checkpoint_bytes`].
+pub(crate) const GOLDILOCKS_CHALLENGER_SNAPSHOT_BYTES: usize = max_challenger_snapshot_bytes(8, 4);
 const MAX_ARTIFACT_PATH_COUNTER: &str = "18446744073709551615";
 const MAX_ARTIFACT_PATH_PID: &str = "4294967295";
 
@@ -130,9 +151,29 @@ impl CancellationToken {
     }
 }
 
-type DurableCommitMatrix = BitReversedMatrixView<ResourceBoundedMatrix>;
-type DurableCommitData = DurableMerkleData<DurableCommitMatrix>;
-type DurableCommitment = MerkleCap<Val, [Val; 4]>;
+type DurableCommitMatrix<const PW: usize, const DE: usize, P> =
+    BitReversedMatrixView<ResourceBoundedMatrix<PW, DE, P>>;
+type DurableCommitData<const PW: usize, const DE: usize, P> =
+    DurableMerkleData<PW, DE, P, DurableCommitMatrix<PW, DE, P>>;
+/// One Merkle cap of `[P::Val; DIGEST_ELEMS]` roots. The `4` this replaced was
+/// the Goldilocks digest size, not an arity.
+type DurableCommitment<const PW: usize, const DE: usize, P> = DurableFriCommitment<PW, DE, P>;
+/// The unmodified upstream `StarkConfig` this module verifies every proof
+/// against, at the active profile. `GoldilocksConfig<Radix2DitParallel<Val>>`
+/// is exactly its `<8, 4, GoldilocksProfile>` instantiation.
+type OfficialConfig<const PW: usize, const DE: usize, P> =
+    ProfileStarkConfig<PW, DE, P, Radix2DitParallel<<P as DurableFieldProfile<PW, DE>>::Val>>;
+
+/// Number of base-field coordinates per challenge element: 2 for Goldilocks,
+/// 4 for BabyBear. Same quantity `fri.rs`/`quotient.rs` call
+/// `extension_degree()`; every inline `2` describing an extension element's
+/// column count in this module was this number.
+fn extension_degree<const PW: usize, const DE: usize, P: DurableFieldProfile<PW, DE>>() -> usize
+where
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
+    <P::Challenge as BasedVectorSpace<P::Val>>::DIMENSION
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -143,10 +184,17 @@ struct ResumeDescriptorV1 {
     logical_rows: u64,
     public_values: Vec<u64>,
     resource_policy: ResourcePolicyV1,
+    // `Vec<Vec<u64>>` rather than `Vec<[u64; 4]>`: the inner length is
+    // `DIGEST_ELEMS`, which is 4 for Goldilocks and 8 for BabyBear, and serde's
+    // fixed-size-array impls are macro-generated per length so a generic one
+    // cannot be selected. The JSON encoding is unchanged (a fixed array and a
+    // `Vec` both serialize as a JSON array), so existing Goldilocks
+    // checkpoints still round-trip; `validate_resume_descriptor` now enforces
+    // the inner length explicitly, which the array type used to do.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    trace_commitment: Option<Vec<[u64; 4]>>,
+    trace_commitment: Option<Vec<Vec<u64>>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    quotient_commitment: Option<Vec<[u64; 4]>>,
+    quotient_commitment: Option<Vec<Vec<u64>>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     fri_state: Option<FriResumeStateV1>,
 }
@@ -154,15 +202,24 @@ struct ResumeDescriptorV1 {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FriResumeStateV1 {
-    trace_local: Vec<[u64; 2]>,
-    trace_next: Option<Vec<[u64; 2]>>,
-    quotient_chunks: Vec<Vec<[u64; 2]>>,
-    commitments: Vec<Vec<[u64; 4]>>,
+    // Inner lengths are the extension degree (2 Goldilocks / 4 BabyBear) for
+    // the opening vectors and `DIGEST_ELEMS` for the commitments. See
+    // `ResumeDescriptorV1` for why these are `Vec` rather than fixed arrays,
+    // and `validate_resume_descriptor` / `decode_challenges` /
+    // `decode_commitment` for where the lengths are now checked.
+    trace_local: Vec<Vec<u64>>,
+    trace_next: Option<Vec<Vec<u64>>>,
+    quotient_chunks: Vec<Vec<Vec<u64>>>,
+    commitments: Vec<Vec<Vec<u64>>>,
     commit_pow_witnesses: Vec<u64>,
     log_arities: Vec<u8>,
 }
 
-struct ProverCheckpointContext {
+struct ProverCheckpointContext<const PW: usize, const DE: usize, P: DurableFieldProfile<PW, DE>>
+where
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
+    profile: std::marker::PhantomData<P>,
     root: PathBuf,
     manifest: CheckpointManifestV2,
     descriptor: ResumeDescriptorV1,
@@ -170,14 +227,21 @@ struct ProverCheckpointContext {
     fri_artifacts: BTreeMap<u32, CheckpointArtifactV2>,
 }
 
-enum TraceLdeContinuation {
+enum TraceLdeContinuation<const PW: usize, const DE: usize, P: DurableFieldProfile<PW, DE>>
+where
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     FromTraceLde,
     AfterTraceCommitment,
-    FromQuotient(ScratchMatrixStore<GoldilocksWord>),
-    FromQuotientLdes(Vec<ResourceBoundedMatrix>),
+    FromQuotient(ScratchMatrixStore<P::Word>),
+    FromQuotientLdes(Vec<ResourceBoundedMatrix<PW, DE, P>>),
 }
 
-impl TraceLdeContinuation {
+impl<const PW: usize, const DE: usize, P: DurableFieldProfile<PW, DE>>
+    TraceLdeContinuation<PW, DE, P>
+where
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     fn skips_trace_commitment_checkpoint(&self) -> bool {
         !matches!(self, Self::FromTraceLde)
     }
@@ -261,27 +325,35 @@ pub fn estimate_builtin_manifest(
         crate::contracts::WorkloadId::Fibonacci
             if crate::prover::uses_in_memory_pipeline(&manifest.resource_policy, rows, 2, 1) =>
         {
-            Ok(crate::prover::conventional_pipeline_estimate(rows, 2, 1))
+            Ok(crate::prover::conventional_pipeline_estimate(
+                rows, 2, 1, 8, 16,
+            ))
         }
         crate::contracts::WorkloadId::Poseidon2Goldilocks
             if crate::prover::uses_in_memory_pipeline(&manifest.resource_policy, rows, 180, 2) =>
         {
-            Ok(crate::prover::conventional_pipeline_estimate(rows, 180, 2))
+            Ok(crate::prover::conventional_pipeline_estimate(
+                rows, 180, 2, 8, 16,
+            ))
         }
-        crate::contracts::WorkloadId::Fibonacci => estimate_air_pipeline(
-            &crate::FibonacciAir,
-            "fibonacci",
-            3,
-            rows,
-            &manifest.resource_policy,
-        ),
-        crate::contracts::WorkloadId::Poseidon2Goldilocks => estimate_air_pipeline(
-            &crate::poseidon2_goldilocks_air(),
-            "poseidon2_goldilocks",
-            0,
-            rows,
-            &manifest.resource_policy,
-        ),
+        crate::contracts::WorkloadId::Fibonacci => {
+            estimate_air_pipeline::<8, 4, GoldilocksProfile, _>(
+                &crate::FibonacciAir,
+                "fibonacci",
+                3,
+                rows,
+                &manifest.resource_policy,
+            )
+        }
+        crate::contracts::WorkloadId::Poseidon2Goldilocks => {
+            estimate_air_pipeline::<8, 4, GoldilocksProfile, _>(
+                &crate::poseidon2_goldilocks_air(),
+                "poseidon2_goldilocks",
+                0,
+                rows,
+                &manifest.resource_policy,
+            )
+        }
     }
 }
 
@@ -326,6 +398,20 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
 {
+    estimate_resource_bounded_workload_with_profile::<8, 4, GoldilocksProfile, W>(workload, policy)
+}
+
+/// The profile-generic form of [`estimate_resource_bounded_workload`].
+pub fn estimate_resource_bounded_workload_with_profile<const PW: usize, const DE: usize, P, Wk>(
+    workload: &Wk,
+    policy: &ResourcePolicyV1,
+) -> Result<ResourceEstimate>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    Wk::Air: BaseAir<P::Val> + Air<SymbolicAirBuilder<P::Val>>,
+{
     let rows =
         usize::try_from(workload.rows()).map_err(|_| BoundedProverError::UnsupportedProfile)?;
     if rows == 0 || !rows.is_power_of_two() {
@@ -335,7 +421,7 @@ where
     if workload.public_values().len() != air.num_public_values() {
         return Err(BoundedProverError::UnsupportedProfile);
     }
-    estimate_air_pipeline(
+    estimate_air_pipeline::<PW, DE, P, _>(
         &air,
         workload.identity().id,
         air.num_public_values(),
@@ -351,6 +437,24 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
 {
+    estimate_resource_conventional_workload_with_profile::<8, 4, GoldilocksProfile, W>(workload)
+}
+
+/// The profile-generic form of [`estimate_resource_conventional_workload`].
+pub fn estimate_resource_conventional_workload_with_profile<
+    const PW: usize,
+    const DE: usize,
+    P,
+    Wk,
+>(
+    workload: &Wk,
+) -> Result<ResourceEstimate>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    Wk::Air: BaseAir<P::Val> + Air<SymbolicAirBuilder<P::Val>>,
+{
     let rows =
         usize::try_from(workload.rows()).map_err(|_| BoundedProverError::UnsupportedProfile)?;
     if rows == 0 || !rows.is_power_of_two() {
@@ -363,12 +467,20 @@ where
     {
         return Err(BoundedProverError::UnsupportedProfile);
     }
-    let width = BaseAir::<Val>::width(&air);
-    let quotient_chunks = quotient_chunks(&air, width, air.num_public_values())?;
+    let width = BaseAir::<P::Val>::width(&air);
+    let quotient_chunks = quotient_chunks::<PW, DE, P, _>(&air, width, air.num_public_values())?;
+    // Profile-derived, NOT Goldilocks' 8/16: this function is generic over P,
+    // and passing the Goldilocks widths here made the in-process planner
+    // disagree 2x with the shipped `/v1/estimate` model on BabyBear's
+    // conventional trace term.
+    let field_bytes = <P::Word as CanonicalElement>::WIDTH as u64;
+    let ext_field_bytes = field_bytes.saturating_mul(extension_degree::<PW, DE, P>() as u64);
     Ok(crate::prover::conventional_pipeline_estimate(
         rows,
         width as u64,
         quotient_chunks,
+        field_bytes,
+        ext_field_bytes,
     ))
 }
 
@@ -383,9 +495,25 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
 {
+    plan_resource_workload_with_profile::<8, 4, GoldilocksProfile, W>(workload, policy)
+}
+
+/// The profile-generic form of [`plan_resource_workload`].
+pub fn plan_resource_workload_with_profile<const PW: usize, const DE: usize, P, Wk>(
+    workload: &Wk,
+    policy: &ResourcePolicyV1,
+) -> Result<ResourceExecutionPlanV1>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    Wk::Air: BaseAir<P::Val> + Air<SymbolicAirBuilder<P::Val>>,
+{
     policy.validate()?;
-    let conventional_estimate = estimate_resource_conventional_workload(workload)?;
-    let bounded_estimate = estimate_resource_bounded_workload(workload, policy)?;
+    let conventional_estimate =
+        estimate_resource_conventional_workload_with_profile::<PW, DE, P, Wk>(workload)?;
+    let bounded_estimate =
+        estimate_resource_bounded_workload_with_profile::<PW, DE, P, Wk>(workload, policy)?;
     let selected_mode = match policy.mode {
         ResourceMode::Memory => ExecutionMode::Memory,
         ResourceMode::Scratch => ExecutionMode::Scratch,
@@ -409,9 +537,15 @@ where
     })
 }
 
-fn quotient_chunks<A>(air: &A, width: usize, public_values: usize) -> Result<u64>
+fn quotient_chunks<const PW: usize, const DE: usize, P, A>(
+    air: &A,
+    width: usize,
+    public_values: usize,
+) -> Result<u64>
 where
-    A: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    A: BaseAir<P::Val> + Air<SymbolicAirBuilder<P::Val>>,
 {
     let layout = AirLayout {
         preprocessed_width: 0,
@@ -420,11 +554,11 @@ where
         num_periodic_columns: 0,
         ..Default::default()
     };
-    1u64.checked_shl(get_log_num_quotient_chunks::<Val, _>(air, layout, 0) as u32)
+    1u64.checked_shl(get_log_num_quotient_chunks::<P::Val, _>(air, layout, 0) as u32)
         .ok_or(BoundedProverError::UnsupportedProfile)
 }
 
-fn estimate_air_pipeline<A>(
+fn estimate_air_pipeline<const PW: usize, const DE: usize, P, A>(
     air: &A,
     workload_id: &str,
     public_values: usize,
@@ -432,21 +566,54 @@ fn estimate_air_pipeline<A>(
     policy: &ResourcePolicyV1,
 ) -> Result<ResourceEstimate>
 where
-    A: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    A: BaseAir<P::Val> + Air<SymbolicAirBuilder<P::Val>>,
 {
-    let width = BaseAir::<Val>::width(air);
-    let params = crate::estimate_params::EstimateParams {
+    let width = BaseAir::<P::Val>::width(air);
+    let params = profile_estimate_params::<PW, DE, P>(
+        workload_id,
+        rows,
+        width,
+        quotient_chunks::<PW, DE, P, _>(air, width, public_values)?,
+        public_values,
+        !air.main_next_row_columns().is_empty(),
+    );
+    crate::estimate_params::estimate_from_params(&params, policy)
+}
+
+/// The three byte widths the analytic cost model needs, read off the profile
+/// instead of the Goldilocks literals `8`, `16`, `32`.
+///
+/// `field_bytes` is the durable scratch element width (8 Goldilocks, 4
+/// BabyBear — `CanonicalElement::WIDTH`, NOT the permutation width);
+/// `ext_field_bytes` is that times the extension degree (16 for both profiles,
+/// via 2x8 and 4x4); `digest_bytes` is `DIGEST_ELEMS` times the same element
+/// width (32 for both, via 4x8 and 8x4).
+fn profile_estimate_params<const PW: usize, const DE: usize, P>(
+    workload_id: &str,
+    rows: usize,
+    width: usize,
+    quotient_chunks: u64,
+    public_values: usize,
+    has_next_row_columns: bool,
+) -> crate::estimate_params::EstimateParams
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
+    let field_bytes = <P::Word as CanonicalElement>::WIDTH as u64;
+    crate::estimate_params::EstimateParams {
         workload_id: workload_id.to_string(),
         rows: rows as u64,
         width: width as u64,
-        quotient_chunks: quotient_chunks(air, width, public_values)?,
+        quotient_chunks,
         public_values: public_values as u64,
-        has_next_row_columns: !air.main_next_row_columns().is_empty(),
-        field_bytes: 8,
-        ext_field_bytes: 16,
-        digest_bytes: 32,
-    };
-    crate::estimate_params::estimate_from_params(&params, policy)
+        has_next_row_columns,
+        field_bytes,
+        ext_field_bytes: field_bytes * extension_degree::<PW, DE, P>() as u64,
+        digest_bytes: field_bytes * DE as u64,
+    }
 }
 
 #[cfg(test)]
@@ -472,22 +639,25 @@ where
     let air = workload.air();
     let width = BaseAir::<Val>::width(&air);
     let public_values = air.num_public_values();
-    crate::estimate_params::EstimateParams {
-        workload_id: workload.identity().id.to_string(),
-        rows: workload.rows(),
-        width: width as u64,
-        quotient_chunks: quotient_chunks(&air, width, public_values).unwrap(),
-        public_values: public_values as u64,
-        has_next_row_columns: !air.main_next_row_columns().is_empty(),
-        field_bytes: 8,
-        ext_field_bytes: 16,
-        digest_bytes: 32,
-    }
+    profile_estimate_params::<8, 4, GoldilocksProfile>(
+        workload.identity().id,
+        usize::try_from(workload.rows()).unwrap(),
+        width,
+        quotient_chunks::<8, 4, GoldilocksProfile, _>(&air, width, public_values).unwrap(),
+        public_values,
+        !air.main_next_row_columns().is_empty(),
+    )
 }
 
-fn quotient_log_blowup<A>(air: &A, width: usize, public_values: usize) -> usize
+fn quotient_log_blowup<const PW: usize, const DE: usize, P, A>(
+    air: &A,
+    width: usize,
+    public_values: usize,
+) -> usize
 where
-    A: BaseAir<Val> + Air<SymbolicAirBuilder<Val>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    A: BaseAir<P::Val> + Air<SymbolicAirBuilder<P::Val>>,
 {
     let layout = AirLayout {
         preprocessed_width: 0,
@@ -496,23 +666,32 @@ where
         num_periodic_columns: 0,
         ..Default::default()
     };
-    get_log_num_quotient_chunks::<Val, _>(air, layout, 0).max(1)
+    get_log_num_quotient_chunks::<P::Val, _>(air, layout, 0).max(1)
 }
 
+/// `digest_words` is `DIGEST_ELEMS` and `extension_degree` is the challenge
+/// field's dimension over the base field; both used to be written as literals
+/// (`4` and `2`), correct only for Goldilocks. Passing 4 and 2 reproduces the
+/// previous constants exactly.
 pub(crate) fn estimated_profile_proof_bytes(
     rows: u64,
     trace_width: u64,
     quotient_chunks: u64,
+    digest_words: u64,
+    extension_degree: u64,
 ) -> u64 {
+    let log_squared_bytes = PROFILE_FRI_QUERY_COUNT * digest_words * MAX_POSTCARD_U64_BYTES / 2;
+    let log_bytes = PROFILE_FRI_QUERY_COUNT * digest_words * MAX_POSTCARD_U64_BYTES * 3;
+    let extra_quotient_chunk_bytes =
+        PROFILE_FRI_QUERY_COUNT * extension_degree * MAX_POSTCARD_U64_BYTES;
     let log_rows = rows.trailing_zeros() as u64;
-    PROFILE_PROOF_LOG_SQUARED_BYTES
+    log_squared_bytes
         .saturating_mul(log_rows.saturating_mul(log_rows))
-        .saturating_add(PROFILE_PROOF_LOG_BYTES.saturating_mul(log_rows))
+        .saturating_add(log_bytes.saturating_mul(log_rows))
         .saturating_add(PROFILE_PROOF_FIXED_BYTES)
         .saturating_add(PROFILE_PROOF_TRACE_COLUMN_BYTES.saturating_mul(trace_width))
         .saturating_add(
-            PROFILE_PROOF_EXTRA_QUOTIENT_CHUNK_BYTES
-                .saturating_mul(quotient_chunks.saturating_sub(1)),
+            extra_quotient_chunk_bytes.saturating_mul(quotient_chunks.saturating_sub(1)),
         )
 }
 
@@ -546,6 +725,13 @@ pub(crate) fn fri_mmcs_store_count(log_rows: u64) -> u64 {
         .saturating_add(log_rows)
 }
 
+/// `digest_elems`, `extension_degree`, and `challenger_snapshot_bytes` used to
+/// be the literals `4`, `2`, and `MAX_CHALLENGER_SNAPSHOT_BYTES`. They are
+/// arguments so `estimate_params.rs` — which is deliberately field-agnostic and
+/// carries only byte widths — can derive the first two from
+/// `digest_bytes / field_bytes` and `ext_field_bytes / field_bytes`. Passing
+/// `4, 2, GOLDILOCKS_CHALLENGER_SNAPSHOT_BYTES` reproduces the previous
+/// behavior byte for byte.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn estimated_atomic_checkpoint_bytes(
     policy: &ResourcePolicyV1,
@@ -556,16 +742,21 @@ pub(crate) fn estimated_atomic_checkpoint_bytes(
     quotient_chunks: u64,
     has_trace_next: bool,
     proof_bytes: u64,
+    digest_elems: usize,
+    extension_degree: usize,
+    challenger_snapshot_bytes: usize,
 ) -> Result<u64> {
     let fri_rounds = rows.trailing_zeros() as usize;
     let quotient_chunks =
         usize::try_from(quotient_chunks).map_err(|_| BoundedProverError::UnsupportedProfile)?;
     let maximum = u64::MAX;
+    let widest_challenge = vec![maximum; extension_degree];
+    let widest_digest = vec![maximum; digest_elems];
     let fri_state = FriResumeStateV1 {
-        trace_local: vec![[maximum; 2]; trace_width],
-        trace_next: has_trace_next.then(|| vec![[maximum; 2]; trace_width]),
-        quotient_chunks: vec![vec![[maximum; 2]]; quotient_chunks],
-        commitments: vec![vec![[maximum; 4]]; fri_rounds],
+        trace_local: vec![widest_challenge.clone(); trace_width],
+        trace_next: has_trace_next.then(|| vec![widest_challenge.clone(); trace_width]),
+        quotient_chunks: vec![vec![widest_challenge.clone()]; quotient_chunks],
+        commitments: vec![vec![widest_digest.clone()]; fri_rounds],
         commit_pow_witnesses: vec![maximum; fri_rounds],
         log_arities: vec![u8::MAX; fri_rounds],
     };
@@ -576,8 +767,8 @@ pub(crate) fn estimated_atomic_checkpoint_bytes(
         logical_rows: rows,
         public_values: vec![maximum; public_value_count],
         resource_policy: policy.clone(),
-        trace_commitment: Some(vec![[maximum; 4]]),
-        quotient_commitment: Some(vec![[maximum; 4]]),
+        trace_commitment: Some(vec![widest_digest.clone()]),
+        quotient_commitment: Some(vec![widest_digest]),
         fri_state: Some(fri_state),
     };
     let resume_payload = serde_json::to_vec(&descriptor)
@@ -625,7 +816,7 @@ pub(crate) fn estimated_atomic_checkpoint_bytes(
     }
 
     let identity_hash = [u8::MAX; 32];
-    let challenger_state = vec![u8::MAX; MAX_CHALLENGER_SNAPSHOT_BYTES];
+    let challenger_state = vec![u8::MAX; challenger_snapshot_bytes];
     let previous = CheckpointManifestV2 {
         schema_version: 2,
         backend_hash: identity_hash,
@@ -872,9 +1063,38 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val>
         + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
 {
     prove_resource_bounded_observed(workload, policy, |_| {})
+}
+
+/// The profile-generic form of [`prove_resource_bounded`]: the durable,
+/// resource-bounded pipeline at any [`DurableFieldProfile`].
+///
+/// Profiles with no durable checkpoint representation (everything except
+/// Goldilocks today — see `DurableFieldProfile::capture_challenger`) prove
+/// single-shot: no checkpoint is written, so no resume is offered, and a
+/// half-finished job cannot be restarted.
+pub fn prove_resource_bounded_with_profile<const PW: usize, const DE: usize, P, Wk>(
+    workload: &Wk,
+    policy: &ResourcePolicyV1,
+) -> Result<Vec<u8>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    Wk::Air: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
+{
+    prove_resource_bounded_observed_with_control_inner::<PW, DE, P, Wk, _>(
+        workload,
+        policy,
+        None,
+        CancellationToken::new(),
+        default_failure_injector(),
+        |_| {},
+    )
 }
 
 pub fn prove_resource_bounded_observed<W, Observe>(
@@ -886,7 +1106,7 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val>
         + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
     Observe: FnMut(&ProverEventV1),
 {
     prove_resource_bounded_observed_with_cancellation(
@@ -907,7 +1127,7 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val>
         + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
     Observe: FnMut(&ProverEventV1),
 {
     prove_resource_bounded_observed_with_control(
@@ -930,7 +1150,7 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val>
         + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
     Observe: FnMut(&ProverEventV1),
 {
     prove_resource_bounded_observed_with_control_inner(
@@ -958,7 +1178,7 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val>
         + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
     Observe: FnMut(&ProverEventV1),
 {
     prove_resource_bounded_observed_with_control_inner(
@@ -971,8 +1191,15 @@ where
     )
 }
 
-fn prove_resource_bounded_observed_with_control_inner<W, Observe>(
-    workload: &W,
+#[allow(clippy::too_many_arguments)]
+fn prove_resource_bounded_observed_with_control_inner<
+    const PW: usize,
+    const DE: usize,
+    P,
+    Wk,
+    Observe,
+>(
+    workload: &Wk,
     policy: &ResourcePolicyV1,
     checkpoint_dir: Option<&Path>,
     cancellation: CancellationToken,
@@ -980,10 +1207,12 @@ fn prove_resource_bounded_observed_with_control_inner<W, Observe>(
     mut observe: Observe,
 ) -> Result<Vec<u8>>
 where
-    W: ResourceBoundedWorkload,
-    W::Air: BaseAir<Val>
-        + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    Wk::Air: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
     Observe: FnMut(&ProverEventV1),
 {
     policy.validate()?;
@@ -1002,9 +1231,9 @@ where
     if expected_public_values.len() != air.num_public_values() {
         return Err(BoundedProverError::UnsupportedProfile);
     }
-    let width = BaseAir::<Val>::width(&air);
-    let log_blowup = quotient_log_blowup(&air, width, air.num_public_values());
-    let full_estimate = estimate_air_pipeline(
+    let width = BaseAir::<P::Val>::width(&air);
+    let log_blowup = quotient_log_blowup::<PW, DE, P, _>(&air, width, air.num_public_values());
+    let full_estimate = estimate_air_pipeline::<PW, DE, P, _>(
         &air,
         workload.identity().id,
         air.num_public_values(),
@@ -1028,15 +1257,18 @@ where
     local_policy.scratch_dir = job_dir.join("artifacts");
     create_private_dir(&local_policy.scratch_dir)?;
     let result = (|| {
-        let challenger =
-            StarkGenericConfig::initialise_challenger(&make_bounded_verifier_config(log_blowup));
-        let mut trace_store = ScratchMatrixStore::<GoldilocksWord>::create(
+        let challenger: ProfileChallengerFor<PW, DE, P> = StarkGenericConfig::initialise_challenger(
+            &make_bounded_verifier_config::<PW, DE, P>(log_blowup),
+        );
+        let mut trace_store = ScratchMatrixStore::<P::Word>::create(
             &local_policy.scratch_dir,
             "trace.bin",
             rows as u64,
             width,
         )?;
-        let block_rows = local_policy.tile_rows(8, width)?.min(rows);
+        let block_rows = local_policy
+            .tile_rows(<P::Word as CanonicalElement>::WIDTH, width)?
+            .min(rows);
         let generated = if policy.max_threads == 1 {
             workload.write_trace(&mut trace_store, block_rows)?
         } else {
@@ -1064,7 +1296,7 @@ where
                 .digest()
                 .ok_or(BoundedProverError::InvalidCheckpoint)?,
         )?;
-        let trace_checkpoint = write_phase_checkpoint(
+        let trace_checkpoint = write_phase_checkpoint::<PW, DE, P, Wk>(
             workload,
             policy,
             &job_dir,
@@ -1086,9 +1318,9 @@ where
         failure_injector.after_checkpoint(&PipelinePhaseV1::Trace);
         check_cancelled(&cancellation)?;
 
-        let dft = ResourceBoundedDft::new(local_policy.clone())?;
+        let dft = ResourceBoundedDft::<PW, DE, P>::new(local_policy.clone())?;
         let trace_lde =
-            dft.try_coset_lde_block_matrix(&trace_store, log_blowup, Goldilocks::GENERATOR)?;
+            dft.try_coset_lde_block_matrix(&trace_store, log_blowup, P::Val::GENERATOR)?;
         trace_lde.retain_for_resume();
         let (trace_lde_path, trace_lde_digest) = trace_lde.scratch_artifact()?;
         let trace_lde_artifact = checkpoint_artifact(
@@ -1098,7 +1330,7 @@ where
             trace_lde_path,
             trace_lde_digest,
         )?;
-        let trace_lde_checkpoint = write_phase_checkpoint(
+        let trace_lde_checkpoint = write_phase_checkpoint::<PW, DE, P, Wk>(
             workload,
             policy,
             &job_dir,
@@ -1121,7 +1353,7 @@ where
         failure_injector.after_checkpoint(&PipelinePhaseV1::TraceLde);
         check_cancelled(&cancellation)?;
 
-        continue_from_trace_lde(
+        continue_from_trace_lde::<PW, DE, P, Wk, _>(
             workload,
             &air,
             rows,
@@ -1152,15 +1384,15 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn continue_from_trace_lde<W, A>(
-    workload: &W,
+fn continue_from_trace_lde<const PW: usize, const DE: usize, P, Wk, A>(
+    workload: &Wk,
     air: &A,
     rows: usize,
-    public_values: Vec<Val>,
+    public_values: Vec<P::Val>,
     input_digest: [u8; 32],
-    trace_lde: ResourceBoundedMatrix,
-    continuation: TraceLdeContinuation,
-    expected_trace_commitment: Option<&Vec<[u64; 4]>>,
+    trace_lde: ResourceBoundedMatrix<PW, DE, P>,
+    continuation: TraceLdeContinuation<PW, DE, P>,
+    expected_trace_commitment: Option<&Vec<Vec<u64>>>,
     expected_challenger: Option<&ChallengerSnapshotV1>,
     cancellation: &CancellationToken,
     policy: &ResourcePolicyV1,
@@ -1172,12 +1404,14 @@ fn continue_from_trace_lde<W, A>(
     failure_injector: &dyn FailureInjector,
 ) -> Result<Vec<u8>>
 where
-    W: ResourceBoundedWorkload,
-    A: BaseAir<Val>
-        + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    A: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
 {
-    let width = BaseAir::<Val>::width(air);
+    let width = BaseAir::<P::Val>::width(air);
     trace_lde.retain_for_resume();
     let (trace_lde_path, trace_lde_digest) = trace_lde.scratch_artifact()?;
     let trace_lde_artifact = checkpoint_artifact(
@@ -1187,35 +1421,38 @@ where
         trace_lde_path,
         trace_lde_digest,
     )?;
-    let input_mmcs = make_durable_mmcs(local_policy.clone());
+    let input_mmcs = make_durable_mmcs::<PW, DE, P>(local_policy.clone());
     let (trace_commit, trace_data) = input_mmcs.try_commit_bit_reversed(vec![trace_lde.clone()])?;
     if expected_trace_commitment
-        .is_some_and(|expected| *expected != encode_commitment(&trace_commit))
+        .is_some_and(|expected| *expected != encode_commitment::<PW, DE, P>(&trace_commit))
     {
         return Err(BoundedProverError::InvalidCheckpoint);
     }
 
     let log_degree = rows.trailing_zeros() as usize;
-    let trace_domain =
-        p3_field::coset::TwoAdicMultiplicativeCoset::new(Goldilocks::ONE, log_degree)
-            .ok_or(BoundedProverError::UnsupportedProfile)?;
-    let log_blowup = quotient_log_blowup(air, width, public_values.len());
+    let trace_domain = p3_field::coset::TwoAdicMultiplicativeCoset::new(P::Val::ONE, log_degree)
+        .ok_or(BoundedProverError::UnsupportedProfile)?;
+    let log_blowup = quotient_log_blowup::<PW, DE, P, _>(air, width, public_values.len());
     let lde_rows = rows * (1usize << log_blowup);
-    let mut challenger =
-        StarkGenericConfig::initialise_challenger(&make_bounded_verifier_config(log_blowup));
-    challenger.observe(Goldilocks::from_u8(log_degree as u8));
-    challenger.observe(Goldilocks::from_u8(log_degree as u8));
-    challenger.observe(Goldilocks::ZERO);
+    let mut challenger: ProfileChallengerFor<PW, DE, P> = StarkGenericConfig::initialise_challenger(
+        &make_bounded_verifier_config::<PW, DE, P>(log_blowup),
+    );
+    challenger.observe(P::Val::from_u8(log_degree as u8));
+    challenger.observe(P::Val::from_u8(log_degree as u8));
+    challenger.observe(P::Val::ZERO);
     challenger.observe(trace_commit.clone());
     challenger.observe_slice(&public_values);
-    let constraint_alpha: Challenge = challenger.sample_algebra_element();
+    let constraint_alpha: P::Challenge = challenger.sample_algebra_element();
+    // `P::capture_challenger` returning `None` (a profile with no durable
+    // checkpoint format) while a checkpoint claims an expected transcript is a
+    // contradiction, so this comparison fails closed rather than skipping.
     if expected_challenger
-        .is_some_and(|expected| *expected != ChallengerSnapshotV1::capture(&challenger))
+        .is_some_and(|expected| P::capture_challenger(&challenger).as_ref() != Some(expected))
     {
         return Err(BoundedProverError::InvalidCheckpoint);
     }
     if !continuation.skips_trace_commitment_checkpoint() {
-        let trace_commitment_checkpoint = write_phase_checkpoint(
+        let trace_commitment_checkpoint = write_phase_checkpoint::<PW, DE, P, Wk>(
             workload,
             policy,
             job_dir,
@@ -1245,7 +1482,7 @@ where
         num_periodic_columns: 0,
         ..Default::default()
     };
-    let log_num_quotient_chunks = get_log_num_quotient_chunks::<Val, _>(air, layout, 0);
+    let log_num_quotient_chunks = get_log_num_quotient_chunks::<P::Val, _>(air, layout, 0);
     let num_quotient_chunks = 1usize << log_num_quotient_chunks;
     let quotient_domain = trace_domain.create_disjoint_domain(
         1usize
@@ -1262,11 +1499,21 @@ where
     let resumed_from_quotient = quotient_values.is_some();
     let resumed_from_quotient_ldes = saved_quotient_ldes.is_some();
     if let Some(values) = quotient_values.as_ref() {
-        if values.rows() != quotient_domain.size() as u64 || values.columns() != 2 {
+        // The column count is the EXTENSION DEGREE — the number of base-field
+        // coordinates one quotient value occupies — not an arity. It was
+        // written as a literal `2`, which is correct only for Goldilocks;
+        // BabyBear stores 4 columns and this check would have rejected every
+        // valid BabyBear resume.
+        if values.rows() != quotient_domain.size() as u64
+            || values.columns() != extension_degree::<PW, DE, P>()
+        {
             return Err(BoundedProverError::InvalidCheckpoint);
         }
     } else if !resumed_from_quotient_ldes {
-        quotient_values = Some(stream_quotient_values(
+        // `P` is not inferable from the arguments (`P::Word` is an associated
+        // type, so `ScratchMatrixStore<P::Word>` does not pin it), so the
+        // active profile is named explicitly.
+        quotient_values = Some(stream_quotient_values::<PW, DE, P, _, _>(
             air,
             &public_values,
             trace_domain,
@@ -1291,7 +1538,7 @@ where
                 .digest()
                 .ok_or(BoundedProverError::InvalidCheckpoint)?,
         )?;
-        let quotient_checkpoint = write_phase_checkpoint(
+        let quotient_checkpoint = write_phase_checkpoint::<PW, DE, P, Wk>(
             workload,
             policy,
             job_dir,
@@ -1315,17 +1562,18 @@ where
     }
 
     let quotient_ldes = if let Some(ldes) = saved_quotient_ldes {
+        // Same extension-degree column count as the quotient store above.
         if ldes.len() != num_quotient_chunks
-            || ldes
-                .iter()
-                .any(|matrix| matrix.height() != lde_rows || matrix.width() != 2)
+            || ldes.iter().any(|matrix| {
+                matrix.height() != lde_rows || matrix.width() != extension_degree::<PW, DE, P>()
+            })
         {
             return Err(BoundedProverError::InvalidCheckpoint);
         }
         ldes
     } else {
-        let dft = ResourceBoundedDft::new(local_policy.clone())?;
-        build_quotient_chunk_ldes(
+        let dft = ResourceBoundedDft::<PW, DE, P>::new(local_policy.clone())?;
+        build_quotient_chunk_ldes::<PW, DE, P>(
             quotient_domain,
             quotient_values
                 .as_ref()
@@ -1350,7 +1598,7 @@ where
                 digest,
             )?);
         }
-        let quotient_lde_checkpoint = write_phase_checkpoint(
+        let quotient_lde_checkpoint = write_phase_checkpoint::<PW, DE, P, Wk>(
             workload,
             policy,
             job_dir,
@@ -1380,7 +1628,7 @@ where
     let (quotient_commit, quotient_data) =
         input_mmcs.try_commit_bit_reversed(quotient_ldes.clone())?;
     challenger.observe(quotient_commit.clone());
-    let mut checkpoint = write_quotient_checkpoint(
+    let mut checkpoint = write_quotient_checkpoint::<PW, DE, P, Wk>(
         workload,
         policy,
         job_dir,
@@ -1405,7 +1653,7 @@ where
     failure_injector.after_checkpoint(&PipelinePhaseV1::QuotientCommitment);
     check_cancelled(cancellation)?;
 
-    finish_after_quotient(
+    finish_after_quotient::<PW, DE, P, _>(
         air,
         rows,
         trace_domain,
@@ -1440,6 +1688,23 @@ where
         + for<'a> Air<VerifierConstraintFolder<'a, GoldilocksConfig<Radix2DitParallel<Val>>>>
         + for<'a> Air<p3_air::DebugConstraintBuilder<'a, Val>>,
 {
+    prove_resource_reference_with_profile::<8, 4, GoldilocksProfile, W>(workload)
+}
+
+/// The profile-generic form of [`prove_resource_reference`].
+pub fn prove_resource_reference_with_profile<const PW: usize, const DE: usize, P, Wk>(
+    workload: &Wk,
+) -> Result<Vec<u8>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    Wk::Air: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<ProverConstraintFolder<'a, OfficialConfig<PW, DE, P>>>
+        + for<'a> Air<VerifierConstraintFolder<'a, OfficialConfig<PW, DE, P>>>
+        + for<'a> Air<p3_air::DebugConstraintBuilder<'a, P::Val>>,
+{
     let rows =
         usize::try_from(workload.rows()).map_err(|_| BoundedProverError::UnsupportedProfile)?;
     if rows == 0 || !rows.is_power_of_two() {
@@ -1451,8 +1716,8 @@ where
     if expected_public_values.len() != air.num_public_values() {
         return Err(BoundedProverError::UnsupportedProfile);
     }
-    let width = BaseAir::<Val>::width(&air);
-    let mut store = MemoryMatrix::<GoldilocksWord>::preallocated(rows as u64, width)?;
+    let width = BaseAir::<P::Val>::width(&air);
+    let mut store = MemoryMatrix::<P::Word>::preallocated(rows as u64, width)?;
     let generated = workload.write_trace(&mut store, rows)?;
     if generated.identity != workload.identity()
         || generated.rows != workload.rows()
@@ -1462,12 +1727,15 @@ where
     {
         return Err(BoundedProverError::Workload(WorkloadError::InvalidShape));
     }
-    let mut words = vec![GoldilocksWord::default(); rows.saturating_mul(width)];
+    let mut words = vec![P::Word::default(); rows.saturating_mul(width)];
     store.read_rows(0, rows, &mut words)?;
-    let trace = RowMajorMatrix::new(words.into_iter().map(|word| word.0).collect(), width);
-    let log_blowup = quotient_log_blowup(&air, width, generated.public_values.len());
-    let config =
-        crate::prover::make_config_with_log_blowup(Radix2DitParallel::<Val>::default(), log_blowup);
+    let trace = RowMajorMatrix::new(words.into_iter().map(Into::into).collect(), width);
+    let log_blowup =
+        quotient_log_blowup::<PW, DE, P, _>(&air, width, generated.public_values.len());
+    let config = crate::prover::make_config_with_log_blowup::<PW, DE, P, _>(
+        Radix2DitParallel::<P::Val>::default(),
+        log_blowup,
+    );
     let proof = prove(&config, &air, trace, &generated.public_values);
     let bytes = postcard::to_allocvec(&proof)
         .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
@@ -1483,7 +1751,25 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val>
         + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
+{
+    verify_resource_bounded_proof_with_profile::<8, 4, GoldilocksProfile, W>(workload, proof_bytes)
+}
+
+/// The profile-generic form of [`verify_resource_bounded_proof`]. Decodes into
+/// the UNMODIFIED upstream `p3_uni_stark::Proof` for the profile's stock
+/// config and hands it to the stock verifier; TinyZKP supplies no verifier.
+pub fn verify_resource_bounded_proof_with_profile<const PW: usize, const DE: usize, P, Wk>(
+    workload: &Wk,
+    proof_bytes: &[u8],
+) -> Result<()>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    Wk::Air: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
 {
     let rows =
         usize::try_from(workload.rows()).map_err(|_| BoundedProverError::UnsupportedProfile)?;
@@ -1495,31 +1781,37 @@ where
         return Err(BoundedProverError::UnsupportedProfile);
     }
     let air = workload.air();
-    let log_blowup = quotient_log_blowup(&air, BaseAir::<Val>::width(&air), public_values.len());
-    let proof: Proof<GoldilocksConfig<Radix2DitParallel<Val>>> = postcard::from_bytes(proof_bytes)
+    let log_blowup = quotient_log_blowup::<PW, DE, P, _>(
+        &air,
+        BaseAir::<P::Val>::width(&air),
+        public_values.len(),
+    );
+    let proof: Proof<OfficialConfig<PW, DE, P>> = postcard::from_bytes(proof_bytes)
         .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
-    let config =
-        crate::prover::make_config_with_log_blowup(Radix2DitParallel::<Val>::default(), log_blowup);
+    let config = crate::prover::make_config_with_log_blowup::<PW, DE, P, _>(
+        Radix2DitParallel::<P::Val>::default(),
+        log_blowup,
+    );
     verify(&config, &air, &proof, &public_values)
         .map_err(|error| BoundedProverError::Verification(format!("{error:?}")))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn finish_after_quotient<A>(
+fn finish_after_quotient<const PW: usize, const DE: usize, P, A>(
     air: &A,
     rows: usize,
-    trace_domain: p3_field::coset::TwoAdicMultiplicativeCoset<Val>,
-    public_values: Vec<Val>,
-    trace_lde: ResourceBoundedMatrix,
-    quotient_ldes: Vec<ResourceBoundedMatrix>,
-    input_mmcs: DurableInputMmcs,
-    trace_data: DurableCommitData,
-    quotient_data: DurableCommitData,
-    trace_commit: DurableCommitment,
-    quotient_commit: DurableCommitment,
-    mut challenger: crate::ProfileChallenger,
+    trace_domain: p3_field::coset::TwoAdicMultiplicativeCoset<P::Val>,
+    public_values: Vec<P::Val>,
+    trace_lde: ResourceBoundedMatrix<PW, DE, P>,
+    quotient_ldes: Vec<ResourceBoundedMatrix<PW, DE, P>>,
+    input_mmcs: DurableInputMmcs<PW, DE, P>,
+    trace_data: DurableCommitData<PW, DE, P>,
+    quotient_data: DurableCommitData<PW, DE, P>,
+    trace_commit: DurableCommitment<PW, DE, P>,
+    quotient_commit: DurableCommitment<PW, DE, P>,
+    mut challenger: ProfileChallengerFor<PW, DE, P>,
     policy: &ResourcePolicyV1,
-    mut checkpoint: Option<&mut ProverCheckpointContext>,
+    mut checkpoint: Option<&mut ProverCheckpointContext<PW, DE, P>>,
     cancellation: &CancellationToken,
     observe: &mut dyn FnMut(&ProverEventV1),
     completed_phases: &mut u32,
@@ -1527,13 +1819,15 @@ fn finish_after_quotient<A>(
     failure_injector: &dyn FailureInjector,
 ) -> Result<Vec<u8>>
 where
-    A: BaseAir<Val>
-        + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    A: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
 {
     let resource_root = policy.scratch_dir.parent().unwrap_or(&policy.scratch_dir);
     let log_degree = rows.trailing_zeros() as usize;
-    let zeta: Challenge = challenger.sample_algebra_element();
+    let zeta: P::Challenge = challenger.sample_algebra_element();
     let zeta_next = trace_domain
         .next_point(zeta)
         .ok_or(BoundedProverError::UnsupportedProfile)?;
@@ -1558,7 +1852,7 @@ where
     for chunk in &quotient_chunks {
         challenger.observe_algebra_slice(chunk);
     }
-    let batching_alpha: Challenge = challenger.sample_algebra_element();
+    let batching_alpha: P::Challenge = challenger.sample_algebra_element();
 
     let mut trace_points = vec![(zeta, trace_local.clone())];
     if let Some(next) = &trace_next {
@@ -1596,7 +1890,11 @@ where
     check_cancelled(cancellation)?;
 
     let challenge_mmcs = ExtensionMmcs::new(input_mmcs.clone());
-    let log_blowup = quotient_log_blowup(air, BaseAir::<Val>::width(air), public_values.len());
+    let log_blowup = quotient_log_blowup::<PW, DE, P, _>(
+        air,
+        BaseAir::<P::Val>::width(air),
+        public_values.len(),
+    );
     let mut fri_params = FriParameters::new_benchmark(challenge_mmcs);
     fri_params.log_blowup = log_blowup;
     let opening_proof = prove_durable_fri_observed_batched(
@@ -1637,7 +1935,7 @@ where
         Err(error) => return Err(error.into()),
     };
 
-    let bytes = assemble_and_verify(
+    let bytes = assemble_and_verify::<PW, DE, P, _>(
         air,
         log_degree,
         public_values,
@@ -1664,12 +1962,20 @@ where
     Ok(bytes)
 }
 
-fn open_input_batches_sorted(
-    input_mmcs: &DurableInputMmcs,
+#[allow(clippy::type_complexity)]
+fn open_input_batches_sorted<const PW: usize, const DE: usize, P>(
+    input_mmcs: &DurableInputMmcs<PW, DE, P>,
     indices: &[usize],
-    trace_data: &DurableCommitData,
-    quotient_data: &DurableCommitData,
-) -> std::result::Result<Vec<Vec<p3_commit::BatchOpening<Val, DurableInputMmcs>>>, String> {
+    trace_data: &DurableCommitData<PW, DE, P>,
+    quotient_data: &DurableCommitData<PW, DE, P>,
+) -> std::result::Result<
+    Vec<Vec<p3_commit::BatchOpening<P::Val, DurableInputMmcs<PW, DE, P>>>>,
+    String,
+>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     let trace = input_mmcs
         .open_batches_sorted(indices, trace_data)
         .map_err(|error| error.to_string())?;
@@ -1684,23 +1990,25 @@ fn open_input_batches_sorted(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn assemble_and_verify<A>(
+fn assemble_and_verify<const PW: usize, const DE: usize, P, A>(
     air: &A,
     log_degree: usize,
-    public_values: Vec<Val>,
-    trace_commit: DurableCommitment,
-    quotient_commit: DurableCommitment,
-    trace_local: Vec<Challenge>,
-    trace_next: Option<Vec<Challenge>>,
-    quotient_chunks: Vec<Vec<Challenge>>,
-    opening_proof: crate::DurablePcsProof,
+    public_values: Vec<P::Val>,
+    trace_commit: DurableCommitment<PW, DE, P>,
+    quotient_commit: DurableCommitment<PW, DE, P>,
+    trace_local: Vec<P::Challenge>,
+    trace_next: Option<Vec<P::Challenge>>,
+    quotient_chunks: Vec<Vec<P::Challenge>>,
+    opening_proof: crate::bounded_pcs::DurablePcsProof<PW, DE, P>,
 ) -> Result<Vec<u8>>
 where
-    A: BaseAir<Val>
-        + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    A: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
 {
-    let proof = Proof::<BoundedConfig> {
+    let proof = Proof::<BoundedConfig<PW, DE, P>> {
         commitments: Commitments {
             trace: trace_commit,
             quotient_chunks: quotient_commit,
@@ -1720,47 +2028,65 @@ where
     let bytes = postcard::to_allocvec(&proof)
         .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
 
-    let log_blowup = quotient_log_blowup(air, BaseAir::<Val>::width(air), public_values.len());
-    let official_config =
-        crate::prover::make_config_with_log_blowup(Radix2DitParallel::<Val>::default(), log_blowup);
-    let official_proof: Proof<GoldilocksConfig<Radix2DitParallel<Val>>> =
-        postcard::from_bytes(&bytes)
-            .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
+    let log_blowup = quotient_log_blowup::<PW, DE, P, _>(
+        air,
+        BaseAir::<P::Val>::width(air),
+        public_values.len(),
+    );
+    let official_config = crate::prover::make_config_with_log_blowup::<PW, DE, P, _>(
+        Radix2DitParallel::<P::Val>::default(),
+        log_blowup,
+    );
+    let official_proof: Proof<OfficialConfig<PW, DE, P>> = postcard::from_bytes(&bytes)
+        .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
     verify(&official_config, air, &official_proof, &public_values)
         .map_err(|error| BoundedProverError::Verification(format!("{error:?}")))?;
     Ok(bytes)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn write_phase_checkpoint<W: ResourceBoundedWorkload>(
-    workload: &W,
+fn write_phase_checkpoint<const PW: usize, const DE: usize, P, Wk>(
+    workload: &Wk,
     policy: &ResourcePolicyV1,
     job_dir: &Path,
     input_hash: [u8; 32],
-    public_values: &[Val],
+    public_values: &[P::Val],
     completed_phase: PipelinePhaseV1,
-    trace_commitment: Option<&DurableCommitment>,
-    challenger: &crate::ProfileChallenger,
+    trace_commitment: Option<&DurableCommitment<PW, DE, P>>,
+    challenger: &ProfileChallengerFor<PW, DE, P>,
     artifacts: Vec<CheckpointArtifactV2>,
-) -> Result<Option<PathBuf>> {
+) -> Result<Option<PathBuf>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+{
     if policy.checkpoint_policy == CheckpointPolicy::Disabled {
         return Ok(None);
     }
+    // A profile with no durable checkpoint representation proves single-shot:
+    // writing a manifest whose `challenger_state` could never be restored
+    // would produce a checkpoint that only fails at resume time, after the
+    // scratch artifacts it points at have already been retained.
+    let Some(snapshot) = P::capture_challenger(challenger) else {
+        return Ok(None);
+    };
     let identity = workload.identity();
     let descriptor = ResumeDescriptorV1 {
         schema_version: 1,
         workload_id: identity.id.into(),
         workload_version: identity.version,
         logical_rows: workload.rows(),
-        public_values: public_values.iter().map(canonical_u64).collect(),
+        public_values: public_values.iter().map(canonical_u64::<P::Val>).collect(),
         resource_policy: policy.clone(),
-        trace_commitment: trace_commitment.map(encode_commitment),
+        trace_commitment: trace_commitment.map(encode_commitment::<PW, DE, P>),
         quotient_commitment: None,
         fri_state: None,
     };
     let resume_payload = serde_json::to_vec(&descriptor)
         .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
-    let identity = checkpoint_identity(&descriptor, input_hash, policy.policy_hash()?)?;
+    let identity =
+        checkpoint_identity::<PW, DE, P>(&descriptor, input_hash, policy.policy_hash()?)?;
     let manifest = CheckpointManifestV2 {
         schema_version: 2,
         backend_hash: identity.backend_hash,
@@ -1771,7 +2097,7 @@ fn write_phase_checkpoint<W: ResourceBoundedWorkload>(
         input_hash: identity.input_hash,
         resource_policy_hash: identity.resource_policy_hash,
         completed_phase,
-        challenger_state: ChallengerSnapshotV1::capture(challenger).encode()?,
+        challenger_state: snapshot.encode()?,
         resume_payload,
         artifacts,
     };
@@ -1781,21 +2107,32 @@ fn write_phase_checkpoint<W: ResourceBoundedWorkload>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn write_quotient_checkpoint<W: ResourceBoundedWorkload>(
-    workload: &W,
+fn write_quotient_checkpoint<const PW: usize, const DE: usize, P, Wk>(
+    workload: &Wk,
     policy: &ResourcePolicyV1,
     job_dir: &Path,
     input_hash: [u8; 32],
-    public_values: &[Val],
-    trace_lde: &ResourceBoundedMatrix,
-    quotient_ldes: &[ResourceBoundedMatrix],
-    trace_commitment: &DurableCommitment,
-    quotient_commitment: &DurableCommitment,
-    challenger: &crate::ProfileChallenger,
-) -> Result<Option<ProverCheckpointContext>> {
+    public_values: &[P::Val],
+    trace_lde: &ResourceBoundedMatrix<PW, DE, P>,
+    quotient_ldes: &[ResourceBoundedMatrix<PW, DE, P>],
+    trace_commitment: &DurableCommitment<PW, DE, P>,
+    quotient_commitment: &DurableCommitment<PW, DE, P>,
+    challenger: &ProfileChallengerFor<PW, DE, P>,
+) -> Result<Option<ProverCheckpointContext<PW, DE, P>>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+{
     if policy.checkpoint_policy == CheckpointPolicy::Disabled {
         return Ok(None);
     }
+    // See `write_phase_checkpoint`: no representable challenger snapshot means
+    // no checkpoint, and therefore no `ProverCheckpointContext` for the FRI,
+    // openings, and proof phases downstream either.
+    let Some(snapshot) = P::capture_challenger(challenger) else {
+        return Ok(None);
+    };
     let Ok((trace_path, trace_digest)) = trace_lde.scratch_artifact() else {
         return Ok(None);
     };
@@ -1824,15 +2161,16 @@ fn write_quotient_checkpoint<W: ResourceBoundedWorkload>(
         workload_id: identity.id.into(),
         workload_version: identity.version,
         logical_rows: workload.rows(),
-        public_values: public_values.iter().map(canonical_u64).collect(),
+        public_values: public_values.iter().map(canonical_u64::<P::Val>).collect(),
         resource_policy: policy.clone(),
-        trace_commitment: Some(encode_commitment(trace_commitment)),
-        quotient_commitment: Some(encode_commitment(quotient_commitment)),
+        trace_commitment: Some(encode_commitment::<PW, DE, P>(trace_commitment)),
+        quotient_commitment: Some(encode_commitment::<PW, DE, P>(quotient_commitment)),
         fri_state: None,
     };
     let resume_payload = serde_json::to_vec(&descriptor)
         .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
-    let identity = checkpoint_identity(&descriptor, input_hash, policy.policy_hash()?)?;
+    let identity =
+        checkpoint_identity::<PW, DE, P>(&descriptor, input_hash, policy.policy_hash()?)?;
     let manifest = CheckpointManifestV2 {
         schema_version: 2,
         backend_hash: identity.backend_hash,
@@ -1843,12 +2181,13 @@ fn write_quotient_checkpoint<W: ResourceBoundedWorkload>(
         input_hash: identity.input_hash,
         resource_policy_hash: identity.resource_policy_hash,
         completed_phase: PipelinePhaseV1::QuotientCommitment,
-        challenger_state: ChallengerSnapshotV1::capture(challenger).encode()?,
+        challenger_state: snapshot.encode()?,
         resume_payload,
         artifacts: artifacts.clone(),
     };
     manifest.write_atomic(job_dir.join("checkpoint.json"))?;
     Ok(Some(ProverCheckpointContext {
+        profile: std::marker::PhantomData,
         root: job_dir.to_path_buf(),
         manifest,
         descriptor,
@@ -1857,11 +2196,26 @@ fn write_quotient_checkpoint<W: ResourceBoundedWorkload>(
     }))
 }
 
-impl ProverCheckpointContext {
+impl<const PW: usize, const DE: usize, P: DurableFieldProfile<PW, DE>>
+    ProverCheckpointContext<PW, DE, P>
+where
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
+    /// Every `record_*` method below is only reachable through a context that
+    /// `write_quotient_checkpoint` returned, which it only does when
+    /// `P::capture_challenger` succeeded — so these `ok_or` arms are the
+    /// belt-and-braces case, not the live one.
+    fn capture(challenger: &ProfileChallengerFor<PW, DE, P>) -> Result<Vec<u8>> {
+        P::capture_challenger(challenger)
+            .ok_or(BoundedProverError::InvalidCheckpoint)?
+            .encode()
+            .map_err(Into::into)
+    }
+
     fn record_proof(
         &mut self,
         proof_bytes: &[u8],
-        challenger: &crate::ProfileChallenger,
+        challenger: &ProfileChallengerFor<PW, DE, P>,
     ) -> Result<PathBuf> {
         if proof_bytes.is_empty() {
             return Err(BoundedProverError::InvalidCheckpoint);
@@ -1883,7 +2237,7 @@ impl ProverCheckpointContext {
             digest,
         )?;
         self.manifest.completed_phase = PipelinePhaseV1::ProofAssembly;
-        self.manifest.challenger_state = ChallengerSnapshotV1::capture(challenger).encode()?;
+        self.manifest.challenger_state = Self::capture(challenger)?;
         self.manifest.resume_payload = serde_json::to_vec(&self.descriptor)
             .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
         self.manifest.artifacts = self.base_artifacts.clone();
@@ -1898,16 +2252,16 @@ impl ProverCheckpointContext {
 
     fn set_openings(
         &mut self,
-        trace_local: &[Challenge],
-        trace_next: Option<&[Challenge]>,
-        quotient_chunks: &[Vec<Challenge>],
+        trace_local: &[P::Challenge],
+        trace_next: Option<&[P::Challenge]>,
+        quotient_chunks: &[Vec<P::Challenge>],
     ) -> Result<()> {
         self.descriptor.fri_state = Some(FriResumeStateV1 {
-            trace_local: encode_challenges(trace_local),
-            trace_next: trace_next.map(encode_challenges),
+            trace_local: encode_challenges::<PW, DE, P>(trace_local),
+            trace_next: trace_next.map(encode_challenges::<PW, DE, P>),
             quotient_chunks: quotient_chunks
                 .iter()
-                .map(|chunk| encode_challenges(chunk))
+                .map(|chunk| encode_challenges::<PW, DE, P>(chunk))
                 .collect(),
             commitments: Vec::new(),
             commit_pow_witnesses: Vec::new(),
@@ -1918,8 +2272,8 @@ impl ProverCheckpointContext {
 
     fn record_fri_layer(
         &mut self,
-        layer: FriLayerCheckpoint<'_>,
-        challenger: &crate::ProfileChallenger,
+        layer: FriLayerCheckpoint<'_, PW, DE, P>,
+        challenger: &ProfileChallengerFor<PW, DE, P>,
         failure_injector: &dyn FailureInjector,
     ) -> std::result::Result<(), String> {
         self.record_fri_layer_inner(layer, challenger, failure_injector)
@@ -1928,8 +2282,8 @@ impl ProverCheckpointContext {
 
     fn record_openings(
         &mut self,
-        reduced: &ScratchChallengeVector,
-        challenger: &crate::ProfileChallenger,
+        reduced: &ScratchChallengeVector<PW, DE, P>,
+        challenger: &ProfileChallengerFor<PW, DE, P>,
         failure_injector: &dyn FailureInjector,
     ) -> Result<()> {
         reduced.retain_for_resume();
@@ -1942,7 +2296,7 @@ impl ProverCheckpointContext {
             digest,
         )?;
         self.manifest.completed_phase = PipelinePhaseV1::Openings;
-        self.manifest.challenger_state = ChallengerSnapshotV1::capture(challenger).encode()?;
+        self.manifest.challenger_state = Self::capture(challenger)?;
         self.manifest.resume_payload = serde_json::to_vec(&self.descriptor)
             .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
         self.manifest.artifacts = self.base_artifacts.clone();
@@ -1955,8 +2309,8 @@ impl ProverCheckpointContext {
 
     fn record_fri_layer_inner(
         &mut self,
-        layer: FriLayerCheckpoint<'_>,
-        challenger: &crate::ProfileChallenger,
+        layer: FriLayerCheckpoint<'_, PW, DE, P>,
+        challenger: &ProfileChallengerFor<PW, DE, P>,
         failure_injector: &dyn FailureInjector,
     ) -> Result<()> {
         let state = self
@@ -1967,10 +2321,12 @@ impl ProverCheckpointContext {
         if state.commitments.len() != layer.layer as usize {
             return Err(BoundedProverError::InvalidCheckpoint);
         }
-        state.commitments.push(encode_commitment(layer.commitment));
+        state
+            .commitments
+            .push(encode_commitment::<PW, DE, P>(layer.commitment));
         state
             .commit_pow_witnesses
-            .push(canonical_u64(&layer.commit_pow_witness));
+            .push(canonical_u64::<P::Val>(&layer.commit_pow_witness));
         state.log_arities.push(layer.log_arity);
 
         for (ordinal, vector) in [
@@ -1993,7 +2349,7 @@ impl ProverCheckpointContext {
             }
         }
         self.manifest.completed_phase = PipelinePhaseV1::FriLayer { layer: layer.layer };
-        self.manifest.challenger_state = ChallengerSnapshotV1::capture(challenger).encode()?;
+        self.manifest.challenger_state = Self::capture(challenger)?;
         self.manifest.resume_payload = serde_json::to_vec(&self.descriptor)
             .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
         self.manifest.artifacts = self.base_artifacts.clone();
@@ -2007,12 +2363,16 @@ impl ProverCheckpointContext {
     }
 }
 
-fn reopen_fri_layers(
+fn reopen_fri_layers<const PW: usize, const DE: usize, P>(
     manifest: &CheckpointManifestV2,
     root: &Path,
     state: &FriResumeStateV1,
     completed_layer: u32,
-) -> Result<Vec<ScratchChallengeVector>> {
+) -> Result<Vec<ScratchChallengeVector<PW, DE, P>>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     if state.commitments.len() != completed_layer as usize + 1
         || state.commitments.len() != state.commit_pow_witnesses.len()
         || state.commitments.len() != state.log_arities.len()
@@ -2043,43 +2403,49 @@ fn reopen_fri_layers(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn finish_from_openings_checkpoint<A>(
+fn finish_from_openings_checkpoint<const PW: usize, const DE: usize, P, A>(
     air: &A,
     rows: usize,
-    public_values: Vec<Val>,
-    input_mmcs: DurableInputMmcs,
-    trace_data: DurableCommitData,
-    quotient_data: DurableCommitData,
-    trace_commitment: DurableCommitment,
-    quotient_commitment: DurableCommitment,
-    challenger: &mut crate::ProfileChallenger,
+    public_values: Vec<P::Val>,
+    input_mmcs: DurableInputMmcs<PW, DE, P>,
+    trace_data: DurableCommitData<PW, DE, P>,
+    quotient_data: DurableCommitData<PW, DE, P>,
+    trace_commitment: DurableCommitment<PW, DE, P>,
+    quotient_commitment: DurableCommitment<PW, DE, P>,
+    challenger: &mut ProfileChallengerFor<PW, DE, P>,
     policy: &ResourcePolicyV1,
-    checkpoint: &mut ProverCheckpointContext,
+    checkpoint: &mut ProverCheckpointContext<PW, DE, P>,
     cancellation: &CancellationToken,
     state: &FriResumeStateV1,
-    reduced: ScratchChallengeVector,
+    reduced: ScratchChallengeVector<PW, DE, P>,
     failure_injector: &dyn FailureInjector,
     observe: &mut dyn FnMut(&ProverEventV1),
     completed_phases: &mut u32,
     total_phases: u32,
 ) -> Result<Vec<u8>>
 where
-    A: BaseAir<Val>
-        + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    A: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
 {
-    let trace_local = decode_challenges(&state.trace_local)?;
+    let trace_local = decode_challenges::<PW, DE, P>(&state.trace_local)?;
     let trace_next = state
         .trace_next
         .as_ref()
-        .map(|values| decode_challenges(values))
+        .map(|values| decode_challenges::<PW, DE, P>(values))
         .transpose()?;
     let quotient_chunks = state
         .quotient_chunks
         .iter()
-        .map(|values| decode_challenges(values))
+        .map(|values| decode_challenges::<PW, DE, P>(values))
         .collect::<Result<Vec<_>>>()?;
-    let log_blowup = quotient_log_blowup(air, BaseAir::<Val>::width(air), public_values.len());
+    let log_blowup = quotient_log_blowup::<PW, DE, P, _>(
+        air,
+        BaseAir::<P::Val>::width(air),
+        public_values.len(),
+    );
     let mut fri_params = FriParameters::new_benchmark(ExtensionMmcs::new(input_mmcs.clone()));
     fri_params.log_blowup = log_blowup;
     let opening_proof = prove_durable_fri_observed_batched(
@@ -2108,7 +2474,7 @@ where
         },
     );
     let opening_proof = map_cancelled_fri(opening_proof)?;
-    let bytes = assemble_and_verify(
+    let bytes = assemble_and_verify::<PW, DE, P, _>(
         air,
         rows.trailing_zeros() as usize,
         public_values,
@@ -2134,54 +2500,60 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn finish_from_fri_checkpoint<A>(
+fn finish_from_fri_checkpoint<const PW: usize, const DE: usize, P, A>(
     air: &A,
     rows: usize,
-    public_values: Vec<Val>,
-    input_mmcs: DurableInputMmcs,
-    trace_data: DurableCommitData,
-    quotient_data: DurableCommitData,
-    trace_commitment: DurableCommitment,
-    quotient_commitment: DurableCommitment,
-    challenger: &mut crate::ProfileChallenger,
+    public_values: Vec<P::Val>,
+    input_mmcs: DurableInputMmcs<PW, DE, P>,
+    trace_data: DurableCommitData<PW, DE, P>,
+    quotient_data: DurableCommitData<PW, DE, P>,
+    trace_commitment: DurableCommitment<PW, DE, P>,
+    quotient_commitment: DurableCommitment<PW, DE, P>,
+    challenger: &mut ProfileChallengerFor<PW, DE, P>,
     policy: &ResourcePolicyV1,
-    checkpoint: &mut ProverCheckpointContext,
+    checkpoint: &mut ProverCheckpointContext<PW, DE, P>,
     cancellation: &CancellationToken,
     state: &FriResumeStateV1,
-    layers: Vec<ScratchChallengeVector>,
+    layers: Vec<ScratchChallengeVector<PW, DE, P>>,
     failure_injector: &dyn FailureInjector,
     observe: &mut dyn FnMut(&ProverEventV1),
     completed_phases: &mut u32,
     total_phases: u32,
 ) -> Result<Vec<u8>>
 where
-    A: BaseAir<Val>
-        + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    A: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
 {
-    let trace_local = decode_challenges(&state.trace_local)?;
+    let trace_local = decode_challenges::<PW, DE, P>(&state.trace_local)?;
     let trace_next = state
         .trace_next
         .as_ref()
-        .map(|values| decode_challenges(values))
+        .map(|values| decode_challenges::<PW, DE, P>(values))
         .transpose()?;
     let quotient_chunks = state
         .quotient_chunks
         .iter()
-        .map(|values| decode_challenges(values))
+        .map(|values| decode_challenges::<PW, DE, P>(values))
         .collect::<Result<Vec<_>>>()?;
     let commitments = state
         .commitments
         .iter()
-        .map(|commitment| decode_commitment(commitment))
+        .map(|commitment| decode_commitment::<PW, DE, P>(commitment))
         .collect::<Result<Vec<_>>>()?;
-    let commit_pow_witnesses = decode_public_values(&state.commit_pow_witnesses)?;
+    let commit_pow_witnesses = decode_public_values::<PW, DE, P>(&state.commit_pow_witnesses)?;
     let log_arities: Vec<_> = state
         .log_arities
         .iter()
         .map(|arity| *arity as usize)
         .collect();
-    let log_blowup = quotient_log_blowup(air, BaseAir::<Val>::width(air), public_values.len());
+    let log_blowup = quotient_log_blowup::<PW, DE, P, _>(
+        air,
+        BaseAir::<P::Val>::width(air),
+        public_values.len(),
+    );
     let mut fri_params = FriParameters::new_benchmark(ExtensionMmcs::new(input_mmcs.clone()));
     fri_params.log_blowup = log_blowup;
     let opening_proof = resume_durable_fri_observed_batched(
@@ -2213,7 +2585,7 @@ where
         },
     );
     let opening_proof = map_cancelled_fri(opening_proof)?;
-    let bytes = assemble_and_verify(
+    let bytes = assemble_and_verify::<PW, DE, P, _>(
         air,
         rows.trailing_zeros() as usize,
         public_values,
@@ -2238,49 +2610,54 @@ where
     Ok(bytes)
 }
 
-fn resume_early_phase<W: ResourceBoundedWorkload>(
+fn resume_early_phase<const PW: usize, const DE: usize, P, Wk>(
     manifest: &CheckpointManifestV2,
     descriptor: &ResumeDescriptorV1,
     job_dir: &Path,
-    workload: &W,
+    workload: &Wk,
     cancellation: &CancellationToken,
     failure_injector: &dyn FailureInjector,
     observe: &mut dyn FnMut(&ProverEventV1),
 ) -> Result<Vec<u8>>
 where
-    W::Air: BaseAir<Val>
-        + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    Wk::Air: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
 {
     let rows = usize::try_from(descriptor.logical_rows)
         .map_err(|_| BoundedProverError::InvalidCheckpoint)?;
     let air = workload.air();
-    let width = BaseAir::<Val>::width(&air);
-    let public_values = decode_public_values(&descriptor.public_values)?;
+    let width = BaseAir::<P::Val>::width(&air);
+    let public_values = decode_public_values::<PW, DE, P>(&descriptor.public_values)?;
     let mut local_policy = descriptor.resource_policy.clone();
     local_policy.scratch_dir = job_dir.join("artifacts");
     create_private_dir(&local_policy.scratch_dir)?;
     // Decode even when the earliest continuation recomputes the deterministic
     // transcript; malformed or non-canonical snapshots must never be accepted.
+    // A profile with no snapshot representation cannot have written this
+    // checkpoint, so restoring one fails closed.
     let saved_challenger = ChallengerSnapshotV1::decode(&manifest.challenger_state)?;
-    saved_challenger.restore()?;
+    P::restore_challenger(&saved_challenger).ok_or(BoundedProverError::InvalidCheckpoint)?;
 
-    let log_blowup = quotient_log_blowup(&air, width, public_values.len());
+    let log_blowup = quotient_log_blowup::<PW, DE, P, _>(&air, width, public_values.len());
     let trace_lde = if manifest.completed_phase == PipelinePhaseV1::Trace {
         let artifact = manifest
             .artifacts
             .iter()
             .find(|artifact| artifact.kind == PipelineArtifactKindV1::Trace)
             .ok_or(BoundedProverError::InvalidCheckpoint)?;
-        let trace = ScratchMatrixStore::<GoldilocksWord>::reopen(
+        let trace = ScratchMatrixStore::<P::Word>::reopen(
             job_dir.join(&artifact.relative_path),
             artifact.digest,
         )?;
         if trace.rows() != rows as u64 || trace.columns() != width {
             return Err(BoundedProverError::InvalidCheckpoint);
         }
-        let dft = ResourceBoundedDft::new(local_policy.clone())?;
-        dft.try_coset_lde_block_matrix(&trace, log_blowup, Goldilocks::GENERATOR)?
+        let dft = ResourceBoundedDft::<PW, DE, P>::new(local_policy.clone())?;
+        dft.try_coset_lde_block_matrix(&trace, log_blowup, P::Val::GENERATOR)?
     } else {
         let artifact = manifest
             .artifacts
@@ -2318,7 +2695,7 @@ where
                     .iter()
                     .find(|artifact| artifact.kind == PipelineArtifactKindV1::Quotient)
                     .ok_or(BoundedProverError::InvalidCheckpoint)?;
-                let values = ScratchMatrixStore::<GoldilocksWord>::reopen(
+                let values = ScratchMatrixStore::<P::Word>::reopen(
                     job_dir.join(&artifact.relative_path),
                     artifact.digest,
                 )?;
@@ -2374,7 +2751,7 @@ where
         };
     let mut completed_phases = completed_phases;
     let total_phases = 8 + rows.trailing_zeros();
-    continue_from_trace_lde(
+    continue_from_trace_lde::<PW, DE, P, Wk, _>(
         workload,
         &air,
         rows,
@@ -2395,18 +2772,22 @@ where
     )
 }
 
-fn resume_assembled_proof<W: ResourceBoundedWorkload>(
+fn resume_assembled_proof<const PW: usize, const DE: usize, P, Wk>(
     manifest: &CheckpointManifestV2,
     descriptor: &ResumeDescriptorV1,
     job_dir: &Path,
-    workload: &W,
+    workload: &Wk,
 ) -> Result<Vec<u8>>
 where
-    W::Air: BaseAir<Val>
-        + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    Wk::Air: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
 {
-    ChallengerSnapshotV1::decode(&manifest.challenger_state)?.restore()?;
+    let snapshot = ChallengerSnapshotV1::decode(&manifest.challenger_state)?;
+    P::restore_challenger(&snapshot).ok_or(BoundedProverError::InvalidCheckpoint)?;
     let artifact = manifest
         .artifacts
         .iter()
@@ -2421,13 +2802,19 @@ where
         usize::try_from(store.rows()).map_err(|_| BoundedProverError::InvalidCheckpoint)?;
     let mut proof_bytes = vec![0u8; proof_len];
     store.read_rows(0, proof_len, &mut proof_bytes)?;
-    let proof: Proof<GoldilocksConfig<Radix2DitParallel<Val>>> = postcard::from_bytes(&proof_bytes)
+    let proof: Proof<OfficialConfig<PW, DE, P>> = postcard::from_bytes(&proof_bytes)
         .map_err(|error| BoundedProverError::Serialization(error.to_string()))?;
-    let public_values = decode_public_values(&descriptor.public_values)?;
+    let public_values = decode_public_values::<PW, DE, P>(&descriptor.public_values)?;
     let air = workload.air();
-    let log_blowup = quotient_log_blowup(&air, BaseAir::<Val>::width(&air), public_values.len());
-    let config =
-        crate::prover::make_config_with_log_blowup(Radix2DitParallel::<Val>::default(), log_blowup);
+    let log_blowup = quotient_log_blowup::<PW, DE, P, _>(
+        &air,
+        BaseAir::<P::Val>::width(&air),
+        public_values.len(),
+    );
+    let config = crate::prover::make_config_with_log_blowup::<PW, DE, P, _>(
+        Radix2DitParallel::<P::Val>::default(),
+        log_blowup,
+    );
     verify(&config, &air, &proof, &public_values)
         .map_err(|error| BoundedProverError::Verification(format!("{error:?}")))?;
     Ok(proof_bytes)
@@ -2438,7 +2825,7 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val>
         + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
 {
     resume_resource_bounded_with_cancellation(checkpoint_path, workload, CancellationToken::new())
 }
@@ -2452,7 +2839,7 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val>
         + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
 {
     resume_resource_bounded_with_cancellation_observed(
         checkpoint_path,
@@ -2472,7 +2859,7 @@ where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val>
         + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
     Observe: FnMut(&ProverEventV1),
 {
     resume_resource_bounded_with_control(
@@ -2495,7 +2882,8 @@ where
     W: ResourceBoundedWorkload,
 {
     expected_policy.validate()?;
-    let validated = validate_checkpoint_for_workload(checkpoint_path, workload)?;
+    let validated =
+        validate_checkpoint_for_workload::<8, 4, GoldilocksProfile, W>(checkpoint_path, workload)?;
     if validated.descriptor.resource_policy != *expected_policy {
         return Err(BoundedProverError::InvalidCheckpoint);
     }
@@ -2505,12 +2893,14 @@ where
     })
 }
 
-fn validate_checkpoint_for_workload<W>(
+fn validate_checkpoint_for_workload<const PW: usize, const DE: usize, P, Wk>(
     checkpoint_path: &Path,
-    workload: &W,
+    workload: &Wk,
 ) -> Result<ValidatedCheckpointV1>
 where
-    W: ResourceBoundedWorkload,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
 {
     let manifest = CheckpointManifestV2::read(checkpoint_path)?;
     if !matches!(
@@ -2529,7 +2919,7 @@ where
     }
     let descriptor: ResumeDescriptorV1 = serde_json::from_slice(&manifest.resume_payload)
         .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
-    validate_resume_descriptor(&descriptor)?;
+    validate_resume_descriptor::<PW, DE, P>(&descriptor)?;
     let workload_identity = workload.identity();
     if descriptor.workload_id != workload_identity.id
         || descriptor.workload_version != workload_identity.version
@@ -2537,7 +2927,7 @@ where
     {
         return Err(BoundedProverError::InvalidCheckpoint);
     }
-    let expected_identity = checkpoint_identity(
+    let expected_identity = checkpoint_identity::<PW, DE, P>(
         &descriptor,
         workload.input_digest(),
         descriptor.resource_policy.policy_hash()?,
@@ -2565,13 +2955,44 @@ pub fn resume_resource_bounded_with_control<W, Observe>(
     workload: &W,
     cancellation: CancellationToken,
     failure_injector: &dyn FailureInjector,
-    mut observe: Observe,
+    observe: Observe,
 ) -> Result<Vec<u8>>
 where
     W: ResourceBoundedWorkload,
     W::Air: BaseAir<Val>
         + Air<SymbolicAirBuilder<Val>>
-        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
+    Observe: FnMut(&ProverEventV1),
+{
+    resume_resource_bounded_with_control_inner::<8, 4, GoldilocksProfile, W, Observe>(
+        checkpoint_path,
+        workload,
+        cancellation,
+        failure_injector,
+        observe,
+    )
+}
+
+/// Resume is Goldilocks-only in practice — `ChallengerSnapshotV1` cannot
+/// represent another profile's challenger — but the body is generic because it
+/// shares `continue_from_trace_lde` and `finish_*` with the prove path. For a
+/// profile whose `restore_challenger` returns `None` every path here fails
+/// closed with `InvalidCheckpoint`, which is also unreachable: such a profile
+/// never wrote a checkpoint to resume from.
+fn resume_resource_bounded_with_control_inner<const PW: usize, const DE: usize, P, Wk, Observe>(
+    checkpoint_path: &Path,
+    workload: &Wk,
+    cancellation: CancellationToken,
+    failure_injector: &dyn FailureInjector,
+    mut observe: Observe,
+) -> Result<Vec<u8>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Wk: ResourceBoundedWorkload<PW, DE, P>,
+    Wk::Air: BaseAir<P::Val>
+        + Air<SymbolicAirBuilder<P::Val>>
+        + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<PW, DE, P>>>,
     Observe: FnMut(&ProverEventV1),
 {
     check_cancelled(&cancellation)?;
@@ -2579,12 +3000,12 @@ where
         manifest,
         descriptor,
         job_dir,
-    } = validate_checkpoint_for_workload(checkpoint_path, workload)?;
+    } = validate_checkpoint_for_workload::<PW, DE, P, Wk>(checkpoint_path, workload)?;
     let job_dir = job_dir.as_path();
     let rows = usize::try_from(descriptor.logical_rows)
         .map_err(|_| BoundedProverError::InvalidCheckpoint)?;
     let air = workload.air();
-    let estimate = estimate_air_pipeline(
+    let estimate = estimate_air_pipeline::<PW, DE, P, _>(
         &air,
         &descriptor.workload_id,
         descriptor.public_values.len(),
@@ -2595,7 +3016,8 @@ where
     let total_phases = 8 + rows.trailing_zeros();
 
     if manifest.completed_phase == PipelinePhaseV1::ProofAssembly {
-        let result = resume_assembled_proof(&manifest, &descriptor, job_dir, workload);
+        let result =
+            resume_assembled_proof::<PW, DE, P, Wk>(&manifest, &descriptor, job_dir, workload);
         if result.is_ok() {
             observe(&ProverEventV1::Phase {
                 phase: PipelinePhaseV1::ProofAssembly,
@@ -2622,7 +3044,7 @@ where
             | PipelinePhaseV1::Quotient
             | PipelinePhaseV1::QuotientLde
     ) {
-        let result = resume_early_phase(
+        let result = resume_early_phase::<PW, DE, P, Wk>(
             &manifest,
             &descriptor,
             job_dir,
@@ -2646,7 +3068,7 @@ where
             .iter()
             .find(|artifact| artifact.kind == PipelineArtifactKindV1::TraceLde)
             .ok_or(BoundedProverError::InvalidCheckpoint)?;
-        let trace_lde = ResourceBoundedMatrix::reopen_scratch(
+        let trace_lde = ResourceBoundedMatrix::<PW, DE, P>::reopen_scratch(
             &job_dir.join(&trace_artifact.relative_path),
             trace_artifact.digest,
         )?;
@@ -2674,9 +3096,12 @@ where
             })
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
-        let public_values = decode_public_values(&descriptor.public_values)?;
-        let log_blowup =
-            quotient_log_blowup(&air, BaseAir::<Val>::width(&air), public_values.len());
+        let public_values = decode_public_values::<PW, DE, P>(&descriptor.public_values)?;
+        let log_blowup = quotient_log_blowup::<PW, DE, P, _>(
+            &air,
+            BaseAir::<P::Val>::width(&air),
+            public_values.len(),
+        );
         let lde_rows = rows * (1usize << log_blowup);
         if rows == 0
             || !rows.is_power_of_two()
@@ -2690,20 +3115,23 @@ where
         let mut local_policy = descriptor.resource_policy.clone();
         local_policy.scratch_dir = job_dir.join("artifacts");
         create_private_dir(&local_policy.scratch_dir)?;
-        let input_mmcs = make_durable_mmcs(local_policy.clone());
+        let input_mmcs = make_durable_mmcs::<PW, DE, P>(local_policy.clone());
         let (trace_commitment, trace_data) =
             input_mmcs.try_commit_bit_reversed(vec![trace_lde.clone()])?;
         let (quotient_commitment, quotient_data) =
             input_mmcs.try_commit_bit_reversed(quotient_ldes.clone())?;
-        if Some(encode_commitment(&trace_commitment)) != descriptor.trace_commitment
-            || Some(encode_commitment(&quotient_commitment)) != descriptor.quotient_commitment
+        if Some(encode_commitment::<PW, DE, P>(&trace_commitment)) != descriptor.trace_commitment
+            || Some(encode_commitment::<PW, DE, P>(&quotient_commitment))
+                != descriptor.quotient_commitment
         {
             return Err(BoundedProverError::InvalidCheckpoint);
         }
-        let mut challenger = ChallengerSnapshotV1::decode(&manifest.challenger_state)?.restore()?;
+        let snapshot = ChallengerSnapshotV1::decode(&manifest.challenger_state)?;
+        let mut challenger =
+            P::restore_challenger(&snapshot).ok_or(BoundedProverError::InvalidCheckpoint)?;
         let log_degree = rows.trailing_zeros() as usize;
         let trace_domain =
-            p3_field::coset::TwoAdicMultiplicativeCoset::new(Goldilocks::ONE, log_degree)
+            p3_field::coset::TwoAdicMultiplicativeCoset::new(P::Val::ONE, log_degree)
                 .ok_or(BoundedProverError::InvalidCheckpoint)?;
         let base_artifacts: Vec<_> = manifest
             .artifacts
@@ -2722,7 +3150,8 @@ where
             .filter(|artifact| artifact.kind == PipelineArtifactKindV1::FriLayer)
             .filter_map(|artifact| artifact.ordinal.map(|ordinal| (ordinal, artifact.clone())))
             .collect();
-        let mut checkpoint = ProverCheckpointContext {
+        let mut checkpoint = ProverCheckpointContext::<PW, DE, P> {
+            profile: std::marker::PhantomData,
             root: job_dir.to_path_buf(),
             manifest: manifest.clone(),
             descriptor: descriptor.clone(),
@@ -2736,7 +3165,7 @@ where
             _ => return Err(BoundedProverError::InvalidCheckpoint),
         };
         match manifest.completed_phase {
-            PipelinePhaseV1::QuotientCommitment => finish_after_quotient(
+            PipelinePhaseV1::QuotientCommitment => finish_after_quotient::<PW, DE, P, _>(
                 &air,
                 rows,
                 trace_domain,
@@ -2762,8 +3191,8 @@ where
                     .fri_state
                     .as_ref()
                     .ok_or(BoundedProverError::InvalidCheckpoint)?;
-                let layers = reopen_fri_layers(&manifest, job_dir, state, layer)?;
-                finish_from_fri_checkpoint(
+                let layers = reopen_fri_layers::<PW, DE, P>(&manifest, job_dir, state, layer)?;
+                finish_from_fri_checkpoint::<PW, DE, P, _>(
                     &air,
                     rows,
                     public_values,
@@ -2797,11 +3226,11 @@ where
                     .iter()
                     .find(|artifact| artifact.kind == PipelineArtifactKindV1::Openings)
                     .ok_or(BoundedProverError::InvalidCheckpoint)?;
-                let reduced = ScratchChallengeVector::reopen(
+                let reduced = ScratchChallengeVector::<PW, DE, P>::reopen(
                     &job_dir.join(&artifact.relative_path),
                     artifact.digest,
                 )?;
-                finish_from_openings_checkpoint(
+                finish_from_openings_checkpoint::<PW, DE, P, _>(
                     &air,
                     rows,
                     public_values,
@@ -2857,7 +3286,7 @@ where
     let manifest = CheckpointManifestV2::read(checkpoint_path)?;
     let descriptor: ResumeDescriptorV1 = serde_json::from_slice(&manifest.resume_payload)
         .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
-    validate_resume_descriptor(&descriptor)?;
+    validate_resume_descriptor::<8, 4, GoldilocksProfile>(&descriptor)?;
     let proof_bytes = match descriptor.workload_id.as_str() {
         "fibonacci" if descriptor.workload_version == 1 && descriptor.public_values.len() == 3 => {
             let workload = FibonacciWorkload {
@@ -2917,11 +3346,26 @@ fn checkpoint_artifact(
     })
 }
 
-fn checkpoint_identity(
+/// `profile_hash` MUST bind the FIELD, not just the compatibility profile
+/// string. `COMPATIBILITY_PROFILE` is a single global constant
+/// ("tinyzkp-p3-goldilocks-v1") shared by every profile, and for a workload
+/// like Fibonacci the workload hash and input digest are field-independent —
+/// so without this, a Goldilocks checkpoint and a BabyBear checkpoint of the
+/// same statement carry BYTE-IDENTICAL identities. Today nothing bad happens
+/// only because `P::restore_challenger` returns `None` for BabyBear and every
+/// resume fails closed. That protection is INCIDENTAL: the moment resumable
+/// BabyBear checkpoints land, `restore_challenger` returns `Some` and the
+/// cross-field binding would silently vanish. Binding the field here is a
+/// one-line change now and a cross-field checkpoint-confusion bug later.
+fn checkpoint_identity<const PW: usize, const DE: usize, P>(
     descriptor: &ResumeDescriptorV1,
     input_hash: [u8; 32],
     resource_policy_hash: [u8; 32],
-) -> Result<CheckpointIdentityV2> {
+) -> Result<CheckpointIdentityV2>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     let workload_bytes = serde_json::to_vec(&(
         descriptor.workload_id.as_str(),
         descriptor.workload_version,
@@ -2932,7 +3376,11 @@ fn checkpoint_identity(
     Ok(CheckpointIdentityV2 {
         backend_hash: *blake3::hash(b"hc-plonky3-resource-bounded-v1").as_bytes(),
         profile_hash: *blake3::hash(
-            format!("{COMPATIBILITY_PROFILE}:{PLONKY3_VERSION}").as_bytes(),
+            format!(
+                "{COMPATIBILITY_PROFILE}:{PLONKY3_VERSION}:{}:{PW}:{DE}",
+                P::FIELD_NAME
+            )
+            .as_bytes(),
         )
         .as_bytes(),
         release_hash: *blake3::hash(release.as_bytes()).as_bytes(),
@@ -2944,7 +3392,13 @@ fn checkpoint_identity(
     })
 }
 
-fn validate_resume_descriptor(descriptor: &ResumeDescriptorV1) -> Result<()> {
+fn validate_resume_descriptor<const PW: usize, const DE: usize, P>(
+    descriptor: &ResumeDescriptorV1,
+) -> Result<()>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     if descriptor.schema_version != 1
         || descriptor.logical_rows == 0
         || !descriptor.logical_rows.is_power_of_two()
@@ -2961,7 +3415,17 @@ fn validate_resume_descriptor(descriptor: &ResumeDescriptorV1) -> Result<()> {
         return Err(BoundedProverError::InvalidCheckpoint);
     }
     descriptor.resource_policy.validate()?;
-    decode_public_values(&descriptor.public_values)?;
+    decode_public_values::<PW, DE, P>(&descriptor.public_values)?;
+    // The inner-length checks the fixed-size `[u64; 4]`/`[u64; 2]` array types
+    // used to perform structurally now happen inside `decode_commitment` /
+    // `decode_challenges`, which every branch below goes through.
+    for commitment in descriptor
+        .trace_commitment
+        .iter()
+        .chain(&descriptor.quotient_commitment)
+    {
+        decode_commitment::<PW, DE, P>(commitment)?;
+    }
     if let Some(state) = &descriptor.fri_state {
         if state.commitments.len() != state.commit_pow_witnesses.len()
             || state.commitments.len() != state.log_arities.len()
@@ -2969,76 +3433,121 @@ fn validate_resume_descriptor(descriptor: &ResumeDescriptorV1) -> Result<()> {
         {
             return Err(BoundedProverError::InvalidCheckpoint);
         }
-        decode_challenges(&state.trace_local)?;
+        decode_challenges::<PW, DE, P>(&state.trace_local)?;
         if let Some(next) = &state.trace_next {
-            decode_challenges(next)?;
+            decode_challenges::<PW, DE, P>(next)?;
         }
         for chunk in &state.quotient_chunks {
-            decode_challenges(chunk)?;
+            decode_challenges::<PW, DE, P>(chunk)?;
         }
         for commitment in &state.commitments {
-            decode_commitment(commitment)?;
+            decode_commitment::<PW, DE, P>(commitment)?;
         }
-        decode_public_values(&state.commit_pow_witnesses)?;
+        decode_public_values::<PW, DE, P>(&state.commit_pow_witnesses)?;
     }
     Ok(())
 }
 
-fn encode_commitment(commitment: &DurableCommitment) -> Vec<[u64; 4]> {
+fn encode_commitment<const PW: usize, const DE: usize, P>(
+    commitment: &DurableCommitment<PW, DE, P>,
+) -> Vec<Vec<u64>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     commitment
         .roots()
         .iter()
-        .map(|root| root.map(|value| canonical_u64(&value)))
+        .map(|root| root.iter().map(canonical_u64::<P::Val>).collect())
         .collect()
 }
 
-fn decode_commitment(values: &[[u64; 4]]) -> Result<DurableFriCommitment> {
+fn decode_commitment<const PW: usize, const DE: usize, P>(
+    values: &[Vec<u64>],
+) -> Result<DurableFriCommitment<PW, DE, P>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     if values.len() != 1 {
         return Err(BoundedProverError::InvalidCheckpoint);
     }
     let roots = values
         .iter()
         .map(|root| {
-            let decoded = decode_public_values(root)?;
-            decoded
-                .try_into()
+            // Each root is exactly `DIGEST_ELEMS` canonical field elements: 4
+            // for Goldilocks, 8 for BabyBear. `try_into` on the fixed-size
+            // array is what enforces the length now that the wire type is a
+            // `Vec`.
+            let decoded = decode_public_values::<PW, DE, P>(root)?;
+            <Vec<P::Val> as TryInto<[P::Val; DE]>>::try_into(decoded)
                 .map_err(|_| BoundedProverError::InvalidCheckpoint)
         })
-        .collect::<Result<Vec<[Val; 4]>>>()?;
+        .collect::<Result<Vec<[P::Val; DE]>>>()?;
     Ok(MerkleCap::new(roots))
 }
 
-fn decode_public_values(values: &[u64]) -> Result<Vec<Val>> {
-    const GOLDILOCKS_MODULUS: u64 = 0xffff_ffff_0000_0001;
-    if values.iter().any(|value| *value >= GOLDILOCKS_MODULUS) {
+fn decode_public_values<const PW: usize, const DE: usize, P>(values: &[u64]) -> Result<Vec<P::Val>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
+    // Non-canonical encodings must not be accepted: two distinct `u64`s that
+    // reduce to the same field element would let one checkpoint decode to a
+    // different public input than the one it was written for. The literal
+    // Goldilocks modulus this replaced is now `P::modulus_u64()`.
+    if values.iter().any(|value| *value >= P::modulus_u64()) {
         return Err(BoundedProverError::InvalidCheckpoint);
     }
-    Ok(values.iter().copied().map(Val::new).collect())
+    Ok(values
+        .iter()
+        .copied()
+        .map(<P::Val as PrimeCharacteristicRing>::from_u64)
+        .collect())
 }
 
-fn encode_challenges(values: &[Challenge]) -> Vec<[u64; 2]> {
+fn encode_challenges<const PW: usize, const DE: usize, P>(values: &[P::Challenge]) -> Vec<Vec<u64>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     values
         .iter()
         .map(|value| {
-            let basis = value.as_basis_coefficients_slice();
-            [canonical_u64(&basis[0]), canonical_u64(&basis[1])]
+            // One entry per extension-field coordinate: 2 for Goldilocks, 4
+            // for BabyBear. The two hand-written indices this replaced were a
+            // degree-2 assumption.
+            value
+                .as_basis_coefficients_slice()
+                .iter()
+                .map(canonical_u64::<P::Val>)
+                .collect()
         })
         .collect()
 }
 
-fn decode_challenges(values: &[[u64; 2]]) -> Result<Vec<Challenge>> {
+fn decode_challenges<const PW: usize, const DE: usize, P>(
+    values: &[Vec<u64>],
+) -> Result<Vec<P::Challenge>>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     values
         .iter()
         .map(|value| {
-            let basis = decode_public_values(value)?;
-            Challenge::from_basis_coefficients_slice(&basis)
+            if value.len() != extension_degree::<PW, DE, P>() {
+                return Err(BoundedProverError::InvalidCheckpoint);
+            }
+            let basis = decode_public_values::<PW, DE, P>(value)?;
+            P::Challenge::from_basis_coefficients_slice(&basis)
                 .ok_or(BoundedProverError::InvalidCheckpoint)
         })
         .collect()
 }
 
-fn canonical_u64(value: &Val) -> u64 {
-    p3_field::PrimeField64::as_canonical_u64(value)
+fn canonical_u64<F: PrimeField64>(value: &F) -> u64 {
+    F::as_canonical_u64(value)
 }
 
 fn check_cancelled(cancellation: &CancellationToken) -> Result<()> {
@@ -3273,7 +3782,7 @@ mod tests {
         W: ResourceBoundedWorkload,
         W::Air: BaseAir<Val>
             + Air<SymbolicAirBuilder<Val>>
-            + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig>>,
+            + for<'a> Air<VerifierConstraintFolder<'a, EvaluationConfig<8, 4, GoldilocksProfile>>>,
     {
         let dir = tempfile::tempdir().unwrap();
         let selected_policy = policy(dir.path());
@@ -3362,6 +3871,152 @@ mod tests {
         )
         .unwrap();
         assert_eq!(actual, expected.proof_bytes);
+    }
+
+    /// Known-answer test pinning the Goldilocks transcript to a CONSTANT.
+    ///
+    /// Every other byte-equality test in this file compares the bounded
+    /// prover against the reference prover *in the same build*. Both sides
+    /// call the same `profile_permutation()`, so a change to its seed, RNG,
+    /// or round constants would move both sides together and leave every
+    /// assertion green while silently emitting a different proof system.
+    ///
+    /// Phase 3A rewrites `dft`/`mmcs`/`fri`/`quotient`/`bounded_pcs`/
+    /// `bounded_prover` to be generic over `DurableFieldProfile`, and the
+    /// plan's stated safety net is "Goldilocks stays byte-identical". That
+    /// net is only real if something outside the build holds the answer.
+    /// This is that something.
+    ///
+    /// If this fails, the Goldilocks proof bytes changed. Do NOT update the
+    /// constant to make it pass — per the plan's Global Constraints, a
+    /// changed byte-equality expectation is a plan conflict: stop and ask.
+    #[test]
+    fn goldilocks_fibonacci_proof_matches_frozen_known_answer() {
+        const FROZEN_FIBONACCI_16_PROOF_BLAKE3: &str =
+            "ed94fb697d9c6ec95e08724bf960a1e3bb84b7b41954eed888688d2a8a174a02";
+
+        let proof = crate::ResourceBoundedUniStarkProver::prove_reference(
+            crate::WorkloadKind::Fibonacci {
+                initial_a: 0,
+                initial_b: 1,
+            },
+            16,
+        )
+        .unwrap();
+        let digest = blake3::hash(&proof.proof_bytes).to_hex().to_string();
+        assert_eq!(
+            digest, FROZEN_FIBONACCI_16_PROOF_BLAKE3,
+            "Goldilocks fibonacci(0,1,16) proof bytes changed; see this test's doc comment"
+        );
+    }
+
+    /// BabyBear has no durable checkpoint representation, so the prover must
+    /// write NO checkpoint rather than one it could never restore.
+    ///
+    /// This is the fail-closed half of `DurableFieldProfile::capture_challenger`
+    /// returning `None`. Written with `RetainOnFailure` and an interrupted run —
+    /// the exact configuration under which Goldilocks DOES leave a resumable
+    /// `checkpoint.json` (see
+    /// `cancellation_retains_only_an_explicitly_resumable_checkpoint`) — so a
+    /// future change that started emitting Goldilocks-shaped snapshots for
+    /// BabyBear fails here instead of at some later resume.
+    #[test]
+    fn babybear_writes_no_checkpoint_because_it_cannot_restore_one() {
+        use crate::profile::BabyBearProfile;
+
+        let dir = tempfile::tempdir().unwrap();
+        let workload = FibonacciWorkload {
+            initial_a: 0,
+            initial_b: 1,
+            logical_rows: 16,
+        };
+        let mut resumable = policy(dir.path());
+        resumable.checkpoint_policy = CheckpointPolicy::RetainOnFailure;
+        let cancellation = CancellationToken::new();
+        let observer_token = cancellation.clone();
+        let mut observed_checkpoint_paths = 0usize;
+        let result =
+            prove_resource_bounded_observed_with_control_inner::<16, 8, BabyBearProfile, _, _>(
+                &workload,
+                &resumable,
+                None,
+                cancellation,
+                default_failure_injector(),
+                |event| {
+                    if let ProverEventV1::Phase {
+                        phase,
+                        checkpoint_path,
+                        ..
+                    } = event
+                    {
+                        if checkpoint_path.is_some() {
+                            observed_checkpoint_paths += 1;
+                        }
+                        if matches!(phase, PipelinePhaseV1::Quotient) {
+                            observer_token.cancel();
+                        }
+                    }
+                },
+            );
+        assert!(matches!(result, Err(BoundedProverError::Cancelled)));
+        assert_eq!(
+            observed_checkpoint_paths, 0,
+            "BabyBear reported a checkpoint path it cannot have written"
+        );
+        let stray = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .map(|entry| entry.path().join("checkpoint.json"))
+            .find(|path| path.is_file());
+        assert!(
+            stray.is_none(),
+            "BabyBear left an unrestorable checkpoint at {stray:?}"
+        );
+    }
+
+    /// The Goldilocks counterpart of the test above, asserted in the same run so
+    /// the two cannot silently converge: the identical policy and interruption
+    /// DO leave a checkpoint for Goldilocks.
+    #[test]
+    fn goldilocks_still_writes_a_checkpoint_under_the_same_interruption() {
+        let dir = tempfile::tempdir().unwrap();
+        let workload = FibonacciWorkload {
+            initial_a: 0,
+            initial_b: 1,
+            logical_rows: 16,
+        };
+        let mut resumable = policy(dir.path());
+        resumable.checkpoint_policy = CheckpointPolicy::RetainOnFailure;
+        let cancellation = CancellationToken::new();
+        let observer_token = cancellation.clone();
+        let result =
+            prove_resource_bounded_observed_with_control_inner::<8, 4, GoldilocksProfile, _, _>(
+                &workload,
+                &resumable,
+                None,
+                cancellation,
+                default_failure_injector(),
+                |event| {
+                    if matches!(
+                        event,
+                        ProverEventV1::Phase {
+                            phase: PipelinePhaseV1::Quotient,
+                            ..
+                        }
+                    ) {
+                        observer_token.cancel();
+                    }
+                },
+            );
+        assert!(matches!(result, Err(BoundedProverError::Cancelled)));
+        assert!(
+            fs::read_dir(dir.path())
+                .unwrap()
+                .filter_map(std::result::Result::ok)
+                .map(|entry| entry.path().join("checkpoint.json"))
+                .any(|path| path.is_file()),
+            "Goldilocks stopped writing resumable checkpoints"
+        );
     }
 
     #[test]

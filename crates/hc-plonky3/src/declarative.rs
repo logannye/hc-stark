@@ -1,4 +1,5 @@
 use crate::contracts::{AirConstraintKindV1, AirExpressionV1, AirPackageV1, TraceManifestV1};
+use crate::profile::{DurableFieldProfile, GoldilocksProfile};
 use crate::{
     estimate_resource_bounded_workload, plan_resource_workload, verify_resource_bounded_proof,
     GeneratedTraceV1, GoldilocksWord, ResourceBoundedWorkload, ResourceExecutionPlanV1,
@@ -21,11 +22,33 @@ pub struct DeclarativeAir {
     max_degree: usize,
 }
 
+/// Every `ResourceBoundedWorkload` in this module is implemented at the trait's
+/// default parameters — `<8, 4, GoldilocksProfile>` — so its public values are
+/// `Vec<Goldilocks>` and its trace store is `MatrixStore<GoldilocksWord>`. It
+/// therefore cannot represent an AIR that declares another field, and the four
+/// `GOLDILOCKS_MODULUS_U64` bounds and `* 8` row arithmetic below are exact only
+/// because of this refusal.
+///
+/// `AirPackageV1::validate` admits any field this crate has canonicality rules
+/// for, which is a strictly wider set. Refusing here rather than reducing mod p
+/// is what keeps a BabyBear-declared statement from being proved — or
+/// **verified** — as a Goldilocks one. The verify path matters as much as the
+/// prove path: `verify_declarative_proof` builds a `DeclarativeStatement`, so
+/// without this guard a BabyBear AIR would be checked against a Goldilocks
+/// transcript.
+fn require_goldilocks_air(package: &AirPackageV1) -> Result<(), WorkloadError> {
+    if package.field != <GoldilocksProfile as DurableFieldProfile<8, 4>>::FIELD_NAME {
+        return Err(WorkloadError::InvalidShape);
+    }
+    Ok(())
+}
+
 impl DeclarativeAir {
     pub fn new(package: AirPackageV1) -> Result<Self, WorkloadError> {
         package
             .validate()
             .map_err(|_| WorkloadError::InvalidShape)?;
+        require_goldilocks_air(&package)?;
         let mut next_columns = Vec::new();
         let mut degrees: Vec<usize> = Vec::with_capacity(package.expressions.len());
         for expression in &package.expressions {
@@ -129,6 +152,37 @@ pub struct UploadedTraceWorkload {
     input_digest: [u8; 32],
 }
 
+/// zstd is scoped to non-wasm targets in Cargo.toml: its build script
+/// compiles an x86-64 assembly file even when targeting wasm32, which made
+/// `hc-wasm` -- and therefore the vendored WASM estimator -- unbuildable for
+/// that target. The uploaded-trace path below reads chunk FILES, so it is
+/// already unreachable on wasm32; this shim keeps the call sites identical
+/// on both targets rather than cfg-gating public methods, so the crate's API
+/// does not change shape by target.
+#[cfg(not(target_arch = "wasm32"))]
+mod compression {
+    use super::WorkloadError;
+    use std::io::Read;
+
+    pub(super) fn decoder<R: Read>(reader: R) -> Result<impl Read, WorkloadError> {
+        zstd::stream::read::Decoder::new(reader).map_err(|_| WorkloadError::InvalidShape)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+mod compression {
+    use super::WorkloadError;
+    use std::io::Read;
+
+    /// Unreachable on wasm32: reaching it requires an opened chunk file, and
+    /// this target has no filesystem. Fails closed rather than silently
+    /// returning empty data, so a future caller that does reach it gets an
+    /// error instead of a zero-row trace.
+    pub(super) fn decoder<R: Read>(_reader: R) -> Result<std::io::Empty, WorkloadError> {
+        Err(WorkloadError::InvalidShape)
+    }
+}
+
 impl UploadedTraceWorkload {
     pub fn new(
         air: AirPackageV1,
@@ -207,8 +261,7 @@ impl UploadedTraceWorkload {
         for chunk in &self.manifest.chunks {
             let path = self.chunk_path(chunk.index);
             let file = open_validated_chunk(&path, chunk.compressed_bytes, &chunk.blake3_hex)?;
-            let mut decoder =
-                zstd::stream::read::Decoder::new(file).map_err(|_| WorkloadError::InvalidShape)?;
+            let mut decoder = compression::decoder(file)?;
             let mut remaining = chunk.uncompressed_bytes;
             while remaining > 0 {
                 let read_len = usize::try_from(remaining.min(buffer.len() as u64))
@@ -299,8 +352,7 @@ impl ResourceBoundedWorkload for UploadedTraceWorkload {
         for chunk in &self.manifest.chunks {
             let path = self.chunk_path(chunk.index);
             let file = open_validated_chunk(&path, chunk.compressed_bytes, &chunk.blake3_hex)?;
-            let mut decoder =
-                zstd::stream::read::Decoder::new(file).map_err(|_| WorkloadError::InvalidShape)?;
+            let mut decoder = compression::decoder(file)?;
             let chunk_rows = usize::try_from(chunk.uncompressed_bytes / row_bytes as u64)
                 .map_err(|_| WorkloadError::InvalidShape)?;
             let mut remaining_rows = chunk_rows;
@@ -804,6 +856,47 @@ mod tests {
             AirProofBundleV1::from_proof(air, manifest, public_inputs, bounded, "test-release")
                 .unwrap();
         bundle.verify_local_registration_proof().unwrap();
+    }
+
+    /// The verify path is the one the admission gate could not close on its
+    /// own. `AirPackageV1::validate` now admits any field this crate has
+    /// canonicality rules for, but every workload here is
+    /// `ResourceBoundedWorkload<8, 4, GoldilocksProfile>`, so a BabyBear AIR
+    /// must be refused rather than proved — or verified — over Goldilocks.
+    #[test]
+    fn declarative_prove_and_verify_refuse_a_non_goldilocks_air() {
+        let babybear = AirPackageV1 {
+            field: crate::profile::BabyBearProfile::FIELD_NAME.into(),
+            ..fibonacci_air()
+        };
+        // It is a well-formed declaration...
+        babybear
+            .validate()
+            .expect("a BabyBear AIR must be declarable");
+
+        // ...that this Goldilocks-typed executor refuses at every entry point.
+        assert!(matches!(
+            DeclarativeAir::new(babybear.clone()),
+            Err(WorkloadError::InvalidShape)
+        ));
+        assert!(matches!(
+            verify_declarative_proof(
+                babybear.clone(),
+                MIN_CUSTOM_TRACE_ROWS,
+                &[0, 1, 1],
+                &[0u8; 8]
+            ),
+            Err(WorkloadError::InvalidShape)
+        ));
+
+        let dir = tempdir().unwrap();
+        let chunks = dir.path().join("chunks");
+        fs::create_dir(&chunks).unwrap();
+        let (manifest, public) = packed_fibonacci(&chunks);
+        assert!(matches!(
+            UploadedTraceWorkload::new(babybear, manifest, public, &chunks),
+            Err(WorkloadError::InvalidShape)
+        ));
     }
 
     #[test]

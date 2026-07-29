@@ -15,8 +15,99 @@
 - The current lock hash `e124d2c46bf7e313edc2c4b06ea90633d9a929a430d5d1657d032a581f760990` is pinned in exactly these 8 places (verified by `grep -rl` against the repo root): `.github/workflows/evaluation-doctor.yml`, `crates/hc-cli/tests/cli_roundtrip.rs`, `crates/hc-plonky3/src/prover.rs` (constant `DEPENDENCY_LOCK_SHA256`), `release/plonky3-compatibility-v1.json`, `scripts/ci/backend_release_ready.py`, `scripts/ci/test_backend_release_ready.py`, `scripts/release/build_external_records.py`, `scripts/release/test_build_external_records.py`. Every task that changes `Cargo.lock` must re-freeze all 8, plus regenerate `fuzz/Cargo.lock` and `clients/rust/Cargo.lock` (standalone workspaces, no root gate covers them). `release/evidence/` is signed historical attestation — **never edit it**; a diff there after any task is a bug in that task.
 - `scripts/ci/claim_containment_scan.py` scans `docs/**/*.md`, `README.md`, and `site/`/`release/` trees for `\bzero[- ]knowledge\b` and similar unsupported-claim patterns. Run it after every task that touches a doc file.
 - **Every existing Goldilocks fixture must produce byte-identical output after every task in this plan.** This is the plan's core safety net: `cargo test --workspace` must stay green throughout, and the specific byte-equality parity tests in `hc-plonky3` (see Task 2) must not change their expected values. If a task changes a byte-equality assertion's expected constant, treat that as a plan-conflict and stop — ask before proceeding, per this repo's fix-loop rules.
-- No task in this plan touches `site/`, pricing, or commerce copy. Site/estimator copy changes (the scalar-fallback caveat, BabyBear benchmark publication) are Task 10 only, and only additive.
+- No task in this plan touches `site/` **pricing or commerce copy**. Site copy changes (the scalar-fallback caveat, BabyBear benchmark publication) are Task 10 only, and only additive.
+- **AMENDED (this constraint as originally written was WRONG).** The original text said no task touches `site/` at all. That is not achievable: `site/vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm` is a COMPILED ARTIFACT of `crates/hc-plonky3`'s cost model, and `scripts/ci/estimate_wasm_cli_parity_gate.mjs` requires it to agree byte-for-byte with the native CLI over a BabyBear fixture. So **any change to the estimator model REQUIRES re-vendoring the wasm in the same commit** — leaving it stale fails CI and blocks `deploy-site.yml`. Two tasks legitimately hit this (the extension-degree fix, and Task 8's profile-relative digest words). Re-vendoring the wasm is therefore IN SCOPE wherever the cost model changes; the constraint's real intent — no pricing or marketing copy changes outside Task 10 — is unaffected. Follow the "RE-VENDORING PROCEDURE" section above, including the byte-identical-glue check.
 - This plan does **not** implement KoalaBear or Mersenne31, multi-table scheduling (Phase 3B), or LogUp (Phase 3C). Once `DurableFieldProfile` exists, adding KoalaBear is expected to be a small follow-on (a second profile impl, no further trait changes) — track it as a fast-follow, not a task here.
+
+## Fix round 2 (post-review, before Task 3) — READ BEFORE TASKS 4-8
+
+A code review of Tasks 1-2 produced four findings that change how the
+remaining tasks must be executed. All were verified by compiling, not by
+reasoning.
+
+1. **`DurableFieldProfile` needed 8 more bounds, and now carries them.**
+   Task 2's note said rustc "cannot normalize the projection inside a
+   higher-ranked bound". That was WRONG. `crates/hc-plonky3/src/generic_prover_guard.rs`
+   builds a fully generic `prove_to_bytes` with exactly that `for<'a>` bound
+   and it compiles and produces real proof bytes. The original 15 E0277s
+   were missing bounds: `Val: PrimeField64`, the three **`Packing` (SIMD)**
+   variants of Permutation/Hash/Compression, `Sync` on Hash and Compression,
+   and `[Val; DIGEST_ELEMS]: Serialize + Deserialize`. Seven are now stated
+   once on the trait; only the serde one must be restated at generic use
+   sites (trait `where`-clauses over non-`Self` types are not elaborated to
+   callers).
+
+2. **Task 8 must go fully generic in ONE step.** Making `prover.rs`'s `Val`
+   alias a projection while its callers stay concrete still fails, with a
+   DIFFERENT error (`Dft: TwoAdicSubgroupDft<Goldilocks>` unsatisfied).
+   That is an artifact of the half-generic intermediate state. Flipping
+   `Val` first and chasing fallout does not converge — convert
+   `prove_to_bytes` and its generic parameters together.
+
+3. **The byte-identity safety net was self-referential.** Every existing
+   byte-equality test compared the bounded prover against the reference
+   prover *in the same build*; both call the same `profile_permutation()`,
+   so a changed seed would move both sides together and stay green.
+   `bounded_prover.rs::goldilocks_fibonacci_proof_matches_frozen_known_answer`
+   now pins the fibonacci(0,1,16) proof to a blake3 constant. That constant
+   was verified equal at `main` (f17930c) and on this branch, which is the
+   only external evidence Tasks 1-2 were byte-preserving. **If it ever
+   fails, stop and ask — do not update the constant.**
+
+4. **`PERM_WIDTH` vs `CanonicalElement::WIDTH`.** The trait's permutation
+   width is now spelled `PERM_WIDTH`, because `hc_stream::CanonicalElement::WIDTH`
+   means BYTES PER SCRATCH ELEMENT — a different quantity that coincidentally
+   also equals 8 for Goldilocks (and is 4, not 16, for BabyBear). Never
+   write bare `WIDTH` for either. `checkpoint.rs` likewise now separates
+   `RATE` from `DIGEST_ELEMS` with a static assertion.
+
+Still open, deliberately deferred: FRI security parameters are field-blind
+(`prover.rs` calls `FriParameters::new_benchmark` with no field awareness).
+BabyBear's challenge field is 124 bits vs Goldilocks' 128. Task 8 or 10
+should compute `p3_uni_stark::security::ConjecturedSecurity` for both
+profiles and assert BabyBear meets a stated floor before Task 10 publishes
+any benchmark.
+
+## ✅ RESOLVED (was a blocking prerequisite for Task 9): live estimator degree bug + wasm32 build
+
+`estimate_params.rs` priced the quotient DFT with a hardcoded `2` — the extension degree, missed when `fri.rs`/`quotient.rs` were swept. Correct for Goldilocks (degree 2); **half the true column count for BabyBear/KoalaBear/Mersenne31** (degree 4). It is now derived from the widths already in `params`, since `field_widths` returns `(base, base * degree)`:
+
+```rust
+let extension_degree = ext_field_bytes.checked_div(field_bytes).unwrap_or(2).max(1) as usize;
+```
+
+**Measured correction** on `test-vectors/estimate/babybear-multi-table.json`:
+
+| metric | before (shipped) | after | delta |
+|---|---|---|---|
+| `total_read_bytes` | 59,458,455,408 | 60,129,544,048 | +671,088,640 (+1.13%) |
+| `total_write_bytes` | 38,052,155,280 | 38,723,243,920 | +671,088,640 (+1.76%) |
+| `scratch_high_water_bytes` / `peak_resident_bytes` | — | unchanged | — |
+
+Goldilocks is byte-identical (16/8 = 2), confirmed by the parity gate. The correction moves BabyBear estimates UP; the previously shipped numbers understated I/O.
+
+### The wasm32 blocker, and how it was cleared
+
+Landing any cost-model change requires rebuilding the committed `site/vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm`, because `estimate_wasm_cli_parity_gate.mjs` compares `hc-cli` against those exact bytes — and that gate runs in **`deploy-site.yml`**, the production Pages deploy, so a source-only change would have blocked the site deploy.
+
+`hc-wasm` could not build for `wasm32-unknown-unknown`: `zstd-sys`'s build script compiles `zstd/lib/decompress/huf_decompress_amd64.S` — x86-64 assembly — even for wasm32, and clang rejects it. Verified identical at `main`, so it predated this plan.
+
+**Fix:** `zstd` is now scoped to `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` in `crates/hc-plonky3/Cargo.toml`, with a small `compression` shim in `declarative.rs` keeping both call sites identical across targets (the uploaded-trace path reads chunk FILES, so it is already unreachable on a target with no filesystem; the wasm arm fails closed rather than returning empty data). **`Cargo.lock` is byte-unchanged** — the lock is target-agnostic, so the hash pinned in 8 places still matches. Side benefit: the vendored wasm shrank 428,793 → 394,572 bytes (−8%), since zstd was dead weight there.
+
+### ⚠️ THE RE-VENDORING PROCEDURE (reverse-engineered; write it down or it will be lost)
+
+The vendored files are named `tinyzkp-estimate.*` but the wasm's compiled-in import module name is `tinyzkp-verify`. Build with `--out-name tinyzkp-verify`, then rename only the `.wasm` FILENAME reference — never the import key at `tinyzkp-estimate.js:88` (`"./tinyzkp-verify_bg.js"`), which must keep matching the binary's import section:
+
+```bash
+RUSTFLAGS=" " wasm-pack build --target web --out-name tinyzkp-verify --out-dir <tmp> crates/hc-wasm
+sed 's/tinyzkp-verify_bg\.wasm/tinyzkp-estimate_bg.wasm/g; s|@ts-self-types="./tinyzkp-verify.d.ts"|@ts-self-types="./tinyzkp-estimate.d.ts"|' \
+  <tmp>/tinyzkp-verify.js > site/vendor/tinyzkp-estimate/tinyzkp-estimate.js
+cp <tmp>/tinyzkp-verify_bg.wasm site/vendor/tinyzkp-estimate/tinyzkp-estimate_bg.wasm
+```
+
+Applying that transform to a fresh build reproduces the committed `.js` **byte-identically**, which is the check that the toolchain and ABI still match — do it every time before replacing the `.wasm`. `RUSTFLAGS=" "` is required on this Mac because `~/.cargo/config.toml` sets a global `target-cpu=native`, which leaks `apple-m4` into wasm32 builds.
+
+Gates confirming the result: `estimate_wasm_cli_parity_gate.mjs` (BOTH fixtures), `test_worker_estimate.mjs`, `site_worker_dispatch_test.mjs`.
 
 ---
 
@@ -185,7 +276,7 @@ pub trait DurableFieldProfile: Clone + Send + Sync + 'static {
     /// Upper bound (exclusive) on values this profile's workloads may seed
     /// with, so generated fixtures (Fibonacci's `initial_a`/`initial_b`,
     /// etc.) never exceed the field's modulus. Generalizes
-    /// `GOLDILOCKS_MODULUS_U64` in `workloads.rs`.
+    /// `GOLDILOCKS_MODULUS_U64` in `prover.rs`.
     fn modulus_u64() -> u64;
 }
 ```
@@ -229,7 +320,7 @@ impl DurableFieldProfile for GoldilocksProfile {
     }
 
     fn modulus_u64() -> u64 {
-        crate::workloads::GOLDILOCKS_MODULUS_U64
+        crate::prover::GOLDILOCKS_MODULUS_U64
     }
 }
 ```
@@ -316,17 +407,29 @@ impl CanonicalElement for BabyBearWord {
     }
 
     fn decode(bytes: &[u8]) -> hc_stream::Result<Self> {
-        use p3_field::PrimeCharacteristicRing;
         let bytes: [u8; 4] = bytes
             .try_into()
             .map_err(|_| hc_stream::StreamError::Corrupt("invalid BabyBear width"))?;
         let value = u32::from_le_bytes(bytes);
-        Ok(Self(p3_baby_bear::BabyBear::from_u32(value)))
+        // REQUIRED, and absent from this plan's first draft.
+        // `GoldilocksWord::decode` (dft.rs:62) rejects `value >= modulus`:
+        // that check is the durable scratch layer's corruption detector and
+        // it makes decode injective. `BabyBear::new` accepts ANY u32 and
+        // silently reduces mod p ("Any `u32` value is accepted",
+        // p3-monty-31-0.6.1/src/monty_31.rs:47), so omitting this makes `x`
+        // and `x + 0x78000001` decode to the same element and loses
+        // corruption detection on the BabyBear scratch path.
+        if value >= 0x7800_0001 {
+            return Err(hc_stream::StreamError::Corrupt(
+                "non-canonical BabyBear element",
+            ));
+        }
+        Ok(Self(p3_baby_bear::BabyBear::new(value)))
     }
 }
 ```
 
-Confirm the exact method names (`as_canonical_u32`, `from_u32` or whichever `p3_baby_bear::BabyBear` actually exposes for canonical round-trip) against the crate as vendored by Task 1 — `cargo doc -p p3-baby-bear --open` or reading `~/.cargo/registry/src/*/p3-baby-bear-0.6.1/src/` directly, since this plan was written without that crate checked out locally. If the method names differ, use the real ones; the round-trip property (`decode(encode(x)) == x` for every canonical value) is what Step 3's test enforces, not the exact method names above.
+The constructor is `BabyBear::new(u32)` — VERIFIED against the vendored crate; this plan's original guess of `from_u32` is WRONG. `as_canonical_u32` comes from `p3_field::PrimeField32`. Confirm any further method names against the crate as vendored by Task 1 — `cargo doc -p p3-baby-bear --open` or reading `~/.cargo/registry/src/*/p3-baby-bear-0.6.1/src/` directly, since this plan was written without that crate checked out locally. If the method names differ, use the real ones; the round-trip property (`decode(encode(x)) == x` for every canonical value) is what Step 3's test enforces, not the exact method names above.
 
 - [ ] **Step 2: Implement `BabyBearProfile`**
 
@@ -339,25 +442,28 @@ use p3_baby_bear::BabyBear;
 #[derive(Clone, Debug, Default)]
 pub struct BabyBearProfile;
 
-impl DurableFieldProfile for BabyBearProfile {
+// CORRECTED (fix rounds 1 + 2). BabyBear's Poseidon2 exists ONLY at widths
+// 16/24/32, and Plonky3's reference BabyBear config uses an 8-element
+// digest. Goldilocks' <8, 4, 4> / <2, 4, 8> here would be BOTH a compile
+// error AND a silent soundness regression (a 4-element BabyBear digest is
+// ~62-bit collision resistance vs Goldilocks' ~128). These exact numbers
+// are already proven satisfiable by profile.rs's BabyBearShapeStub.
+impl DurableFieldProfile<16, 8> for BabyBearProfile {
     type Val = BabyBear;
     type Challenge = p3_field::extension::BinomialExtensionField<BabyBear, 4>;
-    type Permutation = /* p3_baby_bear's standard Poseidon2 permutation type —
-                           check p3-baby-bear's public API for its Poseidon2
-                           constructor, analogous to GoldilocksProfile's */;
-    type Hash = PaddingFreeSponge<Self::Permutation, 8, 4, 4>;
-    type Compression = TruncatedPermutation<Self::Permutation, 2, 4, 8>;
+    type Permutation = p3_baby_bear::Poseidon2BabyBear<16>;
+    type Hash = PaddingFreeSponge<Self::Permutation, 16, 8, 8>;
+    type Compression = TruncatedPermutation<Self::Permutation, 2, 8, 16>;
     type Word = BabyBearWord;
 
     const FIELD_NAME: &'static str = "babybear";
     const EXTENSION_DEGREE: u8 = 4;
 
     fn profile_permutation() -> Self::Permutation {
-        // Use p3_baby_bear's own recommended/default Poseidon2 construction
-        // (a seeded RNG construction analogous to GoldilocksProfile's, or a
-        // fixed round-constants constant if p3-baby-bear ships one — check
-        // p3-poseidon2's generic constructor and p3-baby-bear's re-export).
-        todo!("construct BabyBear's Poseidon2 permutation")
+        // Same construction GoldilocksProfile uses, already compiled in
+        // profile.rs's BabyBearShapeStub.
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(1);
+        Self::Permutation::new_from_rng_128(&mut rng)
     }
 
     fn modulus_u64() -> u64 {
@@ -599,7 +705,7 @@ pub struct ResourceBoundedVerifierPcs<P: DurableFieldProfile> {
 }
 ```
 
-`ProfileChallenger` (referenced throughout `bounded_pcs.rs` and `fri.rs`, currently `DuplexChallenger<Val, Permutation, 8, 4>` per `prover.rs:54`) becomes generic: `ProfileChallenger<P> = DuplexChallenger<P::Val, P::Permutation, 8, 4>`. `BoundedConfig` (`bounded_pcs.rs:131`) becomes `BoundedConfig<P> = StarkConfig<ResourceBoundedVerifierPcs<P>, P::Challenge, ProfileChallenger<P>>`.
+`ProfileChallenger` (referenced throughout `bounded_pcs.rs` and `fri.rs`, currently `DuplexChallenger<Val, Permutation, 8, 4>` per `prover.rs:54`) becomes generic: `ProfileChallenger<const PERM_WIDTH: usize, const DIGEST_ELEMS: usize, P> = DuplexChallenger<P::Val, P::Permutation, PERM_WIDTH, DIGEST_ELEMS>`. **Do NOT leave the literal `8, 4`** — BabyBear needs `16, 8` (`p3-uni-stark-0.6.1/tests/mul_fib_pair.rs:190`), so hardcoding `8, 4` here stalls Task 8. `crates/hc-plonky3/src/generic_prover_guard.rs` already holds a COMPILING generic form of this entire alias chain (ValPacking -> ValMmcs -> ChallengeMmcs -> Challenger -> Pcs -> Config); copy its shapes rather than re-deriving them. `BoundedConfig` (`bounded_pcs.rs:131`) becomes `BoundedConfig<P> = StarkConfig<ResourceBoundedVerifierPcs<P>, P::Challenge, ProfileChallenger<P>>`.
 
 - [ ] **Step 3: Compile and regression-test**
 
@@ -624,7 +730,7 @@ This is the task that first produces an actual BabyBear proof.
 **Files:**
 - Modify: `crates/hc-plonky3/src/bounded_prover.rs` (every public entry point — `prove_resource_bounded`, `verify_resource_bounded_proof`, checkpoint/resume functions)
 - Modify: `crates/hc-plonky3/src/prover.rs` (finish removing any remaining Goldilocks-concrete code not already covered by Task 2)
-- Modify: `crates/hc-plonky3/src/workloads.rs` (`FibonacciWorkload`'s seed-value bound: replace `GOLDILOCKS_MODULUS_U64` literal check at `workloads.rs:494,637` with `P::modulus_u64()`; `FibonacciAir` itself needs no change — it is already `impl<F> BaseAir<F> for FibonacciAir` / `impl<AB: AirBuilder> Air<AB> for FibonacciAir`, field-agnostic since before this plan)
+- Modify: `crates/hc-plonky3/src/workloads.rs` (`FibonacciWorkload`'s seed-value bound: replace the `GOLDILOCKS_MODULUS_U64` literal check at **`workloads.rs:191-192`** with `P::modulus_u64()`; `FibonacciAir` itself needs no change — it is already `impl<F> BaseAir<F> for FibonacciAir` / `impl<AB: AirBuilder> Air<AB> for FibonacciAir`, field-agnostic since before this plan)
 - Test: `crates/hc-plonky3/tests/babybear_fibonacci_roundtrip.rs` (new)
 
 **Interfaces:**
@@ -639,7 +745,7 @@ Apply the established substitution to every function currently concrete over `Go
 
 - [ ] **Step 2: Fix `FibonacciWorkload`'s modulus check**
 
-In `crates/hc-plonky3/src/workloads.rs`, replace the two sites currently comparing against the literal `GOLDILOCKS_MODULUS_U64` (`workloads.rs:494,637`) with a comparison against `P::modulus_u64()`, threading `P: DurableFieldProfile` through `FibonacciWorkload` the same way `bounded_prover.rs` now does. `GOLDILOCKS_MODULUS_U64` itself stays defined (Task 3's `GoldilocksProfile::modulus_u64()` already returns it) — only the two call sites change to go through the profile instead of the bare constant.
+In `crates/hc-plonky3/src/workloads.rs`, replace the site currently comparing against the literal `GOLDILOCKS_MODULUS_U64` with a comparison against `P::modulus_u64()`. **CORRECTED SCOPE — the original line numbers were wrong:** `workloads.rs` is only 419 lines, so `:494,637` do not exist; the real check is the single two-line condition at **`workloads.rs:191-192`**. Repo-wide the constant is referenced at **31 sites across 10 files** (`workloads.rs`, `declarative.rs`, `beta_fixtures.rs`, `contracts.rs`, `bounded_prover.rs`, `prover.rs`, `lib.rs`, `profile.rs`, `hc-cli/src/commands/plonky3.rs`, `hc-cli/tests/cli_roundtrip.rs`). Enumerate them first with `grep -rn GOLDILOCKS_MODULUS_U64 crates/ --include='*.rs'` and explicitly declare which stay Goldilocks-only — do NOT assume all 31 must generalize. threading `P: DurableFieldProfile` through `FibonacciWorkload` the same way `bounded_prover.rs` now does. `GOLDILOCKS_MODULUS_U64` itself stays defined (Task 3's `GoldilocksProfile::modulus_u64()` already returns it) — only the two call sites change to go through the profile instead of the bare constant.
 
 - [ ] **Step 3: Write the failing test first**
 
@@ -722,6 +828,22 @@ pub enum ProfileIdentifierV1 {
     Other,
 }
 ```
+
+**⚠️ SCOPED WORK DISCOVERED BEFORE TASK 8 — the admission gates are a canonicality hazard, not just an enum check.**
+
+"Loosening" the field-admission check is NOT sufficient on its own. `GOLDILOCKS_MODULUS_U64` is referenced at 31 sites across 10 files, and the load-bearing ones are **public-input canonicality validators**, not definitions:
+
+| file | sites | role |
+|---|---|---|
+| `declarative.rs` | 146, 225, 320, 377 | declarative-AIR public values |
+| `contracts.rs` | 145, 352, 424, 425 | admission gate |
+| `prover.rs` | 532 (`validate_workload`) | workload seeds |
+| `workloads.rs` | 191-192 | Fibonacci seeds (Task 8 handles this one) |
+| `hc-cli/src/commands/plonky3.rs` | 299 | CLI input |
+
+Every one of these compares a user-supplied `u64` against **Goldilocks'** modulus (~2^64). Left as-is on a BabyBear job they admit any value below 2^64, and the field constructor then silently reduces it mod 2^31-2^27+1. That is precisely the failure `prover.rs:23-25` already warns about in prose — *"distinct manifests collapse to the same public field element"* — and is the same defect class as the `BabyBearWord::decode` bug this plan's fix round 2 caught: a constructor that accepts anything and reduces, with no canonicality gate in front of it.
+
+So this step must make each of those validators compare against **the profile's** modulus (`P::modulus_u64()`), not merely accept a new `field` string. A test must assert that a BabyBear job with a public input in `[BABYBEAR_MODULUS, GOLDILOCKS_MODULUS)` is REJECTED — that range passes every check today.
 
 - [ ] **Step 2: Loosen the field-admission check**
 
@@ -813,7 +935,21 @@ Compare the `bounded.peak_resident_bytes` figure against Step 2's measured value
 
 - [ ] **Step 4: Resolve the documented uncertainty**
 
-If the measured value matches the prediction within reasonable tolerance, update the comment at `estimate_params.rs:145-158` to state the term is now measured and confirmed for BabyBear (cite this fixture), removing the "unverified for non-Goldilocks" hedge. If it does not match, use the discrepancy to correct the `+3`/`192` term's field-byte-width attribution — the comment itself names this as the expected remedy ("if a BabyBear/KoalaBear/Mersenne31 estimate is ever contradicted by measurement, start here"). Either outcome is a valid result of this step; do not force a match.
+**FIRST READ THIS — a BabyBear measurement is only PARTLY discriminating, computed before the fact (fix round 2):**
+
+`canonical_extension_degree` (`estimate_params.rs:366-372`) gives Goldilocks `(8, 2)` and BabyBear/KoalaBear/Mersenne31 `(4, 4)`. So `ext_field_bytes = base * degree` is **16 for every field this codebase supports**, and `digest_bytes` is **32 for every one of them** (Goldilocks 4 elements x 8 bytes; BabyBear 8 elements x 4 bytes). The three candidate readings of the `192` term therefore evaluate as:
+
+| field | `12 * ext_field_bytes` | `6 * digest_bytes` | `24 * field_bytes` |
+|---|---|---|---|
+| goldilocks | 192 | 192 | 192 |
+| babybear / koalabear / mersenne31 | 192 | 192 | **96** |
+
+Consequences, which the existing comment does NOT say and which this step must not overstate:
+
+1. A BabyBear measurement **CAN falsify the `24 * field_bytes` reading** — that reading predicts half the term (96 vs 192), a difference large enough to see.
+2. It **CANNOT separate `12 * ext_field_bytes` from `6 * digest_bytes`**. Those two coincide in *every* field on this codebase's roadmap, so no measurement reachable from here distinguishes them. A field with `digest_bytes != 2 * ext_field_bytes` would be required, and none is planned.
+
+So the honest outcomes of this step are "the `24 * field_bytes` reading is falsified (or confirmed)", NOT "the term is now resolved". If the measurement matches, update the comment at `estimate_params.rs:145-158` to say the term is measured and confirmed for BabyBear (cite this fixture) and that the `24 * field_bytes` reading is excluded — but **keep a hedge recording that `12 * ext_field_bytes` and `6 * digest_bytes` remain confounded**, because they do. Removing the hedge entirely would be a false claim of resolution. If it does not match, use the discrepancy to correct the `+3`/`192` term's field-byte-width attribution — the comment itself names this as the expected remedy ("if a BabyBear/KoalaBear/Mersenne31 estimate is ever contradicted by measurement, start here"). Either outcome is a valid result of this step; do not force a match.
 
 - [ ] **Step 5: Publish the honest benchmark, with the scalar-fallback caveat**
 
