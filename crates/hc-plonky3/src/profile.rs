@@ -311,6 +311,85 @@ impl DurableFieldProfile<16, 8> for BabyBearProfile {
 /// (`p3-baby-bear-0.6.1/src/baby_bear.rs:18`) states it.
 pub const BABYBEAR_MODULUS_U64: u64 = 0x7800_0001;
 
+/// Everything the JSON contract boundary needs to know about a field it only
+/// sees as a **string** (`AirPackageV1::field`, `TraceManifestV1`'s encoding),
+/// rather than as a `P: DurableFieldProfile` type parameter.
+///
+/// This exists because the validators in `contracts.rs`, `declarative.rs`, and
+/// `hc-cli` receive user-supplied `u64`s alongside a declared field name and
+/// have no type-level profile to consult. Before this table they all compared
+/// against **Goldilocks'** modulus unconditionally, which on any other field
+/// would admit every value below 2^64 and then let the field constructor
+/// silently reduce it — exactly the collapse `prover.rs`'s
+/// `GOLDILOCKS_MODULUS_U64` doc comment warns about ("distinct manifests
+/// collapse to the same public field element"), and the same defect class that
+/// `BabyBearWord::decode` was fixed for.
+///
+/// Every entry is tied back to its `DurableFieldProfile` impl by the
+/// `const _` assertions and the unit tests below, so the two cannot drift.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DeclaredFieldProfile {
+    /// Matches the profile's `FIELD_NAME`.
+    pub name: &'static str,
+    /// Exclusive upper bound on a canonical element, as an integer.
+    pub modulus_u64: u64,
+    /// Bytes one base-field element occupies in the durable/wire encoding.
+    /// Matches `<P::Word as CanonicalElement>::WIDTH`.
+    pub element_bytes: u64,
+    /// The only `TraceManifestV1::field_encoding` value valid for this field.
+    pub trace_encoding: &'static str,
+    /// Matches the profile's `EXTENSION_DEGREE`.
+    pub extension_degree: u8,
+}
+
+/// Every field this crate can describe on the contract boundary.
+///
+/// Membership here means "the validators know how to bound values for this
+/// field", NOT "the engine can prove it". Admission is a separate decision
+/// made per contract (see `AirPackageV1::validate`), and execution is a third
+/// (`declarative.rs` refuses anything but Goldilocks, because its workloads
+/// are `ResourceBoundedWorkload<8, 4, GoldilocksProfile>` at the type level).
+pub const DECLARED_FIELD_PROFILES: &[DeclaredFieldProfile] = &[
+    DeclaredFieldProfile {
+        name: <GoldilocksProfile as DurableFieldProfile<8, 4>>::FIELD_NAME,
+        modulus_u64: crate::prover::GOLDILOCKS_MODULUS_U64,
+        element_bytes: 8,
+        trace_encoding: "goldilocks_u64_le",
+        extension_degree: <GoldilocksProfile as DurableFieldProfile<8, 4>>::EXTENSION_DEGREE,
+    },
+    DeclaredFieldProfile {
+        name: <BabyBearProfile as DurableFieldProfile<16, 8>>::FIELD_NAME,
+        modulus_u64: BABYBEAR_MODULUS_U64,
+        element_bytes: 4,
+        trace_encoding: "babybear_u32_le",
+        extension_degree: <BabyBearProfile as DurableFieldProfile<16, 8>>::EXTENSION_DEGREE,
+    },
+];
+
+/// Resolve a declared field name. `None` means "this crate has no canonicality
+/// rule for that name", which every caller must treat as a refusal — never as
+/// a licence to fall back on some other field's bounds.
+#[must_use]
+pub fn declared_field_profile(field: &str) -> Option<&'static DeclaredFieldProfile> {
+    DECLARED_FIELD_PROFILES
+        .iter()
+        .find(|profile| profile.name == field)
+}
+
+// `element_bytes` must equal the durable scratch word width, or the contract
+// layer and the on-SSD layout disagree about how many bytes a trace row is.
+const _: () = {
+    assert!(
+        DECLARED_FIELD_PROFILES[0].element_bytes as usize
+            == <<GoldilocksProfile as DurableFieldProfile<8, 4>>::Word as CanonicalElement>::WIDTH
+    );
+    assert!(
+        DECLARED_FIELD_PROFILES[1].element_bytes as usize
+            == <<BabyBearProfile as DurableFieldProfile<16, 8>>::Word as CanonicalElement>::WIDTH
+    );
+    assert!(DECLARED_FIELD_PROFILES.len() == 2);
+};
+
 // EXTENSION_DEGREE (what contracts, manifests, and the estimator report) and
 // Challenge::DIMENSION (what actually sizes the durable on-SSD layout, via
 // fri.rs/quotient.rs's extension_degree()) are two independent sources of the
@@ -441,5 +520,45 @@ mod tests {
     fn babybear_word_rejects_wrong_width_slices() {
         assert!(BabyBearWord::decode(&[0u8; 3]).is_err());
         assert!(BabyBearWord::decode(&[0u8; 8]).is_err());
+    }
+
+    /// `modulus_u64` is the one `DeclaredFieldProfile` member that cannot be
+    /// const-asserted against its `DurableFieldProfile` impl (`modulus_u64()`
+    /// is a plain trait method, not a `const fn`), so it is pinned here
+    /// instead. Without this the string-keyed table could drift away from the
+    /// type-keyed profile and every contract-layer bound would silently move.
+    #[test]
+    fn declared_field_table_agrees_with_every_profile_impl() {
+        use super::declared_field_profile;
+
+        let goldilocks = declared_field_profile(GoldilocksProfile::FIELD_NAME)
+            .expect("goldilocks must be a declarable field");
+        assert_eq!(goldilocks.modulus_u64, GoldilocksProfile::modulus_u64());
+        assert_eq!(
+            goldilocks.extension_degree,
+            GoldilocksProfile::EXTENSION_DEGREE
+        );
+
+        let babybear = declared_field_profile(BabyBearProfile::FIELD_NAME)
+            .expect("babybear must be a declarable field");
+        assert_eq!(babybear.modulus_u64, BabyBearProfile::modulus_u64());
+        assert_eq!(babybear.extension_degree, BabyBearProfile::EXTENSION_DEGREE);
+
+        // Distinct bounds are the whole point: a validator keyed off this
+        // table must reject for BabyBear what it accepts for Goldilocks.
+        assert!(babybear.modulus_u64 < goldilocks.modulus_u64);
+        assert_ne!(babybear.trace_encoding, goldilocks.trace_encoding);
+    }
+
+    #[test]
+    fn unknown_field_names_resolve_to_nothing_rather_than_a_default() {
+        use super::declared_field_profile;
+
+        for name in ["", "other", "Goldilocks", "koalabear", "mersenne31"] {
+            assert!(
+                declared_field_profile(name).is_none(),
+                "{name} resolved to a canonicality rule it has no claim to"
+            );
+        }
     }
 }

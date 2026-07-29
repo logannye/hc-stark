@@ -392,6 +392,87 @@ fn pack_trace_rejects_noncanonical_field_values() {
         .stderr(predicate::str::is_empty());
 }
 
+/// `pack-trace` used to hardcode Goldilocks' eight-byte elements and ~2^64
+/// modulus. Both now follow the AIR's declared field, so a BabyBear AIR packs
+/// four-byte elements, stamps `babybear_u32_le`, and rejects a value that only
+/// Goldilocks would call canonical.
+#[test]
+fn pack_trace_follows_the_airs_declared_field_rather_than_goldilocks() {
+    let dir = tempdir().unwrap();
+    let air_path = dir.path().join("babybear-air.json");
+    let mut air: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(write_customer_air(dir.path())).unwrap()).unwrap();
+    air["field"] = json!("babybear");
+    std::fs::write(&air_path, serde_json::to_vec_pretty(&air).unwrap()).unwrap();
+
+    // Four bytes per element, not eight.
+    let trace = dir.path().join("trace.bin");
+    let mut bytes = Vec::with_capacity(1024 * 4);
+    for row in 0..1024u32 {
+        let value = if row == 1023 {
+            (hc_plonky3::BABYBEAR_MODULUS_U64 - 1) as u32
+        } else {
+            row
+        };
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    std::fs::write(&trace, bytes).unwrap();
+    let packed = dir.path().join("packed");
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "pack-trace",
+            "--air",
+            air_path.to_str().unwrap(),
+            "--trace",
+            trace.to_str().unwrap(),
+            "--rows",
+            "1024",
+            "--output-dir",
+            packed.to_str().unwrap(),
+            // A multiple of BabyBear's four-byte element but NOT of
+            // Goldilocks' eight, so the old hardcoded `is_multiple_of(8)`
+            // would have rejected it outright.
+            "--chunk-bytes",
+            "2052",
+        ])
+        .assert()
+        .success();
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(packed.join("trace-manifest-v1.json")).unwrap())
+            .unwrap();
+    assert_eq!(manifest["field_encoding"], "babybear_u32_le");
+    assert_eq!(manifest["chunk_uncompressed_bytes"], 2052);
+    // 1024 rows x 1 column x 4 bytes = 4096 bytes, not the 8192 Goldilocks
+    // would have demanded.
+    assert_eq!(manifest["chunks"].as_array().unwrap().len(), 2);
+
+    // A value canonical only for Goldilocks must now be refused, not reduced.
+    let noncanonical = dir.path().join("noncanonical.bin");
+    let mut bytes = vec![0u8; 1024 * 4];
+    bytes[..4].copy_from_slice(&(hc_plonky3::BABYBEAR_MODULUS_U64 as u32).to_le_bytes());
+    std::fs::write(&noncanonical, bytes).unwrap();
+    cargo_bin_cmd!("hc-cli")
+        .args([
+            "plonky3",
+            "pack-trace",
+            "--air",
+            air_path.to_str().unwrap(),
+            "--trace",
+            noncanonical.to_str().unwrap(),
+            "--rows",
+            "1024",
+            "--output-dir",
+            dir.path().join("packed-noncanonical").to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "\"code\":\"manifest_contract_invalid\"",
+        ))
+        .stderr(predicate::str::is_empty());
+}
+
 #[test]
 fn declarative_air_cli_proves_estimates_and_officially_verifies() {
     let dir = tempdir().unwrap();

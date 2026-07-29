@@ -81,7 +81,10 @@ pub use mmcs::goldilocks::{DurableGoldilocksMmcs, DurableMerkleData};
 pub use mmcs::DurableMmcsError;
 pub use opening::goldilocks::MatrixOpening;
 pub use opening::{build_reduced_opening_layer, interpolate_standard_lde, DurableOpeningError};
-pub use profile::{BabyBearProfile, DurableFieldProfile, GoldilocksProfile, BABYBEAR_MODULUS_U64};
+pub use profile::{
+    declared_field_profile, BabyBearProfile, DeclaredFieldProfile, DurableFieldProfile,
+    GoldilocksProfile, BABYBEAR_MODULUS_U64, DECLARED_FIELD_PROFILES,
+};
 pub use prover::{
     release_identity, BackendError, InternalProofBundle, ResourceBoundedUniStarkProver,
     WorkloadKind, COMPATIBILITY_PROFILE, DEPENDENCY_LOCK_SHA256, GOLDILOCKS_MODULUS_U64,

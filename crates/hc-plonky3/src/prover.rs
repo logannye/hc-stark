@@ -565,6 +565,14 @@ fn validate_rows(rows: u64) -> Result<usize> {
     Ok(rows)
 }
 
+/// DELIBERATELY Goldilocks-only, and safe to be so. `WorkloadKind` carries no
+/// field, and every caller is a `ResourceBoundedUniStarkProver` method, which is
+/// pinned to `<8, 4, GoldilocksProfile>` (see the `Val`/`Challenge` aliases at
+/// the top of this file). The profile-generic entry points —
+/// `prove_resource_bounded_with_profile` and friends — never reach here; their
+/// seed bound is `FibonacciWorkload::write_trace`'s `P::modulus_u64()`, pinned
+/// by `tests/babybear_fibonacci_roundtrip.rs::
+/// babybear_rejects_a_seed_that_is_canonical_only_for_goldilocks`.
 fn validate_workload(workload: &WorkloadKind) -> Result<()> {
     match workload {
         WorkloadKind::Fibonacci {

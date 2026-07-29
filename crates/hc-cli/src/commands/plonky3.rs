@@ -253,6 +253,15 @@ pub fn pack_trace(
 ) -> Result<()> {
     let air: AirPackageV1 = read_json_limited(air_path, MAX_AIR_JSON_BYTES)?;
     air.validate().map_err(anyhow::Error::msg)?;
+    // Element width, wire encoding, and the canonicality bound below all follow
+    // the AIR's DECLARED field. Hardcoding Goldilocks' 8 bytes and ~2^64 modulus
+    // (as this did) would, for any narrower field, pack the wrong number of
+    // bytes per element and admit values the field constructor then silently
+    // reduces mod p. `air.validate()` has already refused any field this build
+    // has no rule for, so the lookup cannot fail.
+    let field = hc_plonky3::declared_field_profile(&air.field)
+        .context("AIR declares a field this release has no canonical encoding for")?;
+    let element_bytes = field.element_bytes;
     if !(MIN_CUSTOM_TRACE_ROWS..=MAX_CUSTOM_TRACE_ROWS).contains(&logical_rows)
         || !logical_rows.is_power_of_two()
     {
@@ -260,15 +269,15 @@ pub fn pack_trace(
     }
     if chunk_uncompressed_bytes == 0
         || chunk_uncompressed_bytes > MAX_TRACE_CHUNK_UNCOMPRESSED_BYTES
-        || !chunk_uncompressed_bytes.is_multiple_of(8)
+        || !chunk_uncompressed_bytes.is_multiple_of(element_bytes)
     {
-        bail!("chunk bytes must be a nonzero multiple of 8 and at most 256 MiB");
+        bail!("chunk bytes must be a nonzero multiple of {element_bytes} and at most 256 MiB");
     }
     let expected_bytes = logical_rows
         .checked_mul(u64::from(air.trace_width))
-        .and_then(|value| value.checked_mul(8))
+        .and_then(|value| value.checked_mul(element_bytes))
         .context("trace size overflow")?;
-    let row_bytes = u64::from(air.trace_width) * 8;
+    let row_bytes = u64::from(air.trace_width) * element_bytes;
     let chunk_uncompressed_bytes = chunk_uncompressed_bytes - chunk_uncompressed_bytes % row_bytes;
     if chunk_uncompressed_bytes == 0 {
         bail!("chunk bytes must hold at least one complete trace row");
@@ -279,8 +288,9 @@ pub fn pack_trace(
     let metadata = fs::symlink_metadata(trace_path)
         .with_context(|| format!("stat {}", trace_path.display()))?;
     if !metadata.file_type().is_file() || metadata.len() != expected_bytes {
+        let encoding = field.trace_encoding;
         bail!(
-            "trace must be a regular file containing exactly {expected_bytes} bytes of row-major Goldilocks u64 little-endian values"
+            "trace must be a regular file containing exactly {expected_bytes} bytes of row-major {encoding} values"
         );
     }
 
@@ -294,9 +304,14 @@ pub fn pack_trace(
         let this_chunk = remaining.min(chunk_uncompressed_bytes);
         let mut raw = vec![0u8; usize::try_from(this_chunk)?];
         input.read_exact(&mut raw)?;
-        for encoded in raw.chunks_exact(8) {
-            let value = u64::from_le_bytes(encoded.try_into().expect("eight-byte chunk"));
-            if value >= hc_plonky3::GOLDILOCKS_MODULUS_U64 {
+        let element_width = usize::try_from(element_bytes)?;
+        for encoded in raw.chunks_exact(element_width) {
+            // Widening into a fixed eight-byte buffer handles every field width
+            // this crate declares without branching on it; the high bytes stay
+            // zero for anything narrower than Goldilocks.
+            let mut widened = [0u8; 8];
+            widened[..element_width].copy_from_slice(encoded);
+            if u64::from_le_bytes(widened) >= field.modulus_u64 {
                 return Err(ProtocolFailure::new(ReasonCodeV1::ManifestContractInvalid).into());
             }
         }
@@ -319,7 +334,7 @@ pub fn pack_trace(
         trace_digest_hex: hex_lower(trace_hasher.finalize().as_bytes()),
         logical_rows,
         trace_width: air.trace_width,
-        field_encoding: "goldilocks_u64_le".into(),
+        field_encoding: field.trace_encoding.into(),
         compression: "zstd".into(),
         chunk_uncompressed_bytes,
         chunks,
