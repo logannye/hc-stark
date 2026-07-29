@@ -4052,9 +4052,25 @@ def derive(
             "guard_checkout": checkout_enabled,
             "hosted_proving": False,
             "hosted_verification": False,
+            # `customer_accounts` stays False deliberately, and is NOT the
+            # right flag to flip for the estimator's free keys. A minted
+            # bearer key has no password, dashboard, recovery flow, or
+            # stored email (migrations/0002_keys.sql), so calling it an
+            # account would be its own misstatement. The two flags below
+            # say what is actually true instead.
             "customer_accounts": False,
+            "anonymous_api_keys": True,
             "contact_form": False,
-            "event_collector": False,
+            # True since Phase 1b: `POST /v1/estimate` writes a shape-only
+            # row to the `demand_log` D1 table (migrations/0001_demand_log.sql).
+            # That is an event collector by any fair reading. The flag was
+            # accurate before that shipped and was left stale afterwards;
+            # site/privacy.html#resource-estimator now discloses the whole
+            # surface and scripts/ci/privacy_disclosure_gate.py enforces it.
+            "event_collector": True,
+            # Distinguishes "no API at all" from "no hosted proving": the
+            # resource estimator IS a TinyZKP-operated API surface.
+            "resource_estimator_api": True,
         },
         "supported_profile": "https://tinyzkp.com/compatibility.json",
         "pricing": "https://tinyzkp.com/pricing.json",

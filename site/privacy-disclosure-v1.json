@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "canonical_url": "https://tinyzkp.com/privacy",
+  "note": "Machine-readable record of EVERY D1 table and column site/_worker.js writes, and the human-readable disclosure each one is covered by in site/privacy.html. scripts/ci/privacy_disclosure_gate.py fails CI if the worker writes anything absent from this file, so a new column cannot ship before the privacy notice names it. Adding an entry here is not the disclosure -- site/privacy.html must actually describe it.",
+  "controller": {
+    "identity_state": "pending_owner_supplied_seller_facts",
+    "reason_anchor": "/privacy#notice-identity"
+  },
+  "database": {
+    "provider": "cloudflare_d1",
+    "binding": "DB",
+    "operated_by": "tinyzkp",
+    "purpose": "Evaluate the pre-committed demand threshold in scripts/ci/demand_report.py, and bound abuse of the free estimator.",
+    "not_used_for": [
+      "advertising",
+      "resale or disclosure to third parties",
+      "profiling or automated decision-making about a person",
+      "contacting callers"
+    ]
+  },
+  "retention": {
+    "enforced": false,
+    "policy": "none_implemented",
+    "disclosure": "site/privacy.html states plainly that no automated deletion runs yet.",
+    "tracking_issue": "Task 5.3 of docs/superpowers/plans/2026-07-29-tinyzkp-truthful-surfaces-and-demand-validity.md"
+  },
+  "identifier_limitations": {
+    "anon_ip_hash": {
+      "construction": "HMAC-SHA256(IP_HASH_SALT, CF-Connecting-IP)",
+      "salt_is_secret": false,
+      "salt_location": "site/_worker.js (hardcoded constant in a public repository)",
+      "reversible": true,
+      "reason": "The salt is public and the IPv4 preimage space is 2^32, so the hash can be inverted by exhaustive search. It is a coarse de-duplication token, NOT an anonymising transform, and site/privacy.html must not imply otherwise.",
+      "why_not_fixed_here": "The static site deliberately has no secret surface; scripts/ci/cloudflare_pages_secret_check.py asserts this. Introducing one is an architecture decision, not a copy fix."
+    }
+  },
+  "never_stored": [
+    "raw client IP address",
+    "email address",
+    "raw request body",
+    "workload, witness, trace, or AIR",
+    "checkpoint, scratch data, or proof bytes",
+    "file path",
+    "raw bearer key",
+    "precise timestamp"
+  ],
+  "tables": [
+    {
+      "name": "rate_limit_windows",
+      "migration": "migrations/0000_rate_limit_windows.sql",
+      "written_by": "POST /v1/estimate, POST /v1/keys",
+      "purpose": "Anonymous per-IP fixed-window rate limiting (30/hour).",
+      "disclosed_in": "resource-estimator",
+      "columns": {
+        "ip_hash": "Salted, publicly reversible hash of CF-Connecting-IP. See identifier_limitations.",
+        "window_start": "Start of a one-hour window, unix seconds truncated to the hour.",
+        "request_count": "Integer counter for that window."
+      }
+    },
+    {
+      "name": "demand_log",
+      "migration": "migrations/0001_demand_log.sql",
+      "written_by": "POST /v1/estimate",
+      "purpose": "Shape-only record of accepted estimate requests, feeding the demand threshold.",
+      "disclosed_in": "resource-estimator",
+      "columns": {
+        "id": "Autoincrement row id.",
+        "observed_at_hour": "Unix seconds truncated to the top of the hour. Coarse, never precise.",
+        "request_digest": "Digest of the request shape, computed by the engine.",
+        "field": "Declared field name, e.g. goldilocks or babybear.",
+        "extension_degree": "Declared extension degree.",
+        "trace_width_bucket": "One of 8 fixed 32-wide bands; the exact width is not stored.",
+        "logical_rows_bucket": "One of 4 wide exponent bands; the exact row count is not stored.",
+        "uses_lookups": "Boolean AIR feature flag.",
+        "uses_buses": "Boolean AIR feature flag.",
+        "uses_permutations": "Boolean AIR feature flag.",
+        "uses_multi_table": "Boolean AIR feature flag.",
+        "uses_preprocessed_columns": "Boolean AIR feature flag.",
+        "uses_periodic_columns": "Boolean AIR feature flag.",
+        "uses_recursion": "Boolean AIR feature flag.",
+        "uses_gpu": "Boolean AIR feature flag.",
+        "provable_today": "Whether the declared config is inside the supported profile.",
+        "blocking_reason_codes": "JSON array of reason codes when it is not.",
+        "key_id": "Opaque random key identifier, when the caller presented a minted key.",
+        "anon_ip_hash": "Salted IP hash, when the caller did not. Exactly one of key_id / anon_ip_hash is populated."
+      }
+    },
+    {
+      "name": "estimator_keys",
+      "migration": "migrations/0002_keys.sql",
+      "written_by": "POST /v1/keys",
+      "purpose": "Free bearer keys that raise the rate ceiling and let a caller be counted as one distinct organisation.",
+      "disclosed_in": "resource-estimator",
+      "columns": {
+        "key_id": "Independently-random opaque identifier, not derived from the key or its hash.",
+        "key_hash": "SHA-256 of the minted bearer key. The key itself is never stored.",
+        "minted_at_hour": "Unix seconds truncated to the top of the hour.",
+        "revoked": "Reserved flag; no revocation endpoint exists yet."
+      }
+    },
+    {
+      "name": "keyed_rate_limit_windows",
+      "migration": "migrations/0002_keys.sql",
+      "written_by": "POST /v1/estimate",
+      "purpose": "Per-key fixed-window rate limiting (300/hour).",
+      "disclosed_in": "resource-estimator",
+      "columns": {
+        "key_id": "Opaque random key identifier.",
+        "window_start": "Start of a one-hour window, unix seconds truncated to the hour.",
+        "request_count": "Integer counter for that window."
+      }
+    }
+  ]
+}

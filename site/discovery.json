@@ -1,15 +1,17 @@
 {
   "availability": {
+    "anonymous_api_keys": true,
     "community_doctor": true,
     "community_source": true,
     "contact_form": false,
     "customer_accounts": false,
-    "event_collector": false,
+    "event_collector": true,
     "guard_artifact": false,
     "guard_checkout": false,
     "hosted_proving": false,
     "hosted_verification": false,
     "qualified_engine_artifact": false,
+    "resource_estimator_api": true,
     "signed_evaluation_doctor_binary": true,
     "signed_evaluation_doctor_oci": true
   },
