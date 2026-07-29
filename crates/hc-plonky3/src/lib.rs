@@ -25,6 +25,7 @@ pub mod profile;
 mod prover;
 mod quotient;
 mod scratch;
+pub mod security_floor;
 mod workloads;
 
 // `dft`, `mmcs`, `fri`, `quotient`, and `bounded_pcs` are now generic over
