@@ -179,10 +179,42 @@ pub fn estimate_from_params(
     // algebraic relation `192 = 3 * 64`, and for Goldilocks `192` is equally
     // consistent with `6 * digest_bytes` or `24 * field_bytes` — no test
     // here holds `ext_field_bytes` and `digest_bytes` apart, so the unit
-    // choice below is unverified for non-Goldilocks fields. Known
-    // limitation of `quotient_transform_peak` outside Goldilocks; if a
-    // BabyBear/KoalaBear/Mersenne31 estimate is ever contradicted by
-    // measurement, start here.
+    // choice below is unverified for non-Goldilocks fields.
+    //
+    // MEASURED 2026-07-29 against a real BabyBear proof; see
+    // `scratch_calibration.rs`. Three findings, none of which resolve the
+    // unit choice:
+    //
+    // 1. NOT CONTRADICTED. At the only shape where the readings differ
+    //    (quotient_chunks == 2, trace_width 24-26, rows >= 2^14) the measured
+    //    scratch high-water was 11,670,144 bytes, BELOW both the shipped
+    //    model's 11,967,932 and the `24 * field_bytes` counterfactual's
+    //    11,836,188. Both readings stay conservative, so the invitation just
+    //    above -- "if an estimate is ever contradicted by measurement, start
+    //    here" -- has NOT been triggered.
+    // 2. STILL UNSEPARABLE, and permanently so on this roadmap.
+    //    `canonical_extension_degree` gives every 31-bit field (4, 4), so
+    //    `ext_field_bytes` is 16 and `digest_bytes` 32 for EVERY supported
+    //    field: `12 * ext_field_bytes` and `6 * digest_bytes` both evaluate
+    //    to 192 always. Only `24 * field_bytes` (192 vs 96) is even in
+    //    principle falsifiable here, and it was not falsified. Separating the
+    //    other two needs a field with `digest_bytes != 2 * ext_field_bytes`;
+    //    none is planned.
+    // 3. LOW STAKES. A sweep over chunks {1,2,4,8} x rows 2^10..2^24 x
+    //    widths 1..256 found `quotient_transform_peak` is the binding term
+    //    for BabyBear only in that 3-width band, and the disputed reading
+    //    moves the final estimate by at most 1.12%. Everywhere else
+    //    `fri_peak` or `trace_transform_peak` dominates and all three
+    //    readings agree byte-for-byte. This is also why Goldilocks never
+    //    calibrated it: the term is nearly unreachable there too.
+    //
+    // The model is CONSERVATIVE, never optimistic, at both fields on every
+    // shape measured (Goldilocks +0.10%/+0.47%, BabyBear +1.24%/+2.55%).
+    // Open question worth a look before anyone tightens this: BabyBear's
+    // measured value sits only 0.26% above `trace_transform_peak`, so the
+    // `7 * field_bytes` coefficient there may be marginally optimistic at
+    // 4-byte fields and rescued only by the `max()`. No phase attribution
+    // exists to confirm that.
     let quotient_transform_peak = rows
         .saturating_mul(
             ext_field_bytes

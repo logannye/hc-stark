@@ -25,6 +25,8 @@ pub mod profile;
 mod prover;
 mod quotient;
 mod scratch;
+#[cfg(test)]
+mod scratch_calibration;
 pub mod security_floor;
 mod workloads;
 
