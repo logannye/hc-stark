@@ -168,6 +168,46 @@ fn fibonacci_pair<F: PrimeField64>(index: u64) -> (F, F) {
 /// values, and its AIR are all field-agnostic. The seed-canonicality check
 /// that used to compare against the `GOLDILOCKS_MODULUS_U64` literal now goes
 /// through `P::modulus_u64()`, which is the only field-specific thing here.
+/// Inherent methods restoring unambiguous calls on the profile-INDEPENDENT
+/// parts of the workload surface.
+///
+/// `FibonacciWorkload` implements `ResourceBoundedWorkload` for EVERY profile,
+/// and Rust resolves trait-level default parameters only when the trait is
+/// NAMED, never during method resolution. So after the generalization a bare
+/// `fib.rows()` became `E0283` ambiguous for external callers — a real source
+/// break that no test covered, because every in-crate call site had already
+/// been rewritten to UFCS.
+///
+/// Inherent methods take precedence over trait methods during resolution, so
+/// these restore `fib.rows()` / `.identity()` / `.air()` / `.input_digest()`
+/// to exactly their pre-generalization behaviour. They are NOT provided for
+/// `public_values` or `write_trace`: those genuinely depend on the field
+/// (`Vec<P::Val>`, `MatrixStore<P::Word>`), so requiring the caller to name a
+/// profile there is correct rather than annoying.
+impl FibonacciWorkload {
+    /// Profile-independent: the identity is the same for every field.
+    pub fn identity(&self) -> WorkloadIdentityV1 {
+        <Self as ResourceBoundedWorkload<8, 4, GoldilocksProfile>>::identity(self)
+    }
+
+    /// Profile-independent: a row count is a row count.
+    pub fn rows(&self) -> u64 {
+        self.logical_rows
+    }
+
+    /// Profile-independent: `FibonacciAir` is field-agnostic by construction
+    /// (`impl<F> BaseAir<F> for FibonacciAir`).
+    pub fn air(&self) -> FibonacciAir {
+        FibonacciAir
+    }
+
+    /// Profile-independent: hashes the identity, row count, and the two u64
+    /// seeds — none of which are field-typed.
+    pub fn input_digest(&self) -> [u8; 32] {
+        <Self as ResourceBoundedWorkload<8, 4, GoldilocksProfile>>::input_digest(self)
+    }
+}
+
 impl<const PERM_WIDTH: usize, const DIGEST_ELEMS: usize, P>
     ResourceBoundedWorkload<PERM_WIDTH, DIGEST_ELEMS, P> for FibonacciWorkload
 where
