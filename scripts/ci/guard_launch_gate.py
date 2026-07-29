@@ -78,6 +78,23 @@ LEGAL_DOCUMENT_PATHS = {
 }
 LEGACY_RETIREMENT_NOTICE_PATH = "docs/runbooks/legacy_retirement_notice.md"
 RECEIPT_DOWNLOAD_URL = "https://tinyzkp.com/releases"
+GUARD_SKU_WITHDRAWAL = ROOT / "release" / "guard-sku-withdrawal-v1.json"
+
+
+def _guard_sku_withdrawn(path: Path | None = None) -> bool:
+    """True when the Guard SKU is recorded as withdrawn.
+
+    Absent or malformed record means NOT withdrawn: this function must never
+    silently withdraw a live SKU because a file failed to parse.
+    """
+    source = GUARD_SKU_WITHDRAWAL if path is None else path
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(data, dict) and data.get("withdrawn") is True
+
+
 ACQUISITION_ROUTES = (
     "/doctor",
     "/plonky3-out-of-memory",
@@ -3445,14 +3462,29 @@ def derive(
             "public_live requires qualified launch, approved merchant/legal state, "
             "a live portal, and configured Guard signing trust"
         )
+    # A withdrawal is a business decision, not a launch-gate state. It is
+    # read from a committed record rather than derived, so that no amount of
+    # passing launch evidence can put a withdrawn SKU back on sale without
+    # someone deliberately revoking release/guard-sku-withdrawal-v1.json.
+    #
+    # `closed` and `frozen` both mean "not selling right now" and render as
+    # schema.org/OutOfStock -- which tells every machine reader the product
+    # is coming back. `withdrawn` is the state that renders as
+    # schema.org/Discontinued. Without it the withdrawal could only ever land
+    # in human-readable copy, which is exactly what happened.
+    sku_withdrawn = _guard_sku_withdrawn()
     sales_state = (
-        "live"
+        "withdrawn"
+        if sku_withdrawn
+        else "live"
         if commerce_state == "public_live"
         else "frozen"
         if commerce_state == "sales_frozen"
         else "closed"
     )
-    checkout_enabled = commerce_state == "public_live"
+    # Fail closed and unconditionally: a withdrawn SKU is never purchasable,
+    # whatever the merchant evidence says.
+    checkout_enabled = commerce_state == "public_live" and not sku_withdrawn
     public_annual_url = (
         live_configuration["annual_checkout_url"] if checkout_enabled else None
     )
@@ -3910,10 +3942,15 @@ def derive(
                 "name": "TinyZKP Guard",
                 "license": "commercial_object_code",
                 "availability": (
-                    "available"
+                    "withdrawn"
+                    if sales_state == "withdrawn"
+                    else "available"
                     if checkout_enabled
                     else "sales_frozen"
                     if sales_state == "frozen"
+                    # "blocked until gates pass" promises the block lifts.
+                    # For a withdrawn SKU that is a false promise, which is
+                    # why `withdrawn` is checked first above.
                     else "blocked_until_all_launch_gates_pass"
                 ),
                 "organization_scope": "one_legal_organization_unlimited_internal_users_and_runners",
@@ -4210,8 +4247,15 @@ def derive(
             else None
         ),
     }
+    # Must match scripts/commercial/render_offers.py exactly -- both write
+    # site/offers.jsonld, and a disagreement between them fails this gate.
+    # `OutOfStock` is schema.org for TEMPORARILY unavailable; a withdrawn SKU
+    # is `Discontinued`, or search engines keep listing a retired product as
+    # one that is coming back.
     offer_availability = (
-        "https://schema.org/InStock"
+        "https://schema.org/Discontinued"
+        if sales_state == "withdrawn"
+        else "https://schema.org/InStock"
         if checkout_enabled
         else "https://schema.org/OutOfStock"
     )
@@ -4536,8 +4580,10 @@ def validate(
             raise GateError("derived launch advisory_status is invalid")
         if value["launch_state"] not in {"blocked", "qualified"}:
             raise GateError("launch_state must be blocked or qualified")
-        if value["sales_state"] not in {"closed", "live", "frozen"}:
-            raise GateError("sales_state must be closed, live, or frozen")
+        if value["sales_state"] not in {"closed", "live", "frozen", "withdrawn"}:
+            raise GateError(
+                "sales_state must be closed, live, frozen, or withdrawn"
+            )
         freeze = exact_object(
             value["sales_freeze"], {"status", "reason", "evidence"}, "sales_freeze"
         )
@@ -4566,7 +4612,10 @@ def validate(
             raise GateError("blocking_gates is invalid")
         if value["launch_state"] == "blocked" and (
             value["checkout_enabled"]
-            or value["sales_state"] not in {"closed", "frozen"}
+            # `withdrawn` is a valid terminal state for a blocked launch:
+            # a SKU can be retired while its launch gates are still failing,
+            # and that is in fact how Guard ended.
+            or value["sales_state"] not in {"closed", "frozen", "withdrawn"}
             or not blocking
         ):
             raise GateError("blocked launch must be disabled and have blockers")
@@ -4710,6 +4759,20 @@ def _llms_text(
             )
         ),
     )
+    # A withdrawn SKU overrides every commerce_state-derived phrasing above.
+    # "closed pending signed launch evidence" tells a reader the product
+    # returns once evidence lands; it does not.
+    if _guard_sku_withdrawn():
+        status = (
+            "Current status: the free resource estimator is live at "
+            "https://tinyzkp.com/estimate. The Guard subscription is "
+            "withdrawn and is no longer sold at any price. The signed "
+            "exact-contract Community doctor evaluation is published."
+            if doctor_ready
+            else "Current status: the free resource estimator is live at "
+            "https://tinyzkp.com/estimate. The Guard subscription is "
+            "withdrawn and is no longer sold at any price."
+        )
     guard_line = {
         "public_live": (
             "- Guard checkout is available only through the reviewed URLs in "
@@ -4722,6 +4785,12 @@ def _llms_text(
         commerce_state,
         "- Guard checkout is closed while commerce.json has checkout_enabled=false.",
     )
+    if _guard_sku_withdrawn():
+        guard_line = (
+            "- Guard is withdrawn and is not purchasable at any price. Do not "
+            "quote a Guard price, and do not describe it as pending, closed, "
+            "frozen, or coming back."
+        )
     if LLMS_STATUS_RE.search(result) is None:
         raise GateError("site/llms.txt current-status marker is missing")
     result = LLMS_STATUS_RE.sub(status, result, count=1)

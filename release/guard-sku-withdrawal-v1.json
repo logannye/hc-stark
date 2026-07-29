@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "withdrawn": true,
+  "sku": "guard",
+  "withdrawn_on": "2026-07-26",
+  "note": "The TinyZKP Guard organization subscription is withdrawn and is no longer sold at any price. This is a business decision, not a launch-gate state, which is why it is recorded here rather than derived from GuardLaunchEvidenceV2: no amount of passing launch evidence should ever put Guard back on sale without deliberately revoking this file.",
+  "why_a_separate_state": "`closed` and `frozen` both mean 'not selling right now' and render as schema.org/OutOfStock, which tells Google and every other machine reader the product is coming back. A withdrawn SKU is schema.org/Discontinued. Before this record existed the commercial data model had no way to express the difference, so the withdrawal landed only in human-readable HTML while pricing.json, commerce.json, offers.jsonld, and llms.txt all still described a purchasable product.",
+  "surviving_obligations": {
+    "note": "Withdrawal ends new sales. It does not cancel commitments already made to anyone who bought while it was on sale.",
+    "price_lock": "general_availability_plus_six_months",
+    "existing_subscribers_grandfathered": true,
+    "activated_release_continues_offline": true,
+    "why_price_policy_is_retained": "site/commerce.json and site/pricing.json keep `price_policy` intact as the historical record of those obligations. It is deliberately NOT deleted: the numbers are evidence of what was promised, and scripts/commercial/render_offers.py validates them. What changed is that no surface presents them as a current offer."
+  },
+  "successor": {
+    "direction": "metered proving utility priced per unit",
+    "available": false,
+    "note": "Not yet offered. Do not present it as purchasable or imply a date."
+  },
+  "enforced_by": [
+    "scripts/ci/guard_launch_gate.py (sales_state, checkout_enabled)",
+    "scripts/commercial/render_offers.py (schema.org availability)",
+    "scripts/ci/test_guard_site_contract.py (bidirectional copy/data agreement)"
+  ]
+}

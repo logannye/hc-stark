@@ -7,7 +7,7 @@ This is a fail-closed readiness ledger. It is not a customer, payment, or booked
 ## Current Business State
 
 - Launch: `blocked`
-- Sales: `closed`
+- Sales: `withdrawn`
 - Checkout enabled: `false`
 - Merchant of record: `lemon_squeezy` (`approval_pending`)
 - Legal: `blocked_pending_owner_approval`
@@ -18,7 +18,7 @@ This is a fail-closed readiness ledger. It is not a customer, payment, or booked
 
 ## Guard Offer
 
-- Availability: `blocked_until_all_launch_gates_pass`
+- Availability: `withdrawn`
 - Monthly: `$499`
 - Annual: `$4,990` (recommended)
 

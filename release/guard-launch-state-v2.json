@@ -114,7 +114,7 @@
     "reason": null,
     "status": "inactive"
   },
-  "sales_state": "closed",
+  "sales_state": "withdrawn",
   "schema_version": 2,
   "source_sha256": "496ed2c65859ead9760365399498c408ff8be4114298ed2a7c7513e2a8d13dc3"
 }

@@ -102,7 +102,11 @@ def test_checkout_is_consistently_fail_closed() -> None:
             item["portal_state"],
         )
         for item in (gate, commerce, pricing, release)
-    } == {("blocked", "closed", "unconfigured", "unconfigured")}
+        # `withdrawn`, not `closed`: the Guard SKU is retired, not merely
+        # not-selling-right-now. `closed` renders as schema.org/OutOfStock,
+        # which tells machine readers the product is coming back. See
+        # release/guard-sku-withdrawal-v1.json.
+    } == {("blocked", "withdrawn", "unconfigured", "unconfigured")}
     assert set(release["blocking_gates"]) == set(gate["blocking_gates"])
     assert release["gate_status"] == gate["gate_status"]
     for variant in commerce["variants"].values():

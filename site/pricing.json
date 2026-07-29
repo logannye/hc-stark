@@ -44,7 +44,7 @@
       "price_usd": 0
     },
     {
-      "availability": "blocked_until_all_launch_gates_pass",
+      "availability": "withdrawn",
       "excludes": [
         "hosted proving",
         "usage metering",
@@ -84,7 +84,7 @@
     "merchant": "/pricing#merchant-of-record-status",
     "sales": "/pricing#sales-status"
   },
-  "sales_state": "closed",
+  "sales_state": "withdrawn",
   "schema_version": 5,
   "subscription_policy": {
     "activated_release_continues_offline": true,

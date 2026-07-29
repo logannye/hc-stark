@@ -41,7 +41,7 @@
     "sales": "/pricing#sales-status"
   },
   "receipt_download_url": null,
-  "sales_state": "closed",
+  "sales_state": "withdrawn",
   "schema_version": 2,
   "store_hostname": null,
   "store_id": null,

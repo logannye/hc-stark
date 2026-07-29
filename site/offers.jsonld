@@ -12,7 +12,7 @@
     },
     {
       "@type": "Offer",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/Discontinued",
       "name": "TinyZKP Guard annual subscription",
       "price": "4990",
       "priceCurrency": "USD",
@@ -20,7 +20,7 @@
     },
     {
       "@type": "Offer",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/Discontinued",
       "name": "TinyZKP Guard monthly subscription",
       "price": "499",
       "priceCurrency": "USD",

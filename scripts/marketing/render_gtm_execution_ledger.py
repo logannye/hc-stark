@@ -190,7 +190,13 @@ def validate_sources(
     if launch_state.get("launch_state") == "blocked":
         _require(bool(blocking_gates), "blocked launch must retain at least one blocking gate")
         _require(not launch_state.get("checkout_enabled"), "blocked launch cannot enable checkout")
-        _require(launch_state.get("sales_state") in {"closed", "frozen"}, "blocked launch cannot report live sales")
+        # `withdrawn` is a valid terminal state for a blocked launch: a SKU
+        # can be retired while its launch gates are still failing, which is
+        # how Guard ended. See release/guard-sku-withdrawal-v1.json.
+        _require(
+            launch_state.get("sales_state") in {"closed", "frozen", "withdrawn"},
+            "blocked launch cannot report live sales",
+        )
     if launch_state.get("launch_state") == "qualified":
         _require(not blocking_gates, "qualified launch cannot retain blocking gates")
     if launch_state.get("sales_state") == "live":

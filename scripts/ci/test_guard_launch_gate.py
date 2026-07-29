@@ -16,6 +16,29 @@ if str(SCRIPT_DIR) not in sys.path:
 import guard_launch_gate as gate  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _sku_not_withdrawn(monkeypatch, tmp_path_factory):
+    """Exercise the commerce state machine in a NOT-withdrawn world.
+
+    The Guard SKU is withdrawn in the live repository, and a withdrawal
+    correctly forces `sales_state` to "withdrawn" and `checkout_enabled` to
+    False no matter what the launch evidence says. Left unpatched that would
+    collapse every `public_live` / `sales_frozen` / `live_hidden` assertion
+    in this module into one answer, silently deleting all coverage of the
+    state machine those states belong to.
+
+    So the default here is "no withdrawal recorded", and the withdrawal's own
+    behaviour is tested explicitly in
+    `test_a_recorded_withdrawal_overrides_every_commerce_state` below and in
+    scripts/ci/test_sku_withdrawal_gate.py.
+    """
+    monkeypatch.setattr(
+        gate,
+        "GUARD_SKU_WITHDRAWAL",
+        tmp_path_factory.mktemp("no-withdrawal") / "absent.json",
+    )
+
+
 IDENTITY = {
     "guard_release": "tinyzkp-guard-v1",
     "guard_version": "1.0.0",
@@ -1072,7 +1095,15 @@ def site_legal_pricing_source(root: Path) -> dict:
     return source
 
 
-def test_repository_state_is_generated_from_independently_anchored_policy() -> None:
+def test_repository_state_is_generated_from_independently_anchored_policy(
+    monkeypatch,
+) -> None:
+    # This one test checks the ACTUAL committed site artifacts, so it must
+    # see the real withdrawal record rather than the not-withdrawn default
+    # the autouse fixture installs for the state-machine tests.
+    monkeypatch.setattr(
+        gate, "GUARD_SKU_WITHDRAWAL", gate.ROOT / "release" / "guard-sku-withdrawal-v1.json"
+    )
     source = gate.load_json(gate.DEFAULT_SOURCE, "source")
     signing_digest = hashlib.sha256(
         (gate.ROOT / gate.SIGNING_TRUST_PATH).read_bytes()
@@ -2669,3 +2700,49 @@ def test_digest_identity_semantics_and_safe_paths_remain_enforced(
     ] = "release/evidence/guard-launch-v2/../outside.json"
     with pytest.raises(gate.GateError, match="normalized JSON path"):
         derive_qualified(source, root)
+
+
+def test_a_recorded_withdrawal_overrides_every_commerce_state(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A withdrawn SKU is never purchasable, whatever the evidence says.
+
+    The autouse fixture above runs the rest of this module in a
+    not-withdrawn world so the commerce state machine stays covered. This
+    test is the other half: with a withdrawal recorded, even a fully
+    qualified `public_live` source -- the state that otherwise opens
+    checkout -- must produce `withdrawn` and `checkout_enabled: False`.
+    """
+    record = tmp_path / "withdrawal.json"
+    record.write_text(json.dumps({"withdrawn": True}), encoding="utf-8")
+    monkeypatch.setattr(gate, "GUARD_SKU_WITHDRAWAL", record)
+
+    source = qualified_source(tmp_path)
+    derived = derive_qualified(source, tmp_path)
+
+    assert derived["launch"]["sales_state"] == "withdrawn"
+    assert derived["launch"]["checkout_enabled"] is False
+    assert derived["pricing"]["sales_state"] == "withdrawn"
+    guard = next(p for p in derived["pricing"]["products"] if p["id"] == "guard")
+    assert guard["availability"] == "withdrawn"
+    offers = [
+        item
+        for item in derived["offers"]["itemListElement"]
+        if "Guard" in item["name"]
+    ]
+    assert offers, "expected Guard offers in the catalog"
+    for offer in offers:
+        assert offer["availability"] == "https://schema.org/Discontinued"
+
+
+def test_a_missing_withdrawal_record_never_withdraws_a_live_sku(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Fail open in the safe direction: absent record means still on sale."""
+    monkeypatch.setattr(gate, "GUARD_SKU_WITHDRAWAL", tmp_path / "does-not-exist.json")
+    assert gate._guard_sku_withdrawn() is False
+
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    monkeypatch.setattr(gate, "GUARD_SKU_WITHDRAWAL", broken)
+    assert gate._guard_sku_withdrawn() is False
