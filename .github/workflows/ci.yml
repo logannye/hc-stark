@@ -165,6 +165,11 @@ jobs:
           # reached only human-readable HTML, leaving offers.jsonld telling
           # search engines a $499/mo product was temporarily out of stock.
           python3 scripts/ci/sku_withdrawal_gate.py
+          # Fails if any published manifest or llms.txt points at a retired
+          # host, a gone prefix, or a path the site does not serve. The MCP
+          # directory listings advertised mcp.tinyzkp.com and /signup for
+          # months after both became permanent 410s.
+          python3 scripts/ci/external_listing_check.py
           python3 -m pytest \
             scripts/ci/test_site_route_check.py \
             scripts/ci/test_guard_site_contract.py \
@@ -172,6 +177,7 @@ jobs:
             scripts/ci/test_site_asset_manifest.py \
             scripts/ci/test_privacy_disclosure_gate.py \
             scripts/ci/test_sku_withdrawal_gate.py \
+            scripts/ci/test_external_listing_check.py \
             scripts/ci/test_demand_report.py -q
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs
