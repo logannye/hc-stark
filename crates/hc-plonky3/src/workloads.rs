@@ -1,5 +1,6 @@
 use crate::dft::GoldilocksWord;
-use hc_stream::{ArtifactDigest, BlockMatrix, MatrixStore};
+use crate::profile::{DurableFieldProfile, GoldilocksProfile};
+use hc_stream::{ArtifactDigest, BlockMatrix, CanonicalElement, MatrixStore};
 use p3_air::{Air, AirBuilder, BaseAir, WindowAccess};
 use p3_field::{PrimeCharacteristicRing, PrimeField64};
 use p3_goldilocks::{
@@ -33,12 +34,15 @@ pub struct WorkloadIdentityV1 {
     pub version: u32,
 }
 
+/// The base field defaults to Goldilocks so partner crates that already name
+/// `GeneratedTraceV1` keep compiling unchanged; the durable prover always
+/// spells the parameter explicitly as `P::Val`.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GeneratedTraceV1 {
+pub struct GeneratedTraceV1<F = Goldilocks> {
     pub identity: WorkloadIdentityV1,
     pub rows: u64,
     pub columns: usize,
-    pub public_values: Vec<Goldilocks>,
+    pub public_values: Vec<F>,
     pub input_digest: [u8; 32],
     pub trace_digest: ArtifactDigest,
 }
@@ -46,19 +50,32 @@ pub struct GeneratedTraceV1 {
 /// A statically linked Plonky3 workload whose trace can be emitted without an
 /// owned full-trace allocation. Partner AIRs implement this trait in their own
 /// integration crate; the production CLI registers only the built-in types.
-pub trait ResourceBoundedWorkload: Sync {
+///
+/// The three profile parameters default to Goldilocks' `<8, 4,
+/// GoldilocksProfile>`, so an existing `impl ResourceBoundedWorkload for
+/// MyWorkload` — including the one in `examples/partner-adapter` — still means
+/// exactly what it meant before this trait became profile-generic. A workload
+/// whose trace generation is field-agnostic (`FibonacciWorkload`) implements it
+/// once for every profile instead.
+pub trait ResourceBoundedWorkload<
+    const PERM_WIDTH: usize = 8,
+    const DIGEST_ELEMS: usize = 4,
+    P: DurableFieldProfile<PERM_WIDTH, DIGEST_ELEMS> = GoldilocksProfile,
+>: Sync where
+    [P::Val; DIGEST_ELEMS]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     type Air;
 
     fn identity(&self) -> WorkloadIdentityV1;
     fn rows(&self) -> u64;
     fn air(&self) -> Self::Air;
-    fn public_values(&self) -> Vec<Goldilocks>;
+    fn public_values(&self) -> Vec<P::Val>;
     fn input_digest(&self) -> [u8; 32];
-    fn write_trace<S: MatrixStore<GoldilocksWord>>(
+    fn write_trace<S: MatrixStore<P::Word>>(
         &self,
         store: &mut S,
         block_rows: usize,
-    ) -> WorkloadResult<GeneratedTraceV1>;
+    ) -> WorkloadResult<GeneratedTraceV1<P::Val>>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -126,24 +143,19 @@ pub fn fibonacci_trace<F: PrimeField64>(a: u64, b: u64, rows: usize) -> RowMajor
     RowMajorMatrix::new(values, FIBONACCI_COLUMNS)
 }
 
-pub fn fibonacci_public_values(a: u64, b: u64, rows: usize) -> Vec<Goldilocks> {
+pub fn fibonacci_public_values<F: PrimeField64>(a: u64, b: u64, rows: usize) -> Vec<F> {
     assert!(rows.is_power_of_two() && rows > 0);
-    let (coefficient_a, coefficient_b) = fibonacci_pair((rows - 1) as u64);
-    let final_value =
-        coefficient_a * Goldilocks::from_u64(a) + coefficient_b * Goldilocks::from_u64(b);
-    vec![
-        Goldilocks::from_u64(a),
-        Goldilocks::from_u64(b),
-        final_value,
-    ]
+    let (coefficient_a, coefficient_b) = fibonacci_pair::<F>((rows - 1) as u64);
+    let final_value = coefficient_a * F::from_u64(a) + coefficient_b * F::from_u64(b);
+    vec![F::from_u64(a), F::from_u64(b), final_value]
 }
 
-fn fibonacci_pair(index: u64) -> (Goldilocks, Goldilocks) {
+fn fibonacci_pair<F: PrimeField64>(index: u64) -> (F, F) {
     if index == 0 {
-        return (Goldilocks::ZERO, Goldilocks::ONE);
+        return (F::ZERO, F::ONE);
     }
-    let (left, right) = fibonacci_pair(index / 2);
-    let doubled = left * (Goldilocks::from_u64(2) * right - left);
+    let (left, right) = fibonacci_pair::<F>(index / 2);
+    let doubled = left * (F::from_u64(2) * right - left);
     let adjacent = left * left + right * right;
     if index.is_multiple_of(2) {
         (doubled, adjacent)
@@ -152,7 +164,16 @@ fn fibonacci_pair(index: u64) -> (Goldilocks, Goldilocks) {
     }
 }
 
-impl ResourceBoundedWorkload for FibonacciWorkload {
+/// Implemented once for every profile: the Fibonacci recurrence, its public
+/// values, and its AIR are all field-agnostic. The seed-canonicality check
+/// that used to compare against the `GOLDILOCKS_MODULUS_U64` literal now goes
+/// through `P::modulus_u64()`, which is the only field-specific thing here.
+impl<const PERM_WIDTH: usize, const DIGEST_ELEMS: usize, P>
+    ResourceBoundedWorkload<PERM_WIDTH, DIGEST_ELEMS, P> for FibonacciWorkload
+where
+    P: DurableFieldProfile<PERM_WIDTH, DIGEST_ELEMS>,
+    [P::Val; DIGEST_ELEMS]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     type Air = FibonacciAir;
 
     fn identity(&self) -> WorkloadIdentityV1 {
@@ -170,41 +191,43 @@ impl ResourceBoundedWorkload for FibonacciWorkload {
         FibonacciAir
     }
 
-    fn public_values(&self) -> Vec<Goldilocks> {
+    fn public_values(&self) -> Vec<P::Val> {
         let rows = usize::try_from(self.logical_rows).expect("validated workload row count");
-        fibonacci_public_values(self.initial_a, self.initial_b, rows)
+        fibonacci_public_values::<P::Val>(self.initial_a, self.initial_b, rows)
     }
 
     fn input_digest(&self) -> [u8; 32] {
+        // `self.identity()` is ambiguous here: `FibonacciWorkload` implements
+        // the trait for every profile, so the receiver cannot pick one. The
+        // value is profile-independent, so any instantiation would do; naming
+        // this one keeps the digest's provenance obvious.
         workload_input_digest(
-            self.identity(),
+            ResourceBoundedWorkload::<PERM_WIDTH, DIGEST_ELEMS, P>::identity(self),
             self.logical_rows,
             &[self.initial_a, self.initial_b],
         )
     }
 
-    fn write_trace<S: MatrixStore<GoldilocksWord>>(
+    fn write_trace<S: MatrixStore<P::Word>>(
         &self,
         store: &mut S,
         block_rows: usize,
-    ) -> WorkloadResult<GeneratedTraceV1> {
-        if self.initial_a >= crate::GOLDILOCKS_MODULUS_U64
-            || self.initial_b >= crate::GOLDILOCKS_MODULUS_U64
-        {
+    ) -> WorkloadResult<GeneratedTraceV1<P::Val>> {
+        if self.initial_a >= P::modulus_u64() || self.initial_b >= P::modulus_u64() {
             return Err(WorkloadError::InvalidShape);
         }
         validate_trace_target(store, self.logical_rows, FIBONACCI_COLUMNS, block_rows)?;
         let rows = usize::try_from(self.logical_rows).map_err(|_| WorkloadError::InvalidShape)?;
         let block_rows = block_rows.min(rows);
-        let mut block = vec![GoldilocksWord::default(); block_rows * FIBONACCI_COLUMNS];
-        let mut left = Goldilocks::from_u64(self.initial_a);
-        let mut right = Goldilocks::from_u64(self.initial_b);
+        let mut block = vec![P::Word::default(); block_rows * FIBONACCI_COLUMNS];
+        let mut left = P::Val::from_u64(self.initial_a);
+        let mut right = P::Val::from_u64(self.initial_b);
         for block_start in (0..rows).step_by(block_rows) {
             let row_count = (rows - block_start).min(block_rows);
             for row in 0..row_count {
                 let offset = row * FIBONACCI_COLUMNS;
-                block[offset] = GoldilocksWord(left);
-                block[offset + 1] = GoldilocksWord(right);
+                block[offset] = P::Word::from(left);
+                block[offset + 1] = P::Word::from(right);
                 if block_start + row + 1 < rows {
                     (left, right) = (right, left + right);
                 }
@@ -217,11 +240,15 @@ impl ResourceBoundedWorkload for FibonacciWorkload {
         }
         let trace_digest = store.finalize()?;
         Ok(GeneratedTraceV1 {
-            identity: self.identity(),
+            identity: ResourceBoundedWorkload::<PERM_WIDTH, DIGEST_ELEMS, P>::identity(self),
             rows: self.logical_rows,
             columns: FIBONACCI_COLUMNS,
-            public_values: self.public_values(),
-            input_digest: self.input_digest(),
+            public_values: ResourceBoundedWorkload::<PERM_WIDTH, DIGEST_ELEMS, P>::public_values(
+                self,
+            ),
+            input_digest: ResourceBoundedWorkload::<PERM_WIDTH, DIGEST_ELEMS, P>::input_digest(
+                self,
+            ),
             trace_digest,
         })
     }
@@ -258,7 +285,10 @@ pub fn poseidon2_trace(rows: usize, extra_capacity_bits: usize) -> RowMajorMatri
     poseidon2_goldilocks_air().generate_trace_rows(rows, extra_capacity_bits)
 }
 
-impl ResourceBoundedWorkload for Poseidon2Workload {
+/// Goldilocks-only: `Poseidon2GoldilocksAir` is built from Goldilocks' own
+/// round constants and MDS layers, so unlike `FibonacciWorkload` this workload
+/// has no meaning at another profile.
+impl ResourceBoundedWorkload<8, 4, GoldilocksProfile> for Poseidon2Workload {
     type Air = Poseidon2GoldilocksAir;
 
     fn identity(&self) -> WorkloadIdentityV1 {
@@ -323,7 +353,7 @@ impl ResourceBoundedWorkload for Poseidon2Workload {
     }
 }
 
-fn validate_trace_target<S: BlockMatrix<GoldilocksWord>>(
+fn validate_trace_target<Word: CanonicalElement, S: BlockMatrix<Word>>(
     store: &S,
     rows: u64,
     columns: usize,
@@ -365,7 +395,7 @@ mod tests {
     fn fibonacci_public_value_matches_trace_endpoint() {
         for rows in [1, 2, 8, 32, 1024] {
             for (left, right) in [(0, 1), (u64::MAX, 0), (17, u64::MAX)] {
-                let public = fibonacci_public_values(left, right, rows);
+                let public = fibonacci_public_values::<Goldilocks>(left, right, rows);
                 let trace = fibonacci_trace::<Goldilocks>(left, right, rows);
                 assert_eq!(public[2], *trace.values.last().unwrap());
             }
@@ -388,7 +418,10 @@ mod tests {
         };
         let mut store =
             MemoryMatrix::<GoldilocksWord>::preallocated(32, FIBONACCI_COLUMNS).unwrap();
-        let generated = workload.write_trace(&mut store, 8).unwrap();
+        let generated = ResourceBoundedWorkload::<8, 4, GoldilocksProfile>::write_trace(
+            &workload, &mut store, 8,
+        )
+        .unwrap();
         let reference = fibonacci_trace::<Goldilocks>(0, 1, 32);
         let mut words = vec![GoldilocksWord::default(); reference.values.len()];
         store.read_rows(0, 32, &mut words).unwrap();

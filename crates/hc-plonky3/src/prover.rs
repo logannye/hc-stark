@@ -41,57 +41,75 @@ pub fn release_identity() -> String {
         .unwrap_or_else(|| "development-unreleased".into())
 }
 
-// `Val` is kept as a direct concrete-type alias rather than the literal
-// projection `<GoldilocksProfile as DurableFieldProfile<8, 4>>::Val`.
+// `prove_to_bytes`, `make_config*`, and `profile_components` are now generic
+// over `DurableFieldProfile<PERM_WIDTH, DIGEST_ELEMS>`; the aliases below are
+// the **Goldilocks pins** every existing caller and test in this crate keeps
+// naming, so nothing outside this module changed shape.
 //
-// The original Task 2 note recorded this as "rustc cannot normalize the
-// projection inside `prove_to_bytes`'s higher-ranked (`for<'a>`) bound".
-// That diagnosis was WRONG and has been retired: `generic_prover_guard.rs`
-// builds a fully generic `prove_to_bytes` carrying exactly that
-// higher-ranked bound, and it compiles and produces real proof bytes. The
-// original 15 E0277s were missing trait bounds (now stated once on
-// `DurableFieldProfile`), not a normalization failure.
-//
-// What DOES still fail — verified, not assumed — is making this alias a
-// projection while `prove_to_bytes`'s callers stay concrete: rustc then
-// reports `Dft: TwoAdicSubgroupDft<Goldilocks>` unsatisfied, because it
-// will not unify the projection with `Goldilocks` in `Dft`/`Air`'s bounds.
-// That is a property of the HALF-generic intermediate state only.
-// Task 8 must therefore convert `prove_to_bytes` and its generic parameters
-// to `P::Val` in a single step; flipping this alias first does not converge.
+// The conversion was done in one step, as `generic_prover_guard.rs` records:
+// making `Val` a projection while `prove_to_bytes`'s callers stayed concrete
+// fails with `Dft: TwoAdicSubgroupDft<Goldilocks>` unsatisfied, an artifact of
+// the half-generic intermediate state. The generic alias chain lives in
+// `mmcs.rs`/`bounded_pcs.rs`/`fri.rs` (Tasks 5-7 built it); this module
+// instantiates it at `<8, 4, GoldilocksProfile>` rather than keeping a second,
+// drifting copy.
 //
 // The `const _` assertion just below proves at compile time that this `Val`
 // is exactly `GoldilocksProfile::Val`, so the two cannot drift apart.
-pub(crate) type Val = Goldilocks;
-pub(crate) type Challenge =
-    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile<8, 4>>::Challenge;
-pub(crate) type Permutation =
-    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile<8, 4>>::Permutation;
-pub(crate) type Hash =
-    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile<8, 4>>::Hash;
-pub(crate) type Compression =
-    <crate::profile::GoldilocksProfile as crate::profile::DurableFieldProfile<8, 4>>::Compression;
+pub(crate) type Val = <GoldilocksProfile as DurableFieldProfile<8, 4>>::Val;
+pub(crate) type Challenge = <GoldilocksProfile as DurableFieldProfile<8, 4>>::Challenge;
+pub(crate) type Permutation = <GoldilocksProfile as DurableFieldProfile<8, 4>>::Permutation;
+pub(crate) type Hash = <GoldilocksProfile as DurableFieldProfile<8, 4>>::Hash;
+pub(crate) type Compression = <GoldilocksProfile as DurableFieldProfile<8, 4>>::Compression;
 
 #[allow(dead_code)]
 const _: () = {
-    fn assert_val_matches_profile<P: DurableFieldProfile<8, 4, Val = Val>>() {}
+    fn assert_val_matches_profile<P: DurableFieldProfile<8, 4, Val = Goldilocks>>() {}
     fn check() {
         assert_val_matches_profile::<GoldilocksProfile>();
     }
 };
 
-// ValPacking, ValMmcs, ChallengeMmcs, Challenger, Pcs<Dft> keep their
-// existing definitions unchanged — they're built FROM Val/Challenge/
-// Permutation/Hash/Compression, not part of the profile trait itself.
-// (`Permutation` is also re-derived from the profile here, since
-// Hash/Compression/Challenger's definitions below still name it directly;
-// the plan's original sketch omitted it, but dropping it does not compile.)
 pub(crate) type ValPacking = <Val as Field>::Packing;
-pub(crate) type ValMmcs = MerkleTreeMmcs<ValPacking, ValPacking, Hash, Compression, 2, 4>;
-pub(crate) type ChallengeMmcs = ExtensionMmcs<Val, Challenge, ValMmcs>;
-pub(crate) type Challenger = DuplexChallenger<Val, Permutation, 8, 4>;
-pub(crate) type Pcs<Dft> = TwoAdicFriPcs<Val, Dft, ValMmcs, ChallengeMmcs>;
-pub(crate) type GoldilocksConfig<Dft> = StarkConfig<Pcs<Dft>, Challenge, Challenger>;
+pub(crate) type ValMmcs = crate::mmcs::ReferenceMmcs<8, 4, GoldilocksProfile>;
+pub(crate) type ChallengeMmcs = crate::bounded_pcs::ProfileChallengeMmcs<8, 4, GoldilocksProfile>;
+pub(crate) type Challenger = crate::fri::ProfileChallengerFor<8, 4, GoldilocksProfile>;
+pub(crate) type Pcs<Dft> = crate::bounded_pcs::ProfilePcs<8, 4, GoldilocksProfile, Dft>;
+pub(crate) type GoldilocksConfig<Dft> =
+    crate::bounded_pcs::ProfileStarkConfig<8, 4, GoldilocksProfile, Dft>;
+
+// The pre-generic spellings, kept as compile-time proof that instantiating the
+// shared alias chain at `<8, 4, GoldilocksProfile>` produces EXACTLY the types
+// this module used to define inline. If Tasks 4-7's generic chain ever drifts
+// (a different Merkle arity, digest size, challenger rate, or FRI PCS shape),
+// these stop being the same type and the crate fails to build here rather than
+// silently emitting a different proof system.
+#[allow(dead_code)]
+const _: () = {
+    fn assert_same<T>(_: core::marker::PhantomData<T>, _: core::marker::PhantomData<T>) {}
+    fn check<Dft: TwoAdicSubgroupDft<Val>>() {
+        assert_same::<MerkleTreeMmcs<ValPacking, ValPacking, Hash, Compression, 2, 4>>(
+            core::marker::PhantomData,
+            core::marker::PhantomData::<ValMmcs>,
+        );
+        assert_same::<ExtensionMmcs<Val, Challenge, ValMmcs>>(
+            core::marker::PhantomData,
+            core::marker::PhantomData::<ChallengeMmcs>,
+        );
+        assert_same::<DuplexChallenger<Val, Permutation, 8, 4>>(
+            core::marker::PhantomData,
+            core::marker::PhantomData::<Challenger>,
+        );
+        assert_same::<TwoAdicFriPcs<Val, Dft, ValMmcs, ChallengeMmcs>>(
+            core::marker::PhantomData,
+            core::marker::PhantomData::<Pcs<Dft>>,
+        );
+        assert_same::<StarkConfig<Pcs<Dft>, Challenge, Challenger>>(
+            core::marker::PhantomData,
+            core::marker::PhantomData::<GoldilocksConfig<Dft>>,
+        );
+    }
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {
@@ -255,7 +273,7 @@ impl ResourceBoundedUniStarkProver {
                     cancellation,
                     &mut observe,
                 )?;
-                let public = crate::fibonacci_public_values(initial_a, initial_b, rows);
+                let public = crate::fibonacci_public_values::<Val>(initial_a, initial_b, rows);
                 Ok(bundle(
                     WorkloadKind::Fibonacci {
                         initial_a,
@@ -285,7 +303,7 @@ impl ResourceBoundedUniStarkProver {
         bundle.validate_envelope()?;
         validate_workload(&bundle.workload)?;
         let rows = validate_rows(bundle.logical_rows)?;
-        let config = make_config(Radix2DitParallel::<Val>::default());
+        let config = make_config::<8, 4, GoldilocksProfile, _>(Radix2DitParallel::<Val>::default());
         match bundle.workload {
             WorkloadKind::Fibonacci {
                 initial_a,
@@ -294,7 +312,7 @@ impl ResourceBoundedUniStarkProver {
                 if bundle.public_values.len() != 3 {
                     return Err(BackendError::InvalidWorkload);
                 }
-                let expected = fibonacci_public_values(initial_a, initial_b, rows)
+                let expected = fibonacci_public_values::<Val>(initial_a, initial_b, rows)
                     .into_iter()
                     .map(|value| value.as_canonical_u64())
                     .collect::<Vec<_>>();
@@ -337,7 +355,7 @@ impl ResourceBoundedUniStarkProver {
                     Val::from_u64(initial_b),
                     trace.values[trace.values.len() - 1],
                 ];
-                let proof_bytes = prove_to_bytes(
+                let proof_bytes = prove_to_bytes::<8, 4, GoldilocksProfile, _, _>(
                     Radix2DitParallel::<Val>::default(),
                     &FibonacciAir,
                     trace,
@@ -358,7 +376,7 @@ impl ResourceBoundedUniStarkProver {
             }
             WorkloadKind::Poseidon2 => {
                 let trace = poseidon2_trace(rows, 0);
-                let proof_bytes = prove_to_bytes(
+                let proof_bytes = prove_to_bytes::<8, 4, GoldilocksProfile, _, _>(
                     Radix2DitParallel::<Val>::default(),
                     &poseidon2_goldilocks_air(),
                     trace,
@@ -384,7 +402,7 @@ impl ResourceBoundedUniStarkProver {
                 },
                 &self.policy,
             )?;
-            let public = crate::fibonacci_public_values(initial_a, initial_b, rows);
+            let public = crate::fibonacci_public_values::<Val>(initial_a, initial_b, rows);
             return Ok(bundle(
                 WorkloadKind::Fibonacci {
                     initial_a,
@@ -406,7 +424,7 @@ impl ResourceBoundedUniStarkProver {
                 Val::from_u64(initial_b),
                 trace.values[trace.values.len() - 1],
             ];
-            let proof_bytes = prove_to_bytes(
+            let proof_bytes = prove_to_bytes::<8, 4, GoldilocksProfile, _, _>(
                 Radix2DitParallel::<Val>::default(),
                 &FibonacciAir,
                 trace,
@@ -441,7 +459,7 @@ impl ResourceBoundedUniStarkProver {
         preflight_memory(&self.policy, conventional_pipeline_estimate(rows, 180, 2))?;
         let proof_bytes = in_policy_pool(&self.policy, || {
             let trace = poseidon2_trace(rows, 0);
-            prove_to_bytes(
+            prove_to_bytes::<8, 4, GoldilocksProfile, _, _>(
                 Radix2DitParallel::<Val>::default(),
                 &poseidon2_goldilocks_air(),
                 trace,
@@ -553,47 +571,73 @@ fn bundle(
     }
 }
 
-pub(crate) fn make_config<Dft: TwoAdicSubgroupDft<Val>>(dft: Dft) -> GoldilocksConfig<Dft> {
-    make_config_with_log_blowup(dft, 1)
+pub(crate) fn make_config<const PW: usize, const DE: usize, P, Dft>(
+    dft: Dft,
+) -> crate::bounded_pcs::ProfileStarkConfig<PW, DE, P, Dft>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Dft: TwoAdicSubgroupDft<P::Val>,
+{
+    make_config_with_log_blowup::<PW, DE, P, Dft>(dft, 1)
 }
 
-pub(crate) fn make_config_with_log_blowup<Dft: TwoAdicSubgroupDft<Val>>(
+pub(crate) fn make_config_with_log_blowup<const PW: usize, const DE: usize, P, Dft>(
     dft: Dft,
     log_blowup: usize,
-) -> GoldilocksConfig<Dft> {
+) -> crate::bounded_pcs::ProfileStarkConfig<PW, DE, P, Dft>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Dft: TwoAdicSubgroupDft<P::Val>,
+{
     // Copied without parameter changes from Plonky3 v0.6.1's
-    // `prove_goldilocks_poseidon2` example.
-    let (permutation, hash, compression) = profile_components();
-    let val_mmcs = ValMmcs::new(hash, compression, 0);
-    let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
+    // `prove_goldilocks_poseidon2` example; only the concrete Goldilocks types
+    // became profile projections.
+    let (permutation, hash, compression) = profile_components::<PW, DE, P>();
+    let val_mmcs = crate::mmcs::ReferenceMmcs::<PW, DE, P>::new(hash, compression, 0);
+    let challenge_mmcs =
+        crate::bounded_pcs::ProfileChallengeMmcs::<PW, DE, P>::new(val_mmcs.clone());
     let mut fri_parameters = FriParameters::new_benchmark(challenge_mmcs);
     fri_parameters.log_blowup = log_blowup;
-    let pcs = Pcs::new(dft, val_mmcs, fri_parameters);
-    let challenger = Challenger::new(permutation);
-    GoldilocksConfig::new(pcs, challenger)
+    let pcs = crate::bounded_pcs::ProfilePcs::<PW, DE, P, Dft>::new(dft, val_mmcs, fri_parameters);
+    let challenger = crate::fri::ProfileChallengerFor::<PW, DE, P>::new(permutation);
+    crate::bounded_pcs::ProfileStarkConfig::<PW, DE, P, Dft>::new(pcs, challenger)
 }
 
-pub(crate) fn profile_components() -> (Permutation, Hash, Compression) {
-    let permutation = GoldilocksProfile::profile_permutation();
-    let hash = Hash::new(permutation.clone());
-    let compression = Compression::new(permutation.clone());
-    (permutation, hash, compression)
+pub(crate) fn profile_components<const PW: usize, const DE: usize, P>(
+) -> (P::Permutation, P::Hash, P::Compression)
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
+    (
+        P::profile_permutation(),
+        P::profile_hash(),
+        P::profile_compression(),
+    )
 }
 
-fn prove_to_bytes<Dft, Air>(
+fn prove_to_bytes<const PW: usize, const DE: usize, P, Dft, Air>(
     dft: Dft,
     air: &Air,
-    trace: RowMajorMatrix<Val>,
-    public_values: &[Val],
+    trace: RowMajorMatrix<P::Val>,
+    public_values: &[P::Val],
 ) -> Result<Vec<u8>>
 where
-    Dft: TwoAdicSubgroupDft<Val>,
-    Air: for<'a> p3_air::Air<p3_uni_stark::ProverConstraintFolder<'a, GoldilocksConfig<Dft>>>
-        + for<'a> p3_air::Air<p3_air::DebugConstraintBuilder<'a, Val>>
-        + p3_air::Air<p3_air::SymbolicAirBuilder<Val>>
-        + p3_air::BaseAir<Val>,
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+    Dft: TwoAdicSubgroupDft<P::Val>,
+    Air: for<'a> p3_air::Air<
+            p3_uni_stark::ProverConstraintFolder<
+                'a,
+                crate::bounded_pcs::ProfileStarkConfig<PW, DE, P, Dft>,
+            >,
+        > + for<'a> p3_air::Air<p3_air::DebugConstraintBuilder<'a, P::Val>>
+        + p3_air::Air<p3_air::SymbolicAirBuilder<P::Val>>
+        + p3_air::BaseAir<P::Val>,
 {
-    let config = make_config(dft);
+    let config = make_config::<PW, DE, P, Dft>(dft);
     let proof = prove(&config, air, trace, public_values);
     let bytes = postcard::to_allocvec(&proof)
         .map_err(|error| BackendError::Serialization(error.to_string()))?;
@@ -736,7 +780,7 @@ mod tests {
         };
         let trace = fibonacci_trace::<Val>(0, 1, rows);
         let public = vec![Val::ZERO, Val::ONE, *trace.values.last().unwrap()];
-        let config = make_config(Radix2DitParallel::<Val>::default());
+        let config = make_config::<8, 4, GoldilocksProfile, _>(Radix2DitParallel::<Val>::default());
         let rejects = |candidate: &Proof<GoldilocksConfig<Radix2DitParallel<Val>>>| {
             assert!(verify(&config, &FibonacciAir, candidate, &public).is_err());
         };
@@ -784,14 +828,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let trace = fibonacci_trace::<Val>(0, 1, 8);
         let public = vec![Val::ZERO, Val::ONE, Val::from_u64(21)];
-        let bounded = prove_to_bytes(
+        let bounded = prove_to_bytes::<8, 4, GoldilocksProfile, _, _>(
             ResourceBoundedDft::new(policy(dir.path())).unwrap(),
             &FibonacciAir,
             trace.clone(),
             &public,
         )
         .unwrap();
-        let reference = prove_to_bytes(
+        let reference = prove_to_bytes::<8, 4, GoldilocksProfile, _, _>(
             Radix2DitParallel::<Val>::default(),
             &FibonacciAir,
             trace,
@@ -805,14 +849,14 @@ mod tests {
     fn scratch_and_reference_dft_emit_identical_poseidon2_proof_bytes() {
         let dir = tempfile::tempdir().unwrap();
         let trace = poseidon2_trace(8, 0);
-        let bounded = prove_to_bytes(
+        let bounded = prove_to_bytes::<8, 4, GoldilocksProfile, _, _>(
             ResourceBoundedDft::new(policy(dir.path())).unwrap(),
             &poseidon2_goldilocks_air(),
             trace.clone(),
             &[],
         )
         .unwrap();
-        let reference = prove_to_bytes(
+        let reference = prove_to_bytes::<8, 4, GoldilocksProfile, _, _>(
             Radix2DitParallel::<Val>::default(),
             &poseidon2_goldilocks_air(),
             trace,

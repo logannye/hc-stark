@@ -1,8 +1,6 @@
 use crate::fri::ProfileChallengerFor;
 use crate::mmcs::{DurableProfileMmcs, ReferenceMmcs};
-use crate::profile::{DurableFieldProfile, GoldilocksProfile};
-use crate::prover::{profile_components, ChallengeMmcs, Val};
-use crate::ProfileChallenger;
+use crate::profile::DurableFieldProfile;
 use hc_stream::ResourcePolicyV1;
 use p3_commit::{BatchOpening, BuildPeriodicLdeTableFast, ExtensionMmcs, OpenedValues, Pcs};
 use p3_dft::Radix2DitParallel;
@@ -74,27 +72,34 @@ where
     }
 }
 
-// `new`, `make_bounded_verifier_config`, and `make_durable_mmcs` stay pinned to
-// Goldilocks: constructing a profile's sponge and compression means calling
-// `PaddingFreeSponge::new`/`TruncatedPermutation::new`, and `P::Hash`/
-// `P::Compression` are opaque associated types with no constructor on
-// `DurableFieldProfile`. Everything they build is generic; only the
-// construction is concrete. Adding `profile_hash`/`profile_compression` to the
-// trait would lift this, and belongs with the profile, not here.
-impl ResourceBoundedVerifierPcs<8, 4, GoldilocksProfile> {
+// `new`, `make_bounded_verifier_config`, and `make_durable_mmcs` used to be
+// pinned to Goldilocks because constructing a profile's sponge and compression
+// means calling `PaddingFreeSponge::new`/`TruncatedPermutation::new`, and
+// `P::Hash`/`P::Compression` are opaque associated types. `DurableFieldProfile`
+// now supplies `profile_hash`/`profile_compression`, so these are generic and
+// the Goldilocks values they produce are unchanged.
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>>
+    ResourceBoundedVerifierPcs<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     pub fn new(log_blowup: usize) -> Self {
-        let (_, hash, compression) = profile_components();
-        let val_mmcs = crate::prover::ValMmcs::new(hash, compression, 0);
-        let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
+        let val_mmcs =
+            ReferenceMmcs::<W, D, P>::new(P::profile_hash(), P::profile_compression(), 0);
+        let challenge_mmcs = ProfileChallengeMmcs::<W, D, P>::new(val_mmcs.clone());
         let mut fri = FriParameters::new_benchmark(challenge_mmcs);
         fri.log_blowup = log_blowup;
         Self {
-            official: TwoAdicFriPcs::new(Radix2DitParallel::<Val>::default(), val_mmcs, fri),
+            official: TwoAdicFriPcs::new(Radix2DitParallel::<P::Val>::default(), val_mmcs, fri),
         }
     }
 }
 
-impl Default for ResourceBoundedVerifierPcs<8, 4, GoldilocksProfile> {
+impl<const W: usize, const D: usize, P: DurableFieldProfile<W, D>> Default
+    for ResourceBoundedVerifierPcs<W, D, P>
+where
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     fn default() -> Self {
         Self::new(1)
     }
@@ -211,17 +216,27 @@ pub type BoundedConfig<const W: usize, const D: usize, P> = StarkConfig<
     ProfileChallengerFor<W, D, P>,
 >;
 
-pub fn make_bounded_verifier_config(log_blowup: usize) -> goldilocks::BoundedConfig {
-    let (permutation, _, _) = profile_components();
+pub fn make_bounded_verifier_config<const W: usize, const D: usize, P>(
+    log_blowup: usize,
+) -> BoundedConfig<W, D, P>
+where
+    P: DurableFieldProfile<W, D>,
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
     StarkConfig::new(
-        ResourceBoundedVerifierPcs::new(log_blowup),
-        ProfileChallenger::new(permutation),
+        ResourceBoundedVerifierPcs::<W, D, P>::new(log_blowup),
+        ProfileChallengerFor::<W, D, P>::new(P::profile_permutation()),
     )
 }
 
-pub fn make_durable_mmcs(policy: ResourcePolicyV1) -> goldilocks::DurableInputMmcs {
-    let (_, hash, compression) = profile_components();
-    goldilocks::DurableInputMmcs::new(hash, compression, policy)
+pub fn make_durable_mmcs<const W: usize, const D: usize, P>(
+    policy: ResourcePolicyV1,
+) -> DurableInputMmcs<W, D, P>
+where
+    P: DurableFieldProfile<W, D>,
+    [P::Val; D]: serde::Serialize + for<'de> serde::Deserialize<'de>,
+{
+    DurableInputMmcs::<W, D, P>::new(P::profile_hash(), P::profile_compression(), policy)
         .expect("validated resource policy constructs durable MMCS")
 }
 
@@ -241,7 +256,9 @@ pub mod goldilocks {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prover::{Challenge, GoldilocksConfig};
+    use crate::profile::GoldilocksProfile;
+    use crate::prover::{Challenge, GoldilocksConfig, Val};
+    use crate::ProfileChallenger;
 
     /// The Goldilocks instantiation of the upstream PCS proof, which `verify`
     /// decodes into. Pinned here so the generic alias chain cannot drift away

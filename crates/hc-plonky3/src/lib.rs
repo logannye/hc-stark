@@ -6,6 +6,8 @@
 
 #![deny(unsafe_op_in_unsafe_fn)]
 
+#[cfg(test)]
+mod babybear_differential;
 pub mod beta_fixtures;
 mod bounded_pcs;
 mod bounded_prover;
@@ -39,20 +41,23 @@ pub use bounded_pcs::{make_bounded_verifier_config, make_durable_mmcs};
 pub use bounded_prover::EnvironmentAbortFailureInjector;
 pub use bounded_prover::{
     estimate_builtin_manifest, estimate_resource_bounded_workload,
-    estimate_resource_conventional_workload, inspect_resource_bounded_checkpoint,
-    plan_resource_workload, preflight_builtin_manifest, prove_resource_bounded,
-    prove_resource_bounded_observed, prove_resource_bounded_observed_with_cancellation,
+    estimate_resource_bounded_workload_with_profile, estimate_resource_conventional_workload,
+    estimate_resource_conventional_workload_with_profile, inspect_resource_bounded_checkpoint,
+    plan_resource_workload, plan_resource_workload_with_profile, preflight_builtin_manifest,
+    prove_resource_bounded, prove_resource_bounded_observed,
+    prove_resource_bounded_observed_with_cancellation,
     prove_resource_bounded_observed_with_cancellation_at_checkpoint_dir,
-    prove_resource_bounded_observed_with_control, prove_resource_reference,
-    prove_resource_with_policy, prove_resource_with_policy_observed_with_cancellation,
+    prove_resource_bounded_observed_with_control, prove_resource_bounded_with_profile,
+    prove_resource_reference, prove_resource_reference_with_profile, prove_resource_with_policy,
+    prove_resource_with_policy_observed_with_cancellation,
     prove_resource_with_policy_observed_with_cancellation_at_checkpoint_dir,
     resume_resource_bounded, resume_resource_bounded_cancelable,
     resume_resource_bounded_cancelable_observed, resume_resource_bounded_with,
     resume_resource_bounded_with_cancellation, resume_resource_bounded_with_cancellation_observed,
-    resume_resource_bounded_with_control, verify_resource_bounded_proof, BoundedProverError,
-    CancellationToken, CheckpointInspectionV1, FailureInjector, NoopFailureInjector,
-    PlannedResourceProofV1, ProverEventV1, ResourceExecutionPlanV1, ResourceUsageV1,
-    ResumedProofV1,
+    resume_resource_bounded_with_control, verify_resource_bounded_proof,
+    verify_resource_bounded_proof_with_profile, BoundedProverError, CancellationToken,
+    CheckpointInspectionV1, FailureInjector, NoopFailureInjector, PlannedResourceProofV1,
+    ProverEventV1, ResourceExecutionPlanV1, ResourceUsageV1, ResumedProofV1,
 };
 pub use checkpoint::{
     ChallengerSnapshotError, ChallengerSnapshotV1, ProfileChallenger, ProfilePermutation,
@@ -62,7 +67,7 @@ pub use declarative::{
     plan_declarative_statement, verify_declarative_proof, DeclarativeAir, UploadedTraceWorkload,
 };
 pub use dft::goldilocks::{ResourceBoundedDft, ResourceBoundedMatrix, ScratchPlonky3Matrix};
-pub use dft::GoldilocksWord;
+pub use dft::{BabyBearWord, GoldilocksWord};
 pub use fri::goldilocks::{
     ChallengeArityMatrix, DurableFriCommitment, FriLayerCheckpoint, ScratchChallengeVector,
 };
@@ -76,7 +81,7 @@ pub use mmcs::DurableMmcsError;
 pub use opening::{
     build_reduced_opening_layer, interpolate_standard_lde, DurableOpeningError, MatrixOpening,
 };
-pub use profile::{BabyBearProfile, DurableFieldProfile, GoldilocksProfile};
+pub use profile::{BabyBearProfile, DurableFieldProfile, GoldilocksProfile, BABYBEAR_MODULUS_U64};
 pub use prover::{
     release_identity, BackendError, InternalProofBundle, ResourceBoundedUniStarkProver,
     WorkloadKind, COMPATIBILITY_PROFILE, DEPENDENCY_LOCK_SHA256, GOLDILOCKS_MODULUS_U64,
@@ -88,6 +93,23 @@ pub use workloads::{
     FibonacciAir, FibonacciWorkload, GeneratedTraceV1, Poseidon2GoldilocksAir, Poseidon2Workload,
     ResourceBoundedWorkload, WorkloadError, WorkloadIdentityV1,
 };
+
+/// `bounded_pcs`, `dft`, `fri`, `mmcs`, and `quotient` re-exported in their
+/// PROFILE-GENERIC form, for callers proving at a profile other than
+/// Goldilocks. The unsuffixed names above stay bound to the Goldilocks pins so
+/// this crate's existing public API is unchanged.
+pub mod generic {
+    pub use crate::bounded_pcs::{
+        BoundedConfig, DurableChallengeMmcs, DurableInputMmcs, DurablePcsProof,
+        ResourceBoundedVerifierPcs,
+    };
+    pub use crate::dft::{ResourceBoundedDft, ResourceBoundedMatrix, ScratchPlonky3Matrix};
+    pub use crate::fri::{
+        ChallengeArityMatrix, DurableFriCommitment, FriLayerCheckpoint, ScratchChallengeVector,
+    };
+    pub use crate::mmcs::{DurableMerkleData, DurableProfileMmcs};
+    pub use crate::quotient::EvaluationConfig;
+}
 
 /// Test-only fixtures shared across this crate's unit tests.
 #[cfg(test)]

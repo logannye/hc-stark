@@ -89,7 +89,22 @@ pub fn estimate_from_params(
     let durable_core = trace_lde_bytes
         .saturating_add(quotient_lde_bytes)
         .saturating_add(input_mmcs_bytes);
-    let proof_bytes = estimated_profile_proof_bytes(rows, width as u64, quotient_chunks);
+    // The quotient store holds one column per EXTENSION-field coefficient, and
+    // each Merkle root holds `digest_bytes / field_bytes` field elements. Both
+    // were literals (`2` and `4`) in the prover's sizing helpers, correct only
+    // for Goldilocks. `field_widths` returns `(base, base * degree)`, so both
+    // are derivable from the widths `params` already carries: 16/8 = 2 and
+    // 32/8 = 4 for Goldilocks (byte-identical to the previous literals), and
+    // 16/4 = 4 and 32/4 = 8 for BabyBear/KoalaBear/Mersenne31.
+    let extension_degree = ext_field_bytes.checked_div(field_bytes).unwrap_or(2).max(1);
+    let digest_words = digest_bytes.checked_div(field_bytes).unwrap_or(4).max(1);
+    let proof_bytes = estimated_profile_proof_bytes(
+        rows,
+        width as u64,
+        quotient_chunks,
+        digest_words,
+        extension_degree,
+    );
     let log_rows = rows.trailing_zeros() as u64;
     let max_store_count = 1u64
         .saturating_add(quotient_chunks)
@@ -107,6 +122,18 @@ pub fn estimate_from_params(
         quotient_chunks,
         params.has_next_row_columns,
         proof_bytes,
+        digest_words as usize,
+        extension_degree as usize,
+        // `EstimateParams` deliberately carries no Poseidon2 permutation
+        // width, so this prices the GOLDILOCKS challenger snapshot for every
+        // field. For BabyBear the real snapshot would be 128 bytes larger
+        // (16-element state, rate 8, versus 8 and 4), i.e. 256 bytes across
+        // the two manifests an atomic replacement holds — a fixed, sub-kilobyte
+        // understatement against a scratch high-water measured in megabytes.
+        // Correcting it needs a permutation-width field on `EstimateParams`,
+        // which is a shipped, wasm-vendored public shape; that belongs with
+        // the admission-gate work, not here.
+        crate::bounded_prover::GOLDILOCKS_CHALLENGER_SNAPSHOT_BYTES,
     )?;
     // Atomic checkpoint replacement temporarily keeps the previous manifest
     // beside the fully-synced replacement. Store headers and both manifests
@@ -175,16 +202,13 @@ pub fn estimate_from_params(
     let dft = ResourceBoundedDft::new(policy.clone())?;
     let trace_dft = dft.estimate_scratch(lde_rows as usize, width, false, field_bytes)?;
     // The quotient store holds one column per EXTENSION-field coefficient,
-    // not a literal 2. That is the same quantity `fri.rs`/`quotient.rs` call
-    // `extension_degree()`; this site was missed when those were swept, so
-    // the shipped model priced half the columns the prover actually writes
-    // for every 31-bit field. Derived from the two widths already in
-    // `params` (`field_widths` returns `(base, base * degree)`), so it needs
-    // no new plumbing: 16/8 = 2 for Goldilocks, byte-identical to the
-    // previous literal, and 16/4 = 4 for BabyBear/KoalaBear/Mersenne31.
-    let extension_degree = ext_field_bytes.checked_div(field_bytes).unwrap_or(2).max(1) as usize;
-    let quotient_dft =
-        dft.estimate_scratch(lde_rows as usize, extension_degree, false, field_bytes)?;
+    // not a literal 2 — the same `extension_degree` derived above.
+    let quotient_dft = dft.estimate_scratch(
+        lde_rows as usize,
+        extension_degree as usize,
+        false,
+        field_bytes,
+    )?;
     let peak_resident_bytes = trace_dft
         .peak_resident_bytes
         .max(quotient_dft.peak_resident_bytes)

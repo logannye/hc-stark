@@ -108,11 +108,58 @@ where
     /// in which concrete Poseidon2 instantiation they call.
     fn profile_permutation() -> Self::Permutation;
 
+    /// The sponge hash built from a fresh [`Self::profile_permutation`].
+    ///
+    /// `Self::Hash` is an opaque associated type, so no downstream module can
+    /// call `PaddingFreeSponge::new` on it; without this the MMCS/PCS
+    /// constructors stay Goldilocks-pinned. Implementations must construct it
+    /// exactly as `prover.rs::profile_components` always has — from a
+    /// permutation clone, hash first, compression second — because the
+    /// Goldilocks transcript is frozen.
+    fn profile_hash() -> Self::Hash;
+
+    /// The Merkle compression built from the same permutation instance
+    /// [`Self::profile_hash`] uses. See that method for why this exists.
+    fn profile_compression() -> Self::Compression;
+
     /// Upper bound (exclusive) on values this profile's workloads may seed
     /// with, so generated fixtures (Fibonacci's `initial_a`/`initial_b`,
     /// etc.) never exceed the field's modulus. Generalizes
     /// `GOLDILOCKS_MODULUS_U64` in `prover.rs`.
     fn modulus_u64() -> u64;
+
+    /// Capture a resumable snapshot of this profile's duplex challenger, or
+    /// `None` when this profile has no durable checkpoint representation.
+    ///
+    /// `checkpoint.rs`'s `ChallengerSnapshotV1` is a **frozen, Goldilocks-only
+    /// wire format**: a fixed `[u64; 8]` sponge state, a `RATE`-of-4 buffer
+    /// bound, and Goldilocks-modulus canonicality validation. It cannot
+    /// represent BabyBear's `<16, 8>` challenger, and Phase 3A deliberately
+    /// does not widen it (that would change a serialized, release-pinned
+    /// format for a field that has no checkpoints to be compatible with yet).
+    ///
+    /// Returning `None` is therefore not an error: it means "this profile
+    /// proves single-shot". `bounded_prover` treats it as a refusal to write
+    /// a checkpoint it could never restore, rather than writing one that a
+    /// later resume would silently misinterpret.
+    fn capture_challenger(
+        challenger: &p3_challenger::DuplexChallenger<
+            Self::Val,
+            Self::Permutation,
+            PERM_WIDTH,
+            DIGEST_ELEMS,
+        >,
+    ) -> Option<crate::checkpoint::ChallengerSnapshotV1>;
+
+    /// Rebuild this profile's challenger from a durable snapshot. `None` for
+    /// every profile whose [`Self::capture_challenger`] returns `None`, so a
+    /// checkpoint that somehow reached a non-checkpointable profile fails
+    /// closed instead of resuming from an unrelated transcript.
+    fn restore_challenger(
+        snapshot: &crate::checkpoint::ChallengerSnapshotV1,
+    ) -> Option<
+        p3_challenger::DuplexChallenger<Self::Val, Self::Permutation, PERM_WIDTH, DIGEST_ELEMS>,
+    >;
 }
 
 #[derive(Clone, Debug, Default)]
@@ -141,8 +188,38 @@ impl DurableFieldProfile<8, 4> for GoldilocksProfile {
         Self::Permutation::new_from_rng_128(&mut rng)
     }
 
+    // Constructed exactly as `prover.rs::profile_components` always did: one
+    // permutation, `Hash::new(permutation.clone())`, then
+    // `Compression::new(permutation)`. `Poseidon2Goldilocks` is a value type
+    // whose clones are indistinguishable, so building each from its own fresh
+    // `profile_permutation()` is byte-equivalent — but the calls are kept in
+    // that order and shape so the frozen transcript's provenance stays
+    // readable against the pre-generic code.
+    fn profile_hash() -> Self::Hash {
+        Self::Hash::new(Self::profile_permutation())
+    }
+
+    fn profile_compression() -> Self::Compression {
+        Self::Compression::new(Self::profile_permutation())
+    }
+
     fn modulus_u64() -> u64 {
         crate::prover::GOLDILOCKS_MODULUS_U64
+    }
+
+    /// Goldilocks is the one profile `ChallengerSnapshotV1` can represent:
+    /// its `<8, 4>` dimensions are exactly the format's hardcoded `WIDTH`/
+    /// `RATE`, and its modulus is the one the format validates against.
+    fn capture_challenger(
+        challenger: &p3_challenger::DuplexChallenger<Goldilocks, Self::Permutation, 8, 4>,
+    ) -> Option<crate::checkpoint::ChallengerSnapshotV1> {
+        Some(crate::checkpoint::ChallengerSnapshotV1::capture(challenger))
+    }
+
+    fn restore_challenger(
+        snapshot: &crate::checkpoint::ChallengerSnapshotV1,
+    ) -> Option<p3_challenger::DuplexChallenger<Goldilocks, Self::Permutation, 8, 4>> {
+        snapshot.restore().ok()
     }
 }
 
@@ -197,8 +274,34 @@ impl DurableFieldProfile<16, 8> for BabyBearProfile {
         Self::Permutation::new_from_rng_128(&mut rng)
     }
 
+    fn profile_hash() -> Self::Hash {
+        Self::Hash::new(Self::profile_permutation())
+    }
+
+    fn profile_compression() -> Self::Compression {
+        Self::Compression::new(Self::profile_permutation())
+    }
+
     fn modulus_u64() -> u64 {
         BABYBEAR_MODULUS_U64
+    }
+
+    /// BabyBear has no durable checkpoint format. `ChallengerSnapshotV1`
+    /// stores a `[u64; 8]` sponge state and validates against the Goldilocks
+    /// modulus; this profile's challenger has a 16-element state over a
+    /// 31-bit field, so it is not merely narrower — it is unrepresentable.
+    /// Widening that frozen format is explicitly out of scope for Phase 3A,
+    /// so BabyBear proves single-shot and the prover writes no checkpoint.
+    fn capture_challenger(
+        _challenger: &p3_challenger::DuplexChallenger<BabyBear, Self::Permutation, 16, 8>,
+    ) -> Option<crate::checkpoint::ChallengerSnapshotV1> {
+        None
+    }
+
+    fn restore_challenger(
+        _snapshot: &crate::checkpoint::ChallengerSnapshotV1,
+    ) -> Option<p3_challenger::DuplexChallenger<BabyBear, Self::Permutation, 16, 8>> {
+        None
     }
 }
 

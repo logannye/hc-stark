@@ -22,7 +22,7 @@ use std::sync::atomic::AtomicU64;
 /// `<8, 4, GoldilocksProfile>` this is exactly `prover::GoldilocksConfig<
 /// Radix2DitParallel<Goldilocks>>`, the type `bounded_prover`'s AIR bounds
 /// already name.
-pub(crate) type EvaluationConfig<const W: usize, const D: usize, P> =
+pub type EvaluationConfig<const W: usize, const D: usize, P> =
     ProfileStarkConfig<W, D, P, Radix2DitParallel<<P as DurableFieldProfile<W, D>>::Val>>;
 static CHUNK_JOB_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -339,11 +339,13 @@ where
     result
 }
 
-/// Goldilocks pin, so `bounded_prover`'s AIR bounds keep naming exactly the
-/// config they named before this module became generic.
+/// Goldilocks pin. `bounded_prover` now spells `EvaluationConfig<8, 4,
+/// GoldilocksProfile>` directly in its pinned public bounds, so this exists for
+/// this module's own tests and for symmetry with `dft`/`fri`/`mmcs`.
 pub mod goldilocks {
     use crate::profile::GoldilocksProfile;
 
+    #[allow(dead_code)]
     pub(crate) type EvaluationConfig = super::EvaluationConfig<8, 4, GoldilocksProfile>;
 }
 
@@ -391,7 +393,8 @@ mod tests {
             Goldilocks::ONE,
             *trace.values.last().unwrap(),
         ];
-        let config = make_config(Radix2DitParallel::<Goldilocks>::default());
+        let config =
+            make_config::<8, 4, GoldilocksProfile, _>(Radix2DitParallel::<Goldilocks>::default());
         let pcs = p3_uni_stark::StarkGenericConfig::pcs(&config);
         type EvalPcs = <EvaluationConfig as p3_uni_stark::StarkGenericConfig>::Pcs;
         type EvalChallenger = <EvaluationConfig as p3_uni_stark::StarkGenericConfig>::Challenger;
@@ -506,7 +509,8 @@ mod tests {
         let rows = 8usize;
         let air = poseidon2_goldilocks_air();
         let trace = poseidon2_trace(rows, 0);
-        let config = make_config(Radix2DitParallel::<Goldilocks>::default());
+        let config =
+            make_config::<8, 4, GoldilocksProfile, _>(Radix2DitParallel::<Goldilocks>::default());
         let pcs = p3_uni_stark::StarkGenericConfig::pcs(&config);
         type EvalPcs = <EvaluationConfig as p3_uni_stark::StarkGenericConfig>::Pcs;
         type EvalChallenger = <EvaluationConfig as p3_uni_stark::StarkGenericConfig>::Challenger;
