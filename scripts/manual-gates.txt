@@ -1,0 +1,41 @@
+# Scripts that CI deliberately does not run.
+#
+# Format: <repo-relative path>  # <reason>
+#
+# scripts/ci/gate_wiring_check.py fails if a script is reachable from no
+# workflow and absent from this file, AND fails if an entry here has since
+# become reachable or names a file that no longer exists. The reason is
+# mandatory: an unexplained exemption is how a dead gate hides, which is
+# exactly what happened to offer_metadata_check.py -- orphaned, failing on
+# every run, unnoticed for months because nothing executed it.
+#
+# Adding a line here is a claim that the script is intentionally manual. If
+# the honest answer is "it is broken and belongs to a retired subsystem",
+# say so, so the next person can delete it rather than assume it is load
+# bearing.
+
+# --- Retired hosted stack (deletion candidates, kept for archaeology) ---
+# The hosted API, MCP endpoint, billing, and public beta were retired in
+# b4570c5. These reference modules, hosts, or schemas that no longer exist.
+# Wiring them would mean reviving the subsystem, not fixing a gate.
+scripts/ci/public_beta_migration_upgrade_check.sh  # retired public-beta stack; no beta deployment exists
+scripts/ci/public_beta_schema_check.py  # retired public-beta control plane; its tests fail against the current schema
+scripts/ci/test_public_beta_schema_check.py  # fails: asserts control-plane invariants for a retired subsystem
+scripts/ci/reconciliation_invariants.sh  # hosted-stack billing reconciliation; the hosted stack is gone
+scripts/ci/test_production_launch_preflight.py  # collection error: imports retired billing/hosted modules
+scripts/ci/test_stripe_checkout_pipeline_sync.py  # collection error: stripe_checkout_monitor was deleted with the hosted stack
+scripts/marketing/sync_stripe_checkout_pipeline.py  # retired billing pipeline; imports the same deleted module
+scripts/monitoring/host_cron_env.sh  # cron env for the Hetzner box, which is dead (ports 22/80/443 filtered since 2026-07-26)
+scripts/monitoring/run_api_health_audit.sh  # audits api.tinyzkp.com, which returns 410 permanently
+scripts/monitoring/shared_dispatch_smoke.sh  # smoke test against the retired hosted dispatch path
+
+# --- Owner-run operational tooling (correctly not in CI) ---
+# These take real actions or need credentials, a live host, or a published
+# artifact. Running them from CI would be wrong, not merely redundant.
+scripts/marketing/indexnow_submit.py  # submits URLs to IndexNow; an outward-facing action, owner-triggered only
+scripts/release/wait_for_crate_version.py  # polls crates.io during a publish; meaningless outside a release run
+scripts/ci/capture_sdk_python_runtime.py  # captures an SDK runtime fingerprint during an SDK release
+scripts/ci/cloudflare_backup_worker_test.mjs  # exercises the backup worker; run during a disaster-recovery drill
+
+# --- Not yet applicable ---
+scripts/ci/test_analytics_attribution.mjs  # no analytics beacon is deployed; the CSP allows one but no page loads it
