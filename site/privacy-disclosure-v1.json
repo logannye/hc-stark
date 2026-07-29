@@ -19,10 +19,15 @@
     ]
   },
   "retention": {
-    "enforced": false,
-    "policy": "none_implemented",
-    "disclosure": "site/privacy.html states plainly that no automated deletion runs yet.",
-    "tracking_issue": "Task 5.3 of docs/superpowers/plans/2026-07-29-tinyzkp-truthful-surfaces-and-demand-validity.md"
+    "enforced": true,
+    "policy": "delete_after_180_days",
+    "retention_days": 180,
+    "mechanism": "site/_worker.js pruneExpiredRows(), piggybacked on ordinary writes at most once per isolate per hour. Cloudflare Pages has no scheduled trigger, so there is no cron to rely on.",
+    "covers": ["demand_log", "rejected_log", "rate_limit_windows", "keyed_rate_limit_windows"],
+    "excludes": {
+      "estimator_keys": "Deliberately not pruned. Deleting a key row would silently revoke a caller's access with no notice and no recovery path, since no email is stored."
+    },
+    "why_180": "scripts/ci/demand_report.py reads a trailing 90-day window; 180 days keeps twice that so the analysis window is never truncated, and no more."
   },
   "identifier_limitations": {
     "anon_ip_hash": {

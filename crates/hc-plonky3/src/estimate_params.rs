@@ -50,6 +50,19 @@ pub fn estimate_from_params(
     if params.rows == 0 || !params.rows.is_power_of_two() {
         return Err(BoundedProverError::UnsupportedProfile);
     }
+    // Reject zero widths rather than dividing by them below. `field_widths`
+    // never yields a zero, but `EstimateParams` is public and constructible
+    // by hand, and the previous `checked_div(...).unwrap_or(2)` /
+    // `.unwrap_or(4)` fallbacks silently substituted GOLDILOCKS-shaped
+    // constants for a zero divisor -- producing a confident, plausible, wrong
+    // answer for a caller who had supplied nothing usable. An estimator whose
+    // entire product claim is "the numbers are real" must refuse instead.
+    if params.field_bytes == 0 || params.ext_field_bytes == 0 || params.digest_bytes == 0 {
+        return Err(BoundedProverError::UnsupportedProfile);
+    }
+    if params.ext_field_bytes < params.field_bytes || params.digest_bytes < params.field_bytes {
+        return Err(BoundedProverError::UnsupportedProfile);
+    }
     let width = params.width as usize;
     let quotient_chunks = params.quotient_chunks;
     let rows = params.rows;
@@ -96,8 +109,12 @@ pub fn estimate_from_params(
     // are derivable from the widths `params` already carries: 16/8 = 2 and
     // 32/8 = 4 for Goldilocks (byte-identical to the previous literals), and
     // 16/4 = 4 and 32/4 = 8 for BabyBear/KoalaBear/Mersenne31.
-    let extension_degree = ext_field_bytes.checked_div(field_bytes).unwrap_or(2).max(1);
-    let digest_words = digest_bytes.checked_div(field_bytes).unwrap_or(4).max(1);
+    // `field_bytes` is guaranteed non-zero by the guard at the top of this
+    // function, so these are plain divisions with no fallback constant to
+    // disagree with. Both are still floored at 1 because an extension or
+    // digest narrower than the base field is rejected above, not clamped.
+    let extension_degree = (ext_field_bytes / field_bytes).max(1);
+    let digest_words = (digest_bytes / field_bytes).max(1);
     let proof_bytes = estimated_profile_proof_bytes(
         rows,
         width as u64,
@@ -429,10 +446,28 @@ pub fn estimate_conventional_from_params(params: &EstimateParams) -> ResourceEst
 /// rejected rather than priced: this function only reports widths for
 /// extensions this codebase would actually reach for, not every degree that
 /// happens to be algebraically valid.
+/// Base widths are certain: all three 31-bit fields hold one element in four
+/// bytes. The DEGREES differ in how well they are established here:
+///
+/// * `goldilocks` and `babybear` are verified against the crates this repo
+///   actually depends on (`p3-goldilocks`, `p3-baby-bear`); `security_floor.rs`
+///   pins both, and `profile.rs` asserts `EXTENSION_DEGREE == Challenge::DIMENSION`
+///   at compile time.
+/// * `koalabear` and `mersenne31` are **not dependencies**, so nothing here
+///   checks them against upstream. Degree 4 is the standard choice for both
+///   (KoalaBear mirrors BabyBear; Mersenne31's degree-4 extension is what
+///   circle-STARK constructions use), but it is asserted from the literature,
+///   not measured. Both always return `provable_today: false`, so the blast
+///   radius is a resource estimate for a field TinyZKP cannot prove — still,
+///   **verify against `p3-koala-bear` / `p3-mersenne-31` before either string
+///   is advertised anywhere**, because this function's whole contract is that
+///   it refuses to guess widths.
 fn canonical_extension_degree(field: &str) -> Option<(u64, u8)> {
     match field {
         "goldilocks" => Some((8, 2)),
-        "babybear" | "koalabear" | "mersenne31" => Some((4, 4)),
+        "babybear" => Some((4, 4)),
+        // Unverified against upstream — see the note above.
+        "koalabear" | "mersenne31" => Some((4, 4)),
         _ => None,
     }
 }
@@ -930,5 +965,75 @@ mod tests {
                 max_phase_write
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod zero_width_guard_tests {
+    use super::*;
+    use hc_stream::ResourceMode;
+
+    fn policy() -> ResourcePolicyV1 {
+        ResourcePolicyV1 {
+            mode: ResourceMode::Scratch,
+            max_resident_bytes: 1 << 30,
+            max_scratch_bytes: 1 << 40,
+            scratch_dir: std::env::temp_dir(),
+            max_threads: 1,
+            checkpoint_policy: CheckpointPolicy::RetainOnFailure,
+        }
+    }
+
+    fn goldilocks_params() -> EstimateParams {
+        EstimateParams {
+            workload_id: "test".into(),
+            rows: 1 << 16,
+            width: 64,
+            quotient_chunks: 2,
+            public_values: 4,
+            has_next_row_columns: true,
+            field_bytes: 8,
+            ext_field_bytes: 16,
+            digest_bytes: 32,
+        }
+    }
+
+    /// The baseline must succeed, or every rejection below is vacuous.
+    #[test]
+    fn a_well_formed_request_is_still_priced() {
+        assert!(estimate_from_params(&goldilocks_params(), &policy()).is_ok());
+    }
+
+    /// A zero divisor previously fell back to GOLDILOCKS-shaped constants
+    /// (`unwrap_or(2)` / `unwrap_or(4)`), returning a confident, plausible,
+    /// wrong estimate for a caller who supplied nothing usable.
+    #[test]
+    fn zero_widths_are_refused_rather_than_guessed() {
+        for mutate in [
+            (|p: &mut EstimateParams| p.field_bytes = 0) as fn(&mut EstimateParams),
+            |p: &mut EstimateParams| p.ext_field_bytes = 0,
+            |p: &mut EstimateParams| p.digest_bytes = 0,
+        ] {
+            let mut params = goldilocks_params();
+            mutate(&mut params);
+            assert!(
+                estimate_from_params(&params, &policy()).is_err(),
+                "a zero element width must be refused, never priced with a \
+                 substituted default"
+            );
+        }
+    }
+
+    /// An extension or digest narrower than the base field is incoherent;
+    /// clamping it to 1 would price a field that cannot exist.
+    #[test]
+    fn widths_narrower_than_the_base_field_are_refused() {
+        let mut params = goldilocks_params();
+        params.ext_field_bytes = 4;
+        assert!(estimate_from_params(&params, &policy()).is_err());
+
+        let mut params = goldilocks_params();
+        params.digest_bytes = 4;
+        assert!(estimate_from_params(&params, &policy()).is_err());
     }
 }
