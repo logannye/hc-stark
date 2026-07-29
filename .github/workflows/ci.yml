@@ -160,12 +160,18 @@ jobs:
           # disclose. Phase 1b shipped a demand log while the privacy notice
           # still denied one existed; this is what makes that impossible.
           python3 scripts/ci/privacy_disclosure_gate.py
+          # Fails if a withdrawn SKU is still described as purchasable on any
+          # surface, in either direction. The Guard withdrawal previously
+          # reached only human-readable HTML, leaving offers.jsonld telling
+          # search engines a $499/mo product was temporarily out of stock.
+          python3 scripts/ci/sku_withdrawal_gate.py
           python3 -m pytest \
             scripts/ci/test_site_route_check.py \
             scripts/ci/test_guard_site_contract.py \
             scripts/commercial/test_render_offers.py \
             scripts/ci/test_site_asset_manifest.py \
             scripts/ci/test_privacy_disclosure_gate.py \
+            scripts/ci/test_sku_withdrawal_gate.py \
             scripts/ci/test_demand_report.py -q
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs

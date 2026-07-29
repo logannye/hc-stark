@@ -227,8 +227,12 @@ def validate(source: dict[str, object]) -> list[str]:
     sales_state = source.get("sales_state")
     if checkout_enabled and sales_state != "live":
         failures.append("enabled checkout requires sales_state 'live'")
-    if not checkout_enabled and sales_state not in {"closed", "frozen"}:
-        failures.append("disabled checkout requires sales_state 'closed' or 'frozen'")
+    if not checkout_enabled and sales_state not in {"closed", "frozen", "withdrawn"}:
+        failures.append(
+            "disabled checkout requires sales_state 'closed', 'frozen', or 'withdrawn'"
+        )
+    if sales_state == "withdrawn" and checkout_enabled:
+        failures.append("a withdrawn SKU can never have checkout enabled")
 
     try:
         products = products_by_id(source)
@@ -268,6 +272,9 @@ def validate(source: dict[str, object]) -> list[str]:
         "live": "available",
         "frozen": "sales_frozen",
         "closed": "blocked_until_all_launch_gates_pass",
+        # NOT "blocked_until_all_launch_gates_pass": that promises the block
+        # lifts once gates pass, which for a withdrawn SKU is a false promise.
+        "withdrawn": "withdrawn",
     }.get(str(sales_state))
     if guard.get("availability") != expected_guard_availability:
         failures.append(
@@ -323,8 +330,15 @@ def validate(source: dict[str, object]) -> list[str]:
 def render_jsonld(source: dict[str, object]) -> str:
     products = products_by_id(source)
     guard_prices = products["guard"]["prices"]
+    # `OutOfStock` means TEMPORARILY unavailable -- Google and every other
+    # structured-data consumer reads it as a product that is coming back. A
+    # withdrawn SKU is `Discontinued`. Publishing the two Guard offers as
+    # OutOfStock after the withdrawal told search engines, for months, that a
+    # $499/mo product would return.
     guard_availability = (
-        "https://schema.org/InStock"
+        "https://schema.org/Discontinued"
+        if source.get("sales_state") == "withdrawn"
+        else "https://schema.org/InStock"
         if source["checkout_enabled"]
         else "https://schema.org/OutOfStock"
     )

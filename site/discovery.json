@@ -82,7 +82,7 @@
     "sales": "https://tinyzkp.com/pricing#sales-status"
   },
   "release_status": "https://tinyzkp.com/release.json",
-  "sales_state": "closed",
+  "sales_state": "withdrawn",
   "schema_version": 5,
   "service_status": "guard_prelaunch",
   "support": {

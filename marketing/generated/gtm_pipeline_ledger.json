@@ -13,7 +13,7 @@
   ],
   "business_state": {
     "launch_state": "blocked",
-    "sales_state": "closed",
+    "sales_state": "withdrawn",
     "checkout_enabled": false,
     "commerce_state": "unconfigured",
     "portal_state": "unconfigured",
@@ -36,7 +36,7 @@
     {
       "id": "guard",
       "name": "TinyZKP Guard",
-      "availability": "blocked_until_all_launch_gates_pass",
+      "availability": "withdrawn",
       "license": "commercial_object_code",
       "monthly_usd": 499,
       "annual_usd": 4990,
