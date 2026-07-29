@@ -37,7 +37,23 @@ Registry entries live on the registries, not in this repository. Removing the
 manifests stops future publishes; the published entries must be withdrawn
 explicitly. **Verified against each registry's live API on 2026-07-29:**
 
-### 1. MCP registry — LISTED, and worse than `server.json` was
+## Status as of 2026-07-29
+
+| Surface | State |
+|---|---|
+| MCP registry | ✅ **Retracted** — `0.1.0: active → deleted` |
+| Glama | ✅ Never listed; nothing to do |
+| Smithery | ⏸️ **Still listed, deliberately deferred** (`useCount: 0`) |
+| claude.ai connector | ⏸️ Outstanding — owner-only, no CLI path |
+
+### 1. MCP registry — ✅ RETRACTED 2026-07-29
+
+Done with the commands below; verified absent from
+`?search=tinyzkp` and from `?search=tinyzkp&version=latest` (the latter would
+still surface a merely-deprecated entry, so this confirms a real delete).
+The section is kept because the *reason* it mattered is the reusable lesson.
+
+### 1a. What it had been serving — worse than `server.json` was
 
 The published entry is **not** the "capability-only, backend recovery" text
 that was in `server.json`. `server.json` was revised at some point and never
@@ -61,16 +77,36 @@ mcp-publisher logout
 
 Verify: `curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=tinyzkp"`
 
-### 2. Smithery — LISTED
+### 2. Smithery — STILL LISTED, deliberately deferred
 
 `logan/tinyzkp-mcp` (id `cf89af6f-4bba-4af1-8766-2acb94c24624`, created
 2026-04-28), still titled "TinyZKP — Verifiable Receipts for AI Agents".
-`useCount` is **0**, so nothing has ever called it.
+**`useCount` is 0 — nothing has ever called it.**
 
-`DELETE https://registry.smithery.ai/servers/logan/tinyzkp-mcp` returns
-**401**, not 404 — the endpoint exists but needs a Smithery API key, which is
-not stored on this machine. Either obtain a key from the Smithery dashboard
-and call that endpoint, or remove the server from the dashboard UI.
+Deletion via the API is a real, supported operation. Probed 2026-07-29:
+
+```
+DELETE /servers/logan/tinyzkp-mcp     -> 401   (exists, auth-gated)
+DELETE /definitely-not-a-real-route   -> 404
+DELETE /servers                       -> 404
+GET    /servers/logan/tinyzkp-mcp     -> 200
+```
+
+A bogus path returns 404, so the 401 is genuine auth enforcement on a real
+route, not a gateway catch-all. A valid key should therefore work:
+
+```sh
+curl -sS -X DELETE https://registry.smithery.ai/servers/logan/tinyzkp-mcp \
+  -H "Authorization: Bearer <smithery-key>" -w '\nHTTP %{http_code}\n'
+```
+
+**Deferred on 2026-07-29 after the key handling proved fiddly** (Smithery
+auto-regenerates the key when you delete it, which is a rotation mechanism
+rather than a bug, but made the flow awkward). This was a considered call,
+not an oversight: with `useCount: 0` the listing has misled no one, and the
+two surfaces that actually reached people — the privacy notice and the MCP
+registry entry advertising free receipt minting — are both fixed. Clear it
+from the Smithery dashboard whenever convenient.
 
 ### 3. Glama — NOT LISTED, no action needed
 
