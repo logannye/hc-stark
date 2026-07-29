@@ -170,6 +170,10 @@ jobs:
           # directory listings advertised mcp.tinyzkp.com and /signup for
           # months after both became permanent 410s.
           python3 scripts/ci/external_listing_check.py
+          # Fails if a check script is reachable from no workflow and is not
+          # declared in scripts/manual-gates.txt with a reason. Wiring the 44
+          # previously-dark test modules above was the first thing this found.
+          python3 scripts/ci/gate_wiring_check.py
           python3 -m pytest \
             scripts/ci/test_site_route_check.py \
             scripts/ci/test_guard_site_contract.py \
@@ -178,12 +182,66 @@ jobs:
             scripts/ci/test_privacy_disclosure_gate.py \
             scripts/ci/test_sku_withdrawal_gate.py \
             scripts/ci/test_external_listing_check.py \
+            scripts/ci/test_gate_wiring_check.py \
             scripts/ci/test_demand_report.py -q
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs
           node scripts/ci/site_shared_checkout_test.mjs
           node --test scripts/ci/test_worker_estimate.mjs
           node scripts/ci/estimate_wasm_cli_parity_gate.mjs
+
+      - name: Previously unwired policy tests
+        # These 44 modules existed and passed but were named by no workflow,
+        # so CI never ran them: ~290 assertions that looked like coverage and
+        # were not. scripts/ci/gate_wiring_check.py now fails if a script
+        # drifts back out of reach. Six sibling modules remain unwired and are
+        # declared in scripts/manual-gates.txt with the reason.
+        run: |
+          python3 -m pytest -q \
+            scripts/benchmark/test_customer_cubic8.py \
+            scripts/benchmark/test_run_customer_cubic8_matrix.py \
+            scripts/ci/test_backend_evidence_workflow.py \
+            scripts/ci/test_backend_source_scan.py \
+            scripts/ci/test_backup_restore_check.py \
+            scripts/ci/test_beta_deployment_contract.py \
+            scripts/ci/test_compose_config_check.py \
+            scripts/ci/test_cursor_plugin_check.py \
+            scripts/ci/test_deploy_readiness_check.py \
+            scripts/ci/test_fixed_host_backup_evidence.py \
+            scripts/ci/test_fixed_host_evidence_workspace.py \
+            scripts/ci/test_generate_sdk_schema_models.py \
+            scripts/ci/test_gtm_distribution_monitor.py \
+            scripts/ci/test_manual_distribution_assets_check.py \
+            scripts/ci/test_materialize_sdk_python_env.py \
+            scripts/ci/test_mcp_submission_renderer.py \
+            scripts/ci/test_outbound_research_packets.py \
+            scripts/ci/test_outbound_send_queue.py \
+            scripts/ci/test_outbound_target_pipeline.py \
+            scripts/ci/test_production_secret_parity_check.py \
+            scripts/ci/test_public_beta_gate.py \
+            scripts/ci/test_recovery_reconciliation_invariants.py \
+            scripts/ci/test_release_identity_check.py \
+            scripts/ci/test_stripe_checkout_canary.py \
+            scripts/ci/test_validate_public_beta_canary.py \
+            scripts/ci/test_verify_sdk_npm_tarballs.py \
+            scripts/ci/test_verify_sdk_python_wheelhouse.py \
+            scripts/commercial/test_evaluation_qualification.py \
+            scripts/commercial/test_partner_preflight.py \
+            scripts/commercial/test_validate_design_partner_prospects.py \
+            scripts/commercial/test_validate_scorecard.py \
+            scripts/monitoring/test_backend_recovery_canary.py \
+            scripts/monitoring/test_contact_intake_readiness.py \
+            scripts/monitoring/test_migrate_audit_env.py \
+            scripts/release/test_activate_public_beta.py \
+            scripts/release/test_build_dark_canary_authorization.py \
+            scripts/release/test_build_preliminary_sbom.py \
+            scripts/release/test_build_public_beta_authorization.py \
+            scripts/release/test_evidence_runtime.py \
+            scripts/release/test_extract_public_beta_evidence.py \
+            scripts/release/test_smoke_engine_release_artifacts.py \
+            scripts/release/test_stage_public_beta_site.py \
+            scripts/release/test_verify_sdk_backend_compatibility.py \
+            scripts/release/test_verify_sdk_release_versions.py
 
       - name: Guard and static-site production preflight
         run: |
