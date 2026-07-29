@@ -155,11 +155,17 @@ jobs:
           python3 scripts/commercial/render_offers.py --check
           python3 scripts/ci/site_route_check.py
           python3 scripts/ci/site_deploy_check.py
+          # Fails if site/_worker.js writes any D1 table or column that
+          # site/privacy-disclosure-v1.json and site/privacy.html do not
+          # disclose. Phase 1b shipped a demand log while the privacy notice
+          # still denied one existed; this is what makes that impossible.
+          python3 scripts/ci/privacy_disclosure_gate.py
           python3 -m pytest \
             scripts/ci/test_site_route_check.py \
             scripts/ci/test_guard_site_contract.py \
             scripts/commercial/test_render_offers.py \
             scripts/ci/test_site_asset_manifest.py \
+            scripts/ci/test_privacy_disclosure_gate.py \
             scripts/ci/test_demand_report.py -q
           node --check site/_worker.js
           node scripts/ci/site_worker_dispatch_test.mjs
