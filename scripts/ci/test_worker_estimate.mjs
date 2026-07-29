@@ -109,9 +109,13 @@ function createD1Stub({
   const rateLimitCounts = new Map();
   const keyedRateLimitCounts = new Map();
   const demandLogRows = [];
+  const rejectedLogRows = [];
+  const prunedTables = [];
   const keysByHash = new Map();
   return {
     demandLogRows,
+    rejectedLogRows,
+    prunedTables,
     keysByHash,
     prepare(sql) {
       const normalized = sql.replace(/\s+/g, " ").trim();
@@ -148,6 +152,17 @@ function createD1Stub({
           throw new Error(`D1 stub: unsupported .first() query: ${normalized}`);
         },
         async run() {
+          // Retention prunes are DELETEs against the same tables the INSERT
+          // branches below match on, so they must be classified FIRST or a
+          // prune is miscounted as a write.
+          if (normalized.startsWith("DELETE FROM")) {
+            prunedTables.push({ sql: normalized, cutoff: boundArgs[0] });
+            return { success: true, meta: {} };
+          }
+          if (normalized.includes("rejected_log")) {
+            rejectedLogRows.push(boundArgs);
+            return { success: true, meta: {} };
+          }
           if (normalized.includes("estimator_keys")) {
             if (failKeyMint) throw new Error("D1 stub: injected key-mint failure");
             const [keyId, keyHash, mintedAtHour, revoked] = boundArgs;
@@ -693,6 +708,131 @@ test("a D1 outage while minting fails as a structured error, never internal_erro
     assert.equal(body.error, "keys_unavailable");
     assert.notEqual(body.error, "internal_error");
     assert.equal(db.keysByHash.size, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+// --- Phase 5: rejected-request counting, retention, missing caller IP ---
+
+test("a rejected estimate is counted by reason code, and never as demand", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub();
+    const ctx = createExecutionContext();
+    const request = new Request("https://tinyzkp.com/v1/estimate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.77" },
+      body: "{ this is not valid json",
+    });
+
+    const response = await worker.fetch(request, { ASSETS: assetsMock(), DB: db }, ctx);
+    assert.equal(response.status, 200, "the engine's error envelope is still a 200 body");
+    await ctx.drain();
+
+    // Before migrations/0003_rejected_log.sql this attempt vanished entirely,
+    // which biased the demand measurement toward zero: someone trying to
+    // integrate and getting the shape wrong was indistinguishable from silence.
+    assert.equal(db.rejectedLogRows.length, 1);
+    const [observedAtHour, reasonCode, keyId, anonIpHash] = db.rejectedLogRows[0];
+    assert.equal(observedAtHour % 3600, 0, "the hour must be coarse, never precise");
+    assert.equal(typeof reasonCode, "string");
+    assert.equal(keyId, null);
+    assert.equal(typeof anonIpHash, "string");
+
+    // A rejection is evidence someone tried, NOT evidence of a served need.
+    assert.equal(db.demandLogRows.length, 0, "a rejection must never count as demand");
+
+    // Nothing derived from the body may be stored: a malformed body is
+    // exactly where a witness or a secret is most likely to appear.
+    for (const value of db.rejectedLogRows[0]) {
+      assert.ok(
+        typeof value !== "string" || !value.includes("this is not valid json"),
+        "no fragment of the request body may reach the rejected log",
+      );
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test("a successful estimate is not counted as a rejection", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub();
+    const ctx = createExecutionContext();
+    await worker.fetch(estimateRequest("203.0.113.78"), { ASSETS: assetsMock(), DB: db }, ctx);
+    await ctx.drain();
+    assert.equal(db.demandLogRows.length, 1);
+    assert.equal(db.rejectedLogRows.length, 0, "the two logs must never double-count");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("retention prunes every timestamped table except minted keys", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub();
+    const ctx = createExecutionContext();
+    await worker.fetch(estimateRequest("203.0.113.79"), { ASSETS: assetsMock(), DB: db }, ctx);
+    await ctx.drain();
+
+    const pruned = db.prunedTables.map((entry) => entry.sql).join("\n");
+    for (const table of [
+      "demand_log",
+      "rejected_log",
+      "rate_limit_windows",
+      "keyed_rate_limit_windows",
+    ]) {
+      assert.ok(pruned.includes(table), `retention must cover ${table}`);
+    }
+    // Deleting a key would silently revoke a caller's access with no notice
+    // and no recovery path, because no email is stored.
+    assert.ok(
+      !pruned.includes("estimator_keys"),
+      "minted keys must never be pruned on a timer",
+    );
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    for (const entry of db.prunedTables) {
+      const ageDays = (nowSeconds - entry.cutoff) / 86400;
+      assert.ok(
+        ageDays > 90,
+        "the retention cutoff must never truncate the 90-day demand window",
+      );
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test("a request with no CF-Connecting-IP is not forced into one shared bucket", async () => {
+  const { worker, anonRateLimitPerHour, cleanup } = await importWorker();
+  try {
+    const db = createD1Stub();
+    const ctx = createExecutionContext();
+    const env = { ASSETS: assetsMock(), DB: db };
+    const headerless = () =>
+      new Request("https://tinyzkp.com/v1/estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: SP1_SHAPED_REQUEST,
+      });
+
+    // Hashing "" would give every unidentifiable caller the SAME bucket, so
+    // the first N requests from anywhere would 429 everyone else. The edge
+    // always sets this header, so the branch is unreachable in production --
+    // which is precisely why it must not fail closed onto a shared bucket.
+    for (let i = 0; i < anonRateLimitPerHour + 5; i += 1) {
+      const response = await worker.fetch(headerless(), env, ctx);
+      assert.equal(response.status, 200);
+    }
+    await ctx.drain();
+
+    for (const row of db.demandLogRows) {
+      assert.equal(row[17], null, "an unidentifiable caller stores no IP hash");
+    }
   } finally {
     await cleanup();
   }

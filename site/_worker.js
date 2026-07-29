@@ -88,7 +88,49 @@ const RATE_LIMIT_WINDOW_SECONDS = 3600;
 // the limitation. See the Task 3/4 report for the full rationale.
 const IP_HASH_SALT = "tinyzkp-v1-estimate-ip-hash-salt";
 
+// Retention. `demand_report.py` reads a trailing 90-day window; this keeps
+// twice that and no more, so the analysis window is never truncated but the
+// table does not accumulate indefinitely. The privacy notice states this
+// number, and scripts/ci/privacy_disclosure_gate.py fails if the manifest
+// and the code disagree about whether retention is enforced at all.
+const RETENTION_DAYS = 180;
+const RETENTION_SECONDS = RETENTION_DAYS * 86400;
+
+// Pruning piggybacks on ordinary writes rather than a cron, because Pages
+// has no scheduled trigger. Module scope persists for the life of an
+// isolate, so this runs at most once per isolate per hour instead of on
+// every request.
+let lastPrunedHour = 0;
+
+function pruneExpiredRows(env, ctx, nowSeconds) {
+  const hour = Math.floor(nowSeconds / 3600) * 3600;
+  if (hour === lastPrunedHour) return;
+  lastPrunedHour = hour;
+  const cutoff = hour - RETENTION_SECONDS;
+  try {
+    const work = Promise.all([
+      env.DB.prepare("DELETE FROM demand_log WHERE observed_at_hour < ?").bind(cutoff).run(),
+      env.DB.prepare("DELETE FROM rejected_log WHERE observed_at_hour < ?").bind(cutoff).run(),
+      env.DB.prepare("DELETE FROM rate_limit_windows WHERE window_start < ?").bind(cutoff).run(),
+      env.DB.prepare("DELETE FROM keyed_rate_limit_windows WHERE window_start < ?").bind(cutoff).run(),
+    ]).catch(() => {});
+    if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(work);
+  } catch {
+    // Retention must never affect a response. A failed prune retries on the
+    // next isolate/hour; `estimator_keys` is deliberately NOT pruned, since
+    // deleting a key would silently revoke a caller's access.
+  }
+}
+
+// `CF-Connecting-IP` is set by the Cloudflare edge and cannot be removed by
+// a client, so the empty branch is unreachable in production. It is handled
+// explicitly anyway: hashing "" would put every such caller in ONE shared
+// rate-limit bucket, so the first 30 requests from anywhere would 429
+// everyone else. Returning null instead means an unidentifiable caller is
+// simply not rate-limited, which matches this limiter's documented
+// fail-open posture -- it is a courtesy limit, not a security boundary.
 async function saltedIpHash(ip) {
+  if (!ip) return null;
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(IP_HASH_SALT),
@@ -106,6 +148,8 @@ async function saltedIpHash(ip) {
 // security boundary, so a transient rate-limit-store error must never take
 // down the estimator itself.
 async function checkAnonymousRateLimit(env, ipHash) {
+  // No usable caller identity: see `saltedIpHash`. Never share one bucket.
+  if (!ipHash) return { limited: false };
   const nowSeconds = Math.floor(Date.now() / 1000);
   const windowStart = Math.floor(nowSeconds / RATE_LIMIT_WINDOW_SECONDS) * RATE_LIMIT_WINDOW_SECONDS;
   try {
@@ -711,6 +755,7 @@ async function estimateResponse(request, env, ctx) {
   const responseBody = estimateJson(body);
   logDemand(env, ctx, body, responseBody, { keyId, ipHash });
   logRejection(env, ctx, responseBody, { keyId, ipHash });
+  pruneExpiredRows(env, ctx, Math.floor(Date.now() / 1000));
 
   return new Response(responseBody, {
     headers: { "Content-Type": "application/json; charset=utf-8" },
