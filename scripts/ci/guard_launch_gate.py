@@ -115,6 +115,11 @@ LAUNCH_COPY_RE = re.compile(
 )
 BASE_SITEMAP_ROUTES = (
     "/",
+    # The live product. Its absence here was not cosmetic: the demand
+    # threshold in scripts/ci/demand_report.py counts callers of an endpoint
+    # that search engines were never told about, which makes a zero reading
+    # unattributable. See the achievability preconditions in that module.
+    "/estimate",
     "/guard",
     "/compatibility",
     "/benchmarks",
@@ -125,6 +130,10 @@ BASE_SITEMAP_ROUTES = (
     "/releases",
     "/support",
 )
+# Acquisition (SEO landing) routes are spliced in after the primary product
+# pages and before the reference pages. Named rather than inlined so adding a
+# primary page cannot silently reorder the acquisition block.
+SITEMAP_ACQUISITION_SPLICE_INDEX = 5
 ACQUISITION_ROBOTS_RE = re.compile(
     r'<meta name="robots" content="(?:noindex,nofollow|index,follow)" '
     r'data-guard-acquisition>'
@@ -4617,13 +4626,13 @@ def _acquisition_meta(ready: bool) -> str:
 
 def _sitemap_bytes(routes_ready: dict[str, bool]) -> bytes:
     routes = [
-        *BASE_SITEMAP_ROUTES[:4],
+        *BASE_SITEMAP_ROUTES[:SITEMAP_ACQUISITION_SPLICE_INDEX],
         *(
             route
             for route in ACQUISITION_ROUTES
             if routes_ready[route]
         ),
-        *BASE_SITEMAP_ROUTES[4:],
+        *BASE_SITEMAP_ROUTES[SITEMAP_ACQUISITION_SPLICE_INDEX:],
     ]
     records = "\n".join(
         f"  <url><loc>https://tinyzkp.com{route}</loc></url>"

@@ -80,9 +80,13 @@ This is the load-bearing part of Phase 0. Without it the disclosure rots the nex
 
 `scripts/ci/demand_report.py:59` freezes: *fewer than 15 distinct keyed organisations in 90 days ⇒ `KILL_THRESHOLD_MET`.* Today that number cannot be anything but zero, for reasons that have nothing to do with demand:
 
-- `POST /v1/keys` is live but referenced on **zero** live pages (`/`, `/estimate`, `/docs` — all 0 hits for `v1/keys`).
 - `/estimate` is **absent from `sitemap.xml`**, which still lists withdrawn `/guard` as canonical.
 - `/estimate` is **absent from `llms.txt`** (0 occurrences), which instead instructs agents: *"Do not describe TinyZKP as a hosted prover, proof API, … agent product."*
+- `site/docs.html` never mentions the estimator (0 occurrences), so the CLI documentation page does not lead anyone to the hosted endpoint.
+
+> **CORRECTED 2026-07-29, during execution.** The review originally also claimed `POST /v1/keys` was referenced on zero live pages. **That was wrong.** `site/estimate.html:111` has a visible "Get a free key" form that posts to `/v1/keys` via `site/estimate.js:178`, and the page's "What we store" section already disclosed the demand log accurately. The original grep looked for the literal string `v1/keys` in the HTML and missed the call in the JS.
+>
+> The consequence is that this phase is **narrower than planned**: minting is already discoverable and usable *once a caller reaches `/estimate`*. The defect is reaching it at all — the page is in no sitemap, no `llms.txt`, and was actively disclaimed to agents. Task 1.1 drops the redundant "document key minting on estimate.html" step.
 
 A `KILL` verdict from this configuration is a **non-result** — indistinguishable from "nobody could find it". This is the achievability-precheck failure mode, and the mitigation is the same one used elsewhere in this repo: refuse to emit the verdict until the measurement is capable of producing the other answer.
 
@@ -94,7 +98,8 @@ A `KILL` verdict from this configuration is a **non-result** — indistinguishab
   - Delete "Guard: $499/month or $4,990/year" and "checkout is closed pending signed launch evidence" (see Phase 2 for the correct framing).
   - Document `POST /v1/estimate` and `POST /v1/keys` with a request shape.
   - **Narrow the disclaimer.** "Do not describe TinyZKP as a hosted prover, proof API, receipt system, MCP server, agent product…" was written when all of those were false. `/v1/estimate` is now a hosted API. Keep the accurate half (not a prover, not a receipt system, no MCP endpoint) and drop the half that now suppresses the one true thing.
-- [ ] Document key minting on `site/estimate.html` and `site/docs.html`: a copy-pasteable `curl` for `POST /v1/keys`, what a key does (raises the rate ceiling from 30/hr to 300/hr), and — stated plainly — that minting one is how a caller is counted as a distinct organisation. People are more willing to be counted when told why.
+- [ ] ~~Document key minting on `site/estimate.html`~~ — **already done**; see the correction above. `estimate.html:111` has the form and `estimate.html`'s "What we store" already describes the demand log.
+- [ ] Document the estimator on `site/docs.html` (currently 0 mentions): a copy-pasteable `curl` for `POST /v1/estimate` and `POST /v1/keys`, what a key does (raises the ceiling from 30/hr to 300/hr), and — stated plainly — that minting one is how a caller is counted as a distinct organisation. People are more willing to be counted when told why.
 
 ### Task 1.2: Stop discarding the strongest demand signal
 

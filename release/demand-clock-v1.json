@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "demand_clock_started_at": "2026-07-29",
+  "note": "The date the resource estimator first became discoverable: present in site/sitemap.xml, described in site/llms.txt (page and both API endpoints), documented in site/docs.html, with the key-minting form live on site/estimate.html. scripts/ci/demand_report.py measures the trailing 90-day kill-criterion window from this date and refuses to emit KILL_THRESHOLD_MET before it elapses.",
+  "why_not_earlier": "POST /v1/estimate shipped 2026-07-27 and POST /v1/keys shortly after, but until this date the endpoint appeared in no sitemap and no llms.txt, and llms.txt instructed agents that TinyZKP has no proof API. Demand measured against an undiscoverable endpoint cannot distinguish 'no market' from 'no way to be counted', so the clock starts here rather than at first deploy.",
+  "if_deploy_slips": "This date must equal the date the discoverability changes reached production, not the date they were merged. If the deploy is delayed, move it forward.",
+  "preconditions_enforced_by": "scripts/ci/demand_report.py (PRECONDITIONS)"
+}
