@@ -241,8 +241,8 @@ impl ResourceBoundedUniStarkProver {
         };
         if use_memory {
             let estimate = match &workload {
-                WorkloadKind::Fibonacci { .. } => conventional_pipeline_estimate(rows, 2, 1),
-                WorkloadKind::Poseidon2 => conventional_pipeline_estimate(rows, 180, 2),
+                WorkloadKind::Fibonacci { .. } => conventional_pipeline_estimate(rows, 2, 1, 8, 16),
+                WorkloadKind::Poseidon2 => conventional_pipeline_estimate(rows, 180, 2, 8, 16),
             };
             observe(&crate::ProverEventV1::ResourceEstimate { estimate });
             let proof = self.prove(workload, logical_rows)?;
@@ -416,7 +416,10 @@ impl ResourceBoundedUniStarkProver {
                 proof_bytes,
             ));
         }
-        preflight_memory(&self.policy, conventional_pipeline_estimate(rows, 2, 1))?;
+        preflight_memory(
+            &self.policy,
+            conventional_pipeline_estimate(rows, 2, 1, 8, 16),
+        )?;
         let (public, proof_bytes) = in_policy_pool(&self.policy, || {
             let trace = fibonacci_trace::<Val>(initial_a, initial_b, rows);
             let public = vec![
@@ -456,7 +459,10 @@ impl ResourceBoundedUniStarkProver {
             )?;
             return Ok(bundle(WorkloadKind::Poseidon2, rows, vec![], proof_bytes));
         }
-        preflight_memory(&self.policy, conventional_pipeline_estimate(rows, 180, 2))?;
+        preflight_memory(
+            &self.policy,
+            conventional_pipeline_estimate(rows, 180, 2, 8, 16),
+        )?;
         let proof_bytes = in_policy_pool(&self.policy, || {
             let trace = poseidon2_trace(rows, 0);
             prove_to_bytes::<8, 4, GoldilocksProfile, _, _>(
@@ -484,22 +490,39 @@ pub(crate) fn uses_in_memory_pipeline(
             // and FRI vectors. This conservative profile-specific estimate is
             // used only for Auto selection; Scratch performs its own exact
             // phase preflight.
-            conventional_pipeline_estimate(rows, trace_width, quotient_chunks).peak_resident_bytes
+            conventional_pipeline_estimate(rows, trace_width, quotient_chunks, 8, 16)
+                .peak_resident_bytes
                 <= policy.memory_selection_threshold()
         }
     }
 }
 
+/// `field_bytes`/`ext_field_bytes` are REQUIRED, not optional polish. The
+/// previous form hardcoded `24 * trace_width` and `32 * quotient_chunks`,
+/// which are `3 * field_bytes` and `2 * ext_field_bytes` evaluated at
+/// GOLDILOCKS ONLY (8 and 16). BabyBear's 4-byte base field makes the first
+/// term `12`, so the hardcoded version over-reported the conventional trace
+/// footprint by 2x for every 31-bit field — and disagreed with this crate's
+/// own shipped mirror, `estimate_params::estimate_conventional_from_params`,
+/// which had always computed it from the widths. That divergence was live and
+/// reachable from `estimate_resource_conventional_workload_with_profile`.
+/// Keep the two decompositions identical; the parity test in
+/// `estimate_params.rs` is what holds them together.
 pub(crate) fn conventional_pipeline_estimate(
     rows: usize,
     trace_width: u64,
     quotient_chunks: u64,
+    field_bytes: u64,
+    ext_field_bytes: u64,
 ) -> ResourceEstimate {
     let peak_resident_bytes = (rows as u64)
         .saturating_mul(
-            24u64
+            3u64.saturating_mul(field_bytes)
                 .saturating_mul(trace_width)
-                .saturating_add(32u64.saturating_mul(quotient_chunks))
+                .saturating_add(
+                    2u64.saturating_mul(ext_field_bytes)
+                        .saturating_mul(quotient_chunks),
+                )
                 .saturating_add(448),
         )
         .saturating_add(32 * 1024 * 1024);

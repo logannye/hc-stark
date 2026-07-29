@@ -17,8 +17,10 @@
 //! from the upstream Plonky3 repo directly, not guessed) uses an 8-element
 //! digest, not 4 — forcing BabyBear into Goldilocks' width/digest numbers
 //! would have been both a hard compile error (wrong width) and a silent
-//! soundness regression (a 4-element BabyBear digest is ~124 bits, roughly
-//! half the collision resistance of Goldilocks' 4-element 256-bit digest).
+//! soundness regression: a 4-element BabyBear digest is 124 bits WIDE, which
+//! is only ~62 bits of collision resistance, against ~128 for Goldilocks'
+//! 4-element 256-bit digest. (Digest width and collision resistance are not
+//! the same number -- it is the halved one that disqualifies the shape.)
 //!
 //! NOTE the deliberate name: `hc_stream::CanonicalElement::WIDTH` means
 //! BYTES PER SCRATCH ELEMENT (8 for Goldilocks, 4 for BabyBear), which is a

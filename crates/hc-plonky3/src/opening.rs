@@ -299,3 +299,16 @@ mod tests {
         assert_eq!(actual, expected);
     }
 }
+
+/// Goldilocks pins, matching the `goldilocks` sub-module every other
+/// genericized module in this crate exposes (`dft`, `mmcs`, `fri`,
+/// `bounded_pcs`). `opening.rs` was genericized without one, which silently
+/// broke `hc_plonky3::MatrixOpening<'a>` as a nameable type on a root
+/// re-export — a source break for any external caller, and the one place the
+/// "public API is unchanged" property did not actually hold.
+pub mod goldilocks {
+    use crate::profile::GoldilocksProfile;
+
+    /// The pre-generic name for a matrix opening at Goldilocks' `<8, 4>`.
+    pub type MatrixOpening<'a> = super::MatrixOpening<'a, 8, 4, GoldilocksProfile>;
+}

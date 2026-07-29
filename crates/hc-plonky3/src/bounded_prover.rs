@@ -325,12 +325,16 @@ pub fn estimate_builtin_manifest(
         crate::contracts::WorkloadId::Fibonacci
             if crate::prover::uses_in_memory_pipeline(&manifest.resource_policy, rows, 2, 1) =>
         {
-            Ok(crate::prover::conventional_pipeline_estimate(rows, 2, 1))
+            Ok(crate::prover::conventional_pipeline_estimate(
+                rows, 2, 1, 8, 16,
+            ))
         }
         crate::contracts::WorkloadId::Poseidon2Goldilocks
             if crate::prover::uses_in_memory_pipeline(&manifest.resource_policy, rows, 180, 2) =>
         {
-            Ok(crate::prover::conventional_pipeline_estimate(rows, 180, 2))
+            Ok(crate::prover::conventional_pipeline_estimate(
+                rows, 180, 2, 8, 16,
+            ))
         }
         crate::contracts::WorkloadId::Fibonacci => {
             estimate_air_pipeline::<8, 4, GoldilocksProfile, _>(
@@ -465,10 +469,18 @@ where
     }
     let width = BaseAir::<P::Val>::width(&air);
     let quotient_chunks = quotient_chunks::<PW, DE, P, _>(&air, width, air.num_public_values())?;
+    // Profile-derived, NOT Goldilocks' 8/16: this function is generic over P,
+    // and passing the Goldilocks widths here made the in-process planner
+    // disagree 2x with the shipped `/v1/estimate` model on BabyBear's
+    // conventional trace term.
+    let field_bytes = <P::Word as CanonicalElement>::WIDTH as u64;
+    let ext_field_bytes = field_bytes.saturating_mul(extension_degree::<PW, DE, P>() as u64);
     Ok(crate::prover::conventional_pipeline_estimate(
         rows,
         width as u64,
         quotient_chunks,
+        field_bytes,
+        ext_field_bytes,
     ))
 }
 
@@ -2073,7 +2085,8 @@ where
     };
     let resume_payload = serde_json::to_vec(&descriptor)
         .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
-    let identity = checkpoint_identity(&descriptor, input_hash, policy.policy_hash()?)?;
+    let identity =
+        checkpoint_identity::<PW, DE, P>(&descriptor, input_hash, policy.policy_hash()?)?;
     let manifest = CheckpointManifestV2 {
         schema_version: 2,
         backend_hash: identity.backend_hash,
@@ -2156,7 +2169,8 @@ where
     };
     let resume_payload = serde_json::to_vec(&descriptor)
         .map_err(|error| BoundedProverError::CheckpointPayload(error.to_string()))?;
-    let identity = checkpoint_identity(&descriptor, input_hash, policy.policy_hash()?)?;
+    let identity =
+        checkpoint_identity::<PW, DE, P>(&descriptor, input_hash, policy.policy_hash()?)?;
     let manifest = CheckpointManifestV2 {
         schema_version: 2,
         backend_hash: identity.backend_hash,
@@ -2913,7 +2927,7 @@ where
     {
         return Err(BoundedProverError::InvalidCheckpoint);
     }
-    let expected_identity = checkpoint_identity(
+    let expected_identity = checkpoint_identity::<PW, DE, P>(
         &descriptor,
         workload.input_digest(),
         descriptor.resource_policy.policy_hash()?,
@@ -3332,11 +3346,26 @@ fn checkpoint_artifact(
     })
 }
 
-fn checkpoint_identity(
+/// `profile_hash` MUST bind the FIELD, not just the compatibility profile
+/// string. `COMPATIBILITY_PROFILE` is a single global constant
+/// ("tinyzkp-p3-goldilocks-v1") shared by every profile, and for a workload
+/// like Fibonacci the workload hash and input digest are field-independent —
+/// so without this, a Goldilocks checkpoint and a BabyBear checkpoint of the
+/// same statement carry BYTE-IDENTICAL identities. Today nothing bad happens
+/// only because `P::restore_challenger` returns `None` for BabyBear and every
+/// resume fails closed. That protection is INCIDENTAL: the moment resumable
+/// BabyBear checkpoints land, `restore_challenger` returns `Some` and the
+/// cross-field binding would silently vanish. Binding the field here is a
+/// one-line change now and a cross-field checkpoint-confusion bug later.
+fn checkpoint_identity<const PW: usize, const DE: usize, P>(
     descriptor: &ResumeDescriptorV1,
     input_hash: [u8; 32],
     resource_policy_hash: [u8; 32],
-) -> Result<CheckpointIdentityV2> {
+) -> Result<CheckpointIdentityV2>
+where
+    P: DurableFieldProfile<PW, DE>,
+    [P::Val; DE]: Serialize + for<'de> Deserialize<'de>,
+{
     let workload_bytes = serde_json::to_vec(&(
         descriptor.workload_id.as_str(),
         descriptor.workload_version,
@@ -3347,7 +3376,11 @@ fn checkpoint_identity(
     Ok(CheckpointIdentityV2 {
         backend_hash: *blake3::hash(b"hc-plonky3-resource-bounded-v1").as_bytes(),
         profile_hash: *blake3::hash(
-            format!("{COMPATIBILITY_PROFILE}:{PLONKY3_VERSION}").as_bytes(),
+            format!(
+                "{COMPATIBILITY_PROFILE}:{PLONKY3_VERSION}:{}:{PW}:{DE}",
+                P::FIELD_NAME
+            )
+            .as_bytes(),
         )
         .as_bytes(),
         release_hash: *blake3::hash(release.as_bytes()).as_bytes(),

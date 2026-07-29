@@ -127,8 +127,6 @@ fn babybear_durable_binary_fold_matches_plonky3() {
             .unwrap();
     let actual = fold_binary_layer::<PW, DE, Profile>(&source, beta, &policy(dir.path())).unwrap();
 
-    let (hash, compression) = components();
-    let upstream_base = UpstreamMmcs::new(hash, compression, 0);
     let folding: TwoAdicFriFoldingForMmcs<BabyBear, UpstreamMmcs> =
         TwoAdicFriFolding(core::marker::PhantomData);
     // Width 2 is the FOLDING ARITY, not the extension degree.
@@ -139,7 +137,6 @@ fn babybear_durable_binary_fold_matches_plonky3() {
         RowMajorMatrix::new(values, 2),
     );
     assert_eq!(actual.try_read(0, actual.len()).unwrap(), expected);
-    let _ = upstream_base;
 }
 
 /// `DurableProfileMmcs` roots and openings vs the unmodified

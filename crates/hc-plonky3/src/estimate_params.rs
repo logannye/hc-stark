@@ -631,6 +631,52 @@ mod tests {
         }
     }
 
+    /// The BabyBear half of the invariant above, which did not exist and whose
+    /// absence hid a live 2x divergence: `conventional_pipeline_estimate` used
+    /// to hardcode `24 * trace_width` and `32 * quotient_chunks` — `3 *
+    /// field_bytes` and `2 * ext_field_bytes` evaluated at GOLDILOCKS ONLY.
+    /// The parameter-only core opposite always computed them from the widths,
+    /// so for any 31-bit field the in-process planner and the shipped
+    /// `/v1/estimate` model disagreed by 2x on the conventional trace term.
+    /// A Goldilocks-only parity test cannot see that: 3*8 IS 24.
+    #[test]
+    fn conventional_cores_agree_for_babybear_widths_not_just_goldilocks() {
+        // BabyBear: 4-byte base, degree-4 extension => 16-byte extension.
+        const BABYBEAR_FIELD_BYTES: u64 = 4;
+        const BABYBEAR_EXT_FIELD_BYTES: u64 = 16;
+        for (width, quotient_chunks, rows) in [
+            (2u64, 1u64, 1usize << 20),
+            (180, 2, 1 << 16),
+            (7, 3, 1 << 10),
+        ] {
+            let params = EstimateParams {
+                field_bytes: BABYBEAR_FIELD_BYTES,
+                ext_field_bytes: BABYBEAR_EXT_FIELD_BYTES,
+                width,
+                quotient_chunks,
+                rows: rows as u64,
+                ..params_for_workload_for_test(&FibonacciWorkload {
+                    initial_a: 0,
+                    initial_b: 1,
+                    logical_rows: rows as u64,
+                })
+            };
+            let via_params = estimate_conventional_from_params(&params);
+            let via_pipeline = crate::prover::conventional_pipeline_estimate(
+                rows,
+                width,
+                quotient_chunks,
+                BABYBEAR_FIELD_BYTES,
+                BABYBEAR_EXT_FIELD_BYTES,
+            );
+            assert_eq!(
+                via_params.peak_resident_bytes, via_pipeline.peak_resident_bytes,
+                "conventional cores diverged at BabyBear widths \
+                 (width={width}, chunks={quotient_chunks}, rows={rows})"
+            );
+        }
+    }
+
     /// The parameter-only conventional core must reproduce
     /// `conventional_pipeline_estimate` (via
     /// `estimate_resource_conventional_workload`) exactly for Goldilocks —
