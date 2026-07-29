@@ -80,10 +80,38 @@ def _insert_row(
         conn.close()
 
 
-def _report(db_path: Path, *, window_days: int = 90):
+def _measurable_root(base: Path, *, started: str = "2020-01-01") -> Path:
+    """A repo root where every discoverability precondition holds and the
+    demand clock elapsed long ago.
+
+    Threshold tests must not be silently converted into tests of the
+    precondition gate: without this, every existing KILL assertion would
+    start reading MEASUREMENT_INVALID for reasons unrelated to what it is
+    checking, and the threshold would stop being covered at all.
+    """
+    root = base / "measurable-root"
+    for _, relative, needle in report.PRECONDITIONS:
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(needle + "\n")
+    clock = root / "release" / "demand-clock-v1.json"
+    clock.parent.mkdir(parents=True, exist_ok=True)
+    clock.write_text(
+        json.dumps({"demand_clock_started_at": started}), encoding="utf-8"
+    )
+    return root
+
+
+def _report(db_path: Path, *, window_days: int = 90, root: Path | None = None):
     conn = report.connect_readonly(db_path)
     try:
-        return report.build_report(conn, now=NOW, window_days=window_days)
+        return report.build_report(
+            conn,
+            now=NOW,
+            window_days=window_days,
+            root=_measurable_root(db_path.parent) if root is None else root,
+        )
     finally:
         conn.close()
 
@@ -182,6 +210,8 @@ def test_keyed_and_anonymous_counts_are_reported_separately_and_never_summed(tmp
         "generated_at",
         "window_days",
         "window_start_hour",
+        "rejected_requests_by_reason",
+        "measurement",
         "distinct_keyed_organizations",
         "distinct_approximate_anonymous_sources",
         "top_request_digests",
@@ -283,3 +313,129 @@ def test_main_reports_a_clean_failure_for_a_missing_database(tmp_path, capsys):
     exit_code = report.main(["--db", str(missing)])
     assert exit_code == 1
     assert "no such database file" in capsys.readouterr().err
+
+
+# --- Achievability precheck --------------------------------------------
+#
+# The threshold reads "fewer than 15 distinct KEYED organizations in 90 days
+# => KILL". Until 2026-07-29 that number could not be anything but zero for
+# reasons unrelated to demand: the estimator was in no sitemap and no
+# llms.txt, and llms.txt told agents TinyZKP had no proof API. These tests
+# pin the rule that a kill verdict is withheld while the measurement is
+# incapable of producing another answer -- and, just as importantly, that
+# the threshold itself was not weakened to achieve that.
+
+
+def test_kill_is_withheld_when_the_product_is_undiscoverable(tmp_path):
+    """The load-bearing case: zero orgs, but zero was never reachable."""
+    db_path = _make_db(tmp_path)
+    blind = tmp_path / "undiscoverable"
+    (blind / "release").mkdir(parents=True)
+    (blind / "release" / "demand-clock-v1.json").write_text(
+        json.dumps({"demand_clock_started_at": "2020-01-01"}), encoding="utf-8"
+    )
+
+    result = _report(db_path, root=blind)
+
+    assert result["distinct_keyed_organizations"] == 0
+    assert result["verdict"] == report.VERDICT_INVALID, (
+        "a zero reading against an undiscoverable endpoint is a NON-RESULT; "
+        "emitting KILL_THRESHOLD_MET for it would retire the product on an "
+        "artifact of its own marketing"
+    )
+    assert result["measurement"]["invalid_because"], "must name what is unmet"
+    assert all(
+        reason.startswith("discoverability:") or reason.startswith("demand_clock:")
+        for reason in result["measurement"]["invalid_because"]
+    )
+
+
+def test_kill_still_fires_once_the_measurement_is_valid(tmp_path):
+    """The gate must not become a permanent excuse for never deciding."""
+    db_path = _make_db(tmp_path)
+    _insert_row(db_path, observed_at_hour=NOW - HOUR, key_id="org-0")
+
+    result = _report(db_path)
+
+    assert result["verdict"] == report.VERDICT_KILL
+    assert result["measurement"]["invalid_because"] == []
+
+
+def test_kill_is_withheld_until_the_window_has_actually_elapsed(tmp_path):
+    db_path = _make_db(tmp_path)
+    fresh = _measurable_root(tmp_path / "fresh", started="2027-01-01")
+
+    result = _report(db_path, root=fresh)
+
+    assert result["verdict"] == report.VERDICT_INVALID
+    assert any(
+        reason.startswith("demand_clock:only_")
+        for reason in result["measurement"]["invalid_because"]
+    )
+
+
+def test_real_demand_reaches_continue_even_before_the_clock_elapses(tmp_path):
+    """CONTINUE is decided first, so a genuine early signal is never masked."""
+    db_path = _make_db(tmp_path)
+    for index in range(report.KILL_THRESHOLD_ORGANIZATIONS):
+        _insert_row(db_path, observed_at_hour=NOW - HOUR, key_id=f"org-{index}")
+    fresh = _measurable_root(tmp_path / "fresh", started="2027-01-01")
+
+    result = _report(db_path, root=fresh)
+
+    assert result["verdict"] == report.VERDICT_CONTINUE
+    assert result["measurement"]["invalid_because"] == []
+
+
+def test_the_threshold_itself_was_not_weakened(tmp_path):
+    """Guards against 'fixing' validity by making KILL harder on the merits."""
+    assert report.KILL_THRESHOLD_ORGANIZATIONS == 15
+    db_path = _make_db(tmp_path)
+    for index in range(report.KILL_THRESHOLD_ORGANIZATIONS - 1):
+        _insert_row(db_path, observed_at_hour=NOW - HOUR, key_id=f"org-{index}")
+    # 14 keyed orgs plus a crowd of anonymous sources must still be KILL.
+    for index in range(50):
+        _insert_row(db_path, observed_at_hour=NOW - HOUR, anon_ip_hash=f"anon-{index}")
+
+    assert _report(db_path)["verdict"] == report.VERDICT_KILL
+
+
+def test_the_live_repository_currently_satisfies_discoverability():
+    """The shipped tree must actually meet what the gate demands."""
+    unmet = sorted(
+        name for name, met in report.evaluate_preconditions().items() if not met
+    )
+    assert unmet == [], f"discoverability preconditions unmet in-tree: {unmet}"
+
+
+def test_rejected_requests_are_counted_but_never_folded_into_demand(tmp_path):
+    db_path = _make_db(tmp_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.executescript(
+            (ROOT / "migrations" / "0003_rejected_log.sql").read_text(encoding="utf-8")
+        )
+        for _ in range(3):
+            conn.execute(
+                "INSERT INTO rejected_log (observed_at_hour, reason_code, anon_ip_hash)"
+                " VALUES (?, ?, ?)",
+                (NOW - HOUR, "manifest_contract_invalid", "anon-0"),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    result = _report(db_path)
+
+    assert result["rejected_requests_by_reason"] == {"manifest_contract_invalid": 3}
+    # A rejected request is evidence someone tried, not evidence of a served
+    # need. It must never move a demand count or the verdict.
+    assert result["distinct_keyed_organizations"] == 0
+    assert result["distinct_approximate_anonymous_sources"] == 0
+
+
+def test_a_database_without_the_rejected_table_is_an_empty_observation(tmp_path):
+    """Pre-0003 databases must report {}, not crash the whole report."""
+    db_path = _make_db(tmp_path)
+
+    assert _report(db_path)["rejected_requests_by_reason"] == {}

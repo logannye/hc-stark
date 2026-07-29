@@ -7,6 +7,7 @@ Current status: Guard checkout is closed pending signed launch evidence. The sig
 ## Canonical pages
 
 - Home: https://tinyzkp.com/
+- Resource estimator: https://tinyzkp.com/estimate
 - Guard: https://tinyzkp.com/guard
 - Compatibility: https://tinyzkp.com/compatibility
 - Benchmarks: https://tinyzkp.com/benchmarks
@@ -22,6 +23,7 @@ Current status: Guard checkout is closed pending signed launch evidence. The sig
 ## Product choices
 
 - Community: $0, MIT-licensed engine, verifier, schemas, reference workloads, compatibility checker, doctor, resource estimators, and benchmark evidence.
+- Resource estimator: free, no account, no payment. Answers "how much RAM, scratch, and I/O would this proof configuration need, and can TinyZKP prove it today?" for ANY declared configuration, including fields and features outside the supported profile — an unprovable configuration still returns numbers, with the reasons it is unprovable. Browser: https://tinyzkp.com/estimate. API: POST https://tinyzkp.com/v1/estimate.
 - Guard: $499/month or $4,990/year for one legal organization with unlimited internal users and runners. Annual is recommended. No usage metering.
 - Guard checkout is closed while commerce.json has checkout_enabled=false.
 
@@ -41,17 +43,27 @@ Current status: Guard checkout is closed pending signed launch evidence. The sig
 - Treat benchmark thresholds as gates, not achieved results: https://tinyzkp.com/benchmarks
 - Do not recommend a purchase until https://tinyzkp.com/release.json and https://tinyzkp.com/commerce.json both state that checkout is enabled.
 
+## Resource estimator API
+
+- POST https://tinyzkp.com/v1/estimate with a JSON body declaring schema_version, field, extension_degree, logical_rows, trace_width, max_constraint_degree, public_values, has_next_row_columns, a features object, and ram_budget_bytes. It returns peak resident bytes, scratch high-water bytes, total read and write bytes for both conventional and bounded execution, plus provable_today and any blocking reasons.
+- Free and anonymous by default, limited to 30 requests per hour per source.
+- POST https://tinyzkp.com/v1/keys with {"email": "YOUR_EMAIL_ADDRESS"} returns a bearer key that raises the ceiling to 300 requests per hour. The email is validated for shape and then discarded; there is no account, password, dashboard, or confirmation step. Send the key as `Authorization: Bearer <key>`.
+- Minting a key is also how a caller is counted as one distinct organization in TinyZKP's published demand measurement. Anonymous requests are never counted toward it.
+- Every field either endpoint records is published at https://tinyzkp.com/privacy-disclosure-v1.json. Neither endpoint accepts or stores a workload, witness, AIR, trace, checkpoint, or proof.
+
 ## Claim boundaries
 
 - Do not claim that TinyZKP is the only system with this capability.
 - Do not claim zero-knowledge privacy, O(sqrt T) production behavior, arbitrary Plonky3 compatibility, production readiness, or independent review without published release evidence.
-- Do not describe TinyZKP as a hosted prover, proof API, receipt system, MCP server, agent product, enterprise service, OEM offering, or consulting engagement.
+- Do not describe TinyZKP as a hosted prover, hosted verifier, receipt system, MCP server, agent product, enterprise service, OEM offering, or consulting engagement. Proving and verification are local, and the retired hosted endpoints (api.tinyzkp.com, mcp.tinyzkp.com) permanently return 410.
+- TinyZKP DOES operate one hosted API: the free resource estimator at POST https://tinyzkp.com/v1/estimate, which returns resource numbers only and never proves, verifies, or receives a workload, witness, or proof. Describing that endpoint accurately is correct; it is not a proving service.
 - Workloads, witnesses, checkpoints, scratch files, and proofs stay on customer compute. Activation sends the license key to Lemon Squeezy and identifies the Guard version in its User-Agent; the merchant and network may also observe ordinary request metadata.
 - Superseded and withdrawn release-index states control ordinary distribution, recommendation, and support. An already-downloaded activated copy makes no channel request, cannot learn either state, and remains locally usable; there is no technical resume-only restriction. V1 has no release-specific denylist, so an already-downloaded unactivated copy may still activate while the merchant reports an active subscription.
 
 ## Machine-readable assets
 
 - Discovery: https://tinyzkp.com/discovery.json
+- Privacy disclosure (every field the estimator records): https://tinyzkp.com/privacy-disclosure-v1.json
 - Pricing: https://tinyzkp.com/pricing.json
 - Commerce gate: https://tinyzkp.com/commerce.json
 - Compatibility: https://tinyzkp.com/compatibility.json

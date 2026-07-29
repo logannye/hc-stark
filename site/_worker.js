@@ -424,6 +424,56 @@ function logDemand(env, ctx, requestBody, responseBody, caller) {
   }
 }
 
+// Counts requests the engine REJECTED (migrations/0003_rejected_log.sql).
+// `logDemand` above deliberately ignores them, which left every failed
+// integration attempt invisible — a bias in the one metric the kill
+// criterion reads. Someone who wires this up and gets the request shape
+// wrong wanted the tool; silence and a malformed request are not the same
+// observation, and `demand_report.py` now reports them separately.
+//
+// Nothing derived from the body is recorded — not the body, not a digest,
+// not its length. A malformed body is exactly where a witness or a secret
+// is most likely to turn up. Only the hour, the engine's own reason code,
+// and the caller column.
+function logRejection(env, ctx, responseBody, caller) {
+  try {
+    let parsed;
+    try {
+      parsed = JSON.parse(responseBody);
+    } catch {
+      return;
+    }
+    // The error envelope, and only it: `ok === false` with a reason code.
+    // A successful `EstimateResponseV1` has no `ok` field at all and is
+    // `logDemand`'s business, so the two can never double-count.
+    if (parsed.ok !== false || !parsed.error || !parsed.error.reason) {
+      return;
+    }
+    const reasonCode =
+      typeof parsed.error.reason.code === "string" ? parsed.error.reason.code : null;
+    const observedAtHour = Math.floor(Date.now() / 1000 / 3600) * 3600;
+
+    const promise = env.DB.prepare(
+      `INSERT INTO rejected_log (observed_at_hour, reason_code, key_id, anon_ip_hash)
+       VALUES (?, ?, ?, ?)`,
+    )
+      .bind(
+        observedAtHour,
+        reasonCode,
+        caller && caller.keyId ? caller.keyId : null,
+        caller && caller.ipHash ? caller.ipHash : null,
+      )
+      .run();
+
+    const safe = Promise.resolve(promise).catch(() => {});
+    if (ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil(safe);
+    }
+  } catch {
+    // Same contract as `logDemand`: never affect the computed response.
+  }
+}
+
 const CANONICAL_HOST = "tinyzkp.com";
 const RETIRED_HOSTS = new Set([
   "api.tinyzkp.com",
@@ -660,6 +710,7 @@ async function estimateResponse(request, env, ctx) {
 
   const responseBody = estimateJson(body);
   logDemand(env, ctx, body, responseBody, { keyId, ipHash });
+  logRejection(env, ctx, responseBody, { keyId, ipHash });
 
   return new Response(responseBody, {
     headers: { "Content-Type": "application/json; charset=utf-8" },

@@ -11,6 +11,28 @@
 <main><section class="page-hero"><div class="container"><div class="eyebrow">Local CLI and JSON</div><h1>Evaluate compatibility before you buy.</h1><p class="lede">The Community engine and doctor are the evaluation path. Guard adds local supervision around the same versioned engine and public file contracts.</p><div class="actions"><a class="button" href="/doctor">Run the free doctor</a><a class="button secondary" href="https://github.com/logannye/hc-stark">Browse source</a></div></div></section>
 <section class="content container">
   <div class="notice"><strong>Release status:</strong> no signed exact-contract Community evaluation artifact or production Guard artifact is published yet. Source commands and interface examples are not release evidence. See <a href="/releases">current gates</a>.</div>
+  <h2 id="estimator">Free resource estimator (no install, no account)</h2>
+  <p>The only TinyZKP-hosted API. It answers how much RAM, scratch, and I/O a proof configuration would need, and whether TinyZKP can prove it today — for <em>any</em> declared configuration, including fields and features outside the supported profile. An unprovable configuration still returns numbers, along with the reasons it is unprovable. It runs the same compiled cost model as <code>tinyzkp-engine estimate</code>; nothing rounds or adjusts the result. Use it from the <a href="/estimate">browser</a>, or directly:</p>
+  <pre><code>curl -sS https://tinyzkp.com/v1/estimate \
+  -H 'Content-Type: application/json' \
+  -d '{"schema_version":1,"field":"goldilocks","extension_degree":2,
+       "logical_rows":4194304,"trace_width":180,"max_constraint_degree":3,
+       "public_values":8,"has_next_row_columns":true,
+       "features":{"uses_lookups":false,"uses_buses":false,
+         "uses_permutations":false,"uses_multi_table":false,
+         "uses_preprocessed_columns":false,"uses_periodic_columns":false,
+         "uses_recursion":false,"uses_gpu":false},
+       "ram_budget_bytes":2147483648}'</code></pre>
+  <p>Anonymous callers get 30 requests per hour. A free key raises that to 300:</p>
+  <pre><code>curl -sS https://tinyzkp.com/v1/keys \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"YOUR_EMAIL_ADDRESS"}'
+
+# then send it on each estimate request
+curl -sS https://tinyzkp.com/v1/estimate \
+  -H 'Authorization: Bearer tzk_live_...' \
+  -H 'Content-Type: application/json' -d @request.json</code></pre>
+  <p>There is no account, password, dashboard, or confirmation email — one request returns one key, and your email is checked for shape and then discarded. Minting a key is also how you are counted as one distinct organization in TinyZKP's published demand measurement; anonymous requests are never counted toward it. Every field either endpoint records is listed at <a href="/privacy-disclosure-v1.json">privacy-disclosure-v1.json</a>. Neither endpoint accepts a workload, witness, trace, AIR, or proof.</p>
   <h2 id="doctor">Free Community doctor</h2>
   <p>Once the signed evaluation release is published, prepare <code>JobManifestV1</code> and run:</p>
   <pre><code>tinyzkp-engine doctor --job job.json</code></pre>

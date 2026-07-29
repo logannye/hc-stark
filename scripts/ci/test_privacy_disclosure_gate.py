@@ -50,11 +50,13 @@ def test_the_parser_actually_found_the_real_tables(live: dict[str, Any]) -> None
     assert set(writes) == {
         "rate_limit_windows",
         "demand_log",
+        "rejected_log",
         "estimator_keys",
         "keyed_rate_limit_windows",
     }
     assert "anon_ip_hash" in writes["demand_log"]
     assert "key_hash" in writes["estimator_keys"]
+    assert "reason_code" in writes["rejected_log"]
 
 
 def test_undisclosed_column_fails(live: dict[str, Any]) -> None:
