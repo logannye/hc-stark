@@ -114,6 +114,7 @@ def canonical_mode(*, opener: Callable[..., Any]) -> tuple[str, dict[str, Any]]:
         is None
         or mode not in {
             "guard_prelaunch",
+            "guard_withdrawn",
             "guard_transition",
             "guard_live",
             "guard_frozen",
@@ -535,6 +536,55 @@ def audit(mode: str, *, opener: Callable[..., Any] = urllib.request.urlopen) -> 
     if mode == "guard_prelaunch":
         if commerce.get("checkout_enabled") is not False:
             raise AuditError("prelaunch checkout is open")
+    elif mode == "guard_withdrawn":
+        variants = commerce.get("variants")
+        artifact_available = release.get("guard_artifact_available")
+        blocked_release = (
+            release.get("launch_state") == "blocked"
+            and artifact_available is False
+            and isinstance(release.get("blocking_gates"), list)
+            and len(release["blocking_gates"]) > 0
+        )
+        fulfilled_release = (
+            release.get("launch_state") == "qualified"
+            and artifact_available is True
+            and release.get("blocking_gates") == []
+        )
+        if (
+            commerce.get("checkout_enabled") is not False
+            or commerce.get("sales_state") != "withdrawn"
+            or release.get("checkout_enabled") is not False
+            or release.get("sales_state") != "withdrawn"
+            or discovery.get("sales_state") != "withdrawn"
+            or discovery.get("availability", {}).get("guard_checkout") is not False
+            or discovery.get("availability", {}).get("hosted_proving") is not False
+            or discovery.get("availability", {}).get("hosted_verification") is not False
+            or not isinstance(variants, dict)
+            or set(variants) != {"monthly", "annual"}
+            or variants["monthly"].get("checkout_url") is not None
+            or variants["annual"].get("checkout_url") is not None
+            or variants["monthly"].get("reviewed") is not False
+            or variants["annual"].get("reviewed") is not False
+            or not (blocked_release or fulfilled_release)
+        ):
+            raise AuditError("withdrawn Guard surfaces are inconsistent")
+        if commerce.get("portal_state") == "live":
+            if not verified_private_support(commerce.get("support")):
+                raise AuditError("withdrawn Guard support is not verified")
+            checks += probe_frozen_portal(commerce, opener=opener)
+        elif (
+            commerce.get("portal_state") != "unconfigured"
+            or commerce.get("customer_portal_url") is not None
+            or commerce.get("store_hostname") is not None
+            or commerce.get("support") is not None
+        ):
+            raise AuditError("withdrawn Guard portal state is inconsistent")
+        if artifact_available:
+            compatibility = json_contract("compatibility.json", opener=opener)
+            checks += 1
+            checks += probe_live_fulfillment(
+                release, compatibility, opener=opener
+            )
     elif mode == "guard_transition":
         if (
             commerce.get("checkout_enabled") is not False
@@ -602,6 +652,7 @@ def main(argv: list[str] | None = None) -> int:
         choices=(
             "canonical",
             "guard_prelaunch",
+            "guard_withdrawn",
             "guard_transition",
             "guard_live",
             "guard_frozen",

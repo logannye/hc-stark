@@ -594,6 +594,65 @@ def check_monitoring_mode(
         if commerce.get("checkout_enabled") is not False:
             raise CanaryError("guard_prelaunch checkout is not closed")
         return
+    if mode == "guard_withdrawn":
+        variants = commerce.get("variants")
+        artifact_available = release.get("guard_artifact_available")
+        blocked_release = (
+            release.get("launch_state") == "blocked"
+            and artifact_available is False
+            and isinstance(release.get("blocking_gates"), list)
+            and len(release["blocking_gates"]) > 0
+        )
+        fulfilled_release = (
+            release.get("launch_state") == "qualified"
+            and artifact_available is True
+            and release.get("blocking_gates") == []
+        )
+        if (
+            commerce.get("checkout_enabled") is not False
+            or commerce.get("sales_state") != "withdrawn"
+            or release.get("checkout_enabled") is not False
+            or release.get("sales_state") != "withdrawn"
+            or discovery.get("sales_state") != "withdrawn"
+            or discovery.get("availability", {}).get("guard_checkout") is not False
+            or discovery.get("availability", {}).get("hosted_proving") is not False
+            or discovery.get("availability", {}).get("hosted_verification") is not False
+            or not isinstance(variants, dict)
+            or set(variants) != {"monthly", "annual"}
+            or variants["monthly"].get("checkout_url") is not None
+            or variants["annual"].get("checkout_url") is not None
+            or variants["monthly"].get("reviewed") is not False
+            or variants["annual"].get("reviewed") is not False
+            or not (blocked_release or fulfilled_release)
+        ):
+            raise CanaryError("guard_withdrawn contract is inconsistent")
+        if commerce.get("portal_state") == "live":
+            if not isinstance(commerce.get("customer_portal_url"), str):
+                raise CanaryError("guard_withdrawn portal is missing")
+            portal_host, portal = merchant_store_url(
+                commerce["customer_portal_url"], label="withdrawn customer portal"
+            )
+            if (
+                portal_host != commerce.get("store_hostname")
+                or portal.path != "/billing"
+                or portal.query
+                or portal.fragment
+                or not verified_private_support(commerce.get("support"))
+            ):
+                raise CanaryError("guard_withdrawn portal is not preserved safely")
+        elif (
+            commerce.get("portal_state") != "unconfigured"
+            or commerce.get("customer_portal_url") is not None
+            or commerce.get("store_hostname") is not None
+            or commerce.get("support") is not None
+        ):
+            raise CanaryError("guard_withdrawn portal state is inconsistent")
+        check_retired_hosts(opener=opener)
+        if artifact_available:
+            check_live_fulfillment(
+                release, parsed["compatibility.json"], opener=opener
+            )
+        return
     if mode == "guard_transition":
         if (
             commerce.get("checkout_enabled") is not False
@@ -711,6 +770,7 @@ def main(argv: list[str] | None = None) -> int:
             "routes",
             "retired-hosts",
             "guard_prelaunch",
+            "guard_withdrawn",
             "guard_transition",
             "guard_live",
             "guard_frozen",

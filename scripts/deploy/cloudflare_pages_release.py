@@ -1687,8 +1687,10 @@ def run_post_deploy_canary(
         raise ReleaseError("cannot read Guard monitoring mode") from error
     if monitoring_mode not in {
         "guard_prelaunch",
+        "guard_withdrawn",
         "guard_transition",
         "guard_live",
+        "guard_frozen",
     }:
         raise ReleaseError("Guard monitoring mode is not deployable")
     commands = (

@@ -67,12 +67,16 @@ This monitoring environment and its least-privilege token are owner setup
 inputs. Until they are configured and this workflow succeeds, external
 off-device launch monitoring remains an explicit production blocker.
 
-The tracked Worker defaults to the fail-closed `AUDIT_MODE=guard_prelaunch`.
-The active Guard contracts are:
+The tracked Worker resolves `AUDIT_MODE=canonical` from the exact published
+release-channel contract on every run. The active Guard contracts are:
 
 - `guard_prelaunch`: Guard marketing and evaluation are public, checkout and
   release artifacts remain blocked, and the legacy hosts still return their
   expected `200` recovery responses.
+- `guard_withdrawn`: the Guard SKU is permanently withdrawn from new sale,
+  checkout remains closed, any previously published fulfillment is preserved,
+  and the legacy API, webhook, and MCP hosts must return static `410/noindex`
+  retirement responses.
 - `guard_transition`: every legacy API, MCP, and webhook probe must return
   `410` with `X-Robots-Tag: noindex`; owner-qualified commerce is configured
   as `live_hidden`, but checkout remains closed and the only release blocker
@@ -115,6 +119,8 @@ Notes:
   explicit activation transaction. `guard_live` → `guard_frozen` is the
   owner-signed emergency stop that preserves customer fulfillment. Revert to
   `guard_prelaunch` only if the pre-GA transition deployment is rolled back.
+  A committed SKU withdrawal selects `guard_withdrawn` independently of launch
+  evidence; do not override it with a concrete Worker variable.
 
 ---
 

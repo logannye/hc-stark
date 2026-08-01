@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import {
   BACKEND_RECOVERY_TARGETS,
   GUARD_PRELAUNCH_TARGETS,
+  GUARD_WITHDRAWN_TARGETS,
   GUARD_TRANSITION_TARGETS,
   GUARD_LIVE_TARGETS,
   GUARD_FROZEN_TARGETS,
@@ -101,6 +102,39 @@ function contractPayload(contract) {
     service_status: "guard_live",
     availability: { guard_checkout: true, guard_artifact: true },
   };
+  if (contract === "guard_withdrawn_commerce") return {
+    ...owner,
+    checkout_enabled: false,
+    launch_state: "blocked",
+    sales_state: "withdrawn",
+    commerce_state: "unconfigured",
+    portal_state: "unconfigured",
+    customer_portal_url: null,
+    store_hostname: null,
+    support: null,
+    variants: {
+      monthly: { reviewed: false, variant_id: null, checkout_url: null },
+      annual: { reviewed: false, variant_id: null, checkout_url: null },
+    },
+  };
+  if (contract === "guard_withdrawn_release") return {
+    ...owner,
+    checkout_enabled: false,
+    launch_state: "blocked",
+    sales_state: "withdrawn",
+    guard_artifact_available: false,
+    blocking_gates: ["guard_artifact_published"],
+  };
+  if (contract === "guard_withdrawn_discovery") return {
+    sales_state: "withdrawn",
+    service_status: "guard_withdrawn",
+    availability: {
+      guard_checkout: false,
+      guard_artifact: false,
+      hosted_proving: false,
+      hosted_verification: false,
+    },
+  };
   if (contract === "guard_frozen_commerce") return {
     ...contractPayload("guard_live_commerce"),
     checkout_enabled: false,
@@ -160,6 +194,7 @@ try {
   for (const targets of [
     BACKEND_RECOVERY_TARGETS,
     GUARD_PRELAUNCH_TARGETS,
+    GUARD_WITHDRAWN_TARGETS,
     GUARD_TRANSITION_TARGETS,
     GUARD_LIVE_TARGETS,
     GUARD_FROZEN_TARGETS,
@@ -176,6 +211,7 @@ try {
   }
   assert.equal(targetsForMode(), GUARD_PRELAUNCH_TARGETS);
   assert.equal(targetsForMode("guard_prelaunch"), GUARD_PRELAUNCH_TARGETS);
+  assert.equal(targetsForMode("guard_withdrawn"), GUARD_WITHDRAWN_TARGETS);
   assert.equal(targetsForMode("guard_transition"), GUARD_TRANSITION_TARGETS);
   assert.equal(targetsForMode("guard_live"), GUARD_LIVE_TARGETS);
   assert.equal(targetsForMode("guard_frozen"), GUARD_FROZEN_TARGETS);
@@ -209,7 +245,7 @@ try {
     "https://tinyzkp.com/release.json": await readFile(new URL("../../site/release.json", import.meta.url), "utf8"),
     "https://tinyzkp.com/pricing.json": await readFile(new URL("../../site/pricing.json", import.meta.url), "utf8"),
   };
-  for (const target of GUARD_PRELAUNCH_TARGETS.filter((item) => item.jsonField)) {
+  for (const target of GUARD_WITHDRAWN_TARGETS.filter((item) => item.contract)) {
     globalThis.fetch = async () => new Response(checkedInContracts[target.url], { status: 200 });
     assert.equal((await probe(target)).ok, true, `checked-in contract drift: ${target.name}`);
   }
@@ -246,6 +282,11 @@ try {
     invalidFrozen.customer_portal_url = invalidPortal;
     assert.equal(validateContract("guard_frozen_commerce", invalidFrozen), false);
   }
+
+  const withdrawnCommerce = contractPayload("guard_withdrawn_commerce");
+  assert.equal(validateContract("guard_withdrawn_commerce", withdrawnCommerce), true);
+  withdrawnCommerce.variants.monthly.checkout_url = "https://store.example/checkout";
+  assert.equal(validateContract("guard_withdrawn_commerce", withdrawnCommerce), false);
 
   const merchantTargets = liveMerchantTargets(contractPayload("guard_live_commerce"));
   assert.deepEqual(merchantTargets.map((target) => target.name), [
@@ -351,13 +392,13 @@ try {
   };
   const delivered = await alert(
     { ALERT_WEBHOOK_URL: "https://relay.example/alert", ALERT_WEBHOOK_TOKEN: "x".repeat(64) },
-    [{ name: "api-ready", status: 503 }],
+    [{ name: "api-ready", status: 503, missing: "HTTP 200" }],
     "guard_prelaunch",
   );
   assert.equal(delivered, true);
   assert.equal(alertRequest.options.headers.authorization, `Bearer ${"x".repeat(64)}`);
   assert.deepEqual(JSON.parse(alertRequest.options.body), {
-    text: "🔴 TinyZKP Guard prelaunch surface failed: api-ready (503)",
+    text: "🔴 TinyZKP Guard prelaunch surface failed: api-ready (503; HTTP 200)",
     incident: "external_probe_failed",
   });
 

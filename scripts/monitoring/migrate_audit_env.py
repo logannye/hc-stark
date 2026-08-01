@@ -15,6 +15,7 @@ LEGACY_MODES = {"containment", "production"}
 VALID_MODES = {
     "canonical",
     "guard_prelaunch",
+    "guard_withdrawn",
     "guard_transition",
     "guard_live",
     "guard_frozen",

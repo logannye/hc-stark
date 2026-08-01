@@ -371,6 +371,57 @@ def test_guard_frozen_mode_preserves_portal_and_exact_fulfillment(monkeypatch):
         )
 
 
+def test_guard_withdrawn_mode_requires_retirement_and_closed_sales(monkeypatch):
+    release = {
+        "launch_state": "blocked",
+        "sales_state": "withdrawn",
+        "checkout_enabled": False,
+        "guard_artifact_available": False,
+        "blocking_gates": ["guard_artifact_published"],
+    }
+    commerce = {
+        "checkout_enabled": False,
+        "sales_state": "withdrawn",
+        "portal_state": "unconfigured",
+        "customer_portal_url": None,
+        "store_hostname": None,
+        "support": None,
+        "variants": {
+            "monthly": {"reviewed": False, "checkout_url": None},
+            "annual": {"reviewed": False, "checkout_url": None},
+        },
+    }
+    discovery = {
+        "service_status": "guard_withdrawn",
+        "sales_state": "withdrawn",
+        "availability": {
+            "guard_checkout": False,
+            "hosted_proving": False,
+            "hosted_verification": False,
+        },
+    }
+    parsed = {
+        "release.json": release,
+        "commerce.json": commerce,
+        "discovery.json": discovery,
+        "compatibility.json": {},
+    }
+    calls = []
+    monkeypatch.setattr(canary, "check_contracts", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(
+        canary, "check_retired_hosts", lambda **kwargs: calls.append("retired")
+    )
+    canary.check_monitoring_mode(
+        "https://tinyzkp.com/", "guard_withdrawn", site=Path("unused")
+    )
+    assert calls == ["retired"]
+    discovery["availability"]["hosted_proving"] = True
+    with pytest.raises(canary.CanaryError, match="guard_withdrawn"):
+        canary.check_monitoring_mode(
+            "https://tinyzkp.com/", "guard_withdrawn", site=Path("unused")
+        )
+
+
 def test_routes_require_static_security_noindex_and_410():
     def opener(request, timeout):
         retired = request.full_url.endswith(

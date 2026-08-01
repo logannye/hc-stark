@@ -4,10 +4,10 @@ set -euo pipefail
 
 AUDIT_MODE="${TINYZKP_AUDIT_MODE:-}"
 case "$AUDIT_MODE" in
-    canonical|guard_prelaunch|guard_transition|guard_live|guard_frozen)
+    canonical|guard_prelaunch|guard_withdrawn|guard_transition|guard_live|guard_frozen)
         ;;
     *)
-        echo "TINYZKP_AUDIT_MODE must be canonical, guard_prelaunch, guard_transition, guard_live, or guard_frozen" >&2
+        echo "TINYZKP_AUDIT_MODE must be canonical, guard_prelaunch, guard_withdrawn, guard_transition, guard_live, or guard_frozen" >&2
         exit 2
         ;;
 esac

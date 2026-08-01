@@ -84,7 +84,7 @@
   "release_status": "https://tinyzkp.com/release.json",
   "sales_state": "withdrawn",
   "schema_version": 5,
-  "service_status": "guard_prelaunch",
+  "service_status": "guard_withdrawn",
   "support": {
     "documentation": "https://tinyzkp.com/docs",
     "issues": "https://github.com/logannye/hc-stark/issues",

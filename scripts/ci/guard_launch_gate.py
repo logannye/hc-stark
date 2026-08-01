@@ -3992,7 +3992,9 @@ def derive(
         },
     }
     monitoring_mode = (
-        "guard_live"
+        "guard_withdrawn"
+        if sku_withdrawn
+        else "guard_live"
         if checkout_enabled
         else "guard_frozen"
         if sales_state == "frozen" and artifact_published
@@ -4031,6 +4033,17 @@ def derive(
                 "authorization_policy": AUTHORIZATION_POLICY,
                 "qualification_basis": QUALIFICATION_BASIS,
                 "required_gate_document": "release/guard-launch-state-v2.json",
+            },
+            "guard_withdrawn": {
+                "inherits": "community",
+                "guard_artifacts": "preserve_existing_only",
+                "checkout": False,
+                "customer_portal": "preserve_if_configured",
+                "legacy_hosts": "static_410_noindex",
+                "authorization_policy": AUTHORIZATION_POLICY,
+                "qualification_basis": QUALIFICATION_BASIS,
+                "required_gate_document": "release/guard-launch-state-v2.json",
+                "withdrawal_record": "release/guard-sku-withdrawal-v1.json",
             },
             "guard_transition": {
                 "inherits": "community",
