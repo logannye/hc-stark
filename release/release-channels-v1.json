@@ -49,9 +49,20 @@
       "legacy_hosts": "static_410_noindex",
       "qualification_basis": "owner_attested",
       "required_gate_document": "release/guard-launch-state-v2.json"
+    },
+    "guard_withdrawn": {
+      "authorization_policy": "owner_only_ga_v1",
+      "checkout": false,
+      "customer_portal": "preserve_if_configured",
+      "guard_artifacts": "preserve_existing_only",
+      "inherits": "community",
+      "legacy_hosts": "static_410_noindex",
+      "qualification_basis": "owner_attested",
+      "required_gate_document": "release/guard-launch-state-v2.json",
+      "withdrawal_record": "release/guard-sku-withdrawal-v1.json"
     }
   },
-  "current_channel": "guard_prelaunch",
+  "current_channel": "guard_withdrawn",
   "qualification_basis": "owner_attested",
   "schema_version": 1,
   "source_sha256": "496ed2c65859ead9760365399498c408ff8be4114298ed2a7c7513e2a8d13dc3"

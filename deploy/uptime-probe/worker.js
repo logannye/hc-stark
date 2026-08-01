@@ -105,12 +105,20 @@ const GUARD_PRELAUNCH_TARGETS = [
 ];
 
 const RETIRED_LEGACY_TARGETS = [
-  { name: "api-retired", url: "https://api.tinyzkp.com/healthz", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex" },
-  { name: "api-ready-retired", url: "https://api.tinyzkp.com/readyz", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex" },
-  { name: "api-routes-retired", url: "https://api.tinyzkp.com/templates", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex" },
-  { name: "webhook-retired", url: "https://webhook.tinyzkp.com/health", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex" },
-  { name: "mcp-retired", url: "https://mcp.tinyzkp.com/mcp", method: "POST", body: "{}", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex" },
-  { name: "mcp-version-retired", url: "https://mcp.tinyzkp.com/version", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex" },
+  { name: "api-retired", url: "https://api.tinyzkp.com/healthz", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex", contains: "This surface has been retired." },
+  { name: "api-ready-retired", url: "https://api.tinyzkp.com/readyz", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex", contains: "This surface has been retired." },
+  { name: "api-routes-retired", url: "https://api.tinyzkp.com/templates", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex", contains: "This surface has been retired." },
+  { name: "webhook-retired", url: "https://webhook.tinyzkp.com/health", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex", contains: "This surface has been retired." },
+  { name: "mcp-retired", url: "https://mcp.tinyzkp.com/mcp", method: "POST", body: "{}", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex", contains: "This surface has been retired." },
+  { name: "mcp-version-retired", url: "https://mcp.tinyzkp.com/version", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex", contains: "This surface has been retired." },
+];
+
+const GUARD_WITHDRAWN_TARGETS = [
+  ...RETIRED_LEGACY_TARGETS,
+  { name: "site", url: "https://tinyzkp.com/", expect: 200 },
+  { name: "guard-withdrawn-commerce", url: "https://tinyzkp.com/commerce.json", expect: 200, contract: "guard_withdrawn_commerce" },
+  { name: "guard-withdrawn-release", url: "https://tinyzkp.com/release.json", expect: 200, contract: "guard_withdrawn_release" },
+  { name: "guard-withdrawn-discovery", url: "https://tinyzkp.com/discovery.json", expect: 200, contract: "guard_withdrawn_discovery" },
 ];
 
 const GUARD_TRANSITION_TARGETS = [
@@ -171,6 +179,7 @@ const PUBLIC_BETA_TARGETS = [
 
 function targetsForMode(mode) {
   if (!mode || mode === "guard_prelaunch") return GUARD_PRELAUNCH_TARGETS;
+  if (mode === "guard_withdrawn") return GUARD_WITHDRAWN_TARGETS;
   if (mode === "guard_transition") return GUARD_TRANSITION_TARGETS;
   if (mode === "guard_live") return GUARD_LIVE_TARGETS;
   if (mode === "guard_frozen") return GUARD_FROZEN_TARGETS;
@@ -195,7 +204,7 @@ async function loadCanonicalMode(requestedMode = "canonical") {
     || payload?.authorization_policy !== AUTHORIZATION_POLICY
     || payload?.qualification_basis !== QUALIFICATION_BASIS
     || !/^[0-9a-f]{64}$/.test(payload?.source_sha256 || "")
-    || !["guard_prelaunch", "guard_transition", "guard_live", "guard_frozen"].includes(mode)
+    || !["guard_prelaunch", "guard_withdrawn", "guard_transition", "guard_live", "guard_frozen"].includes(mode)
     || channel?.authorization_policy !== AUTHORIZATION_POLICY
     || channel?.qualification_basis !== QUALIFICATION_BASIS
   ) {
@@ -354,6 +363,51 @@ function validateContract(name, payload) {
       && payload.service_status === "guard_live"
       && payload.availability?.guard_checkout === true
       && payload.availability?.guard_artifact === true;
+  }
+  if (name === "guard_withdrawn_commerce") {
+    const variants = payload.variants;
+    const noCheckoutUrls = variants
+      && Object.keys(variants).sort().join(",") === "annual,monthly"
+      && variants.monthly?.checkout_url === null
+      && variants.annual?.checkout_url === null
+      && variants.monthly?.reviewed === false
+      && variants.annual?.reviewed === false;
+    const portalAbsent = payload.portal_state === "unconfigured"
+      && payload.customer_portal_url === null
+      && payload.store_hostname === null
+      && payload.support === null;
+    const portalRetained = payload.portal_state === "live"
+      && portalUrl(payload.customer_portal_url) !== null
+      && new URL(payload.customer_portal_url).hostname === payload.store_hostname
+      && verifiedPrivateSupport(payload.support);
+    return ownerContract(payload)
+      && payload.schema_version === 2
+      && payload.checkout_enabled === false
+      && payload.sales_state === "withdrawn"
+      && noCheckoutUrls
+      && (portalAbsent || portalRetained);
+  }
+  if (name === "guard_withdrawn_release") {
+    const blocked = payload.launch_state === "blocked"
+      && payload.guard_artifact_available === false
+      && Array.isArray(payload.blocking_gates)
+      && payload.blocking_gates.length > 0;
+    const fulfilled = payload.launch_state === "qualified"
+      && payload.guard_artifact_available === true
+      && Array.isArray(payload.blocking_gates)
+      && payload.blocking_gates.length === 0;
+    return ownerContract(payload)
+      && payload.schema_version === 2
+      && payload.checkout_enabled === false
+      && payload.sales_state === "withdrawn"
+      && (blocked || fulfilled);
+  }
+  if (name === "guard_withdrawn_discovery") {
+    return payload.sales_state === "withdrawn"
+      && payload.service_status === "guard_withdrawn"
+      && payload.availability?.guard_checkout === false
+      && payload.availability?.hosted_proving === false
+      && payload.availability?.hosted_verification === false;
   }
   if (name === "guard_frozen_commerce") {
     return ownerContract(payload)
@@ -723,6 +777,7 @@ function modeLabel(mode) {
   if (mode === "containment") return "backend recovery";
   if (mode === "public_beta") return "public beta";
   if (mode === "guard_prelaunch") return "Guard prelaunch";
+  if (mode === "guard_withdrawn") return "Guard withdrawn";
   if (mode === "guard_transition") return "Guard transition";
   if (mode === "guard_live") return "Guard live";
   if (mode === "guard_frozen") return "Guard frozen";
@@ -781,7 +836,10 @@ async function postAlert(env, payload) {
 
 async function alert(env, failures, mode = "guard_prelaunch") {
   const text = `🔴 TinyZKP ${modeLabel(mode)} surface failed: ` + failures
-    .map((failure) => `${failure.name} (${failure.status})`)
+    .map((failure) => {
+      const reason = failure.missing || failure.error;
+      return `${failure.name} (${failure.status}${reason ? `; ${reason}` : ""})`;
+    })
     .join(", ");
   return postAlert(env, { text, incident: "external_probe_failed" });
 }
@@ -884,6 +942,7 @@ export {
   TARGETS,
   BACKEND_RECOVERY_TARGETS,
   GUARD_PRELAUNCH_TARGETS,
+  GUARD_WITHDRAWN_TARGETS,
   GUARD_TRANSITION_TARGETS,
   GUARD_LIVE_TARGETS,
   GUARD_FROZEN_TARGETS,

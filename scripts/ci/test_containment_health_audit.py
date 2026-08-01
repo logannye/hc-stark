@@ -31,7 +31,7 @@ def test_retired_containment_and_production_modes_fail_closed():
         result = run_mode(mode)
         assert result.returncode == 2
         assert (
-            "canonical, guard_prelaunch, guard_transition, guard_live, or guard_frozen"
+            "canonical, guard_prelaunch, guard_withdrawn, guard_transition, guard_live, or guard_frozen"
             in result.stderr
         )
 
@@ -40,7 +40,7 @@ def test_missing_mode_fails_closed():
     result = run_mode(None)
     assert result.returncode == 2
     assert (
-        "canonical, guard_prelaunch, guard_transition, guard_live, or guard_frozen"
+        "canonical, guard_prelaunch, guard_withdrawn, guard_transition, guard_live, or guard_frozen"
         in result.stderr
     )
 

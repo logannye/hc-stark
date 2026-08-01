@@ -24,7 +24,7 @@ def test_legacy_mode_is_migrated_without_losing_unrelated_entries(
 
 @pytest.mark.parametrize(
     "mode",
-    ["canonical", "guard_prelaunch", "guard_transition", "guard_live", "guard_frozen"],
+    ["canonical", "guard_prelaunch", "guard_withdrawn", "guard_transition", "guard_live", "guard_frozen"],
 )
 def test_existing_guard_mode_is_preserved(tmp_path: Path, mode: str) -> None:
     path = tmp_path / "audit.env"

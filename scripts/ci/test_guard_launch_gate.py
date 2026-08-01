@@ -2722,6 +2722,12 @@ def test_a_recorded_withdrawal_overrides_every_commerce_state(
 
     assert derived["launch"]["sales_state"] == "withdrawn"
     assert derived["launch"]["checkout_enabled"] is False
+    assert derived["release_channels"]["current_channel"] == "guard_withdrawn"
+    assert (
+        derived["release_channels"]["channels"]["guard_withdrawn"]["legacy_hosts"]
+        == "static_410_noindex"
+    )
+    assert derived["discovery"]["service_status"] == "guard_withdrawn"
     assert derived["pricing"]["sales_state"] == "withdrawn"
     guard = next(p for p in derived["pricing"]["products"] if p["id"] == "guard")
     assert guard["availability"] == "withdrawn"

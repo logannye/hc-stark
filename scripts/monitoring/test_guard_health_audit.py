@@ -176,6 +176,50 @@ def contracts(mode: str) -> dict[str, dict]:
             "source_sha256": source_sha256,
             "blocking_gates": ["guard_artifact_published"],
         }
+    elif mode == "guard_withdrawn":
+        discovery.update(
+            {
+                "sales_state": "withdrawn",
+                "availability": {
+                    "guard_checkout": False,
+                    "guard_artifact": False,
+                    "hosted_proving": False,
+                    "hosted_verification": False,
+                },
+            }
+        )
+        commerce = {
+            **owner,
+            "checkout_enabled": False,
+            "launch_state": "blocked",
+            "sales_state": "withdrawn",
+            "commerce_state": "unconfigured",
+            "portal_state": "unconfigured",
+            "customer_portal_url": None,
+            "store_hostname": None,
+            "support": None,
+            "variants": {
+                "monthly": {
+                    "reviewed": False,
+                    "variant_id": None,
+                    "checkout_url": None,
+                },
+                "annual": {
+                    "reviewed": False,
+                    "variant_id": None,
+                    "checkout_url": None,
+                },
+            },
+        }
+        release = {
+            **owner,
+            "source_sha256": source_sha256,
+            "launch_state": "blocked",
+            "sales_state": "withdrawn",
+            "checkout_enabled": False,
+            "guard_artifact_available": False,
+            "blocking_gates": ["guard_artifact_published"],
+        }
     else:
         commerce = {**owner, "checkout_enabled": False}
         release = {
@@ -249,6 +293,7 @@ def opener_for(mode: str, *, noindex: bool = True, values: dict | None = None):
     ("mode", "checks"),
     (
         ("guard_prelaunch", 7),
+        ("guard_withdrawn", 10),
         ("guard_transition", 10),
         ("guard_live", 20),
         ("guard_frozen", 18),
@@ -261,6 +306,18 @@ def test_exact_guard_monitoring_modes_pass(mode: str, checks: int):
 def test_transition_requires_noindex_on_every_retired_host():
     with pytest.raises(audit.AuditError, match="410/noindex"):
         audit.audit("guard_transition", opener=opener_for("guard_transition", noindex=False))
+
+
+def test_withdrawn_mode_rejects_checkout_or_hosted_service_revival():
+    values = contracts("guard_withdrawn")
+    values["commerce.json"]["variants"]["monthly"]["checkout_url"] = (
+        "https://store.example/checkout"
+    )
+    with pytest.raises(audit.AuditError, match="withdrawn Guard surfaces"):
+        audit.audit(
+            "guard_withdrawn",
+            opener=opener_for("guard_withdrawn", values=values),
+        )
 
 
 def test_retired_host_redirect_cannot_mask_the_origin() -> None:
@@ -328,5 +385,5 @@ def test_successor_guard_version_is_bound_dynamically() -> None:
 
 def test_shell_wrapper_accepts_only_exact_guard_modes():
     wrapper = Path(__file__).with_name("api_health_audit.sh").read_text()
-    assert "canonical|guard_prelaunch|guard_transition|guard_live|guard_frozen" in wrapper
+    assert "canonical|guard_prelaunch|guard_withdrawn|guard_transition|guard_live|guard_frozen" in wrapper
     assert "containment|production" not in wrapper
