@@ -586,3 +586,36 @@ try {
 } finally {
   globalThis.fetch = originalFetch;
 }
+
+// A monitor that cannot start is worse than no monitor: it reports a single
+// synthetic failure and hides every real signal behind it. That is exactly what
+// `redirect: "error"` did on 2026-08-09 -- valid in the fetch spec and in Node,
+// rejected by workerd at runtime, so the whole probe threw on every tick and
+// reported only `audit-mode`. Node's permissiveness is precisely why the rest of
+// this file could not catch it: these tests run in Node, production runs in
+// workerd. This one asserts on the SOURCE TEXT instead, which is the only part
+// of the contract both runtimes share.
+{
+  const source = await readFile(new URL("./worker.js", import.meta.url), "utf8");
+  const offending = source
+    .split("\n")
+    .map((line, index) => [index + 1, line])
+    // Skip comment lines: the explanation at the top of worker.js necessarily
+    // quotes the forbidden spelling in prose, and must be allowed to.
+    .filter(([, line]) => !line.trimStart().startsWith("//"))
+    .filter(([, line]) => /redirect:\s*["']error["']/.test(line));
+
+  assert.deepEqual(
+    offending,
+    [],
+    `worker.js uses redirect: "error", which workerd rejects at runtime with ` +
+      `"Invalid redirect value". Use the NO_REDIRECT constant ("manual") ` +
+      `instead; callers already treat a 3xx as a failure because Response.ok ` +
+      `is true only for 200-299. Offending lines: ${JSON.stringify(offending)}`,
+  );
+
+  // Non-vacuity: the matcher must actually recognise the defect it forbids.
+  assert.equal(/redirect:\s*["']error["']/.test('    redirect: "error",'), true);
+  assert.equal(/redirect:\s*["']error["']/.test("    redirect: 'error',"), true);
+  assert.equal(/redirect:\s*["']error["']/.test("    redirect: NO_REDIRECT,"), false);
+}

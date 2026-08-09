@@ -1,5 +1,31 @@
 /** External production canary. It runs off-host and pages only after one retry. */
 
+// Every outbound fetch in this file refuses to follow redirects. The obvious
+// spelling for that, `redirect: "error"`, is valid in the fetch spec and in
+// Node, but workerd REJECTS it at runtime:
+//
+//   Invalid redirect value, must be one of "follow" or "manual" ("error" won't
+//   be implemented since it does not make sense at the edge; use "manual" and
+//   check the response status code).
+//
+// This bit production on 2026-08-09. The call sites were all unreachable in the
+// previously deployed build, which pinned AUDIT_MODE and so never entered
+// loadCanonicalMode; and a local Node dry-run of this exact module passed
+// cleanly, because Node's fetch DOES implement "error". The first deploy that
+// actually exercised the canonical-mode path threw on every single run and
+// reported one `audit-mode` failure instead of any target result at all --
+// i.e. the monitor went blind in the one way it cannot report on itself.
+//
+// "manual" preserves the intent exactly: a redirect is surfaced as a 3xx
+// response rather than followed, and every caller rejects it, because
+// Response.ok is true only for 200-299. Do NOT "simplify" this to "follow" --
+// that would let a redirect silently satisfy a liveness check.
+//
+// LESSON, worth more than the fix: this module's tests and dry-runs all run in
+// Node, and Node is more permissive than workerd. Any runtime-API change here
+// needs a real deploy against the real edge before it is believed.
+const NO_REDIRECT = "manual";
+
 const LEGACY_RECOVERY_TARGETS = [
   { name: "api-health", url: "https://api.tinyzkp.com/healthz", expect: 200 },
   { name: "api-ready", url: "https://api.tinyzkp.com/readyz", expect: 200 },
@@ -323,7 +349,7 @@ function dueTargets(targets, now) {
 async function loadCanonicalMode(requestedMode = "canonical") {
   const response = await fetch("https://tinyzkp.com/release-channels-v1.json", {
     method: "GET",
-    redirect: "error",
+    redirect: NO_REDIRECT,
     cf: { cacheTtl: 0 },
     headers: { "user-agent": "tinyzkp-uptime-probe", "accept": "application/json" },
   });
@@ -743,7 +769,7 @@ function liveReleaseTargets(payload, compatibility = null, mode = "guard_live") 
 async function loadLiveReleaseTargets(mode = "guard_live") {
   const options = {
     method: "GET",
-    redirect: "error",
+    redirect: NO_REDIRECT,
     cf: { cacheTtl: 0 },
     headers: { "user-agent": "tinyzkp-uptime-probe", "accept": "application/json" },
   };
@@ -767,7 +793,7 @@ async function probeOci(target, timeoutMs = TIMEOUT_MS) {
   const url = `https://ghcr.io/v2/${target.ociRepository}/manifests/${target.ociDigest}`;
   const options = (authorization = null) => ({
     method: "GET",
-    redirect: "error",
+    redirect: NO_REDIRECT,
     signal: controller.signal,
     cf: { cacheTtl: 0 },
     headers: {
@@ -788,7 +814,7 @@ async function probeOci(target, timeoutMs = TIMEOUT_MS) {
       const tokenUrl = new URL(match[1]);
       tokenUrl.searchParams.set("service", match[2]);
       tokenUrl.searchParams.set("scope", match[3]);
-      const tokenResponse = await fetch(tokenUrl, { method: "GET", redirect: "error", signal: controller.signal, headers: { "user-agent": "tinyzkp-uptime-probe", "accept": "application/json" } });
+      const tokenResponse = await fetch(tokenUrl, { method: "GET", redirect: NO_REDIRECT, signal: controller.signal, headers: { "user-agent": "tinyzkp-uptime-probe", "accept": "application/json" } });
       if (!tokenResponse.ok) return { name: target.name, ok: false, status: tokenResponse.status };
       const token = (await tokenResponse.json())?.token;
       if (typeof token !== "string" || !token) return { name: target.name, ok: false, status: tokenResponse.status, missing: "anonymous GHCR token" };
@@ -807,7 +833,7 @@ async function probeOci(target, timeoutMs = TIMEOUT_MS) {
 async function loadLiveMerchantTargets() {
   const response = await fetch("https://tinyzkp.com/commerce.json", {
     method: "GET",
-    redirect: "error",
+    redirect: NO_REDIRECT,
     cf: { cacheTtl: 0 },
     headers: { "user-agent": "tinyzkp-uptime-probe", "accept": "application/json" },
   });
@@ -1102,7 +1128,7 @@ async function runProbes(env, scheduledAt = null) {
         : frozenPortalTargets(
           await (await fetch("https://tinyzkp.com/commerce.json", {
             method: "GET",
-            redirect: "error",
+            redirect: NO_REDIRECT,
             cf: { cacheTtl: 0 },
             headers: { "user-agent": "tinyzkp-uptime-probe", "accept": "application/json" },
           })).json(),
