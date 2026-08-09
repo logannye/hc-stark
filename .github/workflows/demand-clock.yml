@@ -57,9 +57,30 @@ jobs:
 
       - name: Export the remote demand log
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # A DEDICATED, D1-READ-ONLY credential, not the Pages deploy token.
+          #
+          # The first real run of this workflow (2026-08-09) failed with
+          # "Authentication error [code: 10000]" on /accounts/*/d1/database,
+          # because secrets.CLOUDFLARE_API_TOKEN was minted for Cloudflare Pages
+          # and carries no D1 permission. Widening that token would have given
+          # this read-only reporting job the same write access that deploys the
+          # production site, and a bad edit to it would break deploys - a much
+          # worse failure than a red demand report. So this reads its own secret
+          # instead. wrangler still expects the value in CLOUDFLARE_API_TOKEN,
+          # which is why the mapping happens here rather than in the script.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_READ_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
+          # Name the missing precondition instead of letting it surface three
+          # layers down as Cloudflare's generic "Authentication error [10000]",
+          # which is indistinguishable from a token that exists but lacks D1.
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "CLOUDFLARE_D1_READ_TOKEN is not set in the" \
+                 "tinyzkp-production environment. Create a Cloudflare API" \
+                 "token with Account > D1 > Read and add it with:" >&2
+            echo "  gh secret set CLOUDFLARE_D1_READ_TOKEN --env tinyzkp-production" >&2
+            exit 1
+          fi
           install -d -m 0700 "$RUNNER_TEMP/tinyzkp-demand-clock"
           # Fails loudly rather than emitting an empty database: a broken
           # export and genuine zero demand must never look the same.
