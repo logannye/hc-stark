@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "robots_url": "https://tinyzkp.com/robots.txt",
+  "recorded_at": "2026-08-09",
+  "owner_decision": "UNDECIDED_RECORDED_AS_OBSERVED",
+  "what_this_file_is": "The intended crawler policy of the SERVED site, declared separately from site/robots.txt because the served file is not the repository file. Cloudflare injects a zone-level 'Managed content' block ahead of our six committed lines, and every other gate in this repository reads the repository copy, so the injection was invisible for its entire lifetime. scripts/ci/live_robots_policy_gate.py fetches the live file and fails when it disagrees with THIS declaration in either direction.",
+  "owner_must_decide": "The lists below record PRODUCTION AS MEASURED on 2026-08-09, not a decision that this is what TinyZKP wants. Nobody in this repository chose to disallow these agents; a Cloudflare zone setting did. Emptying `intentionally_disallowed_user_agents` and setting `content_signal_by_user_agent` to {} is what reopens the crawlers -- the gate will then RED until the Cloudflare zone setting is actually turned off, which is the point. Leaving it as-is is also a decision, and this file is where that decision is on the record instead of being an accident.",
+  "why_this_is_load_bearing": "site/llms.txt exists specifically to court agent traffic, and release/demand-clock-v1.json measures the 90-day kill criterion on the traffic those agents generate. Nine of the largest AI crawlers -- including the two whose operators most plausibly surface a Plonky3 memory-cliff query -- are blocked at the edge, and 'ai-train=no, use=reference' is asserted against every remaining agent. A KILL_THRESHOLD_MET verdict computed under this configuration would be measuring the block, not the market.",
+  "intentionally_disallowed_user_agents": [
+    "Amazonbot",
+    "Applebot-Extended",
+    "Bytespider",
+    "CCBot",
+    "ClaudeBot",
+    "CloudflareBrowserRenderingCrawler",
+    "GPTBot",
+    "Google-Extended",
+    "meta-externalagent"
+  ],
+  "content_signal_by_user_agent": {
+    "*": "search=yes,ai-train=no,use=reference"
+  },
+  "enforced_by": "scripts/ci/live_robots_policy_gate.py"
+}

@@ -8,7 +8,7 @@
   <link rel="canonical" href="https://tinyzkp.com/doctor"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/shared.css"><script src="/shared.js" defer></script><script src="/roi.js" defer></script>
 </head>
 <body>
-<header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a><a class="button nav-buy" data-checkout="annual" data-closed-label="Not yet for sale" data-live-label="Buy Guard">Not yet for sale</a></nav></div></header>
+<header class="site-header"><div class="container nav-shell"><a class="brand" href="/"><span>Tiny</span>ZKP</a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary"><a href="/estimate">Estimator</a><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a><a class="button nav-buy" data-checkout="annual" data-closed-label="Guard withdrawn" data-live-label="Buy Guard">Guard withdrawn</a></nav></div></header>
 <main><section class="page-hero"><div class="container"><div class="eyebrow">Free evaluation path</div><h1>Check fit before you move a proof job.</h1><p class="lede">The Community engine owns compatibility, automatic mode planning, RAM estimation, and scratch-headroom checks. It rejects unsafe or unsupported jobs before expensive ingestion.</p><div class="actions"><a class="button" href="#run">Run the free doctor</a><a class="button secondary" href="/compatibility">Review the exact profile</a></div></div></section>
 <section class="content container">
   <div class="notice" data-doctor-status><strong>Signed evaluation release available.</strong> Download and verify the exact Community doctor identity published in discovery.json before use.</div>
@@ -26,11 +26,11 @@
       <label>Loaded operator cost per hour (USD)<input type="number" min="0" step="1" value="0" data-roi-rate></label>
       <label>Annual delay or failed-job cost avoided (USD)<input type="number" min="0" step="1" value="0" data-roi-delay></label>
     </div>
-    <p class="formula"><code>avoidable cost = capacity + (restart hours × hourly cost) + delay cost</code><br><code>net after Guard = avoidable cost − $4,990</code></p>
+    <p class="formula"><code>avoidable cost = capacity + (restart hours × hourly cost) + delay cost</code></p>
     <button class="button secondary" type="submit">Calculate locally</button>
     <output class="worksheet-output" data-roi-output aria-live="polite">Enter your documented costs to calculate a local comparison.</output>
   </form>
-  <div class="notice"><strong>Decision rule:</strong> continue only when documented annual avoidable cost materially exceeds $4,990 and integration remains self-service. A hypothetical estimate is not benchmark evidence.</div>
+  <div class="notice"><strong>Decision rule:</strong> continue only when the documented annual avoidable cost materially exceeds the engineering time to adopt and operate the engine, and integration remains self-service. A hypothetical estimate is not benchmark evidence. The Guard subscription is withdrawn and is not sold at any price, so nothing on this page is a purchase decision.</div>
   <h2>What to do with a result</h2>
   <ol><li>If compatible, compare the estimate with your measured baseline and the <a href="/benchmarks">published evidence contract</a>.</li><li>If incompatible, use the exact reason link in <a href="/troubleshooting">troubleshooting</a>; do not work around it.</li><li>If the report appears wrong, open a public issue with synthetic inputs and the exact release identity.</li></ol>
 </section></main>

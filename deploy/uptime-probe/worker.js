@@ -113,8 +113,103 @@ const RETIRED_LEGACY_TARGETS = [
   { name: "mcp-version-retired", url: "https://mcp.tinyzkp.com/version", expect: 410, direct: true, headerName: "x-robots-tag", headerContains: "noindex", contains: "This surface has been retired." },
 ];
 
+// The estimator is the ONLY live product surface: `POST /v1/estimate` and
+// `POST /v1/keys` served by site/_worker.js, and the instrument the 90-day
+// demand clock (release/demand-clock-v1.json) is read from. Until this block
+// existed the probe watched six retired hosts, the homepage, and three JSON
+// contracts — every one of which can be perfectly green while the one thing
+// anybody can actually use is dead. A dead estimator is also invisible from
+// the demand side, because a route returning 500 and genuine zero demand
+// produce the identical reading: an empty `demand_log`.
+//
+// `ram_budget_bytes` is shared by the fixture and the `estimator_live`
+// contract below so the request and the assertion made about its answer can
+// never drift apart.
+const ESTIMATOR_FIXTURE_RAM_BUDGET_BYTES = 2 * 1024 * 1024 * 1024;
+
+// A shape-only manifest, verified against production on 2026-08-09: 2^20 rows
+// of a 64-column goldilocks trace inside a 2 GiB budget answers
+// `provable_today: true` with no blocking reasons. It is deliberately an
+// ordinary, representative shape rather than a corner case — the point is to
+// exercise the same path a real caller takes.
+const ESTIMATOR_LIVENESS_FIXTURE = {
+  schema_version: 1,
+  field: "goldilocks",
+  extension_degree: 2,
+  logical_rows: 1048576,
+  trace_width: 64,
+  max_constraint_degree: 3,
+  public_values: 4,
+  has_next_row_columns: true,
+  features: {
+    uses_lookups: false,
+    uses_buses: false,
+    uses_permutations: false,
+    uses_multi_table: false,
+    uses_preprocessed_columns: false,
+    uses_periodic_columns: false,
+    uses_recursion: false,
+    uses_gpu: false,
+  },
+  ram_budget_bytes: ESTIMATOR_FIXTURE_RAM_BUDGET_BYTES,
+};
+
+// Two probes at two cadences, because the two failures they catch cost
+// different amounts to look for.
+//
+// The `405` checks are free: site/_worker.js rejects a non-POST before it
+// touches D1, so they consume no rate-limit slot and write no demand row.
+// They run on every two-minute tick and catch the failures that actually
+// happen to a static-site deploy — `_worker.js` dropped from a Pages build,
+// the route falling through to the asset handler, the module-scope WASM
+// instantiation throwing, or the whole zone being down. A `200` here would
+// mean the method guard is gone; a `404` would mean the route is.
+//
+// The POST is the only target in this file that costs the product something
+// (see `dueTargets` for the full accounting), so it runs once an hour. It is
+// what proves the compiled cost model still *answers*, which no amount of
+// route liveness implies.
+//
+// These targets join exactly the four contracts that already share
+// `RETIRED_LEGACY_TARGETS` — `guard_withdrawn`, `guard_transition`,
+// `guard_live`, `guard_frozen` — because those are the post-retirement
+// postures in which the Pages estimator is the deployed product. They are
+// deliberately absent from `guard_prelaunch`, `containment`, and
+// `public_beta`, which describe earlier eras where `api.tinyzkp.com` still
+// answered `200` and this endpoint did not exist; those sets are retained
+// only for rollback, and asserting a surface that a rollback intentionally
+// removes would page the owner for executing the rollback correctly.
+const ESTIMATOR_TARGETS = [
+  {
+    name: "estimator-route-mounted",
+    url: "https://tinyzkp.com/v1/estimate",
+    expect: 405,
+    headerName: "allow",
+    headerContains: "POST",
+    contains: "method not allowed",
+  },
+  {
+    name: "keys-route-mounted",
+    url: "https://tinyzkp.com/v1/keys",
+    expect: 405,
+    headerName: "allow",
+    headerContains: "POST",
+    contains: "method not allowed",
+  },
+  {
+    name: "estimator-answers",
+    url: "https://tinyzkp.com/v1/estimate",
+    method: "POST",
+    body: JSON.stringify(ESTIMATOR_LIVENESS_FIXTURE),
+    expect: 200,
+    contract: "estimator_live",
+    cadence: "hourly",
+  },
+];
+
 const GUARD_WITHDRAWN_TARGETS = [
   ...RETIRED_LEGACY_TARGETS,
+  ...ESTIMATOR_TARGETS,
   { name: "site", url: "https://tinyzkp.com/", expect: 200 },
   { name: "guard-withdrawn-commerce", url: "https://tinyzkp.com/commerce.json", expect: 200, contract: "guard_withdrawn_commerce" },
   { name: "guard-withdrawn-release", url: "https://tinyzkp.com/release.json", expect: 200, contract: "guard_withdrawn_release" },
@@ -123,6 +218,7 @@ const GUARD_WITHDRAWN_TARGETS = [
 
 const GUARD_TRANSITION_TARGETS = [
   ...RETIRED_LEGACY_TARGETS,
+  ...ESTIMATOR_TARGETS,
   { name: "site", url: "https://tinyzkp.com/", expect: 200 },
   { name: "guard-transition-commerce", url: "https://tinyzkp.com/commerce.json", expect: 200, contract: "guard_transition_commerce" },
   { name: "guard-transition-release", url: "https://tinyzkp.com/release.json", expect: 200, contract: "guard_transition_release" },
@@ -130,6 +226,7 @@ const GUARD_TRANSITION_TARGETS = [
 
 const GUARD_LIVE_TARGETS = [
   ...RETIRED_LEGACY_TARGETS,
+  ...ESTIMATOR_TARGETS,
   { name: "site", url: "https://tinyzkp.com/", expect: 200 },
   { name: "guard-live-commerce", url: "https://tinyzkp.com/commerce.json", expect: 200, contract: "guard_live_commerce" },
   { name: "guard-live-release", url: "https://tinyzkp.com/release.json", expect: 200, contract: "guard_live_release" },
@@ -138,6 +235,7 @@ const GUARD_LIVE_TARGETS = [
 
 const GUARD_FROZEN_TARGETS = [
   ...RETIRED_LEGACY_TARGETS,
+  ...ESTIMATOR_TARGETS,
   { name: "site", url: "https://tinyzkp.com/", expect: 200 },
   { name: "guard-frozen-commerce", url: "https://tinyzkp.com/commerce.json", expect: 200, contract: "guard_frozen_commerce" },
   { name: "guard-frozen-release", url: "https://tinyzkp.com/release.json", expect: 200, contract: "guard_frozen_release" },
@@ -186,6 +284,40 @@ function targetsForMode(mode) {
   if (mode === "containment") return BACKEND_RECOVERY_TARGETS;
   if (mode === "public_beta") return PUBLIC_BETA_TARGETS;
   throw new Error(`invalid AUDIT_MODE: ${mode}`);
+}
+
+// The one target that costs the product something, and the accounting for
+// why it does not run every two minutes.
+//
+// A successful `POST /v1/estimate` does two things beyond answering: it
+// consumes one slot of site/_worker.js's anonymous 30/hour rate-limit window
+// (`ANON_RATE_LIMIT_PER_HOUR`), and it appends one shape-only row to the
+// `demand_log` table that scripts/ci/demand_report.py reads to decide the
+// 90-day kill/continue verdict.
+//
+// At the `*/2` cron cadence that is exactly 30 requests per clock hour —
+// precisely the ceiling, with zero headroom. The single retry
+// `probeWithRetry` makes to filter a transient blip would be request 31, get
+// a `429`, and confirm a failure that did not exist: the retry designed to
+// SUPPRESS false pages would guarantee them. It would also inject ~21,600
+// synthetic rows into the trailing 90-day demand window, which is the
+// measurement this whole phase exists to keep honest.
+//
+// Once per UTC hour costs at most 24 rows a day and leaves 28 slots of
+// headroom, and still catches a cost model that stopped answering within the
+// hour — the model is a static wasm artifact that only changes on deploy, so
+// hourly is the right resolution for it. The zero-cost `405` targets keep the
+// two-minute watch on the route itself.
+const HOURLY_CADENCE_MINUTE = 0;
+
+// `now` must be the cron's INTENDED tick (`event.scheduledTime`), not
+// `Date.now()`: a dispatch delayed past :00 would otherwise skip the hourly
+// target forever, which is worse than not having it — a check that silently
+// never runs still reports green.
+function dueTargets(targets, now) {
+  if (!now) return targets;
+  if (now.getUTCMinutes() === HOURLY_CADENCE_MINUTE) return targets;
+  return targets.filter((target) => target.cadence !== "hourly");
 }
 
 async function loadCanonicalMode(requestedMode = "canonical") {
@@ -295,6 +427,39 @@ function portalUrl(raw) {
 
 function validateContract(name, payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  if (name === "estimator_live") {
+    // What this deliberately does NOT assert: the exact byte figures. The
+    // estimator is a deterministic cost model, so pinning
+    // `bounded.peak_resident_bytes === 1082130432` would catch a silent
+    // cost-model regression — but it would catch an INTENDED model revision
+    // just as hard, and page the owner at 03:00 for shipping a correct
+    // change. Exact numbers already have an owner that fails the right
+    // thing: scripts/ci/estimate_wasm_cli_parity_gate.mjs fails the BUILD,
+    // before the deploy, if the committed wasm and the native CLI disagree.
+    // A pager must not duplicate a build gate, because the two have opposite
+    // costs when they are wrong.
+    //
+    // What it asserts instead is every invariant that holds for ANY correct
+    // answer to this fixture and fails for every way the surface can be
+    // broken: an error envelope (no `estimates`), an HTML fallback or an
+    // empty body (no JSON), a rate-limited or otherwise degraded JSON reply,
+    // a model returning zeros or non-integers, and — the actual product
+    // claim — a bounded peak that no longer beats conventional or no longer
+    // fits the declared RAM budget, which is precisely what
+    // `provable_today: true` asserts about this manifest.
+    const bounded = payload.estimates?.bounded;
+    const conventional = payload.estimates?.conventional;
+    const positiveBytes = (value) => Number.isSafeInteger(value) && value > 0;
+    return payload.schema_version === 1
+      && /^[0-9a-f]{64}$/.test(payload.request_digest || "")
+      && payload.provable_today === true
+      && Array.isArray(payload.blocking_reasons)
+      && payload.blocking_reasons.length === 0
+      && positiveBytes(bounded?.peak_resident_bytes)
+      && positiveBytes(conventional?.peak_resident_bytes)
+      && bounded.peak_resident_bytes < conventional.peak_resident_bytes
+      && bounded.peak_resident_bytes <= ESTIMATOR_FIXTURE_RAM_BUDGET_BYTES;
+  }
   if (name === "guard_transition_commerce") {
     return ownerContract(payload)
       && payload.schema_version === 2
@@ -844,7 +1009,26 @@ async function alert(env, failures, mode = "guard_prelaunch") {
   return postAlert(env, { text, incident: "external_probe_failed" });
 }
 
-async function reconcileAlertState(env, failures, mode, now = Date.now()) {
+// The target names inside a stored incident fingerprint. An unparseable
+// record yields none, which lets recovery through: a corrupt state entry must
+// not be able to wedge an incident open forever, and the next failing run
+// pages again immediately from clean state.
+function incidentTargetNames(fingerprint) {
+  try {
+    const entries = JSON.parse(fingerprint);
+    if (!Array.isArray(entries)) return [];
+    return entries.map((entry) => entry?.name).filter((name) => typeof name === "string");
+  } catch {
+    return [];
+  }
+}
+
+// `checkedNames` is the set of targets this run actually probed. It exists
+// because of the hourly cadence in `dueTargets`: without it, the estimator
+// probe would page at :00 and then "recover" at :02 on a run that never
+// touched it, flapping the owner's inbox and — far worse — closing an
+// incident that is still open. Not-checked is not recovered.
+async function reconcileAlertState(env, failures, mode, now = Date.now(), checkedNames = null) {
   if (!env.ALERT_STATE) {
     if (failures.length) await alert(env, failures, mode);
     return;
@@ -861,6 +1045,10 @@ async function reconcileAlertState(env, failures, mode, now = Date.now()) {
 
   if (!failures.length) {
     if (!previous) return;
+    if (
+      checkedNames
+      && !incidentTargetNames(previous.fingerprint).every((name) => checkedNames.has(name))
+    ) return;
     const delivered = await postAlert(env, {
       text: `🟢 TinyZKP ${modeLabel(mode)} surface recovered.`,
       incident: "external_probe_recovered",
@@ -889,12 +1077,18 @@ async function reconcileAlertState(env, failures, mode, now = Date.now()) {
   );
 }
 
-async function runProbes(env) {
+// `scheduledAt` is the cron's intended tick on the timed path and null on the
+// on-demand `fetch` path. Null runs EVERY target, including the hourly one:
+// the documented way to verify the probe is to open its URL, and a manual
+// verification that silently skips the only product check would be worse than
+// no verification at all. The rate-limit cost of a hand-triggered run is
+// bounded by how often a human loads the page.
+async function runProbes(env, scheduledAt = null) {
   let targets;
   let mode;
   try {
     mode = await loadCanonicalMode(env.AUDIT_MODE || "canonical");
-    targets = targetsForMode(mode);
+    targets = dueTargets(targetsForMode(mode), scheduledAt);
   } catch (error) {
     const failures = [{ name: "audit-mode", ok: false, status: 0, error: String(error) }];
     await reconcileAlertState(env, failures, env.AUDIT_MODE || "invalid");
@@ -921,13 +1115,15 @@ async function runProbes(env) {
     }
   }
   const failures = results.filter((result) => !result.ok);
-  await reconcileAlertState(env, failures, mode);
+  await reconcileAlertState(env, failures, mode, Date.now(), new Set(results.map((result) => result.name)));
   return { ok: failures.length === 0, checked_at: new Date().toISOString(), mode, results };
 }
 
 export default {
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(runProbes(env));
+  async scheduled(event, env, ctx) {
+    // `scheduledTime` is the tick the cron was SUPPOSED to fire, so a delayed
+    // dispatch still lands on the hour for `dueTargets`.
+    ctx.waitUntil(runProbes(env, new Date(event?.scheduledTime ?? Date.now())));
   },
   async fetch(_request, env) {
     const summary = await runProbes(env);
@@ -947,8 +1143,11 @@ export {
   GUARD_LIVE_TARGETS,
   GUARD_FROZEN_TARGETS,
   RETIRED_LEGACY_TARGETS,
+  ESTIMATOR_TARGETS,
+  ESTIMATOR_LIVENESS_FIXTURE,
   PUBLIC_BETA_TARGETS,
   targetsForMode,
+  dueTargets,
   loadCanonicalMode,
   probe,
   validateContract,

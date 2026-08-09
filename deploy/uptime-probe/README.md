@@ -98,12 +98,68 @@ Rollback-only contracts are:
 - `public_beta`: the retired hosted-beta activation contract, retained only for
   rollback compatibility.
 
+### What actually watches the live product
+
+Every contract above describes *retired* surfaces and *published JSON*. The
+only thing a customer can currently use is the estimator served by
+`site/_worker.js`, which is also the instrument the 90-day demand clock
+(`release/demand-clock-v1.json`) is read from — and for a long time nothing
+watched it at all. Three targets close that, in every post-retirement mode
+(`guard_withdrawn`, `guard_transition`, `guard_live`, `guard_frozen`):
+
+| target | cadence | what it proves |
+| --- | --- | --- |
+| `estimator-route-mounted` | every tick (2 min) | `GET /v1/estimate` returns `405` with `Allow: POST`, so the route is mounted and still the estimator — not an asset-handler `404`, not a dropped `_worker.js`, not a method guard that quietly disappeared |
+| `keys-route-mounted` | every tick (2 min) | the same for `GET /v1/keys` |
+| `estimator-answers` | once per UTC hour | `POST /v1/estimate` with a fixed 2^20-row goldilocks manifest returns a real answer: `provable_today: true`, no blocking reasons, and a bounded peak that both beats the conventional peak and fits the declared 2 GiB budget |
+
+`estimator-answers` deliberately does **not** assert exact byte figures. The
+estimator is a deterministic cost model, so pinning
+`bounded.peak_resident_bytes` would catch a silent regression — and would page
+the owner just as hard for an *intended* model revision. Exact numbers already
+have an owner with the right failure cost:
+`scripts/ci/estimate_wasm_cli_parity_gate.mjs` fails the **build**, before the
+deploy. A pager must not duplicate a build gate.
+
+**Why the POST is hourly, and what it costs.** A successful estimate consumes
+one slot of the anonymous 30/hour rate-limit window and appends one shape-only
+row to `demand_log`. At the `*/2` cron cadence that is exactly 30 requests per
+hour — the ceiling, with zero headroom — so the single retry that exists to
+filter a blip would itself `429` and turn every blip into a page; it would also
+inject ~21,600 synthetic rows into the 90-day demand window. Hourly bounds both
+(≤24 rows/day, 28 slots of headroom) and still catches a dead cost model within
+the hour, which is the right resolution for an artifact that only changes on
+deploy. The two free `405` checks keep the two-minute watch.
+
+Those probe rows are identifiable: the fixture is deterministic, so every probe
+row carries
+`request_digest = 7b47655339a060af69c77888e7333f90f9995b43b723ac1c40c1b84df9d21ad9`.
+The kill/continue verdict is unaffected by them — it counts distinct **keyed**
+organizations only, and the probe never mints a key, precisely so it can never
+manufacture the number the decision turns on.
+
+They are also load-bearing in one direction. `scripts/ci/demand_report.py`
+treats a window with **zero** `demand_log` rows as an unmet precondition,
+because a dead write path and a dead market produce byte-identical input. An
+hourly writer that is known to be alive is exactly what disambiguates them:
+with this probe running, zero rows can only mean the write path is broken, and
+non-zero rows with no keyed organizations is a real reading of silence. So if
+probe rows are ever excluded from the reported figures, they must **not** be
+excluded from that zero-row liveness precondition — doing so would restore the
+ambiguity the precondition exists to remove.
+
+**Known blind spot.** Every D1 write in `site/_worker.js` fails open and silent
+by design, so a dead write path still returns a perfectly healthy estimate. This
+probe proves the answer is real; it cannot prove the row was recorded, because
+it has no D1 binding to read back. The `demand_report.py` precondition above is
+where that half is caught, one report at a time rather than one page.
+
 Any other mode fails the entire probe instead of silently selecting a contract.
 The production Worker must bind `ALERT_STATE` to its dedicated KV namespace;
 without the binding, probing still works but duplicate suppression deliberately
 fails open so a persistence outage cannot hide an incident.
 
-Verify it works by hitting the deployed worker URL in a browser — it runs the probe on demand and returns JSON (`200` if everything is up, `503` if a target is down). To force a page, point a target at a known-bad URL temporarily, or stop the API container and watch the webhook fire within ~2 min.
+Verify it works by hitting the deployed worker URL in a browser — it runs the probe on demand and returns JSON (`200` if everything is up, `503` if a target is down). An on-demand run deliberately ignores the hourly cadence and runs **every** target, including `estimator-answers`: a manual verification that silently skipped the only product check would be worse than no verification. To force a page, point a target at a known-bad URL temporarily, or stop the API container and watch the webhook fire within ~2 min.
 
 Notes:
 - Alerts use the authenticated relay in `deploy/cloudflare/alert-relay`, which sends only to the account-verified `logan@galenhealth.org` destination through Cloudflare Email Service. It does not revive the retired MailChannels path.

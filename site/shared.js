@@ -147,7 +147,9 @@
         control.removeAttribute("data-reason-anchor");
         control.removeAttribute("title");
       }
-      control.textContent = control.getAttribute("data-closed-label") || "Not yet for sale";
+      // The Guard SKU is withdrawn, not pending. "Not yet" would promise a
+      // launch that is not coming, so the fallback names the real state.
+      control.textContent = control.getAttribute("data-closed-label") || "Guard withdrawn";
     });
   }
 

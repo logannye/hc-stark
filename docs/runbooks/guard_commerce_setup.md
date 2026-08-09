@@ -1,7 +1,28 @@
-# TinyZKP Guard merchant setup and evidence runbook
+# Retired: TinyZKP Guard merchant setup and evidence runbook
 
-Status: operator procedure. Never commit Lemon Squeezy credentials, license
-keys, purchaser data, checkout-session data, or private evidence.
+This runbook is historical and **must not be executed**.
+
+The Guard SKU was withdrawn. `site/release-channels-v1.json` publishes
+`current_channel: guard_withdrawn`, which means checkout is closed permanently,
+no Lemon Squeezy store, product, or variant may be created or reopened, and no
+bootstrap transition in the sequence below is available. Its former status line
+read "operator procedure", which is exactly the failure this banner exists to
+prevent: an operator reading it would have started standing up a merchant
+catalog for a product that is not for sale. Revenue is zero by design.
+
+Two things it references are still live and are **not** retired by this banner:
+[`legacy_retirement_notice.md`](legacy_retirement_notice.md), whose exact bytes
+are hashed by `scripts/ci/guard_launch_gate.py` and whose obligations checklist
+still governs, and [`release_provenance.md`](release_provenance.md), the active
+release-control runbook.
+
+For the system that is actually running, see
+[`production_operations.md`](production_operations.md).
+
+The catalog contract, lifecycle, and evidence requirements are preserved below
+so that a future commerce decision starts from the reviewed version rather than
+from scratch. Never commit Lemon Squeezy credentials, license keys, purchaser
+data, checkout-session data, or private evidence.
 
 ## Catalog contract
 

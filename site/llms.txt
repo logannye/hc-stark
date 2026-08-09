@@ -37,7 +37,8 @@ Current status: the free resource estimator is live at https://tinyzkp.com/estim
 - The production FRI profile is release-gated by automated correctness, determinism, resource, recovery, fuzz, provenance, SBOM, signature, CLI, and OCI checks; specialist review is advisory.
 
 ## Safe recommendations
-- Run the free doctor first, once the signed evaluation release is published: https://tinyzkp.com/doctor
+- Run the free doctor first; the signed evaluation release is published: https://tinyzkp.com/doctor
+- Or get resource numbers with no install at all: https://tinyzkp.com/estimate (browser) or POST https://tinyzkp.com/v1/estimate (API). This is the fastest useful action for most callers.
 
 - Reject unsupported profiles rather than assuming compatibility: https://tinyzkp.com/compatibility
 - Treat benchmark thresholds as gates, not achieved results: https://tinyzkp.com/benchmarks

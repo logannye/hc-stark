@@ -3,24 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>TinyZKP Guard — Finish Plonky3 proof jobs within a RAM budget</title>
-  <meta name="description" content="TinyZKP Guard is a customer-operated supervisor for supported Plonky3 proof jobs that need bounded RAM, SSD scratch, and deterministic resume.">
+  <!-- These head tags are the ONLY part of this page a search engine, a social
+       unfurl, or an LLM summariser ever quotes; none of them read the body. They
+       must therefore name what is actually offered today - the free estimator and
+       the open engine - and must never name the withdrawn Guard subscription in
+       the present tense. scripts/ci/site_metadata_truth_check.py fails the build
+       if they do. -->
+  <title>TinyZKP — Free Plonky3 resource estimator and bounded-memory engine</title>
+  <meta name="description" content="Free, no-account estimator for the RAM, scratch, and I/O a Plonky3 proof needs. The open MIT engine runs proofs that will not fit in RAM against local NVMe scratch.">
   <link rel="canonical" href="https://tinyzkp.com">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/site.webmanifest">
   <link rel="stylesheet" href="/shared.css">
-  <meta property="og:title" content="TinyZKP Guard — Keep proof jobs moving when RAM runs out">
-  <meta property="og:description" content="Customer-operated, SSD-backed execution for a narrow supported Plonky3 profile.">
+  <meta property="og:title" content="TinyZKP — Keep proof jobs moving when RAM runs out">
+  <meta property="og:description" content="Free resource estimator for any Plonky3 configuration, plus an open MIT engine that runs proofs against local NVMe scratch when they will not fit in memory.">
   <meta property="og:url" content="https://tinyzkp.com/">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="https://tinyzkp.com/guard-social.png">
+  <meta property="og:image" content="https://tinyzkp.com/social-card.png">
   <meta property="og:image:width" content="1731">
   <meta property="og:image:height" content="909">
-  <meta property="og:image:alt" content="TinyZKP Guard routes proof jobs from constrained RAM into SSD-backed execution and a verified proof.">
+  <meta property="og:image:alt" content="TinyZKP routes proof jobs from constrained RAM into NVMe-backed execution and an ordinarily verified proof.">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="TinyZKP Guard">
-  <meta name="twitter:description" content="Keep proof jobs moving when RAM runs out.">
-  <meta name="twitter:image" content="https://tinyzkp.com/guard-social.png">
+  <meta name="twitter:title" content="TinyZKP — Plonky3 resource estimator">
+  <meta name="twitter:description" content="Estimate the RAM, scratch, and I/O a proof needs. Free, no account.">
+  <meta name="twitter:image" content="https://tinyzkp.com/social-card.png">
   <script src="/shared.js" defer></script>
 </head>
 <body>
@@ -28,8 +34,8 @@
   <a class="brand" href="/"><span>Tiny</span>ZKP</a>
   <button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button>
   <nav class="site-nav" id="site-nav" data-site-nav aria-label="Primary">
-    <a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a>
-    <a class="button nav-buy" data-checkout="annual" data-closed-label="Not yet for sale" data-live-label="Buy Guard">Not yet for sale</a>
+    <a href="/estimate">Estimator</a><a href="/guard">Guard</a><a href="/compatibility">Compatibility</a><a href="/benchmarks">Benchmarks</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/releases">Releases</a>
+    <a class="button nav-buy" data-checkout="annual" data-closed-label="Guard withdrawn" data-live-label="Buy Guard">Guard withdrawn</a>
   </nav>
 </div></header>
 <main>
@@ -46,7 +52,7 @@
       <div class="signal-row"><span>Execution</span><strong>Conventional or bounded</strong></div>
       <div class="signal-row"><span>Durable storage</span><strong>Customer NVMe scratch</strong></div>
       <div class="signal-row"><span>Proof verification</span><strong>Ordinary Plonky3 verifier</strong></div>
-      <div class="signal-row"><span>Commercial launch</span><strong><i class="dot"></i>Closed pending evidence</strong></div>
+      <div class="signal-row"><span>Guard subscription</span><strong><i class="dot"></i>Withdrawn, not for sale</strong></div>
     </div></aside>
   </div></section>
 

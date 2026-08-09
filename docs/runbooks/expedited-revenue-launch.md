@@ -3,8 +3,12 @@
 > **Superseded plan — not active release guidance.** Use the Guard release,
 > market-clock, commerce, and decommission controls in the current runbooks.
 
-Status: **historical archive only**. This runbook has no launch, billing,
-deployment, or customer-contact authority.
+Status: **historical archive only**. This runbook is historical and
+**must not be executed**; it has no launch, billing, deployment, or
+customer-contact authority. The maintenance site, API, MCP service, and
+evaluation intake it stands up were all retired with the hosted stack. For the
+system that actually runs, see
+[`production_operations.md`](production_operations.md).
 
 This runbook launches a fail-closed maintenance site, API, MCP service, and
 no-email evaluation intake. It does **not** launch hosted proving, hosted

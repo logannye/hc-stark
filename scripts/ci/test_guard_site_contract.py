@@ -12,6 +12,23 @@ ROOT = Path(__file__).resolve().parents[2]
 SITE = ROOT / "site"
 LAUNCH_GATE = ROOT / "release" / "guard-launch-state-v2.json"
 MARKET_CLOCK = ROOT / "release" / "guard-market-clock-v1.json"
+GUARD_SKU_WITHDRAWAL = ROOT / "release" / "guard-sku-withdrawal-v1.json"
+
+
+def _guard_sku_withdrawn() -> bool:
+    """True when the Guard SKU is recorded as withdrawn.
+
+    Mirrors ``guard_launch_gate._guard_sku_withdrawn`` deliberately rather than
+    importing it: this module is a CONTRACT test on the shipped site, and it
+    must keep working if the gate is refactored. Absent or malformed record
+    means NOT withdrawn, so a parse failure can never silently relax the
+    stricter "is this described as pending?" assertions below.
+    """
+    try:
+        data = json.loads(GUARD_SKU_WITHDRAWAL.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(data, dict) and data.get("withdrawn") is True
 
 PUBLIC_PAGES = {
     "index.html",
@@ -125,7 +142,15 @@ def test_checkout_is_consistently_fail_closed() -> None:
 
 def test_homepage_describes_the_blocked_launch_state_unambiguously() -> None:
     homepage = (SITE / "index.html").read_text(encoding="utf-8")
-    assert "Closed pending evidence" in homepage
+    if _guard_sku_withdrawn():
+        # "Closed pending evidence" says the gates could still open, which is
+        # true of a blocked launch and false of a withdrawal. Once the SKU is
+        # withdrawn the homepage must say so and must NOT carry the pending
+        # phrasing, or the panel contradicts the page's own body copy.
+        assert "Withdrawn, not for sale" in homepage
+        assert "Closed pending evidence" not in homepage
+    else:
+        assert "Closed pending evidence" in homepage
     assert "Evidence gates open" not in homepage
 
 
@@ -139,9 +164,33 @@ def test_checkout_urls_cannot_be_in_page_markup() -> None:
         portals.extend((page, attributes) for attributes in parser.portal_controls)
 
     assert controls, "site must expose visibly closed Guard purchase controls"
+    # The allowed label set is DERIVED from the withdrawal record rather than
+    # pinned, so that revoking the withdrawal moves the site back to "not yet"
+    # copy and re-withdrawing moves it forward again, without either state
+    # needing a hand edit here. A withdrawn SKU described as pending is the
+    # specific defect this asserts against: "not yet" promises a launch that is
+    # not coming, and site/llms.txt forbids exactly that phrasing.
+    sku_withdrawn = _guard_sku_withdrawn()
+    allowed = (
+        {"Guard withdrawn", "Monthly withdrawn"}
+        if sku_withdrawn
+        else {"Not yet for sale", "Monthly not yet for sale"}
+    )
     for page, attributes in controls:
         assert attributes.get("href") is None, f"{page} hardcodes a checkout href"
-        assert attributes.get("data-closed-label") in {"Not yet for sale", "Monthly not yet for sale"}
+        label = attributes.get("data-closed-label")
+        assert label in allowed, f"{page}: {label!r} not one of {sorted(allowed)}"
+        if sku_withdrawn:
+            lowered = (label or "").lower()
+            pending = [
+                phrase
+                for phrase in ("not yet", "coming", "soon", "pending", "launch")
+                if phrase in lowered
+            ]
+            assert not pending, (
+                f"{page} describes the withdrawn Guard SKU as pending "
+                f"({label!r} contains {pending}); a withdrawal is not a delay"
+            )
     assert len(portals) == 1
     portal_page, portal = portals[0]
     assert portal_page == "support.html"

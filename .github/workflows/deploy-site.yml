@@ -92,6 +92,8 @@ jobs:
           python3 scripts/ci/passive_operations_scorecard.py --check
           python3 scripts/commercial/render_offers.py --check
           python3 scripts/ci/site_route_check.py
+          python3 scripts/ci/site_metadata_truth_check.py
+          python3 scripts/ci/runbook_currency_check.py
           python3 scripts/ci/site_deploy_check.py
           python3 -m pytest \
             scripts/ci/test_guard_launch_gate.py \

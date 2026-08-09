@@ -1,4 +1,23 @@
-# Restore Runbook — hc-stark state (G13)
+# Retired: restore runbook — hc-stark state (G13)
+
+This runbook is historical and **must not be executed**.
+
+Every artifact, service, and host below belonged to the hosted stack: the
+Hetzner box, the `hc-stark` and `hc-billing-webhook` units, the rclone off-box
+backup job, and the `api.tinyzkp.com` origin. That stack was retired; those
+hostnames now return a static `410 Gone` from the Pages worker, no backup
+remote is being written to, and there is nothing left for `systemctl stop
+hc-stark` to stop. An operator following these steps spends an hour and
+restores nothing — which in a two-hours-per-month ops envelope is worse than
+having no runbook at all.
+
+Production state today is one Cloudflare D1 database, `tinyzkp-estimator`. Its
+schema, retention model, and export procedure are in
+[`production_operations.md`](production_operations.md).
+
+The steps are preserved verbatim rather than deleted, for incident archaeology
+and because `scripts/ci/backup_restore_check.py` still asserts their exact
+markers.
 
 Covers restoring `tenant_store.sqlite`, `usage.sqlite`,
 `evaluation_applications.sqlite`, `contract_billing.sqlite`, `api_keys.txt`,

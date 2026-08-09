@@ -8,8 +8,11 @@ import {
   GUARD_TRANSITION_TARGETS,
   GUARD_LIVE_TARGETS,
   GUARD_FROZEN_TARGETS,
+  ESTIMATOR_TARGETS,
+  ESTIMATOR_LIVENESS_FIXTURE,
   PUBLIC_BETA_TARGETS,
   targetsForMode,
+  dueTargets,
   loadCanonicalMode,
   probe,
   alert,
@@ -27,7 +30,33 @@ const originalFetch = globalThis.fetch;
 const terms = "checkout%5Bcustom%5D%5Bterms_version%5D=2026-07-21";
 const guard = "checkout%5Bcustom%5D%5Bguard_version%5D=0.1.0";
 
+// The exact body https://tinyzkp.com/v1/estimate returned for
+// ESTIMATOR_LIVENESS_FIXTURE on 2026-08-09, copied verbatim. Keeping the real
+// answer here means the validator is tested against production's actual
+// output rather than against a hand-written idea of it.
+const LIVE_ESTIMATE_RESPONSE = {
+  schema_version: 1,
+  request_digest: "7b47655339a060af69c77888e7333f90f9995b43b723ac1c40c1b84df9d21ad9",
+  provable_today: true,
+  blocking_reasons: [],
+  estimates: {
+    conventional: {
+      peak_resident_bytes: 2181038080,
+      scratch_high_water_bytes: 1,
+      total_read_bytes: 0,
+      total_write_bytes: 0,
+    },
+    bounded: {
+      peak_resident_bytes: 1082130432,
+      scratch_high_water_bytes: 3758292128,
+      total_read_bytes: 11106517104,
+      total_write_bytes: 7282433200,
+    },
+  },
+};
+
 function contractPayload(contract) {
+  if (contract === "estimator_live") return structuredClone(LIVE_ESTIMATE_RESPONSE);
   const owner = {
     schema_version: 2,
     authorization_policy: "owner_only_ga_v1",
@@ -219,6 +248,98 @@ try {
   assert.equal(targetsForMode("public_beta"), PUBLIC_BETA_TARGETS);
   assert.throws(() => targetsForMode("production"), /invalid AUDIT_MODE/);
 
+  // --- The live product is watched (the defect this file exists to keep fixed)
+  //
+  // Every post-retirement contract must probe the estimator. Before this
+  // gate, `guard_withdrawn` — the canonical mode in production — checked six
+  // retired hosts, the homepage, and three JSON files, and NOTHING that a
+  // customer can use. This assertion fails if the estimator targets are ever
+  // dropped from a mode, which is the exact way that regression happens.
+  const estimatorNames = ["estimator-route-mounted", "keys-route-mounted", "estimator-answers"];
+  assert.deepEqual(ESTIMATOR_TARGETS.map((target) => target.name), estimatorNames);
+  for (const [mode, targets] of [
+    ["guard_withdrawn", GUARD_WITHDRAWN_TARGETS],
+    ["guard_transition", GUARD_TRANSITION_TARGETS],
+    ["guard_live", GUARD_LIVE_TARGETS],
+    ["guard_frozen", GUARD_FROZEN_TARGETS],
+  ]) {
+    for (const name of estimatorNames) {
+      assert.ok(targets.some((target) => target.name === name), `${mode} does not watch ${name}`);
+    }
+  }
+  // Rollback-only contracts describe eras where this endpoint did not exist.
+  for (const targets of [BACKEND_RECOVERY_TARGETS, GUARD_PRELAUNCH_TARGETS, PUBLIC_BETA_TARGETS]) {
+    assert.equal(targets.some((target) => estimatorNames.includes(target.name)), false);
+  }
+
+  // The probe must send the exact manifest whose live answer is asserted
+  // below, by POST, to the real path — a GET or a drifted body would make the
+  // whole check meaningless while still reporting green.
+  const estimatorAnswers = ESTIMATOR_TARGETS.find((target) => target.name === "estimator-answers");
+  assert.equal(estimatorAnswers.method, "POST");
+  assert.equal(estimatorAnswers.url, "https://tinyzkp.com/v1/estimate");
+  assert.deepEqual(JSON.parse(estimatorAnswers.body), ESTIMATOR_LIVENESS_FIXTURE);
+  assert.equal(ESTIMATOR_LIVENESS_FIXTURE.ram_budget_bytes, 2147483648);
+  const routeMounted = ESTIMATOR_TARGETS.find((target) => target.name === "estimator-route-mounted");
+  assert.equal(routeMounted.expect, 405);
+
+  // The recorded production answer satisfies the contract, and each way the
+  // surface can break fails it.
+  assert.equal(validateContract("estimator_live", contractPayload("estimator_live")), true);
+  const brokenEstimates = {
+    "error envelope": { schema_version: 1, error: { code: "malformed_manifest" } },
+    "unprovable answer": { ...contractPayload("estimator_live"), provable_today: false },
+    "blocked answer": {
+      ...contractPayload("estimator_live"),
+      blocking_reasons: [{ code: "ram_budget_exceeded" }],
+    },
+    "zeroed cost model": {
+      ...contractPayload("estimator_live"),
+      estimates: { conventional: { peak_resident_bytes: 0 }, bounded: { peak_resident_bytes: 0 } },
+    },
+    "memory cliff returned": {
+      ...contractPayload("estimator_live"),
+      estimates: {
+        conventional: { peak_resident_bytes: 1082130432 },
+        bounded: { peak_resident_bytes: 2181038080 },
+      },
+    },
+    "budget overrun": {
+      ...contractPayload("estimator_live"),
+      estimates: {
+        conventional: { peak_resident_bytes: 8589934592 },
+        bounded: { peak_resident_bytes: 4294967296 },
+      },
+    },
+    "digest dropped": { ...contractPayload("estimator_live"), request_digest: null },
+  };
+  for (const [label, payload] of Object.entries(brokenEstimates)) {
+    assert.equal(validateContract("estimator_live", payload), false, label);
+  }
+
+  // An HTML fallback page and a rate-limited reply are both failures, not
+  // "the endpoint answered".
+  globalThis.fetch = async () => new Response("<!doctype html><title>TinyZKP</title>", { status: 200 });
+  assert.equal((await probe(estimatorAnswers)).error, "invalid JSON");
+  globalThis.fetch = async () => new Response('{"ok":false,"error":"rate_limited"}', { status: 429 });
+  const rateLimited = await probe(estimatorAnswers);
+  assert.equal(rateLimited.ok, false);
+  assert.equal(rateLimited.status, 429);
+  // A removed method guard means the route is no longer the estimator.
+  globalThis.fetch = async () => new Response("ok", { status: 200 });
+  assert.equal((await probe(routeMounted)).ok, false);
+
+  // Cadence: the paid-for POST runs on the hour, the free route checks run on
+  // every tick, and an on-demand run (no scheduled tick) runs everything.
+  const onTheHour = dueTargets(GUARD_WITHDRAWN_TARGETS, new Date("2026-08-09T15:00:00Z"));
+  const offTheHour = dueTargets(GUARD_WITHDRAWN_TARGETS, new Date("2026-08-09T15:02:00Z"));
+  assert.equal(onTheHour.length, GUARD_WITHDRAWN_TARGETS.length);
+  assert.equal(offTheHour.length, GUARD_WITHDRAWN_TARGETS.length - 1);
+  assert.equal(offTheHour.some((target) => target.name === "estimator-answers"), false);
+  assert.ok(offTheHour.some((target) => target.name === "estimator-route-mounted"));
+  assert.ok(offTheHour.some((target) => target.name === "keys-route-mounted"));
+  assert.equal(dueTargets(GUARD_WITHDRAWN_TARGETS, null), GUARD_WITHDRAWN_TARGETS);
+
   const canonicalChannels = {
     schema_version: 1,
     authorization_policy: "owner_only_ga_v1",
@@ -245,7 +366,15 @@ try {
     "https://tinyzkp.com/release.json": await readFile(new URL("../../site/release.json", import.meta.url), "utf8"),
     "https://tinyzkp.com/pricing.json": await readFile(new URL("../../site/pricing.json", import.meta.url), "utf8"),
   };
-  for (const target of GUARD_WITHDRAWN_TARGETS.filter((item) => item.contract)) {
+  // Only the contracts published as static files in site/ can be replayed
+  // from the working tree; `estimator-answers` is a live computation, covered
+  // separately below. The count is asserted so a renamed or mistyped URL
+  // cannot silently empty this loop.
+  const publishedContractTargets = GUARD_WITHDRAWN_TARGETS.filter(
+    (item) => item.contract && checkedInContracts[item.url],
+  );
+  assert.equal(publishedContractTargets.length, 3, "every published contract target is replayed");
+  for (const target of publishedContractTargets) {
     globalThis.fetch = async () => new Response(checkedInContracts[target.url], { status: 200 });
     assert.equal((await probe(target)).ok, true, `checked-in contract drift: ${target.name}`);
   }
@@ -439,6 +568,20 @@ try {
   await reconcileAlertState(env, [], "guard_prelaunch", 305_000);
   assert.equal(payloads.length, 4, "recovery is sent once");
   assert.equal(payloads[3].incident, "external_probe_recovered");
+  assert.equal(kv.values.size, 0);
+
+  // A cadence-throttled target is skipped by most runs. Those runs report no
+  // failures, and without the checked-set guard that would read as recovery —
+  // closing an open estimator incident two minutes after it was raised.
+  const estimatorIncident = [{ name: "estimator-answers", status: 500 }];
+  await reconcileAlertState(env, estimatorIncident, "guard_withdrawn", 400_000, new Set(["estimator-answers"]));
+  assert.equal(payloads.length, 5, "a dead estimator pages");
+  await reconcileAlertState(env, [], "guard_withdrawn", 401_000, new Set(["estimator-route-mounted"]));
+  assert.equal(payloads.length, 5, "a target that was not probed is not evidence of recovery");
+  assert.equal(kv.values.size, 1, "the open incident survives a run that skipped it");
+  await reconcileAlertState(env, [], "guard_withdrawn", 402_000, new Set(["estimator-answers"]));
+  assert.equal(payloads.length, 6, "recovery lands once the target is actually probed green");
+  assert.equal(payloads[5].incident, "external_probe_recovered");
   assert.equal(kv.values.size, 0);
 } finally {
   globalThis.fetch = originalFetch;
