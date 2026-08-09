@@ -190,6 +190,38 @@ jobs:
           node --test scripts/ci/test_worker_estimate.mjs
           node scripts/ci/estimate_wasm_cli_parity_gate.mjs
 
+      - name: Live crawler policy (production robots.txt)
+        # The only gate here that reads PRODUCTION rather than the working
+        # tree, which is exactly why it exists: every robots-related check
+        # before it read site/robots.txt, so none of them could see the
+        # Cloudflare zone-level "Managed content" block the edge injects ahead
+        # of our six committed lines. Nine AI crawlers were disallowed at the
+        # edge while site/llms.txt courted them and release/demand-clock-v1.json
+        # counted the traffic they never sent.
+        #
+        # It runs on every trigger rather than on a schedule. A scheduled run
+        # would report this to nobody -- the finding has to be in front of
+        # whoever is editing site/llms.txt or the demand clock at the moment
+        # they edit it, not in a tab no one opens. The cost is one ~2 KB GET.
+        #
+        # --tolerate-unreachable is passed on pull_request events ONLY. A
+        # contributor must not be blocked by a transient network failure on a
+        # change unrelated to the site, but the push build on main is the run
+        # that speaks for production, and there an unreachable origin is fatal
+        # (exit 75). Tolerated misses still emit a ::warning:: annotation and a
+        # job-summary row, so an origin we have not reached in a week can never
+        # be mistaken for an origin that agrees with us.
+        env:
+          # `github.event_name` is a GitHub-controlled enum rather than
+          # attacker-supplied text, but it is bound through `env:` instead of
+          # interpolated into `run:` so no expression in this file ever reaches
+          # a shell directly. Unquoted below on purpose: empty must expand to
+          # no argument at all, not to an empty one.
+          TOLERATE_UNREACHABLE: ${{ github.event_name == 'pull_request' && '--tolerate-unreachable' || '' }}
+        run: |
+          python3 -m pytest scripts/ci/test_live_robots_policy_gate.py -q
+          python3 scripts/ci/live_robots_policy_gate.py $TOLERATE_UNREACHABLE
+
       - name: Previously unwired policy tests
         # These 44 modules existed and passed but were named by no workflow,
         # so CI never ran them: ~290 assertions that looked like coverage and

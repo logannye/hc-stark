@@ -5,7 +5,7 @@
 // value read out of module internals; every assertion reads the `Response`
 // (status, headers, parsed JSON body) `_worker.js` itself constructs.
 import assert from "node:assert/strict";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { register } from "node:module";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -835,5 +835,216 @@ test("a request with no CF-Connecting-IP is not forced into one shared bucket", 
     }
   } finally {
     await cleanup();
+  }
+});
+
+// --- Unmatched paths must 404, not answer 200 with the homepage ----------
+//
+// Observed in production on 2026-08-09: `GET /schemas/estimate-request-v1
+// .schema.json` and `GET /totally/bogus/path.json` both returned 200 with
+// the homepage's HTML. That is Cloudflare Pages' single-page-app fallback
+// (a project with no `404.html` serves the root `index.html` for anything it
+// cannot resolve), and it makes every published machine-readable contract
+// URL unverifiable: a consumer cannot tell "this contract exists" from "this
+// was never published". The mock below reproduces that asset server exactly
+// — exact file, then `<path>.html`, then the 200 fallback — so these tests
+// fail against a worker that delegates the question to it.
+
+const SITE = path.join(root, "site");
+// A body marker no real asset can collide with, so a test can prove a 404
+// body is this worker's own and not the laundered homepage.
+const SPA_FALLBACK_BODY = "spa-fallback:/index.html";
+
+async function fileExists(absolutePath) {
+  try {
+    return (await stat(absolutePath)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function pagesAssetsMock() {
+  const calls = [];
+  return {
+    calls,
+    async fetch(request) {
+      const pathname = new URL(request.url).pathname;
+      calls.push(pathname);
+      // Exact file, then the clean-URL `<path>.html`, then a directory
+      // index — the three things Pages resolves before it gives up.
+      for (const candidate of [pathname, `${pathname}.html`, `${pathname.replace(/\/*$/, "/")}index.html`]) {
+        const relative = candidate.replace(/^\/+/, "");
+        if (relative && (await fileExists(path.join(SITE, relative)))) {
+          return new Response(`asset:/${relative}`, {
+            status: 200,
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          });
+        }
+      }
+      // The defect under test: Pages answers an unresolvable path with the
+      // root index.html at HTTP 200, never a 404.
+      return new Response(SPA_FALLBACK_BODY, {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    },
+  };
+}
+
+async function getFromWorker(worker, pathname) {
+  return worker.fetch(new Request(`https://tinyzkp.com${pathname}`), { ASSETS: pagesAssetsMock() });
+}
+
+test("an unpublished .json contract path returns a machine-readable 404, never the homepage", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    for (const pathname of [
+      // The exact paths observed returning 200 + homepage in production.
+      "/schemas/estimate-request-v1.schema.json",
+      "/totally/bogus/path.json",
+    ]) {
+      const response = await getFromWorker(worker, pathname);
+      assert.equal(response.status, 404, `${pathname} must be 404`);
+      assert.match(response.headers.get("Content-Type"), /^application\/json/);
+      const body = await response.text();
+      assert.ok(
+        !body.includes(SPA_FALLBACK_BODY),
+        `${pathname} must not answer with the homepage fallback`,
+      );
+      assert.deepEqual(JSON.parse(body), { ok: false, error: "not_found" });
+      // A cached miss would shadow a contract published tomorrow.
+      assert.equal(response.headers.get("Cache-Control"), "no-store");
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test("an unmatched pretty path returns a 404 page, never the homepage", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    for (const pathname of ["/not-a-route", "/schemas", "/docs/nested/missing"]) {
+      const response = await getFromWorker(worker, pathname);
+      assert.equal(response.status, 404, `${pathname} must be 404`);
+      assert.match(response.headers.get("Content-Type"), /^text\/html/);
+      const body = await response.text();
+      assert.ok(!body.includes(SPA_FALLBACK_BODY), `${pathname} must not answer with the homepage fallback`);
+      assert.match(body, /Not found/);
+      assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow");
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test("real pages and published contracts still return 200", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    // Every route in site/sitemap.xml, plus a published schema and the two
+    // non-HTML files the pages themselves load.
+    for (const [pathname, expectedAsset] of [
+      ["/", "/index.html"],
+      ["/estimate", "/estimate.html"],
+      ["/guard", "/guard.html"],
+      ["/compatibility", "/compatibility.html"],
+      ["/benchmarks", "/benchmarks.html"],
+      ["/doctor", "/doctor.html"],
+      ["/troubleshooting", "/troubleshooting.html"],
+      ["/pricing", "/pricing.html"],
+      ["/docs", "/docs.html"],
+      ["/security", "/security.html"],
+      ["/releases", "/releases.html"],
+      ["/support", "/support.html"],
+      ["/schemas/reason-v1.schema.json", "/schemas/reason-v1.schema.json"],
+      ["/shared.css", "/shared.css"],
+      ["/sitemap.xml", "/sitemap.xml"],
+    ]) {
+      const response = await getFromWorker(worker, pathname);
+      assert.equal(response.status, 200, `${pathname} must still be served`);
+      assert.equal(await response.text(), `asset:${expectedAsset}`);
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test("a deliberately retired asset stays 410, not 404", async () => {
+  const { worker, cleanup } = await importWorker();
+  try {
+    for (const pathname of [
+      // `GONE_ASSETS`: files that still exist on disk but are withdrawn.
+      "/og-image.png",
+      "/pilot-preview.jpg",
+      "/mcp.json",
+      // `GONE_PREFIXES`: the retired vendor bundle, which also exists on disk.
+      "/vendor/tinyzkp-verify/tinyzkp-verify_bg.wasm",
+    ]) {
+      const response = await getFromWorker(worker, pathname);
+      assert.equal(response.status, 410, `${pathname} must stay retired, not become 404`);
+      assert.match(await response.text(), /no longer operates hosted proving/);
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+// `STATIC_ASSETS`, `GONE_ASSETS`, and `GONE_PREFIXES` are deliberately NOT
+// named exports of `_worker.js`, for the same reason the rate-limit
+// constants above aren't (Pages' Advanced Mode runtime refuses to start when
+// a top-level export isn't a handler). Read them back out of the committed
+// source instead.
+function parseSourceList(source, name) {
+  const match = new RegExp(`const ${name} = (?:new Set\\()?\\[([\\s\\S]*?)\\]`).exec(source);
+  assert.ok(match, `site/_worker.js must declare \`${name}\` as a literal array of paths`);
+  return new Set(Array.from(match[1].matchAll(/"([^"]+)"/g), (entry) => entry[1]));
+}
+
+async function walkSite(directory, prefix = "") {
+  const found = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const publicPath = `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      found.push(...(await walkSite(path.join(directory, entry.name), publicPath)));
+    } else if (entry.isFile()) {
+      found.push(publicPath);
+    }
+  }
+  return found;
+}
+
+test("the worker's published-asset list matches the files actually in site/", async () => {
+  // The gate for the fix above: existence is decided from a committed list
+  // inside `_worker.js`, so an asset added to `site/` without being listed
+  // would 404 in production, and a listed path that no longer exists would
+  // promise a file the deploy cannot serve. Both must fail HERE instead.
+  const source = await readFile(path.join(SITE, "_worker.js"), "utf8");
+  const staticAssets = parseSourceList(source, "STATIC_ASSETS");
+  const goneAssets = parseSourceList(source, "GONE_ASSETS");
+  const gonePrefixes = [...parseSourceList(source, "GONE_PREFIXES")];
+  assert.ok(staticAssets.size > 0 && goneAssets.size > 0 && gonePrefixes.length > 0);
+
+  const expected = new Set();
+  for (const publicPath of await walkSite(SITE)) {
+    const segments = publicPath.split("/").slice(1);
+    // Pages never serves its own control files; `wrangler.toml` and the
+    // `.wrangler/` cache are deployment inputs, not public surface; `.html`
+    // pages are routed by `PUBLIC_ROUTES`, not by `STATIC_ASSETS`.
+    if (segments[0].startsWith("_")) continue;
+    if (segments[0] === "wrangler.toml") continue;
+    if (segments[0].startsWith(".") && segments[0] !== ".well-known") continue;
+    if (publicPath.endsWith(".html")) continue;
+    // Retired surfaces answer 410 before `STATIC_ASSETS` is consulted.
+    if (goneAssets.has(publicPath)) continue;
+    if (gonePrefixes.some((prefix) => publicPath.startsWith(prefix))) continue;
+    expected.add(publicPath);
+  }
+
+  const missing = [...expected].filter((publicPath) => !staticAssets.has(publicPath)).sort();
+  const stale = [...staticAssets].filter((publicPath) => !expected.has(publicPath)).sort();
+  assert.deepEqual(missing, [], "site/ files absent from _worker.js's STATIC_ASSETS would 404 in production");
+  assert.deepEqual(stale, [], "STATIC_ASSETS entries with no file in site/ promise an asset the deploy cannot serve");
+  // A path cannot be both published and retired.
+  for (const publicPath of staticAssets) {
+    assert.ok(!goneAssets.has(publicPath), `${publicPath} cannot be both published and retired`);
   }
 });

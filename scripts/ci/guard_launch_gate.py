@@ -112,8 +112,20 @@ LLMS_ACQUISITION_LINES = (
     "- SSD-backed Plonky3 proving: https://tinyzkp.com/ssd-backed-plonky3-proving",
 )
 LLMS_ACQUISITION_RECOMMENDATIONS = (
-    "- Run the free doctor first, once the signed evaluation release is "
+    # The "once ... is published" conditional was written before the signed
+    # Community doctor shipped as doctor-eval-v0.1.0 on 2026-07-24, and it
+    # deferred the primary action for a release that already existed.
+    # discovery.json has read signed_evaluation_doctor_binary: true since.
+    "- Run the free doctor first; the signed evaluation release is "
     "published: https://tinyzkp.com/doctor",
+    # The estimator needs no install and no account, so for most callers it is
+    # strictly the fastest useful action. It is also the surface the 90-day
+    # demand clock measures, and agents were previously never pointed at it
+    # from the recommendations section.
+    "- Or get resource numbers with no install at all: "
+    "https://tinyzkp.com/estimate (browser) or POST "
+    "https://tinyzkp.com/v1/estimate (API). This is the fastest useful "
+    "action for most callers.",
 )
 LLMS_STATUS_RE = re.compile(r"^Current status:.*$", re.MULTILINE)
 LLMS_GUARD_AVAILABILITY_RE = re.compile(
@@ -4853,8 +4865,26 @@ def _launch_copy_values(
     legal_approved = launch["legal_status"] == "approved"
     engine_available = release["qualified_engine_artifact_available"] is True
     guard_available = release["guard_artifact_available"] is True
+    # A withdrawal outranks every launch state. `blocked` and `frozen` both read
+    # as "not selling RIGHT NOW" and promise a launch that is coming; a withdrawn
+    # SKU is not coming back. This must therefore be tested BEFORE checkout_live
+    # and sales_frozen, or a commerce_state transition would silently re-render
+    # "not yet for sale" over a SKU the owner deliberately retired.
+    sku_withdrawn = _guard_sku_withdrawn()
 
-    if checkout_live:
+    if sku_withdrawn:
+        release_status = (
+            "<strong>Current status: withdrawn.</strong> The TinyZKP Guard "
+            "subscription is no longer offered for purchase at any price. The "
+            "MIT Community engine and the free resource estimator remain "
+            "available; <a href=\"/release.json\">release.json</a> is "
+            "authoritative for engine release state."
+        )
+        release_footer = (
+            "Guard is withdrawn. Published engine release evidence remains "
+            "available and already activated releases continue to work locally."
+        )
+    elif checkout_live:
         release_status = (
             "<strong>Current status: qualified and available.</strong> "
             "TinyZKP Guard is available through the reviewed merchant checkout "
@@ -4924,7 +4954,9 @@ def _launch_copy_values(
             "Guard checkout",
             "yes" if checkout_live else "no",
             (
-                "Available through the reviewed merchant checkout"
+                "Withdrawn, no longer sold"
+                if sku_withdrawn
+                else "Available through the reviewed merchant checkout"
                 if checkout_live
                 else "Sales frozen"
                 if sales_frozen
@@ -5120,7 +5152,14 @@ def _launch_copy_values(
         "credentials, or license keys."
     )
     guard_status = (
-        "<strong>Guard is live.</strong> The exact signed artifact and reviewed "
+        # Withdrawal is checked first for the same reason as release_status
+        # above: every other branch describes a sale that is closed *for now*.
+        "<strong>Guard is withdrawn.</strong> The Guard subscription is no "
+        "longer offered for purchase at any price, and no gate reopens it. "
+        "The MIT Community engine and the free resource estimator remain "
+        "available and are unaffected."
+        if sku_withdrawn
+        else "<strong>Guard is live.</strong> The exact signed artifact and reviewed "
         "merchant checkout in release.json and commerce.json are available. "
         "Advisory review and adoption metrics remain transparently not completed."
         if checkout_live

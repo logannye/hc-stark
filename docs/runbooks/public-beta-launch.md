@@ -1,4 +1,22 @@
-# TinyZKP paid public-beta launch
+# Retired: TinyZKP paid public-beta launch
+
+This runbook is historical and **must not be executed**.
+
+It launches hosted proving, hosted verification, signup, Checkout, uploads, and
+proof jobs against `api.tinyzkp.com` through the `hc-cli beta` client. All of
+that was retired with the hosted stack, and `site/release-channels-v1.json` now
+publishes `current_channel: guard_withdrawn` rather than `public_beta`, so the
+channel transition this runbook performs has no reachable target. The uptime
+probe still carries a `public_beta` target set in
+`deploy/uptime-probe/worker.js`; that is dormant configuration for a channel
+that is not current, not evidence the surface exists.
+
+The system that is actually running is a static Cloudflare Pages site plus one
+Pages worker serving `POST /v1/estimate` and `POST /v1/keys`; see
+[`production_operations.md`](production_operations.md).
+
+The channel model, rollback discipline, and fail-closed gating below are
+preserved as the reviewed prior art for any future paid launch.
 
 This runbook is intentionally fail-closed. The production channel remains
 `containment` until the hash-bound public-beta gate reports `ready`. Public beta

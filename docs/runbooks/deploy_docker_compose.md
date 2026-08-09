@@ -1,4 +1,16 @@
-## Deploy with Docker Compose (single-host)
+## Retired: deploy with Docker Compose (single-host)
+
+This runbook is historical and **must not be executed**.
+
+The stack it starts no longer exists. Repo-root `docker-compose.yml` is now
+literally `services: {}` — `docker compose up --build` builds and starts
+nothing, and there is no `hc-server`, no Prometheus, and no Grafana to reach at
+the ports below. The `HC_SERVER_*` environment contract, the `demo:demo_key`
+bearer key, and the `/healthz`, `/readyz`, and `/docs` routes all belonged to
+the retired hosted proving API.
+
+The live system is a static Cloudflare Pages site and one Pages worker with no
+containers anywhere. See [`production_operations.md`](production_operations.md).
 
 This repo ships a production-shaped stack via `docker-compose.yml`:
 

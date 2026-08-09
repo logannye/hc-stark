@@ -48,6 +48,18 @@ Design commitments this file exists to keep honest, not just measure:
   unmet precondition instead. The threshold itself is untouched, and
   `CONTINUE` is decided first so real keyed demand still lands immediately.
 
+* A window containing NO `demand_log` rows at all is treated as another
+  unmet precondition rather than as the strongest possible kill signal. An
+  empty window and a dead write path produce byte-identical input: a D1
+  binding that stopped resolving, an export that read the wrong database, a
+  worker that stopped logging, and genuine silence are indistinguishable
+  from inside this report. The discoverability preconditions above prove the
+  endpoint could be FOUND; this one asks the narrower question of whether
+  anything was ever RECORDED, which is the half a broken pipeline gets
+  wrong. `scripts/ci/d1_demand_export.py` is the other half: it refuses to
+  leave a database behind at all when its own checks fail, so a broken
+  export cannot even reach this code.
+
 * Rejected requests are counted (migrations/0003_rejected_log.sql) and
   reported separately from every demand figure. They were previously
   dropped entirely, which made a failed integration attempt -- strong
@@ -274,6 +286,7 @@ def build_report(
     )
 
     distinct_keyed_organizations = len(keyed_organizations)
+    demand_log_rows_in_window = len(rows)
 
     # Ordering matters. Real keyed demand is a real signal whenever it
     # arrives, so CONTINUE is decided FIRST and is never blocked by the
@@ -297,6 +310,19 @@ def build_report(
             invalid_because.append(
                 f"demand_clock:only_{days_elapsed}_of_{window_days}_days_elapsed"
             )
+        # An empty window is the one reading a dead pipeline and a dead
+        # market produce identically. Zero rows means nothing was RECORDED,
+        # which is a statement about the measurement apparatus first and the
+        # market only second, so it is named as an unmet precondition rather
+        # than converted into the most consequential verdict this file emits.
+        #
+        # `rejected_log` rows deliberately do NOT satisfy this. They are
+        # written by a different code path (`logRejected` in site/_worker.js,
+        # migrations/0003_rejected_log.sql), so their presence proves that
+        # path is alive and says nothing about whether `logDemand` is. Only
+        # the log the verdict is computed from can vouch for itself.
+        if demand_log_rows_in_window == 0:
+            invalid_because.append("demand_log:zero_rows_in_window")
         verdict = VERDICT_INVALID if invalid_because else VERDICT_KILL
 
     rejected_by_reason = _rejected_by_reason(conn, cutoff_hour)
@@ -316,6 +342,10 @@ def build_report(
             "discoverability_preconditions": preconditions,
             "demand_clock_started_at": started,
             "demand_clock_days_elapsed": days_elapsed,
+            # Raw observed rows, not a demand figure: it exists so a reader
+            # can tell "the log recorded nothing" apart from "the log
+            # recorded traffic that never became a keyed organization".
+            "demand_log_rows_in_window": demand_log_rows_in_window,
             "invalid_because": invalid_because,
         },
         # Reported separately and NEVER summed: anonymous attribution is

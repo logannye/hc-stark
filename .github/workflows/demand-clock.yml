@@ -1,0 +1,152 @@
+name: Ninety-day demand clock verdict
+
+# The pre-committed kill criterion for the hosted estimator is measured by
+# scripts/ci/demand_report.py, and until this workflow existed nothing ran it
+# outside its own unit tests: no workflow in the repository carried a
+# `schedule:` trigger at all. The decision due at the close of the window
+# (release/demand-clock-v1.json, started 2026-07-29, closing ~2026-10-27)
+# would simply never have been made.
+#
+# Weekly is the right cadence for a 90-day window: it bounds how long a
+# fired verdict can sit unnoticed to one week, and it exercises the export
+# path often enough that a broken pipeline surfaces months before the
+# decision depends on it -- which is the whole point, since a pipeline that
+# only breaks on the day of the verdict breaks the verdict.
+#
+# Two GitHub behaviours matter here. A `schedule:` trigger only runs on the
+# repository's DEFAULT branch, so this file does nothing until it is merged
+# to main. And GitHub disables scheduled workflows after 60 days of
+# repository inactivity; if the demand clock ever matters more than the
+# commit rate, re-enable it from the Actions tab.
+
+on:
+  schedule:
+    # 07:00 UTC every Monday.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tinyzkp-demand-clock
+  cancel-in-progress: false
+
+jobs:
+  verdict:
+    # A fork inherits the schedule but not the environment credentials, so
+    # its runs would fail on a missing token and email the wrong person.
+    if: github.repository == 'logannye/hc-stark'
+    runs-on: ubuntu-24.04
+    environment: tinyzkp-production
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          # The exact Node the reviewed Cloudflare toolchain declares in
+          # toolchains/cloudflare/package.json.
+          node-version: "24.18.0"
+      - name: Install the pinned Wrangler toolchain
+        # `npm ci` against the committed lockfile, so the client that reads
+        # production D1 is the reviewed Wrangler 4.85.0 and never whatever
+        # `npx wrangler` resolves to on the day.
+        run: npm ci --prefix toolchains/cloudflare
+
+      - name: Export the remote demand log
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          install -d -m 0700 "$RUNNER_TEMP/tinyzkp-demand-clock"
+          # Fails loudly rather than emitting an empty database: a broken
+          # export and genuine zero demand must never look the same.
+          python3 scripts/ci/d1_demand_export.py \
+            --output "$RUNNER_TEMP/tinyzkp-demand-clock/demand_log.sqlite3" \
+            --summary-output "$RUNNER_TEMP/tinyzkp-demand-clock/export-summary.json"
+
+      - name: Compute the kill-criterion verdict
+        run: |
+          python3 scripts/ci/demand_report.py \
+            --db "$RUNNER_TEMP/tinyzkp-demand-clock/demand_log.sqlite3" \
+            > "$RUNNER_TEMP/tinyzkp-demand-clock/demand-report.json"
+
+      - name: Upload the report and its export provenance
+        # Uploaded BEFORE the verdict is enforced, so the evidence survives
+        # the run that fails on it.
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: demand-clock-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/tinyzkp-demand-clock/demand-report.json
+            ${{ runner.temp }}/tinyzkp-demand-clock/export-summary.json
+          retention-days: 90
+
+      - name: Publish the verdict and fail when a decision is due
+        run: |
+          report="$RUNNER_TEMP/tinyzkp-demand-clock/demand-report.json"
+          verdict="$(jq -er .verdict "$report")"
+          window="$(jq -er .window_days "$report")"
+          threshold="$(jq -er .kill_threshold_organizations "$report")"
+          organizations="$(jq -er .distinct_keyed_organizations "$report")"
+          anonymous="$(jq -er .distinct_approximate_anonymous_sources "$report")"
+          observed="$(jq -er .measurement.demand_log_rows_in_window "$report")"
+          # `//` substitutes only for null/false, and jq treats 0 as true, so
+          # day 0 stays 0 and only an absent/unparseable clock becomes -1.
+          elapsed="$(jq -er '.measurement.demand_clock_days_elapsed // -1' "$report")"
+
+          {
+            printf '## Ninety-day demand clock\n\n'
+            printf -- '- Verdict: **%s**\n' "$verdict"
+            printf -- '- Distinct keyed organizations: %s (kill threshold %s)\n' \
+              "$organizations" "$threshold"
+            printf -- '- Distinct approximate anonymous sources: %s (never summed with the keyed count)\n' \
+              "$anonymous"
+            printf -- '- Demand-log rows observed in the window: %s\n' "$observed"
+            printf -- '- Demand-clock day %s of %s\n' "$elapsed" "$window"
+            if test "$(jq -er '.measurement.invalid_because | length' "$report")" -gt 0; then
+              printf '\nUnmet measurement preconditions:\n\n'
+              jq -r '.measurement.invalid_because[] | "- `" + . + "`"' "$report"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "$verdict" in
+            CONTINUE)
+              # Real keyed demand cleared the frozen threshold. Pass quietly:
+              # a green weekly run is the correct way to say "nothing to
+              # decide", and failing on good news would train the owner to
+              # ignore this workflow's mail.
+              exit 0
+              ;;
+            KILL_THRESHOLD_MET)
+              # Only reachable once the clock has elapsed and every
+              # precondition is met -- demand_report.py withholds this
+              # verdict otherwise. The run fails so GitHub emails the owner.
+              echo "The pre-committed kill criterion is met: ${organizations} distinct keyed organizations against a threshold of ${threshold}. This run fails to force the decision, not because anything is broken." >&2
+              exit 1
+              ;;
+            MEASUREMENT_INVALID)
+              if test "$elapsed" -lt 0; then
+                echo "release/demand-clock-v1.json records no parseable start date, so the window cannot be evaluated at all." >&2
+                exit 1
+              fi
+              if test "$elapsed" -lt "$window"; then
+                # The EXPECTED pre-adoption state. The clock started
+                # 2026-07-29 and MEASUREMENT_INVALID is the honest reading of
+                # every week before it elapses; failing here would mean ~13
+                # consecutive failing runs and a workflow nobody reads by the
+                # time it has something to say.
+                echo "Day ${elapsed} of ${window}: the window has not elapsed, so MEASUREMENT_INVALID is the expected reading."
+                exit 0
+              fi
+              echo "The window has elapsed but the measurement still cannot produce an answer. Unmet preconditions are listed in the job summary; each is a defect to fix, not a result to act on." >&2
+              exit 1
+              ;;
+            *)
+              echo "Unrecognized verdict: ${verdict}" >&2
+              exit 1
+              ;;
+          esac

@@ -22,15 +22,19 @@
     const rate = readAmount("[data-roi-rate]");
     const delay = readAmount("[data-roi-delay]");
     const avoidable = capacity + (hours * rate) + delay;
-    const net = avoidable - 4990;
     const output = form.querySelector("[data-roi-output]");
     if (!output) return;
+    // This worksheet used to subtract the $4,990 annual Guard price and report
+    // a purchase decision. Guard is withdrawn and is not sold at any price, so
+    // quoting it here would price a product that does not exist. What survives
+    // the withdrawal is the only part that was ever customer-owned: the size of
+    // the problem itself, which is what decides whether adopting the engine is
+    // worth anyone's integration time.
     output.textContent = [
       `Documented annual avoidable cost: ${dollars.format(avoidable)}.`,
-      `After the $4,990 annual Guard price: ${dollars.format(net)}.`,
-      net > 0
-        ? "Validate the same workload and integration boundary before treating this as actionable."
-        : "The entered cost does not exceed the annual price.",
+      avoidable > 0
+        ? "Compare this against the engineering time to adopt the free MIT engine, and validate the same workload and integration boundary before treating it as actionable."
+        : "Enter your documented capacity, restart, and delay costs to size the problem.",
     ].join(" ");
   });
 })();

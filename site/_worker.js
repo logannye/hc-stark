@@ -617,6 +617,76 @@ const GONE_ASSETS = new Set([
   "/.well-known/tinyzkp-receipt-share.json",
 ]);
 
+// Every non-HTML file this site actually publishes, by exact request path.
+//
+// Cloudflare Pages' asset server answers a path it cannot resolve by serving
+// the ROOT `index.html` at HTTP 200 — its single-page-app fallback — whenever
+// a project ships no `404.html`, and this project cannot ship one:
+// scripts/ci/site_route_check.py requires every `site/**/*.html` to be either
+// a declared public page or a declared retired route, and a `404.html` is
+// neither. That fallback made every published machine-readable contract URL
+// unverifiable: `GET /schemas/estimate-request-v1.schema.json` — a schema
+// this site has never published — answered 200 with a page of HTML, which a
+// consumer cannot distinguish from "this contract exists". So existence is
+// decided HERE, against a committed list, instead of being delegated to a
+// fallback that has no way to say no.
+//
+// scripts/ci/test_worker_estimate.mjs walks `site/` and fails if this list
+// and the files on disk disagree in EITHER direction, so a newly added asset
+// cannot silently 404 and a deleted one cannot silently keep 200-ing.
+//
+// Deliberately absent, and why:
+//   - `*.html` pages — routed by `PUBLIC_ROUTES` above, not by this list;
+//   - `/og-image.png`, `/pilot-preview.jpg`, and everything under `/vendor/`
+//     — retired surfaces that `retiredResponse` answers 410 before this list
+//     is ever consulted; listing them here would resurrect them;
+//   - `_worker.js`/`_headers` — Pages never serves its own control files;
+//   - `wrangler.toml` and `.wrangler/` — deployment inputs that live in this
+//     directory for tooling reasons and are not part of the public surface.
+const STATIC_ASSETS = new Set([
+  "/.well-known/security.txt",
+  "/commerce.json",
+  "/compatibility.json",
+  "/discovery.json",
+  "/estimate.js",
+  "/favicon.svg",
+  "/guard-social.png",
+  "/indexnow-key.txt",
+  "/llms.txt",
+  "/offers.jsonld",
+  "/pricing.json",
+  "/privacy-disclosure-v1.json",
+  "/release-channels-v1.json",
+  "/release.json",
+  "/robots.txt",
+  "/roi.js",
+  "/schemas/air-package-v1.schema.json",
+  "/schemas/air-proof-bundle-v1.schema.json",
+  "/schemas/benchmark-report-v1.schema.json",
+  "/schemas/compatibility-manifest-v1.schema.json",
+  "/schemas/compatibility-report-v1.schema.json",
+  "/schemas/doctor-report-v1.schema.json",
+  "/schemas/error-envelope-v1.schema.json",
+  "/schemas/guard-channel-v1.schema.json",
+  "/schemas/guard-release-index-v1.schema.json",
+  "/schemas/job-inspect-result-v1.schema.json",
+  "/schemas/job-manifest-v1.schema.json",
+  "/schemas/job-result-v1.schema.json",
+  "/schemas/policy-baseline-v1.schema.json",
+  "/schemas/progress-event-v1.schema.json",
+  "/schemas/proof-bundle-v1.schema.json",
+  "/schemas/public-inputs-v1.schema.json",
+  "/schemas/reason-v1.schema.json",
+  "/schemas/support-report-v1.schema.json",
+  "/schemas/trace-manifest-v1.schema.json",
+  "/schemas/workload-manifest-v1.schema.json",
+  "/shared.css",
+  "/shared.js",
+  "/site.webmanifest",
+  "/sitemap.xml",
+  "/social-card.png",
+]);
+
 function secured(response, preview = false) {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) headers.set(name, value);
@@ -664,6 +734,33 @@ function goneResponse() {
     );
 }
 
+// A 404 has to be legible to whoever asked for it. A machine consumer
+// fetching a contract (`*.json`, `*.jsonld`) gets a machine-readable answer
+// in the same `{ ok: false, error: <code> }` envelope the rest of this
+// worker uses, with a matching content type — the entire point being that
+// "published" and "never published" must be distinguishable without parsing
+// HTML. Anything else gets a short page with a way back. Neither is
+// cacheable: an asset added tomorrow must not be shadowed by a cached miss.
+function notFoundResponse(pathname) {
+  const headers = {
+    "Cache-Control": "no-store",
+    "X-Robots-Tag": "noindex, nofollow",
+  };
+  if (/\.(json|jsonld)$/i.test(pathname)) {
+    return new Response(JSON.stringify({ ok: false, error: "not_found" }), {
+      status: 404,
+      headers: { ...headers, "Content-Type": "application/json; charset=utf-8" },
+    });
+  }
+  return new Response(
+    "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>Not found — TinyZKP</title></head><body><main><h1>Not found.</h1><p>TinyZKP publishes nothing at this address.</p><p><a href=\"/\">Go to the TinyZKP home page</a></p></main></body></html>",
+    {
+      status: 404,
+      headers: { ...headers, "Content-Type": "text/html; charset=utf-8" },
+    },
+  );
+}
+
 function retiredResponse(pathname) {
   const normalized = normalizedPath(pathname);
   if (GONE_ASSETS.has(pathname) || GONE_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
@@ -682,21 +779,34 @@ async function staticResponse(request, env, url, preview) {
 
   const normalized = normalizedPath(url.pathname);
   const lastSegment = normalized.split("/").pop() || "";
-  if (!lastSegment.includes(".") && !PUBLIC_ROUTES.has(normalized)) {
-    return secured(new Response("not found", {
-      status: 404,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    }), preview);
+  // A dot in the last segment means a file request (`normalizedPath` has
+  // already stripped any `.html`, so pages never land here). Pages' asset
+  // fallback cannot answer "no" for those — see `STATIC_ASSETS` — so an
+  // unpublished file is settled from the committed list before `ASSETS` is
+  // consulted at all, and never gets the chance to become a 200.
+  if (lastSegment.includes(".")) {
+    if (!STATIC_ASSETS.has(normalized)) return secured(notFoundResponse(normalized), preview);
+  } else if (!PUBLIC_ROUTES.has(normalized)) {
+    return secured(notFoundResponse(normalized), preview);
   }
 
   const direct = await env.ASSETS.fetch(request);
-  if (direct.status !== 404 || url.pathname === "/" || lastSegment.includes(".")) {
+  // A 404 from the asset server for a path this worker believes IS published
+  // is answered in this site's own shape rather than passed through as
+  // Pages' generic page — but it stays a 404, and is never laundered into a
+  // 200 by falling through to the clean-URL retry below.
+  if (direct.status === 404 && (url.pathname === "/" || lastSegment.includes("."))) {
+    return secured(notFoundResponse(normalized), preview);
+  }
+  if (direct.status !== 404) {
     return secured(direct, preview);
   }
 
   const htmlUrl = new URL(url);
   htmlUrl.pathname = `${normalized}.html`;
-  return secured(await env.ASSETS.fetch(new Request(htmlUrl, request)), preview);
+  const html = await env.ASSETS.fetch(new Request(htmlUrl, request));
+  if (html.status === 404) return secured(notFoundResponse(normalized), preview);
+  return secured(html, preview);
 }
 
 // `POST /v1/estimate` — the shape-only resource estimator. Every number in

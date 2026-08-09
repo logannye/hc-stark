@@ -1,8 +1,18 @@
 # TinyZKP incident response runbook
 
-Status: production Guard operating runbook. Hosted API, MCP, Stripe-backend,
-and on-box proving instructions retained later in this file are historical
-recovery references only; they are not current launch or rollback controls.
+Status: partially historical. The severity model, communication discipline, and
+postmortem practice below still govern. The Guard operating posture they were
+written for does not: `site/release-channels-v1.json` publishes
+`current_channel: guard_withdrawn`. The hosted API, MCP, Stripe-backend, and
+on-box proving instructions retained later in this file describe systems that no
+longer exist; they are historical recovery references only, not current launch
+or rollback controls, and **must not be executed**.
+
+The live production surface is a static Cloudflare Pages site plus one Pages
+worker. Its architecture, health checks, deploy and rollback path, and paging
+mechanism are in [`production_operations.md`](production_operations.md) — start
+an incident from that file's section 2 and use this one for the process around
+it.
 
 Use this when TinyZKP has a customer-visible outage, degraded proving path,
 billing/account incident, security concern, or bad deployment. The goal is to
