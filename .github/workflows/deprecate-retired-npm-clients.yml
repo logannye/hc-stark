@@ -1,0 +1,114 @@
+# Deprecate the published npm clients for the retired hosted API.
+#
+# WHY THIS EXISTS
+# ===============
+# The hosted TinyZKP API was retired on 2026-07-17 and api.tinyzkp.com has
+# returned 410 ever since. Four client packages were published against it and
+# were never deprecated, so as of 2026-08-09 they still install cleanly and
+# still instruct callers to point at a host that is gone:
+#
+#   tinyzkp@0.1.1      "TypeScript client for the TinyZKP proving API"
+#   @tinyzkp/cli@0.1.0
+#   @tinyzkp/verify@0.1.0, @0.1.1
+#
+# Unlike a stale directory listing this is EXECUTABLE. `npx @tinyzkp/cli
+# templates` runs today, resolves api.tinyzkp.com, and dies on a bare 410 with
+# no explanation. It is the worst available first impression of the project.
+#
+# WHY DEPRECATE RATHER THAN UNPUBLISH
+# ===================================
+# Unpublishing breaks the lockfile of anyone who already depends on these, and
+# npm refuses it outright more than 72 hours after publish. Deprecation is the
+# supported, reversible signal: it warns on install and shows on the package
+# page while leaving existing installs working. Clearing it later is
+# `npm deprecate <pkg> ""`.
+#
+# WHY THIS IS A WORKFLOW AND NOT A RUNBOOK
+# ========================================
+# NPM_TOKEN already exists as a repository secret (it was added 2026-04-27 for
+# the client publish pipeline). Doing this by hand otherwise means finding npm
+# credentials that live nowhere else. This turns the whole task into one
+# dispatch. Nothing here runs on a schedule or on push: deprecating a public
+# package is an outward-facing act and must stay a deliberate one.
+
+name: Deprecate retired npm clients
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type DEPRECATE to confirm this outward-facing change
+        required: true
+        type: string
+      dry_run:
+        description: Print the commands without sending them
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tinyzkp-npm-deprecation
+  cancel-in-progress: false
+
+jobs:
+  deprecate:
+    # Owner-only, mirroring deploy-uptime-probe.yml. A published-package change
+    # should never be reachable from a fork or a non-owner dispatch.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.actor == github.repository_owner &&
+      github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-24.04
+    env:
+      CONFIRM: ${{ inputs.confirm }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          registry-url: https://registry.npmjs.org
+
+      - name: Require explicit confirmation
+        run: |
+          set -euo pipefail
+          # Compared as an environment variable rather than interpolated into
+          # the script body, so the input can never be executed as shell.
+          test "$CONFIRM" = "DEPRECATE"
+
+      - name: Deprecate each retired client
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          message='The hosted TinyZKP API was retired on 2026-07-17 and api.tinyzkp.com now returns 410 Gone, so this client cannot function. TinyZKP is now a local, MIT-licensed Plonky3 engine plus a free hosted resource estimator: see https://tinyzkp.com and https://tinyzkp.com/estimate'
+          status=0
+          for spec in 'tinyzkp@<=0.1.1' '@tinyzkp/cli@<=0.1.0' '@tinyzkp/verify@<=0.1.1'; do
+            if [ "$DRY_RUN" = "true" ]; then
+              printf 'DRY RUN: npm deprecate %s "<message>"\n' "$spec"
+              continue
+            fi
+            printf 'Deprecating %s\n' "$spec"
+            # Keep going on failure so one missing package cannot strand the
+            # others half-done; the loop reports a non-zero status at the end.
+            npm deprecate "$spec" "$message" || status=1
+          done
+          exit "$status"
+
+      - name: Report the resulting registry state
+        if: always()
+        run: |
+          set -euo pipefail
+          for pkg in tinyzkp @tinyzkp/cli @tinyzkp/verify; do
+            printf '### %s\n' "$pkg" >> "$GITHUB_STEP_SUMMARY"
+            # `npm view <pkg> deprecated` prints nothing when not deprecated.
+            deprecated="$(npm view "$pkg" deprecated 2>/dev/null || true)"
+            if [ -n "$deprecated" ]; then
+              printf 'deprecated: %s\n\n' "$deprecated" >> "$GITHUB_STEP_SUMMARY"
+            else
+              printf 'NOT deprecated\n\n' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
