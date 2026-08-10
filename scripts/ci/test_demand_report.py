@@ -11,10 +11,11 @@ either of them on a schedule.
 
 from __future__ import annotations
 
+import io
 import json
 import re
 import sqlite3
-import subprocess
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -596,7 +597,17 @@ def test_the_demand_clock_workflow_exports_before_it_reports():
     assert export_at < report_at
     assert "environment: tinyzkp-production" in workflow
     assert "CLOUDFLARE_API_TOKEN" in workflow
-    assert "npm ci --prefix toolchains/cloudflare" in workflow
+    # A DEDICATED D1 credential, not the Pages deploy token. The deploy token
+    # carries no D1 permission (the first real run failed on exactly that), and
+    # widening it would give a read-only weekly report the rights that publish
+    # the production site.
+    assert "CLOUDFLARE_D1_READ_TOKEN" in workflow
+    # And no Node/Wrangler toolchain: `wrangler d1 execute <database>` resolves
+    # its argument as a NAME and cannot address the database by UUID, so this
+    # job talks to D1's REST API from the standard library instead. If someone
+    # reintroduces `npm ci` here, the export has probably been quietly moved
+    # back onto a client that cannot name the right database.
+    assert "npm ci" not in workflow
 
 
 def test_the_demand_clock_workflow_fails_only_when_a_decision_is_due():
@@ -628,16 +639,46 @@ def test_the_demand_clock_workflow_fails_only_when_a_decision_is_due():
 # empty remote log leaves a real database that reads as MEASUREMENT_INVALID.
 
 
-def _completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess:
-    return subprocess.CompletedProcess(
-        args=(), returncode=returncode, stdout=stdout, stderr=""
-    )
+class _Response:
+    """The minimal urlopen() context manager the export consumes."""
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def read(self, _limit: int | None = None) -> bytes:
+        return self._body
+
+    def __enter__(self) -> "_Response":
+        return self
+
+    def __exit__(self, *_exc) -> bool:
+        return False
+
+
+def _completed(payload: str, status: int = 200) -> _Response:
+    if status != 200:
+        raise urllib.error.HTTPError(
+            "https://api.cloudflare.com/", status, "error", {}, io.BytesIO(payload.encode())
+        )
+    return _Response(payload.encode("utf-8"))
 
 
 def _envelope(rows: list[dict]) -> str:
-    """Wrangler's `d1 execute --json` output shape."""
+    """D1's REST response shape.
+
+    The inner `result` array is byte-identical to what `wrangler d1 execute
+    --json` used to print, which is why the export's parser is unchanged; only
+    the transport moved. See D1_QUERY_URL in d1_demand_export.py for why
+    Wrangler cannot be used here at all.
+    """
     return json.dumps(
-        [{"success": True, "meta": {"rows_read": len(rows)}, "results": rows}]
+        {
+            "success": True,
+            "errors": [],
+            "result": [
+                {"success": True, "meta": {"rows_read": len(rows)}, "results": rows}
+            ],
+        }
     )
 
 
@@ -661,19 +702,24 @@ def _fake_wrangler(
     overcount: dict[str, int] | None = None,
     fail_on: str | None = None,
 ):
-    """Stand-in for `wrangler d1 execute --remote --json`.
+    """Stand-in for D1's REST query endpoint.
 
-    Wrangler cannot run here (it needs a real Cloudflare credential), so the
-    envelope it returns is reproduced exactly and the SQL this script emits is
-    answered from in-memory tables.
+    The real endpoint needs a Cloudflare credential, so its envelope is
+    reproduced exactly and the SQL this script emits is answered from in-memory
+    tables. The SQL is read out of the POST body rather than out of an argv
+    list, which is the only thing the transport change altered here.
     """
     stores = {"demand_log": demand or [], "rejected_log": rejected or []}
     extra = overcount or {}
 
-    def runner(command, **_kwargs):
-        sql = command[command.index("--command") + 1]
+    def opener(request, **_kwargs):
+        assert request.get_method() == "POST"
+        # The database must be addressed by UUID in the path; a name here would
+        # reintroduce the resolution ambiguity the export exists to refuse.
+        assert export_module.DATABASE_ID in request.full_url
+        sql = json.loads(request.data.decode("utf-8"))["sql"]
         if fail_on is not None and fail_on in sql:
-            return _completed("", returncode=1)
+            return _completed(json.dumps({"success": False, "errors": [{"code": 7500}]}), status=500)
         if "sqlite_master" in sql:
             return _completed(_envelope([{"name": name} for name in tables]))
         table = "demand_log" if "demand_log" in sql else "rejected_log"
@@ -692,23 +738,17 @@ def _fake_wrangler(
         page = [row for row in rows if lower < row["id"] <= upper]
         return _completed(_envelope(page[: export_module.PAGE_ROWS]))
 
-    return runner
+    return opener
 
 
-def _run_export(tmp_path: Path, runner, *, output: Path | None = None) -> dict:
-    node = tmp_path / "node"
-    wrangler = tmp_path / "wrangler.js"
-    node.write_text("", encoding="utf-8")
-    wrangler.write_text("", encoding="utf-8")
+def _run_export(tmp_path: Path, opener, *, output: Path | None = None) -> dict:
     return export_module.export(
         output if output is not None else tmp_path / "export" / "demand_log.sqlite3",
         environment={
             "CLOUDFLARE_API_TOKEN": "t" * 40,
             "CLOUDFLARE_ACCOUNT_ID": "0" * 32,
         },
-        node=node,
-        wrangler=wrangler,
-        runner=runner,
+        opener=opener,
         now=NOW,
     )
 
@@ -729,11 +769,6 @@ def test_a_repointed_binding_is_refused_before_any_query_runs(tmp_path):
         'database_id = "00000000-0000-0000-0000-000000000000"\n',
         encoding="utf-8",
     )
-    node = tmp_path / "node"
-    wrangler = tmp_path / "wrangler.js"
-    node.write_text("", encoding="utf-8")
-    wrangler.write_text("", encoding="utf-8")
-
     with pytest.raises(export_module.ExportError, match="no longer binds"):
         export_module.export(
             tmp_path / "demand_log.sqlite3",
@@ -741,9 +776,7 @@ def test_a_repointed_binding_is_refused_before_any_query_runs(tmp_path):
                 "CLOUDFLARE_API_TOKEN": "t" * 40,
                 "CLOUDFLARE_ACCOUNT_ID": "0" * 32,
             },
-            node=node,
-            wrangler=wrangler,
-            runner=_fake_wrangler(),
+            opener=_fake_wrangler(),
             config=config,
             now=NOW,
         )
@@ -820,15 +853,24 @@ def test_remote_schema_drift_fails_instead_of_dropping_a_column(tmp_path):
         _run_export(tmp_path, _fake_wrangler(demand=[row]))
 
 
-def test_an_unsuccessful_wrangler_envelope_is_never_treated_as_no_rows():
+def test_an_unsuccessful_d1_envelope_is_never_treated_as_no_rows():
+    """Every way the provider can answer badly must raise, not return [].
+
+    Returning an empty row list for any of these would be the false zero this
+    whole module exists to prevent: an error would become "nobody called".
+    """
     with pytest.raises(export_module.ExportError, match="unsuccessful statement"):
         export_module.parse_statement_results(
             json.dumps([{"success": False, "meta": {}, "results": []}])
         )
     with pytest.raises(export_module.ExportError, match="not valid JSON"):
         export_module.parse_statement_results("Authentication error [code: 10000]")
-    with pytest.raises(export_module.ExportError, match="no output"):
+    with pytest.raises(export_module.ExportError, match="no result"):
         export_module.parse_statement_results("")
+    # `result: null` is what D1 returns alongside a top-level error, and it is
+    # the shape most likely to slip through a laxer parser as "no rows".
+    with pytest.raises(export_module.ExportError, match="other than one statement"):
+        export_module.parse_statement_results(json.dumps(None))
 
 
 def test_a_malformed_credential_fails_before_the_database_is_replaced(tmp_path):
@@ -842,9 +884,7 @@ def test_a_malformed_credential_fails_before_the_database_is_replaced(tmp_path):
         export_module.export(
             output,
             environment={"CLOUDFLARE_ACCOUNT_ID": "0" * 32},
-            node=node,
-            wrangler=wrangler,
-            runner=_fake_wrangler(),
+            opener=_fake_wrangler(),
             now=NOW,
         )
     assert not output.exists()
