@@ -44,16 +44,16 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          # The exact Node the reviewed Cloudflare toolchain declares in
-          # toolchains/cloudflare/package.json.
-          node-version: "24.18.0"
-      - name: Install the pinned Wrangler toolchain
-        # `npm ci` against the committed lockfile, so the client that reads
-        # production D1 is the reviewed Wrangler 4.85.0 and never whatever
-        # `npx wrangler` resolves to on the day.
-        run: npm ci --prefix toolchains/cloudflare
+      # No Node and no Wrangler toolchain: the export calls D1's REST API from
+      # the Python standard library. `wrangler d1 execute <database>` resolves
+      # its argument as a NAME, never a UUID, so it could not address the exact
+      # database this job is required to read -- see D1_QUERY_URL in
+      # scripts/ci/d1_demand_export.py. Dropping it also removes a dependency
+      # install and a Node install from a weekly read-only report.
+      #
+      # (Deliberately not naming the package-install command here: the test
+      # that enforces this asserts on the workflow's TEXT, so a comment
+      # mentioning it would fail the very check it describes.)
 
       - name: Export the remote demand log
         env:

@@ -54,23 +54,38 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 import sqlite3
-import subprocess
 import sys
-import tempfile
 import time
 from typing import Any, Callable
+import urllib.error
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = ROOT / "migrations"
 WRANGLER_CONFIG = ROOT / "site" / "wrangler.toml"
-# Installed by `npm ci --prefix toolchains/cloudflare`, which pins Wrangler
-# 4.85.0 by lockfile integrity. The Pages deploy path materializes the same
-# toolchain under /var/lib as root; this read-only report does not need that
-# ceremony, but it must not fall back to an unpinned `npx wrangler` either.
-DEFAULT_WRANGLER = (
-    ROOT / "toolchains" / "cloudflare" / "node_modules" / "wrangler" / "bin" / "wrangler.js"
+
+# The export talks to D1's REST API directly rather than shelling out to
+# Wrangler. That is not a style preference; Wrangler cannot do this job.
+#
+# `wrangler d1 execute <database>` resolves its positional argument as a NAME
+# or binding, never as a UUID. Given the UUID it lists the account's databases,
+# finds nothing called "ea4ad71c-...", and reports:
+#     Couldn't find DB with name 'ea4ad71c-6175-4a69-b106-02cc4af378ae'
+# which reads like a missing database rather than an unsupported identifier.
+# (Observed 2026-08-10 with a token that could both query AND list, so it is
+# not a permissions problem, and widening the token does not fix it.)
+#
+# Passing the friendly name instead would work but reintroduces exactly the
+# ambiguity this module refuses: a name resolves against whatever is in scope,
+# and resolving to the wrong or empty database is the failure that would read
+# as zero demand. The REST endpoint takes the UUID IN THE URL PATH, so the
+# database is addressed unambiguously and no resolution step exists to go
+# wrong. It also needs only D1 Read, and removes Node and the pinned Wrangler
+# toolchain from this job entirely.
+D1_QUERY_URL = (
+    "https://api.cloudflare.com/client/v4"
+    "/accounts/{account}/d1/database/{database}/query"
 )
 
 DATABASE_NAME = "tinyzkp-estimator"
@@ -124,7 +139,6 @@ MAX_PAGES = 10_000
 COMMAND_TIMEOUT = 300
 MAX_COMMAND_OUTPUT_BYTES = 64 * 1024 * 1024
 MAX_DIAGNOSTIC_BYTES = 4096
-TRUSTED_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
 
 
 class ExportError(ValueError):
@@ -153,26 +167,13 @@ def configured_database(path: Path = WRANGLER_CONFIG) -> tuple[str, str]:
     return names[0], identifiers[0]
 
 
-def _executable(candidate: str | Path | None, program: str) -> Path:
-    resolved = Path(candidate) if candidate is not None else None
-    if resolved is None:
-        found = shutil.which(program)
-        if found is None:
-            raise ExportError(f"required executable is not on PATH: {program}")
-        resolved = Path(found)
-    if not resolved.is_file():
-        raise ExportError(f"required executable is missing: {resolved}")
-    return resolved
+def _credentials(environment: dict[str, str]) -> tuple[str, str]:
+    """The validated (token, account) pair.
 
-
-def _wrangler_environment(
-    environment: dict[str, str], node: Path, home: Path
-) -> dict[str, str]:
-    """A minimal environment for Wrangler, with the credential validated.
-
-    A malformed or absent token makes Wrangler fail in ways that read like a
-    query problem, so the shape is checked here where the message can say
-    what is actually wrong.
+    A malformed or absent credential makes the API fail in ways that read like
+    a query problem -- Cloudflare answers both with a bare "Authentication
+    error [code: 10000]" -- so the shape is checked here, where the message can
+    say what is actually wrong.
     """
     token = environment.get("CLOUDFLARE_API_TOKEN", "")
     account = environment.get("CLOUDFLARE_ACCOUNT_ID", "")
@@ -184,116 +185,104 @@ def _wrangler_environment(
         raise ExportError("CLOUDFLARE_API_TOKEN is missing or malformed")
     if ACCOUNT_ID.fullmatch(account) is None:
         raise ExportError("CLOUDFLARE_ACCOUNT_ID is missing or malformed")
-    return {
-        "PATH": os.pathsep.join((str(node.parent), TRUSTED_PATH)),
-        "HOME": str(home),
-        "TMPDIR": str(home),
-        "LANG": "C.UTF-8",
-        "LC_ALL": "C.UTF-8",
-        "NO_COLOR": "1",
-        "WRANGLER_SEND_METRICS": "false",
-        "CLOUDFLARE_API_TOKEN": token,
-        "CLOUDFLARE_ACCOUNT_ID": account,
-    }
+    return token, account
 
 
-def wrangler_command(sql: str, *, node: Path, wrangler: Path) -> tuple[str, ...]:
-    """The exact remote read command.
+def query_request(sql: str, *, account: str, token: str) -> "urllib.request.Request":
+    """The exact remote read request.
 
-    The database is named by UUID, not by the friendly name: a name is
-    resolved against whatever config happens to be in scope, and resolving to
-    the wrong (empty) database is precisely the failure that would read as
-    zero demand. `configured_database` has already proved this UUID is the one
-    the deployed worker writes to.
+    The database is addressed by UUID in the URL path, so there is no name to
+    resolve and nothing that can silently select a different (empty) database.
+    `configured_database` has already proved this UUID is the one the deployed
+    worker writes to.
     """
-    return (
-        str(node),
-        str(wrangler),
-        "d1",
-        "execute",
-        DATABASE_ID,
-        "--remote",
-        "--json",
-        "--command",
-        sql,
+    return urllib.request.Request(
+        D1_QUERY_URL.format(account=account, database=DATABASE_ID),
+        data=json.dumps({"sql": sql}).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "tinyzkp-demand-clock",
+        },
     )
 
 
 def parse_statement_results(raw: str) -> list[dict[str, Any]]:
-    """The single statement's rows from Wrangler's `--json` envelope."""
+    """The single statement's rows from D1's response envelope.
+
+    Shape (identical to what `wrangler --json` used to print, which is why the
+    validation below is unchanged from the Wrangler era):
+        {"success": true, "errors": [], "result": [
+            {"success": true, "meta": {...}, "results": [ {...}, ... ]}]}
+    `raw` is the serialized `result` array, i.e. the inner list.
+    """
     text = (raw or "").strip()
     if not text:
-        raise ExportError("Wrangler produced no output for a query")
-    # Under `--json` Wrangler is expected to print nothing but the envelope,
-    # but it has historically prefixed a progress banner. Skipping to the
-    # first `[` tolerates that WITHOUT tolerating a partial document:
-    # everything from that byte on still has to parse as one complete value.
-    start = text.find("[")
-    if start < 0:
-        raise ExportError("Wrangler output contains no JSON array")
+        raise ExportError("D1 returned no result for a query")
     try:
-        payload = json.loads(text[start:])
+        payload = json.loads(text)
     except json.JSONDecodeError as error:
-        raise ExportError("Wrangler output is not valid JSON") from error
+        raise ExportError("D1 result is not valid JSON") from error
     if not isinstance(payload, list) or len(payload) != 1:
-        raise ExportError("Wrangler returned other than one statement result")
+        raise ExportError("D1 returned other than one statement result")
     statement = payload[0]
     if not isinstance(statement, dict):
-        raise ExportError("Wrangler statement result is not an object")
+        raise ExportError("D1 statement result is not an object")
     if statement.get("success") is not True:
-        raise ExportError("Wrangler reported an unsuccessful statement")
+        raise ExportError("D1 reported an unsuccessful statement")
     if not isinstance(statement.get("meta"), dict):
-        raise ExportError("Wrangler statement result carries no meta block")
+        raise ExportError("D1 statement result carries no meta block")
     rows = statement.get("results")
     if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
-        raise ExportError("Wrangler statement result carries no row list")
+        raise ExportError("D1 statement result carries no row list")
     return rows
 
 
 def _run_query(
     sql: str,
     *,
-    node: Path,
-    wrangler: Path,
-    environment: dict[str, str],
-    runner: Callable[..., "subprocess.CompletedProcess[str]"],
+    account: str,
+    token: str,
+    opener: Callable[..., Any],
     timeout: int,
 ) -> list[dict[str, Any]]:
-    command = wrangler_command(sql, node=node, wrangler=wrangler)
+    request = query_request(sql, account=account, token=token)
     try:
-        completed = runner(
-            command,
-            cwd=str(ROOT),
-            env=environment,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise ExportError("the Wrangler query could not complete") from error
-    stdout = completed.stdout or ""
-    stderr = completed.stderr or ""
-    if completed.returncode != 0:
-        # The diagnostic is worth printing -- a weekly job the owner has to
-        # debug from an email needs the provider's own message -- but the
-        # token must never appear in a log, so it is redacted by value rather
-        # than by guessing at a pattern.
-        token = environment.get("CLOUDFLARE_API_TOKEN", "")
-        diagnostic = f"{stdout}\n{stderr}"
+        with opener(request, timeout=timeout) as response:
+            body = response.read(MAX_COMMAND_OUTPUT_BYTES + 1)
+    except urllib.error.HTTPError as error:
+        # Cloudflare returns its error envelope in the BODY of a 4xx, so the
+        # useful diagnostic is only available by reading the failed response.
+        body = error.read(MAX_DIAGNOSTIC_BYTES)
+        detail = body.decode("utf-8", "replace") if body else ""
+        # The token must never reach a log, and it is not echoed back by the
+        # API -- but redact by value anyway rather than trust that.
         if token:
-            diagnostic = diagnostic.replace(token, "***")
+            detail = detail.replace(token, "***")
         print(
-            "d1_demand_export: Wrangler exited "
-            f"{completed.returncode}: {diagnostic[:MAX_DIAGNOSTIC_BYTES]}",
+            f"d1_demand_export: D1 returned HTTP {error.code}: "
+            f"{detail[:MAX_DIAGNOSTIC_BYTES]}",
             file=sys.stderr,
         )
-        raise ExportError("the Wrangler query failed")
-    if len(stdout.encode("utf-8")) > MAX_COMMAND_OUTPUT_BYTES:
-        raise ExportError("the Wrangler query emitted oversized output")
-    return parse_statement_results(stdout)
+        raise ExportError("the D1 query failed") from error
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        raise ExportError("the D1 query could not complete") from error
+
+    if len(body) > MAX_COMMAND_OUTPUT_BYTES:
+        raise ExportError("the D1 query emitted oversized output")
+    try:
+        envelope = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ExportError("D1 response is not valid JSON") from error
+    if not isinstance(envelope, dict) or envelope.get("success") is not True:
+        errors = ""
+        if isinstance(envelope, dict):
+            errors = json.dumps(envelope.get("errors"))[:MAX_DIAGNOSTIC_BYTES]
+        print(f"d1_demand_export: D1 reported {errors}", file=sys.stderr)
+        raise ExportError("the D1 query failed")
+    return parse_statement_results(json.dumps(envelope.get("result")))
 
 
 def _non_negative_integer(
@@ -413,9 +402,7 @@ def export(
     output: Path,
     *,
     environment: dict[str, str] | None = None,
-    node: str | Path | None = None,
-    wrangler: str | Path | None = None,
-    runner: Callable[..., "subprocess.CompletedProcess[str]"] = subprocess.run,
+    opener: Callable[..., Any] = urllib.request.urlopen,
     timeout: int = COMMAND_TIMEOUT,
     config: Path = WRANGLER_CONFIG,
     now: int | None = None,
@@ -432,13 +419,7 @@ def export(
             "manufacture a false zero"
         )
 
-    node_path = _executable(node, "node")
-    wrangler_path = Path(wrangler) if wrangler is not None else DEFAULT_WRANGLER
-    if not wrangler_path.is_file():
-        raise ExportError(
-            f"pinned Wrangler entrypoint is missing: {wrangler_path} "
-            "(run `npm ci --prefix toolchains/cloudflare`)"
-        )
+    token, account = _credentials(environment)
 
     # Remove any stale database BEFORE the first query. Everything after this
     # point either completes and renames a fresh file into place, or leaves
@@ -446,37 +427,34 @@ def export(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.unlink(missing_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="tinyzkp-d1-export-") as home:
-        wrangler_environment = _wrangler_environment(
-            environment, node_path, Path(home)
+    # No sandbox temporary directory any more: it existed only to give Wrangler
+    # an isolated HOME so it could not read or write the caller's Wrangler
+    # state. An HTTPS request has no such ambient state to isolate.
+    def query(sql: str) -> list[dict[str, Any]]:
+        return _run_query(
+            sql,
+            account=account,
+            token=token,
+            opener=opener,
+            timeout=timeout,
         )
 
-        def query(sql: str) -> list[dict[str, Any]]:
-            return _run_query(
-                sql,
-                node=node_path,
-                wrangler=wrangler_path,
-                environment=wrangler_environment,
-                runner=runner,
-                timeout=timeout,
-            )
+    present = {
+        row.get("name")
+        for row in query("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+    }
+    missing = sorted(table for table, _, _ in EXPORTED_TABLES if table not in present)
+    if missing:
+        raise ExportError(
+            "the remote database is missing " + ", ".join(missing) + "; an "
+            "unmigrated database answers every demand query with nothing, "
+            "which is not the same as nobody calling"
+        )
 
-        present = {
-            row.get("name")
-            for row in query("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
-        }
-        missing = sorted(table for table, _, _ in EXPORTED_TABLES if table not in present)
-        if missing:
-            raise ExportError(
-                "the remote database is missing " + ", ".join(missing) + "; an "
-                "unmigrated database answers every demand query with nothing, "
-                "which is not the same as nobody calling"
-            )
-
-        exported = {
-            table: _fetch_table(table, columns, query=query)
-            for table, _, columns in EXPORTED_TABLES
-        }
+    exported = {
+        table: _fetch_table(table, columns, query=query)
+        for table, _, columns in EXPORTED_TABLES
+    }
 
     _materialize(output, exported)
 
@@ -509,26 +487,11 @@ def main(argv: list[str]) -> int:
         default=None,
         help="Optional path for the JSON export summary also printed to stdout",
     )
-    parser.add_argument(
-        "--node",
-        default=None,
-        help="Node executable to run Wrangler with; defaults to `node` on PATH",
-    )
-    parser.add_argument(
-        "--wrangler",
-        default=None,
-        help=f"Wrangler entrypoint; defaults to {DEFAULT_WRANGLER}",
-    )
     parser.add_argument("--timeout", type=int, default=COMMAND_TIMEOUT)
     args = parser.parse_args(argv)
 
     try:
-        summary = export(
-            args.output,
-            node=args.node,
-            wrangler=args.wrangler,
-            timeout=args.timeout,
-        )
+        summary = export(args.output, timeout=args.timeout)
     except ExportError as error:
         print(f"d1_demand_export: {error}", file=sys.stderr)
         return 1
