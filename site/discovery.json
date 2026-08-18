@@ -34,7 +34,10 @@
     "support_report_v1": "https://tinyzkp.com/schemas/support-report-v1.schema.json"
   },
   "evergreen_acquisition_pages": [
-    "https://tinyzkp.com/doctor"
+    "https://tinyzkp.com/doctor",
+    "https://tinyzkp.com/plonky3-out-of-memory",
+    "https://tinyzkp.com/resumable-plonky3-prover",
+    "https://tinyzkp.com/ssd-backed-plonky3-proving"
   ],
   "latest_release_index": null,
   "launch_state": "blocked",

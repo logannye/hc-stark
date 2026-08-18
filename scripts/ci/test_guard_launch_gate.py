@@ -1227,22 +1227,84 @@ def test_generated_public_live_and_sales_frozen_surfaces_do_not_contradict_json(
     )
 
 
-def test_signed_evaluation_doctor_indexes_only_doctor_before_engine_gate() -> None:
+def test_qualified_engine_release_still_indexes_acquisition_pages() -> None:
+    """The engine gate remains SUFFICIENT, it is just no longer NECESSARY.
+
+    Replaces `test_signed_evaluation_doctor_indexes_only_doctor_before_engine_gate`,
+    which pinned the policy that a blocked engine release keeps the three SEO
+    landing pages out of the index. That policy outlived the SKU it protected;
+    see `_acquisition_routes`. Keeping this arm proves the change is a strict
+    relaxation rather than a swap.
+    """
     derived = gate.derive(blocked_source())
     derived["discovery"]["availability"][
         "signed_evaluation_doctor_binary"
-    ] = True
+    ] = False
+    derived["launch"]["gate_status"]["engine_release_ready"]["status"] = "passed"
+
     routes = gate._acquisition_routes(derived)
-    assert routes["/doctor"] is True
+    # A qualified engine release carries the three content pages on its own...
     assert all(
-        ready is False
-        for route, ready in routes.items()
-        if route != "/doctor"
-    )
+        ready for route, ready in routes.items() if route != "/doctor"
+    ), routes
+    # ...but NOT `/doctor`, which hands out the signed evaluation doctor and so
+    # keeps requiring that release as its own evidence.
+    assert routes["/doctor"] is False, routes
+
     sitemap = gate._sitemap_bytes(routes).decode("utf-8")
-    assert "https://tinyzkp.com/doctor" in sitemap
-    assert "https://tinyzkp.com/plonky3-out-of-memory" not in sitemap
+    assert "https://tinyzkp.com/plonky3-out-of-memory" in sitemap
+    assert "https://tinyzkp.com/doctor" not in sitemap
     assert "<lastmod>" not in sitemap
+
+
+def test_acquisition_pages_index_on_free_diagnostic_evidence() -> None:
+    """The three SEO landing pages must not be gated on the withdrawn SKU.
+
+    They previously keyed on `engine_release_ready`, which attests readiness to
+    ship a Guard engine RELEASE. Guard is withdrawn, that gate is `blocked`, and
+    nothing the current business does can unblock it -- so the three pages that
+    capture "plonky3 out of memory", the exact query of the buyer persona, were
+    `noindex,nofollow` and absent from the sitemap for as long as the withdrawal
+    stood. The pages route readers to the FREE diagnostics (`/doctor`,
+    `/estimate`), so the signed evaluation doctor release is the honest
+    evidence that what they point at is real.
+    """
+    derived = gate.derive(blocked_source())
+    assert (
+        derived["launch"]["gate_status"]["engine_release_ready"]["status"]
+        == "blocked"
+    ), "fixture must keep the engine gate blocked, or this proves nothing"
+    derived["discovery"]["availability"][
+        "signed_evaluation_doctor_binary"
+    ] = True
+
+    routes = gate._acquisition_routes(derived)
+    assert all(routes.values()), routes
+
+    sitemap = gate._sitemap_bytes(routes).decode("utf-8")
+    for route in gate.ACQUISITION_ROUTES:
+        assert f"https://tinyzkp.com{route}" in sitemap
+
+
+def test_acquisition_pages_deindex_without_free_diagnostic_evidence() -> None:
+    """The falsifiability arm: the new key must be able to say no.
+
+    Without this, keying acquisition on a signal that is `True` by construction
+    would swap one dead gate for a decoration one. `signed_evaluation_doctor_binary`
+    is derived from `signed_doctor_identity is not None`, so withdrawing the
+    signed release must de-index every acquisition page.
+    """
+    derived = gate.derive(blocked_source())
+    derived["discovery"]["availability"][
+        "signed_evaluation_doctor_binary"
+    ] = False
+
+    routes = gate._acquisition_routes(derived)
+    assert not any(routes.values()), routes
+
+    sitemap = gate._sitemap_bytes(routes).decode("utf-8")
+    for route in gate.ACQUISITION_ROUTES:
+        assert f"https://tinyzkp.com{route}" not in sitemap
 
 
 def test_free_structured_offer_points_to_available_community_source() -> None:
@@ -1395,9 +1457,18 @@ def test_qualified_write_removes_visible_prelaunch_contradictions(
     ).read_text(encoding="utf-8")
 
 
-def test_engine_evidence_exposes_only_production_evidence_acquisition_surfaces(
+def test_free_diagnostic_evidence_exposes_every_acquisition_surface(
     tmp_path: Path,
 ) -> None:
+    """With Guard withdrawn, free-diagnostic evidence carries all four routes.
+
+    Was `test_engine_evidence_exposes_only_production_evidence_acquisition_surfaces`,
+    which asserted that a blocked engine release left `/doctor` as the only
+    exposed acquisition surface. That is the policy `_acquisition_routes`
+    retired: the engine gate belongs to a withdrawn SKU, and holding the three
+    landing pages behind it suppressed the organic-acquisition surface of the
+    product that is actually live.
+    """
     blocked = gate.derive(blocked_source())
     doctor_ready = blocked["discovery"]["availability"]["community_doctor"]
     doctor_url = "https://tinyzkp.com/doctor"
@@ -1407,13 +1478,14 @@ def test_engine_evidence_exposes_only_production_evidence_acquisition_surfaces(
         else []
     )
     assert blocked["discovery"]["evergreen_acquisition_pages"] == (
-        [doctor_url] if doctor_ready else []
+        [f"https://tinyzkp.com{route}" for route in gate.ACQUISITION_ROUTES]
+        if doctor_ready
+        else []
     )
     assert blocked["discovery"]["primary_actions"] == doctor_actions
     assert "noindex,nofollow" in gate._acquisition_meta(False)
     blocked_routes = {
-        route: route == "/doctor" and doctor_ready
-        for route in gate.ACQUISITION_ROUTES
+        route: doctor_ready for route in gate.ACQUISITION_ROUTES
     }
     assert all(
         (

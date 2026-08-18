@@ -52,9 +52,31 @@ register(`data:text/javascript,${encodeURIComponent(WASM_LOADER_SOURCE)}`, impor
 // and `crates/tinyzkp-contracts/src/lib.rs`'s `in_profile_request()`
 // respectively, so this gate and those Rust-side tests stay pointed at the
 // same known-shape fixtures rather than inventing a third set of numbers.
+//
+// The last two fixtures exist because the first two do not span the input
+// range, only its comfortable middle — both sit at or below 2^22 rows and
+// 180 columns, and the defect they missed lives above them. The native CLI
+// and the deployed wasm differ in POINTER WIDTH (`usize` is 64-bit on the
+// host, 32-bit on wasm32), so any `as usize` on a row count is a divergence
+// this gate exists to catch, and can only catch where the fixtures reach:
+//
+//   goldilocks-max-envelope   `rows * width >= 2^31` — the top corner of the
+//                             contract's own provable envelope (MAX_ROWS x
+//                             MAX_TRACE_WIDTH). Overflows a 32-bit
+//                             `checked_mul` and returns `internal_error`.
+//   goldilocks-beyond-envelope
+//                             `lde_rows >= 2^32` — out-of-profile, which the
+//                             estimator deliberately prices. A 32-bit cast
+//                             TRUNCATES here rather than erroring, so the
+//                             response stays a confident HTTP 200 carrying a
+//                             number that is wrong by orders of magnitude.
+//                             This is the worse of the two failures and the
+//                             one no error path would ever surface.
 const FIXTURES = [
   "test-vectors/estimate/babybear-multi-table.json",
   "test-vectors/estimate/goldilocks-in-profile.json",
+  "test-vectors/estimate/goldilocks-max-envelope.json",
+  "test-vectors/estimate/goldilocks-beyond-envelope.json",
 ];
 
 // Recursively sort object keys (arrays keep their order — order is

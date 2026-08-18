@@ -4167,6 +4167,14 @@ def derive(
             "policy_baseline_v1": "https://tinyzkp.com/schemas/policy-baseline-v1.schema.json",
             "compatibility_manifest_v1": "https://tinyzkp.com/schemas/compatibility-manifest-v1.schema.json",
         },
+        # Every acquisition route shares ONE condition: a signed evaluation
+        # doctor release, or a qualified engine release. This must stay
+        # expression-for-expression equivalent to `_acquisition_routes`, which
+        # reads the same two facts off the derived document -- `_check_outputs`
+        # compares the two and fails if they drift. See `_acquisition_routes`
+        # for why `engine_release_ready` stopped being the sole key: it gates a
+        # withdrawn SKU's release and was suppressing the current product's
+        # entire organic-acquisition surface.
         "evergreen_acquisition_pages": [
             *(
                 ["https://tinyzkp.com/doctor"]
@@ -4179,7 +4187,7 @@ def derive(
                     for route in ACQUISITION_ROUTES
                     if route != "/doctor"
                 ]
-                if engine_claim is not None
+                if (signed_doctor_identity is not None or engine_claim is not None)
                 else []
             ),
         ],
@@ -4676,16 +4684,63 @@ def validate(
 def _acquisition_routes(
     derived: dict[str, dict[str, Any]],
 ) -> dict[str, bool]:
-    engine_ready = (
-        derived["launch"]["gate_status"]["engine_release_ready"]["status"]
-        == "passed"
-    )
+    """Which acquisition routes may be indexed, and on what evidence.
+
+    Every route keys on ONE fact: a signed, published evaluation doctor
+    release. That is the evidence that the free diagnostic path these pages
+    send readers to actually exists.
+
+    This deliberately no longer reads `engine_release_ready`. That gate attests
+    readiness to ship a Guard ENGINE RELEASE, and it was the right key while
+    Guard was the product: do not run SEO for something you cannot ship. Guard
+    was withdrawn on 2026-07-26 (`release/guard-sku-withdrawal-v1.json`), the
+    gate is `blocked`, and nothing the current business does can unblock it --
+    it needs a fixed-host qualification run and an owner-signed attestation for
+    a SKU that is no longer sold. The effect was that
+    `/plonky3-out-of-memory`, `/resumable-plonky3-prover` and
+    `/ssd-backed-plonky3-proving` -- the pages that capture the buyer
+    persona's exact query -- stayed `noindex,nofollow`, out of `sitemap.xml`,
+    out of `llms.txt` and out of `discovery.json`, for as long as the
+    withdrawal stood, while `scripts/ci/demand_report.py` counted the traffic
+    they were suppressing and `release/demand-clock-v1.json` measured a 90-day
+    kill criterion against the result.
+
+    `BASE_SITEMAP_ROUTES` already carries the same correction for `/estimate`:
+    "The demand threshold counts callers of an endpoint that search engines
+    were never told about, which makes a zero reading unattributable." The
+    acquisition pages are the same defect one layer out.
+
+    `engine_release_ready` is still honoured, as a UNION rather than the sole
+    key: a qualified engine release remains a perfectly good reason to index
+    these pages, and keeping it means this change is a strict relaxation that
+    cannot narrow behaviour on the qualified path. What changed is that it is
+    no longer the ONLY reason, so a withdrawn SKU's blocked release gate can no
+    longer suppress the current product's acquisition surface.
+
+    The key must stay FALSIFIABLE. `signed_evaluation_doctor_binary` is
+    `signed_doctor_identity is not None` and `engine_release_ready` is a real
+    gate status, so with neither in evidence every acquisition page
+    de-indexes; `test_acquisition_pages_deindex_without_free_diagnostic_evidence`
+    pins that. Do NOT re-key this on a hardcoded availability literal such as
+    `resource_estimator_api` (`True` by construction) -- that would trade a
+    dead gate for a decoration one.
+    """
     doctor_ready = (
         derived["discovery"]["availability"]["signed_evaluation_doctor_binary"]
         is True
     )
+    engine_ready = (
+        derived["launch"]["gate_status"]["engine_release_ready"]["status"]
+        == "passed"
+    )
+    # `/doctor` keeps its ORIGINAL key. It is the page that hands out the
+    # signed evaluation doctor, so advertising it without that release would be
+    # the very dishonesty this gate exists to prevent. Only the three content
+    # pages are relaxed: they describe a problem and route readers to whichever
+    # free diagnostic exists, so either kind of evidence justifies indexing
+    # them.
     return {
-        route: doctor_ready if route == "/doctor" else engine_ready
+        route: doctor_ready if route == "/doctor" else (doctor_ready or engine_ready)
         for route in ACQUISITION_ROUTES
     }
 

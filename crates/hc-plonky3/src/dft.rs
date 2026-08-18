@@ -570,33 +570,68 @@ where
     /// hypothetical configuration) must pass `P::Word::WIDTH as u64`.
     /// `estimate_params::estimate_from_params` is the one caller that passes a
     /// caller-declared width to price fields TinyZKP does not execute.
+    /// `height` and `width` are `u64` rather than `usize` DELIBERATELY, and
+    /// must stay that way. This function has two classes of caller with very
+    /// different bounds: the execution path passes the shape of a matrix that
+    /// actually exists in memory (so it necessarily fits `usize`), while
+    /// `estimate_params::estimate_from_params` prices HYPOTHETICAL
+    /// configurations up to `MAX_ESTIMATE_ROWS` (2^32) that no machine will
+    /// ever hold. Those hypothetical shapes are the product — the estimator
+    /// exists precisely to answer "what would this cost?" for a job you cannot
+    /// run.
+    ///
+    /// The shipped artifact for that question is `crates/hc-wasm` compiled to
+    /// **wasm32, where `usize` is 32 bits**. While this signature took `usize`,
+    /// the caller's `lde_rows as usize` silently narrowed on that target and
+    /// the product had two failure regimes, both live in production:
+    ///   * `rows * width >= 2^31` — `checked_mul` failed, surfacing as
+    ///     `internal_error` at the top corner of the contract's own provable
+    ///     envelope (`MAX_ROWS` x `MAX_TRACE_WIDTH`);
+    ///   * `lde_rows >= 2^32` — the cast truncated toward zero, the DFT was
+    ///     priced for an empty matrix, and `peak_resident_bytes` collapsed onto
+    ///     the 64 MiB floor in `estimate_params`. That answer was returned as a
+    ///     confident `HTTP 200`, wrong by more than an order of magnitude, with
+    ///     no error path anywhere that could have surfaced it.
+    ///
+    /// The lesson generalises past this function: a bound argued in `u64` is
+    /// not a bound in the type the artifact is COMPILED to. Keep the arithmetic
+    /// here in `u64` and narrow only where a value is provably small.
     pub fn estimate_scratch(
         &self,
-        height: usize,
-        width: usize,
+        height: u64,
+        width: u64,
         owned_input: bool,
         field_bytes: u64,
     ) -> Result<ResourceEstimate> {
-        let elements = height.checked_mul(width).ok_or(DftError::SizeOverflow)? as u64;
+        let elements = height.checked_mul(width).ok_or(DftError::SizeOverflow)?;
         let artifact_bytes = elements
             .checked_mul(field_bytes)
             .ok_or(DftError::SizeOverflow)?;
         let owned_input_bytes = if owned_input { artifact_bytes } else { 0 };
-        let (first_factor, second_factor) = four_step_factors(height);
+        let (first_factor, second_factor) = four_step_factors_u64(height);
+        // The four-step factors are both about sqrt(height), and `width` is
+        // bounded by the admission gate, so all three fit `usize` on every
+        // supported target for every admitted request. They are narrowed with
+        // `try_from` rather than `as` anyway: an unchecked cast on a
+        // caller-influenced value is the exact defect this signature removes,
+        // and a refusal is honest where a truncated number is not.
+        let first_factor = usize::try_from(first_factor).map_err(|_| DftError::SizeOverflow)?;
+        let second_factor = usize::try_from(second_factor).map_err(|_| DftError::SizeOverflow)?;
+        let width_elems = usize::try_from(width).map_err(|_| DftError::SizeOverflow)?;
         let first_sub_fft_buffers =
-            self.sub_fft_buffer_bytes(first_factor, second_factor, width, field_bytes)?;
+            self.sub_fft_buffer_bytes(first_factor, second_factor, width_elems, field_bytes)?;
         let second_sub_fft_buffers =
-            self.sub_fft_buffer_bytes(second_factor, first_factor, width, field_bytes)?;
+            self.sub_fft_buffer_bytes(second_factor, first_factor, width_elems, field_bytes)?;
         let sub_fft_buffers = first_sub_fft_buffers.max(second_sub_fft_buffers);
         let (outer_tile, inner_tile) = self.transpose_tile_shape(
-            width,
+            width_elems,
             first_factor.max(second_factor),
             first_factor.min(second_factor),
             field_bytes,
         )?;
         let transpose_buffers = (outer_tile as u64)
             .saturating_mul(inner_tile as u64)
-            .saturating_mul(width as u64)
+            .saturating_mul(width)
             .saturating_mul(field_bytes)
             .saturating_mul(2);
         let working_buffers = sub_fft_buffers.max(transpose_buffers);
@@ -630,9 +665,12 @@ where
             .select_mode(&self.estimate_memory(height, width)?)?;
         let estimate = match selected {
             ExecutionMode::Memory => self.estimate_memory(height, width)?,
-            ExecutionMode::Scratch => {
-                self.estimate_scratch(height, width, true, word_bytes::<W, D, P>() as u64)?
-            }
+            ExecutionMode::Scratch => self.estimate_scratch(
+                height as u64,
+                width as u64,
+                true,
+                word_bytes::<W, D, P>() as u64,
+            )?,
         };
         self.policy.preflight_for_mode(selected, estimate)?;
         if selected == ExecutionMode::Memory {
@@ -683,9 +721,12 @@ where
             .select_mode(&self.estimate_memory(height, width)?)?;
         let estimate = match selected {
             ExecutionMode::Memory => self.estimate_memory(height, width)?,
-            ExecutionMode::Scratch => {
-                self.estimate_scratch(height, width, false, word_bytes::<W, D, P>() as u64)?
-            }
+            ExecutionMode::Scratch => self.estimate_scratch(
+                height as u64,
+                width as u64,
+                false,
+                word_bytes::<W, D, P>() as u64,
+            )?,
         };
         self.policy.preflight_for_mode(selected, estimate)?;
         if selected == ExecutionMode::Memory {
@@ -736,9 +777,12 @@ where
             .select_mode(&self.estimate_memory(height, width)?)?;
         let estimate = match selected {
             ExecutionMode::Memory => self.estimate_memory(height, width)?,
-            ExecutionMode::Scratch => {
-                self.estimate_scratch(height, width, false, word_bytes::<W, D, P>() as u64)?
-            }
+            ExecutionMode::Scratch => self.estimate_scratch(
+                height as u64,
+                width as u64,
+                false,
+                word_bytes::<W, D, P>() as u64,
+            )?,
         };
         self.policy.preflight_for_mode(selected, estimate)?;
         if selected == ExecutionMode::Memory {
@@ -1211,10 +1255,22 @@ pub mod goldilocks {
     pub type ResourceBoundedDft = super::ResourceBoundedDft<8, 4, GoldilocksProfile>;
 }
 
-fn four_step_factors(height: usize) -> (usize, usize) {
-    let log_height = height.trailing_zeros() as usize;
-    let first = 1usize << (log_height / 2);
+/// The four-step split, computed in `u64` so it is identical on 32- and
+/// 64-bit targets. `estimate_scratch` prices hypothetical heights that exceed
+/// `usize` on wasm32; see the note on that function.
+fn four_step_factors_u64(height: u64) -> (u64, u64) {
+    let log_height = height.trailing_zeros() as u64;
+    let first = 1u64 << (log_height / 2);
     (first, height / first)
+}
+
+/// Execution-path convenience over [`four_step_factors_u64`]. Callers here
+/// pass the height of a matrix that is already resident, so both the input and
+/// the derived factors fit `usize` by construction. Kept as a delegation
+/// rather than a second implementation so the two can never drift apart.
+fn four_step_factors(height: usize) -> (usize, usize) {
+    let (first, second) = four_step_factors_u64(height as u64);
+    (first as usize, second as usize)
 }
 
 fn integer_sqrt(value: u64) -> u64 {
@@ -1310,7 +1366,12 @@ mod tests {
         parallel_policy.max_threads = 4;
         let parallel_dft = ResourceBoundedDft::new(parallel_policy).unwrap();
         let estimate = parallel_dft
-            .estimate_scratch(height, width, true, GoldilocksWord::WIDTH as u64)
+            .estimate_scratch(
+                height as u64,
+                width as u64,
+                true,
+                GoldilocksWord::WIDTH as u64,
+            )
             .unwrap();
         assert!(estimate.peak_resident_bytes <= 32 * 1024 * 1024);
         let parallel = parallel_dft.try_dft_batch(input).unwrap();
@@ -1455,7 +1516,7 @@ mod tests {
         constrained.max_scratch_bytes = u64::MAX;
         let dft = ResourceBoundedDft::new(constrained.clone()).unwrap();
         let estimate = dft
-            .estimate_scratch(1 << 30, 180, false, GoldilocksWord::WIDTH as u64)
+            .estimate_scratch(1u64 << 30, 180, false, GoldilocksWord::WIDTH as u64)
             .unwrap();
         assert!(matches!(
             constrained.preflight_for_mode(ExecutionMode::Scratch, estimate),

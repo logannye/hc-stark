@@ -12,6 +12,9 @@ Current status: the free resource estimator is live at https://tinyzkp.com/estim
 - Compatibility: https://tinyzkp.com/compatibility
 - Benchmarks: https://tinyzkp.com/benchmarks
 - Doctor: https://tinyzkp.com/doctor
+- Plonky3 out of memory: https://tinyzkp.com/plonky3-out-of-memory
+- Resumable Plonky3 prover: https://tinyzkp.com/resumable-plonky3-prover
+- SSD-backed Plonky3 proving: https://tinyzkp.com/ssd-backed-plonky3-proving
 - Troubleshooting: https://tinyzkp.com/troubleshooting
 - Pricing: https://tinyzkp.com/pricing
 - Documentation: https://tinyzkp.com/docs
