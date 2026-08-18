@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "field": "goldilocks",
+  "extension_degree": 2,
+  "logical_rows": 16777216,
+  "trace_width": 256,
+  "max_constraint_degree": 3,
+  "public_values": 2,
+  "has_next_row_columns": true,
+  "features": {
+    "uses_lookups": false,
+    "uses_buses": false,
+    "uses_permutations": false,
+    "uses_multi_table": false,
+    "uses_preprocessed_columns": false,
+    "uses_periodic_columns": false,
+    "uses_recursion": false,
+    "uses_gpu": false
+  },
+  "ram_budget_bytes": 2147483648
+}

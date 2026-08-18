@@ -249,15 +249,14 @@ pub fn estimate_from_params(
         .max(proof_checkpoint_peak);
 
     let dft = ResourceBoundedDft::new(policy.clone())?;
-    let trace_dft = dft.estimate_scratch(lde_rows as usize, width, false, field_bytes)?;
+    // `lde_rows` stays `u64` all the way into the DFT estimator. It was
+    // previously narrowed with `as usize` here, which is a no-op on the native
+    // CLI and a silent truncation in the wasm32 artifact that actually serves
+    // `POST /v1/estimate` — see the note on `ResourceBoundedDft::estimate_scratch`.
+    let trace_dft = dft.estimate_scratch(lde_rows, width as u64, false, field_bytes)?;
     // The quotient store holds one column per EXTENSION-field coefficient,
     // not a literal 2 — the same `extension_degree` derived above.
-    let quotient_dft = dft.estimate_scratch(
-        lde_rows as usize,
-        extension_degree as usize,
-        false,
-        field_bytes,
-    )?;
+    let quotient_dft = dft.estimate_scratch(lde_rows, extension_degree, false, field_bytes)?;
     let peak_resident_bytes = trace_dft
         .peak_resident_bytes
         .max(quotient_dft.peak_resident_bytes)
