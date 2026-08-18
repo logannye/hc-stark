@@ -345,13 +345,19 @@ def test_acquisition_page_indexing_matches_signed_doctor_evidence() -> None:
     market_clock = load_json(MARKET_CLOCK)
     doctor_ready = market_clock["doctor_evaluation_release"]["status"] == "passed"
     sitemap = (SITE / "sitemap.xml").read_text(encoding="utf-8")
+    # The three content pages no longer wait on `engine_release_ready`, which
+    # gates a release of the WITHDRAWN Guard SKU and had been holding the whole
+    # organic-acquisition surface out of the index. `/doctor` still requires
+    # its own signed release. See `guard_launch_gate._acquisition_routes`.
     assert discovery["evergreen_acquisition_pages"] == (
-        ["https://tinyzkp.com/doctor"] if doctor_ready else []
+        [f"https://tinyzkp.com{route}" for route in routes]
+        if doctor_ready
+        else []
     )
     for route in routes:
         page = SITE / f"{route.removeprefix('/')}.html"
         text = page.read_text(encoding="utf-8")
-        route_ready = route == "/doctor" and doctor_ready
+        route_ready = doctor_ready
         robots = "index,follow" if route_ready else "noindex,nofollow"
         assert (
             f'<meta name="robots" content="{robots}" data-guard-acquisition>'
